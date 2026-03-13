@@ -13,7 +13,6 @@ import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   CriteriaDto,
-  RubricDto,
   ScoringDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
@@ -897,35 +896,6 @@ export class TextGradingService implements ITextGradingService {
   }
 
   /**
-   * Check if corrections are minor enough to auto-approve
-   */
-  private areCorrectionsMinor(
-    corrections: {
-      points?: number;
-      feedback?: string;
-      rubricScores?: RubricScore[];
-    },
-    originalPoints?: number,
-    maxPoints?: number,
-  ): boolean {
-    if (corrections.rubricScores) return false;
-    if (corrections.feedback) return false;
-
-    if (
-      corrections.points !== undefined &&
-      originalPoints !== undefined &&
-      maxPoints !== undefined
-    ) {
-      const pointDifference = Math.abs(corrections.points - originalPoints);
-      const percentageChange =
-        maxPoints > 0 ? (pointDifference / maxPoints) * 100 : 0;
-
-      return percentageChange <= 5;
-    }
-    return false;
-  }
-
-  /**
    * Sanitize user input to prevent prompt injection and other attacks
    */
   private sanitizeInput(input: string): string {
@@ -943,13 +913,6 @@ export class TextGradingService implements ITextGradingService {
       )
       .slice(0, 10_000)
       .trim();
-  }
-
-  /**
-   * Compare numbers with zero tolerance - must be exactly equal
-   */
-  private areNumbersEqual(a: number, b: number, tolerance = 0): boolean {
-    return Math.abs(a - b) <= tolerance;
   }
 
   /**
@@ -1020,95 +983,6 @@ export class TextGradingService implements ITextGradingService {
 
     const combined = `${normalizedQuestion}:${normalizedResponse}`;
     return Buffer.from(combined).toString("base64").slice(0, 16);
-  }
-
-  /**
-   * Validate that feedback contains no subjective language
-   */
-  private validateNoSubjectiveLanguage(feedback: string): boolean {
-    const subjectiveWords = [
-      "excellent",
-      "outstanding",
-      "great",
-      "strong",
-      "impressive",
-      "well done",
-      "good job",
-      "poor",
-      "weak",
-      "nice",
-      "wonderful",
-      "fantastic",
-      "brilliant",
-      "superb",
-    ];
-
-    const lowerFeedback = feedback.toLowerCase();
-    return !subjectiveWords.some((word) => lowerFeedback.includes(word));
-  }
-
-  /**
-   * Format judge feedback to be more actionable for the grading assistant
-   */
-  private formatJudgeFeedbackForTA(
-    judgeResult: {
-      feedback?: string;
-      issues?: string[];
-      corrections?: {
-        points?: number;
-        feedback?: string;
-        rubricScores?: unknown[];
-      };
-    },
-    attemptNumber: number,
-  ): string {
-    let formattedFeedback = `📋 GRADING FEEDBACK - ATTEMPT ${attemptNumber}:\n\n`;
-
-    if (judgeResult.issues && Array.isArray(judgeResult.issues)) {
-      formattedFeedback += `🚨 CRITICAL ISSUES TO FIX:\n`;
-      for (const [index, issue] of judgeResult.issues.entries()) {
-        formattedFeedback += `${index + 1}. ${issue}\n`;
-      }
-      formattedFeedback += "\n";
-    }
-
-    const feedback = judgeResult.feedback || "";
-    formattedFeedback += `📝 DETAILED FEEDBACK:\n${feedback}\n\n`;
-
-    if (judgeResult.corrections) {
-      formattedFeedback += `✅ REQUIRED CORRECTIONS:\n`;
-      if (judgeResult.corrections.points !== undefined) {
-        formattedFeedback += `• Adjust total points to: ${judgeResult.corrections.points}\n`;
-      }
-      if (judgeResult.corrections.feedback) {
-        formattedFeedback += `• Update feedback: ${judgeResult.corrections.feedback}\n`;
-      }
-      if (judgeResult.corrections.rubricScores) {
-        formattedFeedback += `• Fix rubric scores as specified\n`;
-      }
-      formattedFeedback += "\n";
-    }
-
-    formattedFeedback += `🎯 WHAT YOU MUST DO DIFFERENTLY:\n`;
-    if (feedback.includes("mathematical")) {
-      formattedFeedback += `• Double-check ALL math: Total points MUST equal sum of rubric scores\n`;
-    }
-    if (feedback.includes("feedback") && feedback.includes("align")) {
-      formattedFeedback += `• Ensure your explanations clearly justify the scores given\n`;
-      formattedFeedback += `• Use specific student quotes as evidence for each point awarded/deducted\n`;
-    }
-    if (feedback.includes("rubric")) {
-      formattedFeedback += `• Follow rubric criteria exactly - pick the ONE criterion that best fits\n`;
-      formattedFeedback += `• Use EXACT point values from the criteria, no custom points\n`;
-    }
-    if (feedback.includes("specific") || feedback.includes("evidence")) {
-      formattedFeedback += `• Quote specific parts of the student response to justify scores\n`;
-      formattedFeedback += `• Provide concrete evidence for every point awarded or deducted\n`;
-    }
-
-    formattedFeedback += `\n💡 REMEMBER: This feedback helps you improve accuracy. Learn from it!`;
-
-    return formattedFeedback;
   }
 
   /**

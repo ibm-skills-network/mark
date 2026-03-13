@@ -1,6 +1,4 @@
 import { readFile } from "@/app/Helpers/fileReader";
-import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
-import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionStore, QuestionType, ResponseType } from "@/config/types";
 import { getStoredGithubToken } from "@/lib/talkToBackend";
 import {
@@ -9,14 +7,8 @@ import {
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
-import { DocumentTextIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Octokit } from "@octokit/rest";
-import {
-  IconBrandGithub,
-  IconCloudUpload,
-  IconEye,
-  IconX,
-} from "@tabler/icons-react";
+import { IconBrandGithub } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -26,8 +18,6 @@ import GithubUploadModal from "./GithubUploadModal";
 import PresentationGrader from "./PresentationGrader";
 import VideoPresentationEditor from "./VideoPresentationEditor";
 import FileUploader from "@/components/FileUploader";
-
-const MAX_CHAR_LIMIT = 40000;
 
 interface FileUploadSectionProps {
   question: QuestionStore;
@@ -51,13 +41,12 @@ const FileUploadSection = ({
   const setIsUploadingFiles = useLearnerStore(
     (state) => state.setIsUploadingFiles,
   );
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [showContent, setShowContent] = useState(false);
   const learnerFileResponse = useLearnerStore((state) =>
     state.getFileUpload(questionId),
   );
-  const deleteFile = useLearnerStore((state) => state.deleteFile);
-  const [fileBlob, setFileBlob] = useState<Blob | null>(null);
+  const [fileBlob] = useState<Blob | null>(null);
   const onDrop = async (acceptedFiles: File[]) => {
     try {
       const fileContents: learnerFileResponse[] = await Promise.all(
@@ -80,10 +69,7 @@ const FileUploadSection = ({
     setShowContent(false);
     setCurrentFileContent(null);
   };
-  const [filename, setFilename] = useState<string>("");
-  const handleDeleteFile = (file: learnerFileResponse) => {
-    deleteFile(file, questionId);
-  };
+  const [filename] = useState<string>("");
   const assignmentId =
     useLearnerOverviewStore((state) => state.assignmentId) ||
     parseInt(usePathname().split("/")[3]);
@@ -92,7 +78,7 @@ const FileUploadSection = ({
   const persistStateForQuestion = useGitHubStore(
     (state) => state.persistStateForQuestion,
   );
-  const [octokit, setOctokit] = useState<Octokit | null>(null);
+  const [, setOctokit] = useState<Octokit | null>(null);
   const getTokenFromBackend = async () => {
     const token = await getStoredGithubToken();
     return token;
@@ -135,21 +121,6 @@ const FileUploadSection = ({
         },
       };
     });
-  };
-
-  const handleRemoveFile = (fileName: string, fileUrl: string) => {
-    removeFileUpload(
-      {
-        filename: fileName,
-        content: "",
-        githubUrl: fileUrl,
-      },
-      questionId,
-    );
-    changeSelectedFiles(
-      questionId,
-      selectedFiles.filter((file) => file.githubUrl !== fileUrl),
-    );
   };
 
   useEffect(() => {
@@ -213,7 +184,7 @@ const FileUploadSection = ({
     }
   };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  useDropzone({
     onDrop,
     accept: getAcceptedFileTypes(questionType, responseType),
     multiple: true,

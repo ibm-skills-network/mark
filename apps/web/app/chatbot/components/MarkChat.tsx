@@ -963,6 +963,7 @@ export const MarkChat = () => {
   const [touchStartTime, setTouchStartTime] = useState(0);
   const [touchStartPosition, setTouchStartPosition] = useState({ x: 0, y: 0 });
   const [isTouching, setIsTouching] = useState(false);
+  const draggableNodeRef = useRef<HTMLDivElement | null>(null);
 
   const isMobileDevice = useCallback(() => {
     return (
@@ -2555,6 +2556,7 @@ Please help me with this.`;
       <AnimatePresence>
         {!isChatbotOpen && (
           <Draggable
+            nodeRef={draggableNodeRef}
             position={dragPosition}
             onStart={handleDragStart}
             onDrag={handleDrag}
@@ -2568,7 +2570,7 @@ Please help me with this.`;
                 typeof window !== "undefined" ? window.innerHeight - 76 : 600,
             }}
           >
-            <div className="fixed z-50">
+            <div ref={draggableNodeRef} className="fixed z-50">
               <OrbitingActionDock
                 isVisible={!isChatbotOpen}
                 onActionClick={handleActionClick}

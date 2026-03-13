@@ -3,7 +3,7 @@
 import Tooltip from "@/components/Tooltip";
 import { cn } from "@/lib/strings";
 import { useEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom";
+import { createPortal } from "react-dom";
 
 interface DropdownProps<T> {
   selectedItem: T;
@@ -156,9 +156,7 @@ function Dropdown<T>({
         </button>
       </Tooltip>
 
-      {isOpen && portalContainer
-        ? ReactDOM.createPortal(menu, portalContainer)
-        : null}
+      {isOpen && portalContainer ? createPortal(menu, portalContainer) : null}
     </div>
   );
 }

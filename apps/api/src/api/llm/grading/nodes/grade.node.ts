@@ -58,33 +58,4 @@ export class GradeNode {
       };
     }
   }
-
-  private createOptimizedPrompt(context: GradingGraphState["context"]): string {
-    const criteriaList = context.rubric
-      .map((c) => `${c.id}: ${c.description} (${c.maxPoints}pts)`)
-      .join("\n");
-
-    return `Grade this answer using the provided criteria:
-
-ANSWER: "${context.learnerAnswer}"
-
-CRITERIA:
-${criteriaList}
-
-Return JSON with exact structure:
-{
-  "criteriaAwards": [{"criterionId": "...", "awarded": 0-${Math.max(
-    ...context.rubric.map((r) => r.maxPoints),
-  )}, "maxPoints": N, "justification": "1-2 sentences", "evidence": "exact quote or omit"}],
-  "totalAwarded": N,
-  "totalMax": ${context.rubric.reduce((sum, c) => sum + c.maxPoints, 0)},
-  "overallFeedback": "brief summary",
-  "confidence": 0.0-1.0
-}
-
-Requirements:
-- Justifications: 1-2 sentences max
-- Evidence: exact quotes from answer, omit if none
-- Be precise with scoring`;
-  }
 }

@@ -1,7 +1,6 @@
 /* eslint-disable */
 import { getBaseApiPath } from "@/config/constants";
 import { IssueSeverity } from "@/config/types";
-import { BASE_API_ROUTES } from "@/lib/talkToBackend";
 
 export interface IssueReportDetails {
   issueType: string;

@@ -4,14 +4,15 @@ import { headers } from "next/headers";
 import AuthFetchToAbout from "./AuthFetchToAbout";
 
 interface Props {
-  params: { assignmentId: string };
-  searchParams: { submissionTime?: string };
+  params: Promise<{ assignmentId: string }>;
+  searchParams: Promise<{ submissionTime?: string }>;
 }
 
 async function Component(props: Props) {
   const { params } = props;
-  const { assignmentId } = params;
-  const headerList = headers();
+  const resolvedParams = await params;
+  const { assignmentId } = resolvedParams;
+  const headerList = await headers();
   const cookieHeader = headerList.get("cookie") || "";
   try {
     const user = await getUser(cookieHeader);
@@ -19,7 +20,7 @@ async function Component(props: Props) {
 
     return (
       <AuthFetchToAbout
-        assignmentId={~~assignmentId}
+        assignmentId={Math.trunc(Number(assignmentId))}
         role={role}
         cookie={cookieHeader}
       />

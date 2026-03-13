@@ -164,6 +164,69 @@ class SweepTranslationsRequestDto {
   includeAll?: boolean;
 }
 
+class DebugAssignmentScanRequestDto {
+  /** Restrict debug scan to these language codes only. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  languageCodes?: string[];
+
+  /** Include unpublished/deleted entities in the scan. Defaults to false. */
+  @IsOptional()
+  @IsBoolean()
+  includeAll?: boolean;
+
+  /** Include raw text/choices in missing item payloads. Defaults to false. */
+  @IsOptional()
+  @IsBoolean()
+  includeText?: boolean;
+
+  /**
+   * Truncate missingItems to this many entries in the response to keep payloads
+   * bounded for large assignments.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  maxMissingItems?: number;
+}
+
+class SweepPreviewRequestDto {
+  /**
+   * How many assignments would be selected for translation in this preview.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  batchSize?: number;
+
+  /**
+   * Preview from this cursor (`id < cursor`). Omit to preview from newest.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cursor?: number;
+
+  /** Restrict preview to these language codes only. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  languageCodes?: string[];
+
+  /** Include unpublished assignments in candidate scanning. */
+  @IsOptional()
+  @IsBoolean()
+  includeAll?: boolean;
+}
+
 type MissingItem = {
   questionId: number;
   variantId: number | null;
@@ -178,6 +241,19 @@ type AssignmentScanResult = {
   missingAssignmentLanguages: string[];
   missingItems: MissingItem[];
   hasAnyTranslations: boolean;
+  totalTranslatableItems: number;
+  expectedTranslationRows: number;
+  existingTranslationRows: number;
+  missingTranslationRows: number;
+};
+
+type SweepBatchDebug = {
+  scanWindow: number;
+  windowAssignmentIds: number[];
+  fastNeedyAssignmentIds: number[];
+  deepScanCandidateIds: number[];
+  deepNeedyAssignmentIds: number[];
+  selectedBatchIds: number[];
 };
 
 type MissingAssignmentSummary = {
@@ -279,29 +355,73 @@ export class TranslationMaintenanceController {
 
     const results: MissingAssignmentSummary[] = [];
     const assignmentIds: number[] = [];
+    if (assignments.length > 0) {
+      const assignmentIdsToClassify = assignments.map(
+        (assignment) => assignment.id,
+      );
 
-    for (const assignment of assignments) {
-      const scanResult = await this.scanAssignment(
-        assignment.id,
+      const assignmentTranslationCounts =
+        await this.prisma.assignmentTranslation.groupBy({
+          by: ["assignmentId"],
+          where: { assignmentId: { in: assignmentIdsToClassify } },
+          _count: { languageCode: true },
+        });
+      const assignmentLangCountById = new Map(
+        assignmentTranslationCounts.map((item) => [
+          item.assignmentId,
+          item._count.languageCode,
+        ]),
+      );
+
+      const missingAssignmentIds = new Set<number>();
+      const assignmentsNeedingDeepScan: Array<{ id: number; name: string }> =
+        [];
+
+      for (const assignment of assignments) {
+        const langCount = assignmentLangCountById.get(assignment.id) ?? 0;
+        const isDefinitelyMissingAtAssignmentLevel =
+          langCount < supportedLanguages.length;
+
+        if (isDefinitelyMissingAtAssignmentLevel && !onlyUntranslated) {
+          missingAssignmentIds.add(assignment.id);
+          continue;
+        }
+
+        assignmentsNeedingDeepScan.push(assignment);
+      }
+
+      const deepScanResults = await this.scanAssignmentsConcurrently(
+        assignmentsNeedingDeepScan,
         supportedLanguages,
         includeAll,
         false,
       );
 
-      if (!scanResult) continue;
+      for (const scanResult of deepScanResults) {
+        if (
+          scanResult.missingAssignmentLanguages.length === 0 &&
+          scanResult.missingItems.length === 0
+        ) {
+          continue;
+        }
 
-      if (
-        scanResult.missingAssignmentLanguages.length > 0 ||
-        scanResult.missingItems.length > 0
-      ) {
         if (onlyUntranslated && scanResult.hasAnyTranslations) {
           continue;
         }
-        assignmentIds.push(scanResult.assignmentId);
+
+        missingAssignmentIds.add(scanResult.assignmentId);
+      }
+
+      for (const assignment of assignments) {
+        if (!missingAssignmentIds.has(assignment.id)) {
+          continue;
+        }
+
+        assignmentIds.push(assignment.id);
         if (includeNames) {
           results.push({
-            assignmentId: scanResult.assignmentId,
-            assignmentName: scanResult.assignmentName,
+            assignmentId: assignment.id,
+            assignmentName: assignment.name,
           });
         }
       }
@@ -330,6 +450,170 @@ export class TranslationMaintenanceController {
         totalPages,
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
+      },
+    };
+  }
+
+  @Post("debug/assignment/:assignmentId/scan")
+  @ApiOperation({
+    summary:
+      "Debug translation coverage for one assignment (assignment + question/variant levels)",
+  })
+  async debugAssignmentScan(
+    @Param("assignmentId", ParseIntPipe) assignmentId: number,
+    @Body() body: DebugAssignmentScanRequestDto,
+  ): Promise<{
+    success: true;
+    data: {
+      assignmentId: number;
+      assignmentName: string;
+      includeAll: boolean;
+      supportedLanguages: string[];
+      hasAnyTranslations: boolean;
+      missingAssignmentLanguages: string[];
+      totalTranslatableItems: number;
+      expectedTranslationRows: number;
+      existingTranslationRows: number;
+      missingTranslationRows: number;
+      missingItemsCount: number;
+      missingItemsPreview: MissingItem[];
+      missingItemsTruncated: boolean;
+    };
+  }> {
+    const allSupportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const supportedLanguagesByNormalized = new Map(
+      allSupportedLanguages.map((lang) => [normalizeLang(lang), lang]),
+    );
+    const requestedLanguages = (body.languageCodes ?? [])
+      .map((lang) => normalizeLang(lang))
+      .filter((lang) => supportedLanguagesByNormalized.has(lang))
+      .map((lang) => supportedLanguagesByNormalized.get(lang) ?? lang);
+
+    if (
+      (body.languageCodes?.length ?? 0) > 0 &&
+      requestedLanguages.length === 0
+    ) {
+      throw new BadRequestException(
+        "No valid languageCodes provided for debug assignment scan",
+      );
+    }
+
+    const supportedLanguages =
+      requestedLanguages.length > 0
+        ? requestedLanguages
+        : allSupportedLanguages;
+    const includeAll = Boolean(body.includeAll);
+    const includeText = Boolean(body.includeText);
+    const maxMissingItems = body.maxMissingItems ?? 100;
+
+    const scanResult = await this.scanAssignment(
+      assignmentId,
+      supportedLanguages,
+      includeAll,
+      includeText,
+    );
+
+    if (!scanResult) {
+      throw new NotFoundException(
+        `Assignment with id ${assignmentId} not found`,
+      );
+    }
+
+    const missingItemsPreview = scanResult.missingItems.slice(
+      0,
+      maxMissingItems,
+    );
+
+    return {
+      success: true,
+      data: {
+        assignmentId: scanResult.assignmentId,
+        assignmentName: scanResult.assignmentName,
+        includeAll,
+        supportedLanguages,
+        hasAnyTranslations: scanResult.hasAnyTranslations,
+        missingAssignmentLanguages: scanResult.missingAssignmentLanguages,
+        totalTranslatableItems: scanResult.totalTranslatableItems,
+        expectedTranslationRows: scanResult.expectedTranslationRows,
+        existingTranslationRows: scanResult.existingTranslationRows,
+        missingTranslationRows: scanResult.missingTranslationRows,
+        missingItemsCount: scanResult.missingItems.length,
+        missingItemsPreview,
+        missingItemsTruncated:
+          missingItemsPreview.length < scanResult.missingItems.length,
+      },
+    };
+  }
+
+  @Post("debug/sweep/preview")
+  @ApiOperation({
+    summary:
+      "Preview the next sweep batch and show why assignments are selected",
+  })
+  async previewSweepBatch(@Body() body: SweepPreviewRequestDto): Promise<{
+    success: true;
+    data: {
+      cursor: number | null;
+      includeAll: boolean;
+      batchSize: number;
+      supportedLanguages: string[];
+      batch: Array<{ id: number; name: string }>;
+      nextCursor: number | null;
+      debug: SweepBatchDebug;
+    };
+  }> {
+    const allSupportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const supportedLanguagesByNormalized = new Map(
+      allSupportedLanguages.map((lang) => [normalizeLang(lang), lang]),
+    );
+    const requestedLanguages = (body.languageCodes ?? [])
+      .map((lang) => normalizeLang(lang))
+      .filter((lang) => supportedLanguagesByNormalized.has(lang))
+      .map((lang) => supportedLanguagesByNormalized.get(lang) ?? lang);
+
+    if (
+      (body.languageCodes?.length ?? 0) > 0 &&
+      requestedLanguages.length === 0
+    ) {
+      throw new BadRequestException(
+        "No valid languageCodes provided for sweep preview",
+      );
+    }
+
+    const supportedLanguages =
+      requestedLanguages.length > 0
+        ? requestedLanguages
+        : allSupportedLanguages;
+    const includeAll = Boolean(body.includeAll);
+    const batchSize = body.batchSize ?? 5;
+    const cursor = body.cursor ?? null;
+
+    const { batch, nextCursor, debug } =
+      await this.findNextBatchForSweepInternal(
+        cursor,
+        batchSize,
+        supportedLanguages,
+        includeAll,
+        true,
+      );
+
+    return {
+      success: true,
+      data: {
+        cursor,
+        includeAll,
+        batchSize,
+        supportedLanguages,
+        batch,
+        nextCursor,
+        debug: debug ?? {
+          scanWindow: Math.max(batchSize * 3, 15),
+          windowAssignmentIds: [],
+          fastNeedyAssignmentIds: [],
+          deepScanCandidateIds: [],
+          deepNeedyAssignmentIds: [],
+          selectedBatchIds: [],
+        },
       },
     };
   }
@@ -443,8 +727,6 @@ export class TranslationMaintenanceController {
   async sweepMissingTranslations(
     @Body() body: SweepTranslationsRequestDto,
   ): Promise<{ success: true; jobId: number; message: string }> {
-    // publishJob.assignmentId has no FK constraint; 0 is used as a sentinel
-    // for sweep jobs that are not tied to a single assignment.
     const job = await this.jobStatusService.createPublishJob(0, "admin");
     void this.runSweepInBackground(job.id, body);
     return {
@@ -453,10 +735,6 @@ export class TranslationMaintenanceController {
       message: `Translation sweep started. Poll GET /api/v1/admin/translations/missing/fix/status/${job.id} for progress.`,
     };
   }
-
-  // ---------------------------------------------------------------------------
-  // Background job
-  // ---------------------------------------------------------------------------
 
   private async runTranslationsInBackground(
     jobId: number,
@@ -468,7 +746,6 @@ export class TranslationMaintenanceController {
       supportedLanguages.map((lang) => [normalizeLang(lang), lang]),
     );
 
-    // Build the ordered, deduplicated list of target languages
     const requestedLanguages = (body.languageCodes ?? [])
       .map((lang) => normalizeLang(lang))
       .filter((lang) => supportedLanguagesByNormalized.has(lang))
@@ -580,10 +857,6 @@ export class TranslationMaintenanceController {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Core translation logic
-  // ---------------------------------------------------------------------------
-
   private async translateAssignmentQuestions({
     assignmentId,
     targetLanguages,
@@ -601,12 +874,6 @@ export class TranslationMaintenanceController {
     questionsTranslated: number;
     remainingTranslations: number | null;
   }> {
-    // -------------------------------------------------------------------------
-    // 1. Load assignment with its ACTIVE (current) version only.
-    //    assignment.currentVersion is the published, non-draft active version.
-    //    We deliberately do NOT fall back to the most recently created version
-    //    because that could be an in-progress draft.
-    // -------------------------------------------------------------------------
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -622,10 +889,6 @@ export class TranslationMaintenanceController {
       );
     }
 
-    // -------------------------------------------------------------------------
-    // 2. Translate assignment metadata (name, introduction, instructions,
-    //    gradingCriteriaOverview) — scoped to targetLanguages.
-    // -------------------------------------------------------------------------
     if (!dryRun) {
       await (translateAllLanguages
         ? this.translationService.translateAssignment(assignmentId)
@@ -635,20 +898,6 @@ export class TranslationMaintenanceController {
           ));
     }
 
-    // -------------------------------------------------------------------------
-    // 3. Build the list of questions to translate.
-    //
-    //    Priority: active version's questionVersions → base questions.
-    //
-    //    QuestionVersion holds a snapshot of the question at publish time, so
-    //    `qv.question` and `qv.choices` are the authoritative text/choices for
-    //    that version.  Variants live on the base Question record (there is no
-    //    per-version variant snapshot), so we still fetch them from Question.
-    //
-    //    Questions whose questionId is null (added directly inside a version
-    //    without a base Question record) cannot be stored in Translation (which
-    //    requires a Question FK), so they are skipped with a warning.
-    // -------------------------------------------------------------------------
     const activeVersion = assignment.currentVersion;
     const questionVersions = activeVersion?.questionVersions ?? [];
 
@@ -659,8 +908,6 @@ export class TranslationMaintenanceController {
         `Assignment ${assignmentId}: translating ${questionVersions.length} questions from active version ${activeVersion?.id}`,
       );
 
-      // Fetch all base questions for resilient mapping. Some active-version
-      // questionVersions can have null or stale questionId values.
       const baseQuestions: BaseQuestionForTranslation[] =
         await this.prisma.question.findMany({
           where: { assignmentId, isDeleted: false },
@@ -760,7 +1007,6 @@ export class TranslationMaintenanceController {
         }));
       }
     } else {
-      // No active version — use base Question records directly
       this.logger.log(
         `Assignment ${assignmentId}: no active version found — translating base questions.`,
       );
@@ -790,18 +1036,10 @@ export class TranslationMaintenanceController {
       }));
     }
 
-    // -------------------------------------------------------------------------
-    // 4. Translate each question and its variants using a single unified path.
-    //
-    //    Both the "translate everything" (no maxMissing) and the "limited
-    //    budget" (maxMissing) cases use the same helper so that targetLanguages
-    //    is always respected and the code path is not duplicated.
-    // -------------------------------------------------------------------------
     let processedTranslations = 0;
     let remaining = remainingTranslations;
 
     for (const question of questionsToTranslate) {
-      // Translate question text + choices
       let qProcessed = 0;
       let qNext = remaining;
 
@@ -832,7 +1070,6 @@ export class TranslationMaintenanceController {
 
       if (remaining !== null && remaining <= 0) break;
 
-      // Translate each variant's content + choices
       for (const variant of question.variants) {
         let vProcessed = 0;
         let vNext = remaining;
@@ -880,9 +1117,8 @@ export class TranslationMaintenanceController {
    * languages and update the remaining budget.
    *
    * - Detects the source language of the text.
-   * - Deletes any existing Translation rows for the target languages before
-   *   writing, so stale/incorrect translations are replaced rather than
-   *   accumulated (Translation has no unique constraint).
+   * - Counts only successful language writes toward progress/budget.
+   * - Retries failed languages once to reduce transient LLM/limiter failures.
    * - Honours the `remaining` budget: only translates up to `remaining`
    *   languages when a limit is set, or all target languages when unlimited.
    */
@@ -931,27 +1167,48 @@ export class TranslationMaintenanceController {
         text,
         assignmentId,
       );
+      const variantSuffix =
+        variantId === null ? "" : ` variant ${String(variantId)}`;
 
-      // Remove stale Translation rows for these languages before writing fresh
-      // ones. Without this, each call would append a new row (no unique
-      // constraint on the table) and learners would see the oldest entry.
-      await this.prisma.translation.deleteMany({
-        where: {
-          questionId,
-          variantId,
-          languageCode: { in: languagesToProcess },
-        },
-      });
+      let pendingLanguages = [...languagesToProcess];
+      let successfulWrites = 0;
 
-      await this.translationService.translateContentToLanguages(
-        assignmentId,
-        questionId,
-        variantId,
-        text,
-        choices ?? null,
-        sourceLanguage,
-        languagesToProcess,
-      );
+      for (
+        let attempt = 1;
+        attempt <= 2 && pendingLanguages.length > 0;
+        attempt++
+      ) {
+        const translationResult =
+          await this.translationService.translateContentToLanguages(
+            assignmentId,
+            questionId,
+            variantId,
+            text,
+            choices ?? null,
+            sourceLanguage,
+            pendingLanguages,
+          );
+
+        successfulWrites += translationResult.success;
+        pendingLanguages = translationResult.failedLanguages;
+
+        if (pendingLanguages.length > 0 && attempt === 1) {
+          this.logger.warn(
+            `Assignment ${assignmentId}: retrying ${pendingLanguages.length} failed translation(s) for question ${questionId}${variantSuffix}.`,
+          );
+        }
+      }
+
+      if (successfulWrites === 0) {
+        this.logger.warn(
+          `Assignment ${assignmentId}: no translations were written for question ${questionId}${variantSuffix}.`,
+        );
+      }
+
+      const next =
+        remaining === null ? null : Math.max(0, remaining - successfulWrites);
+
+      return { processed: successfulWrites, next };
     }
 
     const processed = languagesToProcess.length;
@@ -959,10 +1216,6 @@ export class TranslationMaintenanceController {
 
     return { processed, next };
   }
-
-  // ---------------------------------------------------------------------------
-  // Sweep background job
-  // ---------------------------------------------------------------------------
 
   /**
    * Background worker for the sweep endpoint. Repeatedly calls
@@ -995,8 +1248,6 @@ export class TranslationMaintenanceController {
     const translateAllLanguages =
       targetLanguages.length === allSupportedLanguages.length;
 
-    // Cursor starts at the newest assignments (no id filter on first pass),
-    // then moves downward (`id < cursor`) after each scan window.
     let cursor: number | null = null;
     let batchCount = 0;
     let totalProcessed = 0;
@@ -1023,7 +1274,6 @@ export class TranslationMaintenanceController {
         );
 
         if (nextCursor === null) {
-          // Scanned past all assignments — nothing more to find.
           this.logger.log(
             `Sweep job ${jobId}: no more assignments to scan. Sweep complete.`,
           );
@@ -1033,8 +1283,6 @@ export class TranslationMaintenanceController {
         cursor = nextCursor;
 
         if (batch.length === 0) {
-          // This window had no assignments needing work; advance the cursor
-          // and continue scanning downward.
           continue;
         }
 
@@ -1091,7 +1339,6 @@ export class TranslationMaintenanceController {
           break;
         }
 
-        // Throttle between batches to avoid hammering the LLM API and DB.
         if (delayMs > 0) {
           await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
         }
@@ -1167,10 +1414,30 @@ export class TranslationMaintenanceController {
     batch: Array<{ id: number; name: string }>;
     nextCursor: number | null;
   }> {
+    const { batch, nextCursor } = await this.findNextBatchForSweepInternal(
+      cursor,
+      batchSize,
+      targetLanguages,
+      includeAll,
+      false,
+    );
+    return { batch, nextCursor };
+  }
+
+  private async findNextBatchForSweepInternal(
+    cursor: number | null,
+    batchSize: number,
+    targetLanguages: string[],
+    includeAll: boolean,
+    includeDebug: boolean,
+  ): Promise<{
+    batch: Array<{ id: number; name: string }>;
+    nextCursor: number | null;
+    debug?: SweepBatchDebug;
+  }> {
     const SCAN_WINDOW = Math.max(batchSize * 3, 15);
     const totalLangCount = targetLanguages.length;
 
-    // Step 1: load a window of candidate assignments (newest-first, paginated).
     const window = await this.prisma.assignment.findMany({
       where: {
         ...(cursor === null ? {} : { id: { lt: cursor } }),
@@ -1190,13 +1457,24 @@ export class TranslationMaintenanceController {
     });
 
     if (window.length === 0) {
-      return { batch: [], nextCursor: null };
+      return {
+        batch: [],
+        nextCursor: null,
+        debug: includeDebug
+          ? {
+              scanWindow: SCAN_WINDOW,
+              windowAssignmentIds: [],
+              fastNeedyAssignmentIds: [],
+              deepScanCandidateIds: [],
+              deepNeedyAssignmentIds: [],
+              selectedBatchIds: [],
+            }
+          : undefined,
+      };
     }
 
     const windowIds = window.map((a) => a.id);
 
-    // Step 2: single bulk query — assignment-level translation counts.
-    // With @@unique([assignmentId, languageCode]), count == distinct languages.
     const translationCounts = await this.prisma.assignmentTranslation.groupBy({
       by: ["assignmentId"],
       where: { assignmentId: { in: windowIds } },
@@ -1206,52 +1484,65 @@ export class TranslationMaintenanceController {
       translationCounts.map((c) => [c.assignmentId, c._count.languageCode]),
     );
 
-    // Step 3: classify every assignment in the window.
-    const needy: Array<{ id: number; name: string }> = [];
+    const fastNeedyIds = new Set<number>();
+    const deepScanCandidates: Array<{ id: number; name: string }> = [];
 
     for (const assignment of window) {
       const assignmentLangCount = countByAssignmentId.get(assignment.id) ?? 0;
-
       if (assignmentLangCount < totalLangCount) {
-        // Fast path: assignment-level translations are definitely incomplete.
-        needy.push(assignment);
+        fastNeedyIds.add(assignment.id);
       } else {
-        // Slow path: assignment-level translations appear complete; check
-        // question-level translations to be sure.
-        const scanResult = await this.scanAssignment(
-          assignment.id,
-          targetLanguages,
-          includeAll,
-          false,
-        );
-        if (
-          scanResult &&
-          (scanResult.missingAssignmentLanguages.length > 0 ||
-            scanResult.missingItems.length > 0)
-        ) {
-          needy.push(assignment);
-        }
+        deepScanCandidates.push(assignment);
       }
     }
 
-    // Step 4: take the first `batchSize` needy assignments for this iteration.
+    const deepScanResults = await this.scanAssignmentsConcurrently(
+      deepScanCandidates,
+      targetLanguages,
+      includeAll,
+      false,
+    );
+    const deepNeedyIds = new Set(
+      deepScanResults
+        .filter(
+          (scanResult) =>
+            scanResult.missingAssignmentLanguages.length > 0 ||
+            scanResult.missingItems.length > 0,
+        )
+        .map((scanResult) => scanResult.assignmentId),
+    );
+
+    const needy: Array<{ id: number; name: string }> = [];
+    for (const assignment of window) {
+      if (fastNeedyIds.has(assignment.id) || deepNeedyIds.has(assignment.id)) {
+        needy.push(assignment);
+      }
+    }
+
     const batch = needy.slice(0, batchSize);
 
-    // Step 5: compute the cursor for the next call.
-    // If more needy assignments remain in the window, jump to just above the
-    // next one so it is included in the next scan (`id: { lt: cursor }` is
-    // exclusive). Otherwise move past the entire window.
     const nextCursor =
       needy.length > batchSize
         ? needy[batchSize].id + 1
         : Math.min(...windowIds);
 
-    return { batch, nextCursor };
+    return {
+      batch,
+      nextCursor,
+      debug: includeDebug
+        ? {
+            scanWindow: SCAN_WINDOW,
+            windowAssignmentIds: windowIds,
+            fastNeedyAssignmentIds: [...fastNeedyIds],
+            deepScanCandidateIds: deepScanCandidates.map(
+              (assignment) => assignment.id,
+            ),
+            deepNeedyAssignmentIds: [...deepNeedyIds],
+            selectedBatchIds: batch.map((assignment) => assignment.id),
+          }
+        : undefined,
+    };
   }
-
-  // ---------------------------------------------------------------------------
-  // Question-version → base-question mapping
-  // ---------------------------------------------------------------------------
 
   /**
    * Resolves question-version records to base Question IDs using three
@@ -1292,7 +1583,6 @@ export class TranslationMaintenanceController {
 
     const baseQuestionById = new Map(baseQuestions.map((q) => [q.id, q]));
 
-    // Display-order → base question ID map from assignment.questionOrder
     const baseQuestionIdByDisplayOrder = new Map<number, number>();
     if (Array.isArray(questionOrder)) {
       for (const [index, qId] of questionOrder.entries()) {
@@ -1302,7 +1592,6 @@ export class TranslationMaintenanceController {
       }
     }
 
-    // Normalized text → base questions map
     const baseQuestionsByText = new Map<
       string,
       Array<(typeof baseQuestions)[number]>
@@ -1321,12 +1610,10 @@ export class TranslationMaintenanceController {
     for (const qv of questionVersions) {
       let baseQuestion: (typeof baseQuestions)[number] | undefined;
 
-      // Strategy 1: direct FK
       if (qv.questionId !== null && qv.questionId !== undefined) {
         baseQuestion = baseQuestionById.get(qv.questionId);
       }
 
-      // Strategy 2: display-order alignment
       if (!baseQuestion && typeof qv.displayOrder === "number") {
         const byDisplayId = baseQuestionIdByDisplayOrder.get(qv.displayOrder);
         if (typeof byDisplayId === "number") {
@@ -1334,7 +1621,6 @@ export class TranslationMaintenanceController {
         }
       }
 
-      // Strategy 3: normalized text match (only unambiguous)
       if (!baseQuestion) {
         const normalizedVersionText = normalizeQuestionText(qv.question);
         const byText = normalizedVersionText
@@ -1350,7 +1636,6 @@ export class TranslationMaintenanceController {
       }
     }
 
-    // Fallback: if no versions could be mapped, use all base questions
     if (resolvedIds.size === 0) {
       return baseQuestions.map((q) => q.id);
     }
@@ -1358,9 +1643,41 @@ export class TranslationMaintenanceController {
     return [...resolvedIds];
   }
 
-  // ---------------------------------------------------------------------------
-  // Find-missing helpers
-  // ---------------------------------------------------------------------------
+  private async scanAssignmentsConcurrently(
+    assignments: Array<{ id: number; name: string }>,
+    supportedLanguages: string[],
+    includeAll: boolean,
+    includeText: boolean,
+  ): Promise<AssignmentScanResult[]> {
+    if (assignments.length === 0) {
+      return [];
+    }
+
+    const SCAN_CONCURRENCY = 12;
+    const results: AssignmentScanResult[] = [];
+
+    for (let index = 0; index < assignments.length; index += SCAN_CONCURRENCY) {
+      const chunk = assignments.slice(index, index + SCAN_CONCURRENCY);
+      const chunkResults = await Promise.all(
+        chunk.map((assignment) =>
+          this.scanAssignment(
+            assignment.id,
+            supportedLanguages,
+            includeAll,
+            includeText,
+          ),
+        ),
+      );
+
+      for (const scanResult of chunkResults) {
+        if (scanResult) {
+          results.push(scanResult);
+        }
+      }
+    }
+
+    return results;
+  }
 
   private async resolveAssignmentsToScan(
     assignmentIds: number[] | undefined,
@@ -1472,6 +1789,10 @@ export class TranslationMaintenanceController {
     });
 
     const missingItems: MissingItem[] = [];
+    let totalTranslatableItems = 0;
+    let expectedTranslationRows = 0;
+    let existingTranslationRows = 0;
+    let missingTranslationRows = 0;
 
     for (const question of questions) {
       const languageMap = new Map<string, Set<string>>();
@@ -1491,6 +1812,10 @@ export class TranslationMaintenanceController {
       const missingQuestionLangs = supportedLanguages.filter(
         (lang) => !questionLangs.has(normalizeLang(lang)),
       );
+      totalTranslatableItems++;
+      expectedTranslationRows += supportedLanguages.length;
+      existingTranslationRows += questionLangs.size;
+      missingTranslationRows += missingQuestionLangs.length;
 
       if (missingQuestionLangs.length > 0) {
         missingItems.push({
@@ -1508,6 +1833,10 @@ export class TranslationMaintenanceController {
         const missingVariantLangs = supportedLanguages.filter(
           (lang) => !variantLangs.has(normalizeLang(lang)),
         );
+        totalTranslatableItems++;
+        expectedTranslationRows += supportedLanguages.length;
+        existingTranslationRows += variantLangs.size;
+        missingTranslationRows += missingVariantLangs.length;
 
         if (missingVariantLangs.length > 0) {
           missingItems.push({
@@ -1531,6 +1860,10 @@ export class TranslationMaintenanceController {
       missingAssignmentLanguages,
       missingItems,
       hasAnyTranslations,
+      totalTranslatableItems,
+      expectedTranslationRows,
+      existingTranslationRows,
+      missingTranslationRows,
     };
   }
 }

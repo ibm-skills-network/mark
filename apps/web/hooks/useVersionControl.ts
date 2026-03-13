@@ -24,11 +24,6 @@ export interface DraftData {
   showQuestions?: boolean;
 }
 
-interface Draft {
-  id: number;
-  [key: string]: any;
-}
-
 export function useVersionControl() {
   const versions = useAuthorStore((state) => state.versions);
   const currentVersion = useAuthorStore((state) => state.currentVersion);
@@ -82,7 +77,6 @@ export function useVersionControl() {
 
   const loadVersions = useAuthorStore((state) => state.loadVersions);
   const createVersion = useAuthorStore((state) => state.createVersion);
-  const saveDraft = useAuthorStore((state) => state.saveDraft);
   const restoreVersion = useAuthorStore((state) => state.restoreVersion);
   const activateVersion = useAuthorStore((state) => state.activateVersion);
   const compareVersions = useAuthorStore((state) => state.compareVersions);

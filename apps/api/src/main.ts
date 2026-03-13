@@ -1,9 +1,5 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 /* eslint-disable unicorn/no-process-exit */
-if (process.env.NODE_ENV === "production") {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-var-requires, unicorn/prefer-module
-  require("@instana/collector")();
-}
 /**
  * Application Bootstrap File
  *
@@ -13,7 +9,6 @@ if (process.env.NODE_ENV === "production") {
  * - Graceful shutdown configuration for containerized environments
  * - Signal handling for Kubernetes/Docker deployments
  * - Server timeout configurations for long-running requests
- * - Instana APM integration for monitoring
  *
  * @module main
  */

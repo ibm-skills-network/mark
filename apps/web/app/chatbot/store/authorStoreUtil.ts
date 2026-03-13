@@ -23,8 +23,6 @@ export function waitForBridge(maxWait = 10000) {
     }
 
     const registerCallback = () => {
-      const startTime = Date.now();
-
       const callback = () => {
         resolve(true);
       };

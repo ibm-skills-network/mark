@@ -7,7 +7,6 @@ import {
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
-import { createSafeStorage } from "@/lib/safe-storage";
 
 type GradingDataActions = {
   questionDisplay: QuestionDisplayType;
@@ -213,7 +212,7 @@ export const useAssignmentConfig = createWithEqualityFn<
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(
-            ([_, value]) => typeof value !== "function",
+            ([, value]) => typeof value !== "function",
           ),
         );
       },

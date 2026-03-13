@@ -94,9 +94,7 @@ function collectTextNodes(root: HTMLElement): Text[] {
   return textNodes;
 }
 
-function collectAttrTargets(
-  root: HTMLElement,
-): Array<{
+function collectAttrTargets(root: HTMLElement): Array<{
   element: Element;
   attribute: (typeof TRANSLATABLE_ATTRIBUTES)[number];
 }> {
@@ -200,9 +198,8 @@ function buildAugmentedTranslations(
 
     const numberedSourceMatch = normalizedSource.match(/^\d+[.)]?\s+(.+)$/u);
     if (numberedSourceMatch) {
-      const numberedTranslatedMatch = normalizeSourceText(translatedText).match(
-        /^\d+[.)]?\s+(.+)$/u,
-      );
+      const numberedTranslatedMatch =
+        normalizeSourceText(translatedText).match(/^\d+[.)]?\s+(.+)$/u);
       addTranslationAlias(
         augmentedTranslations,
         numberedSourceMatch[1],
@@ -211,9 +208,8 @@ function buildAugmentedTranslations(
     }
 
     const quantitySourceMatch = normalizedSource.match(/^\d+\s+(.+)$/u);
-    const quantityTranslatedMatch = normalizeSourceText(translatedText).match(
-      /^\d+\s+(.+)$/u,
-    );
+    const quantityTranslatedMatch =
+      normalizeSourceText(translatedText).match(/^\d+\s+(.+)$/u);
     if (quantitySourceMatch && quantityTranslatedMatch) {
       addTranslationAlias(
         augmentedTranslations,
@@ -258,7 +254,11 @@ function buildAugmentedTranslations(
 
   const fileOrLinkTranslation = augmentedTranslations["File or Link"];
   if (fileOrLinkTranslation) {
-    addTranslationAlias(augmentedTranslations, "LINK_FILE", fileOrLinkTranslation);
+    addTranslationAlias(
+      augmentedTranslations,
+      "LINK_FILE",
+      fileOrLinkTranslation,
+    );
   }
 
   const multipleChoiceTranslation = augmentedTranslations["Multiple Choice"];
@@ -286,13 +286,21 @@ function buildAugmentedTranslations(
 
   const unlimitedTranslation = augmentedTranslations.Unlimited;
   if (unlimitedTranslation) {
-    addTranslationAlias(augmentedTranslations, "unlimited", unlimitedTranslation);
+    addTranslationAlias(
+      augmentedTranslations,
+      "unlimited",
+      unlimitedTranslation,
+    );
   }
 
   const questionTranslation = augmentedTranslations.Question;
   if (questionTranslation) {
     addTranslationAlias(augmentedTranslations, "question", questionTranslation);
-    addTranslationAlias(augmentedTranslations, "questions", questionTranslation);
+    addTranslationAlias(
+      augmentedTranslations,
+      "questions",
+      questionTranslation,
+    );
   }
 
   const attemptTranslation = augmentedTranslations.Attempt;
@@ -353,7 +361,8 @@ function resolveDynamicTranslation(
   const normalizedSourceText = normalizeSourceText(sourceText);
   if (!normalizedSourceText) return null;
 
-  const numberedPrefixMatch = normalizedSourceText.match(/^(\d+[.)]?\s+)(.+)$/u);
+  const numberedPrefixMatch =
+    normalizedSourceText.match(/^(\d+[.)]?\s+)(.+)$/u);
   if (numberedPrefixMatch) {
     const normalizedRemainder = normalizeSourceText(numberedPrefixMatch[2]);
     const exactRemainderTranslation =
@@ -443,10 +452,12 @@ async function ensureLanguageTranslationsLoaded(
   NORMALIZED_STATIC_TRANSLATIONS.set(
     languageCode,
     Object.fromEntries(
-      Object.entries(augmentedTranslations).map(([sourceText, translatedText]) => [
-        normalizeSourceText(sourceText),
-        translatedText,
-      ]),
+      Object.entries(augmentedTranslations).map(
+        ([sourceText, translatedText]) => [
+          normalizeSourceText(sourceText),
+          translatedText,
+        ],
+      ),
     ),
   );
 }

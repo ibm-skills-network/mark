@@ -1,6 +1,5 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
-import { useAppConfig } from "@/stores/appConfig";
 import { type ClassValue, clsx } from "clsx";
 import { useCallback } from "react";
 import { twMerge } from "tailwind-merge";
@@ -59,20 +58,13 @@ export function mergeData<T extends DataWithUpdatedAt>(
   return backendData;
 }
 
-type DebugArgs = string | number | boolean | object;
-
 export const useDebugLog = () => {
   const debugMode = process.env.NODE_ENV === "development";
 
   const debugLog = useCallback(
-    (...args: DebugArgs[]) => {
+    (...args: unknown[]) => {
       if (debugMode) {
-        const formattedArgs = args.map((arg) => {
-          if (typeof arg === "object") {
-            return JSON.stringify(arg, null, 2);
-          }
-          return String(arg);
-        });
+        console.debug(...args);
       }
     },
     [debugMode],
@@ -87,10 +79,9 @@ export const useDebugLog = () => {
  * If the response is not a valid JSON string, it returns the original response.
  *
  * @param response - The learner's response as a string.
- * @param attempts - The number of attempts made to parse the response (default is 0).
  * @returns The parsed response as a JSON object or the original response string if parsing fails.
  */
-export function parseLearnerResponse(response: string, attempts = 0) {
+export function parseLearnerResponse(response: string) {
   try {
     let parsedResponse: LearnerResponseType = response;
     let attempts = 0;

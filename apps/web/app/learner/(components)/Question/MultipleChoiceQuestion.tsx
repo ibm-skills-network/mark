@@ -1,7 +1,6 @@
 import { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
-import { useLearnerStore, useLearnerOverviewStore } from "@/stores/learner";
-import { useAutoSaveResponse } from "@/hooks/use-auto-save-response";
+import { useLearnerStore } from "@/stores/learner";
 
 interface MultipleChoiceQuestion {
   isSingleCorrect: boolean;
@@ -12,10 +11,11 @@ function MultipleChoiceQuestion({
   isSingleCorrect,
   question,
 }: MultipleChoiceQuestion) {
-  const [addChoice, removeChoice, activeAttemptId] = useLearnerStore(
-    (state) => [state.addChoice, state.removeChoice, state.activeAttemptId],
-  );
-  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
+  const [addChoice, removeChoice] = useLearnerStore((state) => [
+    state.addChoice,
+    state.removeChoice,
+    state.activeAttemptId,
+  ]);
   const { choices, learnerChoices } = question;
 
   // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {

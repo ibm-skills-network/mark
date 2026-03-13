@@ -6,7 +6,6 @@ import {
   DefaultValuePipe,
   Get,
   Header,
-  Headers,
   Injectable,
   Param,
   ParseIntPipe,

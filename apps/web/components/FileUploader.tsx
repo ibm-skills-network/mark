@@ -12,7 +12,6 @@ import { learnerFileResponse } from "@/stores/learner";
 import {
   deleteFile,
   generateUploadUrl,
-  getFileType,
   uploadWithPresignedUrl,
 } from "@/lib/shared";
 import { UploadType, UploadContext, UploadRequest } from "@/config/types";
@@ -47,8 +46,6 @@ interface FileUploaderProps {
   restrictFileTypes?: boolean;
 }
 
-const isDevelopment = process.env.NODE_ENV === "development";
-
 /**
  * A reusable file uploader component that handles file uploads to IBM Cloud Object Storage
  * with multiple upload strategies depending on the environment and file type
@@ -72,7 +69,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [uploadStatus, setUploadStatus] = useState<
     Record<string, UploadStatus>
   >({});
-  const recentFileUploaded = files[files.length - 1];
   const [isUploading, setIsUploading] = useState(false);
   const [showUploaded, setShowUploaded] = useState<boolean>(showUploadedFiles);
   const [existingFiles, setExistingFiles] =
@@ -81,7 +77,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles: FileData[] = acceptedFiles.map((orig) => {
-      const mimeType = getFileType(orig.name);
       const file = orig;
       return {
         file,
@@ -148,7 +143,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     dropzoneConfig.validator = fileValidator;
   }
 
-  const { getRootProps, getInputProps, isDragActive, fileRejections } =
+  const { getRootProps, getInputProps, isDragActive } =
     useDropzone(dropzoneConfig);
 
   const handleDeleteFile = async (file: learnerFileResponse) => {

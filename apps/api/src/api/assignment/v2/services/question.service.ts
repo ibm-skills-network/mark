@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { isDeepStrictEqual } from "node:util";
 import { ResponseType } from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
@@ -104,6 +105,7 @@ export class QuestionService {
     progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
   ): Promise<void> {
+    void forceTranslation;
     const INITIAL_SETUP_RANGE = { start: 0, end: 10 };
     const QUESTION_PROCESSING_RANGE = { start: 10, end: 90 };
     const FINAL_CLEANUP_RANGE = { start: 90, end: 100 };
@@ -309,29 +311,43 @@ export class QuestionService {
     return true;
   }
 
-  /**
-   * Check if any variants have changed
-   */
   private checkVariantsForChanges(
-    existingVariants: VariantDto[],
-    newVariants: VariantDto[],
+    existingVariants: VariantDto[] = [],
+    newVariants: VariantDto[] = [],
   ): boolean {
     if (existingVariants.length !== newVariants.length) {
       return true;
     }
-    const existingVariantsMap = new Map<number, VariantDto>();
-    for (const v of existingVariants) existingVariantsMap.set(v.id, v);
-    for (const newVariant of newVariants) {
-      const existingVariant = existingVariantsMap.get(newVariant.id);
-      if (
-        !existingVariant ||
-        existingVariant.variantContent !== newVariant.variantContent ||
-        !this.areChoicesEqual(existingVariant.choices, newVariant.choices)
-      ) {
+
+    const existingVariantsById = new Map(
+      existingVariants.map((variant) => [variant.id, variant]),
+    );
+
+    return newVariants.some((newVariant) => {
+      const existingVariant = existingVariantsById.get(newVariant.id);
+
+      if (!existingVariant) {
         return true;
       }
-    }
-    return false;
+
+      return this.hasVariantChanged(existingVariant, newVariant);
+    });
+  }
+
+  private hasVariantChanged(
+    existingVariant: VariantDto,
+    newVariant: VariantDto,
+  ): boolean {
+    return (
+      existingVariant.variantContent !== newVariant.variantContent ||
+      existingVariant.variantType !== newVariant.variantType ||
+      existingVariant.randomizedChoices !== newVariant.randomizedChoices ||
+      existingVariant.maxWords !== newVariant.maxWords ||
+      existingVariant.maxCharacters !== newVariant.maxCharacters ||
+      existingVariant.isDeleted !== newVariant.isDeleted ||
+      !this.areChoicesEqual(existingVariant.choices, newVariant.choices) ||
+      !isDeepStrictEqual(existingVariant.scoring, newVariant.scoring)
+    );
   }
 
   async generateQuestions(

@@ -67,9 +67,6 @@ const SpeechBubble = ({ bubble, onDismiss, position }: SpeechBubbleProps) => {
   const bubbleWidth = 280;
 
   const isNearLeftEdge = position.x < bubbleWidth + 50;
-  const isNearRightEdge =
-    typeof window !== "undefined" &&
-    position.x > window.innerWidth - markSize - 50;
 
   let bubbleX, bubbleY, arrowPosition, arrowClasses;
 

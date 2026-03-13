@@ -17,7 +17,7 @@ FROM ${BASE_IMAGE} AS installer
 ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/out/json/ .
-COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
+COPY --from=builder $DIR/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
 RUN yarn install --ignore-scripts --frozen-lockfile
@@ -36,7 +36,7 @@ RUN yarn build --filter=api-gateway && yarn install --production --ignore-script
 # hadolint ignore=DL3006
 FROM ${BASE_IMAGE} AS production
 ARG DIR=/usr/src/app
-ENV NODE_ENV production
+ENV NODE_ENV=production
 WORKDIR $DIR
 RUN apk add --no-cache dumb-init~=1
 COPY --chown=node:node --from=sourcer $DIR/apps/api-gateway/package.json ./package.json

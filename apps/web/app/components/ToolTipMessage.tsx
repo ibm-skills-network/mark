@@ -16,14 +16,12 @@ interface TooltipMessageProps {
 
 const TooltipMessage: FC<TooltipMessageProps> = ({
   isLoading,
-  questionsLength,
   hasEmptyQuestion,
   isValid,
   message,
   submitting,
   hasChanges,
   changesSummary,
-  invalidQuestionId,
   onNavigate,
   showAction = true,
 }) => {
