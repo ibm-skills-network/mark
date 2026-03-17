@@ -26,7 +26,6 @@ import {
   ArrowRightIcon,
   PencilIcon,
   StarIcon,
-  DocumentArrowDownIcon,
   DocumentArrowUpIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
@@ -74,7 +73,6 @@ const IssuesModal = ({
   questions,
   isValid,
   message,
-  invalidQuestionId,
   onNavigateToFix,
   onAutoFix,
   onNavigateToConfig,
@@ -773,7 +771,6 @@ function Component() {
     name,
     questionOrder,
     replaceQuestion,
-    addQuestion,
   ] = useAuthorStore((state) => [
     state.introduction,
     state.instructions,
@@ -793,7 +790,6 @@ function Component() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
-    correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.showSubmissionFeedback,
@@ -1238,8 +1234,6 @@ function Component() {
 
   const generatePDF = async (data: any, filename: string) => {
     try {
-      const htmlContent = formatForPDF(data);
-
       const printWindow = window.open("", "_blank");
       if (!printWindow) {
         throw new Error(
@@ -1990,7 +1984,7 @@ function Component() {
                 );
               })}
 
-            {originalAssignment?.questions?.map((origQuestion, index) => {
+            {originalAssignment?.questions?.map((origQuestion) => {
               const stillExists = questions?.some(
                 (q) => q.id === origQuestion.id,
               );

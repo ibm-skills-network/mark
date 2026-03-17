@@ -121,7 +121,7 @@ const getStandardsForLevel = (level: number): LevelStandardsUpdates => {
 };
 
 const getLevelStandardsFromName = (
-  name?: string | null
+  name?: string | null,
 ): LevelStandards | null => {
   const level = getLevelFromName(name);
   if (level === null) return null;
@@ -139,7 +139,7 @@ const getLevelStandardsFromName = (
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,
-  })
+  }),
 )
 @Controller({
   path: "admin/assignments/level-standards",
@@ -150,7 +150,7 @@ export class AssignmentLevelStandardsController {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jobStatusService: JobStatusServiceV2
+    private readonly jobStatusService: JobStatusServiceV2,
   ) {}
 
   @Post("apply")
@@ -172,7 +172,7 @@ export class AssignmentLevelStandardsController {
     },
   })
   async applyLevelStandards(
-    @Body() body: ApplyLevelStandardsRequestDto
+    @Body() body: ApplyLevelStandardsRequestDto,
   ): Promise<{
     success: true;
     jobId: number;
@@ -200,14 +200,14 @@ export class AssignmentLevelStandardsController {
 
     if (!jobAssignmentId) {
       throw new NotFoundException(
-        "No assignments found to run level standards job"
+        "No assignments found to run level standards job",
       );
     }
 
     // Reuse the same publishJob infra used by translation backfills.
     const job = await this.jobStatusService.createPublishJob(
       jobAssignmentId,
-      "admin"
+      "admin",
     );
 
     void this.runLevelStandardsInBackground(job.id, {
@@ -233,7 +233,7 @@ export class AssignmentLevelStandardsController {
   @Get("apply/status/:jobId")
   @ApiOperation({ summary: "Check the status of a level-standards apply job" })
   async getApplyJobStatus(
-    @Param("jobId", ParseIntPipe) jobId: number
+    @Param("jobId", ParseIntPipe) jobId: number,
   ): Promise<{
     success: true;
     jobId: number;
@@ -282,7 +282,7 @@ export class AssignmentLevelStandardsController {
       assignmentIds?: number[];
       dryRun: boolean;
       batchSize: number;
-    }
+    },
   ): Promise<void> {
     const { assignmentIds, dryRun, batchSize } = options;
 
@@ -296,7 +296,7 @@ export class AssignmentLevelStandardsController {
         id: number;
         name: string;
         currentVersionId: number | null;
-      }>
+      }>,
     ): Promise<void> => {
       scanned += assignments.length;
 
@@ -355,14 +355,14 @@ export class AssignmentLevelStandardsController {
             this.prisma.assignment.updateMany({
               where: { id: { in: level3AssignmentIds } },
               data: updates,
-            })
+            }),
           );
           if (uniqueLevel3VersionIds.length > 0) {
             operations.push(
               this.prisma.assignmentVersion.updateMany({
                 where: { id: { in: uniqueLevel3VersionIds } },
                 data: updates,
-              })
+              }),
             );
           }
         }
@@ -373,14 +373,14 @@ export class AssignmentLevelStandardsController {
             this.prisma.assignment.updateMany({
               where: { id: { in: otherAssignmentIds } },
               data: updates,
-            })
+            }),
           );
           if (uniqueOtherVersionIds.length > 0) {
             operations.push(
               this.prisma.assignmentVersion.updateMany({
                 where: { id: { in: uniqueOtherVersionIds } },
                 data: updates,
-              })
+              }),
             );
           }
         }
@@ -510,8 +510,8 @@ export class AssignmentLevelStandardsController {
         .catch((updateError) => {
           this.logger.error(
             `Failed to update job ${jobId} failure status: ${String(
-              updateError
-            )}`
+              updateError,
+            )}`,
           );
         });
     }

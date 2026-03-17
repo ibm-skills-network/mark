@@ -4,12 +4,9 @@ import MarkdownViewer from "@/components/MarkdownViewer";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   Choice,
-  Criteria,
   QuestionAuthorStore,
   QuestionType,
   ResponseType,
-  Rubric,
-  RubricType,
   UpdateQuestionStateParams,
 } from "@/config/types";
 import { expandMarkingRubric, generateRubric } from "@/lib/talkToBackend";
@@ -310,9 +307,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   questionTitle,
   setQuestionTitle,
   questionType,
-  setQuestionType,
   questionCriteria,
-  setQuestionCriteria,
   handleUpdateQuestionState,
   questionIndex,
   preview,
@@ -338,16 +333,12 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const modifyChoice = useAuthorStore((state) => state.modifyChoice);
   const [isModalOpen, setModalOpen] = useState(false);
   const [inProgressRubricIndex, setInProgressRubricIndex] = useState<number>(0);
-  const addOneRubric = useAuthorStore((state) => state.addOneRubric);
   const setQuestionScoring = useAuthorStore(
     (state) => state.setQuestionScoring,
   );
   const modifyQuestion = useAuthorStore((state) => state.modifyQuestion);
   const [swappingIndices, setSwappingIndices] = useState<number[]>([]);
   const rowsRef = useRef<(HTMLTableRowElement | null)[]>([]);
-  const handleUpdateAllVariantsCriteria = useAuthorStore(
-    (state) => state.handleUpdateAllVariantsCriteria,
-  );
   const addTrueFalseChoice = useAuthorStore(
     (state) => state.addTrueFalseChoice,
   );

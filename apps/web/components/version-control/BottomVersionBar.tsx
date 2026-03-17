@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useAuthorStore } from "@/stores/author";
@@ -13,7 +13,6 @@ import {
   GitBranch,
   Clock,
   Eye,
-  FileText,
   GitMerge,
   Tag,
   Star,
@@ -27,7 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 interface DropdownProps {
   isOpen: boolean;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   width?: string;
 }
 
@@ -69,11 +68,10 @@ function Dropdown({
 export function BottomVersionBar() {
   const { isOpen: isChatbotOpen } = useChatbot();
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [, setDraftsOpen] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [versionComparison, setVersionComparison] =
-    useState<VersionComparison | null>(null);
+  const [versionComparison] = useState<VersionComparison | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     type: "checkout" | "loadDraft";
     versionId?: number;
@@ -112,21 +110,13 @@ export function BottomVersionBar() {
     hasUnsavedChanges,
     createVersion,
     updateExistingVersion,
-    drafts,
     loadDraft,
-    isLoadingDrafts,
-    draftsLoadFailed,
-    hasAttemptedLoadDrafts,
-    forceRefreshDrafts,
-    debugForceStateRefresh,
-    forceClearLoadingState,
     loadVersions,
     isLoadingVersions,
     versionsLoadFailed,
-    compareVersions,
   } = versionControlHook;
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeAssignmentId && isLoadingVersions) {
       const timeout = setTimeout(() => {
         loadVersions().catch(console.error);
@@ -162,25 +152,7 @@ export function BottomVersionBar() {
       return;
     }
 
-    const result = await checkoutVersion(versionId, versionNumber);
     setVersionsOpen(false);
-  };
-
-  const handleDraftSelect = async (draftId: number) => {
-    const draft = drafts.find((d) => d.id === draftId);
-
-    if (hasUnsavedChanges) {
-      setPendingAction({
-        type: "loadDraft",
-        draftId,
-        targetName: draft?.name || "Draft",
-      });
-      setShowUnsavedModal(true);
-      return;
-    }
-
-    await loadDraft(draftId);
-    setDraftsOpen(false);
   };
 
   const handleSaveAndProceed = async () => {
@@ -237,16 +209,6 @@ export function BottomVersionBar() {
   const handleModalClose = () => {
     setShowUnsavedModal(false);
     setPendingAction(null);
-  };
-
-  const handleRevertChanges = () => {
-    if (
-      confirm(
-        "Are you sure you want to revert all unsaved changes? This action cannot be undone.",
-      )
-    ) {
-      window.location.reload();
-    }
   };
 
   const handleVersionSave = async (

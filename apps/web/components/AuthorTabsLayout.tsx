@@ -2,9 +2,8 @@
 
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useChatbot } from "@/hooks/useChatbot";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Settings, HelpCircle, CheckCircle, Eye } from "lucide-react";
+import { FileText, Settings, HelpCircle, Eye } from "lucide-react";
 
 interface AuthorTabsLayoutProps {
   children: React.ReactNode;
@@ -17,7 +16,6 @@ export function AuthorTabsLayout({
 }: AuthorTabsLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isOpen: isChatbotOpen } = useChatbot();
 
   const getCurrentTab = () => {
     if (pathname.includes("/config")) return "config";

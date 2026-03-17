@@ -10,7 +10,6 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as crypto from "node:crypto";
 import { createCanvas } from "canvas";
 import type {
-  PDFDocumentLoadingTask,
   PDFDocumentProxy,
   PDFPageProxy,
   PDFOperatorList,
@@ -24,7 +23,6 @@ import {
   ContentBlock,
   StructuredPage,
   BlockType,
-  BoundingBox,
   DocumentSection,
   ExtractionMetadata,
 } from "./structured-content.models";
@@ -243,6 +241,7 @@ export class PdfStructureExtractorService {
     pageNumber: number,
     viewport: PageViewport,
   ): ContentBlock[] {
+    void viewport;
     if (!items || items.length === 0) {
       return [];
     }

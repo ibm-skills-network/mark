@@ -1,7 +1,6 @@
 import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLang";
 import { QuestionStore } from "@/config/types";
-import { useLearnerStore, useLearnerOverviewStore } from "@/stores/learner";
-import { useAutoSaveResponse } from "@/hooks/use-auto-save-response";
+import { useLearnerStore } from "@/stores/learner";
 
 interface Props {
   question: QuestionStore;
@@ -9,11 +8,10 @@ interface Props {
 
 function TrueFalseQuestion(props: Props) {
   const { question } = props;
-  const [setAnswerChoice, activeAttemptId] = useLearnerStore((state) => [
+  const [setAnswerChoice] = useLearnerStore((state) => [
     state.setAnswerChoice,
     state.activeAttemptId,
   ]);
-  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const learnerAnswerChoice = question.learnerAnswerChoice;
 
   const userPreferredLanguage =

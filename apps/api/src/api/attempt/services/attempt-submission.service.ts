@@ -61,6 +61,10 @@ import { QuestionResponseService } from "./question-response/question-response.s
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
 
+type QuestionPointsSource =
+  | Pick<Question, "id" | "totalPoints">
+  | Pick<QuestionDto, "id" | "totalPoints">;
+
 @Injectable()
 export class AttemptSubmissionService {
   private readonly logger = new Logger(AttemptSubmissionService.name);
@@ -1074,7 +1078,8 @@ export class AttemptSubmissionService {
       const { totalPossiblePoints, missingQuestions } =
         await this.calculateTotalPossiblePointsWithValidation(
           successfulQuestionResponses,
-          assignment.questions,
+          updateDto.authorQuestions ?? assignment.questions,
+          { allowDatabaseFallback: false },
         );
 
       if (totalPossiblePoints <= 0) {
@@ -1313,16 +1318,21 @@ export class AttemptSubmissionService {
    * to prevent bugs where questions are deleted/filtered after attempt creation.
    *
    * @param responses - The graded question responses
-   * @param assignmentQuestions - Questions from the assignment (may be filtered/deleted)
+   * @param assignmentQuestions - Questions from the active grading source
+   * @param options - Controls whether missing questions should be looked up in the database
    * @returns Object containing totalPossiblePoints and array of missing question IDs
    */
   private async calculateTotalPossiblePointsWithValidation(
     responses: CreateQuestionResponseAttemptResponseDto[],
-    assignmentQuestions: Question[],
+    assignmentQuestions: QuestionPointsSource[],
+    options?: {
+      allowDatabaseFallback?: boolean;
+    },
   ): Promise<{
     totalPossiblePoints: number;
     missingQuestions: number[];
   }> {
+    const allowDatabaseFallback = options?.allowDatabaseFallback ?? true;
     let totalPossiblePoints = 0;
     const missingQuestions: number[] = [];
     const questionMap = new Map(
@@ -1355,6 +1365,13 @@ export class AttemptSubmissionService {
     }
 
     if (missingQuestionIds.length > 0) {
+      if (!allowDatabaseFallback) {
+        throw new InternalServerErrorException(
+          `Cannot calculate totalPossiblePoints: Question ${missingQuestionIds[0]} not found ` +
+            `in provided questions. This prevents accurate grading.`,
+        );
+      }
+
       try {
         const deletedQuestions = await this.prisma.question.findMany({
           where: {

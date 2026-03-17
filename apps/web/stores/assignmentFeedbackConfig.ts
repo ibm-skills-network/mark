@@ -34,7 +34,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
 >()(
   persist(
     devtools(
-      withUpdatedAt((set, get) => ({
+      withUpdatedAt((set) => ({
         verbosityLevel: "Full",
         showSubmissionFeedback: true,
         showQuestionScore: true,
@@ -90,7 +90,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(
-            ([_, value]) => typeof value !== "function",
+            ([, value]) => typeof value !== "function",
           ),
         );
       },

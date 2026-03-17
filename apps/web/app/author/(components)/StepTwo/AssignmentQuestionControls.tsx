@@ -1,10 +1,9 @@
 "use client";
 
-import { stepTwoSections } from "@/config/constants";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { cn } from "@/lib/strings";
 import { type ComponentPropsWithoutRef, type FC } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;
 

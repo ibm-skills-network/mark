@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useAuthorStore, useQuestionStore } from "@/stores/author";
+import { useAuthorStore } from "@/stores/author";
 import { useEffect, useState, useCallback } from "react";
 import { shallow } from "zustand/shallow";
 
@@ -59,8 +59,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     }),
     shallow,
   );
-
-  const questionStates = useQuestionStore((state) => state.questionStates);
 
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [assignmentMeta, setAssignmentMeta] = useState({

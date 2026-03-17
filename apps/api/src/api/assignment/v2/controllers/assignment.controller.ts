@@ -61,14 +61,6 @@ import { JobStatusServiceV2 } from "../services/job-status.service";
 import { QuestionService } from "../services/question.service";
 import { ReportService } from "../services/report.repository";
 
-interface AdminSessionRequest extends Request {
-  adminSession: {
-    email: string;
-    role: UserRole;
-    sessionToken: string;
-  };
-}
-
 interface AssignmentAnalyticsResponse {
   data: Array<{
     id: number;

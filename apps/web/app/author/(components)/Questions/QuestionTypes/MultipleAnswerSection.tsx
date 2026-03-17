@@ -50,7 +50,6 @@ function Section({
   removeChoice,
   setChoices,
   modifyChoice,
-  variantMode,
 }: SectionProps) {
   const [setCriteriaMode] = useQuestionStore((state) => [
     state.setCriteriaMode,
@@ -156,10 +155,6 @@ function Section({
     updatedChoice: Partial<Choice>,
   ) => {
     modifyChoice(questionId, choiceIndex, updatedChoice, variantId);
-  };
-
-  const handleSetChoices = (choices: Choice[]) => {
-    setChoices(questionId, choices, variantId);
   };
 
   const handleChoiceToggle = (choiceIndex: number) => {

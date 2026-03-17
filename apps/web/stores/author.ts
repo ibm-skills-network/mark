@@ -1974,10 +1974,7 @@ export const useAuthorStore = createWithEqualityFn<
             });
         },
 
-        checkoutVersion: async (
-          versionId: number,
-          versionNumber?: string | number,
-        ) => {
+        checkoutVersion: async (versionId: number) => {
           const state = get();
           if (!state.activeAssignmentId) return false;
 

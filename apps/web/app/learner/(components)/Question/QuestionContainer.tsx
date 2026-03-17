@@ -15,15 +15,12 @@ import {
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   LanguageIcon,
   TagIcon as OutlineTagIcon,
   ArrowRightIcon,
   PaperAirplaneIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
-import { AnimatePresence, motion } from "framer-motion";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";
@@ -113,9 +110,10 @@ function Component(props: Props) {
   const setTranslatedChoices = useLearnerStore(
     (state) => state.setTranslatedChoices,
   );
-  const [userPreferedLanguage, setUserPreferredLanguage] = useLearnerStore(
-    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
-  );
+  const [userPreferedLanguage] = useLearnerStore((state) => [
+    state.userPreferedLanguage,
+    state.setUserPreferedLanguage,
+  ]);
   const [userPreferedLanguageName, setUserPreferredLanguageName] = useState<
     string | undefined
   >(undefined);

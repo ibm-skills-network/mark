@@ -26,8 +26,8 @@ interface Props {
 async function LearnerLayout(props: Props) {
   const { params, searchParams } = props;
   const { authorMode } = searchParams;
-  const assignmentId = ~~params.assignmentId;
-  const headerList = headers();
+  const assignmentId = Math.trunc(Number(params.assignmentId));
+  const headerList = await headers();
   const cookieHeader = headerList.get("cookie") || "";
   const stateTimeline: { step: string; detail?: string; timestamp?: string }[] =
     [];

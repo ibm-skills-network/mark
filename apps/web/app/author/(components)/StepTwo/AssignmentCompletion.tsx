@@ -6,7 +6,7 @@ import { stepTwoSections } from "@/config/constants";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { InformationCircleIcon } from "@heroicons/react/24/solid";
 import type { ComponentPropsWithoutRef, FC } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;
 
