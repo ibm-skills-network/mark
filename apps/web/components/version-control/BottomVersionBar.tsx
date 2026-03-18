@@ -152,6 +152,7 @@ export function BottomVersionBar() {
       return;
     }
 
+    await checkoutVersion(versionId, versionNumber);
     setVersionsOpen(false);
   };
 
