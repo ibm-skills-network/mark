@@ -39,6 +39,7 @@ import {
   VariantType,
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
 import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
@@ -1449,10 +1450,9 @@ export class AttemptSubmissionService {
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
     ) {
-      orderedQuestions.sort(
-        (a, b) =>
-          assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id),
+      orderedQuestions = applyQuestionOrder(
+        orderedQuestions,
+        assignment.questionOrder,
       );
     }
 

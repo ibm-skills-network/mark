@@ -370,6 +370,60 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     );
   });
 
+  it("maps temporary frontend question ids to persisted backend ids before saving question order", async () => {
+    const assignmentId = 1;
+    const jobId = 1;
+    const tempQuestionId = 966_122_647;
+    const persistedQuestionId = 3;
+    const dto = createMockUpdateAssignmentQuestionsDto(
+      {
+        questionOrder: [1, tempQuestionId, 2],
+        questions: [
+          createMockQuestionDto({ id: 1 }),
+          createMockQuestionDto({ id: tempQuestionId }),
+          createMockQuestionDto({ id: 2 }),
+        ],
+      },
+      false,
+    );
+
+    const existingAssignment = createMockGetAssignmentResponseDto(
+      { published: true, questionOrder: [1, 2] },
+      [createMockQuestion({ id: 1 }), createMockQuestion({ id: 2 })],
+    );
+    assignmentRepository.findById.mockResolvedValue(existingAssignment);
+    questionService.processQuestionsForPublishing.mockResolvedValue(
+      new Map([[tempQuestionId, persistedQuestionId]]),
+    );
+    questionService.getQuestionsForAssignment.mockResolvedValue([
+      createMockQuestionDto({ id: 1 }),
+      createMockQuestionDto({ id: 2 }),
+      createMockQuestionDto({ id: persistedQuestionId }),
+    ]);
+
+    jest
+      .spyOn<
+        any,
+        any
+      >(service as any, "haveTranslatableAssignmentFieldsChanged")
+      .mockReturnValue(false);
+    jest
+      .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
+      .mockReturnValue(false);
+
+    await service["startPublishingProcess"](
+      jobId,
+      assignmentId,
+      dto,
+      "author-123",
+    );
+
+    expect(assignmentRepository.update).toHaveBeenCalledWith(
+      assignmentId,
+      expect.objectContaining({ questionOrder: [1, persistedQuestionId, 2] }),
+    );
+  });
+
   describe("resolveQuestionOrder", () => {
     it("uses explicit questionOrder even when questions payload is absent", () => {
       const existingAssignment = createMockGetAssignmentResponseDto();

@@ -21,6 +21,7 @@ import {
   VariantDto,
   VariantType,
 } from "../../dto/update.questions.request.dto";
+import { applyQuestionOrder } from "../../utils/question-order.util";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
@@ -104,7 +105,7 @@ export class QuestionService {
     jobId?: number,
     progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
-  ): Promise<void> {
+  ): Promise<Map<number, number>> {
     void forceTranslation;
     const INITIAL_SETUP_RANGE = { start: 0, end: 10 };
     const QUESTION_PROCESSING_RANGE = { start: 10, end: 90 };
@@ -268,6 +269,8 @@ export class QuestionService {
         FINAL_CLEANUP_RANGE.end,
         "Question processing completed successfully",
       );
+
+      return frontendToBackendIdMap;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -395,10 +398,9 @@ export class QuestionService {
       );
     }
 
-    const questionOrder = assignment.questionOrder || [];
-
-    const sortedQuestions = [...assignment.questions].sort(
-      (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id),
+    const sortedQuestions = applyQuestionOrder(
+      assignment.questions,
+      assignment.questionOrder,
     );
 
     const questionsForGradingContext = sortedQuestions.map((q) => ({

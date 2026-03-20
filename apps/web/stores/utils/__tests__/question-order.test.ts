@@ -57,4 +57,18 @@ describe("applyQuestionOrder", () => {
     expect(result.questionOrder).toEqual([5, 6]);
     expect(result.questions.map((q) => q.id)).toEqual([5, 6]);
   });
+
+  it("appends newly added questions that are missing from backend order", () => {
+    const questions = [
+      makeQuestion(1, 1),
+      makeQuestion(2, 2),
+      makeQuestion(99, 3),
+    ];
+
+    const result = applyQuestionOrder(questions, [2, 1]);
+
+    expect(result.questionOrder).toEqual([2, 1, 99]);
+    expect(result.questions.map((q) => q.id)).toEqual([2, 1, 99]);
+    expect(result.questions.map((q) => q.index)).toEqual([1, 2, 3]);
+  });
 });

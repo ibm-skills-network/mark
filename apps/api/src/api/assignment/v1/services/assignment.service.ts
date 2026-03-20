@@ -16,6 +16,7 @@ import { Job, Prisma, QuestionVariant, ReportType } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
+import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
@@ -271,11 +272,10 @@ export class AssignmentServiceV1 {
         }
       }
     }
-    if (result.questions && result.questionOrder) {
-      result.questions.sort(
-        (a, b) =>
-          result.questionOrder.indexOf(a.id) -
-          result.questionOrder.indexOf(b.id),
+    if (result.questions) {
+      result.questions = applyQuestionOrder(
+        result.questions,
+        result.questionOrder,
       );
     }
 
@@ -1009,14 +1009,12 @@ export class AssignmentServiceV1 {
         const backendId = frontendToBackendIdMap.get(q.id);
         return backendId || q.id;
       });
-      allQuestions.sort(
-        (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id),
-      );
+      const orderedQuestions = applyQuestionOrder(allQuestions, questionOrder);
 
       const responseData: UpdateAssignmentQuestionsResponseDto = {
         id: assignmentId,
         success: true,
-        questions: allQuestions.map((q) => {
+        questions: orderedQuestions.map((q) => {
           const variants = q.variants.map((v) => {
             const choices = (v.choices as unknown as Choice[]) ?? [];
             return { ...v, choices };
@@ -1739,13 +1737,13 @@ export class AssignmentServiceV1 {
       where: { id: assignmentId },
       select: { questionOrder: true },
     });
-    const questionOrder = assignmentData?.questionOrder || [];
-    const questionsForGradingContext = assignment.questions
-      .sort((a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id))
-      .map((q) => ({
-        id: q.id,
-        questionText: q.question,
-      }));
+    const questionsForGradingContext = applyQuestionOrder(
+      assignment.questions,
+      assignmentData?.questionOrder,
+    ).map((q) => ({
+      id: q.id,
+      questionText: q.question,
+    }));
 
     const questionGradingContextMap =
       await this.llmFacadeService.generateQuestionGradingContext(

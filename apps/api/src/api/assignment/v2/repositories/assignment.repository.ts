@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Assignment, Question, QuestionVariant } from "@prisma/client";
+import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import {
   UserRole,
   UserSession,
@@ -340,18 +341,10 @@ export class AssignmentRepository {
         return questionDto;
       });
 
-    if (
-      filteredQuestions.length > 0 &&
-      Array.isArray(assignment.questionOrder)
-    ) {
-      filteredQuestions.sort(
-        (a, b) =>
-          assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id),
-      );
-    }
-
-    assignment.questions = filteredQuestions;
+    assignment.questions = applyQuestionOrder(
+      filteredQuestions,
+      assignment.questionOrder,
+    );
     return assignment as Assignment & { questions: QuestionDto[] };
   }
 
