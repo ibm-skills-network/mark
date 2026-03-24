@@ -458,7 +458,7 @@ RESPONSE STYLE:
       createQuestion: {
         description:
           "Generate exactly one AI question for the assignment from the provided prompt and question type",
-        parameters: z.object({
+        inputSchema: z.object({
           questionType: z
             .enum([
               "TEXT",
