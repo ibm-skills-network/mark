@@ -1,55 +1,41 @@
 /**
- * Reliable file upload service with chunking, retry logic, and progress tracking
- * Handles files of any size with automatic retry and recovery
+ * Reliable single-request upload service with retry logic and progress tracking.
+ * For a single presigned PUT URL, we should upload the full file in one request.
  */
 
 interface UploadProgress {
   loaded: number;
   total: number;
   percentage: number;
-  chunkIndex?: number;
-  totalChunks?: number;
-}
-
-interface ChunkUploadResult {
-  success: boolean;
-  chunkIndex: number;
-  etag?: string;
-  error?: Error;
 }
 
 interface ReliableUploadOptions {
   onProgress?: (progress: UploadProgress) => void;
-  chunkSize?: number;
   maxRetries?: number;
   retryDelay?: number;
   timeout?: number;
 }
 
-const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY = 1000;
 const DEFAULT_TIMEOUT = 5 * 60 * 1000;
 
-/**
- * Sleep utility for retry delays with exponential backoff
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-/**
- * Upload a single chunk with retry logic
- */
-async function uploadChunkWithRetry(
-  chunk: Blob,
+async function uploadSinglePutWithRetry(
+  file: File,
   presignedUrl: string,
-  chunkIndex: number,
-  maxRetries: number,
-  retryDelay: number,
-  timeout: number,
-  contentType: string,
-): Promise<ChunkUploadResult> {
+  options: ReliableUploadOptions = {},
+): Promise<void> {
+  const {
+    onProgress,
+    maxRetries = DEFAULT_MAX_RETRIES,
+    retryDelay = DEFAULT_RETRY_DELAY,
+    timeout = DEFAULT_TIMEOUT,
+  } = options;
+
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -59,9 +45,9 @@ async function uploadChunkWithRetry(
 
       const response = await fetch(presignedUrl, {
         method: "PUT",
-        body: chunk,
+        body: file,
         headers: {
-          "Content-Type": contentType,
+          "Content-Type": file.type || "application/octet-stream",
         },
         signal: controller.signal,
       });
@@ -74,18 +60,19 @@ async function uploadChunkWithRetry(
         );
       }
 
-      const etag = response.headers.get("ETag") || undefined;
+      if (onProgress) {
+        onProgress({
+          loaded: file.size,
+          total: file.size,
+          percentage: 100,
+        });
+      }
 
-      return {
-        success: true,
-        chunkIndex,
-        etag,
-      };
+      return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (lastError.name === "AbortError") {
-        // AbortError is expected when upload is cancelled - don't retry
         break;
       }
 
@@ -96,107 +83,26 @@ async function uploadChunkWithRetry(
     }
   }
 
-  return {
-    success: false,
-    chunkIndex,
-    error: lastError,
-  };
+  throw lastError || new Error("Upload failed");
 }
 
 /**
- * Upload file using chunked upload with retry logic
- * For small files (< chunkSize), uses single PUT request
- * For large files, splits into chunks and uploads sequentially with retry
+ * Kept for backwards compatibility; now always uses a single PUT request.
  */
 export async function uploadWithChunking(
   file: File,
   presignedUrl: string,
   options: ReliableUploadOptions = {},
 ): Promise<void> {
-  const {
-    onProgress,
-    chunkSize = DEFAULT_CHUNK_SIZE,
-    maxRetries = DEFAULT_MAX_RETRIES,
-    retryDelay = DEFAULT_RETRY_DELAY,
-    timeout = DEFAULT_TIMEOUT,
-  } = options;
-
   if (file.size === 0) {
     throw new Error("Cannot upload empty file");
   }
 
-  const totalSize = file.size;
-  const contentType = file.type || "application/octet-stream";
-
-  if (totalSize <= chunkSize) {
-    const result = await uploadChunkWithRetry(
-      file,
-      presignedUrl,
-      0,
-      maxRetries,
-      retryDelay,
-      timeout,
-      contentType,
-    );
-
-    if (!result.success) {
-      throw result.error || new Error("Upload failed");
-    }
-
-    if (onProgress) {
-      onProgress({
-        loaded: totalSize,
-        total: totalSize,
-        percentage: 100,
-      });
-    }
-
-    return;
-  }
-
-  const totalChunks = Math.ceil(totalSize / chunkSize);
-
-  let uploadedBytes = 0;
-
-  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-    const start = chunkIndex * chunkSize;
-    const end = Math.min(start + chunkSize, totalSize);
-    const chunk = file.slice(start, end);
-
-    const result = await uploadChunkWithRetry(
-      chunk,
-      presignedUrl,
-      chunkIndex,
-      maxRetries,
-      retryDelay,
-      timeout,
-      contentType,
-    );
-
-    if (!result.success) {
-      throw (
-        result.error ||
-        new Error(`Failed to upload chunk ${chunkIndex + 1}/${totalChunks}`)
-      );
-    }
-
-    uploadedBytes += chunk.size;
-
-    if (onProgress) {
-      onProgress({
-        loaded: uploadedBytes,
-        total: totalSize,
-        percentage: Math.round((uploadedBytes / totalSize) * 100),
-        chunkIndex: chunkIndex + 1,
-        totalChunks,
-      });
-    }
-  }
+  await uploadSinglePutWithRetry(file, presignedUrl, options);
 }
 
 /**
- * Upload file with automatic fallback and retry
- * Tries chunked upload first, falls back to direct upload if needed
+ * Upload with fetch retries first, then axios fallback for client-side progress events.
  */
 export async function reliableUpload(
   file: File,
@@ -206,9 +112,9 @@ export async function reliableUpload(
   try {
     await uploadWithChunking(file, presignedUrl, {
       onProgress,
-      maxRetries: 3,
-      retryDelay: 1000,
-      timeout: 5 * 60 * 1000,
+      maxRetries: DEFAULT_MAX_RETRIES,
+      retryDelay: DEFAULT_RETRY_DELAY,
+      timeout: DEFAULT_TIMEOUT,
     });
   } catch (error) {
     const axios = (await import("axios")).default;
@@ -235,7 +141,7 @@ export async function reliableUpload(
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
       });
-    } catch (axiosError) {
+    } catch {
       throw new Error(
         `Upload failed: ${error instanceof Error ? error.message : String(error)}`,
       );

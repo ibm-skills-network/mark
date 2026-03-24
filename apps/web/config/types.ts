@@ -75,6 +75,7 @@ export interface UploadContext {
 export interface UploadRequest {
   fileName: string;
   fileType: string;
+  fileSize: number;
   uploadType: UploadType;
   context?: UploadContext;
 }
@@ -86,6 +87,9 @@ export interface UploadResponse {
   fileType: string;
   fileName: string;
   uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
 }
 
 export interface FileMetadata {

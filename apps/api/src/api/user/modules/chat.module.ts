@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { PdfStructureExtractorService } from "src/api/attempt/services/pdf-structure-extractor.service";
+import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
 import { ChatController } from "../controllers/chat.controller";
 import { ChatAccessControlGuard } from "../guards/chat.access.control.guard";
@@ -14,6 +17,9 @@ import { ChatService } from "../services/chat.service";
     PrismaService,
     ChatAccessControlGuard,
     ChatRepository,
+    FileContentExtractionService,
+    PdfStructureExtractorService,
+    S3Service,
   ],
   exports: [ChatService],
 })

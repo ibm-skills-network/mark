@@ -1,4 +1,10 @@
-import { IsEnum, IsNumber, IsOptional, IsString } from "class-validator";
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+} from "class-validator";
 
 export enum UploadType {
   AUTHOR = "author",
@@ -32,6 +38,10 @@ export class UploadRequestDto {
   @IsString()
   fileType: string;
 
+  @IsNumber()
+  @IsPositive()
+  fileSize: number;
+
   @IsEnum(UploadType)
   uploadType: UploadType;
 
@@ -46,4 +56,7 @@ export class UploadResponseDto {
   fileType: string;
   fileName: string;
   uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
 }

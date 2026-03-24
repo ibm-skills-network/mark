@@ -35,12 +35,11 @@ export interface AttachedFile {
   fileSize: number;
   fileType: string;
   extension: string;
-  /** Text extracted locally; not saved to localStorage. */
-  extractedContent?: string;
-  /** Leading snippet from extracted content (not semantic summary). */
-  contentPrefix?: string;
   uploadStatus: "uploading" | "uploaded" | "error";
   uploadProgress: number;
+  s3Link?: string;
+  s3Key?: string;
+  s3Bucket?: string;
   errorMessage?: string;
   uploadedAt: string;
 }
@@ -126,7 +125,7 @@ export const useMarkChatStore = create<MarkChatState>()(
       updateFileStatus: (fileId: string, status: Partial<AttachedFile>) =>
         set((s) => ({
           attachedFiles: s.attachedFiles.map((f) =>
-            f.id === fileId ? { ...f, ...status } : f
+            f.id === fileId ? { ...f, ...status } : f,
           ),
         })),
       clearAttachedFiles: () => set({ attachedFiles: [] }),
@@ -266,7 +265,9 @@ export const useMarkChatStore = create<MarkChatState>()(
         try {
           // Strip the UI-only `toolCalls` metadata from user messages — file chips are local only and should not reach the API.
           const conversationMessages = messages
-            .filter((msg) => msg.role !== "system" || !msg.id.includes("context"))
+            .filter(
+              (msg) => msg.role !== "system" || !msg.id.includes("context"),
+            )
             .map((msg) => {
               if (msg.role !== "user" || !msg.toolCalls) return msg;
               const { toolCalls, ...safeMessage } = msg;
@@ -486,6 +487,21 @@ export const useMarkChatStore = create<MarkChatState>()(
     }),
     {
       name: "mark-chat-store",
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return persistedState;
+        }
+
+        if (version < 2) {
+          const nextState = { ...persistedState };
+          delete nextState.attachedFiles;
+          delete nextState.sessionContextFiles;
+          return nextState;
+        }
+
+        return persistedState;
+      },
       partialize: (state) => ({
         userRole: state.userRole,
         messages: state.messages.filter((msg) => msg.role !== "system"),

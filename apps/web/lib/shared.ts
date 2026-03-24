@@ -94,7 +94,7 @@ export async function getPublicFileUrl(
 
 /**
  * Upload a file using a presigned URL with progress tracking
- * Uses chunked upload with retry logic for reliability with large files
+ * Uses a single PUT request with retry/fallback logic
  */
 export async function uploadWithPresignedUrl(
   file: File,
@@ -126,6 +126,51 @@ export async function uploadWithPresignedUrl(
     }
     throw new Error("Failed to upload file with presigned URL");
   }
+}
+
+export type UploadedStorageFile = UploadResponse & {
+  s3Link: string;
+};
+
+/**
+ * Shared helper for the common presigned-upload flow used across the app.
+ */
+export async function uploadFileToStorage(
+  file: File,
+  uploadRequest: UploadRequest,
+  options?: {
+    cookies?: string;
+    onUploadProgress?: (progressEvent: {
+      loaded: number;
+      total: number;
+    }) => void;
+  },
+): Promise<UploadedStorageFile> {
+  const resolvedUploadRequest: UploadRequest = {
+    ...uploadRequest,
+    fileName: uploadRequest.fileName || file.name,
+    fileType: uploadRequest.fileType || file.type || getFileType(file.name),
+    fileSize: uploadRequest.fileSize || file.size,
+  };
+
+  const response = await generateUploadUrl(
+    resolvedUploadRequest,
+    options?.cookies,
+  );
+  if (!response.presignedUrl) {
+    throw new Error("Failed to generate presigned URL");
+  }
+
+  await uploadWithPresignedUrl(
+    file,
+    response.presignedUrl,
+    options?.onUploadProgress,
+  );
+
+  return {
+    ...response,
+    s3Link: `s3://${response.bucket}/${response.key}`,
+  };
 }
 
 /**

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { CreateFolderDto } from "../dto/create-folder.dto";
@@ -20,6 +21,8 @@ import { S3Service } from "./s3.service";
 
 @Injectable()
 export class FilesService {
+  private readonly logger = new Logger(FilesService.name);
+
   constructor(private s3Service: S3Service) {}
 
   /**
@@ -59,7 +62,90 @@ export class FilesService {
   }
 
   private generateUniqueId(): string {
+    // could be replaced with a more robust solution like UUID
     return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
+  private getPresignedUploadTtlSeconds(): number {
+    const fromEnvironment = Number(
+      process.env.UPLOAD_PRESIGNED_URL_TTL_SECONDS ?? 120,
+    );
+    if (!Number.isFinite(fromEnvironment) || fromEnvironment <= 0) {
+      return 120;
+    }
+    return Math.min(fromEnvironment, 300);
+  }
+
+  private getMaxUploadBytes(uploadType: UploadType): number {
+    const fallback = 10 * 1024 * 1024;
+
+    const perTypeEnvironment: Record<UploadType, string | undefined> = {
+      [UploadType.AUTHOR]: process.env.AUTHOR_UPLOAD_MAX_BYTES,
+      [UploadType.LEARNER]: process.env.LEARNER_UPLOAD_MAX_BYTES,
+      [UploadType.LEARNER_PROD]: process.env.LEARNER_UPLOAD_MAX_BYTES,
+      [UploadType.DEBUG]: process.env.DEBUG_UPLOAD_MAX_BYTES,
+    };
+
+    const globalEnvironment = process.env.UPLOAD_MAX_BYTES;
+    const chosen = perTypeEnvironment[uploadType] ?? globalEnvironment;
+    const parsed = Number(chosen ?? fallback);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return fallback;
+    }
+
+    return parsed;
+  }
+
+  private validateUploadSize(
+    fileSize: number,
+    uploadType: UploadType,
+    fileName: string,
+  ): number {
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      throw new BadRequestException("fileSize must be a positive number.");
+    }
+
+    const maxAllowedBytes = this.getMaxUploadBytes(uploadType);
+    if (fileSize > maxAllowedBytes) {
+      this.logger.warn(
+        `Upload rejected by size limit: uploadType=${uploadType} file=${fileName} size=${fileSize} max=${maxAllowedBytes}`,
+      );
+      throw new BadRequestException(
+        `File is too large. Max allowed is ${maxAllowedBytes} bytes.`,
+      );
+    }
+
+    return maxAllowedBytes;
+  }
+
+  private monitorUploadRequest(parameters: {
+    uploadType: UploadType;
+    fileName: string;
+    fileSize: number;
+    maxAllowedBytes: number;
+    bucket: string;
+    key: string;
+    expiresInSeconds: number;
+    userId: string;
+  }): void {
+    const ratio = parameters.fileSize / parameters.maxAllowedBytes;
+    const percentage = Math.round(ratio * 100);
+    const levelPrefix =
+      ratio >= 0.9 ? "near-limit" : ratio >= 0.75 ? "high-usage" : "normal";
+
+    const message =
+      `Upload request [${levelPrefix}] user=${parameters.userId} ` +
+      `type=${parameters.uploadType} file=${parameters.fileName} size=${parameters.fileSize} ` +
+      `limit=${parameters.maxAllowedBytes} bucket=${parameters.bucket} key=${parameters.key} ` +
+      `ttl=${parameters.expiresInSeconds}s usage=${percentage}%`;
+
+    if (ratio >= 0.9) {
+      this.logger.warn(message);
+      return;
+    }
+
+    this.logger.log(message);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -67,12 +153,24 @@ export class FilesService {
     uploadRequest: UploadRequestDto,
     userId: string,
   ): Promise<UploadResponseDto> {
-    const { fileName, fileType, uploadType, context = {} } = uploadRequest;
+    const {
+      fileName,
+      fileType,
+      fileSize,
+      uploadType,
+      context = {},
+    } = uploadRequest;
 
     const bucket = this.s3Service.getBucketName(uploadType);
     if (!bucket) {
       throw new BadRequestException("Invalid upload type");
     }
+
+    const maxAllowedBytes = this.validateUploadSize(
+      fileSize,
+      uploadType,
+      fileName,
+    );
 
     let prefix = "";
     const normalizedPath = context.path?.startsWith("/")
@@ -86,6 +184,10 @@ export class FilesService {
       }
 
       case UploadType.LEARNER: {
+        if (normalizedPath) {
+          prefix = `${normalizedPath}/`;
+          break;
+        }
         if (typeof context.assignmentId !== "number") {
           throw new BadRequestException(
             "Missing assignmentId in context for learner upload",
@@ -104,6 +206,10 @@ export class FilesService {
       }
 
       case UploadType.LEARNER_PROD: {
+        if (normalizedPath) {
+          prefix = `${normalizedPath}/`;
+          break;
+        }
         if (typeof context.assignmentId !== "number") {
           throw new BadRequestException(
             "Missing assignmentId in context for learner production upload",
@@ -140,12 +246,25 @@ export class FilesService {
 
     const uniqueId = this.generateUniqueId();
     const key = `${prefix}${uniqueId}-${fileName}`;
+    const expiresInSeconds = this.getPresignedUploadTtlSeconds();
 
     const presignedUrl = await this.s3Service.getSignedUrl("putObject", {
       Bucket: bucket,
       Key: key,
       ContentType: fileType,
-      Expires: 300,
+      Expires: expiresInSeconds,
+      ContentLength: fileSize,
+    });
+
+    this.monitorUploadRequest({
+      uploadType,
+      fileName,
+      fileSize,
+      maxAllowedBytes,
+      bucket,
+      key,
+      expiresInSeconds,
+      userId,
     });
 
     return {
@@ -155,6 +274,9 @@ export class FilesService {
       fileType,
       fileName,
       uploadType,
+      expiresInSeconds,
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+      maxAllowedBytes,
     };
   }
 

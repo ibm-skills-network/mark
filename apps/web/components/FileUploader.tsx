@@ -9,11 +9,7 @@ import {
 } from "@tabler/icons-react";
 import { formatFileSize } from "./FileExplorer/utils/fileUtils";
 import { learnerFileResponse } from "@/stores/learner";
-import {
-  deleteFile,
-  generateUploadUrl,
-  uploadWithPresignedUrl,
-} from "@/lib/shared";
+import { deleteFile, uploadFileToStorage } from "@/lib/shared";
 import { UploadType, UploadContext, UploadRequest } from "@/config/types";
 import { toast } from "sonner";
 interface FileData {
@@ -190,18 +186,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       const uploadRequest: UploadRequest = {
         fileName: file.name,
         fileType: file.type,
+        fileSize: file.size,
         uploadType,
         context: uploadContext,
       };
 
-      const responseWithPresignedUrl = await generateUploadUrl(uploadRequest);
-      if (!responseWithPresignedUrl.presignedUrl) {
-        throw new Error("Failed to generate presigned URL");
-      }
-      const result = await uploadWithPresignedUrl(
-        file,
-        responseWithPresignedUrl.presignedUrl,
-        (ProgressEvent: { loaded: number; total: number }) => {
+      const uploadedFile = await uploadFileToStorage(file, uploadRequest, {
+        onUploadProgress: (ProgressEvent: {
+          loaded: number;
+          total: number;
+        }) => {
           const progress = Math.round(
             (ProgressEvent.loaded / ProgressEvent.total) * 100,
           );
@@ -214,24 +208,24 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             },
           }));
         },
-      );
+      });
       setUploadStatus((prev) => ({
         ...prev,
         [id]: {
           status: "success",
           message: "Upload complete!",
           progress: 100,
-          result,
+          result: uploadedFile,
         },
       }));
 
       if (onUploadComplete) {
         const formattedFile: learnerFileResponse = {
-          filename: responseWithPresignedUrl.fileName,
+          filename: uploadedFile.fileName,
           content: "InCos",
-          fileType: responseWithPresignedUrl.fileType,
-          key: responseWithPresignedUrl.key,
-          bucket: responseWithPresignedUrl.bucket,
+          fileType: uploadedFile.fileType,
+          key: uploadedFile.key,
+          bucket: uploadedFile.bucket,
         };
         setExistingFiles((prev) => [...prev, formattedFile]);
         onUploadComplete(formattedFile);
