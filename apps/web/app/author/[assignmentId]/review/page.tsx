@@ -919,13 +919,14 @@ function Component() {
     return tmp.textContent || tmp.innerText || "";
   };
 
-
-  const getQuestionTitle = (id: number, allQuestions: QuestionAuthorStore[]) => {
-    
+  const getQuestionTitle = (
+    id: number,
+    allQuestions: QuestionAuthorStore[],
+  ) => {
     // find question and it's display index
     const question = allQuestions.find((q) => q.id === id);
     const index = allQuestions.findIndex((q) => q.id === id) + 1;
-    
+
     // fallback if question not found
     if (!question) return `Question ${index}`;
     const text = question.question?.trim()
@@ -942,7 +943,8 @@ function Component() {
     const required = allQuestions
       .filter((q) => !optional.includes(q.id))
       .map((q) => {
-        const index = allQuestions.findIndex((question) => question.id === q.id) + 1;
+        const index =
+          allQuestions.findIndex((question) => question.id === q.id) + 1;
         const title = getQuestionTitle(q.id, allQuestions);
         return `Q${index}: ${title}`;
       });
@@ -1871,8 +1873,16 @@ function Component() {
                   {changes.requireAllQuestions && (
                     <ChangeComparison
                       label="Required Questions Enforcement"
-                      before={originalAssignment.requireAllQuestions ? "Enabled" : "Disabled"}
-                      after={assignmentConfig.requireAllQuestions ? "Enabled" : "Disabled"}
+                      before={
+                        originalAssignment.requireAllQuestions
+                          ? "Enabled"
+                          : "Disabled"
+                      }
+                      after={
+                        assignmentConfig.requireAllQuestions
+                          ? "Enabled"
+                          : "Disabled"
+                      }
                       type="boolean"
                       onNavigate={() =>
                         router.push(`/author/${activeAssignmentId}/config`)
