@@ -1,5 +1,5 @@
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
-import { useLearnerStore } from "@/stores/learner";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@config/types";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import {
@@ -22,7 +22,14 @@ function Overview({ questions }: Props) {
       state.expiresAt,
     ]);
 
+  // Pulling assignment data for required/optional markers.
+  const assignmentDetails = useAssignmentDetails(
+    (state) => state.assignmentDetails,
+  );
+
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const optionalQuestionIds = assignmentDetails?.optionalQuestionIds ?? [];
+  const requireAllQuestions = assignmentDetails?.requireAllQuestions ?? false;
 
   useEffect(() => {
     handleJumpToQuestion(`indexQuestion-${String(activeQuestionNumber)}`);
@@ -33,11 +40,16 @@ function Overview({ questions }: Props) {
    */
   const getQuestionButtonClasses = useCallback(
     (question: QuestionStore, index: number) => {
+      const isRequired =
+        requireAllQuestions && !optionalQuestionIds.includes(question.id);
+
       let baseClasses =
         "w-8 h-9 md:w-10 md:h-11 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";
 
       if (index === activeQuestionNumber - 1) {
         baseClasses += " bg-gray-100 border-violet-700 text-violet-600";
+      } else if (isRequired) {
+        baseClasses += " bg-red-50 border-red-300 text-red-700";
       } else if (question.status === "flagged") {
         baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
       } else if (question.status === "edited") {
@@ -48,7 +60,7 @@ function Overview({ questions }: Props) {
 
       return baseClasses;
     },
-    [activeQuestionNumber],
+    [activeQuestionNumber, requireAllQuestions, optionalQuestionIds],
   );
 
   return (

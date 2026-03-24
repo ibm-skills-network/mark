@@ -45,6 +45,8 @@ function Component(props: Props) {
   const assignmentDetails = useAssignmentDetails(
     (state) => state.assignmentDetails,
   );
+  const optionalQuestionIds = assignmentDetails?.optionalQuestionIds ?? [];
+  const isOptionalQuestion = optionalQuestionIds.includes(questionId);
   const questionControls = assignmentDetails?.questionControls;
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
@@ -273,6 +275,11 @@ function Component(props: Props) {
             <Bookmark questionStatus={questionStatus} />
             <span className="text-sm sm:hidden">Flag</span>
           </button>
+          {!isOptionalQuestion && (
+            <span className="text-xs sm:text-sm rounded-md px-2 py-1 bg-red-100 text-red-700">
+              Required
+            </span>
+          )}
           <span className="text-sm sm:text-md text-violet-600 bg-violet-100 rounded-md px-2 py-1">
             {question.totalPoints} points
           </span>

@@ -399,6 +399,47 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(orderedQuestions[0].id).toBe(2001);
       expect(orderedQuestions[0].variants).toHaveLength(0);
     });
+
+    it("appends questions missing from questionOrder when creating learner attempts", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 3001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({ id: 3002, questionId: 20, question: "Q2" }),
+        makeQuestionVersion({ id: 3003, questionId: 30, question: "Q3" }),
+      ];
+
+      mockAssignmentRepository.findById.mockResolvedValue({
+        ...baseAssignment,
+        questionOrder: [20, 10],
+      });
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [],
+      });
+      mockPrisma.question.findMany.mockResolvedValue([
+        { id: 10, variants: [] },
+        { id: 20, variants: [] },
+        { id: 30, variants: [] },
+      ]);
+
+      await service.createAssignmentAttempt(assignmentId, userSession);
+
+      const [, orderedQuestions] = mockQuestionVariantService
+        .createAttemptQuestionVariants.mock.calls[0] as [
+        number,
+        Array<{ id: number }>,
+      ];
+
+      expect(orderedQuestions.map((question) => question.id)).toEqual([
+        20, 10, 30,
+      ]);
+      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledWith({
+        where: { id: 55 },
+        data: {
+          questionOrder: [20, 10, 30],
+        },
+      });
+    });
   });
 
   describe("updateAssignmentAttempt - author preview", () => {

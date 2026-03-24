@@ -17,6 +17,7 @@ import {
   UpdateAssignmentQuestionsDto,
   VariantDto,
 } from "../../dto/update.questions.request.dto";
+import { applyQuestionOrder } from "../../utils/question-order.util";
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
 import { QuestionService } from "./question.service";
@@ -232,6 +233,8 @@ export class AssignmentServiceV2 {
         showQuestions: updateDto.showQuestions,
         numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,
         questionControls: updateDto.questionControls,
+        requireAllQuestions: updateDto.requireAllQuestions,
+        optionalQuestionIds: updateDto.optionalQuestionIds,
       });
 
       await this.jobStatusService.updateJobStatus(jobId, {
@@ -263,6 +266,7 @@ export class AssignmentServiceV2 {
       }
 
       let questionContentChanged = false;
+      let frontendToBackendIdMap = new Map<number, number>();
 
       if (updateDto.questions && updateDto.questions.length > 0) {
         await this.jobStatusService.updateJobStatus(jobId, {
@@ -287,19 +291,20 @@ export class AssignmentServiceV2 {
           percentage: 20,
         });
 
-        await this.questionService.processQuestionsForPublishing(
-          assignmentId,
-          updateDto.questions,
-          jobId,
-          async (childProgress: number) => {
-            const mappedProgress = 30 + (childProgress * 50) / 100;
-            await this.jobStatusService.updateJobStatus(jobId, {
-              status: "In Progress",
-              progress: `Processing questions: ${childProgress}% complete`,
-              percentage: Math.floor(mappedProgress),
-            });
-          },
-        );
+        frontendToBackendIdMap =
+          await this.questionService.processQuestionsForPublishing(
+            assignmentId,
+            updateDto.questions,
+            jobId,
+            async (childProgress: number) => {
+              const mappedProgress = 30 + (childProgress * 50) / 100;
+              await this.jobStatusService.updateJobStatus(jobId, {
+                status: "In Progress",
+                progress: `Processing questions: ${childProgress}% complete`,
+                percentage: Math.floor(mappedProgress),
+              });
+            },
+          );
       }
 
       const existingTranslationCount =
@@ -431,36 +436,35 @@ export class AssignmentServiceV2 {
         percentage: 90,
       });
 
-      const questionOrder = this.resolveQuestionOrder(
+      const updatedQuestions =
+        await this.questionService.getQuestionsForAssignment(assignmentId);
+      const resolvedQuestionOrder = this.resolveQuestionOrder(
         updateDto,
         existingAssignment,
       );
-
-      if (questionContentChanged || !existingAssignment.published) {
-        await this.questionService.updateQuestionGradingContext(assignmentId);
-      }
+      const questionOrder = this.normalizeQuestionOrder(
+        resolvedQuestionOrder.map((id) => frontendToBackendIdMap.get(id) ?? id),
+        updatedQuestions.map((question) => question.id),
+      );
 
       await this.assignmentRepository.update(assignmentId, {
         questionOrder,
         published: updateDto.published,
       });
 
-      const updatedQuestions =
-        await this.questionService.getQuestionsForAssignment(assignmentId);
+      if (questionContentChanged || !existingAssignment.published) {
+        await this.questionService.updateQuestionGradingContext(assignmentId);
+      }
 
-      const questionOrderIndex = new Map(
-        questionOrder.map((id, index) => [id, index]),
+      const orderedUpdatedQuestions = applyQuestionOrder(
+        updatedQuestions,
+        questionOrder,
       );
-      updatedQuestions.sort((a, b) => {
-        const indexA = questionOrderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-        const indexB = questionOrderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-        return indexA - indexB;
-      });
 
       this.logger.info(
-        `Found ${updatedQuestions.length} questions after processing for assignment ${assignmentId}`,
+        `Found ${orderedUpdatedQuestions.length} questions after processing for assignment ${assignmentId}`,
         {
-          questionIds: updatedQuestions.map((q) => q.id),
+          questionIds: orderedUpdatedQuestions.map((q) => q.id),
         },
       );
 
@@ -472,7 +476,7 @@ export class AssignmentServiceV2 {
 
       try {
         this.logger.info(
-          `Managing version after question processing - found ${updatedQuestions.length} questions`,
+          `Managing version after question processing - found ${orderedUpdatedQuestions.length} questions`,
         );
 
         const userSession = {
@@ -513,8 +517,10 @@ export class AssignmentServiceV2 {
                 instructions: updateDto.instructions,
                 gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
                 timeEstimateMinutes: updateDto.timeEstimateMinutes,
+                requireAllQuestions: updateDto.requireAllQuestions,
+                optionalQuestionIds: updateDto.optionalQuestionIds,
               },
-              questionsData: updatedQuestions,
+              questionsData: orderedUpdatedQuestions,
               versionDescription:
                 updateDto.versionDescription ??
                 `Published version - ${new Date().toLocaleDateString()}`,
@@ -576,8 +582,10 @@ export class AssignmentServiceV2 {
                 instructions: updateDto.instructions,
                 gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
                 timeEstimateMinutes: updateDto.timeEstimateMinutes,
+                requireAllQuestions: updateDto.requireAllQuestions,
+                optionalQuestionIds: updateDto.optionalQuestionIds,
               },
-              questionsData: updatedQuestions,
+              questionsData: orderedUpdatedQuestions,
               versionDescription:
                 updateDto.versionDescription ??
                 `Draft - ${new Date().toLocaleDateString()}`,
@@ -608,7 +616,7 @@ export class AssignmentServiceV2 {
               versionError instanceof Error ? versionError.stack : undefined,
             assignmentId,
             userId,
-            questionsFound: updatedQuestions.length,
+            questionsFound: orderedUpdatedQuestions.length,
           },
         );
       }
@@ -879,6 +887,7 @@ export class AssignmentServiceV2 {
     for (const id of validIds) {
       if (!seen.has(id)) {
         normalized.push(id);
+        seen.add(id);
       }
     }
 

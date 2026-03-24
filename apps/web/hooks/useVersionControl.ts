@@ -22,6 +22,8 @@ export interface DraftData {
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
   showQuestions?: boolean;
+  requireAllQuestions?: boolean;
+  optionalQuestionIds?: number[];
 }
 
 export function useVersionControl() {
@@ -281,6 +283,14 @@ export function useVersionControl() {
                 typedDraftData.questionDisplay !== undefined
                   ? typedDraftData.questionDisplay
                   : assignmentConfigStore.questionDisplay,
+              requireAllQuestions:
+                typedDraftData.requireAllQuestions !== undefined
+                  ? typedDraftData.requireAllQuestions
+                  : assignmentConfigStore.requireAllQuestions,
+              optionalQuestionIds:
+                typedDraftData.optionalQuestionIds !== undefined
+                  ? typedDraftData.optionalQuestionIds
+                  : assignmentConfigStore.optionalQuestionIds,
             });
           }
 

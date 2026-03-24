@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { normalizeQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { Logger } from "winston";
 import { PrismaService } from "../../../database/prisma.service";
@@ -60,14 +61,43 @@ export class QuestionService {
       choices,
     };
 
-    const result = await this.prisma.question.create({
-      data: dataToSave,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const assignment = await tx.assignment.findUnique({
+        where: { id: assignmentId },
+        select: {
+          questionOrder: true,
+          questions: {
+            where: { isDeleted: false },
+            select: { id: true },
+          },
+        },
+      });
 
-    return {
-      id: result.id,
-      success: true,
-    };
+      if (!assignment) {
+        throw new NotFoundException(
+          `Assignment with Id ${assignmentId} not found.`,
+        );
+      }
+
+      const result = await tx.question.create({
+        data: dataToSave,
+      });
+
+      await tx.assignment.update({
+        where: { id: assignmentId },
+        data: {
+          questionOrder: normalizeQuestionOrder(
+            [...assignment.questions.map((question) => question.id), result.id],
+            assignment.questionOrder,
+          ),
+        },
+      });
+
+      return {
+        id: result.id,
+        success: true,
+      };
+    });
   }
 
   async findOne(
@@ -222,14 +252,56 @@ export class QuestionService {
   }
 
   async remove(id: number): Promise<BaseQuestionResponseDto> {
-    const result = await this.prisma.question.delete({
-      where: { id },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existingQuestion = await tx.question.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          assignmentId: true,
+        },
+      });
 
-    return {
-      id: result.id,
-      success: true,
-    };
+      if (!existingQuestion) {
+        throw new NotFoundException(`Question with Id ${id} not found.`);
+      }
+
+      const assignment = await tx.assignment.findUnique({
+        where: { id: existingQuestion.assignmentId },
+        select: {
+          questionOrder: true,
+          questions: {
+            where: {
+              isDeleted: false,
+              id: { not: id },
+            },
+            select: { id: true },
+          },
+        },
+      });
+
+      const result = await tx.question.delete({
+        where: { id },
+      });
+
+      if (assignment) {
+        await tx.assignment.update({
+          where: { id: existingQuestion.assignmentId },
+          data: {
+            questionOrder: normalizeQuestionOrder(
+              assignment.questions.map((question) => question.id),
+              assignment.questionOrder.filter(
+                (questionId) => questionId !== id,
+              ),
+            ),
+          },
+        });
+      }
+
+      return {
+        id: result.id,
+        success: true,
+      };
+    });
   }
   async createMarkingRubric(
     question: QuestionDto,

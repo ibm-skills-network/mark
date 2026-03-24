@@ -29,6 +29,7 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
+import { applyQuestionOrder } from "../utils/question-order.util";
 import { PrismaService } from "../../../database/prisma.service";
 import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
@@ -394,10 +395,10 @@ export class AttemptServiceV1 {
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
     ) {
-      questions.sort(
-        (a, b) =>
-          assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id),
+      questions.splice(
+        0,
+        questions.length,
+        ...applyQuestionOrder(questions, assignment.questionOrder),
       );
     }
     await this.prisma.assignmentAttempt.update({
