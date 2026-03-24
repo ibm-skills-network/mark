@@ -75,6 +75,7 @@ ineum('autoPageDetection', { titleAsPageName: true });`
       <body
         className={`${inter.className} h-full m-0 p-0`}
         data-color-mode="light"
+        suppressHydrationWarning
       >
         <LayoutContent>{children}</LayoutContent>
       </body>

@@ -1,27 +1,24 @@
-import dynamic from "next/dynamic";
 import PageTitle from "../(components)/PageTitle";
+import SuccessPage from "../(components)/SuccessPage";
 import { FooterNavigation } from "../(components)/StepOne/FooterNavigation";
 import MainContent from "../(components)/StepOne/MainContent";
 
-const DynamicSuccessPage = dynamic(
-  () => import("../(components)/SuccessPage"),
-  { ssr: false },
-);
-
 interface Props {
-  params: { assignmentId: string };
-  searchParams: { submissionTime?: string };
+  params: Promise<{ assignmentId: string }>;
+  searchParams: Promise<{ submissionTime?: string }>;
 }
 
-function Component(props: Props) {
+async function Component(props: Props) {
   const { params, searchParams } = props;
-  const { submissionTime } = searchParams;
-  const { assignmentId } = params;
+  const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+  const { submissionTime } = resolvedSearchParams;
+  const { assignmentId } = resolvedParams;
 
   return (
     <main className="main-author-container">
       {submissionTime ? (
-        <DynamicSuccessPage />
+        <SuccessPage />
       ) : (
         <>
           <PageTitle

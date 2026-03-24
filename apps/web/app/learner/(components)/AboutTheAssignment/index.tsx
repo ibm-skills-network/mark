@@ -10,10 +10,7 @@ import {
   LearnerAssignmentState,
 } from "@/config/types";
 import { getSupportedLanguages } from "@/lib/talkToBackend";
-import {
-  DEFAULT_UI_LANGUAGE,
-  setStoredUiLanguage,
-} from "@/lib/ui-language";
+import { DEFAULT_UI_LANGUAGE, setStoredUiLanguage } from "@/lib/ui-language";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,

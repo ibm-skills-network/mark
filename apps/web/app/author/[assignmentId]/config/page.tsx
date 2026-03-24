@@ -9,13 +9,7 @@ import { FooterNavigation } from "@authorComponents/StepTwo/FooterNavigation";
 import AssignmentQuestionDisplay from "../../(components)/StepTwo/AssignmentQuestionDisplay";
 import AssignmentQuestionControls from "../../(components)/StepTwo/AssignmentQuestionControls";
 
-interface Props {
-  params: { assignmentId: string };
-  searchParams: { submissionTime?: string };
-}
-
-function Component(props: Props) {
-  const { params, searchParams } = props;
+function Component() {
   return (
     <main className="main-author-container">
       <PageTitle

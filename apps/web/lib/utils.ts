@@ -1,6 +1,5 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
-import { useAppConfig } from "@/stores/appConfig";
 import { type ClassValue, clsx } from "clsx";
 import { useCallback } from "react";
 import { twMerge } from "tailwind-merge";
@@ -59,20 +58,13 @@ export function mergeData<T extends DataWithUpdatedAt>(
   return backendData;
 }
 
-type DebugArgs = string | number | boolean | object;
-
 export const useDebugLog = () => {
   const debugMode = process.env.NODE_ENV === "development";
 
   const debugLog = useCallback(
-    (...args: DebugArgs[]) => {
+    (...args: unknown[]) => {
       if (debugMode) {
-        const formattedArgs = args.map((arg) => {
-          if (typeof arg === "object") {
-            return JSON.stringify(arg, null, 2);
-          }
-          return String(arg);
-        });
+        console.debug(...args);
       }
     },
     [debugMode],
@@ -87,10 +79,9 @@ export const useDebugLog = () => {
  * If the response is not a valid JSON string, it returns the original response.
  *
  * @param response - The learner's response as a string.
- * @param attempts - The number of attempts made to parse the response (default is 0).
  * @returns The parsed response as a JSON object or the original response string if parsing fails.
  */
-export function parseLearnerResponse(response: string, attempts = 0) {
+export function parseLearnerResponse(response: string) {
   try {
     let parsedResponse: LearnerResponseType = response;
     let attempts = 0;
@@ -131,21 +122,71 @@ const validateURL = (str: string) => {
   return pattern.test(str);
 };
 
-export const editedQuestionsOnly = (questions: QuestionStore[]) =>
-  questions.filter(
-    (q) =>
-      q.learnerTextResponse ||
-      (q.learnerUrlResponse && validateURL(q.learnerUrlResponse)) ||
-      (q.learnerChoices?.length ?? 0) > 0 ||
-      q.learnerAnswerChoice !== undefined ||
-      q.learnerFileResponse !== undefined ||
-      q.presentationResponse !== undefined,
+const hasPresentationResponse = (
+  response?: QuestionStore["presentationResponse"],
+): boolean => {
+  if (!response) return false;
+  const transcript = response.transcript?.trim() ?? "";
+  if (transcript.length > 0) {
+    return true;
+  }
+  return (response.slidesData?.length ?? 0) > 0;
+};
+
+export const hasLearnerResponse = (question: QuestionStore): boolean => {
+  const text = question.learnerTextResponse?.trim() ?? "";
+  const hasText =
+    text.length > 0 && question.learnerTextResponse !== "<p><br></p>";
+  const hasUrl = Boolean(question.learnerUrlResponse?.trim());
+  const hasChoices = (question.learnerChoices?.length ?? 0) > 0;
+  const hasAnswerChoice =
+    question.learnerAnswerChoice !== null &&
+    question.learnerAnswerChoice !== undefined;
+  const hasFiles = (question.learnerFileResponse?.length ?? 0) > 0;
+  const presentationResponse =
+    question.presentationResponse ?? question.learnerPresentationResponse;
+  const hasPresentation = hasPresentationResponse(presentationResponse);
+
+  return (
+    hasText ||
+    hasUrl ||
+    hasChoices ||
+    hasAnswerChoice ||
+    hasFiles ||
+    hasPresentation
   );
+};
+
+export const editedQuestionsOnly = (questions: QuestionStore[]) =>
+  questions.filter((q) => {
+    const text = q.learnerTextResponse?.trim() ?? "";
+    const hasText = text.length > 0 && q.learnerTextResponse !== "<p><br></p>";
+    const urlResponse = q.learnerUrlResponse?.trim();
+    const hasValidUrl = urlResponse ? validateURL(urlResponse) : false;
+    const hasChoices = (q.learnerChoices?.length ?? 0) > 0;
+    const hasAnswerChoice =
+      q.learnerAnswerChoice !== null && q.learnerAnswerChoice !== undefined;
+    const hasFiles = (q.learnerFileResponse?.length ?? 0) > 0;
+    const presentationResponse =
+      q.presentationResponse ?? q.learnerPresentationResponse;
+    const hasPresentation = hasPresentationResponse(presentationResponse);
+
+    return (
+      hasText ||
+      hasValidUrl ||
+      hasChoices ||
+      hasAnswerChoice ||
+      hasFiles ||
+      hasPresentation
+    );
+  });
 
 export const getSubmitButtonStatus = (
   questions: QuestionStore[],
   submitting: boolean,
   isUploadingFiles?: boolean,
+  requireAllQuestions?: boolean,
+  optionalQuestionIds?: number[],
 ) => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
@@ -155,15 +196,7 @@ export const getSubmitButtonStatus = (
     return { disabled: true, reason: "File upload in progress..." };
   }
 
-  const questionsWithResponses = questions.filter(
-    (q) =>
-      q.learnerTextResponse ||
-      q.learnerUrlResponse ||
-      (q.learnerChoices?.length ?? 0) > 0 ||
-      q.learnerAnswerChoice !== undefined ||
-      q.learnerFileResponse !== undefined ||
-      q.presentationResponse !== undefined,
-  );
+  const questionsWithResponses = questions.filter(hasLearnerResponse);
 
   if (questionsWithResponses.length === 0) {
     return { disabled: true, reason: "No questions have been answered" };
@@ -183,6 +216,26 @@ export const getSubmitButtonStatus = (
   const validEditedQuestions = editedQuestionsOnly(questions);
   if (validEditedQuestions.length === 0) {
     return { disabled: true, reason: "No valid responses to submit" };
+  }
+
+  if (requireAllQuestions) {
+    const optionalQuestionSet = new Set(optionalQuestionIds ?? []);
+    const requiredQuestions = questions.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+    const requiredResponses = questionsWithResponses.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+
+    // notification for error submitting if required questions are unanswered
+    if (requiredResponses.length < requiredQuestions.length) {
+      const unansweredCount =
+        requiredQuestions.length - requiredResponses.length;
+      return {
+        disabled: true,
+        reason: `All required questions must be answered before submitting (${unansweredCount} unanswered)`,
+      };
+    }
   }
 
   return { disabled: false, reason: null };

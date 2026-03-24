@@ -14,17 +14,18 @@ ARG DIR
 WORKDIR ${DIR}
 
 COPY --from=builder ${DIR}/out/json/ .
-COPY --from=builder ${DIR}/out/yarn.lock ./yarn.lock
+COPY --from=builder ${DIR}/yarn.lock ./yarn.lock
 COPY --from=builder ${DIR}/turbo.json ./turbo.json
 COPY --from=builder ${DIR}/packages ./packages
 COPY --from=builder ${DIR}/apps/api/prisma ./apps/api/prisma
+COPY --from=builder ${DIR}/patches ./patches
 
+# hadolint ignore=DL3008
 RUN apt-get update -y \
   && apt-get install -y --no-install-recommends \
      python3 make g++ pkg-config openssl \
   && yarn install --frozen-lockfile \
   && yarn prisma generate \
-  && npm rebuild cld --build-from-source \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -42,6 +43,7 @@ ARG DIR
 ENV NODE_ENV=production
 WORKDIR ${DIR}
 
+# hadolint ignore=DL3008
 RUN apt-get update -y \
   && apt-get install -y --no-install-recommends \
      dumb-init postgresql-client openssl ca-certificates \

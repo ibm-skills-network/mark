@@ -1,5 +1,4 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
-import { Prisma, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
@@ -597,6 +596,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     responseDto: CreateQuestionResponseAttemptResponseDto,
     _context: GradingContext,
   ): Promise<void> {
+    void _context;
     if (!this.consistencyService) {
       this.logger?.debug(
         "Consistency service not available - skipping consistency recording",

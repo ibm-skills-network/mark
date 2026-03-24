@@ -2,7 +2,6 @@
 
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
-import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import { useChatbot } from "@/hooks/useChatbot";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
@@ -10,7 +9,6 @@ import { stripHtml } from "@/app/Helpers/strippers";
 import Modal from "@/components/Modal";
 import Dropdown from "@/components/Dropdown";
 import ProgressBar, { JobStatus } from "@/components/ProgressBar";
-import Tooltip from "@/components/Tooltip";
 import {
   Assignment,
   Choice,
@@ -163,6 +161,8 @@ function AuthorHeader() {
     updatedAt,
     numberOfQuestionsPerAttempt,
     questionControls,
+    requireAllQuestions,
+    optionalQuestionIds,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
     state.retakeAttemptCoolDownMinutes,
@@ -176,6 +176,8 @@ function AuthorHeader() {
     state.updatedAt,
     state.numberOfQuestionsPerAttempt,
     state.questionControls,
+    state.requireAllQuestions,
+    state.optionalQuestionIds,
   ]);
   const [
     showSubmissionFeedback,
@@ -204,7 +206,6 @@ function AuthorHeader() {
   const deleteAssignmentFeedbackConfigStore = useAssignmentFeedbackConfig(
     (state) => state.deleteStore,
   );
-  const changesSummary = useChangesSummary();
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
@@ -297,6 +298,8 @@ function AuthorHeader() {
         updatedAt: newAssignment.updatedAt,
         showQuestions: newAssignment.showQuestions,
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
+        requireAllQuestions: newAssignment.requireAllQuestions,
+        optionalQuestionIds: newAssignment.optionalQuestionIds,
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
@@ -361,6 +364,7 @@ function AuthorHeader() {
         authorSafeAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
@@ -378,6 +382,7 @@ function AuthorHeader() {
         updatedAt: authorStoreUpdatedAt,
         ...cleanedAssignmentConfigData
       } = mergedAssignmentConfigData;
+      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
         ...cleanedAssignmentConfigData,
       });
@@ -390,6 +395,7 @@ function AuthorHeader() {
         updatedAt: assignmentFeedbackUpdatedAt,
         ...cleanedAssignmentFeedbackData
       } = mergedAssignmentFeedbackData;
+      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
         ...cleanedAssignmentFeedbackData,
       });
@@ -427,13 +433,7 @@ function AuthorHeader() {
 
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
-      const {
-        description,
-        publishImmediately,
-        versionNumber,
-        updateExisting,
-        afterPublish,
-      } = event.detail;
+      const { description, publishImmediately, afterPublish } = event.detail;
 
       const originalAfterPublish = afterPublish;
 
@@ -446,7 +446,7 @@ function AuthorHeader() {
             originalAfterPublish();
           }
         })
-        .catch((error) => {
+        .catch(() => {
           toast.error("Failed to publish version through header");
         });
     };
@@ -559,6 +559,8 @@ function AuthorHeader() {
       showAssignmentScore,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
+      requireAllQuestions,
+      optionalQuestionIds,
       questionControls,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)
@@ -651,16 +653,6 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
-
-  const handleSyncWithLatestPublishedVersion = async () => {
-    if (changesSummary !== "No changes detected.") {
-      setShowAreYouSureModal(true);
-      return;
-    } else {
-      await SyncAssignment();
-      toast.success("Synced with latest published version.");
-    }
-  };
 
   const handleConfirmSync = async () => {
     deleteAuthorStore();

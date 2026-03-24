@@ -8,28 +8,21 @@ import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import { useEffect, useState } from "react";
 
-type Props = ComponentPropsWithoutRef<"section">;
-
-function SuccessPage(props: Props) {
-  const {} = props;
+function SuccessPage() {
   const pathname = usePathname();
   const [
-    setActiveAssignmentId,
     questions,
     setPageState,
     setAuthorStore,
     activeAssignmentId,
-    name,
     setQuestionOrder,
   ] = useAuthorStore((state) => [
-    state.setActiveAssignmentId,
     state.questions,
     state.setPageState,
     state.setAuthorStore,
     state.activeAssignmentId,
-    state.name,
     state.setQuestionOrder,
   ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
@@ -69,6 +62,7 @@ function SuccessPage(props: Props) {
         authorSafeAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
@@ -90,6 +84,7 @@ function SuccessPage(props: Props) {
         updatedAt: authorStoreUpdatedAt,
         ...cleanedAssignmentConfigData
       } = mergedAssignmentConfigData;
+      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
         ...cleanedAssignmentConfigData,
       });
@@ -102,6 +97,7 @@ function SuccessPage(props: Props) {
         updatedAt: assignmentFeedbackUpdatedAt,
         ...cleanedAssignmentFeedbackData
       } = mergedAssignmentFeedbackData;
+      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
         ...cleanedAssignmentFeedbackData,
       });

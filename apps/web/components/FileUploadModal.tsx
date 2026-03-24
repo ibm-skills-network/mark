@@ -61,7 +61,8 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const [learningObjectives, setLearningObjectives] = useAuthorStore(
     (state) => [state.learningObjectives, state.setLearningObjectives],
   );
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
+  const questions = useAuthorStore((state) => state.questions);
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     else if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;

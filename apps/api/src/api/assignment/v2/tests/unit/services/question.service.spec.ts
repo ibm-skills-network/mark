@@ -425,6 +425,40 @@ describe("QuestionService", () => {
         expect(prismaService.question.update).toHaveBeenCalledTimes(2);
       });
 
+      it("should append questions missing from questionOrder when building grading context", async () => {
+        const assignmentId = 1;
+        const mockAssignment = {
+          id: assignmentId,
+          questionOrder: [2, 1],
+          questions: [
+            { id: 1, question: "Question 1", isDeleted: false },
+            { id: 2, question: "Question 2", isDeleted: false },
+            { id: 3, question: "Question 3", isDeleted: false },
+          ],
+        };
+
+        prismaService.assignment.findUnique.mockResolvedValue(mockAssignment);
+        llmFacadeService.generateQuestionGradingContext.mockResolvedValue({
+          "1": [2],
+          "2": [1],
+          "3": [1, 2],
+        });
+        prismaService.question.update.mockResolvedValue({});
+
+        await questionService.updateQuestionGradingContext(assignmentId);
+
+        expect(
+          llmFacadeService.generateQuestionGradingContext,
+        ).toHaveBeenCalledWith(
+          [
+            { id: 2, questionText: "Question 2" },
+            { id: 1, questionText: "Question 1" },
+            { id: 3, questionText: "Question 3" },
+          ],
+          assignmentId,
+        );
+      });
+
       it("should throw not found exception for invalid assignment", async () => {
         const assignmentId = 999;
         prismaService.assignment.findUnique.mockResolvedValue(null);
