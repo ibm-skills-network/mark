@@ -13,12 +13,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useState,
-  type ComponentPropsWithoutRef,
-  type FC,
-} from "react";
+import { useState, type ComponentPropsWithoutRef, type FC } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"nav"> {
   assignmentId?: string;
@@ -27,7 +22,6 @@ interface Props extends ComponentPropsWithoutRef<"nav"> {
 }
 
 export const FooterNavigation: FC<Props> = ({
-  assignmentId,
   nextStep = "config",
   currentStepId = 1,
 }) => {

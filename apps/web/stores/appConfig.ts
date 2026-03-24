@@ -1,6 +1,4 @@
 import { withUpdatedAt } from "./middlewares";
-import type { GradingData } from "@/config/types";
-import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
 
@@ -27,7 +25,7 @@ export const useAppConfig = createWithEqualityFn<
         setTips: (tips: boolean) => set({ tips }),
         SET_DEBUG_MODE: (debugMode: boolean) => set({ DEBUG_MODE: debugMode }),
         setTipsVersion: (newVersion: string) => {
-          const { tipsVersion, persistTips } = get();
+          const { tipsVersion } = get();
           if (tipsVersion !== newVersion) {
             set({
               tips: true,

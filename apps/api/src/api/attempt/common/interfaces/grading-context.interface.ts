@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { PrismaService } from "src/database/prisma.service";
 

@@ -344,7 +344,7 @@ export class AttemptServiceV2 {
             subscriber.next(initialEvent);
           }
         })
-        .catch((error) => {
+        .catch(() => {
           subscriber.next({
             type: "error",
             data: JSON.stringify({

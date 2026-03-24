@@ -1,12 +1,7 @@
 "use client";
 
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
-import type {
-  Assignment,
-  AssignmentDetails,
-  QuestionStore,
-  ReplaceAssignmentRequest,
-} from "@/config/types";
+import type { AssignmentDetails, QuestionStore } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";

@@ -1,6 +1,12 @@
 /* eslint-disable unicorn/no-nested-ternary */
 import * as http from "node:http";
 import * as https from "node:https";
+import type {
+  IncomingHttpHeaders,
+  OutgoingHttpHeader,
+  OutgoingHttpHeaders,
+  RequestOptions,
+} from "node:http";
 import {
   BadRequestException,
   HttpException,
@@ -10,7 +16,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { AxiosRequestConfig } from "@nestjs/terminus/dist/health-indicator/http/axios.interfaces";
-import axios, { AxiosError, Method } from "axios";
+import axios, { AxiosError, Method, type RawAxiosRequestHeaders } from "axios";
 import { Request, Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -20,7 +26,7 @@ import { DownstreamService } from "./api.controller";
 
 @Injectable()
 export class ApiService {
-  private logger;
+  private readonly logger: Logger;
   constructor(
     private readonly messagingService: MessagingService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
@@ -84,9 +90,9 @@ export class ApiService {
   public getForwardingDetails(
     forwardingService: DownstreamService,
     request: UserSessionRequest,
-  ): { endpoint: string; extraHeaders: Record<string, any> } {
+  ): { endpoint: string; extraHeaders: RawAxiosRequestHeaders } {
     let endpoint: string;
-    let extraHeaders: Record<string, any> = {};
+    let extraHeaders: RawAxiosRequestHeaders = {};
     switch (forwardingService) {
       case DownstreamService.MARK_API: {
         endpoint = `${process.env.MARK_API_ENDPOINT ?? ""}${
@@ -124,6 +130,53 @@ export class ApiService {
     }
     return { endpoint, extraHeaders };
   }
+
+  private normalizeOutgoingHeaderValue(
+    value: unknown,
+  ): OutgoingHttpHeader | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .filter(
+          (item): item is Exclude<typeof item, null | undefined> =>
+            item !== undefined && item !== null,
+        )
+        .map((item) => (typeof item === "string" ? item : String(item)));
+    }
+
+    if (typeof value === "string" || typeof value === "number") {
+      return value;
+    }
+
+    return String(value);
+  }
+
+  private normalizeOutgoingHeaders(
+    ...headerGroups: Array<
+      IncomingHttpHeaders | RawAxiosRequestHeaders | undefined
+    >
+  ): OutgoingHttpHeaders {
+    const normalizedHeaders: OutgoingHttpHeaders = {};
+
+    for (const headerGroup of headerGroups) {
+      if (!headerGroup) {
+        continue;
+      }
+
+      for (const [key, value] of Object.entries(headerGroup)) {
+        const normalizedValue = this.normalizeOutgoingHeaderValue(value);
+
+        if (normalizedValue !== undefined) {
+          normalizedHeaders[key] = normalizedValue;
+        }
+      }
+    }
+
+    return normalizedHeaders;
+  }
   /**
    * Forward SSE requests specifically
    */
@@ -131,7 +184,7 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {},
+    headers: RawAxiosRequestHeaders = {},
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
@@ -139,20 +192,22 @@ export class ApiService {
 
       const parsedUrl = new URL(url);
 
-      const outgoingHeaders = {
-        ...clientRequest.headers,
-        ...headers,
-        host: parsedUrl.hostname,
-        accept: "text/event-stream",
-      };
+      const outgoingHeaders = this.normalizeOutgoingHeaders(
+        clientRequest.headers,
+        headers,
+        {
+          host: parsedUrl.hostname,
+          accept: "text/event-stream",
+        },
+      );
 
       delete outgoingHeaders["content-length"];
 
       this.logger.info(`Forwarding SSE request to ${url}`);
 
-      const requestOptions = {
+      const requestOptions: RequestOptions = {
         hostname: parsedUrl.hostname,
-        port: parsedUrl.port || (isHTTPS ? 443 : 80),
+        port: parsedUrl.port ? Number(parsedUrl.port) : isHTTPS ? 443 : 80,
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers: outgoingHeaders,
@@ -366,16 +421,21 @@ export class ApiService {
               _event: string,
               _listener: (...arguments_: unknown[]) => void,
             ): void {
+              void _event;
+              void _listener;
               // no-op for mock response
             },
             once(
               _event: string,
               _listener: (...arguments_: unknown[]) => void,
             ): void {
+              void _event;
+              void _listener;
               // no-op for mock response
             },
 
             pipe<T>(this: MockResponse, _destination: T): T {
+              void _destination;
               return this as unknown as T;
             },
           };
@@ -411,7 +471,7 @@ export class ApiService {
       const config: AxiosRequestConfig = {
         method: request.method.toLowerCase() as Method,
         url: endpoint,
-        data: request.body as Record<string, any>,
+        data: request.body as Record<string, unknown>,
         headers: {
           ...originalHeaders,
           ...extraHeaders,
@@ -453,7 +513,7 @@ export class ApiService {
     clientRequest: Request,
     clientResponse: Response,
     url: string,
-    headers: Record<string, any> = {},
+    headers: RawAxiosRequestHeaders = {},
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const isHTTPS = url.startsWith("https");
@@ -495,10 +555,10 @@ export class ApiService {
           ? httpAgentNoKeepAlive
           : httpAgent;
 
-      const outgoingHeaders = {
-        ...clientRequest.headers,
-        ...headers,
-      };
+      const outgoingHeaders = this.normalizeOutgoingHeaders(
+        clientRequest.headers,
+        headers,
+      );
       delete outgoingHeaders.host;
 
       if (!isBinaryFile) {
@@ -513,9 +573,9 @@ export class ApiService {
       );
 
       const parsedUrl = new URL(url);
-      const requestOptions = {
+      const requestOptions: RequestOptions = {
         hostname: parsedUrl.hostname,
-        port: parsedUrl.port || (isHTTPS ? 443 : 80),
+        port: parsedUrl.port ? Number(parsedUrl.port) : isHTTPS ? 443 : 80,
         path: parsedUrl.pathname + parsedUrl.search,
         method: clientRequest.method,
         headers: outgoingHeaders,

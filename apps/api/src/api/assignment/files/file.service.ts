@@ -1,22 +1,59 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { S3 } from "aws-sdk";
+import {
+  GetObjectCommand,
+  GetObjectCommandInput,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl as getS3SignedUrl } from "@aws-sdk/s3-request-presigner";
 
 @Injectable()
 export class FileService {
-  private readonly s3Client: S3;
+  private readonly s3Client: S3Client;
   private readonly logger = new Logger(FileService.name);
 
   constructor() {
-    this.s3Client = new S3({
+    this.s3Client = new S3Client({
       endpoint: process.env.IBM_COS_ENDPOINT,
       credentials: {
         accessKeyId: process.env.IBM_COS_ACCESS_KEY_ID || "",
         secretAccessKey: process.env.IBM_COS_SECRET_ACCESS_KEY || "",
       },
-      s3ForcePathStyle: true,
-      signatureVersion: "v4",
+      forcePathStyle: true,
       region: process.env.IBM_COS_REGION || "us-east",
     });
+  }
+
+  private async getObjectBuffer(parameters: GetObjectCommandInput): Promise<{
+    buffer: Buffer;
+    contentType?: string;
+  }> {
+    const response = await this.s3Client.send(new GetObjectCommand(parameters));
+
+    if (!response.Body) {
+      throw new Error("No file content received from COS");
+    }
+
+    const body = response.Body;
+    let buffer: Buffer;
+
+    if (Buffer.isBuffer(body)) {
+      buffer = body;
+    } else if (body instanceof Uint8Array) {
+      buffer = Buffer.from(body);
+    } else {
+      const chunks: Uint8Array[] = [];
+      const stream = body as NodeJS.ReadableStream;
+
+      buffer = await new Promise((resolve, reject) => {
+        stream.on("data", (chunk) =>
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+        );
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", reject);
+      });
+    }
+
+    return { buffer, contentType: response.ContentType };
   }
 
   /**
@@ -33,10 +70,8 @@ export class FileService {
       };
 
       this.logger.log(`Fetching file: ${key} from bucket: ${bucket}`);
-      const response = await this.s3Client.getObject(parameters).promise();
-
-      const contentType = response.ContentType;
-      const fileContent = response.Body.toString("utf8");
+      const { buffer, contentType } = await this.getObjectBuffer(parameters);
+      const fileContent = buffer.toString("utf8");
 
       if (
         contentType &&
@@ -127,12 +162,15 @@ export class FileService {
    * @param bucket The bucket name
    * @returns A pre-signed URL with temporary access to the file
    */
-  getFileUrl(key: string, bucket: string): string {
-    return this.s3Client.getSignedUrl("getObject", {
-      Bucket: bucket,
-      Key: key,
-      Expires: 3600,
-    });
+  async getFileUrl(key: string, bucket: string): Promise<string> {
+    return getS3SignedUrl(
+      this.s3Client,
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+      { expiresIn: 3600 },
+    );
   }
 
   /**
@@ -141,11 +179,14 @@ export class FileService {
    * @param bucket The bucket name
    * @returns A pre-signed URL with temporary access to the file
    */
-  getFileAccessUrl(key: string, bucket: string): string {
-    return this.s3Client.getSignedUrl("getObject", {
-      Bucket: bucket,
-      Key: key,
-      Expires: 24 * 60 * 60,
-    });
+  async getFileAccessUrl(key: string, bucket: string): Promise<string> {
+    return getS3SignedUrl(
+      this.s3Client,
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+      { expiresIn: 24 * 60 * 60 },
+    );
   }
 }

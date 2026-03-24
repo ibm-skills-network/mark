@@ -156,7 +156,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     sortField,
     sortDirection,
     sortFiles,
-    toggleSortDirection,
     expandedFolders,
     toggleFolderExpanded,
     updateFile,
@@ -201,7 +200,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderName, setNewFolderName] = useState<string>("");
 
-  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [, setIsDragging] = useState<boolean>(false);
   const [draggedFile, setDraggedFile] = useState<FileObject | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 

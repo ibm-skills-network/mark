@@ -8,19 +8,15 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEffect, useState, type FC } from "react";
 import {
-  ChevronRightIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 import Tooltip from "@/components/Tooltip";
 import { VersionSelectionModal } from "@/components/version-control/VersionSelectionModal";
 import { VersionConflictModal } from "@/components/version-control/VersionConflictModal";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { VersionComparison } from "@/types/version-types";
 import {
-  SemanticVersion,
-  VersionSuggestion,
   formatSemanticVersion,
   parseSemanticVersion,
   suggestNextVersion,
@@ -47,11 +43,8 @@ interface Props {
 const SubmitQuestionsButton: FC<Props> = ({
   submitting,
   questionsAreReadyToBePublished,
-  handlePublishButton,
-  currentStepId = 0,
 }) => {
   const router = useRouter();
-  const validateAssignmentSetup = useAuthorStore((state) => state.validate);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -65,13 +58,8 @@ const SubmitQuestionsButton: FC<Props> = ({
   } | null>(null);
 
   const versionControlHook = useVersionControl();
-  const {
-    versions,
-    currentVersion,
-    compareVersions,
-    createVersion,
-    updateExistingVersion,
-  } = versionControlHook;
+  const { versions, currentVersion, createVersion, updateExistingVersion } =
+    versionControlHook;
 
   const { isValid, message, step, invalidQuestionId } =
     questionsAreReadyToBePublished();
@@ -86,7 +74,6 @@ const SubmitQuestionsButton: FC<Props> = ({
   }));
   const changesSummary = useChangesSummary();
   const hasChanges = changesSummary !== "No changes detected.";
-  const isLastStep = currentStepId === 3;
 
   const pageRouterUsingSteps = (step: number | null) => {
     switch (true) {

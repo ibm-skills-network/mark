@@ -15,15 +15,12 @@ import {
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   LanguageIcon,
   TagIcon as OutlineTagIcon,
   ArrowRightIcon,
   PaperAirplaneIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
-import { AnimatePresence, motion } from "framer-motion";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";
@@ -48,6 +45,8 @@ function Component(props: Props) {
   const assignmentDetails = useAssignmentDetails(
     (state) => state.assignmentDetails,
   );
+  const optionalQuestionIds = assignmentDetails?.optionalQuestionIds ?? [];
+  const isOptionalQuestion = optionalQuestionIds.includes(questionId);
   const questionControls = assignmentDetails?.questionControls;
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
@@ -113,9 +112,10 @@ function Component(props: Props) {
   const setTranslatedChoices = useLearnerStore(
     (state) => state.setTranslatedChoices,
   );
-  const [userPreferedLanguage, setUserPreferredLanguage] = useLearnerStore(
-    (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
-  );
+  const [userPreferedLanguage] = useLearnerStore((state) => [
+    state.userPreferedLanguage,
+    state.setUserPreferedLanguage,
+  ]);
   const [userPreferedLanguageName, setUserPreferredLanguageName] = useState<
     string | undefined
   >(undefined);
@@ -275,6 +275,11 @@ function Component(props: Props) {
             <Bookmark questionStatus={questionStatus} />
             <span className="text-sm sm:hidden">Flag</span>
           </button>
+          {!isOptionalQuestion && (
+            <span className="text-xs sm:text-sm rounded-md px-2 py-1 bg-red-100 text-red-700">
+              Required
+            </span>
+          )}
           <span className="text-sm sm:text-md text-violet-600 bg-violet-100 rounded-md px-2 py-1">
             {question.totalPoints} points
           </span>

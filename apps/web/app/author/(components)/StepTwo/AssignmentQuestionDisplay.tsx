@@ -5,7 +5,7 @@ import { QuestionDisplayType } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import type { ComponentPropsWithoutRef, FC, MouseEvent } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;
 

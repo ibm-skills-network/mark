@@ -978,6 +978,8 @@ export const createMockAssignment = (
     preventPrint: false,
     preventScreenshot: false,
   },
+  requireAllQuestions: false,
+  optionalQuestionIds: [],
   ...overrides,
 });
 
@@ -1133,6 +1135,8 @@ export const createMockUpdateAssignmentQuestionsDto = (
     showSubmissionFeedback: true,
     showQuestions: true,
     correctAnswerVisibility: "ON_PASS",
+    requireAllQuestions: false,
+    optionalQuestionIds: [],
     versionNumber: "0.0.1",
     versionDescription: "Updated questions version",
     updatedAt: new Date(),
@@ -1801,7 +1805,7 @@ export const createMockQuestionService = () => ({
       { ...createMockQuestionDto(), variants: [createMockVariantDto()] },
     ],
   }),
-  processQuestionsForPublishing: jest.fn().mockResolvedValue(undefined),
+  processQuestionsForPublishing: jest.fn().mockResolvedValue(new Map()),
   generateQuestions: jest
     .fn()
     .mockResolvedValue({ message: "Question generation started", jobId: 1 }),

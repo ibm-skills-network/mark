@@ -1,4 +1,4 @@
-import React from "react";
+import { useState, type FC } from "react";
 import { IconX, IconCheck, IconCopy } from "@tabler/icons-react";
 import { formatFileSize, getFileExtension } from "./utils/fileUtils";
 import { getFileIcon } from "./FileExplorer";
@@ -9,8 +9,8 @@ interface FilePropertiesProps {
   onClose: () => void;
 }
 
-const FileProperties: React.FC<FilePropertiesProps> = ({ file, onClose }) => {
-  const [copySuccess, setCopySuccess] = React.useState<string | null>(null);
+const FileProperties: FC<FilePropertiesProps> = ({ file, onClose }) => {
+  const [copySuccess, setCopySuccess] = useState<string | null>(null);
 
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = {

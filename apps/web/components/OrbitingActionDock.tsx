@@ -1,16 +1,8 @@
 "use client";
 
 import { useChatbot } from "@/hooks/useChatbot";
-import {
-  SpeakerWaveIcon,
-  SpeakerXMarkIcon,
-  Cog6ToothIcon,
-  QuestionMarkCircleIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
-import { motion, AnimatePresence } from "framer-motion";
-import Tippy from "@tippyjs/react";
-import "tippy.js/dist/tippy.css";
+import { SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/outline";
+import { AnimatePresence, motion } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 
 interface OrbitingActionDockProps {
@@ -189,12 +181,7 @@ export const OrbitingActionDock = ({
                 marginTop: -buttonSize / 2,
               }}
             >
-              <Tippy
-                content={action.label}
-                placement="top"
-                arrow={true}
-                delay={[200, 0]}
-              >
+              <div className="group relative h-full w-full">
                 <motion.button
                   whileHover={{
                     scale: 1.3,
@@ -219,6 +206,7 @@ export const OrbitingActionDock = ({
                     relative overflow-hidden
                   `}
                   aria-label={action.label}
+                  title={action.label}
                 >
                   {/* Glossy overlay effect */}
                   <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/40 to-transparent opacity-50" />
@@ -252,7 +240,13 @@ export const OrbitingActionDock = ({
                     </>
                   )}
                 </motion.button>
-              </Tippy>
+                <div className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] left-1/2 z-50 -translate-x-1/2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  <div className="whitespace-nowrap rounded-md bg-gray-950 px-2 py-1 text-xs font-semibold text-white shadow-lg">
+                    {action.label}
+                  </div>
+                  <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-gray-950" />
+                </div>
+              </div>
             </motion.div>
           );
         })}

@@ -4,7 +4,7 @@ import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
 import MarkdownEditor from "@/components/MarkDownEditor";
 import { useAuthorStore } from "@/stores/author";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 import React from "react";
 
 const stepOneSections = {

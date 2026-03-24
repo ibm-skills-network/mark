@@ -5,14 +5,12 @@ import { useVersionControl } from "@/hooks/useVersionControl";
 import { Button } from "@/components/ui/button";
 import {
   Save,
-  History,
   ChevronDown,
   RotateCcw,
   GitBranch,
   Zap,
   FileText,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 interface QuickVersionActionsProps {
   onSave: () => Promise<boolean>;
@@ -25,13 +23,8 @@ export function QuickVersionActions({
   hasUnsavedChanges,
   className = "",
 }: QuickVersionActionsProps) {
-  const {
-    versions,
-    currentVersion,
-    restoreVersion,
-    formatVersionAge,
-    getPublishedVersions,
-  } = useVersionControl();
+  const { restoreVersion, formatVersionAge, getPublishedVersions } =
+    useVersionControl();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -39,10 +32,7 @@ export function QuickVersionActions({
   const hasOtherVersions =
     publishedVersions.filter((v) => !v.isActive).length > 0;
 
-  const handleQuickRestore = async (
-    versionId: number,
-    versionNumber: string,
-  ) => {
+  const handleQuickRestore = async (versionId: number) => {
     await restoreVersion(versionId, true);
     setIsDropdownOpen(false);
   };
@@ -108,12 +98,7 @@ export function QuickVersionActions({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() =>
-                              handleQuickRestore(
-                                version.id,
-                                version.versionNumber,
-                              )
-                            }
+                            onClick={() => handleQuickRestore(version.id)}
                             className="text-xs"
                           >
                             Restore

@@ -290,14 +290,8 @@ const GithubModal: React.FC<{
               }) => {
                 const url = new URL(item.html_url);
                 const pathnameParts = url.pathname.split("/");
-                const [
-                  empty,
-                  repoOwner,
-                  repoName,
-                  blob,
-                  branch,
-                  ...filePathParts
-                ] = pathnameParts;
+                const [, repoOwner, repoName, , branch, ...filePathParts] =
+                  pathnameParts;
 
                 const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${filePathParts.join(
                   "/",

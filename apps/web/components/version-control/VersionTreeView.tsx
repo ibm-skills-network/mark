@@ -15,22 +15,16 @@ import {
   Tag,
   FileText,
   Eye,
-  Download,
-  MoreVertical,
   CheckCircle,
   AlertCircle,
   BarChart3,
-  TrendingUp,
-  Calendar,
   Hash,
   Edit3,
-  Save,
   Star,
   Activity,
   ChevronDown,
   ChevronUp,
   Search,
-  Filter,
   SortAsc,
   SortDesc,
 } from "lucide-react";
@@ -46,12 +40,8 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from "@tanstack/react-table";
-import semver from "semver";
+import { compare as compareSemver } from "semver";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  parseSemanticVersion,
-  formatSemanticVersion,
-} from "@/lib/semantic-versioning";
 import { toast } from "sonner";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 
@@ -129,7 +119,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     toggleFavoriteVersion,
     isVersionFavorite,
     getFavoriteVersions,
-    updateVersionDescription,
   } = versionControlHook;
 
   const checkedOutVersion =
@@ -272,7 +261,7 @@ export function VersionTreeView({ assignmentId }: Props) {
 
         enableSorting: true,
         sortingFn: (rowA, rowB) =>
-          semver.compare(
+          compareSemver(
             rowA.original.versionNumber,
             rowB.original.versionNumber,
           ),
@@ -361,7 +350,7 @@ export function VersionTreeView({ assignmentId }: Props) {
 
       columnHelper.accessor("createdAt", {
         header: "Created",
-        cell: ({ getValue, row }) => (
+        cell: ({ getValue }) => (
           <div className="flex items-center space-x-1">
             <Clock className="h-4 w-4 text-gray-500" />
             <span className="text-sm text-gray-700">{getValue()}</span>
@@ -597,11 +586,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     setPendingActivationVersion(null);
   };
 
-  const handleDeleteVersion = (version: any) => {
-    setVersionToDelete(version);
-    setShowDeleteModal(true);
-  };
-
   const confirmDeleteVersion = async () => {
     if (!versionToDelete) return;
 
@@ -634,12 +618,6 @@ export function VersionTreeView({ assignmentId }: Props) {
     setShowDeleteModal(false);
     setVersionToDelete(null);
     setReplacementVersionId(null);
-  };
-
-  const handleEditVersion = (version: any) => {
-    setVersionToEdit(version);
-    setNewVersionNumber(version.versionNumber?.toString() || "");
-    setShowEditModal(true);
   };
 
   const confirmEditVersion = async () => {

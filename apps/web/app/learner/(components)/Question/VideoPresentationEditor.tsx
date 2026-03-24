@@ -38,27 +38,6 @@ const fileToBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-const extractTextFromPptx = async (file: File): Promise<string> => {
-  const zip = await JSZip.loadAsync(file);
-  let text = "";
-  const slideFiles = Object.keys(zip.files).filter((filename) =>
-    filename.startsWith("ppt/slides/slide"),
-  );
-  for (const slideFile of slideFiles) {
-    const content = await zip.file(slideFile)?.async("string");
-    if (content) {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(content, "application/xml");
-      const textElements = xmlDoc.getElementsByTagName("a:t");
-      for (let i = 0; i < textElements.length; i++) {
-        if (textElements[i].textContent) {
-          text += textElements[i].textContent + " ";
-        }
-      }
-    }
-  }
-  return text.trim();
-};
 const formatTranscriptWithConfidence = (
   segments: TranscriptSegment[],
 ): string => {
@@ -124,7 +103,6 @@ interface VideoPresentationEditorProps {
 
 const VideoPresentationEditor = ({
   question,
-  assignmentId,
 }: VideoPresentationEditorProps) => {
   const questionId = question.id;
 

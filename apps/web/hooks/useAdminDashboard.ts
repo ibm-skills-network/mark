@@ -16,24 +16,6 @@ interface DashboardFilters {
   userId?: string;
 }
 
-interface DashboardStats {
-  totalAssignments: number;
-  publishedAssignments: number;
-  totalReports: number;
-  openReports: number;
-  totalLearners: number;
-  totalAttempts: number;
-  totalCost: number;
-  costBreakdown: {
-    grading: number;
-    questionGeneration: number;
-    translation: number;
-    other: number;
-  };
-  userRole: "admin" | "author";
-  averageAssignmentRating?: number;
-}
-
 interface UpscalePricingData {
   globalFactor?: number;
   usageFactors?: { [usageType: string]: number };
