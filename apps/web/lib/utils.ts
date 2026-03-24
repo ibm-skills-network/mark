@@ -122,21 +122,71 @@ const validateURL = (str: string) => {
   return pattern.test(str);
 };
 
-export const editedQuestionsOnly = (questions: QuestionStore[]) =>
-  questions.filter(
-    (q) =>
-      q.learnerTextResponse ||
-      (q.learnerUrlResponse && validateURL(q.learnerUrlResponse)) ||
-      (q.learnerChoices?.length ?? 0) > 0 ||
-      q.learnerAnswerChoice !== undefined ||
-      q.learnerFileResponse !== undefined ||
-      q.presentationResponse !== undefined,
+const hasPresentationResponse = (
+  response?: QuestionStore["presentationResponse"],
+): boolean => {
+  if (!response) return false;
+  const transcript = response.transcript?.trim() ?? "";
+  if (transcript.length > 0) {
+    return true;
+  }
+  return (response.slidesData?.length ?? 0) > 0;
+};
+
+export const hasLearnerResponse = (question: QuestionStore): boolean => {
+  const text = question.learnerTextResponse?.trim() ?? "";
+  const hasText =
+    text.length > 0 && question.learnerTextResponse !== "<p><br></p>";
+  const hasUrl = Boolean(question.learnerUrlResponse?.trim());
+  const hasChoices = (question.learnerChoices?.length ?? 0) > 0;
+  const hasAnswerChoice =
+    question.learnerAnswerChoice !== null &&
+    question.learnerAnswerChoice !== undefined;
+  const hasFiles = (question.learnerFileResponse?.length ?? 0) > 0;
+  const presentationResponse =
+    question.presentationResponse ?? question.learnerPresentationResponse;
+  const hasPresentation = hasPresentationResponse(presentationResponse);
+
+  return (
+    hasText ||
+    hasUrl ||
+    hasChoices ||
+    hasAnswerChoice ||
+    hasFiles ||
+    hasPresentation
   );
+};
+
+export const editedQuestionsOnly = (questions: QuestionStore[]) =>
+  questions.filter((q) => {
+    const text = q.learnerTextResponse?.trim() ?? "";
+    const hasText = text.length > 0 && q.learnerTextResponse !== "<p><br></p>";
+    const urlResponse = q.learnerUrlResponse?.trim();
+    const hasValidUrl = urlResponse ? validateURL(urlResponse) : false;
+    const hasChoices = (q.learnerChoices?.length ?? 0) > 0;
+    const hasAnswerChoice =
+      q.learnerAnswerChoice !== null && q.learnerAnswerChoice !== undefined;
+    const hasFiles = (q.learnerFileResponse?.length ?? 0) > 0;
+    const presentationResponse =
+      q.presentationResponse ?? q.learnerPresentationResponse;
+    const hasPresentation = hasPresentationResponse(presentationResponse);
+
+    return (
+      hasText ||
+      hasValidUrl ||
+      hasChoices ||
+      hasAnswerChoice ||
+      hasFiles ||
+      hasPresentation
+    );
+  });
 
 export const getSubmitButtonStatus = (
   questions: QuestionStore[],
   submitting: boolean,
   isUploadingFiles?: boolean,
+  requireAllQuestions?: boolean,
+  optionalQuestionIds?: number[],
 ) => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
@@ -146,15 +196,7 @@ export const getSubmitButtonStatus = (
     return { disabled: true, reason: "File upload in progress..." };
   }
 
-  const questionsWithResponses = questions.filter(
-    (q) =>
-      q.learnerTextResponse ||
-      q.learnerUrlResponse ||
-      (q.learnerChoices?.length ?? 0) > 0 ||
-      q.learnerAnswerChoice !== undefined ||
-      q.learnerFileResponse !== undefined ||
-      q.presentationResponse !== undefined,
-  );
+  const questionsWithResponses = questions.filter(hasLearnerResponse);
 
   if (questionsWithResponses.length === 0) {
     return { disabled: true, reason: "No questions have been answered" };
@@ -174,6 +216,26 @@ export const getSubmitButtonStatus = (
   const validEditedQuestions = editedQuestionsOnly(questions);
   if (validEditedQuestions.length === 0) {
     return { disabled: true, reason: "No valid responses to submit" };
+  }
+
+  if (requireAllQuestions) {
+    const optionalQuestionSet = new Set(optionalQuestionIds ?? []);
+    const requiredQuestions = questions.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+    const requiredResponses = questionsWithResponses.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+
+    // notification for error submitting if required questions are unanswered
+    if (requiredResponses.length < requiredQuestions.length) {
+      const unansweredCount =
+        requiredQuestions.length - requiredResponses.length;
+      return {
+        disabled: true,
+        reason: `All required questions must be answered before submitting (${unansweredCount} unanswered)`,
+      };
+    }
   }
 
   return { disabled: false, reason: null };

@@ -870,6 +870,14 @@ function Component() {
       graded: filteredChanges.some(
         (c) => c.includes("Enabled grading") || c.includes("Disabled grading"),
       ),
+      requireAllQuestions: filteredChanges.some(
+        (c) =>
+          c.includes("Enabled required questions enforcement") ||
+          c.includes("Disabled required questions enforcement"),
+      ),
+      optionalQuestionIds: filteredChanges.some((c) =>
+        c.includes("Updated optional/required question selection"),
+      ),
       questionsAdded: filteredChanges.find((c) =>
         c.includes("questions added"),
       ),
@@ -902,6 +910,52 @@ function Component() {
     return indices.length > 0
       ? `Questions: ${indices.join(", ")}`
       : "Default order";
+  };
+
+  // convert to plain text
+  const stripHtmlTags = (html: string): string => {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  };
+
+
+  const getQuestionTitle = (id: number, allQuestions: QuestionAuthorStore[]) => {
+    
+    // find question and it's display index
+    const question = allQuestions.find((q) => q.id === id);
+    const index = allQuestions.findIndex((q) => q.id === id) + 1;
+    
+    // fallback if question not found
+    if (!question) return `Question ${index}`;
+    const text = question.question?.trim()
+      ? stripHtmlTags(question.question).trim()
+      : `Question ${index}`;
+    return text.length > 50 ? text.substring(0, 50) + "..." : text;
+  };
+
+  const formatRequiredQuestionsList = (
+    optionalIds: number[] | undefined,
+    allQuestions: QuestionAuthorStore[],
+  ) => {
+    const optional = optionalIds || [];
+    const required = allQuestions
+      .filter((q) => !optional.includes(q.id))
+      .map((q) => {
+        const index = allQuestions.findIndex((question) => question.id === q.id) + 1;
+        const title = getQuestionTitle(q.id, allQuestions);
+        return `Q${index}: ${title}`;
+      });
+
+    if (required.length === 0) {
+      return "None required (all optional)";
+    }
+
+    if (required.length === allQuestions.length) {
+      return "All questions required";
+    }
+
+    return required.join(", ");
   };
 
   const questionIssues = useMemo(() => {
@@ -1608,7 +1662,9 @@ function Component() {
             changes.showQuestionScore ||
             changes.showAssignmentScore ||
             changes.numberOfQuestionsPerAttempt ||
-            changes.questionOrder) &&
+            changes.questionOrder ||
+            changes.requireAllQuestions ||
+            changes.optionalQuestionIds) &&
             originalAssignment && (
               <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-purple-200 shadow-sm hover:shadow-md transition-all">
                 <div className="flex items-center justify-between w-full mb-4">
@@ -1808,6 +1864,35 @@ function Component() {
                       after={formatQuestionOrder(questionOrder, questions)}
                       onNavigate={() =>
                         router.push(`/author/${activeAssignmentId}/questions`)
+                      }
+                    />
+                  )}
+
+                  {changes.requireAllQuestions && (
+                    <ChangeComparison
+                      label="Required Questions Enforcement"
+                      before={originalAssignment.requireAllQuestions ? "Enabled" : "Disabled"}
+                      after={assignmentConfig.requireAllQuestions ? "Enabled" : "Disabled"}
+                      type="boolean"
+                      onNavigate={() =>
+                        router.push(`/author/${activeAssignmentId}/config`)
+                      }
+                    />
+                  )}
+
+                  {changes.optionalQuestionIds && (
+                    <ChangeComparison
+                      label="Required Questions"
+                      before={formatRequiredQuestionsList(
+                        originalAssignment.optionalQuestionIds,
+                        originalAssignment.questions,
+                      )}
+                      after={formatRequiredQuestionsList(
+                        assignmentConfig.optionalQuestionIds,
+                        questions,
+                      )}
+                      onNavigate={() =>
+                        router.push(`/author/${activeAssignmentId}/config`)
                       }
                     />
                   )}

@@ -4,7 +4,6 @@ import {
   FC,
   useEffect,
   useRef,
-  useState,
   type ComponentPropsWithoutRef,
 } from "react";
 import "quill/dist/quill.snow.css";
@@ -31,37 +30,66 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 const MarkdownViewer: FC<Props> = (props) => {
   const { className, children, allowCopy = true, ...restOfProps } = props;
   const quillRef = useRef<HTMLDivElement>(null);
-  const [quillInstance, setQuillInstance] = useState<any>(null);
+  const quillInstanceRef = useRef<any>(null);
+  const latestChildrenRef = useRef(children);
 
   useEffect(() => {
-    if (quillInstance) {
-      quillInstance.root.innerHTML = "";
+    latestChildrenRef.current = children;
+  }, [children]);
 
-      quillInstance.disable();
-      quillInstance.deleteText(0, quillInstance.getLength());
-      setQuillInstance(null);
+  useEffect(() => {
+    const container = quillRef.current;
+    if (!container) {
+      return;
     }
 
-    if (quillRef.current) {
-      window.hljs = hljs;
+    let isDisposed = false;
+    window.hljs = hljs;
 
-      void import("quill").then((QuillModule) => {
-        const Quill = QuillModule.default;
+    void import("quill").then((QuillModule) => {
+      if (
+        isDisposed ||
+        !container.isConnected ||
+        quillRef.current !== container ||
+        quillInstanceRef.current
+      ) {
+        return;
+      }
 
-        const quill = new Quill(quillRef.current, {
-          theme: "snow",
-          readOnly: true,
-          modules: {
-            toolbar: false,
-            syntax: {
-              highlight: (text: string) => hljs.highlightAuto(text).value,
-            },
+      const Quill = QuillModule.default;
+      const quill = new Quill(container, {
+        theme: "snow",
+        readOnly: true,
+        modules: {
+          toolbar: false,
+          syntax: {
+            highlight: (text: string) => hljs.highlightAuto(text).value,
           },
-        });
-
-        quill.root.innerHTML = String(children) || "";
-        setQuillInstance(quill);
+        },
       });
+
+      quill.root.innerHTML = String(latestChildrenRef.current) || "";
+      quill.disable();
+      quillInstanceRef.current = quill;
+    });
+
+    return () => {
+      isDisposed = true;
+
+      if (quillInstanceRef.current) {
+        quillInstanceRef.current.root.innerHTML = "";
+        quillInstanceRef.current = null;
+      }
+
+      if (container.isConnected) {
+        container.innerHTML = "";
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (quillInstanceRef.current) {
+      quillInstanceRef.current.root.innerHTML = String(children) || "";
     }
   }, [children]);
 

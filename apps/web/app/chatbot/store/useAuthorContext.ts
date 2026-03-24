@@ -3,6 +3,7 @@
 "use client";
 
 import { useAuthorStore } from "@/stores/author";
+import { applyQuestionOrder } from "@/stores/utils/question-order";
 import { useEffect, useState, useCallback } from "react";
 import { shallow } from "zustand/shallow";
 
@@ -152,13 +153,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
 
       const orderedQuestions =
         Array.isArray(questionOrder) && questionOrder.length > 0
-          ? safeQuestions.sort((a, b) => {
-              const aIndex = questionOrder.indexOf(a.id);
-              const bIndex = questionOrder.indexOf(b.id);
-              if (aIndex === -1) return 1;
-              if (bIndex === -1) return -1;
-              return aIndex - bIndex;
-            })
+          ? applyQuestionOrder(safeQuestions, questionOrder).questions
           : safeQuestions;
 
       orderedQuestions.forEach((q, idx) => {

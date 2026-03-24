@@ -336,6 +336,68 @@ describe("AssignmentRepository", () => {
       global.JSON.parse = originalJsonParse;
     });
 
+    it("should append questions missing from questionOrder instead of moving them to the front", async () => {
+      const assignmentId = 1;
+      const mockQuestions = [
+        {
+          id: 3,
+          question: "Question 3",
+          type: QuestionType.SINGLE_CORRECT,
+          isDeleted: false,
+          choices: JSON.stringify([]),
+          variants: [],
+          assignmentId: 1,
+        },
+        {
+          id: 1,
+          question: "Question 1",
+          type: QuestionType.SINGLE_CORRECT,
+          isDeleted: false,
+          choices: JSON.stringify([]),
+          variants: [],
+          assignmentId: 1,
+        },
+        {
+          id: 2,
+          question: "Question 2",
+          type: QuestionType.SINGLE_CORRECT,
+          isDeleted: false,
+          choices: JSON.stringify([]),
+          variants: [],
+          assignmentId: 1,
+        },
+      ];
+
+      const mockAssignment = {
+        ...createMockAssignment({ id: assignmentId }),
+        questions: mockQuestions,
+        questionOrder: [2, 1],
+      };
+
+      jest
+        .spyOn(prismaService.assignment, "findUnique")
+        .mockResolvedValue(mockAssignment);
+
+      const originalJsonParse = JSON.parse;
+      global.JSON.parse = jest.fn().mockImplementation((text) => {
+        if (typeof text === "string") {
+          return originalJsonParse(text) as unknown;
+        }
+        return text as unknown;
+      });
+
+      const result = (await repository.findById(
+        assignmentId,
+        sampleAuthorSession,
+      )) as GetAssignmentResponseDto;
+
+      expect(result.questions?.map((question) => question.id)).toEqual([
+        2, 1, 3,
+      ]);
+
+      global.JSON.parse = originalJsonParse;
+    });
+
     describe("version handling", () => {
       it("should use currentVersion when it exists and is active", async () => {
         const assignmentId = 1;

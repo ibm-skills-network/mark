@@ -75,6 +75,8 @@ export function useChangesSummary(): string {
     graded,
     numberOfQuestionsPerAttempt,
     questionControls,
+    requireAllQuestions,
+    optionalQuestionIds,
   } = useAssignmentConfig();
 
   const {
@@ -445,6 +447,38 @@ export function useChangesSummary(): string {
       diffs.push(graded ? "Enabled grading." : "Disabled grading.");
     }
 
+    if (!safeCompare(requireAllQuestions, originalAssignment.requireAllQuestions)) {
+      if (requireAllQuestions) {
+        diffs.push("Enabled required questions enforcement.");
+      } else {
+        diffs.push("Disabled required questions enforcement.");
+      }
+    }
+
+    if (
+      !safeArrayCompare(
+        optionalQuestionIds,
+        originalAssignment.optionalQuestionIds,
+      )
+    ) {
+      const originalOptional = originalAssignment.optionalQuestionIds || [];
+      const currentOptional = optionalQuestionIds || [];
+
+      // Find questions that became optional 
+      const becameOptional = currentOptional.filter(
+        (id) => !originalOptional.includes(id),
+      );
+
+      // Find questions that became required 
+      const becameRequired = originalOptional.filter(
+        (id) => !currentOptional.includes(id),
+      );
+
+      if (becameOptional.length > 0 || becameRequired.length > 0) {
+        diffs.push("Updated optional/required question selection.");
+      }
+    }
+
     return diffs.length > 0 ? diffs.join(" ") : "No changes detected.";
   }, [
     originalAssignment,
@@ -469,6 +503,8 @@ export function useChangesSummary(): string {
     showAssignmentScore,
     showQuestions,
     numberOfQuestionsPerAttempt,
+    requireAllQuestions,
+    optionalQuestionIds,
   ]);
   return changesSummary;
 }
