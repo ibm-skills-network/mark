@@ -1,20 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Modal from "@/components/Modal";
-import {
-  Save,
-  GitBranch,
-  Clock,
-  RotateCcw,
-  Plus,
-  Eye,
-  ChevronDown,
-  History,
-} from "lucide-react";
+import { GitBranch, Eye, ChevronDown, History } from "lucide-react";
 import { toast } from "sonner";
 
 interface VersionControlPanelProps {
@@ -24,7 +15,6 @@ interface VersionControlPanelProps {
 }
 
 export function VersionControlPanel({
-  onSave,
   hasUnsavedChanges,
   className = "",
 }: VersionControlPanelProps) {
@@ -50,26 +40,6 @@ export function VersionControlPanel({
 
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const success = await onSave();
-      if (success) {
-        toast.success("Changes saved successfully");
-
-        await loadVersions();
-      } else {
-        toast.error("Failed to save changes");
-      }
-    } catch (error) {
-      toast.error("Error saving changes");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleRestoreVersion = async (
     versionId: number,
     versionNumber: string,
@@ -89,7 +59,7 @@ export function VersionControlPanel({
     }
   };
 
-  const handleLoadDraft = async (draftId: number, draftName: string) => {
+  const handleLoadDraft = async (draftId: number) => {
     try {
       const success = await loadDraft(draftId);
       if (success) {
@@ -359,9 +329,7 @@ export function VersionControlPanel({
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() =>
-                                handleLoadDraft(draft.id, draft.draftName)
-                              }
+                              onClick={() => handleLoadDraft(draft.id)}
                               className="text-xs hover:bg-green-50 hover:border-green-300 hover:text-green-700"
                             >
                               <Eye className="h-3 w-3 mr-1" />
@@ -534,7 +502,6 @@ function VersionHistoryModal({
   versions,
   currentVersion,
   checkedOutVersion,
-  onRestoreVersion,
   onCheckoutVersion,
   formatVersionAge,
 }: VersionHistoryModalProps) {
@@ -544,7 +511,7 @@ function VersionHistoryModal({
     <Modal onClose={onClose} Title="Version History">
       <div className="max-h-[70vh] overflow-y-auto">
         <div className="space-y-3">
-          {versions.map((version, index) => (
+          {versions.map((version) => (
             <div
               key={version.id}
               className={`p-4 border rounded-lg transition-all ${

@@ -96,7 +96,7 @@ function buildMinorVersionHierarchy(versions: VersionNode[]): VersionNode[] {
   const result: VersionNode[] = [];
 
   // Process each minor group
-  for (const [_minor, minorVersions] of Array.from(minorGroups.entries())) {
+  for (const [, minorVersions] of Array.from(minorGroups.entries())) {
     // Sort by patch version (newest first)
     minorVersions.sort(
       (a, b) => b.semanticVersion.patch - a.semanticVersion.patch,

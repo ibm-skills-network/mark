@@ -40,6 +40,7 @@ import {
   VariantType,
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
 import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
@@ -61,6 +62,10 @@ import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
+
+type QuestionPointsSource =
+  | Pick<Question, "id" | "totalPoints">
+  | Pick<QuestionDto, "id" | "totalPoints">;
 
 @Injectable()
 export class AttemptSubmissionService {
@@ -1108,7 +1113,8 @@ export class AttemptSubmissionService {
       const { totalPossiblePoints, missingQuestions } =
         await this.calculateTotalPossiblePointsWithValidation(
           successfulQuestionResponses,
-          assignment.questions,
+          updateDto.authorQuestions ?? assignment.questions,
+          { allowDatabaseFallback: false },
         );
 
       if (totalPossiblePoints <= 0) {
@@ -1392,16 +1398,21 @@ export class AttemptSubmissionService {
    * to prevent bugs where questions are deleted/filtered after attempt creation.
    *
    * @param responses - The graded question responses
-   * @param assignmentQuestions - Questions from the assignment (may be filtered/deleted)
+   * @param assignmentQuestions - Questions from the active grading source
+   * @param options - Controls whether missing questions should be looked up in the database
    * @returns Object containing totalPossiblePoints and array of missing question IDs
    */
   private async calculateTotalPossiblePointsWithValidation(
     responses: CreateQuestionResponseAttemptResponseDto[],
-    assignmentQuestions: Question[],
+    assignmentQuestions: QuestionPointsSource[],
+    options?: {
+      allowDatabaseFallback?: boolean;
+    },
   ): Promise<{
     totalPossiblePoints: number;
     missingQuestions: number[];
   }> {
+    const allowDatabaseFallback = options?.allowDatabaseFallback ?? true;
     let totalPossiblePoints = 0;
     const missingQuestions: number[] = [];
     const questionMap = new Map(
@@ -1434,6 +1445,13 @@ export class AttemptSubmissionService {
     }
 
     if (missingQuestionIds.length > 0) {
+      if (!allowDatabaseFallback) {
+        throw new InternalServerErrorException(
+          `Cannot calculate totalPossiblePoints: Question ${missingQuestionIds[0]} not found ` +
+            `in provided questions. This prevents accurate grading.`,
+        );
+      }
+
       try {
         const deletedQuestions = await this.prisma.question.findMany({
           where: {
@@ -1511,10 +1529,9 @@ export class AttemptSubmissionService {
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
     ) {
-      orderedQuestions.sort(
-        (a, b) =>
-          assignment.questionOrder.indexOf(a.id) -
-          assignment.questionOrder.indexOf(b.id),
+      orderedQuestions = applyQuestionOrder(
+        orderedQuestions,
+        assignment.questionOrder,
       );
     }
 

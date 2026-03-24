@@ -13,7 +13,7 @@ import {
   type ComponentPropsWithoutRef,
   type FC,
 } from "react";
-import SectionWithTitle from "../ReusableSections/SectionWithTitle";
+import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
 type Props = ComponentPropsWithoutRef<"div">;
 

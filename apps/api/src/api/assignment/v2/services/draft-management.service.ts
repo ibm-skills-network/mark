@@ -8,7 +8,7 @@ import {
   AssignmentQuestionDisplayOrder,
   QuestionDisplay,
 } from "@prisma/client";
-import { JsonValue } from "aws-sdk/clients/glue";
+import { JsonValue } from "@prisma/client/runtime/library";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   UserRole,

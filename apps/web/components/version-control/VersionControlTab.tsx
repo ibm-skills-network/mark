@@ -4,16 +4,11 @@ import React, { useState } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import Modal from "@/components/Modal";
 import {
   Save,
   GitBranch,
-  Clock,
-  RotateCcw,
-  Plus,
   Eye,
-  ChevronDown,
   History,
   FileText,
   Trash2,
@@ -34,12 +29,8 @@ export function VersionControlTab() {
     checkoutVersion,
     activateVersion,
     formatVersionAge,
-    getDraftVersions,
-    getPublishedVersions,
-
     drafts,
     isLoadingDrafts,
-    draftsLoadFailed,
     loadDraft,
     deleteDraft,
     hasUnsavedChanges,
@@ -47,18 +38,11 @@ export function VersionControlTab() {
 
   const [isCreateVersionModalOpen, setIsCreateVersionModalOpen] =
     useState(false);
-  const [isCreateDraftModalOpen, setIsCreateDraftModalOpen] = useState(false);
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-
+  const [creationMode, setCreationMode] = useState<"draft" | "version">(
+    "version",
+  );
   const [versionDescription, setVersionDescription] = useState("");
-  const [draftName, setDraftName] = useState("");
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
-  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-
-  const publishedVersions = getPublishedVersions();
-  const draftVersions = getDraftVersions();
-
   const handleCreateVersion = async () => {
     if (!versionDescription.trim()) {
       toast.error("Please enter a version description");
@@ -67,11 +51,16 @@ export function VersionControlTab() {
 
     setIsCreatingVersion(true);
     try {
-      const newVersion = await createVersion(versionDescription, false);
+      const isDraft = creationMode === "draft";
+      const newVersion = await createVersion(versionDescription, isDraft);
       if (newVersion) {
         setIsCreateVersionModalOpen(false);
         setVersionDescription("");
-        toast.success("Version created successfully!");
+        toast.success(
+          isDraft
+            ? "Draft saved successfully!"
+            : "Version created successfully!",
+        );
       }
     } finally {
       setIsCreatingVersion(false);
@@ -170,7 +159,10 @@ export function VersionControlTab() {
 
       <div className="flex gap-3">
         <Button
-          onClick={() => setIsCreateDraftModalOpen(true)}
+          onClick={() => {
+            setCreationMode("draft");
+            setIsCreateVersionModalOpen(true);
+          }}
           className="flex items-center gap-2"
         >
           <Save className="h-4 w-4" />
@@ -178,7 +170,10 @@ export function VersionControlTab() {
         </Button>
 
         <Button
-          onClick={() => setIsCreateVersionModalOpen(true)}
+          onClick={() => {
+            setCreationMode("version");
+            setIsCreateVersionModalOpen(true);
+          }}
           variant="outline"
           className="flex items-center gap-2"
         >
@@ -387,17 +382,27 @@ export function VersionControlTab() {
       {isCreateVersionModalOpen && (
         <Modal
           onClose={() => setIsCreateVersionModalOpen(false)}
-          Title="Create New Version"
+          Title={
+            creationMode === "draft"
+              ? "Save Draft Version"
+              : "Create New Version"
+          }
         >
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">
-                Version Description
+                {creationMode === "draft"
+                  ? "Draft Description"
+                  : "Version Description"}
               </label>
               <textarea
                 value={versionDescription}
                 onChange={(e) => setVersionDescription(e.target.value)}
-                placeholder="Describe the changes in this version..."
+                placeholder={
+                  creationMode === "draft"
+                    ? "Describe this draft so you can find it later..."
+                    : "Describe the changes in this version..."
+                }
                 className="w-full p-3 border border-gray-300 rounded-md resize-none"
                 rows={3}
               />
@@ -414,7 +419,13 @@ export function VersionControlTab() {
                 onClick={handleCreateVersion}
                 disabled={isCreatingVersion || !versionDescription.trim()}
               >
-                {isCreatingVersion ? "Creating..." : "Create Version"}
+                {isCreatingVersion
+                  ? creationMode === "draft"
+                    ? "Saving..."
+                    : "Creating..."
+                  : creationMode === "draft"
+                    ? "Save Draft"
+                    : "Create Version"}
               </Button>
             </div>
           </div>

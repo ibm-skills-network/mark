@@ -3,7 +3,7 @@
  */
 import { renderHook, waitFor } from "@testing-library/react";
 import { useAutoSaveResponse } from "../use-auto-save-response";
-import { useLearnerStore, useLearnerOverviewStore } from "@/stores/learner";
+import { useLearnerStore } from "@/stores/learner";
 import { submitQuestion } from "@/lib/talkToBackend";
 
 jest.mock("@/lib/talkToBackend");
@@ -463,7 +463,7 @@ describe("useAutoSaveResponse", () => {
       return selector(mockState);
     });
 
-    const { result, rerender } = renderHook(() =>
+    const { rerender } = renderHook(() =>
       useAutoSaveResponse(assignmentId, attemptId, questionId, {
         enabled: true,
         debounceMs: 100,

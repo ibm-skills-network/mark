@@ -141,7 +141,7 @@ export class FilesService {
     const uniqueId = this.generateUniqueId();
     const key = `${prefix}${uniqueId}-${fileName}`;
 
-    const presignedUrl = this.s3Service.getSignedUrl("putObject", {
+    const presignedUrl = await this.s3Service.getSignedUrl("putObject", {
       Bucket: bucket,
       Key: key,
       ContentType: fileType,
@@ -158,10 +158,10 @@ export class FilesService {
     };
   }
 
-  generatePublicUrl(key: string): { presignedUrl: string } {
+  async generatePublicUrl(key: string): Promise<{ presignedUrl: string }> {
     const bucket = process.env.S3_PUBLIC_BUCKET;
 
-    const presignedUrl = this.s3Service.getSignedUrl("getObject", {
+    const presignedUrl = await this.s3Service.getSignedUrl("getObject", {
       Bucket: bucket,
       Key: key,
       Expires: 3600,
@@ -377,7 +377,7 @@ export class FilesService {
       return folderListing;
     }
 
-    const presignedUrl = this.s3Service.getSignedUrl("getObject", {
+    const presignedUrl = await this.s3Service.getSignedUrl("getObject", {
       Bucket: fileData.cosBucket,
       Key: fileData.cosKey,
       Expires: 3600,

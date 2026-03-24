@@ -82,7 +82,6 @@ export class TranslationService implements OnModuleDestroy {
   private readonly OPERATION_TIMEOUT = 30_000;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
-  private readonly ADAPTIVE_BATCH_SIZE = true;
 
   private stuckOperations = new Set<string>();
   private jobStartTimes = new Map<number, number>();
@@ -236,6 +235,7 @@ export class TranslationService implements OnModuleDestroy {
     batchSize = this.MAX_BATCH_SIZE,
     _concurrencyLimit = this.CONCURRENCY_LIMIT,
   ): Promise<BatchProcessResult> {
+    void _concurrencyLimit;
     const results: BatchProcessResult = { success: 0, failure: 0, dropped: 0 };
     const chunks: T[][] = [];
 
@@ -885,6 +885,7 @@ export class TranslationService implements OnModuleDestroy {
     maxAttempts = this.MAX_RETRY_ATTEMPTS,
     _jobId?: number,
   ): Promise<T> {
+    void _jobId;
     let attempts = 0;
     const operationId = `${operationName}-${Date.now()}`;
 
@@ -947,6 +948,7 @@ export class TranslationService implements OnModuleDestroy {
    * Handle stuck operations by resetting limiter if needed
    */
   private handleStuckOperation(_operationName: string): void {
+    void _operationName;
     this.operationStats.consecutiveFailures++;
     this.operationStats.lastFailureTime = Date.now();
 
@@ -1026,29 +1028,6 @@ export class TranslationService implements OnModuleDestroy {
       return;
     }
     tracker.languageCompleted++;
-  }
-
-  /**
-   * Mark an item as completed in the progress tracker
-   */
-  private incrementCompletedItems(tracker: ProgressTracker | undefined): void {
-    if (!tracker) {
-      return;
-    }
-    tracker.completedItems++;
-  }
-
-  /**
-   * Set the current item index in the progress tracker
-   */
-  private setCurrentItemIndex(
-    tracker: ProgressTracker | undefined,
-    index: number,
-  ): void {
-    if (!tracker) {
-      return;
-    }
-    tracker.currentItemIndex = index;
   }
 
   /**

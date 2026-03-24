@@ -17,12 +17,9 @@ import {
   Question,
 } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { assign } from "nodemailer/lib/shared";
-import {
-  UserRole,
-  UserSession,
-} from "src/auth/interfaces/user.session.interface";
+import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
+import { applyQuestionOrder } from "../../utils/question-order.util";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
 
@@ -322,7 +319,12 @@ export class VersionManagementService {
         `Creating ${assignment.questions.length} question versions for assignment version ${assignmentVersion.id}`,
       );
 
-      for (const [index, question] of assignment.questions.entries()) {
+      const orderedQuestions = applyQuestionOrder(
+        assignment.questions,
+        assignment.questionOrder,
+      );
+
+      for (const [index, question] of orderedQuestions.entries()) {
         const questionVersion = await tx.questionVersion.create({
           data: {
             assignmentVersionId: assignmentVersion.id,
@@ -353,7 +355,7 @@ export class VersionManagementService {
       }
 
       this.logger.info(
-        `Successfully created all ${assignment.questions.length} question versions`,
+        `Successfully created all ${orderedQuestions.length} question versions`,
       );
 
       if (createVersionDto.shouldActivate) {
@@ -930,6 +932,7 @@ export class VersionManagementService {
   }
 
   async getVersionHistory(assignmentId: number, _userSession: UserSession) {
+    void _userSession;
     return await this.prisma.versionHistory.findMany({
       where: { assignmentId },
       include: {
@@ -1100,7 +1103,12 @@ export class VersionManagementService {
         where: { assignmentVersionId: versionId },
       });
 
-      for (const [index, question] of assignment.questions.entries()) {
+      const orderedQuestions = applyQuestionOrder(
+        assignment.questions,
+        assignment.questionOrder,
+      );
+
+      for (const [index, question] of orderedQuestions.entries()) {
         await tx.questionVersion.create({
           data: {
             assignmentVersionId: versionId,
@@ -1284,29 +1292,6 @@ export class VersionManagementService {
     }
 
     return changes;
-  }
-
-  private async verifyAssignmentAccess(
-    assignmentId: number,
-    userSession: UserSession,
-  ) {
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      include: { AssignmentAuthor: true },
-    });
-
-    if (!assignment) {
-      throw new NotFoundException("Assignment not found");
-    }
-
-    if (userSession.role === UserRole.AUTHOR) {
-      const hasAccess = assignment.AssignmentAuthor.some(
-        (author) => author.userId === userSession.userId,
-      );
-      if (!hasAccess) {
-        throw new NotFoundException("Assignment not found");
-      }
-    }
   }
 
   private async createDraftVersion(

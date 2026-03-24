@@ -19,7 +19,7 @@ export const withUpdatedAt =
         }
 
         set(
-          (_state) => ({
+          () => ({
             ...partial,
             updatedAt: new Date().getTime(),
           }),

@@ -208,10 +208,6 @@ export const useMarkChatStore = create<MarkChatState>()(
         });
 
         try {
-          const conversationMessages = messages.filter(
-            (msg) => msg.role !== "system" || !msg.id.includes("context"),
-          );
-
           if (useStreaming) {
             const response = await fetch("/api/markChat/stream", {
               method: "POST",

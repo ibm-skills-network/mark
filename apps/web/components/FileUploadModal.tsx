@@ -59,7 +59,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const [learningObjectives, setLearningObjectives] = useAuthorStore(
     (state) => [state.learningObjectives, state.setLearningObjectives],
   );
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const questions = useAuthorStore((state) => state.questions);
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -131,7 +131,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     linkFile: 0,
   });
 
-  const [selectedResponseTypes, setSelectedResponseTypes] = useState({
+  const [selectedResponseTypes] = useState({
     TEXT: "OTHER" as ResponseType,
     URL: "OTHER" as ResponseType,
     UPLOAD: "OTHER" as ResponseType,

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import HighlightedText from "./HighlightedText";
+import { HighlightedText } from "./HighlightedText";
 import { HighlightLevel, ResponseHighlighting } from "@/config/types";
 
 interface HighlightedResponseProps {
@@ -44,7 +44,6 @@ export const HighlightedResponse: React.FC<HighlightedResponseProps> = ({
   const pages = highlighting.pages;
   const currentPage = pages[selectedPage] || pages[0];
 
-  const totalHighlights = currentPage.highlights.length;
   const correctCount = currentPage.highlights.filter(
     (h) => h.level === HighlightLevel.CORRECT,
   ).length;

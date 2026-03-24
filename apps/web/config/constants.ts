@@ -1,5 +1,4 @@
 import { absoluteUrl } from "../lib/utils";
-import { versions } from "process";
 
 export const API_VERSIONS = {
   V1: "v1",

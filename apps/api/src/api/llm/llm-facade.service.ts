@@ -1,7 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
 import { LearnerLiveRecordingFeedback } from "../assignment/attempt/dto/assignment-attempt/types";
 import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.dto";
 import {
@@ -59,8 +57,6 @@ import { VideoPresentationQuestionResponseModel } from "./model/video-presentati
  */
 @Injectable()
 export class LlmFacadeService {
-  private readonly logger: Logger;
-
   constructor(
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
@@ -83,10 +79,7 @@ export class LlmFacadeService {
     @Inject(RUBRIC_SERVICE) private readonly rubricService: IRubricService,
     @Inject(TRANSLATION_SERVICE)
     private readonly translationService: ITranslationService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
-  ) {
-    this.logger = parentLogger.child({ context: LlmFacadeService.name });
-  }
+  ) {}
 
   /**
    * Validate content using moderation service

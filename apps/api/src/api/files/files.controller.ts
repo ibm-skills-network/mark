@@ -58,7 +58,7 @@ export class FilesController {
   ) {}
 
   @Get("public-url")
-  getPublicUrl(@Query("key") key: string) {
+  async getPublicUrl(@Query("key") key: string) {
     if (!key) {
       throw new BadRequestException("Missing required parameter: key");
     }
@@ -236,7 +236,7 @@ export class FilesController {
       const isPdf = this.isPdfFile(filename);
       const isText = this.isTextFile(filename);
 
-      const viewUrl = this.s3Service.getSignedUrl("getObject", {
+      const viewUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: bucket,
         Key: key,
         Expires: expirationSeconds,
@@ -244,7 +244,7 @@ export class FilesController {
         ResponseContentType: contentType,
       });
 
-      const downloadUrl = this.s3Service.getSignedUrl("getObject", {
+      const downloadUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: bucket,
         Key: key,
         Expires: expirationSeconds,

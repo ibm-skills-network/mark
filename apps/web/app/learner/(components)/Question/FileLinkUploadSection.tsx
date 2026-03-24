@@ -1,5 +1,4 @@
 import { QuestionStore, QuestionType, ResponseType } from "@/config/types";
-import { cn } from "@/lib/strings";
 import { learnerFileResponse, useLearnerStore } from "@/stores/learner";
 import { useState } from "react";
 import FileUploadSection from "./FileUploadSection";
@@ -19,7 +18,6 @@ interface FileLinkUploadSectionProps {
 
 const FileLinkUploadSection = ({
   questionId,
-  questionType,
   responseType,
   question,
   onModeChange,

@@ -329,9 +329,6 @@ export default function LLMAssignmentsPage() {
               {features.map((feature) => {
                 const effectiveModel = getEffectiveModel(feature);
                 const hasChange = changes.has(feature.featureKey);
-                const selectedModel = models.find(
-                  (m) => m.modelKey === effectiveModel,
-                );
 
                 return (
                   <TableRow key={feature.featureKey}>

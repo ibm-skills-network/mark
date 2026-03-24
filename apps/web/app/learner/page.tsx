@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/talkToBackend";
 
 export default async function LearnerIndexPage() {
-  const cookie = headers().get("cookie") || "";
+  const cookie = (await headers()).get("cookie") || "";
   try {
     const user = await getUser(cookie);
     if (user?.role === "learner" && user?.assignmentId) {

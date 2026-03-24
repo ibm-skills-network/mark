@@ -1,8 +1,4 @@
-interface Props {}
-
-function SNIcon(props: Props) {
-  const {} = props;
-
+function SNIcon() {
   return (
     <svg
       width="36"

@@ -50,10 +50,13 @@ export class ChunkIndex {
 
     return results
       .slice(0, limit)
-      .map((result) => ({
-        chunk: this.chunkMap.get(result.id)!,
-        score: result.score,
-      }))
+      .map((result) => {
+        const chunk = this.chunkMap.get(result.id);
+        return {
+          chunk,
+          score: result.score,
+        };
+      })
       .filter((item) => item.chunk);
   }
 
