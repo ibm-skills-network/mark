@@ -29,6 +29,10 @@ type GradingDataActions = {
   ) => void;
   setDisplayOrder: (displayOrder: "DEFINED" | "RANDOM") => void;
   toggleStrictTimeLimit: () => void;
+  toggleRequireAllQuestions: () => void;
+  setRequireAllQuestions: (requireAllQuestions: boolean) => void;
+  toggleOptionalQuestionId: (questionId: number) => void;
+  setOptionalQuestionIds: (optionalQuestionIds: number[]) => void;
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentConfigStore: (state: Partial<GradingData>) => void;
   setStrictTimeLimit: (strictTimeLimit: boolean) => void;
@@ -70,6 +74,8 @@ export const useAssignmentConfig = createWithEqualityFn<
         showQuestions: true,
         showSubmissionFeedback: true,
         showAssignmentScore: false,
+        requireAllQuestions: false,
+        optionalQuestionIds: [],
         numberOfQuestionsPerAttempt: null,
         setNumberOfQuestionsPerAttempt: (numberOfQuestionsPerAttempt) => {
           set({ numberOfQuestionsPerAttempt });
@@ -77,6 +83,24 @@ export const useAssignmentConfig = createWithEqualityFn<
         setShowSubmissionFeedback: (showSubmissionFeedback: boolean) =>
           set({ showSubmissionFeedback }),
         setShowQuestions: (showQuestions: boolean) => set({ showQuestions }),
+        toggleRequireAllQuestions: () =>
+          set((state) => ({
+            requireAllQuestions: !state.requireAllQuestions,
+          })),
+        setRequireAllQuestions: (requireAllQuestions: boolean) =>
+          set({ requireAllQuestions }),
+        toggleOptionalQuestionId: (questionId: number) =>
+          set((state) => {
+            const optionalQuestionIds = state.optionalQuestionIds ?? [];
+            const isOptional = optionalQuestionIds.includes(questionId);
+            return {
+              optionalQuestionIds: isOptional
+                ? optionalQuestionIds.filter((id) => id !== questionId)
+                : [...optionalQuestionIds, questionId],
+            };
+          }),
+        setOptionalQuestionIds: (optionalQuestionIds: number[]) =>
+          set({ optionalQuestionIds }),
         setQuestionControls: (questionControls: QuestionControls) =>
           set({ questionControls }),
         setGraded: (graded) => set({ graded }),
@@ -190,6 +214,8 @@ export const useAssignmentConfig = createWithEqualityFn<
             strictTimeLimit: false,
             updatedAt: undefined,
             graded: false,
+            requireAllQuestions: false,
+            optionalQuestionIds: [],
             questionVariationNumber: 0,
             questionDisplay: QuestionDisplayType.ONE_PER_PAGE,
             timeEstimateMinutes: undefined,

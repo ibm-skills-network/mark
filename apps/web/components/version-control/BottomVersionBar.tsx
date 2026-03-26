@@ -141,6 +141,11 @@ export function BottomVersionBar() {
     versionId: number,
     versionNumber: string | number,
   ) => {
+    if (workingVersion?.id === versionId) {
+      setVersionsOpen(false);
+      return;
+    }
+
     if (hasUnsavedChanges) {
       setPendingAction({
         type: "checkout",
@@ -152,7 +157,14 @@ export function BottomVersionBar() {
       return;
     }
 
-    setVersionsOpen(false);
+    try {
+      const success = await checkoutVersion(versionId, versionNumber);
+      if (success) {
+        setVersionsOpen(false);
+      }
+    } catch (error) {
+      console.error("Failed to checkout version:", error);
+    }
   };
 
   const handleSaveAndProceed = async () => {
@@ -408,7 +420,7 @@ export function BottomVersionBar() {
                       const isWorking = version.id === workingVersion.id;
 
                       return (
-                        <motion.button
+                        <motion.div
                           key={version.id}
                           onClick={() =>
                             handleVersionSelect(
@@ -416,11 +428,22 @@ export function BottomVersionBar() {
                               version.versionNumber,
                             )
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              void handleVersionSelect(
+                                version.id,
+                                version.versionNumber,
+                              );
+                            }
+                          }}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.05 }}
                           whileHover={{ scale: 1.01, y: -1 }}
                           whileTap={{ scale: 0.99 }}
+                          role="button"
+                          tabIndex={0}
                           className={`w-full p-4 rounded-xl border text-left transition-all duration-200 group relative overflow-hidden ${
                             isWorking
                               ? "border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 shadow-md"
@@ -524,7 +547,7 @@ export function BottomVersionBar() {
                               />
                             </button>
                           </div>
-                        </motion.button>
+                        </motion.div>
                       );
                     })}
                   </div>

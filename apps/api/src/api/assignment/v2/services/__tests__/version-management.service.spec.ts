@@ -19,6 +19,7 @@ describe("VersionManagementService", () => {
     assignmentVersion: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       updateMany: jest.fn(),
       update: jest.fn(),
@@ -36,6 +37,7 @@ describe("VersionManagementService", () => {
   const mockLogger = {
     child: jest.fn().mockReturnThis(),
     info: jest.fn(),
+    debug: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
   };
@@ -305,6 +307,172 @@ describe("VersionManagementService", () => {
           changeType: "modified",
         }),
       );
+    });
+  });
+
+  describe("question ordering in version snapshots", () => {
+    const mockUserSession = {
+      userId: "user123",
+      role: UserRole.AUTHOR,
+    };
+
+    const buildQuestion = (id: number, question: string) => ({
+      id,
+      totalPoints: 5,
+      authorComment: null,
+      type: "TEXT",
+      responseType: "ESSAY",
+      question,
+      maxWords: null,
+      scoring: null,
+      choices: null,
+      randomizedChoices: false,
+      answer: null,
+      gradingContextQuestionIds: [],
+      maxCharacters: null,
+      videoPresentationConfig: null,
+      liveRecordingConfig: null,
+    });
+
+    const buildAssignment = () => ({
+      id: 1,
+      currentVersionId: null,
+      name: "Assignment",
+      introduction: null,
+      instructions: null,
+      gradingCriteriaOverview: null,
+      timeEstimateMinutes: null,
+      type: "MANUAL",
+      graded: false,
+      numAttempts: 1,
+      attemptsBeforeCoolDown: 1,
+      retakeAttemptCoolDownMinutes: 5,
+      allotedTimeMinutes: null,
+      attemptsPerTimeRange: null,
+      attemptsTimeRangeHours: null,
+      passingGrade: 50,
+      displayOrder: "DEFINED",
+      questionDisplay: "ONE_PER_PAGE",
+      numberOfQuestionsPerAttempt: null,
+      questionOrder: [2, 1],
+      published: true,
+      showAssignmentScore: true,
+      showQuestionScore: true,
+      showSubmissionFeedback: true,
+      showQuestions: true,
+      correctAnswerVisibility: "NEVER",
+      questionControls: null,
+      languageCode: "en",
+      questions: [
+        buildQuestion(1, "Question 1"),
+        buildQuestion(2, "Question 2"),
+      ],
+      versions: [],
+    });
+
+    it("creates question versions using assignment.questionOrder", async () => {
+      const assignment = buildAssignment();
+      const tx = {
+        assignmentVersion: {
+          create: jest.fn().mockResolvedValue({
+            id: 10,
+            versionNumber: "1.0.0",
+            versionDescription: "Version 1",
+            isDraft: false,
+            isActive: false,
+            published: true,
+            createdBy: mockUserSession.userId,
+            createdAt: new Date(),
+          }),
+        },
+        questionVersion: {
+          create: jest.fn().mockResolvedValue({ id: 100 }),
+        },
+        versionHistory: {
+          create: jest.fn().mockResolvedValue({}),
+        },
+      };
+
+      mockPrismaService.assignment.findUnique.mockResolvedValue(assignment);
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.createVersion(
+        1,
+        {
+          versionNumber: "1.0.0",
+          versionDescription: "Version 1",
+          isDraft: false,
+          shouldActivate: false,
+        },
+        mockUserSession as any,
+      );
+
+      expect(
+        tx.questionVersion.create.mock.calls.map(
+          (call) => call[0].data.questionId,
+        ),
+      ).toEqual([2, 1]);
+      expect(
+        tx.questionVersion.create.mock.calls.map(
+          (call) => call[0].data.displayOrder,
+        ),
+      ).toEqual([1, 2]);
+    });
+
+    it("updates existing versions using assignment.questionOrder", async () => {
+      const assignment = buildAssignment();
+      const tx = {
+        assignmentVersion: {
+          update: jest.fn().mockResolvedValue({
+            id: 10,
+            versionNumber: "1.0.1",
+            versionDescription: "Updated version",
+            isDraft: false,
+            isActive: false,
+            published: true,
+            createdBy: mockUserSession.userId,
+            createdAt: new Date(),
+            _count: { questionVersions: 2 },
+          }),
+        },
+        questionVersion: {
+          deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+          create: jest.fn().mockResolvedValue({ id: 200 }),
+        },
+        versionHistory: {
+          create: jest.fn().mockResolvedValue({}),
+        },
+      };
+
+      mockPrismaService.assignment.findUnique.mockResolvedValue(assignment);
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service["updateExistingVersion"](
+        1,
+        10,
+        {
+          versionDescription: "Updated version",
+          isDraft: false,
+          shouldActivate: false,
+        },
+        mockUserSession as any,
+      );
+
+      expect(
+        tx.questionVersion.create.mock.calls.map(
+          (call) => call[0].data.questionId,
+        ),
+      ).toEqual([2, 1]);
+      expect(
+        tx.questionVersion.create.mock.calls.map(
+          (call) => call[0].data.displayOrder,
+        ),
+      ).toEqual([1, 2]);
     });
   });
 });
