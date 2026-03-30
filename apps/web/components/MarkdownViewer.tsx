@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  FC,
-  useEffect,
-  useRef,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { FC, useEffect, useRef, type ComponentPropsWithoutRef } from "react";
 import "quill/dist/quill.snow.css";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";

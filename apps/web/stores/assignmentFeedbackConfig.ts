@@ -53,7 +53,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
           }
           set({ correctAnswerVisibility });
         },
-        updatedAt: Date.now(),
+        updatedAt: undefined,
         setVerbosityLevel: (verbosityLevel) => set({ verbosityLevel }),
         toggleShowSubmissionFeedback: () =>
           set((state) => ({
@@ -80,7 +80,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
             showAssignmentScore: true,
             showQuestions: true,
             correctAnswerVisibility: "ALWAYS",
-            updatedAt: Date.now(),
+            updatedAt: undefined,
           })),
       })),
     ),

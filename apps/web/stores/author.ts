@@ -1792,8 +1792,6 @@ export const useAuthorStore = createWithEqualityFn<
               } else {
                 checkedOutVersion = currentVersion;
               }
-            } else {
-              checkedOutVersion = currentVersion;
             }
 
             set({
