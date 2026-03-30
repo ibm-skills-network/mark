@@ -54,7 +54,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
           set({ correctAnswerVisibility });
         },
         updatedAt: undefined,
-        setVerbosityLevel: (verbosityLevel) => set({ verbosityLevel }),
+        setVerbosityLevel: (verbosityLevel) => set((state) => ({ ...state, verbosityLevel })),
         toggleShowSubmissionFeedback: () =>
           set((state) => ({
             showSubmissionFeedback: !state.showSubmissionFeedback,
