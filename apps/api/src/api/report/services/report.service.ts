@@ -2810,7 +2810,10 @@ ${description}
 
     const ttlSeconds = this.getRenewalTokenTtlSeconds();
     if (report.renewalEmailSentAt) {
-      const ageMs = Date.now() - report.renewalEmailSentAt.getTime();
+      const renewalSentAtMs = new Date(
+        String(report.renewalEmailSentAt),
+      ).getTime();
+      const ageMs = Date.now() - renewalSentAtMs;
       if (ageMs < ttlSeconds * 1000) {
         return {
           success: true,

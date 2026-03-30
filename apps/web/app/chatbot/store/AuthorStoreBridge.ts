@@ -3,6 +3,13 @@
 "use client";
 
 import { QuestionType } from "@/config/types";
+import {
+  buildQuestionGenerationPayloadFromObjectives,
+  coerceCreateQuestionTypeForPrompt,
+  pollQuestionGenerationJob,
+  startQuestionGenerationJob,
+} from "@/lib/question-generation/client";
+import { mergeGeneratedQuestionsForAuthorStore } from "@/lib/question-generation/normalize";
 import { OptionalQuestion, useAuthorStore } from "@/stores/author";
 import { useEffect } from "react";
 
@@ -69,6 +76,138 @@ export default function AuthorStoreBridge() {
     }
 
     if (!window.authorStoreBridge) {
+      type QuestionGenerationPipelineSuccess = {
+        success: true;
+        message: string;
+        questionIds: number[];
+        jobId: number;
+      };
+
+      type QuestionGenerationPipelineFailure = {
+        success: false;
+        message: string;
+        error: string;
+        jobId?: number;
+      };
+
+      type QuestionGenerationPipelineResult =
+        | QuestionGenerationPipelineSuccess
+        | QuestionGenerationPipelineFailure;
+
+      const AI_QUESTION_TYPES = new Set([
+        "TEXT",
+        "SINGLE_CORRECT",
+        "MULTIPLE_CORRECT",
+        "TRUE_FALSE",
+        "URL",
+        "UPLOAD",
+        "LINK_FILE",
+      ]);
+
+      const generateQuestionsFromAiPipeline = async ({
+        learningObjectives,
+        questionTypes,
+        count,
+      }): Promise<QuestionGenerationPipelineResult> => {
+        const authorStore = useAuthorStore.getState();
+
+        if (!learningObjectives || !learningObjectives.trim()) {
+          throw new Error("No learning objectives provided");
+        }
+
+        const assignmentId = authorStore.activeAssignmentId;
+        if (!assignmentId) {
+          throw new Error("No active assignment selected");
+        }
+
+        const payload = buildQuestionGenerationPayloadFromObjectives({
+          assignmentId,
+          learningObjectives,
+          questionTypes,
+          count,
+        });
+
+        const jobId = await startQuestionGenerationJob(payload);
+
+        return await new Promise<QuestionGenerationPipelineResult>(
+          (resolve) => {
+            let settled = false;
+            const settle = (result: QuestionGenerationPipelineResult) => {
+              if (settled) return;
+              settled = true;
+              resolve(result);
+            };
+
+            const stopPolling = pollQuestionGenerationJob({
+              jobId,
+              onUpdate: () => {},
+              onCompleted: (latestStatusData) => {
+                try {
+                  const latestStore = useAuthorStore.getState();
+                  const generatedQuestions = latestStatusData.questions || [];
+                  const mergeResult = mergeGeneratedQuestionsForAuthorStore({
+                    existingQuestions: latestStore.questions || [],
+                    generatedQuestions,
+                    assignmentId,
+                    existingQuestionOrder: latestStore.questionOrder || [],
+                  });
+
+                  latestStore.setQuestions(mergeResult.questions);
+                  latestStore.setQuestionOrder(mergeResult.questionOrder);
+
+                  if (latestStore.setUpdatedAt) {
+                    latestStore.setUpdatedAt(Date.now());
+                  }
+
+                  stopPolling();
+                  settle({
+                    success: true,
+                    message: `Successfully generated ${mergeResult.processedQuestions.length} questions based on your learning objectives.`,
+                    questionIds: mergeResult.generatedIds,
+                    jobId,
+                  });
+                } catch (error) {
+                  stopPolling();
+                  const errorMessage =
+                    error instanceof Error
+                      ? error.message
+                      : "Unknown error during question processing";
+
+                  settle({
+                    success: false,
+                    message: `Failed to process generated questions: ${errorMessage}`,
+                    error: errorMessage,
+                    jobId,
+                  });
+                }
+              },
+              onFailed: () => {
+                stopPolling();
+                settle({
+                  success: false,
+                  message: "Failed to generate questions: Processing failed.",
+                  error: "Processing failed",
+                  jobId,
+                });
+              },
+              onError: (error) => {
+                stopPolling();
+                const errorMessage =
+                  error instanceof Error
+                    ? error.message
+                    : "An error occurred while fetching job status";
+                settle({
+                  success: false,
+                  message: `Failed to generate questions: ${errorMessage}`,
+                  error: errorMessage,
+                  jobId,
+                });
+              },
+            });
+          },
+        );
+      };
+
       window.authorStoreBridge = {
         getState: () => {
           return useAuthorStore.getState();
@@ -82,90 +221,70 @@ export default function AuthorStoreBridge() {
         ) => {
           console.group("Bridge: createQuestion");
 
-          try {
-            const authorStore = useAuthorStore.getState();
+          return (async () => {
+            try {
+              if (!questionType || !questionText) {
+                throw new Error("Question type and text are required");
+              }
 
-            if (!questionType || !questionText) {
-              throw new Error("Question type and text are required");
+              const normalizedQuestionType = coerceCreateQuestionTypeForPrompt({
+                questionType,
+                prompt: questionText,
+              });
+              if (
+                !normalizedQuestionType ||
+                !AI_QUESTION_TYPES.has(normalizedQuestionType)
+              ) {
+                throw new Error(`Unsupported question type: ${questionType}`);
+              }
+
+              const generationResult = await generateQuestionsFromAiPipeline({
+                learningObjectives: questionText,
+                questionTypes: [normalizedQuestionType],
+                count: 1,
+              });
+
+              if (!generationResult.success) {
+                return generationResult;
+              }
+
+              const generatedQuestionId = Array.isArray(
+                generationResult.questionIds,
+              )
+                ? generationResult.questionIds.find(
+                    (id) => typeof id === "number",
+                  )
+                : undefined;
+
+              if (typeof generatedQuestionId !== "number") {
+                return {
+                  success: false,
+                  message:
+                    "Question generation completed but no question ID was returned.",
+                  error: "No generated question ID",
+                  jobId: generationResult.jobId,
+                };
+              }
+
+              return {
+                success: true,
+                message: `Successfully created a new ${normalizedQuestionType} question with ID ${generatedQuestionId}.`,
+                questionId: generatedQuestionId,
+                questionIds: generationResult.questionIds,
+                jobId: generationResult.jobId,
+              };
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+              return {
+                success: false,
+                message: `Error creating question: ${errorMessage}`,
+                error: errorMessage,
+              };
             }
-
-            const existingIds = authorStore.questions.map((q) => q.id || 0);
-            let newQuestionId = Math.max(0, ...existingIds) + 1;
-
-            if (existingIds.includes(newQuestionId)) {
-              newQuestionId = Math.max(1000000, ...existingIds) + 1;
-            }
-
-            let choices = [];
-            if (
-              options &&
-              Array.isArray(options) &&
-              options.length > 0 &&
-              ["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(questionType)
-            ) {
-              choices = options.map((option) => ({
-                choice: option.text || "",
-                isCorrect: option.isCorrect || false,
-                points:
-                  option.points !== undefined
-                    ? option.points
-                    : questionType === "MULTIPLE_CORRECT"
-                      ? option.isCorrect
-                        ? 1
-                        : -1
-                      : 0,
-                feedback: "",
-              }));
-            }
-
-            const newQuestion = {
-              id: newQuestionId,
-              type: questionType as QuestionType,
-              question: questionText,
-              totalPoints: totalPoints || 10,
-              assignmentId: authorStore.activeAssignmentId || 1,
-              variants: [],
-              choices: choices,
-              scoring: {
-                type: "CRITERIA_BASED" as const,
-                rubrics: [],
-                showRubricsToLearner: true,
-              },
-              randomizedChoices: choices.length > 0 ? true : undefined,
-              index: (authorStore.questions.length || 0) + 1,
-            };
-
-            authorStore.addQuestion(newQuestion);
-
-            if (
-              authorStore.questionOrder &&
-              !authorStore.questionOrder.includes(newQuestionId)
-            ) {
-              authorStore.setQuestionOrder([
-                ...authorStore.questionOrder,
-                newQuestionId,
-              ]);
-            }
-
-            if (authorStore.setUpdatedAt) {
-              authorStore.setUpdatedAt(Date.now());
-            }
-
+          })().finally(() => {
             console.groupEnd();
-
-            return {
-              success: true,
-              message: `Successfully created a new ${questionType} question with ID ${newQuestionId}.`,
-              questionId: newQuestionId,
-            };
-          } catch (error) {
-            console.groupEnd();
-            return {
-              success: false,
-              message: `Error creating question: ${error.message}`,
-              error: error.message,
-            };
-          }
+          });
         },
 
         modifyQuestion: (
@@ -475,112 +594,25 @@ export default function AuthorStoreBridge() {
         ) => {
           console.group("Bridge: generateQuestionsFromObjectives");
 
-          try {
-            const authorStore = useAuthorStore.getState();
-
-            if (!learningObjectives || !learningObjectives.trim()) {
-              throw new Error("No learning objectives provided");
-            }
-
-            count = count || 5;
-            questionTypes =
-              questionTypes &&
-              Array.isArray(questionTypes) &&
-              questionTypes.length > 0
-                ? questionTypes
-                : ["SINGLE_CORRECT", "MULTIPLE_CORRECT", "TEXT", "TRUE_FALSE"];
-
-            let generatedCount = 0;
-            const questionIds = [];
-            const startId =
-              Math.max(0, ...authorStore.questions.map((q) => q.id || 0)) + 1;
-
-            for (let i = 0; i < count; i++) {
-              const qType = questionTypes[i % questionTypes.length];
-              const qId = startId + i;
-
-              const newQuestion = {
-                id: qId,
-                type: qType as QuestionType,
-                question: `Generated question ${i + 1} based on learning objectives (type: ${qType})`,
-                totalPoints: 10,
-                assignmentId: authorStore.activeAssignmentId || 0,
-                variants: [],
-                choices: [],
-                answer: undefined,
-                scoring: {
-                  type: "CRITERIA_BASED" as const,
-                  rubrics: [],
-                  showRubricsToLearner: true,
-                },
+          return (async () => {
+            try {
+              return await generateQuestionsFromAiPipeline({
+                learningObjectives,
+                questionTypes,
+                count,
+              });
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+              return {
+                success: false,
+                message: `Failed to generate questions: ${errorMessage}`,
+                error: errorMessage,
               };
-
-              if (qType === "SINGLE_CORRECT" || qType === "MULTIPLE_CORRECT") {
-                newQuestion.choices = [
-                  {
-                    choice: "Option A",
-                    isCorrect: true,
-                    points: qType === "MULTIPLE_CORRECT" ? 1 : 0,
-                  },
-                  {
-                    choice: "Option B",
-                    isCorrect: false,
-                    points: qType === "MULTIPLE_CORRECT" ? -1 : 0,
-                  },
-                  {
-                    choice: "Option C",
-                    isCorrect: false,
-                    points: qType === "MULTIPLE_CORRECT" ? -1 : 0,
-                  },
-                  {
-                    choice: "Option D",
-                    isCorrect: false,
-                    points: qType === "MULTIPLE_CORRECT" ? -1 : 0,
-                  },
-                ];
-              }
-
-              if (qType === "TRUE_FALSE") {
-                newQuestion.answer = true;
-              }
-
-              newQuestion.scoring = {
-                type: "CRITERIA_BASED",
-                rubrics: [],
-                showRubricsToLearner: true,
-              };
-
-              authorStore.addQuestion(newQuestion);
-              questionIds.push(qId);
-              generatedCount++;
             }
-
-            if (authorStore.questionOrder) {
-              authorStore.setQuestionOrder([
-                ...authorStore.questionOrder,
-                ...questionIds,
-              ]);
-            }
-
-            if (authorStore.setUpdatedAt) {
-              authorStore.setUpdatedAt(Date.now());
-            }
-
+          })().finally(() => {
             console.groupEnd();
-
-            return {
-              success: true,
-              message: `Successfully generated ${generatedCount} questions based on your learning objectives.`,
-              questionIds: questionIds,
-            };
-          } catch (error) {
-            console.groupEnd();
-            return {
-              success: false,
-              message: `Failed to generate questions: ${error.message}`,
-              error: error.message,
-            };
-          }
+          });
         },
 
         updateLearningObjectives: (learningObjectives) => {
@@ -652,6 +684,44 @@ export default function AuthorStoreBridge() {
         },
       };
 
+      const dispatchOperationResult = (requestId, result) => {
+        window.dispatchEvent(
+          new CustomEvent("author-store-result", {
+            detail: {
+              requestId,
+              result,
+            },
+          }),
+        );
+      };
+
+      const dispatchOperationError = (requestId, operation, error) => {
+        const message =
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : "Unknown error";
+
+        window.dispatchEvent(
+          new CustomEvent("author-store-result", {
+            detail: {
+              requestId,
+              result: {
+                success: false,
+                message: `Error executing ${operation}: ${message}`,
+                error: message,
+              },
+            },
+          }),
+        );
+      };
+
+      const isPromiseLike = (value) =>
+        value &&
+        (typeof value === "object" || typeof value === "function") &&
+        typeof value.then === "function";
+
       const authorOperationHandler = (e) => {
         if (!window.authorStoreBridge) {
           return;
@@ -663,45 +733,32 @@ export default function AuthorStoreBridge() {
         }
 
         if (typeof window.authorStoreBridge[operation] !== "function") {
-          window.dispatchEvent(
-            new CustomEvent("author-store-result", {
-              detail: {
-                requestId,
-                result: {
-                  success: false,
-                  message: `Operation ${operation} not found in bridge`,
-                  error: "Operation not found",
-                },
-              },
-            }),
-          );
+          dispatchOperationResult(requestId, {
+            success: false,
+            message: `Operation ${operation} not found in bridge`,
+            error: "Operation not found",
+          });
           return;
         }
 
         try {
-          const result = window.authorStoreBridge[operation](...args);
+          const operationArgs = Array.isArray(args) ? args : [];
+          const result = window.authorStoreBridge[operation](...operationArgs);
 
-          window.dispatchEvent(
-            new CustomEvent("author-store-result", {
-              detail: {
-                requestId,
-                result,
-              },
-            }),
-          );
+          if (isPromiseLike(result)) {
+            void result
+              .then((resolvedResult) => {
+                dispatchOperationResult(requestId, resolvedResult);
+              })
+              .catch((error) => {
+                dispatchOperationError(requestId, operation, error);
+              });
+            return;
+          }
+
+          dispatchOperationResult(requestId, result);
         } catch (error) {
-          window.dispatchEvent(
-            new CustomEvent("author-store-result", {
-              detail: {
-                requestId,
-                result: {
-                  success: false,
-                  message: `Error executing ${operation}: ${error.message}`,
-                  error: error.message,
-                },
-              },
-            }),
-          );
+          dispatchOperationError(requestId, operation, error);
         }
       };
 
