@@ -2,6 +2,10 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DEV_ENV_FILE="${REPO_ROOT}/dev.env"
+
 CONTAINER_NAME="mark-postgres"
 
 echo "🚀 Starting development servers..."
@@ -48,8 +52,9 @@ if ! ./scripts/validate-env.sh; then
 fi
 
 # Source environment variables to get port numbers
-if [ -f "dev.env" ]; then
-    source dev.env
+if [ -f "${DEV_ENV_FILE}" ]; then
+    # shellcheck disable=SC1090,SC1091
+    source "${DEV_ENV_FILE}"
 fi
 
 # Check if development ports are in use
@@ -59,22 +64,22 @@ PORTS_IN_USE=()
 PORT_PROCESSES=()
 
 # Check frontend port (PORT)
-if lsof -Pi :${PORT:-3010} -sTCP:LISTEN -t >/dev/null 2>&1; then
-    PROCESS_INFO=$(lsof -Pi :${PORT:-3010} -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}')
+if lsof -Pi :"${PORT:-3010}" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    PROCESS_INFO=$(lsof -Pi :"${PORT:-3010}" -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}')
     PORTS_IN_USE+=("${PORT:-3010} (Frontend/Web)")
     PORT_PROCESSES+=("  Port ${PORT:-3010}: $PROCESS_INFO")
 fi
 
 # Check API port (API_PORT)
-if lsof -Pi :${API_PORT:-4222} -sTCP:LISTEN -t >/dev/null 2>&1; then
-    PROCESS_INFO=$(lsof -Pi :${API_PORT:-4222} -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}')
+if lsof -Pi :"${API_PORT:-4222}" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    PROCESS_INFO=$(lsof -Pi :"${API_PORT:-4222}" -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}')
     PORTS_IN_USE+=("${API_PORT:-4222} (API)")
     PORT_PROCESSES+=("  Port ${API_PORT:-4222}: $PROCESS_INFO")
 fi
 
 # Check API Gateway port (API_GATEWAY_PORT)
-if lsof -Pi :${API_GATEWAY_PORT:-8000} -sTCP:LISTEN -t >/dev/null 2>&1; then
-    PROCESS_INFO=$(lsof -Pi :${API_GATEWAY_PORT:-8000} -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}')
+if lsof -Pi :"${API_GATEWAY_PORT:-8000}" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    PROCESS_INFO=$(lsof -Pi :"${API_GATEWAY_PORT:-8000}" -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}')
     PORTS_IN_USE+=("${API_GATEWAY_PORT:-8000} (API Gateway)")
     PORT_PROCESSES+=("  Port ${API_GATEWAY_PORT:-8000}: $PROCESS_INFO")
 fi
@@ -110,4 +115,4 @@ echo "✅ All checks passed! Starting development servers..."
 echo ""
 
 # Start the dev servers
-dotenv -e dev.env -- turbo run dev --parallel
+dotenv -e dev.env -- turbo run "${MARK_DEV_TASK:-dev}" --parallel

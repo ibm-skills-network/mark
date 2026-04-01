@@ -9,6 +9,7 @@
     "build": "nest build",
     "clean": "rimraf dist && rimraf node_modules",
     "dev": "yarn start:dev",
+    "dev:e2e": "yarn dev",
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",

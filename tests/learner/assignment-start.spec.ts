@@ -1,22 +1,19 @@
-import { test, expect } from "@playwright/test";
-import { getLearnerAssignmentId } from "../helpers/assignment-helpers";
-import { skipIfNotRole, setAuthCookie } from "../helpers/role-helpers";
+import { test, expect } from "../helpers/e2e-test";
 
 test.describe("Learner - Assignment Start", () => {
-  test.beforeEach(async ({ page }) => {
-    skipIfNotRole("learner");
-    await setAuthCookie(page, "learner");
-  });
-
-  test("should navigate to assignment and see start page", async ({ page }) => {
-    const assignmentId = getLearnerAssignmentId();
-    await page.goto(`/learner/${assignmentId}`);
+  test("should navigate to assignment and see start page", async ({
+    page,
+    assignmentIds,
+  }) => {
+    await page.goto(`/learner/${assignmentIds.learner.id}`);
 
     // Wait for the page to load
     await page.waitForLoadState("networkidle");
 
     // Verify the assignment page loads
-    await expect(page).toHaveURL(new RegExp(`/learner/${assignmentId}`));
+    await expect(page).toHaveURL(
+      new RegExp(`/learner/${assignmentIds.learner.id}`),
+    );
 
     // Add your specific assertions here based on your assignment structure
     // For example:
@@ -24,9 +21,11 @@ test.describe("Learner - Assignment Start", () => {
     // await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
   });
 
-  test("should display assignment information", async ({ page }) => {
-    const assignmentId = getLearnerAssignmentId();
-    await page.goto(`/learner/${assignmentId}`);
+  test("should display assignment information", async ({
+    page,
+    assignmentIds,
+  }) => {
+    await page.goto(`/learner/${assignmentIds.learner.id}`);
 
     // Add assertions for assignment details
     // For example:

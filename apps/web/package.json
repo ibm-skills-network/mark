@@ -5,6 +5,7 @@
   "scripts": {
     "build": "next build",
     "dev": "bash -c 'cat ../../dev.env .env.local > .env.merged && dotenv -e .env.merged -- next dev'",
+    "dev:e2e": "yarn dev",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "lint:fixall": "next lint --fix .",

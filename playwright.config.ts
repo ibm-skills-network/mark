@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -31,7 +32,6 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: "html",
-  globalSetup: "./tests/helpers/global-setup.ts",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL: "http://localhost:3010",
@@ -43,47 +43,53 @@ export default defineConfig({
     trace: "on-first-retry",
   },
 
-  /* Configure projects for major browsers */
+  /* Configure projects for role/browser combinations with a shared setup dependency. */
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      name: "setup",
+      testMatch: /setup\/.*\.setup\.ts/,
     },
-
-    {
-      name: "firefox",
-      use: { ...devices["Desktop Firefox"] },
-    },
-
-    {
-      name: "webkit",
-      use: { ...devices["Desktop Safari"] },
-    },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
+    ...[
+      {
+        browserName: "chromium",
+        device: devices["Desktop Chrome"],
+      },
+      {
+        browserName: "firefox",
+        device: devices["Desktop Firefox"],
+      },
+      {
+        browserName: "webkit",
+        device: devices["Desktop Safari"],
+      },
+    ].flatMap(({ browserName, device }) => [
+      {
+        name: `author-${browserName}`,
+        testMatch: /author\/.*\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          ...device,
+          storageState: path.resolve(__dirname, "playwright/.auth/author.json"),
+        },
+      },
+      {
+        name: `learner-${browserName}`,
+        testMatch: /learner\/.*\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          ...device,
+          storageState: path.resolve(
+            __dirname,
+            "playwright/.auth/learner.json",
+          ),
+        },
+      },
+    ]),
   ],
 
   webServer: {
-    command: "yarn dev",
-    url: "http://localhost:4222/health/readiness", // Wait for API to be ready
+    command: "yarn dev:e2e",
+    url: "http://localhost:3010",
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
   },

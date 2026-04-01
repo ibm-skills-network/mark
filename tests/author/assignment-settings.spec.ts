@@ -1,10 +1,11 @@
-import { test, expect } from "@playwright/test";
-import { getAssignmentId } from "../helpers/assignment-helpers";
+import { test, expect } from "../helpers/e2e-test";
 
-test("author settings persist and reflect in preview", async ({ page }) => {
+test("author settings persist and reflect in preview", async ({
+  page,
+  assignmentIds,
+}) => {
   // Navigate to author assignment page
-  const assignmentId = getAssignmentId();
-  await page.goto(`/author/${assignmentId}`);
+  await page.goto(`/author/${assignmentIds.author.id}`);
 
   // Open Settings tab
   await page.getByRole("button", { name: "Settings" }).click();

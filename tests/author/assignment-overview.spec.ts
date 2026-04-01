@@ -1,18 +1,11 @@
-import { test, expect } from "@playwright/test";
-import { getAuthorAssignmentId } from "../helpers/assignment-helpers";
-import { skipIfNotRole, setAuthCookie } from "../helpers/role-helpers";
+import { test, expect } from "../helpers/e2e-test";
 
 test.describe("Author - Assignment Overview", () => {
-  test.beforeEach(async ({ page }) => {
-    skipIfNotRole("author");
-    await setAuthCookie(page, "author");
-  });
-
   test("should edit assignment overview content and verify in preview", async ({
     page,
+    assignmentIds,
   }) => {
-    const assignmentId = getAuthorAssignmentId();
-    await page.goto(`/author/${assignmentId}`);
+    await page.goto(`/author/${assignmentIds.author.id}`);
 
     // Edit introduction section
     const introSection = page.locator("section", {
