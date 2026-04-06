@@ -501,6 +501,8 @@ export class FileGradingService implements IFileGradingService {
     _maxTotalPoints: number,
     _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
   ): Promise<string> {
+    void _maxTotalPoints;
+    void _rubricMaxPoints;
     const maxRetries = 3;
     let lastError: Error | null = null;
 
@@ -2950,9 +2952,31 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
           this.logger.warn("COS object has no body");
           return null;
         }
-        pdfBuffer = Buffer.isBuffer(pdfBody)
-          ? pdfBody
-          : Buffer.from(pdfBody as ArrayBuffer);
+
+        if (Buffer.isBuffer(pdfBody)) {
+          pdfBuffer = pdfBody;
+        } else if (pdfBody instanceof Uint8Array) {
+          pdfBuffer = Buffer.from(pdfBody);
+        } else if (
+          typeof (
+            pdfBody as { transformToByteArray?: () => Promise<Uint8Array> }
+          ).transformToByteArray === "function"
+        ) {
+          const bytes = await (
+            pdfBody as { transformToByteArray: () => Promise<Uint8Array> }
+          ).transformToByteArray();
+          pdfBuffer = Buffer.from(bytes);
+        } else {
+          const chunks: Uint8Array[] = [];
+          const stream = pdfBody as NodeJS.ReadableStream;
+          pdfBuffer = await new Promise((resolve, reject) => {
+            stream.on("data", (chunk) =>
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+            );
+            stream.on("end", () => resolve(Buffer.concat(chunks)));
+            stream.on("error", reject);
+          });
+        }
       } else if (pdfFile.fileUrl) {
         this.logger.debug(`Downloading PDF from URL: ${pdfFile.fileUrl}`);
         const response = await axios.get(pdfFile.fileUrl, {
@@ -2987,7 +3011,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         ContentType: "application/pdf",
       });
 
-      const presignedUrl = this.s3Service.getSignedUrl("getObject", {
+      const presignedUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: bucket,
         Key: uploadKey,
         Expires: 3600 * 24 * 7,
@@ -3004,246 +3028,6 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         }`,
       );
       return null;
-    }
-  }
-
-  /**
-   * Grade files using vision-capable models for direct PDF/image processing
-   */
-  private async gradeWithVision(
-    learnerResponse: LearnerFileUpload[],
-    question: string,
-    maxTotalPoints: number,
-    scoringCriteriaType: string,
-    scoringCriteria: ScoringDto,
-    responseType: ResponseType,
-    assignmentId: number,
-    language: string | undefined,
-    rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[],
-  ): Promise<FileBasedQuestionResponseModel> {
-    try {
-      const visionFile = learnerResponse.find(
-        (file) => file.useVisionMode && file.fileUrl,
-      );
-
-      if (!visionFile) {
-        throw new Error("No vision mode file found");
-      }
-
-      this.logger.info(`Grading PDF using vision mode: ${visionFile.filename}`);
-
-      const parser = StructuredOutputParser.fromZodSchema(
-        z.object({
-          points: z.number(),
-          feedback: z.string(),
-          analysis: z.string(),
-          evaluation: z.string(),
-          explanation: z.string(),
-          guidance: z.string(),
-          rubricScores: z
-            .array(
-              z.object({
-                rubricQuestion: z.string(),
-                pointsAwarded: z.number(),
-                maxPoints: z.number(),
-                justification: z.string(),
-              }),
-            )
-            .optional(),
-        }),
-      );
-
-      const formatInstructions = parser.getFormatInstructions();
-
-      const fileTypeDescriptions: Record<ResponseType, string> = {
-        CODE: "code submission",
-        REPO: "repository submission",
-        ESSAY: "essay submission",
-        REPORT: "report submission",
-        PRESENTATION: "presentation submission",
-        VIDEO: "video submission",
-        AUDIO: "audio submission",
-        SPREADSHEET: "spreadsheet submission",
-        LIVE_RECORDING: "live recording submission",
-        IMAGES: "image-based submission",
-        OTHER: "document submission",
-      };
-
-      const fileTypeContext =
-        fileTypeDescriptions[responseType] || fileTypeDescriptions.OTHER;
-
-      const visionPrompt = new PromptTemplate({
-        template: `
-You are grading a ${fileTypeContext} that has been submitted as a PDF document.
-
-QUESTION: {question}
-FILENAME: {filename}
-POINTS: {total_points} | TYPE: {scoring_type}
-CRITERIA: {scoring_criteria}
-
-IMPORTANT: You are viewing the actual PDF document. Analyze the COMPLETE visual content including:
-- All text, formatting, and layout
-- Images, diagrams, charts, and tables
-- Design and presentation quality
-- Overall structure and organization
-
-RUBRIC RULES:
-- Select EXACTLY ONE criterion per rubric (no interpolation)
-- Award EXACT points from selected criterion
-- Total = sum of rubric points (max {total_points})
-- Include rubricScores array with: rubricQuestion, pointsAwarded, maxPoints, justification
-
-AEEG APPROACH:
-1. ANALYZE: Examine all visual elements, text, structure, and quality
-2. EVALUATE: Match submission to each rubric criterion, select best fit
-3. EXPLAIN: Justify grade with specific evidence from the PDF
-4. GUIDE: Provide actionable improvement suggestions
-
-FEEDBACK REQUIREMENTS:
-- Focus on what the learner DID or DID NOT include in their submission
-- If criteria are fully met: Acknowledge what was correctly done or demonstrated
-- If criteria are partially met: Point out what was included AND what specific elements are missing
-- If criteria are NOT met: Explain what specific content, concepts, or elements are absent
-- Be specific about gaps: name the missing elements, explanations, or details
-- Frame as actionable guidance: "The submission should include..." or "Consider adding..."
-- NO criterion requirements statements, NO subjective adjectives, NO encouragement, NO praise
-- Do NOT start with "Criterion requires..." or similar phrasing
-- Focus on the work itself, not what the rubric asks for
-
-LANGUAGE: {language}
-
-Provide your response as a JSON object with:
-- points (total score as rubric sum)
-- feedback (overall assessment using learner-focused language)
-- analysis (comprehensive examination of the PDF content)
-- evaluation (rubric-based scoring with evidence)
-- explanation (detailed grade justification with specific examples from the PDF)
-- guidance (concrete improvement tips)
-- rubricScores array (if CRITERIA_BASED)
-
-AVOID REDUNDANCY: Each field should contain unique information.
-Make sure your feedback is concise but thorough.
-
-{format_instructions}
-`,
-        inputVariables: [],
-        partialVariables: {
-          question: () => question,
-          filename: () => visionFile.filename,
-          total_points: () => maxTotalPoints.toString(),
-          scoring_type: () => scoringCriteriaType,
-          scoring_criteria: () => JSON.stringify(scoringCriteria),
-          language: () => language ?? "en",
-          format_instructions: () => formatInstructions,
-        },
-      });
-
-      this.logger.debug(
-        `Calling vision LLM with PDF URL: ${visionFile.fileUrl.slice(
-          0,
-          100,
-        )}...`,
-      );
-
-      const response = await this.promptProcessor.processPromptWithImage(
-        visionPrompt,
-        visionFile.fileUrl,
-        assignmentId,
-        AIUsageType.ASSIGNMENT_GRADING,
-        "gpt-4o-mini",
-      );
-
-      this.logger.debug(
-        `Vision LLM response received, length: ${response.length}`,
-      );
-
-      let parsedResponse = (await parser.parse(response)) as GradingOutput;
-
-      let calculatedTotalPoints = 0;
-      if (
-        parsedResponse.rubricScores &&
-        parsedResponse.rubricScores.length > 0
-      ) {
-        for (const score of parsedResponse.rubricScores) {
-          calculatedTotalPoints += score.pointsAwarded;
-        }
-
-        if (
-          scoringCriteriaType === "CRITERIA_BASED" &&
-          parsedResponse.points !== calculatedTotalPoints
-        ) {
-          this.logger.warn(
-            `Vision LLM total points (${parsedResponse.points}) doesn't match sum of rubric scores (${calculatedTotalPoints}). Using rubric sum.`,
-          );
-          parsedResponse = {
-            ...parsedResponse,
-            points: calculatedTotalPoints,
-          };
-        }
-      }
-
-      const fileBasedQuestionResponseModel = new FileBasedQuestionResponseModel(
-        parsedResponse.points,
-        parsedResponse.feedback,
-        parsedResponse.analysis,
-        parsedResponse.evaluation,
-        parsedResponse.explanation,
-        parsedResponse.guidance,
-        parsedResponse.rubricScores,
-      );
-
-      const parsedPoints = fileBasedQuestionResponseModel.points;
-      let finalModel = fileBasedQuestionResponseModel;
-
-      if (parsedPoints > maxTotalPoints) {
-        this.logger.warn(
-          `Vision LLM awarded ${parsedPoints} points, exceeds maximum of ${maxTotalPoints}. Capping at maximum.`,
-        );
-        finalModel = new FileBasedQuestionResponseModel(
-          maxTotalPoints,
-          fileBasedQuestionResponseModel.feedback,
-          fileBasedQuestionResponseModel.analysis,
-          fileBasedQuestionResponseModel.evaluation,
-          fileBasedQuestionResponseModel.explanation,
-          fileBasedQuestionResponseModel.guidance,
-          fileBasedQuestionResponseModel.rubricScores,
-        );
-      } else if (parsedPoints < 0) {
-        this.logger.warn(
-          `Vision LLM awarded negative points (${parsedPoints}). Setting to 0.`,
-        );
-        finalModel = new FileBasedQuestionResponseModel(
-          0,
-          fileBasedQuestionResponseModel.feedback,
-          fileBasedQuestionResponseModel.analysis,
-          fileBasedQuestionResponseModel.evaluation,
-          fileBasedQuestionResponseModel.explanation,
-          fileBasedQuestionResponseModel.guidance,
-          fileBasedQuestionResponseModel.rubricScores,
-        );
-      }
-
-      this.logger.info(
-        `Vision-based grading completed successfully: ${finalModel.points}/${maxTotalPoints}`,
-      );
-
-      return finalModel;
-    } catch (error) {
-      this.logger.error(
-        `Error in vision-based grading: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
-
-      this.logger.warn(
-        "Vision grading failed, falling back to standard text-based grading",
-      );
-
-      return this.createFallbackResponse(
-        maxTotalPoints,
-        "Vision-based grading failed - using fallback grading",
-        rubricMaxPoints,
-      );
     }
   }
 }

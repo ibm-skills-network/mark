@@ -66,7 +66,11 @@ export class HighlightingGeneratorService {
         if (!blockHighlights.has(evidence.blockId)) {
           blockHighlights.set(evidence.blockId, []);
         }
-        blockHighlights.get(evidence.blockId)!.push(highlight);
+        const blockGroup = blockHighlights.get(evidence.blockId);
+        if (!blockGroup) {
+          continue;
+        }
+        blockGroup.push(highlight);
 
         if (!pageHighlights.has(evidence.page)) {
           pageHighlights.set(evidence.page, {
@@ -77,7 +81,11 @@ export class HighlightingGeneratorService {
             pageNumber: evidence.page,
           });
         }
-        pageHighlights.get(evidence.page)!.highlights.push(highlight);
+        const pageHighlight = pageHighlights.get(evidence.page);
+        if (!pageHighlight) {
+          continue;
+        }
+        pageHighlight.highlights.push(highlight);
       }
     }
 
@@ -87,7 +95,10 @@ export class HighlightingGeneratorService {
       }
 
       const pageText = page.blocks.map((b) => b.text).join("\n\n");
-      const pageData = pageHighlights.get(page.pageNumber)!;
+      const pageData = pageHighlights.get(page.pageNumber);
+      if (!pageData) {
+        continue;
+      }
       pageData.originalText = pageText;
 
       pageData.correctnessScore = this.calculateCorrectnessScore(

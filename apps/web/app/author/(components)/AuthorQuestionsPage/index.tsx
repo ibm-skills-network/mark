@@ -45,7 +45,6 @@ import {
 } from "@heroicons/react/20/solid";
 import {
   ArrowUpTrayIcon,
-  CodeBracketIcon,
   DocumentArrowUpIcon,
   DocumentArrowDownIcon,
 } from "@heroicons/react/24/outline";
@@ -56,10 +55,8 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/solid";
 import { IconCheckbox, IconCircleCheck } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
 import React, {
   Fragment,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -171,7 +168,6 @@ const AuthorQuestionsPage: FC<Props> = ({
   assignmentId,
   defaultQuestionRetries,
 }) => {
-  const router = useRouter();
   useBeforeUnload(
     "Are you sure you want to leave this page? You will lose any unsaved changes.",
   );
@@ -190,8 +186,6 @@ const AuthorQuestionsPage: FC<Props> = ({
   const setActiveAssignmentId = useAuthorStore(
     (state) => state.setActiveAssignmentId,
   );
-  const checkedOutVersion = useAuthorStore((state) => state.checkedOutVersion);
-  const versions = useAuthorStore((state) => state.versions);
 
   const { loadVersions } = useVersionControl();
 
@@ -205,12 +199,8 @@ const AuthorQuestionsPage: FC<Props> = ({
   const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [client, setClient] = useState<any>(null);
+  const [] = useState<any>(null);
 
-  async function testSnapshot() {
-    const snap = await buildClientSnapshot();
-    setClient(snap);
-  }
   const questionTypes = useMemo(
     () => [
       {

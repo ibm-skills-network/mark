@@ -9,6 +9,31 @@ if (typeof global.TextDecoder === "undefined") {
   global.TextDecoder = TextDecoder;
 }
 
+if (typeof global.MessageChannel === "undefined") {
+  class MockMessagePort {
+    onmessage = null;
+
+    postMessage = jest.fn();
+
+    close = jest.fn();
+
+    start = jest.fn();
+
+    addEventListener = jest.fn();
+
+    removeEventListener = jest.fn();
+
+    dispatchEvent = jest.fn();
+  }
+
+  global.MessageChannel = class MockMessageChannel {
+    constructor() {
+      this.port1 = new MockMessagePort();
+      this.port2 = new MockMessagePort();
+    }
+  };
+}
+
 if (typeof global.ClipboardEvent === "undefined") {
   global.ClipboardEvent = class ClipboardEvent extends Event {
     constructor(type, eventInitDict) {

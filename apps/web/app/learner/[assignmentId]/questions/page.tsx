@@ -1,15 +1,19 @@
 "use strict";
 
-import animationData from "@/animations/LoadSN.json";
-import LoadingPage from "@/app/loading";
-import { Suspense } from "react";
 import LearnerLayout from "./LearnerLayout";
 
 interface Props {
-  params: { assignmentId: string };
-  searchParams: { authorMode?: string };
+  params: Promise<{ assignmentId: string }>;
+  searchParams: Promise<{ authorMode?: string }>;
 }
 
-export default function Page(props: Props) {
-  return <LearnerLayout {...props} />;
+export default async function Page(props: Props) {
+  const resolvedParams = await props.params;
+  const resolvedSearchParams = await props.searchParams;
+  return (
+    <LearnerLayout
+      params={resolvedParams}
+      searchParams={resolvedSearchParams}
+    />
+  );
 }

@@ -7,13 +7,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/strings";
 
-interface ExportOption {
-  id: string;
-  label: string;
-  description: string;
-  enabled: boolean;
-}
-
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;

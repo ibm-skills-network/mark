@@ -233,7 +233,7 @@ export class FileContentExtractionService {
         `Using vision mode for PDF: ${file.filename}, generating presigned URL`,
       );
 
-      const fileUrl = this.s3Service.getSignedUrl("getObject", {
+      const fileUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: file.bucket,
         Key: file.key,
         Expires: 3600,

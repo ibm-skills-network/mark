@@ -1,4 +1,4 @@
-import { ChatWatsonx } from "@langchain/community/chat_models/ibm";
+import { ChatWatsonx } from "./watsonx-chat.model";
 import { HumanMessage } from "@langchain/core/messages";
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";

@@ -572,10 +572,7 @@ export class AttemptControllerV2 {
     status: 404,
     description: "Progress not found",
   })
-  async getGradingProgress(
-    @Param("attemptId") attemptId: number,
-    @Req() request: UserSessionRequest,
-  ) {
+  async getGradingProgress(@Param("attemptId") attemptId: number) {
     const progress = await this.gradingProgressService.getProgress(
       Number(attemptId),
     );
@@ -611,10 +608,7 @@ export class AttemptControllerV2 {
     status: 404,
     description: "Sync status not found",
   })
-  async getGradeSyncStatus(
-    @Param("attemptId") attemptId: number,
-    @Req() request: UserSessionRequest,
-  ) {
+  async getGradeSyncStatus(@Param("attemptId") attemptId: number) {
     const syncStatus = await this.ltiGradeSyncService.getSyncStatus(
       Number(attemptId),
     );

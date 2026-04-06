@@ -183,7 +183,7 @@ export const readIpynb = (
     try {
       const notebook = JSON.parse(text);
       const cellContents = (notebook.cells as Array<any>)
-        .map((cell, index) => {
+        .map((cell) => {
           let content = "";
 
           if (cell.source) {

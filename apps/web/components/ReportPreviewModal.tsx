@@ -122,7 +122,6 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   onClose,
   reportType,
   initialData,
-  isAuthor = false,
   attemptId,
   onSubmit,
 }) => {

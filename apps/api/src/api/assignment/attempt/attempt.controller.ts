@@ -27,7 +27,6 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
-import { SuccessPageDataDto } from "../../attempt/dto/success-page-data.dto";
 import {
   GRADE_SUBMISSION_EXCEPTION,
   IN_COOLDOWN_PERIOD,
@@ -59,13 +58,10 @@ import { AssignmentAttemptAccessControlGuard } from "./guards/assignment.attempt
   version: "1",
 })
 export class AttemptControllerV1 {
-  private logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly attemptService: AttemptServiceV1,
-  ) {
-    this.logger = parentLogger.child({ context: AttemptControllerV1.name });
-  }
+  ) {}
 
   @Post()
   @Roles(UserRole.LEARNER)

@@ -4,12 +4,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { HumanMessage } from "@langchain/core/messages";
 import { PrismaClient } from "@prisma/client";
-import * as cld from "cld";
 import { OpenAiLlmMiniService } from "src/api/llm/core/services/openai-llm-mini.service";
 import { createLogger } from "winston";
-import { PromptProcessorService } from "../api/llm/core/services/prompt-processor.service";
 import { TokenCounterService } from "../api/llm/core/services/token-counter.service";
-import { TranslationService } from "../api/llm/features/translation/services/translation.service";
 import { markForRetranslationBatch } from "./translation-audit-batch";
 
 const prisma = new PrismaClient();
@@ -19,12 +16,6 @@ const logger = createLogger({
   level: "error",
   silent: true, // Keep quiet for CLI usage
 });
-
-const promptProcessor = new PromptProcessorService(
-  {} as any, // We don't need the LLM router for language detection
-  {} as any, // We don't need usage tracker for language detection
-  logger,
-);
 
 const tokenCounter = new TokenCounterService(logger);
 const gpt4MiniService = new OpenAiLlmMiniService(tokenCounter, logger);
@@ -139,20 +130,9 @@ async function detectLanguageRobust(text: string): Promise<{
   const rawDetections: { cld?: string; openai?: string; patterns?: string } =
     {};
   const engines: { cld?: string; openai?: string; patterns?: string } = {};
-
-  // Try CLD detection first
-  let cldLang = "unknown";
-  let cldConfidence = 0;
-  try {
-    const cldResponse = await cld.detect(text);
-    cldLang = cldResponse.languages[0].code;
-    cldConfidence = cldResponse.languages[0].percent / 100;
-    rawDetections.cld = `${cldLang} (${Math.round(cldConfidence * 100)}%)`;
-    engines.cld = filterToSupportedLanguage(cldLang);
-  } catch {
-    rawDetections.cld = "error";
-    engines.cld = "error";
-  }
+  rawDetections.cld = "disabled";
+  engines.cld = "disabled";
+  const cldConfidence: number | undefined = undefined;
 
   // Use GPT-5-nano for more accurate language detection
   let openaiLang = "unknown";
@@ -201,13 +181,6 @@ Language code:`;
   if (openaiLang !== "unknown" && openaiConfidence > 0) {
     detected = filterToSupportedLanguage(openaiLang);
     confidence = openaiConfidence;
-    // Check consensus between CLD and OpenAI
-    consensus =
-      normalizeLanguageCode(cldLang) === normalizeLanguageCode(openaiLang);
-  } else if (cldLang !== "unknown" && cldConfidence > 0.5) {
-    // Fall back to CLD if OpenAI failed
-    detected = filterToSupportedLanguage(cldLang);
-    confidence = cldConfidence;
     consensus = false;
   }
 

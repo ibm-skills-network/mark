@@ -38,5 +38,12 @@ module.exports = {
     "coverage/",
     "jest.config.ts",
     "ensureDb.js",
+    "check-question.ts",
+    "prisma/seed.ts",
+    "test/",
+    "**/tests/**",
+    "**/__tests__/**",
+    "**/*.spec.ts",
+    "**/*.test.ts",
   ],
 };

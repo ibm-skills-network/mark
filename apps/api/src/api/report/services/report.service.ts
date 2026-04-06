@@ -2595,6 +2595,8 @@ A new related issue has been created: #${issue.number}
     statusMessage: string,
     closureReason?: string,
   ): Promise<void> {
+    void statusMessage;
+    void closureReason;
     const report = await this.prisma.report.findUnique({
       where: { id: reportId },
       select: {
@@ -2607,8 +2609,6 @@ A new related issue has been created: #${issue.number}
     });
 
     if (!report || report.status === newStatus) return;
-
-    // Status text and reason are no longer used; remove dead variables
   }
   /**
    * Track issue status changes and notify users
@@ -2810,7 +2810,10 @@ ${description}
 
     const ttlSeconds = this.getRenewalTokenTtlSeconds();
     if (report.renewalEmailSentAt) {
-      const ageMs = Date.now() - report.renewalEmailSentAt.getTime();
+      const renewalSentAtMs = new Date(
+        String(report.renewalEmailSentAt),
+      ).getTime();
+      const ageMs = Date.now() - renewalSentAtMs;
       if (ageMs < ttlSeconds * 1000) {
         return {
           success: true,

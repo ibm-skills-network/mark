@@ -7,18 +7,16 @@ import { useAuthorStore } from "@/stores/author";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FC } from "react";
 import {
-  ChevronRightIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { handleScrollToFirstErrorField } from "@/app/Helpers/handleJumpToErrors";
 import Tooltip from "@/components/Tooltip";
 import { VersionSelectionModal } from "@/components/version-control/VersionSelectionModal";
 import { VersionConflictModal } from "@/components/version-control/VersionConflictModal";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { VersionComparison } from "@/types/version-types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import { getAssignment, getUser } from "@/lib/shared";
+import { getAssignment } from "@/lib/shared";
 import { mergeData } from "@/lib/utils";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 
@@ -42,10 +40,8 @@ const SaveAndPublishButton: FC<Props> = ({
   submitting,
   questionsAreReadyToBePublished,
   handlePublishButton,
-  currentStepId = 0,
 }) => {
   const router = useRouter();
-  const validateAssignmentSetup = useAuthorStore((state) => state.validate);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -99,6 +95,7 @@ const SaveAndPublishButton: FC<Props> = ({
         authorSafeAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
@@ -120,6 +117,7 @@ const SaveAndPublishButton: FC<Props> = ({
         updatedAt: authorStoreUpdatedAt,
         ...cleanedAssignmentConfigData
       } = mergedAssignmentConfigData;
+      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
         ...cleanedAssignmentConfigData,
       });
@@ -132,6 +130,7 @@ const SaveAndPublishButton: FC<Props> = ({
         updatedAt: assignmentFeedbackUpdatedAt,
         ...cleanedAssignmentFeedbackData
       } = mergedAssignmentFeedbackData;
+      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
         ...cleanedAssignmentFeedbackData,
       });
@@ -141,13 +140,8 @@ const SaveAndPublishButton: FC<Props> = ({
   };
 
   const versionControlHook = useVersionControl();
-  const {
-    versions,
-    currentVersion,
-    compareVersions,
-    createVersion,
-    updateExistingVersion,
-  } = versionControlHook;
+  const { versions, currentVersion, updateExistingVersion } =
+    versionControlHook;
 
   const { isValid, message, step, invalidQuestionId } =
     questionsAreReadyToBePublished();
@@ -162,7 +156,6 @@ const SaveAndPublishButton: FC<Props> = ({
   }));
   const changesSummary = useChangesSummary();
   const hasChanges = changesSummary !== "No changes detected.";
-  const isLastStep = currentStepId === 3;
 
   const pageRouterUsingSteps = (step: number | null) => {
     switch (true) {

@@ -85,14 +85,14 @@ export class MarkChatService {
       temperature: 0.7,
       tools,
       toolChoice: "auto",
-      maxTokens: 1500,
+      maxOutputTokens: 1500,
     });
 
     const functionResults =
       result.toolResults?.map((toolResult) => ({
         tool_call_id: toolResult.toolCallId,
         function_name: toolResult.toolName,
-        result: toolResult.result,
+        result: toolResult.output,
       })) || [];
 
     return {
@@ -135,7 +135,7 @@ export class MarkChatService {
       temperature: 0.7,
       tools,
       toolChoice: "auto",
-      maxTokens: 1500,
+      maxOutputTokens: 1500,
       onStepFinish: undefined,
     });
 
@@ -172,12 +172,12 @@ export class MarkChatService {
       const toolResults = await result.toolResults;
       const resolvedToolResults = Array.isArray(toolResults) ? toolResults : [];
       for (const toolResult of resolvedToolResults) {
-        if (!toolResult || toolResult.result === undefined) continue;
+        if (!toolResult || toolResult.output === undefined) continue;
 
         const rawResult =
-          typeof toolResult.result === "string"
-            ? toolResult.result
-            : JSON.stringify(toolResult.result);
+          typeof toolResult.output === "string"
+            ? toolResult.output
+            : JSON.stringify(toolResult.output);
 
         if (!rawResult) continue;
 
@@ -350,7 +350,7 @@ ACTION GUIDELINES:
 6. If something seems wrong, investigate and offer to fix it
 
 TOOL USAGE:
-- Use createQuestion for adding new questions (ALWAYS follow with addRubric for text questions)
+- Use createQuestion to AI-generate exactly one question from a prompt
 - Use modifyQuestion for updating question content
 - Use setQuestionChoices for multiple choice options
 - Use addRubric for scoring criteria (MANDATORY for text response questions)
@@ -457,8 +457,8 @@ RESPONSE STYLE:
     return {
       createQuestion: {
         description:
-          "Create a new question for the assignment with complete specifications",
-        parameters: z.object({
+          "Generate exactly one AI question for the assignment from the provided prompt and question type",
+        inputSchema: z.object({
           questionType: z
             .enum([
               "TEXT",
@@ -468,28 +468,10 @@ RESPONSE STYLE:
               "URL",
               "UPLOAD",
             ])
-            .describe("The type of question to create"),
-          questionText: z.string().describe("The text of the question"),
-          totalPoints: z
-            .number()
-            .optional()
-            .describe("The number of points the question is worth"),
-          feedback: z.string().optional().describe("Feedback for the question"),
-          options: z
-            .array(
-              z.object({
-                text: z.string().describe("The text of the option"),
-                isCorrect: z
-                  .boolean()
-                  .describe("Whether this option is correct"),
-                points: z
-                  .number()
-                  .optional()
-                  .describe("Points for this option"),
-              }),
-            )
-            .optional()
-            .describe("For multiple choice questions, the answer options"),
+            .describe("The type of question to generate"),
+          questionText: z
+            .string()
+            .describe("Prompt/objective for generating one question"),
         }),
         execute: async (parameters: any) =>
           JSON.stringify({
@@ -500,7 +482,7 @@ RESPONSE STYLE:
       },
       modifyQuestion: {
         description: "Modify an existing question",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z.number().describe("The ID of the question to modify"),
           questionText: z
             .string()
@@ -525,7 +507,7 @@ RESPONSE STYLE:
       },
       setQuestionChoices: {
         description: "Set the choices for a multiple choice question",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z.number().describe("The ID of the question"),
           choices: z
             .array(
@@ -560,7 +542,7 @@ RESPONSE STYLE:
       addRubric: {
         description:
           "Add a scoring rubric to a question (REQUIRED for text response questions)",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z.number().describe("The ID of the question"),
           rubricQuestion: z
             .string()
@@ -585,7 +567,7 @@ RESPONSE STYLE:
       },
       generateQuestionVariant: {
         description: "Generate a variant of an existing question",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z
             .number()
             .describe("The ID of the question to create a variant for"),
@@ -602,7 +584,7 @@ RESPONSE STYLE:
       },
       deleteQuestion: {
         description: "Delete a question from the assignment",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z.number().describe("The ID of the question to delete"),
         }),
         execute: async (parameters: any) =>
@@ -614,7 +596,7 @@ RESPONSE STYLE:
       },
       generateQuestionsFromObjectives: {
         description: "Generate questions based on learning objectives",
-        parameters: z.object({
+        inputSchema: z.object({
           learningObjectives: z
             .string()
             .describe("The learning objectives to generate questions from"),
@@ -636,7 +618,7 @@ RESPONSE STYLE:
       },
       updateLearningObjectives: {
         description: "Update the learning objectives for the assignment",
-        parameters: z.object({
+        inputSchema: z.object({
           learningObjectives: z
             .string()
             .describe("The updated learning objectives"),
@@ -650,7 +632,7 @@ RESPONSE STYLE:
       },
       setQuestionTitle: {
         description: "Set the title for a question",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z.number().describe("The ID of the question"),
           title: z.string().describe("The title of the question"),
         }),
@@ -664,7 +646,7 @@ RESPONSE STYLE:
       searchKnowledgeBase: {
         description:
           "Search the knowledge base for information about the platform or features",
-        parameters: z.object({
+        inputSchema: z.object({
           query: z
             .string()
             .describe("The search query to find relevant information"),
@@ -676,7 +658,7 @@ RESPONSE STYLE:
       reportIssue: {
         description:
           "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           issueType: z
             .enum(["technical", "content", "grading", "other"])
             .describe("The type of issue being reported"),
@@ -723,7 +705,7 @@ RESPONSE STYLE:
       provideFeedback: {
         description:
           "Provide general feedback about the teaching experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           feedbackType: z
             .enum(["general", "assignment", "grading", "experience"])
             .describe("The type of feedback being provided"),
@@ -771,7 +753,7 @@ RESPONSE STYLE:
       submitSuggestion: {
         description:
           "Submit suggestions for improving the platform or teaching tools. Extract the user's suggestion text and use it as the description to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           suggestionType: z
             .enum(["feature", "content", "ui", "general"])
             .describe("The type of suggestion being made"),
@@ -810,7 +792,7 @@ RESPONSE STYLE:
       submitInquiry: {
         description:
           "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           inquiryType: z
             .enum(["general", "technical", "academic", "other"])
             .describe("The type of inquiry being made"),
@@ -861,7 +843,7 @@ RESPONSE STYLE:
       searchKnowledgeBase: {
         description:
           "Search the knowledge base for information about the platform or features",
-        parameters: z.object({
+        inputSchema: z.object({
           query: z
             .string()
             .describe("The search query to find relevant information"),
@@ -873,7 +855,7 @@ RESPONSE STYLE:
       reportIssue: {
         description:
           "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           issueType: z
             .enum(["technical", "content", "grading", "other"])
             .describe("The type of issue being reported"),
@@ -921,7 +903,7 @@ RESPONSE STYLE:
       provideFeedback: {
         description:
           "Provide general feedback about the learning experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           feedbackType: z
             .enum(["general", "assignment", "grading", "experience"])
             .describe("The type of feedback being provided"),
@@ -969,7 +951,7 @@ RESPONSE STYLE:
       submitSuggestion: {
         description:
           "Submit suggestions for improving the platform or assignments. Extract the user's suggestion text and use it as the description to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           suggestionType: z
             .enum(["feature", "content", "ui", "general"])
             .describe("The type of suggestion being made"),
@@ -1008,7 +990,7 @@ RESPONSE STYLE:
       submitInquiry: {
         description:
           "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
-        parameters: z.object({
+        inputSchema: z.object({
           inquiryType: z
             .enum(["general", "technical", "academic", "other"])
             .describe("The type of inquiry being made"),
@@ -1047,7 +1029,7 @@ RESPONSE STYLE:
       getQuestionDetails: {
         description:
           "Get detailed information about a specific question in the assignment",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z
             .number()
             .describe("The ID of the question to retrieve details for"),
@@ -1063,7 +1045,7 @@ RESPONSE STYLE:
       },
       getAssignmentRubric: {
         description: "Get the rubric or grading criteria for the assignment",
-        parameters: z.object({
+        inputSchema: z.object({
           assignmentId: z.number().describe("The ID of the assignment"),
         }),
         execute: withErrorHandling(
@@ -1078,7 +1060,7 @@ RESPONSE STYLE:
       submitFeedbackQuestion: {
         description:
           "Submit a question about feedback that requires instructor attention",
-        parameters: z.object({
+        inputSchema: z.object({
           questionId: z
             .number()
             .describe("The ID of the question being asked about"),
@@ -1100,7 +1082,7 @@ RESPONSE STYLE:
       },
       requestRegrading: {
         description: "Submit a formal request for regrading an assignment",
-        parameters: z.object({
+        inputSchema: z.object({
           assignmentId: z
             .number()
             .describe("The ID of the assignment to be regraded")

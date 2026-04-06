@@ -18,11 +18,15 @@ import {
   submitAssignment,
 } from "@/lib/talkToBackend";
 import {
+  editedQuestionsOnly,
+  getSubmitButtonStatus,
+  hasLearnerResponse,
+} from "@/lib/utils";
+import {
   isSupportedUiLanguage,
   DEFAULT_UI_LANGUAGE,
   setStoredUiLanguage,
 } from "@/lib/ui-language";
-import { editedQuestionsOnly, getSubmitButtonStatus } from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,
@@ -84,6 +88,8 @@ function LearnerHeader() {
     questions,
     submitting,
     isUploadingFiles,
+    assignmentDetails?.requireAllQuestions,
+    assignmentDetails?.optionalQuestionIds,
   );
 
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
@@ -159,18 +165,38 @@ function LearnerHeader() {
   };
 
   const CheckNoFlaggedQuestions = useCallback(() => {
+    const optionalQuestionSet = new Set(
+      assignmentDetails?.optionalQuestionIds ?? [],
+    );
+    const requiredQuestions = questions.filter(
+      (question) => !optionalQuestionSet.has(question.id),
+    );
+    const requiredResponses = requiredQuestions.filter(hasLearnerResponse);
+
+    if (
+      assignmentDetails?.requireAllQuestions &&
+      requiredResponses.length < requiredQuestions.length
+    ) {
+      const unansweredCount =
+        requiredQuestions.length - requiredResponses.length;
+      toast.error(
+        `All required questions must be answered before submitting (${unansweredCount} unanswered)`,
+      );
+      return;
+    }
+
     const flaggedQuestions = questions.filter((q) => q.status === "flagged");
     if (flaggedQuestions.length > 0) {
       setToggleWarning(true);
     } else {
-      if (questions.every((q) => editedQuestionsOnly([q]).length > 0)) {
+      if (requiredQuestions.every((q) => editedQuestionsOnly([q]).length > 0)) {
         void handleSubmitAssignment();
       } else {
         setToggleEmptyWarning(true);
         setToggleWarning(true);
       }
     }
-  }, [questions]);
+  }, [questions, assignmentDetails]);
 
   const handleCloseModal = () => {
     setToggleWarning(false);

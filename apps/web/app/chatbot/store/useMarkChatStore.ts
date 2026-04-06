@@ -126,7 +126,7 @@ export const useMarkChatStore = create<MarkChatState>()(
       updateFileStatus: (fileId: string, status: Partial<AttachedFile>) =>
         set((s) => ({
           attachedFiles: s.attachedFiles.map((f) =>
-            f.id === fileId ? { ...f, ...status } : f
+            f.id === fileId ? { ...f, ...status } : f,
           ),
         })),
       clearAttachedFiles: () => set({ attachedFiles: [] }),
@@ -264,14 +264,9 @@ export const useMarkChatStore = create<MarkChatState>()(
         });
 
         try {
-          // Strip the UI-only `toolCalls` metadata from user messages — file chips are local only and should not reach the API.
-          const conversationMessages = messages
-            .filter((msg) => msg.role !== "system" || !msg.id.includes("context"))
-            .map((msg) => {
-              if (msg.role !== "user" || !msg.toolCalls) return msg;
-              const { toolCalls, ...safeMessage } = msg;
-              return safeMessage;
-            });
+          const conversationMessages = messages.filter(
+            (msg) => msg.role !== "system" || !msg.id.includes("context"),
+          );
 
           if (useStreaming) {
             const response = await fetch("/api/markChat/stream", {

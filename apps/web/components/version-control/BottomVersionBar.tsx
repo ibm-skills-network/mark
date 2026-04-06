@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useAuthorStore } from "@/stores/author";
@@ -13,7 +13,6 @@ import {
   GitBranch,
   Clock,
   Eye,
-  FileText,
   GitMerge,
   Tag,
   Star,
@@ -27,7 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 interface DropdownProps {
   isOpen: boolean;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   width?: string;
 }
 
@@ -69,11 +68,10 @@ function Dropdown({
 export function BottomVersionBar() {
   const { isOpen: isChatbotOpen } = useChatbot();
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [, setDraftsOpen] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [versionComparison, setVersionComparison] =
-    useState<VersionComparison | null>(null);
+  const [versionComparison] = useState<VersionComparison | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     type: "checkout" | "loadDraft";
     versionId?: number;
@@ -112,21 +110,13 @@ export function BottomVersionBar() {
     hasUnsavedChanges,
     createVersion,
     updateExistingVersion,
-    drafts,
     loadDraft,
-    isLoadingDrafts,
-    draftsLoadFailed,
-    hasAttemptedLoadDrafts,
-    forceRefreshDrafts,
-    debugForceStateRefresh,
-    forceClearLoadingState,
     loadVersions,
     isLoadingVersions,
     versionsLoadFailed,
-    compareVersions,
   } = versionControlHook;
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeAssignmentId && isLoadingVersions) {
       const timeout = setTimeout(() => {
         loadVersions().catch(console.error);
@@ -151,6 +141,11 @@ export function BottomVersionBar() {
     versionId: number,
     versionNumber: string | number,
   ) => {
+    if (workingVersion?.id === versionId) {
+      setVersionsOpen(false);
+      return;
+    }
+
     if (hasUnsavedChanges) {
       setPendingAction({
         type: "checkout",
@@ -162,25 +157,14 @@ export function BottomVersionBar() {
       return;
     }
 
-    const result = await checkoutVersion(versionId, versionNumber);
-    setVersionsOpen(false);
-  };
-
-  const handleDraftSelect = async (draftId: number) => {
-    const draft = drafts.find((d) => d.id === draftId);
-
-    if (hasUnsavedChanges) {
-      setPendingAction({
-        type: "loadDraft",
-        draftId,
-        targetName: draft?.name || "Draft",
-      });
-      setShowUnsavedModal(true);
-      return;
+    try {
+      const success = await checkoutVersion(versionId, versionNumber);
+      if (success) {
+        setVersionsOpen(false);
+      }
+    } catch (error) {
+      console.error("Failed to checkout version:", error);
     }
-
-    await loadDraft(draftId);
-    setDraftsOpen(false);
   };
 
   const handleSaveAndProceed = async () => {
@@ -237,16 +221,6 @@ export function BottomVersionBar() {
   const handleModalClose = () => {
     setShowUnsavedModal(false);
     setPendingAction(null);
-  };
-
-  const handleRevertChanges = () => {
-    if (
-      confirm(
-        "Are you sure you want to revert all unsaved changes? This action cannot be undone.",
-      )
-    ) {
-      window.location.reload();
-    }
   };
 
   const handleVersionSave = async (
@@ -446,7 +420,7 @@ export function BottomVersionBar() {
                       const isWorking = version.id === workingVersion.id;
 
                       return (
-                        <motion.button
+                        <motion.div
                           key={version.id}
                           onClick={() =>
                             handleVersionSelect(
@@ -454,11 +428,22 @@ export function BottomVersionBar() {
                               version.versionNumber,
                             )
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              void handleVersionSelect(
+                                version.id,
+                                version.versionNumber,
+                              );
+                            }
+                          }}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.05 }}
                           whileHover={{ scale: 1.01, y: -1 }}
                           whileTap={{ scale: 0.99 }}
+                          role="button"
+                          tabIndex={0}
                           className={`w-full p-4 rounded-xl border text-left transition-all duration-200 group relative overflow-hidden ${
                             isWorking
                               ? "border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 shadow-md"
@@ -562,7 +547,7 @@ export function BottomVersionBar() {
                               />
                             </button>
                           </div>
-                        </motion.button>
+                        </motion.div>
                       );
                     })}
                   </div>
