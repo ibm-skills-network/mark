@@ -1741,14 +1741,18 @@ export const MarkChat = () => {
         clearAttachedFiles();
         clearSessionContextFiles();
 
-        const storeMessages = (todayChat.messages ?? []).map((msg) => ({
-          id: `msg-${msg.id}`,
-          role: msg.role.toLowerCase() as ChatRole,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp).toISOString(),
-          toolCalls: msg.toolCalls,
-        }));
-        useMarkChatStore.setState({ messages: storeMessages });
+        if (todayChat.messages && todayChat.messages.length > 0) {
+          const storeMessages = todayChat.messages.map((msg) => ({
+            id: `msg-${msg.id}`,
+            role: msg.role.toLowerCase() as ChatRole,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp).toISOString(),
+            toolCalls: msg.toolCalls,
+          }));
+          useMarkChatStore.setState({ messages: storeMessages });
+        } else {
+          resetChat();
+        }
       } catch (error) {
         if (cancelled) return;
         console.error("initializeChat failed:", error);
@@ -1770,6 +1774,7 @@ export const MarkChat = () => {
     clearAttachedFiles,
     clearSessionContextFiles,
     getCurrentAssignmentId,
+    resetChat,
   ]);
 
   useEffect(() => {
