@@ -151,33 +151,41 @@ async function bootstrap() {
      *
      * @param {string} signal - The signal received (SIGTERM, SIGINT, etc.)
      */
+    let shutdownPromise: Promise<void> | undefined;
     const shutdown = async (signal: string) => {
-      logger.log(`${signal} signal received, starting graceful shutdown`);
+      shutdownPromise ??= (async () => {
+        logger.log(`${signal} signal received, starting graceful shutdown`);
 
-      try {
         const shutdownTimeout = setTimeout(() => {
           logger.error("Graceful shutdown timeout, forcing exit");
-          throw new Error("Graceful shutdown timeout");
+          process.exit(1);
         }, 30_000);
 
-        await app.close();
+        try {
+          await app.close();
+          logger.log("Application closed successfully");
+          process.exit(0);
+        } catch (error) {
+          logger.error("Error during graceful shutdown:", error);
+          process.exit(1);
+        } finally {
+          clearTimeout(shutdownTimeout);
+        }
+      })();
 
-        clearTimeout(shutdownTimeout);
-
-        logger.log("Application closed successfully");
-        process.exit(0);
-      } catch (error) {
-        logger.error("Error during graceful shutdown:", error);
-        throw error;
-      }
+      await shutdownPromise;
     };
 
     /**
      * Register signal handlers for container orchestration
      * These signals are commonly used by Docker/Kubernetes for shutdown
      */
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => {
+      void shutdown("SIGTERM");
+    });
+    process.once("SIGINT", () => {
+      void shutdown("SIGINT");
+    });
 
     /**
      * Handle uncaught exceptions and unhandled promise rejections

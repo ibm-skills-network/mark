@@ -14,11 +14,6 @@ const config: Config = {
   testPathIgnorePatterns: ["<rootDir>/dist/"],
   modulePathIgnorePatterns: ["<rootDir>/dist/"],
   testEnvironment: "node",
-  moduleNameMapper: {
-    "^src/(.*)$": "<rootDir>/../api/src/$1",
-    "^pdfjs-dist/legacy/build/pdf\\.mjs$":
-      "<rootDir>/../api/test/__mocks__/pdfjs-dist.ts",
-  },
 };
 
 export default config;

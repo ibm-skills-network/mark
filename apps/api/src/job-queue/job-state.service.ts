@@ -1,13 +1,13 @@
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
-import { Observable } from "rxjs";
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import IORedis from "ioredis";
-import { createRedisConnection } from "./redis.connection";
+import { Observable } from "rxjs";
 import {
   CreateJobStateOptions,
   JobStateRecord,
   JobStatusUpdate,
 } from "./job-state.types";
+import { createRedisConnection } from "./redis.connection";
 
 interface StoredJobState extends JobStateRecord {
   activeKeyHash?: string;
@@ -36,7 +36,7 @@ export class JobStateService implements OnModuleDestroy {
       ? this.hashActiveKey(options.activeKey)
       : undefined;
     const job: StoredJobState = {
-      id: randomUUID(),
+      id: options.reservedId ?? randomUUID(),
       queueName: options.queueName,
       jobName: options.jobName,
       kind: options.kind,
@@ -56,7 +56,8 @@ export class JobStateService implements OnModuleDestroy {
     transaction.hset(this.getJobStateKey(job.id), this.serializeJob(job));
     transaction.expire(this.getJobStateKey(job.id), ACTIVE_JOB_TTL_SECONDS);
 
-    if (activeKeyHash) {
+    if (activeKeyHash && !options.reservedId) {
+      // Only set the active key pointer if it wasn't already set by acquireActiveJobLock
       transaction.set(
         this.getActiveJobKey(activeKeyHash),
         job.id,
@@ -67,6 +68,34 @@ export class JobStateService implements OnModuleDestroy {
 
     await transaction.exec();
     return this.toPublicJob(job);
+  }
+
+  /**
+   * Atomically acquire an active-job lock using Redis SET NX.
+   * Returns null if the lock was acquired (caller should proceed to create the job),
+   * or the existing jobId if the lock was already held by another job.
+   */
+  async acquireActiveJobLock(
+    activeKey: string,
+    temporaryJobId: string,
+  ): Promise<string | null> {
+    const activeKeyHash = this.hashActiveKey(activeKey);
+    const redisKey = this.getActiveJobKey(activeKeyHash);
+    // SET key value EX ttl NX – atomic set-if-not-exists (ioredis argument order)
+    const result = await this.getConnection().set(
+      redisKey,
+      temporaryJobId,
+      "EX",
+      ACTIVE_JOB_TTL_SECONDS,
+      "NX",
+    );
+    if (result === null) {
+      // Lock already held – return existing jobId
+      const existingJobId = await this.getConnection().get(redisKey);
+      return existingJobId;
+    }
+    // Lock acquired – return null to signal caller to proceed
+    return null;
   }
 
   async findActiveJob(activeKey: string): Promise<JobStateRecord | null> {

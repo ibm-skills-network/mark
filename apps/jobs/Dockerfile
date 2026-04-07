@@ -17,14 +17,12 @@ COPY --from=builder ${DIR}/out/json/ .
 COPY --from=builder ${DIR}/out/yarn.lock ./yarn.lock
 COPY --from=builder ${DIR}/out/turbo.json ./turbo.json
 COPY --from=builder ${DIR}/packages ./packages
-COPY --from=builder ${DIR}/apps/api/prisma ./apps/api/prisma
 
 # hadolint ignore=DL3008
 RUN apt-get update -y \
   && apt-get install -y --no-install-recommends \
      python3 make g++ pkg-config openssl \
   && yarn install --frozen-lockfile \
-  && yarn prisma generate \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -52,8 +50,7 @@ RUN apt-get update -y \
 COPY --chown=node:node --from=installer ${DIR}/node_modules ./node_modules
 COPY --chown=node:node --from=build ${DIR}/apps/jobs/dist ./dist
 COPY --chown=node:node --from=build ${DIR}/apps/jobs/package.json ./package.json
-COPY --chown=node:node --from=installer ${DIR}/apps/api/prisma ./prisma
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "dist/jobs/src/main.js"]
+CMD ["node", "dist/src/main.js"]

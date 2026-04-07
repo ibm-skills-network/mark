@@ -7,9 +7,6 @@
     "baseUrl": "./",
     "target": "es2022",
     "useDefineForClassFields": false,
-    "paths": {
-      "src/*": ["../api/src/*"]
-    },
     "resolveJsonModule": true
   },
   "exclude": ["dist", "test", "**/*spec.ts", "**/*.test.ts", "**/tests/**"]

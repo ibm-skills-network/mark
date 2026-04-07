@@ -57,7 +57,10 @@ import {
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
-import { QuestionResponseService } from "./question-response/question-response.service";
+import {
+  GradedItem,
+  QuestionResponseService,
+} from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
 
@@ -855,7 +858,14 @@ export class AttemptSubmissionService {
   }
 
   /**
-   * Updates an attempt for a learner
+   * Updates an attempt for a learner.
+   *
+   * Uses a 3-phase grading flow (Changes 2+3):
+   *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
+   *   Grade computation + validation (in-memory)
+   *   LTI callback (external, before DB commit)
+   *   Phase 3 — commitAttemptWithResponses: write QuestionResponse records and
+   *              AssignmentAttempt.grade atomically in a single short transaction
    */
   private async updateLearnerAttempt(
     attemptId: number,
@@ -923,17 +933,17 @@ export class AttemptSubmissionService {
         },
       });
 
-      const successfulQuestionResponses =
-        await this.questionResponseService.submitQuestions(
+      // ── Phases 1+2: Load question DTOs (short tx) + grade with LLM (no tx) ──
+      const gradedItems: GradedItem[] =
+        await this.questionResponseService.gradeQuestionsForLearner(
           updateDto.responsesForQuestions,
           attemptId,
-          request.userSession.role,
           assignmentId,
           updateDto.language,
-          updateDto.authorQuestions,
-          updateDto.authorAssignmentDetails,
           updateDto.preTranslatedQuestions,
         );
+
+      const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
 
       if (progressCallback) {
         await progressCallback("Calculating final grade...", 92);
@@ -985,11 +995,14 @@ export class AttemptSubmissionService {
         await progressCallback("Finalizing results...", 98);
       }
 
-      const result = await this.updateAssignmentAttemptInDb(
-        attemptId,
-        updateDto,
-        grade,
-      );
+      // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
+      const result =
+        await this.questionResponseService.commitAttemptWithResponses(
+          attemptId,
+          gradedItems,
+          grade,
+          updateDto,
+        );
 
       await this.pruneAutoSavedResponses(
         attemptId,
@@ -1202,36 +1215,6 @@ export class AttemptSubmissionService {
       assignmentId,
       userId,
     );
-  }
-
-  /**
-   * Update the assignment attempt in the database
-   */
-  private async updateAssignmentAttemptInDb(
-    attemptId: number,
-    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    grade: number,
-  ) {
-    const {
-      responsesForQuestions,
-      authorQuestions,
-      authorAssignmentDetails,
-      language,
-      preTranslatedQuestions,
-      expiresAt: _ignoredExpiresAt,
-      ...cleanedUpdateDto
-    } = updateDto;
-
-    return this.prisma.assignmentAttempt.update({
-      data: {
-        ...cleanedUpdateDto,
-        submitted: true,
-        preferredLanguage: language ?? "en",
-        expiresAt: new Date(),
-        grade,
-      },
-      where: { id: attemptId },
-    });
   }
 
   private async pruneAutoSavedResponses(
@@ -1592,9 +1575,7 @@ export class AttemptSubmissionService {
         delete question.scoring?.rubrics;
       }
 
-      if (UserRole.LEARNER) {
-        question.authorComment == null;
-      }
+      question.authorComment = null;
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;

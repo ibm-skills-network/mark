@@ -9,15 +9,19 @@ async function bootstrap() {
 
   logger.log("Jobs worker application context started");
 
+  let shutdownPromise: Promise<void> | undefined;
   const shutdown = async (signal: string) => {
-    logger.log(`Received ${signal}, shutting down jobs worker`);
-    await app.close();
+    shutdownPromise ??= (async () => {
+      logger.log(`Received ${signal}, shutting down jobs worker`);
+      await app.close();
+    })();
+    await shutdownPromise;
   };
 
-  process.on("SIGINT", () => {
+  process.once("SIGINT", () => {
     void shutdown("SIGINT");
   });
-  process.on("SIGTERM", () => {
+  process.once("SIGTERM", () => {
     void shutdown("SIGTERM");
   });
 }

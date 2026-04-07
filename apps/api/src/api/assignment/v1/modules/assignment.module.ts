@@ -24,6 +24,6 @@ import { AssignmentServiceV1 } from "../services/assignment.service";
     AttemptServiceV1,
   ],
   imports: [HttpModule, LlmModule, LtiSyncModule, JobQueueModule],
-  exports: [QuestionService, JobStatusServiceV1],
+  exports: [AssignmentServiceV1, QuestionService, JobStatusServiceV1],
 })
 export class AssignmentModuleV1 {}

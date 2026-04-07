@@ -1,6 +1,5 @@
 import { Module } from "@nestjs/common";
 import { PassportModule } from "@nestjs/passport";
-import { PrismaService } from "src/database/prisma.service";
 import { JobQueueModule } from "src/job-queue/job-queue.module";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { AuthModule } from "../../auth/auth.module";
@@ -41,7 +40,6 @@ import { TRANSLATION_MAINTENANCE_JOB_RUNNER } from "./controllers/translation-ma
   ],
   providers: [
     AdminService,
-    PrismaService,
     AdminRepository,
     TranslationMaintenanceController,
     {

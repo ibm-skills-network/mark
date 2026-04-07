@@ -21,6 +21,7 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { randomUUID } from "node:crypto";
 import {
   UserRole,
   UserSession,
@@ -83,11 +84,15 @@ export class AttemptServiceV2 {
       assignmentId,
       null,
     );
-    const existingJob = await this.jobStateService.findActiveJob(activeKey);
+    const temporaryJobId = randomUUID();
+    const existingJobId = await this.jobStateService.acquireActiveJobLock(
+      activeKey,
+      temporaryJobId,
+    );
 
-    if (existingJob) {
+    if (existingJobId !== null) {
       return {
-        gradingJobId: existingJob.id,
+        gradingJobId: existingJobId,
         message:
           "Author preview job is already in progress. Reusing existing job.",
       };
@@ -103,6 +108,7 @@ export class AttemptServiceV2 {
       status: "Pending",
       progress: "Author preview job created",
       activeKey,
+      reservedId: temporaryJobId,
     });
 
     return {
@@ -128,11 +134,15 @@ export class AttemptServiceV2 {
       assignmentId,
       attemptId,
     );
-    const existingJob = await this.jobStateService.findActiveJob(activeKey);
+    const temporaryJobId = randomUUID();
+    const existingJobId = await this.jobStateService.acquireActiveJobLock(
+      activeKey,
+      temporaryJobId,
+    );
 
-    if (existingJob) {
+    if (existingJobId !== null) {
       return {
-        gradingJobId: existingJob.id,
+        gradingJobId: existingJobId,
         message:
           "A grading job is already running for this attempt. Reusing existing job.",
       };
@@ -148,6 +158,7 @@ export class AttemptServiceV2 {
       status: "Pending",
       progress: "Grading job created",
       activeKey,
+      reservedId: temporaryJobId,
     });
 
     return {
@@ -357,6 +368,10 @@ export class AttemptServiceV2 {
 
       if (this.gradingProgressService) {
         this.gradingProgressService.removeProgressCallback(attemptId);
+        // Guard against author preview jobs which use attemptId = -1
+        if (attemptId > 0) {
+          await this.gradingProgressService.markFailed(attemptId, errorMessage);
+        }
       }
       throw error;
     }

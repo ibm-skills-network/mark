@@ -45,6 +45,7 @@
     "setup": "scripts/setup.sh",
     "setup:no-git": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",
     "test": "turbo run test",
+    "test:insomnia:jobs": "scripts/test-insomnia-jobs.sh",
     "test:watch": "turbo run test --parallel ",
     "test:staged": "turbo run test:staged --",
     "start": "scripts/start.sh",

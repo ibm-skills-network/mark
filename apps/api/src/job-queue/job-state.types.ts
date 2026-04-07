@@ -26,6 +26,8 @@ export interface CreateJobStateOptions {
   percentage?: number;
   result?: unknown;
   activeKey?: string;
+  /** When provided, use this UUID as the job ID (e.g. from acquireActiveJobLock) */
+  reservedId?: string;
 }
 
 export interface JobStatusUpdate {

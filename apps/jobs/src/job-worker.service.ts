@@ -1,49 +1,44 @@
 import {
-  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { ModuleRef } from "@nestjs/core";
 import { Job, Worker } from "bullmq";
 import IORedis from "ioredis";
-import {
-  TRANSLATION_MAINTENANCE_JOB_RUNNER,
-  TranslationMaintenanceJobRunner,
-} from "../../api/src/api/admin/controllers/translation-maintenance.job-runner";
-import { AssignmentServiceV1 } from "../../api/src/api/assignment/v1/services/assignment.service";
-import { AssignmentServiceV2 } from "../../api/src/api/assignment/v2/services/assignment.service";
-import { QuestionService } from "../../api/src/api/assignment/v2/services/question.service";
-import { AttemptServiceV2 } from "../../api/src/api/attempt/services/attempt.service";
+import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import {
   JOB_NAMES,
   JOB_QUEUE_NAMES,
-} from "../../api/src/job-queue/job-queue.constants";
+  JobName,
+  JobQueueName,
+} from "./job-queue.constants";
 import {
-  AdminFixMissingTranslationsJobPayload,
-  AdminSweepMissingTranslationsJobPayload,
-  AssignmentV1GenerateQuestionsJobPayload,
-  AssignmentV1PublishJobPayload,
-  AssignmentV2GenerateQuestionsJobPayload,
-  AssignmentV2PublishJobPayload,
-  AttemptAuthorPreviewJobPayload,
-  AttemptGradeJobPayload,
-} from "../../api/src/job-queue/job-queue.types";
-import { decryptJobPayload } from "../../api/src/job-queue/job-payload.crypto";
-import { createRedisConnection } from "../../api/src/job-queue/redis.connection";
-import { UserSessionRequest } from "../../api/src/auth/interfaces/user.session.interface";
+  DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS,
+  DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS,
+  JOB_WORKER_HEARTBEAT_KEY_PREFIX,
+} from "./job-worker-heartbeat.constants";
+import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
+import { createRedisConnection } from "./redis.connection";
+
+const JOB_EXECUTOR_PATH = "/api/internal/jobs/execute";
+
+interface MarkApiJobExecutionRequest {
+  queueName: JobQueueName;
+  jobName: JobName;
+  payload: unknown;
+  bullJobId?: string;
+}
 
 @Injectable()
 export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobWorkerService.name);
   private connection?: IORedis;
-  private readonly moduleRef: ModuleRef;
   private readonly workers: Worker[] = [];
-
-  constructor(@Inject(ModuleRef) moduleReference: unknown) {
-    this.moduleRef = moduleReference as ModuleRef;
-  }
+  private heartbeatInterval?: NodeJS.Timeout;
+  private readonly workerInstanceId = randomUUID();
+  private readonly startedAt = new Date().toISOString();
 
   async onModuleInit(): Promise<void> {
     this.connection = createRedisConnection();
@@ -62,7 +57,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       this.createWorker(
         JOB_QUEUE_NAMES.ATTEMPT,
         async (job) => this.handleAttemptJob(job),
-        4,
+        Number.parseInt(process.env.GRADING_CONCURRENCY ?? "4", 10),
       ),
       this.createWorker(
         JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
@@ -74,12 +69,18 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     await Promise.all(
       this.workers.map(async (worker) => worker.waitUntilReady()),
     );
+    await this.writeHeartbeat();
+    this.startHeartbeat();
     this.logger.log(`Started ${this.workers.length} background job workers`);
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
     await Promise.all(this.workers.map(async (worker) => worker.close()));
     if (this.connection) {
+      await this.connection.del(this.getHeartbeatKey()).catch(() => null);
       await this.connection.quit();
     }
   }
@@ -116,55 +117,62 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     return this.connection;
   }
 
-  private getAssignmentServiceV1(): AssignmentServiceV1 {
-    return this.moduleRef.get(AssignmentServiceV1, { strict: false });
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      void this.writeHeartbeat().catch((error: Error) => {
+        this.logger.warn(
+          `Failed to write jobs worker heartbeat: ${error.message}`,
+        );
+      });
+    }, this.getHeartbeatIntervalMs());
   }
 
-  private getAssignmentServiceV2(): AssignmentServiceV2 {
-    return this.moduleRef.get(AssignmentServiceV2, { strict: false });
-  }
-
-  private getQuestionService(): QuestionService {
-    return this.moduleRef.get(QuestionService, { strict: false });
-  }
-
-  private getAttemptService(): AttemptServiceV2 {
-    return this.moduleRef.get(AttemptServiceV2, { strict: false });
-  }
-
-  private getTranslationJobRunner(): TranslationMaintenanceJobRunner {
-    return this.moduleRef.get<TranslationMaintenanceJobRunner>(
-      TRANSLATION_MAINTENANCE_JOB_RUNNER,
-      { strict: false },
+  private async writeHeartbeat(): Promise<void> {
+    await this.getConnection().set(
+      this.getHeartbeatKey(),
+      JSON.stringify({
+        instanceId: this.workerInstanceId,
+        hostname: hostname(),
+        pid: process.pid,
+        startedAt: this.startedAt,
+        updatedAt: new Date().toISOString(),
+        workerCount: this.workers.length,
+        queues: Object.values(JOB_QUEUE_NAMES),
+      }),
+      "EX",
+      this.getHeartbeatTtlSeconds(),
     );
+  }
+
+  private getHeartbeatKey(): string {
+    return `${JOB_WORKER_HEARTBEAT_KEY_PREFIX}:${this.workerInstanceId}`;
+  }
+
+  private getHeartbeatIntervalMs(): number {
+    const parsedInterval = Number.parseInt(
+      process.env.JOB_WORKER_HEARTBEAT_INTERVAL_MS ?? "",
+      10,
+    );
+    return Number.isFinite(parsedInterval) && parsedInterval > 0
+      ? parsedInterval
+      : DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS;
+  }
+
+  private getHeartbeatTtlSeconds(): number {
+    const parsedTtl = Number.parseInt(
+      process.env.JOB_WORKER_HEARTBEAT_TTL_SECONDS ?? "",
+      10,
+    );
+    return Number.isFinite(parsedTtl) && parsedTtl > 0
+      ? parsedTtl
+      : DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS;
   }
 
   private async handleAssignmentV1Job(job: Job): Promise<void> {
     switch (job.name) {
-      case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS: {
-        const payload =
-          this.getDecryptedJobData<AssignmentV1GenerateQuestionsJobPayload>(
-            job,
-          );
-        await this.getAssignmentServiceV1().runGenerateQuestionsJob(
-          payload.assignmentId,
-          payload.jobId,
-          payload.assignmentType,
-          payload.questionsToGenerate,
-          payload.files,
-          payload.learningObjectives,
-        );
-        return;
-      }
+      case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS:
       case JOB_NAMES.ASSIGNMENT_V1_PUBLISH: {
-        const payload =
-          this.getDecryptedJobData<AssignmentV1PublishJobPayload>(job);
-        await this.getAssignmentServiceV1().runPublishJob(
-          payload.jobId,
-          payload.assignmentId,
-          payload.updateDto,
-          payload.userId,
-        );
+        await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V1, job);
         return;
       }
       default: {
@@ -175,30 +183,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleAssignmentV2Job(job: Job): Promise<void> {
     switch (job.name) {
-      case JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS: {
-        const payload =
-          this.getDecryptedJobData<AssignmentV2GenerateQuestionsJobPayload>(
-            job,
-          );
-        await this.getQuestionService().runQuestionGenerationJob(
-          payload.assignmentId,
-          payload.jobId,
-          payload.assignmentType,
-          payload.questionsToGenerate,
-          payload.fileContents,
-          payload.learningObjectives,
-        );
-        return;
-      }
+      case JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS:
       case JOB_NAMES.ASSIGNMENT_V2_PUBLISH: {
-        const payload =
-          this.getDecryptedJobData<AssignmentV2PublishJobPayload>(job);
-        await this.getAssignmentServiceV2().runPublishJob(
-          payload.jobId,
-          payload.assignmentId,
-          payload.updateDto,
-          payload.userId,
-        );
+        await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V2, job);
         return;
       }
       default: {
@@ -209,28 +196,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleAttemptJob(job: Job): Promise<void> {
     switch (job.name) {
-      case JOB_NAMES.ATTEMPT_GRADE: {
-        const payload = this.getDecryptedJobData<AttemptGradeJobPayload>(job);
-        await this.getAttemptService().processGradingJob(
-          payload.gradingJobId,
-          payload.attemptId,
-          payload.assignmentId,
-          payload.updateDto,
-          payload.authCookie ?? "",
-          { userSession: payload.userSession } as UserSessionRequest,
-        );
-        return;
-      }
+      case JOB_NAMES.ATTEMPT_GRADE:
       case JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW: {
-        const payload =
-          this.getDecryptedJobData<AttemptAuthorPreviewJobPayload>(job);
-        await this.getAttemptService().processAuthorPreviewJob(
-          payload.gradingJobId,
-          payload.assignmentId,
-          payload.updateDto,
-          "",
-          { userSession: payload.userSession } as UserSessionRequest,
-        );
+        await this.forwardJobToApi(JOB_QUEUE_NAMES.ATTEMPT, job);
         return;
       }
       default: {
@@ -241,25 +209,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleAdminTranslationJob(job: Job): Promise<void> {
     switch (job.name) {
-      case JOB_NAMES.ADMIN_FIX_MISSING_TRANSLATIONS: {
-        const payload =
-          this.getDecryptedJobData<AdminFixMissingTranslationsJobPayload>(job);
-        await this.getTranslationJobRunner().runFixMissingTranslationsJob(
-          payload.jobId,
-          payload.assignmentIds,
-          payload.body,
-        );
-        return;
-      }
+      case JOB_NAMES.ADMIN_FIX_MISSING_TRANSLATIONS:
       case JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS: {
-        const payload =
-          this.getDecryptedJobData<AdminSweepMissingTranslationsJobPayload>(
-            job,
-          );
-        await this.getTranslationJobRunner().runSweepMissingTranslationsJob(
-          payload.jobId,
-          payload.body,
-        );
+        await this.forwardJobToApi(JOB_QUEUE_NAMES.ADMIN_TRANSLATION, job);
         return;
       }
       default: {
@@ -270,5 +222,45 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private getDecryptedJobData<T>(job: Job): T {
     return decryptJobPayload<T>(job.data);
+  }
+
+  private async forwardJobToApi(
+    queueName: JobQueueName,
+    job: Job,
+  ): Promise<void> {
+    const request: MarkApiJobExecutionRequest = {
+      queueName,
+      jobName: job.name as JobName,
+      payload: this.getDecryptedJobData<unknown>(job),
+      bullJobId: job.id,
+    };
+    const response = await fetch(this.getJobExecutorUrl(), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-job-queue-secret": getJobQueueSecret(),
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const responseBody = await response.text().catch(() => "");
+      const details = responseBody ? ` - ${responseBody}` : "";
+      throw new Error(
+        `Mark API job execution failed for ${job.name}#${job.id ?? "unknown"}: ${response.status} ${response.statusText}${details}`,
+      );
+    }
+  }
+
+  private getJobExecutorUrl(): string {
+    if (process.env.MARK_API_JOB_EXECUTOR_URL) {
+      return process.env.MARK_API_JOB_EXECUTOR_URL;
+    }
+
+    const baseUrl =
+      process.env.MARK_API_ENDPOINT ??
+      process.env.MARK_API_URL ??
+      `http://localhost:${process.env.API_PORT ?? "4222"}`;
+    return `${baseUrl.replace(/\/+$/, "")}${JOB_EXECUTOR_PATH}`;
   }
 }
