@@ -1,13 +1,13 @@
-const QUOTED_FILENAME_PATTERN = /["'`]([^"'`\r\n]+?\.[A-Za-z0-9]{2,10})["'`]/;
-const BARE_FILENAME_PATTERN = /\b([\w.-]+\.[A-Za-z0-9]{2,10})\b/;
+const QUOTED_FILENAME_PATTERN = /["'`]([^\n\r"'`]+?\.[\dA-Za-z]{2,10})["'`]/;
+const BARE_FILENAME_PATTERN = /\b([\w.-]+\.[\dA-Za-z]{2,10})\b/;
 const FILENAME_REQUIREMENT_PATTERN =
   /file\s*name|filename|name of (?:the )?file|file named|file called/i;
 const NAMED_FILENAME_PATTERN =
-  /\b(?:named|called)\s+["'`]?([^"'`\r\n]+?\.[A-Za-z0-9]{2,10})/i;
+  /\b(?:named|called)\s+["'`]?([^\n\r"'`]+?\.[\da-z]{2,10})/i;
 
 function sanitizeFilename(filename: string): string {
-  const trimmed = filename.trim().replace(/^["'`]+|["'`]+$/g, "");
-  const basename = trimmed.split(/[\\/]/).pop() ?? trimmed;
+  const trimmed = filename.trim().replaceAll(/^["'`]+|["'`]+$/g, "");
+  const basename = trimmed.split(/[/\\]/).pop() ?? trimmed;
   return basename.trim();
 }
 
