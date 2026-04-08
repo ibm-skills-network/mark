@@ -5,7 +5,6 @@ import * as path from "node:path";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import cld from "cld";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { decodeIfBase64 } from "src/helpers/decoder";
@@ -128,6 +127,35 @@ export class TranslationService implements ITranslationService {
   }
 
   /**
+   * Normalize arbitrary values into translatable text.
+   * Returns null for unsupported or empty values.
+   */
+  private normalizeTranslatableText(value: unknown): string | null {
+    if (typeof value === "string") {
+      return value.trim().length > 0 ? value : null;
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+
+    if (value && typeof value === "object") {
+      const objectValue = value as Record<string, unknown>;
+      const nestedText =
+        objectValue.choice ?? objectValue.text ?? objectValue.value;
+
+      if (typeof nestedText === "string") {
+        return nestedText.trim().length > 0 ? nestedText : null;
+      }
+      if (typeof nestedText === "number" || typeof nestedText === "boolean") {
+        return String(nestedText);
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Batch detect languages for multiple texts using CLD first, falling back to GPT-5-nano
    */
   async batchGetLanguageCodes(
@@ -142,33 +170,12 @@ export class TranslationService implements ITranslationService {
     const textsNeedingGPT: Array<{ text: string; index: number }> = [];
 
     for (const [index, text] of texts.entries()) {
-      if (!text || !text.trim()) {
-        continue;
-      }
-
+      if (!text || !text.trim()) continue;
       const decodedText = decodeIfBase64(text) || text;
-
-      try {
-        const cldResponse = await cld.detect(decodedText);
-        const detectedLanguage = cldResponse.languages[0];
-
-        if (detectedLanguage && detectedLanguage.percent >= 80) {
-          results[index] = detectedLanguage.code;
-          this.logger.debug(
-            `CLD batch detected language for text ${index}: ${detectedLanguage.code} (${detectedLanguage.percent}% confidence)`,
-          );
-        } else {
-          textsNeedingGPT.push({
-            text: decodedText.slice(0, 500),
-            index: index,
-          });
-        }
-      } catch {
-        textsNeedingGPT.push({
-          text: decodedText.slice(0, 500),
-          index: index,
-        });
-      }
+      textsNeedingGPT.push({
+        text: decodedText.slice(0, 500),
+        index,
+      });
     }
 
     if (
@@ -179,11 +186,7 @@ export class TranslationService implements ITranslationService {
     }
 
     this.logger.debug(
-      `CLD processed ${texts.length - textsNeedingGPT.length}/${
-        texts.length
-      } texts confidently, using GPT-5-nano for ${
-        textsNeedingGPT.length
-      } remaining texts`,
+      `Using GPT-5-nano to detect ${textsNeedingGPT.length}/${texts.length} texts`,
     );
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -278,34 +281,12 @@ INSTRUCTIONS:
   }
 
   /**
-   * Detect the language of text using CLD first, falling back to GPT-5-nano
+   * Detect the language of text using GPT-5-nano
    */
   async getLanguageCode(text: string, assignmentId = 1): Promise<string> {
     if (!text) return "unknown";
 
     const decodedText = decodeIfBase64(text) || text;
-
-    try {
-      const cldResponse = await cld.detect(decodedText);
-      const detectedLanguage = cldResponse.languages[0];
-
-      if (detectedLanguage && detectedLanguage.percent >= 80) {
-        this.logger.debug(
-          `CLD detected language: ${detectedLanguage.code} (${detectedLanguage.percent}% confidence)`,
-        );
-        return detectedLanguage.code;
-      } else if (detectedLanguage) {
-        this.logger.debug(
-          `CLD low confidence (${detectedLanguage.percent}%), falling back to GPT-5-nano`,
-        );
-      }
-    } catch (cldError) {
-      this.logger.debug(
-        `CLD failed: ${
-          cldError instanceof Error ? cldError.message : "Unknown error"
-        }, falling back to GPT-5-nano`,
-      );
-    }
 
     const textSample = decodedText.slice(0, 500);
 
@@ -536,24 +517,34 @@ INSTRUCTIONS:
         choiceIndex: number;
         type: "choice" | "feedback";
         textIndex: number;
+        sourceText: string;
       }> = [];
 
       for (const [choiceIndex, choice] of parsedChoices.entries()) {
-        if (choice.choice) {
+        const normalizedChoiceText = this.normalizeTranslatableText(
+          choice.choice,
+        );
+        if (normalizedChoiceText) {
           textMap.push({
             choiceIndex,
             type: "choice",
             textIndex: textsToCheck.length,
+            sourceText: normalizedChoiceText,
           });
-          textsToCheck.push(choice.choice);
+          textsToCheck.push(normalizedChoiceText);
         }
-        if (choice.feedback) {
+
+        const normalizedFeedbackText = this.normalizeTranslatableText(
+          choice.feedback,
+        );
+        if (normalizedFeedbackText) {
           textMap.push({
             choiceIndex,
             type: "feedback",
             textIndex: textsToCheck.length,
+            sourceText: normalizedFeedbackText,
           });
-          textsToCheck.push(choice.feedback);
+          textsToCheck.push(normalizedFeedbackText);
         }
       }
 
@@ -576,7 +567,7 @@ INSTRUCTIONS:
           if (choiceMapping && needsTranslationFlags[choiceMapping.textIndex]) {
             try {
               const translatedText = await this.translateText(
-                choice.choice,
+                choiceMapping.sourceText,
                 targetLanguage,
                 assignmentId,
               );
@@ -602,7 +593,7 @@ INSTRUCTIONS:
           ) {
             try {
               const translatedFeedback = await this.translateText(
-                choice.feedback,
+                feedbackMapping.sourceText,
                 targetLanguage,
                 assignmentId,
               );
@@ -650,7 +641,9 @@ INSTRUCTIONS:
   ): Promise<boolean[]> {
     if (texts.length === 0) return [];
 
-    const validTexts = texts.filter((text) => text && text.trim().length > 0);
+    const validTexts = texts.filter(
+      (text) => typeof text === "string" && text.trim().length > 0,
+    );
     if (validTexts.length === 0) {
       return texts.map(() => false);
     }
@@ -662,7 +655,7 @@ INSTRUCTIONS:
       );
 
       return texts.map((text, index) => {
-        if (!text || text.trim().length === 0) {
+        if (typeof text !== "string" || text.trim().length === 0) {
           return false;
         }
 
@@ -807,9 +800,10 @@ INSTRUCTIONS:
     targetLanguage: string,
     assignmentId: number,
   ): Promise<string> {
-    if (!text) return "";
+    const normalizedInput = this.normalizeTranslatableText(text);
+    if (!normalizedInput) return "";
 
-    const decodedText = decodeIfBase64(text) || text;
+    const decodedText = decodeIfBase64(normalizedInput) || normalizedInput;
 
     const targetLanguageName = this.getLanguageName(targetLanguage);
 

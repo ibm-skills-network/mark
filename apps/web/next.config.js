@@ -36,10 +36,6 @@ const nextConfig = {
       },
     ];
   },
-
-  experimental: {
-    useDeploymentId: false,
-  },
 };
 
 module.exports = nextConfig;

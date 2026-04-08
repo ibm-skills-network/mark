@@ -15,13 +15,14 @@ import type {
   MoveFileRequest,
   QuestionStore,
   RenameFileRequest,
-  UploadContext,
   UploadRequest,
   UploadResponse,
   UploadType,
   User,
 } from "@config/types";
-import { JSONValue } from "ai";
+
+type JSONPrimitive = string | number | boolean | null;
+type JSONValue = JSONPrimitive | { [key: string]: JSONValue } | JSONValue[];
 
 export interface FileProxyInfo {
   filename: string;
@@ -52,16 +53,6 @@ export interface FileAccessInfo {
   viewUrl: string;
   downloadUrl: string;
   textContentUrl?: string;
-}
-
-interface AxiosError {
-  response?: {
-    data?: {
-      message?: string;
-    };
-  };
-  code?: string;
-  message: string;
 }
 
 interface ErrorResponse {
@@ -144,7 +135,6 @@ export async function directUpload(
   file: File,
   uploadRequest: UploadRequest,
   cookies?: string,
-  onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void,
 ): Promise<{
   success: boolean;
   key: string;

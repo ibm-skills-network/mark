@@ -12,6 +12,7 @@ export const withUpdatedAt =
       (partial, replace) => {
         if (
           typeof partial === "function" ||
+          replace ||
           partial?.pageState ||
           get().pageState === "loading"
         ) {
@@ -19,7 +20,7 @@ export const withUpdatedAt =
         }
 
         set(
-          (_state) => ({
+          () => ({
             ...partial,
             updatedAt: new Date().getTime(),
           }),

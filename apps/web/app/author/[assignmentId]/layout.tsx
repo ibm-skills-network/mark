@@ -13,7 +13,13 @@ const Layout: FC<Props> = ({ children }) => {
   const [showRoleError, setShowRoleError] = useState(false);
   const [pageState] = useAuthorStore((state) => [state.pageState]);
   const assignmentId = getAssignmentIdFromURL("author");
-  useAuthorStore.setState({ activeAssignmentId: parseInt(assignmentId) });
+  const assignmentIdNumber = Number.parseInt(assignmentId, 10);
+
+  useEffect(() => {
+    if (Number.isFinite(assignmentIdNumber)) {
+      useAuthorStore.setState({ activeAssignmentId: assignmentIdNumber });
+    }
+  }, [assignmentIdNumber]);
 
   useEffect(() => {
     const checkRole = async () => {

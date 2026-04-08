@@ -1,5 +1,11 @@
 /* eslint-disable unicorn/no-null */
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
@@ -60,12 +66,13 @@ interface BatchProcessResult {
  * Optimized for performance with parallel processing
  */
 @Injectable()
-export class TranslationService {
+export class TranslationService implements OnModuleDestroy {
   private readonly logger = new Logger(TranslationService.name);
   private readonly languageTranslation: boolean;
-  private readonly limiter: Bottleneck;
-  private readonly watsonxLimiter: Bottleneck;
+  private limiter: Bottleneck;
+  private watsonxLimiter: Bottleneck;
   private useWatsonxLimiterForTranslation = false;
+  private isResettingLimiter = false;
 
   private readonly MAX_BATCH_SIZE = 100;
   private readonly CONCURRENCY_LIMIT = 50;
@@ -75,11 +82,12 @@ export class TranslationService {
   private readonly OPERATION_TIMEOUT = 30_000;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
-  private readonly ADAPTIVE_BATCH_SIZE = true;
 
   private stuckOperations = new Set<string>();
   private jobStartTimes = new Map<number, number>();
   private jobCancellationFlags = new Map<number, boolean>();
+  private readonly limiterHealthInterval: NodeJS.Timeout;
+  private readonly jobTimeoutInterval: NodeJS.Timeout;
   private operationStats = {
     totalOperations: 0,
     successfulOperations: 0,
@@ -100,7 +108,27 @@ export class TranslationService {
       process.env.ENABLE_TRANSLATION.toString().toLowerCase() === "true" ||
       false;
 
-    this.limiter = new Bottleneck({
+    this.limiter = this.createDefaultLimiter();
+    this.watsonxLimiter = this.createWatsonxLimiter();
+    this.limiterHealthInterval = setInterval(
+      () => this.checkLimiterHealth(),
+      30_000,
+    );
+    this.jobTimeoutInterval = setInterval(
+      () => this.checkJobTimeouts(),
+      60_000,
+    );
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.limiterHealthInterval);
+    clearInterval(this.jobTimeoutInterval);
+    void this.limiter.disconnect().catch(() => null);
+    void this.watsonxLimiter.disconnect().catch(() => null);
+  }
+
+  private createDefaultLimiter(): Bottleneck {
+    return new Bottleneck({
       maxConcurrent: this.CONCURRENCY_LIMIT,
       minTime: 2,
       reservoirRefreshInterval: 3000,
@@ -109,7 +137,10 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    this.watsonxLimiter = new Bottleneck({
+  }
+
+  private createWatsonxLimiter(): Bottleneck {
+    return new Bottleneck({
       maxConcurrent: 8,
       minTime: 50,
       reservoir: 20,
@@ -119,8 +150,6 @@ export class TranslationService {
       strategy: Bottleneck.strategy.OVERFLOW,
       timeout: this.OPERATION_TIMEOUT,
     });
-    setInterval(() => this.checkLimiterHealth(), 30_000);
-    setInterval(() => this.checkJobTimeouts(), 60_000);
   }
 
   /**
@@ -166,6 +195,33 @@ export class TranslationService {
       : this.limiter;
   }
 
+  private isLimiterStoppedError(error: unknown): boolean {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return errorMessage.includes("has been stopped and cannot accept new jobs");
+  }
+
+  private async scheduleOnActiveLimiter<T>(
+    operationName: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const scheduleOptions = { expiration: 15_000, priority: 5 } as const;
+
+    try {
+      return await this.getActiveLimiter().schedule(scheduleOptions, operation);
+    } catch (error) {
+      if (!this.isLimiterStoppedError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `Limiter was stopped while scheduling ${operationName}. Recreating limiter and retrying once.`,
+      );
+      this.resetLimiter();
+
+      return this.getActiveLimiter().schedule(scheduleOptions, operation);
+    }
+  }
+
   /**
    * Process translations in parallel with efficient batching
    * @param items Items to translate
@@ -179,6 +235,7 @@ export class TranslationService {
     batchSize = this.MAX_BATCH_SIZE,
     _concurrencyLimit = this.CONCURRENCY_LIMIT,
   ): Promise<BatchProcessResult> {
+    void _concurrencyLimit;
     const results: BatchProcessResult = { success: 0, failure: 0, dropped: 0 };
     const chunks: T[][] = [];
 
@@ -190,20 +247,19 @@ export class TranslationService {
       const chunk = chunks[chunkIndex];
 
       const processingPromises = chunk.map((item) =>
-        this.getActiveLimiter()
-          .schedule({ expiration: 15_000, priority: 5 }, () =>
-            batchProcessor(item),
-          )
-          .catch((error) => {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes("dropped")) {
-              results.dropped++;
-            } else {
-              results.failure++;
-            }
-            return false;
-          }),
+        this.scheduleOnActiveLimiter(
+          `processBatchesInParallel-${String(chunkIndex)}`,
+          () => batchProcessor(item),
+        ).catch((error) => {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes("dropped")) {
+            results.dropped++;
+          } else {
+            results.failure++;
+          }
+          return false;
+        }),
       );
 
       const chunkResults = await Promise.all(processingPromises);
@@ -656,29 +712,42 @@ export class TranslationService {
    * Reset the limiter if it appears to be stalled
    */
   private resetLimiter(): void {
+    if (this.isResettingLimiter) {
+      return;
+    }
+
     try {
+      this.isResettingLimiter = true;
       this.logger.warn(
-        "Resetting bottleneck limiter due to potential stalled state",
+        "Recreating translation limiters due to potential stalled/stopped state",
       );
 
-      const limiter = this.getActiveLimiter();
-      void limiter.stop({ dropWaitingJobs: false }).then(() => {
-        limiter.updateSettings({
-          maxConcurrent: 25,
-          minTime: 10,
-          reservoir: 100,
-          reservoirRefreshInterval: 10_000,
-          reservoirRefreshAmount: 100,
-          highWater: 2000,
-          strategy: Bottleneck.strategy.LEAK,
-          timeout: 30_000,
+      const previousDefaultLimiter = this.limiter;
+      const previousWatsonxLimiter = this.watsonxLimiter;
+
+      this.limiter = this.createDefaultLimiter();
+      this.watsonxLimiter = this.createWatsonxLimiter();
+
+      void previousDefaultLimiter
+        .stop({ dropWaitingJobs: true })
+        .catch(() => null)
+        .finally(() => {
+          void previousDefaultLimiter.disconnect().catch(() => null);
         });
-        this.logger.log("Bottleneck limiter has been reset");
-      });
+      void previousWatsonxLimiter
+        .stop({ dropWaitingJobs: true })
+        .catch(() => null)
+        .finally(() => {
+          void previousWatsonxLimiter.disconnect().catch(() => null);
+        });
+
+      this.logger.log("Translation limiters were recreated");
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Error resetting limiter: ${errorMessage}`);
+    } finally {
+      this.isResettingLimiter = false;
     }
   }
 
@@ -816,6 +885,7 @@ export class TranslationService {
     maxAttempts = this.MAX_RETRY_ATTEMPTS,
     _jobId?: number,
   ): Promise<T> {
+    void _jobId;
     let attempts = 0;
     const operationId = `${operationName}-${Date.now()}`;
 
@@ -878,6 +948,7 @@ export class TranslationService {
    * Handle stuck operations by resetting limiter if needed
    */
   private handleStuckOperation(_operationName: string): void {
+    void _operationName;
     this.operationStats.consecutiveFailures++;
     this.operationStats.lastFailureTime = Date.now();
 
@@ -957,29 +1028,6 @@ export class TranslationService {
       return;
     }
     tracker.languageCompleted++;
-  }
-
-  /**
-   * Mark an item as completed in the progress tracker
-   */
-  private incrementCompletedItems(tracker: ProgressTracker | undefined): void {
-    if (!tracker) {
-      return;
-    }
-    tracker.completedItems++;
-  }
-
-  /**
-   * Set the current item index in the progress tracker
-   */
-  private setCurrentItemIndex(
-    tracker: ProgressTracker | undefined,
-    index: number,
-  ): void {
-    if (!tracker) {
-      return;
-    }
-    tracker.currentItemIndex = index;
   }
 
   /**
@@ -1103,6 +1151,11 @@ export class TranslationService {
       ) * languageCodes.length;
 
     for (const question of questions) {
+      const questionSourceLang = await this.llmFacadeService.getLanguageCode(
+        question.question,
+        assignmentId,
+      );
+
       for (const lang of languageCodes) {
         await this.generateAndStoreTranslation(
           assignmentId,
@@ -1110,10 +1163,7 @@ export class TranslationService {
           null,
           question.question,
           question.choices,
-          await this.llmFacadeService.getLanguageCode(
-            question.question,
-            assignmentId,
-          ),
+          questionSourceLang,
           lang,
         );
         processedItems++;
@@ -1130,6 +1180,11 @@ export class TranslationService {
       }
 
       for (const variant of question.variants) {
+        const variantSourceLang = await this.llmFacadeService.getLanguageCode(
+          variant.variantContent,
+          assignmentId,
+        );
+
         for (const lang of languageCodes) {
           await this.generateAndStoreTranslation(
             assignmentId,
@@ -1137,10 +1192,7 @@ export class TranslationService {
             variant.id,
             variant.variantContent,
             variant.choices,
-            await this.llmFacadeService.getLanguageCode(
-              variant.variantContent,
-              assignmentId,
-            ),
+            variantSourceLang,
             lang,
           );
           processedItems++;
@@ -1286,6 +1338,7 @@ export class TranslationService {
           progress: `Assignment with id ${assignmentId} not found`,
           percentage: progressRange?.start || 0,
         });
+        this.cleanupCancelledJob(jobId);
       }
       throw new NotFoundException(
         `Assignment with id ${assignmentId} not found`,
@@ -1607,6 +1660,9 @@ export class TranslationService {
       );
 
       if (missingLanguages.length === 0) {
+        if (hasValidJobId) {
+          this.cleanupCancelledJob(jobId);
+        }
         return;
       }
     }
@@ -1724,19 +1780,28 @@ export class TranslationService {
     originalChoices: Choice[] | string | null | any,
     sourceLanguage: string,
     targetLanguages: string[],
-  ): Promise<{ success: number; failure: number }> {
+  ): Promise<{
+    success: number;
+    failure: number;
+    successfulLanguages: string[];
+    failedLanguages: string[];
+  }> {
     if (!targetLanguages || targetLanguages.length === 0) {
-      return { success: 0, failure: 0 };
+      return {
+        success: 0,
+        failure: 0,
+        successfulLanguages: [],
+        failedLanguages: [],
+      };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     const parsedChoices = this.parseChoices(originalChoices);
 
-    // Fan out all LLM translation calls in parallel, honouring the limiter
     const settled = await Promise.allSettled(
       targetLanguages.map((lang) =>
-        this.getActiveLimiter().schedule(
-          { expiration: 15_000, priority: 5 },
+        this.scheduleOnActiveLimiter(
+          `translateContentToLanguages-${String(questionId)}-${lang}`,
           () =>
             this.generateTranslationForLanguage(
               assignmentId,
@@ -1750,10 +1815,11 @@ export class TranslationService {
       ),
     );
 
-    // Collect successful rows for the batch write
     const rows: Prisma.TranslationCreateManyInput[] = [];
     let success = 0;
     let failure = 0;
+    const successfulLanguages: string[] = [];
+    const failedLanguages: string[] = [];
 
     for (const [index, result] of settled.entries()) {
       const lang = targetLanguages[index];
@@ -1771,6 +1837,7 @@ export class TranslationService {
           ),
         });
         success++;
+        successfulLanguages.push(lang);
       } else {
         const reason =
           result.reason instanceof Error
@@ -1782,15 +1849,25 @@ export class TranslationService {
           } to ${lang}: ${reason}`,
         );
         failure++;
+        failedLanguages.push(lang);
       }
     }
 
-    // Single batch write — one round-trip to the DB regardless of language count
     if (rows.length > 0) {
-      await this.prisma.translation.createMany({ data: rows });
+      await this.prisma.$transaction(async (tx) => {
+        await tx.translation.deleteMany({
+          where: {
+            questionId,
+            variantId,
+            languageCode: { in: successfulLanguages },
+          },
+        });
+
+        await tx.translation.createMany({ data: rows });
+      });
     }
 
-    return { success, failure };
+    return { success, failure, successfulLanguages, failedLanguages };
   }
 
   /**
@@ -1805,7 +1882,6 @@ export class TranslationService {
     sourceLanguage: string,
     targetLanguage: string,
   ): Promise<{ translatedText: string; translatedChoices: Choice[] | null }> {
-    // Same-language shortcut — no LLM call needed
     if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
       return { translatedText: originalText, translatedChoices: parsedChoices };
     }
@@ -1825,7 +1901,7 @@ export class TranslationService {
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        return originalText;
+        throw error;
       }),
 
       parsedChoices && parsedChoices.length > 0
@@ -2068,10 +2144,9 @@ export class TranslationService {
               const errorMessage =
                 error instanceof Error ? error.message : String(error);
               this.logger.error(
-                `Failed to translate ${field}: ${errorMessage}`,
+                `Failed to translate ${field} for assignment ${assignment.id} to ${lang}: ${errorMessage}`,
               );
-              translatedData[field] = source;
-              return { field, translated: source };
+              throw error;
             }),
         );
       } else {
@@ -2179,7 +2254,7 @@ export class TranslationService {
             untranslatedText: originalText,
             untranslatedChoices: this.prepareJsonValue(parsedChoices),
             translatedText: originalText,
-            translatedChoices: this.prepareJsonValue(originalChoices),
+            translatedChoices: this.prepareJsonValue(parsedChoices),
           },
         });
       } catch (createError) {
@@ -2201,6 +2276,7 @@ export class TranslationService {
     const translationPromises: Array<Promise<any>> = [];
     let translatedText: string = originalText;
     let translatedChoices: Choice[] | null = parsedChoices;
+    let textTranslationFailed = false;
 
     translationPromises.push(
       this.executeWithOptimizedRetry(
@@ -2220,9 +2296,9 @@ export class TranslationService {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.error(
-            `Failed to translate question text: ${errorMessage}`,
+            `Failed to translate question text for question ${questionId} to ${targetLanguage}: ${errorMessage}`,
           );
-          return originalText;
+          textTranslationFailed = true;
         }),
     );
 
@@ -2248,14 +2324,22 @@ export class TranslationService {
           .catch((error: unknown) => {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to translate choices: ${errorMessage}`);
-            return parsedChoices;
+            this.logger.error(
+              `Failed to translate choices for question ${questionId} to ${targetLanguage}: ${errorMessage}`,
+            );
           }),
       );
     }
 
     try {
       await Promise.all(translationPromises);
+
+      if (textTranslationFailed) {
+        this.logger.warn(
+          `Skipping translation row for question ${questionId} in ${targetLanguage}: text translation failed`,
+        );
+        return;
+      }
 
       try {
         await this.prisma.translation.create({

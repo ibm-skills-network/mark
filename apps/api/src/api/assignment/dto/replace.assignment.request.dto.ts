@@ -150,4 +150,24 @@ export class ReplaceAssignmentRequestDto {
   @IsDefined()
   @IsArray()
   questionOrder: number[];
+
+  @ApiProperty({
+    description: "Require learners to answer all questions before submitting.",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireAllQuestions?: boolean;
+
+  @ApiProperty({
+    description:
+      "Question IDs that are optional when require all questions is enabled.",
+    type: [Number],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  optionalQuestionIds?: number[];
 }

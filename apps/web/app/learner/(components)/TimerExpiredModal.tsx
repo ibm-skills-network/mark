@@ -5,9 +5,8 @@ import { type ComponentPropsWithoutRef, type FC } from "react";
 
 type Props = ComponentPropsWithoutRef<"div">;
 
-const TimerExpiredModal: FC<Props> = (props) => {
+const TimerExpiredModal: FC<Props> = () => {
   const pathname = usePathname();
-  const {} = props;
 
   const activeAssignmentId = useAssignmentDetails(
     (state) => state.assignmentDetails?.id,

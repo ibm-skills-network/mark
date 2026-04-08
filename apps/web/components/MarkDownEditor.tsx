@@ -11,7 +11,6 @@ import "quill/dist/quill.snow.css";
 import "highlight.js/styles/vs2015.css";
 
 import { cn } from "@/lib/strings";
-import { getWordCount } from "@/lib/utils";
 import hljs from "highlight.js";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
@@ -32,7 +31,6 @@ const MarkdownEditor: React.FC<Props> = ({
   maxWords,
   maxCharacters,
   placeholder = "Write your question here...",
-  allowCopy = true,
 }) => {
   const quillRef = useRef<HTMLDivElement>(null);
   const [quillInstance, setQuillInstance] = useState<any>(null);

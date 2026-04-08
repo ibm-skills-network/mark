@@ -10,7 +10,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, QuestionType } from "@prisma/client";
+import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -192,7 +192,11 @@ export class QuestionResponseService {
     for (const q of questions) {
       for (const depId of q.gradingContextQuestionIds ?? []) {
         if (questionIds.has(depId)) {
-          adj.get(depId)!.push(q.id);
+          const dependentQuestions = adj.get(depId);
+          if (!dependentQuestions) {
+            continue;
+          }
+          dependentQuestions.push(q.id);
           inDegree.set(q.id, (inDegree.get(q.id) ?? 0) + 1);
         }
       }
@@ -204,7 +208,10 @@ export class QuestionResponseService {
     const sorted: number[] = [];
 
     while (queue.length > 0) {
-      const u = queue.shift()!;
+      const u = queue.shift();
+      if (u === undefined) {
+        continue;
+      }
       sorted.push(u);
 
       for (const v of adj.get(u) ?? []) {
@@ -775,9 +782,8 @@ export class QuestionResponseService {
               content: content.body,
               isFunctional: content.isFunctional,
             });
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
+          } catch {
+            // Ignore URL fetch failures while building learner context.
           }
         }
 
@@ -861,9 +867,7 @@ export class QuestionResponseService {
     if (typeof field === "string") {
       try {
         return JSON.parse(field);
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+      } catch {
         return null;
       }
     }
@@ -1006,9 +1010,8 @@ export class QuestionResponseService {
                 isFunctional: true,
               };
             }
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
+          } catch {
+            // Ignore HTTP parsing failures and fall back to an empty response.
           }
         }
 

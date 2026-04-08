@@ -24,7 +24,7 @@ function Component(props: Props) {
         <option value={3}>3</option>
         <option value={4}>4</option>
         <option value={5}>5</option>
-        <option value={-1}>unlimited</option>
+        <option value={-1}>Unlimited</option>
       </select>
     </div>
   );

@@ -1,8 +1,7 @@
 import { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
-import { useLearnerStore, useLearnerOverviewStore } from "@/stores/learner";
+import { useLearnerStore } from "@/stores/learner";
 import { useState, type ComponentPropsWithoutRef } from "react";
-import { useAutoSaveResponse } from "@/hooks/use-auto-save-response";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   question: QuestionStore;
@@ -11,11 +10,10 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 
 function URLQuestion(props: Props) {
   const { className, question, onUrlChange } = props;
-  const [setURLResponse, activeAttemptId] = useLearnerStore((state) => [
+  const [setURLResponse] = useLearnerStore((state) => [
     state.setURLResponse,
     state.activeAttemptId,
   ]);
-  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const { id, learnerUrlResponse: url } = question;
   const [validURL, setValidURL] = useState<boolean>(true);
 

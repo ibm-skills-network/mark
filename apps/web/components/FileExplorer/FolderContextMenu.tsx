@@ -4,7 +4,6 @@ import {
   IconFolderPlus,
   IconClipboard,
   IconFolderX,
-  IconFolderUp,
   IconUpload,
 } from "@tabler/icons-react";
 

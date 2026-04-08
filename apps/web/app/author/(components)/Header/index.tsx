@@ -2,14 +2,13 @@
 
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
-import { useChangesSummary } from "@/app/Helpers/checkDiff";
 import { useChatbot } from "@/hooks/useChatbot";
 import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
 import Modal from "@/components/Modal";
+import Dropdown from "@/components/Dropdown";
 import ProgressBar, { JobStatus } from "@/components/ProgressBar";
-import Tooltip from "@/components/Tooltip";
 import {
   Assignment,
   Choice,
@@ -21,20 +20,27 @@ import {
 } from "@/config/types";
 import { extractAssignmentId } from "@/lib/strings";
 import {
+  DEFAULT_UI_LANGUAGE,
+  getStoredUiLanguage,
+  isSupportedUiLanguage,
+  setStoredUiLanguage,
+} from "@/lib/ui-language";
+import {
   getAssignment,
   getUser,
   publishAssignment,
   subscribeToJobStatus,
 } from "@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
+import languages from "@/public/languages.json";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BarChart3 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestionsReady";
 import { Nav } from "./Nav";
@@ -79,8 +85,20 @@ function normalizeAssignment(assignment: Assignment): Assignment {
 function AuthorHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isOpen: isChatbotOpen } = useChatbot();
   const assignmentId = extractAssignmentId(pathname);
+  const [uiLanguage, setUiLanguage] = useState<string>(DEFAULT_UI_LANGUAGE);
+  const languageOptions = useMemo(
+    () =>
+      [...languages]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((language) => ({
+          value: language.code,
+          label: language.name,
+        })),
+    [],
+  );
   const [currentStepId, setCurrentStepId] = useState<number>(0);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
   const setUserRole = useMarkChatStore((s) => s.setUserRole);
@@ -143,6 +161,8 @@ function AuthorHeader() {
     updatedAt,
     numberOfQuestionsPerAttempt,
     questionControls,
+    requireAllQuestions,
+    optionalQuestionIds,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
     state.retakeAttemptCoolDownMinutes,
@@ -156,6 +176,8 @@ function AuthorHeader() {
     state.updatedAt,
     state.numberOfQuestionsPerAttempt,
     state.questionControls,
+    state.requireAllQuestions,
+    state.optionalQuestionIds,
   ]);
   const [
     showSubmissionFeedback,
@@ -184,7 +206,6 @@ function AuthorHeader() {
   const deleteAssignmentFeedbackConfigStore = useAssignmentFeedbackConfig(
     (state) => state.deleteStore,
   );
-  const changesSummary = useChangesSummary();
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
@@ -277,6 +298,8 @@ function AuthorHeader() {
         updatedAt: newAssignment.updatedAt,
         showQuestions: newAssignment.showQuestions,
         showSubmissionFeedback: newAssignment.showSubmissionFeedback,
+        requireAllQuestions: newAssignment.requireAllQuestions,
+        optionalQuestionIds: newAssignment.optionalQuestionIds,
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
@@ -341,6 +364,7 @@ function AuthorHeader() {
         authorSafeAssignment,
       );
       const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
@@ -358,6 +382,7 @@ function AuthorHeader() {
         updatedAt: authorStoreUpdatedAt,
         ...cleanedAssignmentConfigData
       } = mergedAssignmentConfigData;
+      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
         ...cleanedAssignmentConfigData,
       });
@@ -370,6 +395,7 @@ function AuthorHeader() {
         updatedAt: assignmentFeedbackUpdatedAt,
         ...cleanedAssignmentFeedbackData
       } = mergedAssignmentFeedbackData;
+      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
         ...cleanedAssignmentFeedbackData,
       });
@@ -407,13 +433,7 @@ function AuthorHeader() {
 
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
-      const {
-        description,
-        publishImmediately,
-        versionNumber,
-        updateExisting,
-        afterPublish,
-      } = event.detail;
+      const { description, publishImmediately, afterPublish } = event.detail;
 
       const originalAfterPublish = afterPublish;
 
@@ -426,7 +446,7 @@ function AuthorHeader() {
             originalAfterPublish();
           }
         })
-        .catch((error) => {
+        .catch(() => {
           toast.error("Failed to publish version through header");
         });
     };
@@ -539,6 +559,8 @@ function AuthorHeader() {
       showAssignmentScore,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
+      requireAllQuestions,
+      optionalQuestionIds,
       questionControls,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)
@@ -632,16 +654,6 @@ function AuthorHeader() {
     }
   }
 
-  const handleSyncWithLatestPublishedVersion = async () => {
-    if (changesSummary !== "No changes detected.") {
-      setShowAreYouSureModal(true);
-      return;
-    } else {
-      await SyncAssignment();
-      toast.success("Synced with latest published version.");
-    }
-  };
-
   const handleConfirmSync = async () => {
     deleteAuthorStore();
     deleteAssignmentConfigStore();
@@ -696,6 +708,36 @@ function AuthorHeader() {
     setDraftName("");
   };
 
+  useEffect(() => {
+    const languageFromQuery = searchParams.get("uiLang");
+    if (isSupportedUiLanguage(languageFromQuery)) {
+      setUiLanguage(languageFromQuery);
+      setStoredUiLanguage(languageFromQuery);
+      return;
+    }
+
+    const storedLanguage = getStoredUiLanguage();
+    setUiLanguage(storedLanguage || DEFAULT_UI_LANGUAGE);
+  }, [searchParams]);
+
+  const handleChangeUiLanguage = (selectedLanguage: string) => {
+    if (!isSupportedUiLanguage(selectedLanguage)) return;
+    if (selectedLanguage === uiLanguage) return;
+
+    setUiLanguage(selectedLanguage);
+    setStoredUiLanguage(selectedLanguage);
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (selectedLanguage === DEFAULT_UI_LANGUAGE) {
+      params.delete("uiLang");
+    } else {
+      params.set("uiLang", selectedLanguage);
+    }
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  };
+
   return (
     <>
       <div
@@ -723,6 +765,15 @@ function AuthorHeader() {
             />
 
             <div className="flex flex-wrap items-center md:ml-auto gap-2 sm:gap-4 mt-2 md:mt-0 ml-auto">
+              <div className="w-40 sm:w-52">
+                <Dropdown
+                  items={languageOptions}
+                  selectedItem={uiLanguage}
+                  setSelectedItem={handleChangeUiLanguage}
+                  placeholder="UI language"
+                  disableUiTranslation={true}
+                />
+              </div>
               <CheckLearnerSideButton
                 disabled={!questionsAreReadyToBePublished}
               />
