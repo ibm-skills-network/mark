@@ -2,434 +2,179 @@
 
 This guide covers end-to-end testing with Playwright for the Mark platform.
 
----
-
 ## Quick Start
 
-### 1. Install Playwright Browsers
-
-First time only, install Playwright browser binaries:
+Install Playwright browser binaries the first time:
 
 ```bash
 yarn playwright:install
 ```
 
-This downloads Chromium, Firefox, and WebKit browsers (~300MB). Only needs to be run once.
-
-### 2. Setup Test Environment
-
-Before running tests for the first time, create test assignments:
+Prepare the Playwright setup state:
 
 ```bash
 yarn test:setup
 ```
 
-This will:
-
-- Wait for the API server to be ready (must already be running via `yarn dev`)
-- Create two test assignments:
-  - **Learner Assignment** (ID cached) - Pre-populated with questions for learner tests
-  - **Author Assignment** (ID cached) - Empty assignment for authoring workflow tests
-- Cache assignment IDs in `tests/playwright/.cache/assignments.json`
-
-The cache file ensures tests use consistent assignment IDs across runs.
-
-### 3. Run Tests
-
-Run tests by role:
+Run the local default suite:
 
 ```bash
-# Run only learner tests
+yarn test:e2e
+```
+
+Useful variants:
+
+```bash
+# Full browser matrix
+yarn test:e2e:all
+
+# Role-focused suites across the full matrix
+yarn playwright:author
 yarn playwright:learner
 
-# Run only author tests
-yarn playwright:author
-
-# Run all tests (both learner and author)
-yarn playwright
+# Raw Playwright still uses the full project matrix from playwright.config.ts
+yarn playwright test
 ```
 
----
+## Startup Model
 
-## Test Architecture
+Playwright owns the local E2E startup path through the `webServer` block in [playwright.config.ts](./playwright.config.ts).
 
-### Role-Based Testing
+On a cold start, `yarn start:e2e` does the following:
 
-Tests are organized by user role:
+- Runs shared preflight checks for dependencies, Docker/Postgres, Prisma generation, env validation, and port availability
+- Builds the web app with merged `dev.env` and `apps/web/.env.local`
+- Starts the API, API gateway, and web app in non-watch mode
+- Waits for the API and gateway readiness endpoints before handing control back to Playwright
+- Lets Playwright perform the final web URL availability check
 
-- **Learner Tests** (`tests/learner/`) - Test learner-facing features (taking assignments, viewing grades)
-- **Author Tests** (`tests/author/`) - Test author-facing features (creating assignments, configuring settings)
+On a warm local rerun, Playwright reuses an existing server when `http://localhost:3010` is already available.
 
-Each test file includes role-based skipping to ensure tests only run for their intended role:
+## Setup Project
 
-```typescript
-test.beforeEach(async ({ page }) => {
-  skipIfNotRole("learner"); // Skip if TEST_ROLE is set to "author"
-  await setAuthCookie(page, "learner");
-});
-```
+The `setup` Playwright project is responsible for preparing test state. It:
 
-### Authentication System
+- Creates or validates the cached learner and author assignments
+- Writes assignment metadata to `playwright/.cache/assignments.json`
+- Writes storage state files to `playwright/.auth/learner.json` and `playwright/.auth/author.json`
 
-Tests use cookie-based authentication:
+`yarn test:setup` and every suite that depends on the `setup` project use the same startup path. You do not need to run `yarn dev` first.
 
-1. **Test Helper**: `setAuthCookie(page, role)` sets an authentication cookie with the correct assignment ID for the role
-2. **Assignment IDs**: Automatically loaded from cache file (`tests/playwright/.cache/assignments.json`)
-3. **Mock Guard**: For local development, the mock guard in `apps/api-gateway/src/auth/jwt/cookie-based/mock.jwt.cookie.auth.guard.ts` is hard-coded with default values. Update the `assignmentId` in the mock guard to match either the learner or author assignment ID from the cache file.
+## Project Layout
 
-This approach allows:
+Playwright projects are defined in [playwright.config.ts](./playwright.config.ts):
 
-- Tests to authenticate with different roles and assignments via cookies
-- Normal local development to work with a hard-coded assignment ID
-- Role-based test isolation via `TEST_ROLE` environment variable
+- `setup`
+- `author-chromium`, `author-firefox`, `author-webkit`
+- `learner-chromium`, `learner-firefox`, `learner-webkit`
 
----
+The local default command intentionally runs only:
 
-## Cache File
+- `author-chromium`
+- `learner-chromium`
 
-The cache file is located at:
-
-```
-tests/playwright/.cache/assignments.json
-```
-
-Format:
-
-```json
-{
-  "learner": {
-    "id": 2309,
-    "name": "Playwright Assignment (Learner)",
-    "type": "AI_GRADED",
-    "groupId": "pw-group"
-  },
-  "author": {
-    "id": 2310,
-    "name": "Playwright Assignment (Author)",
-    "type": "AI_GRADED",
-    "groupId": "pw-group"
-  }
-}
-```
-
-The cache file persists between test runs. To reset:
-
-```bash
-# Delete cache and re-run setup
-rm tests/playwright/.cache/assignments.json
-yarn test:setup
-```
-
----
-
-## Running Tests
-
-### Basic Commands
-
-```bash
-# Run all tests
-yarn playwright
-
-# Run only learner tests
-yarn playwright:learner
-
-# Run only author tests
-yarn playwright:author
-
-# Run tests in headed mode (see browser)
-yarn playwright --headed
-
-# Run tests in debug mode
-yarn playwright --debug
-
-# Run specific test file
-yarn playwright tests/learner/learner-homepage.spec.ts
-
-# Run tests matching pattern
-yarn playwright --grep "assignment settings"
-```
-
-### Environment Variables
-
-Control which tests run using `TEST_ROLE`:
-
-```bash
-# Run only learner tests
-TEST_ROLE=learner yarn playwright
-
-# Run only author tests
-TEST_ROLE=author yarn playwright
-```
-
-### Browser Selection
-
-Run tests on specific browsers:
-
-```bash
-# Chrome only
-yarn playwright --project=chromium
-
-# Firefox only
-yarn playwright --project=firefox
-
-# WebKit only
-yarn playwright --project=webkit
-
-# Multiple browsers
-yarn playwright --project=chromium --project=firefox
-```
-
----
-
-## Test Reports
-
-### Viewing Reports
-
-After test runs, view HTML report:
-
-```bash
-yarn playwright show-report
-```
-
-The report includes:
-
-- Test results by browser
-- Screenshots on failure
-- Videos of test execution
-- Detailed error traces
-
-### Reports Location
-
-Reports are saved in `playwright-report/` (gitignored).
-
----
+The setup dependency is still included automatically.
 
 ## Writing Tests
 
-### Test Structure
+Tests should use the shared fixture from [tests/helpers/e2e-test.ts](./tests/helpers/e2e-test.ts). That fixture exposes cached assignment IDs and uses the per-project storage state prepared by the setup project.
 
-All tests follow this pattern:
+Example:
 
 ```typescript
-import { test, expect } from "@playwright/test";
-import { getLearnerAssignmentId } from "../helpers/assignment-helpers";
-import { skipIfNotRole, setAuthCookie } from "../helpers/role-helpers";
+import { test, expect } from "../helpers/e2e-test";
 
-test.describe("Feature Name", () => {
-  test.beforeEach(async ({ page }) => {
-    skipIfNotRole("learner"); // or "author"
-    await setAuthCookie(page, "learner"); // or "author"
-
-    const assignmentId = getLearnerAssignmentId(); // or getAuthorAssignmentId()
-    await page.goto(`/learner/${assignmentId}`);
+test.describe("Learner - Assignment Homepage", () => {
+  test.beforeEach(async ({ page, assignmentIds }) => {
+    await page.goto(`/learner/${assignmentIds.learner.id}?lang=en`);
   });
 
-  test("should do something", async ({ page }) => {
-    // Test assertions
+  test("shows the assignment title", async ({ page }) => {
+    await expect(
+      page.getByRole("heading", { name: "Playwright Assignment" }),
+    ).toBeVisible();
   });
 });
 ```
 
-### Helper Functions
+Keep tests organized under:
 
-#### `skipIfNotRole(role)`
+- `tests/author/`
+- `tests/learner/`
+- `tests/setup/`
 
-Skips test if `TEST_ROLE` environment variable doesn't match:
-
-```typescript
-skipIfNotRole("learner"); // Skip if TEST_ROLE=author
-skipIfNotRole("author"); // Skip if TEST_ROLE=learner
-```
-
-#### `setAuthCookie(page, role, options?)`
-
-Sets authentication cookie for the specified role:
-
-```typescript
-// Basic usage
-await setAuthCookie(page, "learner");
-await setAuthCookie(page, "author");
-
-// With custom options
-await setAuthCookie(page, "learner", {
-  userId: "custom@email.com",
-  groupId: "custom-group",
-});
-```
-
-#### `getLearnerAssignmentId()` / `getAuthorAssignmentId()`
-
-Returns assignment ID from cache:
-
-```typescript
-const assignmentId = getLearnerAssignmentId(); // 2309
-const authorAssignmentId = getAuthorAssignmentId(); // 2310
-```
-
-### Best Practices
-
-1. **Wait for Network**: Add waits for auto-save and network requests
-
-   ```typescript
-   await page.waitForTimeout(300); // After form changes
-   await page.waitForLoadState("networkidle"); // Before assertions
-   ```
-
-2. **Use Role-Based Helpers**: Always use `skipIfNotRole()` and `setAuthCookie()`
-
-   ```typescript
-   test.beforeEach(async ({ page }) => {
-     skipIfNotRole("learner");
-     await setAuthCookie(page, "learner");
-   });
-   ```
-
-3. **Handle Dialogs**: Check for confirmation dialogs
-
-   ```typescript
-   const confirmButton = page.getByRole("button", { name: "Confirm" });
-   if (await confirmButton.isVisible()) {
-     await confirmButton.click();
-   }
-   ```
-
-4. **Use Semantic Selectors**: Prefer role-based selectors
-
-   ```typescript
-   // Good
-   await page.getByRole("button", { name: "Save" }).click();
-   await page.getByRole("heading", { name: "Title" }).isVisible();
-
-   // Avoid
-   await page.locator("#save-btn").click();
-   await page.locator("h1.title").isVisible();
-   ```
-
----
-
-## Recording Tests
-
-Generate test code from browser interactions:
+## Useful Commands
 
 ```bash
-# Record new test
-npx playwright codegen http://localhost:3010/learner/2309
+# Show which projects/tests will run
+yarn test:e2e --list
+yarn test:e2e:all --list
 
-# Record and save to file
-npx playwright codegen http://localhost:3010/author/2310 \
-  --output=tests/author/new-test.spec.ts
+# Headed or debug runs through raw Playwright
+yarn playwright test --project=author-chromium --headed
+yarn playwright test --project=learner-chromium --debug
+
+# Single-file run
+yarn playwright test tests/learner/learner-homepage.spec.ts
+
+# Open the HTML report
+yarn playwright:report
 ```
 
-After recording:
+## Generated State
 
-1. Add `skipIfNotRole()` and `setAuthCookie()` to `beforeEach`
-2. Replace hardcoded IDs with `getLearnerAssignmentId()` / `getAuthorAssignmentId()`
-3. Add appropriate waits for network requests
-4. Update selectors to use semantic roles
+Playwright-generated local state lives under:
 
----
-
-## Troubleshooting
-
-### Tests Failing with "Element not visible"
-
-**Cause**: Race conditions - page loading or auto-save in progress
-
-**Solution**: Add waits before assertions
-
-```typescript
-await page.waitForLoadState("networkidle");
-await expect(element).toBeVisible();
+```text
+playwright/.cache/assignments.json
+playwright/.auth/author.json
+playwright/.auth/learner.json
 ```
 
-### Tests Running for Wrong Role
-
-**Cause**: Missing `skipIfNotRole()` or `setAuthCookie()`
-
-**Solution**: Ensure both are in `beforeEach`:
-
-```typescript
-test.beforeEach(async ({ page }) => {
-  skipIfNotRole("learner");
-  await setAuthCookie(page, "learner");
-});
-```
-
-### Tests Failing After Setup
-
-**Cause**: Cache file missing or corrupted
-
-**Solution**: Re-run setup
+To force a clean setup run:
 
 ```bash
-rm tests/playwright/.cache/assignments.json
+rm -rf playwright/.cache playwright/.auth
 yarn test:setup
 ```
 
-### Server Not Starting
+## Troubleshooting
 
-**Cause**: API server not running or health endpoint failing
+If browser binaries are missing:
 
-**Solution**: Check server logs and ensure `/health/readiness` returns 200:
+```bash
+yarn playwright:install
+```
+
+If startup fails before tests begin:
+
+- Check `dev.env` and `apps/web/.env.local`
+- Make sure Docker/Postgres is running
+- Make sure the configured ports are free
+
+If setup state looks stale:
+
+```bash
+rm -rf playwright/.cache playwright/.auth
+yarn test:setup
+```
+
+If you want to inspect readiness manually:
 
 ```bash
 curl http://localhost:4222/health/readiness
+curl http://localhost:8000/health/readiness
 ```
 
-### Inconsistent Test Results
+## CI
 
-**Cause**: Tests running too fast for auto-save
+GitHub Actions runs the explicit full-matrix suite:
 
-**Solution**: Add strategic waits after form changes:
-
-```typescript
-await page.getByPlaceholder("Enter value").fill("45");
-await page.waitForTimeout(300); // Wait for auto-save
+```bash
+yarn test:e2e:all
 ```
-
----
-
-## Configuration
-
-Playwright configuration is in `playwright.config.ts`:
-
-- **Base URL**: `http://localhost:3010`
-- **API Health Check**: `http://localhost:4222/health/readiness`
-- **Test Directory**: `tests/`
-- **Browsers**: Chromium, Firefox, WebKit
-- **Reports**: HTML, JSON
-- **Timeout**: 30s per test
-
-To modify configuration, edit `playwright.config.ts`.
-
----
-
-## CI/CD Integration
-
-Tests run automatically on pull requests via GitHub Actions.
-
-### CI Environment Variables
-
-The following variables are set in CI:
-
-- `CI=true` - Disables server reuse
-- `TEST_ROLE` - Controls which tests run (if role-specific workflow)
-
-### Running Tests in CI
-
-Tests run in headless mode by default. CI workflow:
-
-1. Start database
-2. Run migrations
-3. Seed database
-4. Run `yarn test:setup`
-5. Run `yarn playwright`
-6. Upload test reports as artifacts
-
----
 
 ## Additional Resources
 
 - [Playwright Documentation](https://playwright.dev/)
-- [SETUP.md](./SETUP.md) - Local development setup
-- [CONTRIBUTING.md](./docs/CONTRIBUTING.md) - Contribution guidelines
+- [SETUP.md](./SETUP.md)

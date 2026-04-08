@@ -19,13 +19,6 @@ import {
 
 type TestRole = "author" | "learner";
 
-type WaitForUrlOptions = {
-  label: string;
-  readinessPath?: string;
-  timeoutMs?: number;
-  isReady?: (status: number) => boolean;
-};
-
 type JwtPayload = {
   userID: string;
   role: TestRole;
@@ -38,7 +31,6 @@ type JwtPayload = {
   exp: number;
 };
 
-const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_RETURN_URL = "https://skills.network";
 const DEFAULT_LOCALE = "en";
 
@@ -106,38 +98,6 @@ function buildStorageState(
     ],
     origins: [],
   };
-}
-
-async function waitForUrlReady(
-  baseUrl: string,
-  {
-    label,
-    readinessPath,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    isReady = (status) => status >= 200 && status < 400,
-  }: WaitForUrlOptions,
-) {
-  const deadline = Date.now() + timeoutMs;
-  const targetUrl = readinessPath
-    ? new URL(readinessPath, baseUrl).toString()
-    : baseUrl;
-
-  console.log(`Waiting for ${label} at ${targetUrl}...`);
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(targetUrl);
-      if (isReady(response.status)) {
-        console.log(`✓ ${label} is ready`);
-        return;
-      }
-    } catch {
-      // Ignore until timeout.
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-  }
-
-  throw new Error(`Timed out waiting for ${label} at ${targetUrl}`);
 }
 
 function normalizeAssignment(
@@ -321,11 +281,6 @@ async function createAuthorAssignment(config: TestEnvironmentConfig) {
 export async function ensureTestAssignments(
   config = getTestEnvironmentConfig(),
 ) {
-  await waitForUrlReady(config.markApiBaseUrl, {
-    label: "Mark API",
-    readinessPath: "/health/readiness",
-  });
-
   const cachedAssignments = tryReadAssignmentsCache();
   let learnerAssignment = await validateLearnerAssignment(
     cachedAssignments?.learner,
@@ -397,34 +352,15 @@ function printSummary(
   console.log(`Auth states:`);
   console.log(`  ${getStorageStatePath("learner")}`);
   console.log(`  ${getStorageStatePath("author")}`);
-  console.log(`\nRun the suite with: yarn test:e2e\n`);
+  console.log(`\nRun the local suite with: yarn test:e2e`);
+  console.log(`Run the full matrix with: yarn test:e2e:all\n`);
 }
 
 export async function bootstrapPlaywrightState() {
   const config = getTestEnvironmentConfig();
-
-  await waitForUrlReady(config.gatewayBaseUrl, {
-    label: "API gateway",
-    readinessPath: "/health/readiness",
-  });
-  await waitForUrlReady(config.webBaseUrl, {
-    label: "web app",
-    isReady: (status) => status < 500,
-  });
-
   const assignments = await ensureTestAssignments(config);
   writeAuthStorageStates(assignments, config);
   printSummary(assignments, config);
 
-  return assignments;
-}
-
-export async function verifyPlaywrightState(
-  config = getTestEnvironmentConfig(),
-) {
-  ensurePlaywrightDirectories();
-
-  const assignments = await ensureTestAssignments(config);
-  writeAuthStorageStates(assignments, config);
   return assignments;
 }

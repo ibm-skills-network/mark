@@ -13,7 +13,6 @@ import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   CriteriaDto,
-  RubricDto,
   ScoringDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
@@ -604,7 +603,9 @@ export class TextGradingService implements ITextGradingService {
       { temperature: 0, top_p: 0 },
     );
 
-    const parsedResponse = await parser.parse(response);
+    const parsedResponse = GradingAttemptSchema.parse(
+      (await parser.parse(response)) as unknown,
+    );
 
     this.logger.info(
       `LLM grading result - Points: ${parsedResponse.totalScore}/${maxPossiblePoints}, ` +

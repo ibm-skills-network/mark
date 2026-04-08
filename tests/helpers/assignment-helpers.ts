@@ -152,7 +152,7 @@ export function getTestEnvironmentConfig(
   return {
     repoRoot,
     markApiBaseUrl:
-      process.env.PW_MARK_API_BASE_URL || `http://localhost:${apiPort}`,
+      process.env.PW_MARK_API_BASE_URL || `http://127.0.0.1:${apiPort}`,
     gatewayBaseUrl:
       process.env.PW_GATEWAY_BASE_URL ||
       process.env.API_GATEWAY_HOST ||

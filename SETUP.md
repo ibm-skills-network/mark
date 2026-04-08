@@ -198,13 +198,18 @@ To run end-to-end tests with Playwright:
 # First time: install Playwright browsers
 yarn playwright:install
 
-# Create test assignments
+# Prepare setup state using the Playwright setup project
 yarn test:setup
 
-# Run tests by role
-yarn playwright:learner  # Run only learner tests
-yarn playwright:author   # Run only author tests
-yarn playwright          # Run all tests
+# Local default: Chromium author + learner projects
+yarn test:e2e
+
+# Full browser matrix
+yarn test:e2e:all
+
+# Role-specific full-matrix runs
+yarn playwright:learner
+yarn playwright:author
 ```
 
 **Note**: `yarn playwright:install` downloads browser binaries (~300MB). This is separate from `yarn install` and only needs to be run once.

@@ -1,14 +1,41 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "../helpers/e2e-test";
+
+async function dismissLanguageModalIfPresent(page: Page) {
+  const modalTitle = page.getByText(
+    "Please pick one of the available languages",
+  );
+  await modalTitle.waitFor({ state: "visible", timeout: 1_000 }).catch(() => {
+    return null;
+  });
+
+  if (!(await modalTitle.isVisible())) {
+    return;
+  }
+
+  const modal = page.locator("div.fixed.inset-0.z-50").filter({
+    has: modalTitle,
+  });
+  const confirmButton = modal.getByRole("button", { name: "Confirm" });
+  if (await confirmButton.isDisabled()) {
+    await modal
+      .getByRole("button", { name: /Select language|English/i })
+      .click();
+    await page
+      .locator("#dropdown-portal")
+      .getByText("English", { exact: true })
+      .click();
+  }
+
+  await expect(confirmButton).toBeEnabled();
+  await confirmButton.click();
+}
 
 test.describe("Learner - Assignment Homepage", () => {
   test.beforeEach(async ({ page, assignmentIds }) => {
     await page.goto(`/learner/${assignmentIds.learner.id}?lang=en`);
 
-    // Handle the initial confirmation dialog if present
-    const confirmButton = page.getByRole("button", { name: "Confirm" });
-    if (await confirmButton.isVisible()) {
-      await confirmButton.click();
-    }
+    await dismissLanguageModalIfPresent(page);
   });
 
   test("should display assignment title and header", async ({ page }) => {

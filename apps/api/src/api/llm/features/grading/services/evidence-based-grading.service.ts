@@ -800,11 +800,13 @@ LANGUAGE: {language}
     const sanitized = this.sanitizeJsonResponse(response);
 
     try {
-      return await parser.parse(sanitized);
+      const parsed = (await parser.parse(sanitized)) as unknown;
+      return EvidenceOutputSchema.parse(parsed);
     } catch (parseError) {
       const extracted = this.extractJsonPayload(sanitized);
       if (extracted && extracted !== sanitized) {
-        return await parser.parse(extracted);
+        const parsed = (await parser.parse(extracted)) as unknown;
+        return EvidenceOutputSchema.parse(parsed);
       }
       throw parseError;
     }

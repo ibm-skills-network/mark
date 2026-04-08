@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
-if (process.env.NODE_ENV === "production") {
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.INSTANA_ENABLED !== "false"
+) {
   const instana = require("@instana/collector");
   instana({
     level: "warn",

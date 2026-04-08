@@ -16,9 +16,9 @@ jobs:
     - name: Install dependencies
       run: npm install -g yarn && yarn
     - name: Install Playwright Browsers
-      run: yarn playwright install --with-deps
+      run: yarn playwright:install
     - name: Run Playwright tests
-      run: yarn playwright test
+      run: yarn test:e2e:all
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:

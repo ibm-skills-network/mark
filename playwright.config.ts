@@ -1,5 +1,6 @@
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import { getTestEnvironmentConfig } from "./tests/helpers/assignment-helpers";
 
 /**
  * Read environment variables from file.
@@ -8,6 +9,8 @@ import { defineConfig, devices } from "@playwright/test";
 // import dotenv from 'dotenv';
 // import path from 'path';
 // dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+const testEnvironment = getTestEnvironmentConfig();
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -34,7 +37,7 @@ export default defineConfig({
   reporter: "html",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    baseURL: "http://localhost:3010",
+    baseURL: testEnvironment.webBaseUrl,
 
     /* Base URL to use in actions like `await page.goto('')`. */
     // baseURL: 'http://localhost:3000',
@@ -88,9 +91,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: "yarn dev:e2e",
-    url: "http://localhost:3010",
-    timeout: 120_000,
+    command: "yarn start:e2e",
+    url: testEnvironment.webBaseUrl,
+    timeout: 300_000,
     reuseExistingServer: !process.env.CI,
   },
 });
