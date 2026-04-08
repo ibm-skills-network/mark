@@ -80,6 +80,53 @@ export function waitForBridge(maxWait = 10000) {
  * @param {array} args - The arguments to pass to the operation
  * @returns {Promise} - A promise that resolves with the result of the operation
  */
+const DEFAULT_OPERATION_TIMEOUT_MS = 10000;
+const AUTHOR_OPERATION_OPTIONS_KEY = "__authorStoreOperationOptions";
+
+function isOperationOptions(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof value[AUTHOR_OPERATION_OPTIONS_KEY]?.timeoutMs === "number"
+  );
+}
+
+function parseOperationCallArgs(args) {
+  if (args.length === 0) {
+    return {
+      operationArgs: [],
+      timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+    };
+  }
+
+  const lastArg = args[args.length - 1];
+  if (isOperationOptions(lastArg)) {
+    const timeoutMs = Math.max(
+      1,
+      Math.floor(lastArg[AUTHOR_OPERATION_OPTIONS_KEY].timeoutMs),
+    );
+
+    return {
+      operationArgs: args.slice(0, -1),
+      timeoutMs,
+    };
+  }
+
+  return {
+    operationArgs: args,
+    timeoutMs: DEFAULT_OPERATION_TIMEOUT_MS,
+  };
+}
+
+export function authorStoreOperationOptions(options) {
+  return {
+    [AUTHOR_OPERATION_OPTIONS_KEY]: {
+      timeoutMs: options?.timeoutMs ?? DEFAULT_OPERATION_TIMEOUT_MS,
+    },
+  };
+}
+
 export async function executeAuthorStoreOperation(operation, ...args) {
   if (typeof window === "undefined") {
     return Promise.reject(
@@ -94,11 +141,20 @@ export async function executeAuthorStoreOperation(operation, ...args) {
       return Promise.reject(new Error("Author store bridge not available"));
     }
 
+    const { operationArgs, timeoutMs } = parseOperationCallArgs(args);
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        window.removeEventListener("author-store-result", resultHandler);
+        reject(
+          new Error(`Operation ${operation} timed out after ${timeoutMs} ms`),
+        );
+      }, timeoutMs);
+
       const resultHandler = (e) => {
         if (e.detail.requestId === requestId) {
           window.removeEventListener("author-store-result", resultHandler);
+          clearTimeout(timeoutId);
           if (e.detail.result && e.detail.result.success) {
             resolve(e.detail.result);
           } else {
@@ -118,16 +174,11 @@ export async function executeAuthorStoreOperation(operation, ...args) {
         new CustomEvent("author-store-operation", {
           detail: {
             operation,
-            args,
+            args: operationArgs,
             requestId,
           },
         }),
       );
-
-      setTimeout(() => {
-        window.removeEventListener("author-store-result", resultHandler);
-        reject(new Error(`Operation ${operation} timed out after 10 seconds`));
-      }, 10000);
     });
   } catch (error) {
     return Promise.reject(error);
@@ -135,11 +186,11 @@ export async function executeAuthorStoreOperation(operation, ...args) {
 }
 
 /**
- * Create a new question
+ * Create a new question via AI generation
  * @param {string} questionType - Type of question
- * @param {string} questionText - Question text
- * @param {number} totalPoints - Total points
- * @param {array} options - Options for multiple choice questions
+ * @param {string} questionText - Prompt/objective for generation
+ * @param {number} totalPoints - Backward-compatible argument (ignored in AI mode)
+ * @param {array} options - Backward-compatible argument (ignored in AI mode)
  * @returns {Promise} - Promise that resolves with the result
  */
 export function createQuestion(
@@ -154,6 +205,7 @@ export function createQuestion(
     questionText,
     totalPoints,
     options,
+    authorStoreOperationOptions({ timeoutMs: 300000 }),
   );
 }
 
@@ -252,6 +304,7 @@ export function generateQuestionsFromObjectives(
     learningObjectives,
     questionTypes,
     count,
+    authorStoreOperationOptions({ timeoutMs: 300000 }),
   );
 }
 
@@ -361,6 +414,7 @@ export default {
   setQuestionTitle,
   showReportPreview,
   executeAuthorStoreOperation,
+  authorStoreOperationOptions,
   runAuthorOperation,
   waitForBridge,
 };

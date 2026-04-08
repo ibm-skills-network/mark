@@ -22,11 +22,13 @@ jest.mock("@/lib/shared", () => ({
 }));
 
 jest.mock("@/stores/learner", () => ({
-  getAssignmentIdFromURL: (...args: any[]) => mockGetAssignmentIdFromURL(...args),
+  getAssignmentIdFromURL: (...args: any[]) =>
+    mockGetAssignmentIdFromURL(...args),
 }));
 
 jest.mock("@/stores/author", () => {
-  const hook = (selector: (state: any) => unknown) => mockUseAuthorStore(selector);
+  const hook = (selector: (state: any) => unknown) =>
+    mockUseAuthorStore(selector);
   (hook as any).setState = (...args: any[]) => mockSetState(...args);
 
   return {
