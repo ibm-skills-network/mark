@@ -29,6 +29,11 @@ enum CorrectAnswerVisibility {
   ALWAYS /// Correct answers are always shown after submission
   ON_PASS /// Correct answers are only shown when learners pass the assignment
 }
+
+enum AssignmentFileStatus {
+  READY
+  FAILED
+}
 model GradingAudit {
   id                Int           @id @default(autoincrement())
   questionId        Int
@@ -272,6 +277,7 @@ model Assignment {
   AssignmentFeedback AssignmentFeedback[]
   RegradingRequest RegradingRequest[]
   Report Report[]
+  files AssignmentFile[]
   AssignmentTranslation AssignmentTranslation[]
   GradingAudit GradingAudit[]
 
@@ -282,6 +288,23 @@ model Assignment {
   versions AssignmentVersion[] @relation("AssignmentVersions")
   versionHistory VersionHistory[]
   drafts AssignmentDraft[]
+}
+
+model AssignmentFile {
+  id            Int                  @id @default(autoincrement())
+  assignmentId  Int
+  assignment    Assignment           @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  filename      String
+  mimeType      String
+  size          Int
+  storageKey    String
+  storageBucket String
+  status        AssignmentFileStatus @default(READY)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([assignmentId])
+  @@index([assignmentId, status])
 }
 
 /// The AssignmentVersion model represents a specific version of an assignment
