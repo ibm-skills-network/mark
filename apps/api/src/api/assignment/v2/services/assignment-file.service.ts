@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from "@nestjs/common";
 import { AssignmentFileStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { S3Service } from "src/api/files/services/s3.service";
@@ -43,20 +47,27 @@ export class AssignmentFileService {
       file: Express.Multer.File;
     }> = [];
 
-    for (const file of files) {
-      const key = this.generateStorageKey(assignmentId, file.originalname);
+    try {
+      for (const file of files) {
+        const key = this.generateStorageKey(assignmentId, file.originalname);
 
-      await this.s3Service.putObject({
-        Bucket: bucket,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-      });
+        await this.s3Service.putObject({
+          Bucket: bucket,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+        });
 
-      uploadedObjects.push({ bucket, key, file });
+        uploadedObjects.push({ bucket, key, file });
+      }
+
+      return { files: [] };
+    } catch (error) {
+      await this.cleanupUploadedObjects(uploadedObjects);
+      throw new InternalServerErrorException(
+        "Failed to upload assignment files",
+      );
     }
-
-    return { files: [] };
   }
 
   private generateStorageKey(assignmentId: number, filename: string): string {
@@ -66,10 +77,20 @@ export class AssignmentFileService {
 
   private toSafeFilename(filename: string): string {
     const sanitized = filename
-      .replace(/[/\\]/g, "-")
-      .replace(/[^\w.!'() -]/g, "_")
+      .replaceAll(/[/\\]/g, "-")
+      .replaceAll(/[^\w !'().-]/g, "_")
       .trim();
 
     return sanitized || "file";
+  }
+
+  private async cleanupUploadedObjects(
+    uploadedObjects: Array<{ bucket: string; key: string }>,
+  ): Promise<void> {
+    await Promise.allSettled(
+      uploadedObjects.map(({ bucket, key }) =>
+        this.s3Service.deleteObject({ Bucket: bucket, Key: key }),
+      ),
+    );
   }
 }
