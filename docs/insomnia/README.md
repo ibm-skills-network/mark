@@ -29,9 +29,11 @@ The automated suite only covers safe contract behavior:
 - malformed job request bodies
 - unsupported queue names
 - unsupported job names for every queue consumed by `apps/jobs`
+- dry-run translation fix job enqueueing
+- dry-run translation sweep enqueueing
 
-It intentionally does not execute successful jobs because those paths require
-real assignment, attempt, and admin data and may mutate staging or production.
+The positive-path coverage uses dry-run admin translation jobs so it exercises
+successful job creation without mutating staging or production assignment data.
 
 For CI, set `INSOMNIA_MARK_API_BASE_URL` and `INSOMNIA_JOB_QUEUE_SECRET` secrets.
 The workflow injects those values into the selected Insomnia environment at run

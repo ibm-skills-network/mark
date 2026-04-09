@@ -15,12 +15,16 @@ JOBS_LOG="$LOG_DIR/jobs.log"
 
 api_pid=""
 jobs_pid=""
+runtime_collection=""
 
 cleanup() {
   local exit_code=$?
 
   terminate_process "$api_pid"
   terminate_process "$jobs_pid"
+  if [ -n "$runtime_collection" ] && [ -f "$runtime_collection" ]; then
+    rm -f "$runtime_collection"
+  fi
 
   exit "$exit_code"
 }
@@ -199,6 +203,7 @@ trap cleanup EXIT INT TERM
 
 require_command inso "Install Inso CLI with: brew install --cask inso"
 require_command curl "Install curl and retry."
+require_command jq "Install jq and retry."
 
 if [ ! -f "$API_ENV_FILE" ]; then
   echo "Missing API env file: $API_ENV_FILE"
@@ -218,6 +223,23 @@ set +a
 API_PORT="${API_PORT:-4222}"
 API_BASE_URL="${API_BASE_URL:-http://localhost:$API_PORT}"
 API_READINESS_URL="$API_BASE_URL/health/readiness"
+
+runtime_collection="$(mktemp -t mark-job-microservice)"
+
+if ! jq -e --arg envName "$INSOMNIA_ENV" '.resources[] | select(._type == "environment" and .name == $envName)' "$COLLECTION_FILE" >/dev/null; then
+  echo "Unknown Insomnia environment: $INSOMNIA_ENV"
+  exit 1
+fi
+
+queue_header_value="${JOB_QUEUE_SECRET:-}" # pragma: allowlist secret
+
+jq \
+  --arg envName "$INSOMNIA_ENV" \
+  --arg baseUrl "$API_BASE_URL" \
+  --arg queueHeaderValue "$queue_header_value" \
+  '(.resources[] | select(._type == "environment" and .name == $envName) | .data.base_url) = $baseUrl
+   | (.resources[] | select(._type == "environment" and .name == $envName) | .data.job_queue_header_value) = $queueHeaderValue' \
+  "$COLLECTION_FILE" > "$runtime_collection"
 
 if lsof -Pi ":$API_PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
   echo "Port $API_PORT is already in use. Stop the existing API process before running yarn test:insomnia:jobs."
@@ -257,7 +279,7 @@ wait_for_log api "$API_LOG" "Connected to jobs worker" "$API_READY_TIMEOUT_SECON
 echo "Running Insomnia job microservice tests..."
 inso run test "Job Microservice" \
   --env "$INSOMNIA_ENV" \
-  --workingDir "$COLLECTION_FILE" \
+  --workingDir "$runtime_collection" \
   --ci \
   --bail \
   --requestTimeout "$INSOMNIA_REQUEST_TIMEOUT_MS"

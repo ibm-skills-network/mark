@@ -87,6 +87,24 @@ class FakeRedis {
     return this.strings.get(key) ?? null;
   }
 
+  async set(
+    key: string,
+    value: string,
+    exMode?: "EX",
+    ttlSeconds?: number,
+    nxFlag?: "NX",
+  ): Promise<string | null> {
+    const isNx = nxFlag === "NX";
+    if (isNx && this.strings.has(key)) {
+      return null; // NX: key already exists
+    }
+    this.strings.set(key, value);
+    if (exMode === "EX" && ttlSeconds !== undefined) {
+      this.ttls.set(key, ttlSeconds);
+    }
+    return "OK";
+  }
+
   async del(key: string): Promise<number> {
     const existed = this.strings.delete(key) || this.hashes.delete(key);
     this.ttls.delete(key);
@@ -373,6 +391,88 @@ describe("JobStateService", () => {
     expect(errors[0].message).toBe("Job missing-job not found.");
 
     subscription.unsubscribe();
+  });
+
+  // ─── Change 1: acquireActiveJobLock ──────────────────────────────────────
+
+  it("acquireActiveJobLock returns null and stores the temp id when the key is free", async () => {
+    const activeKey = "grading:user-1:assignment-5:attempt-10";
+    const tempId = "temp-uuid-abc";
+
+    const existingJobId = await service.acquireActiveJobLock(activeKey, tempId);
+
+    expect(existingJobId).toBeNull();
+    const activeKeyHash = hashActiveKey(activeKey);
+    expect(fakeRedis.strings.get(`mark:jobs:active:${activeKeyHash}`)).toBe(
+      tempId,
+    );
+    expect(fakeRedis.ttls.get(`mark:jobs:active:${activeKeyHash}`)).toBe(
+      24 * 60 * 60,
+    );
+  });
+
+  it("acquireActiveJobLock returns the existing jobId when the lock is already held", async () => {
+    const activeKey = "grading:user-2:assignment-5:attempt-20";
+    const firstTempId = "first-temp-uuid";
+    const secondTempId = "second-temp-uuid";
+
+    // First caller acquires the lock
+    const first = await service.acquireActiveJobLock(activeKey, firstTempId);
+    expect(first).toBeNull();
+
+    // Second caller — lock already held
+    const second = await service.acquireActiveJobLock(activeKey, secondTempId);
+    expect(second).toBe(firstTempId);
+  });
+
+  it("createJob with reservedId skips setting the active key pointer again", async () => {
+    const activeKey = "grading:user-3:assignment-7:attempt-30";
+    const tempId = "reserved-uuid";
+    const activeKeyHash = hashActiveKey(activeKey);
+    const activeRedisKey = `mark:jobs:active:${activeKeyHash}`;
+
+    // Simulate: acquireActiveJobLock already set the pointer
+    await service.acquireActiveJobLock(activeKey, tempId);
+    const ptrBefore = fakeRedis.strings.get(activeRedisKey);
+
+    const job = await service.createJob({
+      queueName: "mark.attempt",
+      jobName: "attempt-grade",
+      kind: "attempt-grading",
+      assignmentId: 7,
+      attemptId: 30,
+      userId: "user-3",
+      status: "Pending",
+      progress: "Queued",
+      activeKey,
+      reservedId: tempId,
+    });
+
+    // Job id equals the reserved id
+    expect(job.id).toBe(tempId);
+    // Active key pointer must NOT have been overwritten
+    expect(fakeRedis.strings.get(activeRedisKey)).toBe(ptrBefore);
+  });
+
+  it("createJob without reservedId sets the active key pointer normally", async () => {
+    const activeKey = "grading:user-4:assignment-9:attempt-40";
+    const activeKeyHash = hashActiveKey(activeKey);
+
+    const job = await service.createJob({
+      queueName: "mark.attempt",
+      jobName: "attempt-grade",
+      kind: "attempt-grading",
+      assignmentId: 9,
+      attemptId: 40,
+      userId: "user-4",
+      status: "Pending",
+      progress: "Queued",
+      activeKey,
+    });
+
+    expect(fakeRedis.strings.get(`mark:jobs:active:${activeKeyHash}`)).toBe(
+      job.id,
+    );
   });
 
   it("quits the shared Redis connection during module teardown", async () => {

@@ -602,4 +602,94 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       // In actual code, this triggers: if (isNaN(grade) || grade < 0 || grade > 1) throw Error
     });
   });
+
+  // ─── Change 4: authorComment bug fix ─────────────────────────────────────
+
+  describe("removeSensitiveData — authorComment always null (Change 4)", () => {
+    type QuestionLike = {
+      authorComment: string | null;
+      scoring?: { showRubricsToLearner?: boolean; rubrics?: unknown };
+      choices?: Array<{
+        points?: number;
+        isCorrect?: boolean;
+        feedback?: string;
+      }>;
+    };
+
+    const callRemoveSensitiveData = (
+      questions: QuestionLike[],
+      correctAnswerVisibility = "NEVER",
+      grade = 0,
+      passingGrade = 0,
+    ) =>
+      (
+        service as unknown as {
+          removeSensitiveData: (
+            questions: QuestionLike[],
+            assignment: { correctAnswerVisibility: string },
+            grade: number,
+            passingGrade: number,
+          ) => void;
+        }
+      ).removeSensitiveData(
+        questions,
+        { correctAnswerVisibility },
+        grade,
+        passingGrade,
+      );
+
+    it("sets authorComment to null for every question", () => {
+      const questions: QuestionLike[] = [
+        { authorComment: "Internal note only for graders" },
+        { authorComment: "Another internal note" },
+      ];
+
+      callRemoveSensitiveData(questions);
+
+      expect(questions[0].authorComment).toBeNull();
+      expect(questions[1].authorComment).toBeNull();
+    });
+
+    it("sets authorComment to null even when it was already null", () => {
+      const questions: QuestionLike[] = [{ authorComment: null }];
+
+      callRemoveSensitiveData(questions);
+
+      expect(questions[0].authorComment).toBeNull();
+    });
+
+    it("sets authorComment to null regardless of grade or passing threshold", () => {
+      const question: QuestionLike = { authorComment: "Should be hidden" };
+
+      // High grade — still must be null
+      callRemoveSensitiveData([question], "PASSING", 1, 0.5);
+      expect(question.authorComment).toBeNull();
+    });
+
+    it("does not expose rubrics when showRubricsToLearner is false", () => {
+      const question: QuestionLike = {
+        authorComment: "hidden",
+        scoring: {
+          showRubricsToLearner: false,
+          rubrics: { criterion: "fluency" },
+        },
+      };
+
+      callRemoveSensitiveData([question]);
+
+      expect(question.scoring?.rubrics).toBeUndefined();
+    });
+
+    it("preserves rubrics when showRubricsToLearner is true", () => {
+      const rubrics = { criterion: "fluency" };
+      const question: QuestionLike = {
+        authorComment: "hidden",
+        scoring: { showRubricsToLearner: true, rubrics },
+      };
+
+      callRemoveSensitiveData([question]);
+
+      expect(question.scoring?.rubrics).toBe(rubrics);
+    });
+  });
 });
