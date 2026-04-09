@@ -3,7 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from "@nestjs/common";
-import { AssignmentFileStatus } from "@prisma/client";
+import { AssignmentFile, AssignmentFileStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
@@ -61,8 +61,24 @@ export class AssignmentFileService {
         uploadedObjects.push({ bucket, key, file });
       }
 
-      return { files: [] };
-    } catch (error) {
+      const createdFiles = await this.prisma.$transaction(
+        uploadedObjects.map(({ bucket, key, file }) =>
+          this.prisma.assignmentFile.create({
+            data: {
+              assignmentId,
+              filename: file.originalname,
+              mimeType: file.mimetype || "application/octet-stream",
+              size: file.size,
+              storageKey: key,
+              storageBucket: bucket,
+              status: AssignmentFileStatus.READY,
+            },
+          }),
+        ),
+      );
+
+      return { files: createdFiles.map((file) => this.toResponse(file)) };
+    } catch {
       await this.cleanupUploadedObjects(uploadedObjects);
       throw new InternalServerErrorException(
         "Failed to upload assignment files",
@@ -92,5 +108,20 @@ export class AssignmentFileService {
         this.s3Service.deleteObject({ Bucket: bucket, Key: key }),
       ),
     );
+  }
+
+  private toResponse(file: AssignmentFile): AssignmentFileResponse {
+    return {
+      id: file.id,
+      assignmentId: file.assignmentId,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      size: file.size,
+      storageKey: file.storageKey,
+      storageBucket: file.storageBucket,
+      status: file.status,
+      createdAt: file.createdAt,
+      updatedAt: file.updatedAt,
+    };
   }
 }
