@@ -15,8 +15,10 @@ import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { authorAssignmentDetailsDTO } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
-import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import {
+  authorAssignmentDetailsDTO,
+  LearnerUpdateAssignmentAttemptRequestDto,
+} from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
   CreateQuestionResponseAttemptResponseDto,
@@ -120,7 +122,9 @@ export class QuestionResponseService {
         { inDegree, adj, nodesInCycle },
       );
       throw new InternalServerErrorException(
-        `A cycle was detected in the question dependencies: ${nodesInCycle.join(", ")}`,
+        `A cycle was detected in the question dependencies: ${nodesInCycle.join(
+          ", ",
+        )}`,
       );
     }
 
@@ -154,7 +158,8 @@ export class QuestionResponseService {
         );
       }
 
-      const question = questionMap.get(questionId)!;
+      const question = questionMap.get(questionId);
+      if (!question) continue;
       questionResponse.language = language;
 
       const assignmentContext = await this.getAssignmentContext(
@@ -211,6 +216,7 @@ export class QuestionResponseService {
     grade: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
   ): Promise<{ id: number; submitted: boolean; grade: number | null }> {
+    /* eslint-disable @typescript-eslint/no-unused-vars */
     const {
       responsesForQuestions: _r,
       authorQuestions: _aq,
@@ -220,6 +226,7 @@ export class QuestionResponseService {
       expiresAt: _ignoredExpiresAt,
       ...cleanedUpdateDto
     } = updateDto;
+    /* eslint-enable @typescript-eslint/no-unused-vars */
 
     // Read the current version before entering the write transaction
     const current = await this.prisma.assignmentAttempt.findUnique({
@@ -362,7 +369,9 @@ export class QuestionResponseService {
         { inDegree, adj, nodesInCycle },
       );
       throw new InternalServerErrorException(
-        `A cycle was detected in the question dependencies: ${nodesInCycle.join(", ")}`,
+        `A cycle was detected in the question dependencies: ${nodesInCycle.join(
+          ", ",
+        )}`,
       );
     }
 
@@ -394,7 +403,8 @@ export class QuestionResponseService {
         );
       }
 
-      const question = questionMap.get(questionId)!;
+      const question = questionMap.get(questionId);
+      if (!question) continue;
       questionResponse.language = language;
 
       const assignmentContext: {
