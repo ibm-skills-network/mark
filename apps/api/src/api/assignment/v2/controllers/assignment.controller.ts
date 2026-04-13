@@ -14,11 +14,15 @@ import {
   Query,
   Req,
   Sse,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
 import {
   ApiBody,
+  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiParam,
@@ -28,6 +32,7 @@ import {
   refs,
 } from "@nestjs/swagger";
 import { Request } from "express";
+import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
 import { AdminService } from "src/api/admin/admin.service";
@@ -56,6 +61,7 @@ import {
   UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
+import { AssignmentFileService } from "../services/assignment-file.service";
 import { AssignmentServiceV2 } from "../services/assignment.service";
 import { JobStatusServiceV2 } from "../services/job-status.service";
 import { QuestionService } from "../services/question.service";
@@ -114,6 +120,7 @@ export class AssignmentControllerV2 {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private readonly parentLogger: Logger,
     private readonly assignmentService: AssignmentServiceV2,
+    private readonly assignmentFileService: AssignmentFileService,
     private readonly questionService: QuestionService,
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
@@ -252,6 +259,44 @@ export class AssignmentControllerV2 {
       updatedAssignment,
       request.userSession.userId,
     );
+  }
+
+  @Post(":id/files")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @UseInterceptors(
+    FilesInterceptor("files", 20, {
+      storage: memoryStorage(),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
+  @ApiOperation({ summary: "Upload files for an assignment" })
+  @ApiConsumes("multipart/form-data")
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          items: {
+            type: "string",
+            format: "binary",
+          },
+        },
+      },
+      required: ["files"],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Files uploaded successfully",
+  })
+  async uploadAssignmentFiles(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.assignmentFileService.uploadAssignmentFiles(id, files);
   }
 
   /**

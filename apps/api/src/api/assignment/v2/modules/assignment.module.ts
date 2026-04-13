@@ -1,6 +1,7 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { AdminService } from "src/api/admin/admin.service";
+import { FilesModule } from "src/api/files/files.module";
 import { LlmModule } from "src/api/llm/llm.module";
 import { AdminVerificationService } from "src/auth/services/admin-verification.service";
 import { PrismaService } from "src/database/prisma.service";
@@ -10,6 +11,7 @@ import { VersionManagementController } from "../controllers/version-management.c
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
+import { AssignmentFileService } from "../services/assignment-file.service";
 import { AssignmentServiceV2 } from "../services/assignment.service";
 import { DraftManagementService } from "../services/draft-management.service";
 import { JobStatusServiceV2 } from "../services/job-status.service";
@@ -27,6 +29,7 @@ import { VersionManagementService } from "../services/version-management.service
     AssignmentServiceV2,
     VersionManagementService,
     DraftManagementService,
+    AssignmentFileService,
     QuestionService,
     ReportService,
     JobStatusServiceV2,
@@ -38,7 +41,7 @@ import { VersionManagementService } from "../services/version-management.service
     PrismaService,
     AdminService,
   ],
-  imports: [HttpModule, LlmModule],
+  imports: [HttpModule, LlmModule, FilesModule],
   exports: [
     AssignmentServiceV2,
     VersionManagementService,
