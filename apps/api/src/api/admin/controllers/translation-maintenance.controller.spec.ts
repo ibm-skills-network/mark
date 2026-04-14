@@ -28,7 +28,7 @@ describe("TranslationMaintenanceController", () => {
   } as any;
   let prisma: {
     assignment: { findUnique: jest.Mock; findMany: jest.Mock };
-    assignmentTranslation: { findMany: jest.Mock };
+    assignmentTranslation: { findMany: jest.Mock; groupBy: jest.Mock };
     question: { findMany: jest.Mock };
     translation: { deleteMany: jest.Mock };
     publishJob: { findUnique: jest.Mock };
@@ -60,7 +60,10 @@ describe("TranslationMaintenanceController", () => {
   beforeEach(async () => {
     prisma = {
       assignment: { findUnique: jest.fn(), findMany: jest.fn() },
-      assignmentTranslation: { findMany: jest.fn() },
+      assignmentTranslation: {
+        findMany: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
       question: { findMany: jest.fn() },
       translation: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
       publishJob: { findUnique: jest.fn() },
@@ -72,7 +75,23 @@ describe("TranslationMaintenanceController", () => {
       detectLanguage: jest.fn().mockResolvedValue("en"),
       translateContentToLanguages: jest
         .fn()
-        .mockResolvedValue({ success: 1, failure: 0 }),
+        .mockImplementation(
+          (
+            _assignmentId: number,
+            _questionId: number,
+            _variantId: number | null,
+            _text: string,
+            _choices: unknown,
+            _sourceLanguage: string,
+            targetLanguages: string[],
+          ) =>
+            Promise.resolve({
+              success: targetLanguages.length,
+              failure: 0,
+              successfulLanguages: targetLanguages,
+              failedLanguages: [],
+            }),
+        ),
     };
 
     jobStatusService = {
@@ -98,10 +117,6 @@ describe("TranslationMaintenanceController", () => {
       TranslationMaintenanceController,
     );
   });
-
-  // ---------------------------------------------------------------------------
-  // Async job handoff
-  // ---------------------------------------------------------------------------
 
   it("returns a job ID immediately without waiting for translations", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
@@ -165,10 +180,6 @@ describe("TranslationMaintenanceController", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // Version selection — must use currentVersion (active), not latest draft
-  // ---------------------------------------------------------------------------
-
   it("uses the active (current) version questions, not the most recently created version", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
@@ -203,7 +214,7 @@ describe("TranslationMaintenanceController", () => {
   it("falls back to base questions when there is no active version", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
-      currentVersion: null, // No active version
+      currentVersion: null,
     });
 
     prisma.question.findMany.mockResolvedValue([
@@ -225,10 +236,6 @@ describe("TranslationMaintenanceController", () => {
       1,
     );
   });
-
-  // ---------------------------------------------------------------------------
-  // Target language scoping — must always respect languageCodes filter
-  // ---------------------------------------------------------------------------
 
   it("translates only the requested languages when languageCodes is specified", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
@@ -277,13 +284,8 @@ describe("TranslationMaintenanceController", () => {
 
     const [, , , , , , targetLanguages] =
       translationService.translateContentToLanguages.mock.calls[0];
-    // getAllLanguageCodes mock returns ["en", "es", "fr"]
     expect(targetLanguages).toEqual(["en", "es", "fr"]);
   });
-
-  // ---------------------------------------------------------------------------
-  // Choices and variants
-  // ---------------------------------------------------------------------------
 
   it("passes choices from questionVersion to translateContentToLanguages", async () => {
     const choices = [
@@ -367,11 +369,7 @@ describe("TranslationMaintenanceController", () => {
     expect(variantCall[4]).toEqual(variantChoices);
   });
 
-  // ---------------------------------------------------------------------------
-  // Stale translation cleanup
-  // ---------------------------------------------------------------------------
-
-  it("deletes existing translations before writing to prevent duplicate rows", async () => {
+  it("does not delete translations directly in the controller", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
       currentVersion: null,
@@ -385,16 +383,8 @@ describe("TranslationMaintenanceController", () => {
       dryRun: false,
     });
 
-    expect(prisma.translation.deleteMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ questionId: 3, variantId: null }),
-      }),
-    );
+    expect(prisma.translation.deleteMany).not.toHaveBeenCalled();
   });
-
-  // ---------------------------------------------------------------------------
-  // Dry-run mode
-  // ---------------------------------------------------------------------------
 
   it("does not write any translations in dry-run mode", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
@@ -417,16 +407,11 @@ describe("TranslationMaintenanceController", () => {
     expect(prisma.translation.deleteMany).not.toHaveBeenCalled();
   });
 
-  // ---------------------------------------------------------------------------
-  // maxMissing budget
-  // ---------------------------------------------------------------------------
-
   it("stops translating after the maxMissing budget is exhausted", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
       currentVersion: null,
     });
-    // 3 questions — but maxMissing=2 (en+es for question 1 fills budget; fr never reached)
     prisma.question.findMany.mockResolvedValue([
       { id: 1, question: "Q1", choices: null, variants: [] },
       { id: 2, question: "Q2", choices: null, variants: [] },
@@ -446,12 +431,8 @@ describe("TranslationMaintenanceController", () => {
 
     const [, , , , , , langs] =
       translationService.translateContentToLanguages.mock.calls[0];
-    expect(langs).toHaveLength(2); // en + es (budget = 2)
+    expect(langs).toHaveLength(2);
   });
-
-  // ---------------------------------------------------------------------------
-  // Assignment metadata
-  // ---------------------------------------------------------------------------
 
   it("calls translateAssignment when all languages are requested", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
@@ -463,7 +444,6 @@ describe("TranslationMaintenanceController", () => {
     await runFixJob({
       assignmentId: 1,
       dryRun: false,
-      // No languageCodes filter → all languages
     });
 
     expect(translationService.translateAssignment).toHaveBeenCalledWith(1);
@@ -491,12 +471,14 @@ describe("TranslationMaintenanceController", () => {
     expect(translationService.translateAssignment).not.toHaveBeenCalled();
   });
 
-  // ---------------------------------------------------------------------------
-  // find-missing endpoint
-  // ---------------------------------------------------------------------------
-
   it("findMissingTranslations scans only active-version question IDs (avoids false positives from non-active questions)", async () => {
     prisma.assignment.findMany.mockResolvedValue([{ id: 1, name: "A1" }]);
+    prisma.assignmentTranslation.groupBy.mockResolvedValue([
+      {
+        assignmentId: 1,
+        _count: { languageCode: 3 },
+      },
+    ]);
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
       name: "A1",
@@ -663,6 +645,111 @@ describe("TranslationMaintenanceController", () => {
     });
   });
 
+  it("debugAssignmentScan returns translation coverage metrics", async () => {
+    prisma.assignment.findUnique.mockResolvedValue({
+      id: 1,
+      name: "A1",
+      questionOrder: [],
+      currentVersion: null,
+    });
+    prisma.assignmentTranslation.findMany.mockResolvedValue([
+      { languageCode: "en" },
+      { languageCode: "es" },
+      { languageCode: "fr" },
+    ]);
+    prisma.question.findMany.mockResolvedValue([
+      {
+        id: 10,
+        question: "Q1",
+        choices: null,
+        translations: [{ languageCode: "en", variantId: null }],
+        variants: [],
+      },
+    ]);
+
+    const result = await controller.debugAssignmentScan(1, {
+      includeAll: true,
+      languageCodes: ["en", "es", "fr"],
+      maxMissingItems: 1,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.assignmentId).toBe(1);
+    expect(result.data.totalTranslatableItems).toBe(1);
+    expect(result.data.expectedTranslationRows).toBe(3);
+    expect(result.data.existingTranslationRows).toBe(1);
+    expect(result.data.missingTranslationRows).toBe(2);
+    expect(result.data.missingItemsCount).toBe(1);
+    expect(result.data.missingItemsPreview).toHaveLength(1);
+    expect(result.data.missingItemsTruncated).toBe(false);
+  });
+
+  it("previewSweepBatch shows fast vs deep classification for selected assignments", async () => {
+    prisma.assignment.findMany.mockResolvedValue([
+      { id: 30, name: "A30" },
+      { id: 20, name: "A20" },
+      { id: 10, name: "A10" },
+    ]);
+    prisma.assignmentTranslation.groupBy.mockResolvedValue([
+      { assignmentId: 30, _count: { languageCode: 1 } },
+      { assignmentId: 20, _count: { languageCode: 3 } },
+      { assignmentId: 10, _count: { languageCode: 3 } },
+    ]);
+    prisma.assignment.findUnique.mockImplementation(({ where }: any) =>
+      Promise.resolve({
+        id: where.id,
+        name: `A${where.id}`,
+        questionOrder: [],
+        currentVersion: null,
+      }),
+    );
+    prisma.assignmentTranslation.findMany.mockResolvedValue([
+      { languageCode: "en" },
+      { languageCode: "es" },
+      { languageCode: "fr" },
+    ]);
+    prisma.question.findMany.mockImplementation(({ where }: any) =>
+      Promise.resolve(
+        where.assignmentId === 20
+          ? [
+              {
+                id: 201,
+                question: "Q missing",
+                choices: null,
+                translations: [{ languageCode: "en", variantId: null }],
+                variants: [],
+              },
+            ]
+          : [
+              {
+                id: 101,
+                question: "Q complete",
+                choices: null,
+                translations: [
+                  { languageCode: "en", variantId: null },
+                  { languageCode: "es", variantId: null },
+                  { languageCode: "fr", variantId: null },
+                ],
+                variants: [],
+              },
+            ],
+      ),
+    );
+
+    const result = await controller.previewSweepBatch({
+      batchSize: 2,
+      includeAll: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.batch.map((assignment) => assignment.id)).toEqual([
+      30, 20,
+    ]);
+    expect(result.data.debug.fastNeedyAssignmentIds).toContain(30);
+    expect(result.data.debug.deepNeedyAssignmentIds).toContain(20);
+    expect(result.data.debug.selectedBatchIds).toEqual([30, 20]);
+  });
+
   it("findMissingTranslations requests assignments ordered by id descending", async () => {
     prisma.assignment.findMany.mockResolvedValue([]);
 
@@ -713,8 +800,8 @@ describe("TranslationMaintenanceController", () => {
 
     expect(translationService.translateContentToLanguages).toHaveBeenCalled();
     const call = translationService.translateContentToLanguages.mock.calls[0];
-    expect(call[1]).toBe(55); // mapped base question id
-    expect(call[3]).toBe("Version question text"); // active-version text preserved
+    expect(call[1]).toBe(55);
+    expect(call[3]).toBe("Version question text");
   });
 
   it("continues translating remaining questions when one question translation fails", async () => {
@@ -763,7 +850,12 @@ describe("TranslationMaintenanceController", () => {
         if (questionId === 10) {
           return Promise.reject(new Error("Question translation failed"));
         }
-        return Promise.resolve({ success: 1, failure: 0 });
+        return Promise.resolve({
+          success: 1,
+          failure: 0,
+          successfulLanguages: ["es"],
+          failedLanguages: [],
+        });
       },
     );
 

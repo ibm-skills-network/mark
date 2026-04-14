@@ -840,7 +840,11 @@ export const useAuthorStore = createWithEqualityFn<
         },
         questions: [],
         setQuestions: (questions) => {
-          set({ questions, hasUnsavedChanges: true });
+          set({
+            questions,
+            questionOrder: questions.map((question) => question.id),
+            hasUnsavedChanges: true,
+          });
         },
         setEvaluateBodyLanguage: (questionId, bodyLanguageBool) => {
           set((state) => {
@@ -963,6 +967,7 @@ export const useAuthorStore = createWithEqualityFn<
 
             return {
               questions: updatedQuestions,
+              questionOrder: updatedQuestions.map((item) => item.id),
               updatedAt: Date.now(),
               hasUnsavedChanges: true,
             };
@@ -976,7 +981,11 @@ export const useAuthorStore = createWithEqualityFn<
               (q) => q.id !== questionId,
             );
             useQuestionStore.getState().clearQuestionState(questionId);
-            return { questions: updatedQuestions, hasUnsavedChanges: true };
+            return {
+              questions: updatedQuestions,
+              questionOrder: updatedQuestions.map((question) => question.id),
+              hasUnsavedChanges: true,
+            };
           }),
         replaceQuestion: (questionId, newQuestion) =>
           set((state) => {
@@ -984,7 +993,11 @@ export const useAuthorStore = createWithEqualityFn<
             if (index === -1) return {};
             const updatedQuestions = [...state.questions];
             updatedQuestions[index] = newQuestion;
-            return { questions: updatedQuestions, hasUnsavedChanges: true };
+            return {
+              questions: updatedQuestions,
+              questionOrder: updatedQuestions.map((question) => question.id),
+              hasUnsavedChanges: true,
+            };
           }),
         modifyQuestion: (questionId, modifiedData) => {
           set((state) => {
@@ -1779,8 +1792,6 @@ export const useAuthorStore = createWithEqualityFn<
               } else {
                 checkedOutVersion = currentVersion;
               }
-            } else {
-              checkedOutVersion = currentVersion;
             }
 
             set({
@@ -1948,6 +1959,14 @@ export const useAuthorStore = createWithEqualityFn<
               versionData.questionDisplay !== undefined
                 ? versionData.questionDisplay
                 : assignmentConfigState.questionDisplay,
+            requireAllQuestions:
+              versionData.requireAllQuestions !== undefined
+                ? versionData.requireAllQuestions
+                : assignmentConfigState.requireAllQuestions,
+            optionalQuestionIds:
+              versionData.optionalQuestionIds !== undefined
+                ? versionData.optionalQuestionIds
+                : assignmentConfigState.optionalQuestionIds,
           });
 
           useAssignmentFeedbackConfig
@@ -2170,6 +2189,8 @@ export const useAuthorStore = createWithEqualityFn<
                   showQuestions: feedbackData.showQuestions,
                   showQuestionScore: feedbackData.showQuestionScore,
                   showAssignmentScore: feedbackData.showAssignmentScore,
+                  requireAllQuestions: configData.requireAllQuestions,
+                  optionalQuestionIds: configData.optionalQuestionIds,
                   numberOfQuestionsPerAttempt:
                     configData.numberOfQuestionsPerAttempt,
                 },
@@ -2300,6 +2321,8 @@ export const useAuthorStore = createWithEqualityFn<
                 showQuestionScore: feedbackConfig.showQuestionScore,
                 showSubmissionFeedback: feedbackConfig.showSubmissionFeedback,
                 showQuestions: feedbackConfig.showQuestions,
+                requireAllQuestions: assignmentConfig.requireAllQuestions,
+                optionalQuestionIds: assignmentConfig.optionalQuestionIds,
 
                 published: false,
               },
@@ -2492,6 +2515,14 @@ export const useAuthorStore = createWithEqualityFn<
                         assignment.showSubmissionFeedback !== undefined
                           ? assignment.showSubmissionFeedback
                           : assignmentConfigStore.showSubmissionFeedback,
+                      requireAllQuestions:
+                        assignment.requireAllQuestions !== undefined
+                          ? assignment.requireAllQuestions
+                          : assignmentConfigStore.requireAllQuestions,
+                      optionalQuestionIds:
+                        assignment.optionalQuestionIds !== undefined
+                          ? assignment.optionalQuestionIds
+                          : assignmentConfigStore.optionalQuestionIds,
                     });
                   }
 

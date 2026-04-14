@@ -62,6 +62,7 @@ const Component: FC<Props> = () => {
           </p>
         )}
       </div>
+
       <div className="flex flex-col gap-y-1">
         <p className=" text-gray-600">
           What is the passing threshold (in percentage)?

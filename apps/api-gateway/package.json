@@ -9,11 +9,13 @@
     "build": "nest build",
     "clean": "rimraf dist && rimraf node_modules",
     "dev": "yarn start:dev",
+    "dev:e2e": "yarn start:e2e --watch",
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",
     "lint:staged": "eslint",
     "start": "dotenv -e ./dev.env -- nest start",
+    "start:e2e": "dotenv -e ./dev.env -- env AUTH_DISABLED=false nest start",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
@@ -25,6 +27,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@instana/collector": "5.3.0",
     "@nestjs/common": "10.4.17",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "10.4.17",

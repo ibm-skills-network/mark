@@ -350,7 +350,7 @@ ACTION GUIDELINES:
 6. If something seems wrong, investigate and offer to fix it
 
 TOOL USAGE:
-- Use createQuestion for adding new questions (ALWAYS follow with addRubric for text questions)
+- Use createQuestion to AI-generate exactly one question from a prompt
 - Use modifyQuestion for updating question content
 - Use setQuestionChoices for multiple choice options
 - Use addRubric for scoring criteria (MANDATORY for text response questions)
@@ -457,7 +457,7 @@ RESPONSE STYLE:
     return {
       createQuestion: {
         description:
-          "Create a new question for the assignment with complete specifications",
+          "Generate exactly one AI question for the assignment from the provided prompt and question type",
         inputSchema: z.object({
           questionType: z
             .enum([
@@ -468,28 +468,10 @@ RESPONSE STYLE:
               "URL",
               "UPLOAD",
             ])
-            .describe("The type of question to create"),
-          questionText: z.string().describe("The text of the question"),
-          totalPoints: z
-            .number()
-            .optional()
-            .describe("The number of points the question is worth"),
-          feedback: z.string().optional().describe("Feedback for the question"),
-          options: z
-            .array(
-              z.object({
-                text: z.string().describe("The text of the option"),
-                isCorrect: z
-                  .boolean()
-                  .describe("Whether this option is correct"),
-                points: z
-                  .number()
-                  .optional()
-                  .describe("Points for this option"),
-              }),
-            )
-            .optional()
-            .describe("For multiple choice questions, the answer options"),
+            .describe("The type of question to generate"),
+          questionText: z
+            .string()
+            .describe("Prompt/objective for generating one question"),
         }),
         execute: async (parameters: any) =>
           JSON.stringify({

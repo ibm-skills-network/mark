@@ -288,18 +288,6 @@ export default function ErrorPage({
             </div>
 
             <div className="flex flex-col gap-2 items-end">
-              <button
-                type="button"
-                onClick={handleReport}
-                disabled={isReporting || reportStatus === "success"}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-700 disabled:opacity-60"
-              >
-                {isReporting
-                  ? "Reporting..."
-                  : reportStatus === "success"
-                    ? "Reported"
-                    : "Report issue"}
-              </button>
               {reportStatusMessage ? (
                 <span
                   role="status"

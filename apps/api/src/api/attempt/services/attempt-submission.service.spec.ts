@@ -2,13 +2,13 @@ import { HttpService } from "@nestjs/axios";
 import { InternalServerErrorException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
-import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
 import {
   UserRole,
   UserSession,
-} from "src/auth/interfaces/user.session.interface";
+} from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { AssignmentRepository } from "../../assignment/v2/repositories/assignment.repository";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { AttemptValidationService } from "./attempt-validation.service";
@@ -103,7 +103,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     question: overrides.question ?? `Question ${overrides.questionId ?? 0}`,
     totalPoints: overrides.totalPoints,
     feedback: overrides.feedback ?? [],
-    metadata: overrides.metadata ?? null,
+    metadata: overrides.metadata ?? undefined,
     learnerResponse: overrides.learnerResponse,
     points: overrides.points,
   });
@@ -177,7 +177,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         makeResponse({
           questionId: 1,
           totalPoints: 8,
-          metadata: null, // No metadata!
+          metadata: undefined,
         }),
       ];
 
@@ -234,7 +234,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         makeResponse({
           questionId: 966122647,
           totalPoints: 8,
-          metadata: null,
+          metadata: undefined,
         }),
       ];
 
@@ -304,7 +304,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     beforeEach(() => {
       mockAssignmentRepository.findById.mockResolvedValue(baseAssignment);
-      mockValidationService.validateNewAttempt.mockResolvedValue();
+      mockValidationService.validateNewAttempt.mockResolvedValue(undefined);
       mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
       mockPrisma.assignmentAttempt.update.mockResolvedValue({});
     });
@@ -398,6 +398,157 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(orderedQuestions).toHaveLength(1);
       expect(orderedQuestions[0].id).toBe(2001);
       expect(orderedQuestions[0].variants).toHaveLength(0);
+    });
+
+    it("appends questions missing from questionOrder when creating learner attempts", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 3001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({ id: 3002, questionId: 20, question: "Q2" }),
+        makeQuestionVersion({ id: 3003, questionId: 30, question: "Q3" }),
+      ];
+
+      mockAssignmentRepository.findById.mockResolvedValue({
+        ...baseAssignment,
+        questionOrder: [20, 10],
+      });
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [],
+      });
+      mockPrisma.question.findMany.mockResolvedValue([
+        { id: 10, variants: [] },
+        { id: 20, variants: [] },
+        { id: 30, variants: [] },
+      ]);
+
+      await service.createAssignmentAttempt(assignmentId, userSession);
+
+      const [, orderedQuestions] = mockQuestionVariantService
+        .createAttemptQuestionVariants.mock.calls[0] as [
+        number,
+        Array<{ id: number }>,
+      ];
+
+      expect(orderedQuestions.map((question) => question.id)).toEqual([
+        20, 10, 30,
+      ]);
+      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledWith({
+        where: { id: 55 },
+        data: {
+          questionOrder: [20, 10, 30],
+        },
+      });
+    });
+  });
+
+  describe("updateAssignmentAttempt - author preview", () => {
+    const assignmentId = 77;
+    type UpdateAttemptDto = Parameters<
+      AttemptSubmissionService["updateAssignmentAttempt"]
+    >[2];
+    type UpdateAttemptRequest = Parameters<
+      AttemptSubmissionService["updateAssignmentAttempt"]
+    >[5];
+
+    const authorRequest = {
+      userSession: {
+        userId: "author-1",
+        role: UserRole.AUTHOR,
+        assignmentId,
+        groupId: "group-1",
+      },
+    };
+
+    beforeEach(() => {
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        questions: [],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+      });
+      mockGradingService.constructFeedbacksForQuestions.mockReturnValue([]);
+    });
+
+    it("uses authorQuestions as the points source without querying fallback questions", async () => {
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [
+          { id: 966_122_647, question: "Draft question response" },
+        ],
+        authorQuestions: [{ id: 966_122_647, totalPoints: 12 }],
+      };
+
+      const successfulResponses = [
+        makeResponse({
+          questionId: 966_122_647,
+          totalPoints: 8,
+          metadata: undefined,
+        }),
+      ];
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue(
+        successfulResponses,
+      );
+      mockGradingService.calculateGradeForAuthor.mockReturnValue({
+        grade: 8 / 12,
+        totalPointsEarned: 8,
+        totalPossiblePoints: 12,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        -1,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "",
+        false,
+        authorRequest as UpdateAttemptRequest,
+      );
+
+      expect(result.totalPossiblePoints).toBe(12);
+      expect(result.totalPointsEarned).toBe(8);
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(mockGradingService.calculateGradeForAuthor).toHaveBeenCalledWith(
+        successfulResponses,
+        12,
+      );
+    });
+
+    it("throws when preview responses reference questions missing from provided draft questions", async () => {
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [
+          { id: 404, question: "Missing draft question" },
+        ],
+      };
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({
+          questionId: 404,
+          totalPoints: 5,
+          metadata: undefined,
+        }),
+      ]);
+
+      await expect(
+        service.updateAssignmentAttempt(
+          -1,
+          assignmentId,
+          updateDto as UpdateAttemptDto,
+          "",
+          false,
+          authorRequest as UpdateAttemptRequest,
+        ),
+      ).rejects.toThrow(
+        "Question 404 not found in provided questions. This prevents accurate grading.",
+      );
+
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(mockGradingService.calculateGradeForAuthor).not.toHaveBeenCalled();
     });
   });
 

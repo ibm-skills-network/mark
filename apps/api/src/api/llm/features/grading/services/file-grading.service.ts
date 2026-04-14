@@ -3011,7 +3011,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         ContentType: "application/pdf",
       });
 
-      const presignedUrl = this.s3Service.getSignedUrl("getObject", {
+      const presignedUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: bucket,
         Key: uploadKey,
         Expires: 3600 * 24 * 7,

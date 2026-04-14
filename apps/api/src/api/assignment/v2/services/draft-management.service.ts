@@ -42,6 +42,8 @@ export interface SaveDraftDto {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string;
   }>;
   questionsData?: Array<any>;
@@ -84,6 +86,22 @@ export class DraftManagementService {
     return undefined;
   }
 
+  private parseBoolean(value: unknown): boolean | undefined {
+    return typeof value === "boolean" ? value : undefined;
+  }
+
+  private parseNumberArray(value: unknown): number[] | undefined {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const numbers = value.filter(
+      (item): item is number => typeof item === "number" && !Number.isNaN(item),
+    );
+
+    return numbers.length === value.length ? numbers : undefined;
+  }
+
   async saveDraft(
     assignmentId: number,
     saveDraftDto: SaveDraftDto,
@@ -105,6 +123,15 @@ export class DraftManagementService {
 
     const draftName =
       saveDraftDto.draftName || `Draft - ${new Date().toLocaleString()}`;
+    const assignmentRecord = assignment as Record<string, unknown>;
+    const requireAllQuestions =
+      saveDraftDto.assignmentData?.requireAllQuestions ??
+      this.parseBoolean(assignmentRecord.requireAllQuestions) ??
+      false;
+    const optionalQuestionIds =
+      saveDraftDto.assignmentData?.optionalQuestionIds ??
+      this.parseNumberArray(assignmentRecord.optionalQuestionIds) ??
+      [];
 
     return await this.prisma.$transaction(async (tx) => {
       const assignmentDraft = await tx.assignmentDraft.create({
@@ -173,6 +200,8 @@ export class DraftManagementService {
           showQuestions:
             saveDraftDto.assignmentData?.showQuestions ??
             assignment.showQuestions,
+          requireAllQuestions,
+          optionalQuestionIds,
           languageCode:
             saveDraftDto.assignmentData?.languageCode ??
             assignment.languageCode,
@@ -307,6 +336,12 @@ export class DraftManagementService {
         ...(saveDraftDto.assignmentData?.showQuestions !== undefined && {
           showQuestions: saveDraftDto.assignmentData.showQuestions,
         }),
+        ...(saveDraftDto.assignmentData?.requireAllQuestions !== undefined && {
+          requireAllQuestions: saveDraftDto.assignmentData.requireAllQuestions,
+        }),
+        ...(saveDraftDto.assignmentData?.optionalQuestionIds !== undefined && {
+          optionalQuestionIds: saveDraftDto.assignmentData.optionalQuestionIds,
+        }),
         ...(saveDraftDto.assignmentData?.languageCode && {
           languageCode: saveDraftDto.assignmentData.languageCode,
         }),
@@ -379,6 +414,8 @@ export class DraftManagementService {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string;
     questions: JsonValue[];
     _isDraft?: boolean;
@@ -397,6 +434,12 @@ export class DraftManagementService {
     if (draft.userId !== userSession.userId) {
       throw new BadRequestException("You can only access your own drafts");
     }
+
+    const draftRecord = draft as Record<string, unknown>;
+    const requireAllQuestions =
+      this.parseBoolean(draftRecord.requireAllQuestions) ?? false;
+    const optionalQuestionIds =
+      this.parseNumberArray(draftRecord.optionalQuestionIds) ?? [];
 
     return {
       id: draft.assignmentId,
@@ -423,6 +466,8 @@ export class DraftManagementService {
       showQuestionScore: draft.showQuestionScore,
       showSubmissionFeedback: draft.showSubmissionFeedback,
       showQuestions: draft.showQuestions,
+      requireAllQuestions,
+      optionalQuestionIds,
       languageCode: draft.languageCode,
       questions:
         (JSON.parse(draft.questionsData as string) as unknown as JsonValue[]) ??
@@ -484,6 +529,8 @@ export class DraftManagementService {
     showQuestionScore: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
+    requireAllQuestions: boolean;
+    optionalQuestionIds: number[];
     languageCode: string;
     questions: JsonValue[];
     _isDraft?: boolean;
