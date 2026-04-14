@@ -5,17 +5,24 @@ import { JobQueueService } from "./job-queue.service";
 import { JobStateService } from "./job-state.service";
 import {
   createRedisTestHarness,
+  getRedisTestEnvironmentAvailability,
+  isRedisTestEnvironmentAvailable,
   RedisTestHarness,
   waitForCondition,
 } from "../../../../test-support/redis-test-harness";
 
-describe("job-queue integration", () => {
+const redisTestEnvironment = getRedisTestEnvironmentAvailability();
+const describeIntegration = isRedisTestEnvironmentAvailable()
+  ? describe
+  : describe.skip;
+
+describeIntegration("job-queue integration", () => {
   const jobQueueSecretEnv = "JOB_QUEUE_SECRET"; // pragma: allowlist secret
   const originalRedisUrl = process.env.REDIS_URL;
   const originalQueueKeyValue = process.env[jobQueueSecretEnv];
 
-  let redisHarness: RedisTestHarness;
-  let loggerSpy: jest.SpyInstance;
+  let redisHarness: RedisTestHarness | undefined;
+  let loggerSpy: jest.SpyInstance | undefined;
 
   beforeAll(async () => {
     redisHarness = await createRedisTestHarness();
@@ -27,6 +34,11 @@ describe("job-queue integration", () => {
   });
 
   beforeEach(async () => {
+    if (!redisHarness) {
+      throw new Error(
+        `Redis test harness was not initialized: ${redisTestEnvironment.reason ?? "unknown reason"}`,
+      );
+    }
     await redisHarness.flush();
   });
 
@@ -43,8 +55,8 @@ describe("job-queue integration", () => {
       process.env[jobQueueSecretEnv] = originalQueueKeyValue;
     }
 
-    await redisHarness.stop();
-    loggerSpy.mockRestore();
+    await redisHarness?.stop();
+    loggerSpy?.mockRestore();
   });
 
   it("encrypts queued payloads and processes them end to end through BullMQ and Redis job state", async () => {
@@ -200,3 +212,10 @@ describe("job-queue integration", () => {
     await jobStateService.onModuleDestroy();
   });
 });
+
+if (!redisTestEnvironment.available) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[job-queue integration] skipped: ${redisTestEnvironment.reason ?? "Redis test environment unavailable"}`,
+  );
+}

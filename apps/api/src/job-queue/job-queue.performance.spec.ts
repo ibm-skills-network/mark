@@ -5,12 +5,16 @@ import { JobQueueService } from "./job-queue.service";
 import { JobStateService } from "./job-state.service";
 import {
   createRedisTestHarness,
+  isRedisTestEnvironmentAvailable,
   RedisTestHarness,
   waitForCondition,
 } from "../../../../test-support/redis-test-harness";
 
 const describePerformance =
-  process.env.RUN_JOB_QUEUE_PERF_TESTS === "true" ? describe : describe.skip;
+  process.env.RUN_JOB_QUEUE_PERF_TESTS === "true" &&
+  isRedisTestEnvironmentAvailable()
+    ? describe
+    : describe.skip;
 
 describePerformance("job-queue performance", () => {
   const jobQueueSecretEnv = "JOB_QUEUE_SECRET"; // pragma: allowlist secret
@@ -19,8 +23,8 @@ describePerformance("job-queue performance", () => {
   const queueName = "mark.job-queue.performance";
   const totalJobs = 100;
 
-  let redisHarness: RedisTestHarness;
-  let loggerSpy: jest.SpyInstance;
+  let redisHarness: RedisTestHarness | undefined;
+  let loggerSpy: jest.SpyInstance | undefined;
 
   beforeAll(async () => {
     redisHarness = await createRedisTestHarness();
@@ -32,6 +36,9 @@ describePerformance("job-queue performance", () => {
   });
 
   beforeEach(async () => {
+    if (!redisHarness) {
+      throw new Error("Redis test harness was not initialized");
+    }
     await redisHarness.flush();
   });
 
@@ -48,8 +55,8 @@ describePerformance("job-queue performance", () => {
       process.env[jobQueueSecretEnv] = originalQueueKeyValue;
     }
 
-    await redisHarness.stop();
-    loggerSpy.mockRestore();
+    await redisHarness?.stop();
+    loggerSpy?.mockRestore();
   });
 
   it("meets the baseline end-to-end throughput budget for queue processing", async () => {

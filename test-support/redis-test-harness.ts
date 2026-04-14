@@ -14,6 +14,11 @@ export interface RedisTestHarness {
   stop: () => Promise<void>;
 }
 
+export interface RedisTestEnvironmentAvailability {
+  available: boolean;
+  reason?: string;
+}
+
 function runCommand(command: string, arguments_: string[]): string {
   const result = spawnSync(command, arguments_, {
     encoding: "utf8",
@@ -30,6 +35,41 @@ function runCommand(command: string, arguments_: string[]): string {
   }
 
   return result.stdout.trim();
+}
+
+export function getRedisTestEnvironmentAvailability(): RedisTestEnvironmentAvailability {
+  if (process.env.JOB_QUEUE_TEST_REDIS_URL) {
+    return { available: true };
+  }
+
+  const result = spawnSync("docker", ["info"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (result.error) {
+    return {
+      available: false,
+      reason: result.error.message,
+    };
+  }
+
+  if (result.status !== 0) {
+    const stderr = result.stderr.trim();
+    return {
+      available: false,
+      reason:
+        stderr.length > 0
+          ? stderr
+          : `docker info failed with exit code ${result.status ?? "unknown"}`,
+    };
+  }
+
+  return { available: true };
+}
+
+export function isRedisTestEnvironmentAvailable(): boolean {
+  return getRedisTestEnvironmentAvailability().available;
 }
 
 async function findFreePort(): Promise<number> {

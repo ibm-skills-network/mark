@@ -5,12 +5,16 @@ import { JobQueueService } from "./job-queue.service";
 import { JobStateService } from "./job-state.service";
 import {
   createRedisTestHarness,
+  isRedisTestEnvironmentAvailable,
   RedisTestHarness,
   waitForCondition,
 } from "../../../../test-support/redis-test-harness";
 
 const describeStress =
-  process.env.RUN_JOB_QUEUE_STRESS_TESTS === "true" ? describe : describe.skip;
+  process.env.RUN_JOB_QUEUE_STRESS_TESTS === "true" &&
+  isRedisTestEnvironmentAvailable()
+    ? describe
+    : describe.skip;
 
 describeStress("job-queue stress", () => {
   const jobQueueSecretEnv = "JOB_QUEUE_SECRET"; // pragma: allowlist secret
@@ -19,8 +23,8 @@ describeStress("job-queue stress", () => {
   const queueName = "mark.job-queue.stress";
   const totalJobs = 200;
 
-  let redisHarness: RedisTestHarness;
-  let loggerSpy: jest.SpyInstance;
+  let redisHarness: RedisTestHarness | undefined;
+  let loggerSpy: jest.SpyInstance | undefined;
 
   beforeAll(async () => {
     redisHarness = await createRedisTestHarness();
@@ -32,6 +36,9 @@ describeStress("job-queue stress", () => {
   });
 
   beforeEach(async () => {
+    if (!redisHarness) {
+      throw new Error("Redis test harness was not initialized");
+    }
     await redisHarness.flush();
   });
 
@@ -48,8 +55,8 @@ describeStress("job-queue stress", () => {
       process.env[jobQueueSecretEnv] = originalQueueKeyValue;
     }
 
-    await redisHarness.stop();
-    loggerSpy.mockRestore();
+    await redisHarness?.stop();
+    loggerSpy?.mockRestore();
   });
 
   it("processes a high-volume mixed workload without dropping or corrupting job state", async () => {

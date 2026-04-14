@@ -374,7 +374,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
   it("maps temporary frontend question ids to persisted backend ids before saving question order", async () => {
     const assignmentId = 1;
-    const jobId = 1;
+    const jobId = "publish-job-1";
     const tempQuestionId = 966_122_647;
     const persistedQuestionId = 3;
     const dto = createMockUpdateAssignmentQuestionsDto(
@@ -413,12 +413,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
       .mockReturnValue(false);
 
-    await service["startPublishingProcess"](
-      jobId,
-      assignmentId,
-      dto,
-      "author-123",
-    );
+    await service.runPublishJob(jobId, assignmentId, dto, "author-123");
 
     expect(assignmentRepository.update).toHaveBeenCalledWith(
       assignmentId,
