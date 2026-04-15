@@ -40,7 +40,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [api-gateway, api, web]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -228,7 +228,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        service: [api-gateway, api, web]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -358,7 +358,7 @@ jobs:
       attestations: write
     strategy:
       matrix:
-        service: [api-gateway, api, web]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     outputs:
       image-tag: ${{ steps.meta.outputs.image-tag }}
