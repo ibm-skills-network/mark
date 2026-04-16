@@ -1,8 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import {
+  CompleteMultipartUploadCommand,
+  CompleteMultipartUploadCommandInput,
+  CompleteMultipartUploadCommandOutput,
   CopyObjectCommand,
   CopyObjectCommandInput,
   CopyObjectCommandOutput,
+  CreateMultipartUploadCommand,
+  CreateMultipartUploadCommandInput,
+  CreateMultipartUploadCommandOutput,
   DeleteObjectCommand,
   DeleteObjectCommandInput,
   DeleteObjectCommandOutput,
@@ -24,6 +30,8 @@ import {
   PutObjectCommandInput,
   PutObjectCommandOutput,
   S3Client,
+  UploadPartCommand,
+  UploadPartCommandInput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl as getS3SignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -131,7 +139,31 @@ export class S3Service {
       });
     }
 
+    if (operation === "uploadPart") {
+      return getS3SignedUrl(
+        client,
+        new UploadPartCommand(commandParameters as UploadPartCommandInput),
+        {
+          expiresIn,
+        },
+      );
+    }
+
     throw new Error(`Unsupported signed URL operation: ${operation}`);
+  }
+
+  async createMultipartUpload(
+    parameters: CreateMultipartUploadCommandInput,
+  ): Promise<CreateMultipartUploadCommandOutput> {
+    const client = this.getS3Client(parameters.Bucket);
+    return client.send(new CreateMultipartUploadCommand(parameters));
+  }
+
+  async completeMultipartUpload(
+    parameters: CompleteMultipartUploadCommandInput,
+  ): Promise<CompleteMultipartUploadCommandOutput> {
+    const client = this.getS3Client(parameters.Bucket);
+    return client.send(new CompleteMultipartUploadCommand(parameters));
   }
 
   async putObject(

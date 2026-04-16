@@ -12,6 +12,7 @@ import type {
   FileResponse,
   FolderListing,
   GetAssignmentResponse,
+  MultipartUploadInitiateResponse,
   MoveFileRequest,
   QuestionStore,
   RenameFileRequest,
@@ -96,39 +97,10 @@ export async function getPublicFileUrl(
  * Upload a file using a presigned URL with progress tracking
  * Uses a single PUT request with retry/fallback logic
  */
-export async function uploadWithPresignedUrl(
-  file: File,
-  presignedUrl: string,
-  onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void,
-): Promise<void> {
-  if (file.size === 0) {
-    throw new Error("Cannot upload empty file");
-  }
-
-  const { reliableUpload } = await import("./reliableUpload");
-
-  try {
-    await reliableUpload(
-      file,
-      presignedUrl,
-      onUploadProgress
-        ? (progress) => {
-            onUploadProgress({
-              loaded: progress.loaded,
-              total: progress.total,
-            });
-          }
-        : undefined,
-    );
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error(`Upload failed: ${error.message}`);
-    }
-    throw new Error("Failed to upload file with presigned URL");
-  }
-}
-
 export type UploadedStorageFile = UploadResponse & {
+  s3Link: string;
+};
+export type MultipartUploadedStorageFile = MultipartUploadInitiateResponse & {
   s3Link: string;
 };
 
@@ -145,7 +117,7 @@ export async function uploadFileToStorage(
       total: number;
     }) => void;
   },
-): Promise<UploadedStorageFile> {
+): Promise<MultipartUploadedStorageFile> {
   const resolvedUploadRequest: UploadRequest = {
     ...uploadRequest,
     fileName: uploadRequest.fileName || file.name,
@@ -153,23 +125,32 @@ export async function uploadFileToStorage(
     fileSize: uploadRequest.fileSize || file.size,
   };
 
-  const response = await generateUploadUrl(
-    resolvedUploadRequest,
-    options?.cookies,
-  );
-  if (!response.presignedUrl) {
-    throw new Error("Failed to generate presigned URL");
+  const { reliableUpload } = await import("./reliableUpload");
+
+  let multipartResponse: MultipartUploadInitiateResponse;
+  try {
+    multipartResponse = await reliableUpload(
+      file,
+      resolvedUploadRequest,
+      options?.onUploadProgress
+        ? (progress) => {
+            options.onUploadProgress?.({
+              loaded: progress.loaded,
+              total: progress.total,
+            });
+          }
+        : undefined,
+    );
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+    throw new Error("Failed to upload file");
   }
 
-  await uploadWithPresignedUrl(
-    file,
-    response.presignedUrl,
-    options?.onUploadProgress,
-  );
-
   return {
-    ...response,
-    s3Link: `s3://${response.bucket}/${response.key}`,
+    ...multipartResponse,
+    s3Link: `s3://${multipartResponse.bucket}/${multipartResponse.key}`,
   };
 }
 

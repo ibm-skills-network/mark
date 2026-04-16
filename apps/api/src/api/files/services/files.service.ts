@@ -13,6 +13,9 @@ import {
 import { MoveFileDto } from "../dto/move-file.dto";
 import { RenameFileDto } from "../dto/rename-file.dto";
 import {
+  CompleteMultipartUploadRequestDto,
+  CompleteMultipartUploadResponseDto,
+  MultipartUploadInitiateResponseDto,
   UploadRequestDto,
   UploadResponseDto,
   UploadType,
@@ -74,6 +77,136 @@ export class FilesService {
       return 120;
     }
     return Math.min(fromEnvironment, 300);
+  }
+
+  private getMultipartPartSizeBytes(): number {
+    const minimumPartSize = 5 * 1024 * 1024;
+    const configured = Number(
+      process.env.MULTIPART_UPLOAD_PART_SIZE_BYTES ?? minimumPartSize,
+    );
+
+    if (!Number.isFinite(configured) || configured < minimumPartSize) {
+      return minimumPartSize;
+    }
+
+    return configured;
+  }
+
+  private resolveUploadTarget(
+    uploadRequest: UploadRequestDto,
+    userId: string,
+  ): {
+    bucket: string;
+    key: string;
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    uploadType: UploadType;
+    maxAllowedBytes: number;
+  } {
+    const {
+      fileName,
+      fileType,
+      fileSize,
+      uploadType,
+      context = {},
+    } = uploadRequest;
+
+    const bucket = this.s3Service.getBucketName(uploadType);
+    if (!bucket) {
+      throw new BadRequestException("Invalid upload type");
+    }
+
+    const maxAllowedBytes = this.validateUploadSize(
+      fileSize,
+      uploadType,
+      fileName,
+    );
+
+    let prefix = "";
+    const normalizedPath = (context.path ?? "").replace(/^\//, "");
+
+    switch (uploadType) {
+      case UploadType.AUTHOR: {
+        if (normalizedPath) {
+          prefix = `${normalizedPath}/`;
+        } else {
+          prefix = `authors/${userId}/`;
+        }
+        break;
+      }
+
+      case UploadType.LEARNER: {
+        if (normalizedPath) {
+          prefix = `${normalizedPath}/`;
+          break;
+        }
+        if (typeof context.assignmentId !== "number") {
+          throw new BadRequestException(
+            "Missing assignmentId in context for learner upload",
+          );
+        }
+        if (typeof context.questionId !== "number") {
+          throw new BadRequestException(
+            "Missing questionId in context for learner upload",
+          );
+        }
+
+        prefix = `${context.assignmentId}/${userId}/${context.questionId}/`;
+        break;
+      }
+
+      case UploadType.LEARNER_PROD: {
+        if (normalizedPath) {
+          prefix = `${normalizedPath}/`;
+          break;
+        }
+        if (typeof context.assignmentId !== "number") {
+          throw new BadRequestException(
+            "Missing assignmentId in context for learner production upload",
+          );
+        }
+        if (typeof context.questionId !== "number") {
+          throw new BadRequestException(
+            "Missing questionId in context for learner production upload",
+          );
+        }
+
+        prefix = `${context.assignmentId}/${userId}/${context.questionId}/`;
+        break;
+      }
+
+      case UploadType.DEBUG: {
+        if (typeof context.reportId !== "number") {
+          throw new BadRequestException(
+            "Missing reportId in context for debug upload",
+          );
+        }
+        if (normalizedPath) {
+          prefix = `${normalizedPath}/`;
+        } else {
+          prefix = `debug/${context.reportId}/`;
+        }
+        break;
+      }
+
+      default: {
+        throw new BadRequestException("Invalid upload type");
+      }
+    }
+
+    const uniqueId = this.generateUniqueId();
+    const key = `${prefix}${uniqueId}-${fileName}`;
+
+    return {
+      bucket,
+      key,
+      fileName,
+      fileType,
+      fileSize,
+      uploadType,
+      maxAllowedBytes,
+    };
   }
 
   private getMaxUploadBytes(uploadType: UploadType): number {
@@ -154,98 +287,14 @@ export class FilesService {
     userId: string,
   ): Promise<UploadResponseDto> {
     const {
+      bucket,
+      key,
       fileName,
       fileType,
       fileSize,
       uploadType,
-      context = {},
-    } = uploadRequest;
-
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
-
-    const maxAllowedBytes = this.validateUploadSize(
-      fileSize,
-      uploadType,
-      fileName,
-    );
-
-    let prefix = "";
-    const normalizedPath = context.path?.startsWith("/")
-      ? context.path.slice(1)
-      : (context.path ?? "");
-
-    switch (uploadType) {
-      case UploadType.AUTHOR: {
-        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
-        break;
-      }
-
-      case UploadType.LEARNER: {
-        if (normalizedPath) {
-          prefix = `${normalizedPath}/`;
-          break;
-        }
-        if (typeof context.assignmentId !== "number") {
-          throw new BadRequestException(
-            "Missing assignmentId in context for learner upload",
-          );
-        }
-        if (typeof context.questionId !== "number") {
-          throw new BadRequestException(
-            "Missing questionId in context for learner upload",
-          );
-        }
-
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `${context.assignmentId}/${userId}/${context.questionId}/`;
-        break;
-      }
-
-      case UploadType.LEARNER_PROD: {
-        if (normalizedPath) {
-          prefix = `${normalizedPath}/`;
-          break;
-        }
-        if (typeof context.assignmentId !== "number") {
-          throw new BadRequestException(
-            "Missing assignmentId in context for learner production upload",
-          );
-        }
-        if (typeof context.questionId !== "number") {
-          throw new BadRequestException(
-            "Missing questionId in context for learner production upload",
-          );
-        }
-
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `${context.assignmentId}/${userId}/${context.questionId}/`;
-        break;
-      }
-
-      case UploadType.DEBUG: {
-        if (typeof context.reportId !== "number") {
-          throw new BadRequestException(
-            "Missing reportId in context for debug upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `debug/${context.reportId}/`;
-        break;
-      }
-
-      default: {
-        throw new BadRequestException("Invalid upload type");
-      }
-    }
-
-    const uniqueId = this.generateUniqueId();
-    const key = `${prefix}${uniqueId}-${fileName}`;
+      maxAllowedBytes,
+    } = this.resolveUploadTarget(uploadRequest, userId);
     const expiresInSeconds = this.getPresignedUploadTtlSeconds();
 
     const presignedUrl = await this.s3Service.getSignedUrl("putObject", {
@@ -277,6 +326,117 @@ export class FilesService {
       expiresInSeconds,
       expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
       maxAllowedBytes,
+    };
+  }
+
+  async initiateMultipartUpload(
+    uploadRequest: UploadRequestDto,
+    userId: string,
+  ): Promise<MultipartUploadInitiateResponseDto> {
+    const {
+      bucket,
+      key,
+      fileName,
+      fileType,
+      fileSize,
+      uploadType,
+      maxAllowedBytes,
+    } = this.resolveUploadTarget(uploadRequest, userId);
+    const expiresInSeconds = this.getPresignedUploadTtlSeconds();
+    const partSizeBytes = this.getMultipartPartSizeBytes();
+    // Number of parts = file size divided by part size, rounded up
+    const partCount = Math.ceil(fileSize / partSizeBytes);
+
+    // Register the multipart upload with S3 to get an uploadId
+    const multipartUpload = await this.s3Service.createMultipartUpload({
+      Bucket: bucket,
+      Key: key,
+      ContentType: fileType,
+    });
+
+    const uploadId = multipartUpload.UploadId;
+    if (!uploadId) {
+      throw new BadRequestException("Failed to initiate multipart upload");
+    }
+
+    // Generate one presigned URL per part so the client can PUT directly to S3
+    const urls = await Promise.all(
+      Array.from({ length: partCount }, async (_, index) => {
+        const partNumber = index + 1;
+        const url = await this.s3Service.getSignedUrl("uploadPart", {
+          Bucket: bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+          Expires: expiresInSeconds,
+        });
+
+        return {
+          partNumber,
+          url,
+        };
+      }),
+    );
+
+    this.monitorUploadRequest({
+      uploadType,
+      fileName,
+      fileSize,
+      maxAllowedBytes,
+      bucket,
+      key,
+      expiresInSeconds,
+      userId,
+    });
+
+    return {
+      uploadId,
+      key,
+      bucket,
+      fileType,
+      fileName,
+      uploadType,
+      expiresInSeconds,
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+      maxAllowedBytes,
+      partSizeBytes,
+      urls,
+    };
+  }
+
+  async completeMultipartUpload(
+    request: CompleteMultipartUploadRequestDto,
+  ): Promise<CompleteMultipartUploadResponseDto> {
+    const bucket = this.s3Service.getBucketName(request.uploadType);
+    if (!bucket) {
+      throw new BadRequestException("Invalid upload type");
+    }
+
+    if (!request.parts?.length) {
+      throw new BadRequestException(
+        "At least one multipart upload part is required",
+      );
+    }
+
+    // Tell S3 to assemble the parts into the final object using the collected ETags
+    const result = await this.s3Service.completeMultipartUpload({
+      Bucket: bucket,
+      Key: request.key,
+      UploadId: request.uploadId,
+      MultipartUpload: {
+        Parts: request.parts.map((part) => ({
+          ETag: part.etag,
+          PartNumber: part.partNumber,
+        })),
+      },
+    });
+
+    return {
+      success: true,
+      key: request.key,
+      bucket,
+      uploadId: request.uploadId,
+      etag: typeof result.ETag === "string" ? result.ETag : undefined,
     };
   }
 

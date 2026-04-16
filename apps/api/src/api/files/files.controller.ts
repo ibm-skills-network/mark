@@ -23,7 +23,11 @@ import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
-import { UploadRequestDto, UploadType } from "./dto/upload.dto";
+import {
+  CompleteMultipartUploadRequestDto,
+  UploadRequestDto,
+  UploadType,
+} from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
@@ -75,6 +79,28 @@ export class FilesController {
       uploadRequest,
       request.userSession.userId,
     );
+  }
+
+  @Post("upload/initiate")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Initiate multipart upload and return part URLs" })
+  async initiateMultipartUpload(
+    @Body() uploadRequest: UploadRequestDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    return this.filesService.initiateMultipartUpload(
+      uploadRequest,
+      request.userSession.userId,
+    );
+  }
+
+  @Post("upload/complete")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Complete multipart upload using uploaded parts" })
+  async completeMultipartUpload(
+    @Body() body: CompleteMultipartUploadRequestDto,
+  ) {
+    return this.filesService.completeMultipartUpload(body);
   }
 
   @Post("direct-upload")
