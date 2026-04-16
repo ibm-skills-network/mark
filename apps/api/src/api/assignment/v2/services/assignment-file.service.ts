@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
+  NotFoundException,
 } from "@nestjs/common";
 import {
   AssignmentFile,
@@ -31,6 +33,8 @@ export interface AssignmentFileResponse {
 
 @Injectable()
 export class AssignmentFileService {
+  private readonly logger = new Logger(AssignmentFileService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
@@ -135,6 +139,46 @@ export class AssignmentFileService {
         "Failed to upload assignment files",
       );
     }
+  }
+
+  async getAssignmentFiles(
+    assignmentId: number,
+  ): Promise<{ files: AssignmentFileResponse[] }> {
+    const files = await this.prisma.assignmentFile.findMany({
+      where: { assignmentId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return { files: files.map((file) => this.toResponse(file)) };
+  }
+
+  async deleteAssignmentFile(
+    assignmentId: number,
+    fileId: number,
+  ): Promise<void> {
+    const file = await this.prisma.assignmentFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    if (file.assignmentId !== assignmentId) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    await this.prisma.assignmentFile.delete({ where: { id: fileId } });
+
+    await this.s3Service
+      .deleteObject({ Bucket: file.storageBucket, Key: file.storageKey })
+      .catch((error: unknown) => {
+        // Logging and moving on: a dangling s3 object is preferable to returning a failure after the delete succeeded.
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `File ${fileId} deleted from DB but S3 cleanup failed: ${message}`,
+        );
+      });
   }
 
   private generateStorageKey(assignmentId: number, filename: string): string {
