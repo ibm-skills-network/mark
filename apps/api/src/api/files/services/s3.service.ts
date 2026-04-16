@@ -143,7 +143,7 @@ export class S3Service {
       );
     }
 
-    throw new Error(`Unsupported signed URL operation: ${operation}`);
+    throw new Error("Unsupported signed URL operation");
   }
 
   async createMultipartUpload(

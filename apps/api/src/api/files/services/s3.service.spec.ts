@@ -1,4 +1,8 @@
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl as getS3SignedUrl } from "@aws-sdk/s3-request-presigner";
 import { S3Service } from "./s3.service";
 
@@ -65,11 +69,28 @@ describe("S3Service", () => {
 
   it("throws on unsupported signed URL operation", async () => {
     await expect(
+      // @ts-expect-error intentional invalid operation to verify runtime guard
       service.getSignedUrl("deleteObject", {
         Bucket: "author-bucket",
         Key: "file.txt",
       }),
-    ).rejects.toThrow("Unsupported signed URL operation: deleteObject");
+    ).rejects.toThrow("Unsupported signed URL operation");
+  });
+
+  it("builds uploadPart signed URLs for multipart uploads", async () => {
+    mockGetSignedUrl.mockResolvedValue("signed-upload-part-url");
+
+    await service.getSignedUrl("uploadPart", {
+      Bucket: "author-bucket",
+      Key: "upload/file.txt",
+      UploadId: "upload-123",
+      PartNumber: 1,
+      Expires: 456,
+    });
+
+    const [, command, options] = mockGetSignedUrl.mock.calls[0];
+    expect(command).toBeInstanceOf(UploadPartCommand);
+    expect(options).toEqual({ expiresIn: 456 });
   });
 
   it("returns false when objectExists receives a 404-style error", async () => {
