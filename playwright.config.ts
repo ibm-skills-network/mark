@@ -25,8 +25,8 @@ export default defineConfig({
     "tests/examples/**",
   ],
 
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* Run tests in files in parallel locally; sequential on CI to match workers: 1 */
+  fullyParallel: !process.env.CI,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
@@ -93,7 +93,7 @@ export default defineConfig({
   webServer: {
     command: "yarn start:e2e",
     url: testEnvironment.webBaseUrl,
-    timeout: 300_000,
+    timeout: 600_000,
     reuseExistingServer: !process.env.CI,
   },
 });

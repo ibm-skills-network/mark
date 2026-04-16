@@ -1,27 +1,118 @@
 name: Playwright Tests
+
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
+    paths:
+      - "apps/**"
+      - "tests/**"
+      - "playwright.config.ts"
+      - "scripts/start-e2e.sh"
+      - "scripts/server-common.sh"
+      - ".github/workflows/playwright.yml"
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
+  workflow_dispatch:
+
 jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: mark-pg-user
+          POSTGRES_PASSWORD: mark-pg-password # pragma: allowlist secret
+          POSTGRES_DB: mark-pg
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-    - name: Install dependencies
-      run: npm install -g yarn && yarn
-    - name: Install Playwright Browsers
-      run: yarn playwright:install
-    - name: Run Playwright tests
-      run: yarn test:e2e:all
-    - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.0.0"
+          cache: "yarn"
+
+      - name: Configure Yarn
+        run: |
+          yarn config set network-timeout 600000
+          yarn config set network-concurrency 1
+          yarn config set child-concurrency 1
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --verbose
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
+          HUSKY: 0
+        timeout-minutes: 15
+
+      - name: Create root dev.env
+        run: |
+          cat > dev.env <<'EOF'
+          export PORT=3010
+          export API_PORT=4222
+          export API_GATEWAY_PORT=8000
+          export API_GATEWAY_HOST=http://127.0.0.1:8000
+          export AUTH_DISABLED=true
+          export NODE_ENV=development
+          export POSTGRES_HOST=localhost
+          export POSTGRES_PORT=5432
+          export POSTGRES_EXTERNAL_PORT=5432
+          export POSTGRES_USER=mark-pg-user
+          export POSTGRES_PASSWORD=mark-pg-password # pragma: allowlist secret
+          export POSTGRES_DB=mark-pg
+          SECRET=devsecret # pragma: allowlist secret
+          EOF
+
+      - name: Patch API database URL
+        run: |
+          DB_URL="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
+          sed -i "s|export DATABASE_URL=.*|export DATABASE_URL=${DB_URL}|" apps/api/dev.env
+          sed -i "s|export DATABASE_URL_DIRECT=.*|export DATABASE_URL_DIRECT=${DB_URL}|" apps/api/dev.env
+
+      - name: Patch API Gateway secret
+        run: |
+          sed -i "s|^SECRET=.*|SECRET=devsecret|" apps/api-gateway/dev.env # pragma: allowlist secret
+
+      - name: Create web local env
+        run: |
+          cat > apps/web/.env.local <<'EOF'
+          OPENAI_API_KEY=ci-dummy-key # pragma: allowlist secret
+          OPENAI_API_SPEECH_TEXT_KEY=ci-dummy-key # pragma: allowlist secret
+          EOF
+
+      - name: Run database migrations
+        run: |
+          cd apps/api
+          export DATABASE_URL="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
+          export DATABASE_URL_DIRECT="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
+          npx prisma migrate deploy
+          npx prisma generate
+
+      - name: Install Playwright browsers
+        run: yarn playwright:install
+
+      - name: Run Playwright tests
+        run: yarn test:e2e:all
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
