@@ -69,21 +69,23 @@ jobs:
           SECRET=devsecret # pragma: allowlist secret
           EOF
 
-      - name: Patch API database URL
+      - name: Create API dev.env
         run: |
-          DB_URL="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
-          sed -i "s|export DATABASE_URL=.*|export DATABASE_URL=${DB_URL}|" apps/api/dev.env
-          sed -i "s|export DATABASE_URL_DIRECT=.*|export DATABASE_URL_DIRECT=${DB_URL}|" apps/api/dev.env
+          cat > apps/api/dev.env <<'EOF'
+          export NODE_ENV=development
+          export API_PORT=4222
+          export DATABASE_URL=postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg # pragma: allowlist secret
+          export DATABASE_URL_DIRECT=postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg # pragma: allowlist secret
+          EOF
 
-      - name: Patch API Gateway secret
+      - name: Create API Gateway dev.env
         run: |
-          sed -i "s|^SECRET=.*|SECRET=devsecret|" apps/api-gateway/dev.env # pragma: allowlist secret
-
-      - name: Create web local env
-        run: |
-          cat > apps/web/.env.local <<'EOF'
-          OPENAI_API_KEY=ci-dummy-key # pragma: allowlist secret
-          OPENAI_API_SPEECH_TEXT_KEY=ci-dummy-key # pragma: allowlist secret
+          cat > apps/api-gateway/dev.env <<'EOF'
+          NODE_ENV=development
+          API_GATEWAY_PORT=8000
+          MARK_API_ENDPOINT=http://localhost:4222
+          AUTH_DISABLED=true
+          SECRET=devsecret # pragma: allowlist secret
           EOF
 
       - name: Run database migrations
