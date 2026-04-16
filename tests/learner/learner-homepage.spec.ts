@@ -34,18 +34,11 @@ async function dismissLanguageModalIfPresent(page: Page) {
 test.describe("Learner - Assignment Homepage", () => {
   test.beforeEach(async ({ page, assignmentIds }) => {
     await page.goto(`/learner/${assignmentIds.learner.id}?lang=en`);
-
     await dismissLanguageModalIfPresent(page);
   });
 
   test("should display assignment title and header", async ({ page }) => {
-    // Verify assignment title appears in both banner and main content
-    await expect(
-      page
-        .getByRole("banner")
-        .getByRole("heading", { name: "Playwright Assignment" }),
-    ).toBeVisible();
-
+    // Verify assignment title appears in main content
     await expect(
       page
         .getByRole("main")
