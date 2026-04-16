@@ -29,7 +29,8 @@ jest.mock("@/hooks/useChatbot", () => ({
 }));
 
 jest.mock("@/stores/author", () => {
-  const hook = (selector: (state: any) => unknown) => mockUseAuthorStore(selector);
+  const hook = (selector: (state: any) => unknown) =>
+    mockUseAuthorStore(selector);
   (hook as any).setState = (...args: any[]) => mockToggleFavoriteStore(...args);
 
   return {
@@ -50,20 +51,18 @@ jest.mock("framer-motion", () => {
     {},
     {
       get: (_target, tag: string) =>
-        forwardRef(
-          ({ children, ...props }: any, ref: Ref<HTMLElement>) => {
-            const sanitizedProps = { ...props };
+        forwardRef(({ children, ...props }: any, ref: Ref<HTMLElement>) => {
+          const sanitizedProps = { ...props };
 
-            delete sanitizedProps.whileHover;
-            delete sanitizedProps.whileTap;
-            delete sanitizedProps.initial;
-            delete sanitizedProps.animate;
-            delete sanitizedProps.exit;
-            delete sanitizedProps.transition;
+          delete sanitizedProps.whileHover;
+          delete sanitizedProps.whileTap;
+          delete sanitizedProps.initial;
+          delete sanitizedProps.animate;
+          delete sanitizedProps.exit;
+          delete sanitizedProps.transition;
 
-            return createElement(tag, { ...sanitizedProps, ref }, children);
-          },
-        ),
+          return createElement(tag, { ...sanitizedProps, ref }, children);
+        }),
     },
   );
 

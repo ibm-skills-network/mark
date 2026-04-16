@@ -4,14 +4,15 @@ import MarkQuestionGenFailed from "@/animations/MarkQuestionGenFailed.json";
 import { readFile } from "@/app/Helpers/fileReader";
 import {
   AssignmentTypeEnum,
-  Choice,
-  Criteria,
   QuestionAuthorStore,
   QuestionGenerationPayload,
   ResponseType,
 } from "@/config/types";
-import { getJobStatus, uploadFiles } from "@/lib/talkToBackend";
-import { generateTempQuestionId } from "@/lib/utils";
+import {
+  pollQuestionGenerationJob,
+  startQuestionGenerationJob,
+} from "@/lib/question-generation/client";
+import { mergeGeneratedQuestionsForAuthorStore } from "@/lib/question-generation/normalize";
 import { useAuthorStore } from "@/stores/author";
 import {
   IconCloudUpload,
@@ -26,7 +27,6 @@ import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import Modal from "./Modal";
 import Tooltip from "./Tooltip";
-import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 
 const MAX_CHAR_LIMIT = 20000;
 
@@ -56,11 +56,12 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     null,
   );
   const setQuestions = useAuthorStore((state) => state.setQuestions);
+  const setQuestionOrder = useAuthorStore((state) => state.setQuestionOrder);
+  const setUpdatedAt = useAuthorStore((state) => state.setUpdatedAt);
   const [learningObjectives, setLearningObjectives] = useAuthorStore(
     (state) => [state.learningObjectives, state.setLearningObjectives],
   );
-  const [, setError] = useState<string | null>(null);
-  const questions = useAuthorStore((state) => state.questions);
+  const [error, setError] = useState<string | null>(null);
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     else if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -196,16 +197,19 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         learningObjectives,
       };
 
-      const response = await uploadFiles(payload);
-      if (response.success && response.jobId) {
-        setJobId(response.jobId);
-        setProgress(0);
-        setProgressMessage("Processing started");
-      } else {
-        setError("Failed to upload files");
-      }
+      const nextJobId = await startQuestionGenerationJob(payload);
+      setJobId(nextJobId);
+      setProgress(0);
+      setProgressMessage("Processing started");
     } catch (error) {
-      setError("An error occurred while uploading files.");
+      if (
+        error instanceof Error &&
+        error.message === "Failed to upload files"
+      ) {
+        setError("Failed to upload files");
+      } else {
+        setError("An error occurred while uploading files.");
+      }
     }
   };
   const getDifficultyDescription = (difficulty: AssignmentTypeEnum) => {
@@ -226,79 +230,56 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   };
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
     if (jobId) {
-      intervalId = setInterval(async () => {
-        try {
-          const statusData = await getJobStatus(jobId);
-          setStatusData(statusData);
-          if (!statusData) {
-            throw new Error("Failed to fetch job status");
-          }
-          setProgressMessage(statusData.progress || "");
+      const stopPolling = pollQuestionGenerationJob({
+        jobId,
+        onUpdate: (latestStatusData) => {
+          setStatusData(latestStatusData);
+          setProgressMessage(latestStatusData.progress || "");
+        },
+        onCompleted: (latestStatusData) => {
+          if (latestStatusData.questions) {
+            const latestStore = useAuthorStore.getState();
+            const mergeResult = mergeGeneratedQuestionsForAuthorStore({
+              existingQuestions: latestStore.questions || [],
+              generatedQuestions: latestStatusData.questions,
+              assignmentId: activeAssignmentId,
+              existingQuestionOrder: latestStore.questionOrder || [],
+              replaceExisting: replaceExistingQuestions,
+            });
 
-          if (statusData.status === "Completed") {
-            clearInterval(intervalId);
-            if (statusData.questions) {
-              const questionsGenerated: QuestionAuthorStore[] =
-                statusData.questions;
-              questionsGenerated.forEach((question: QuestionAuthorStore) => {
-                question.alreadyInBackend = false;
-                question.id = generateTempQuestionId();
-                question.assignmentId = activeAssignmentId;
-                question.randomizedChoices = true;
-                question.totalPoints =
-                  question.scoring?.criteria &&
-                  Array.isArray(question.scoring.criteria)
-                    ? Math.max(
-                        ...question.scoring.criteria.map(
-                          (c: Criteria) => c.points,
-                        ),
-                      )
-                    : question.choices
-                      ? question.choices.reduce(
-                          (acc: number, choice: Choice) => acc + choice.points,
-                          0,
-                        )
-                      : 0;
-                if (question.choices && Array.isArray(question.choices)) {
-                  question.choices = question.choices.map(
-                    (choice: Choice, index: number) => ({
-                      ...choice,
-                      id: index,
-                    }),
-                  );
-                }
-              });
-              const processedQuestions = processQuestions(questionsGenerated);
-              if (replaceExistingQuestions) {
-                setQuestions(processedQuestions);
-              } else {
-                setQuestions(questions.concat(processedQuestions));
-              }
+            setQuestions(mergeResult.questions);
+            setQuestionOrder(mergeResult.questionOrder);
+            if (setUpdatedAt) {
+              setUpdatedAt(Date.now());
             }
-            setTimeout(() => onClose(), 2000);
-          } else if (statusData.status === "Failed") {
-            clearInterval(intervalId);
-            setError("Processing failed. Please try again.");
-            setTimeout(() => {
-              setProgress(null);
-            }, 5000);
           }
-        } catch (error: unknown) {
-          clearInterval(intervalId);
+          setTimeout(() => onClose(), 2000);
+        },
+        onFailed: () => {
+          setError("Processing failed. Please try again.");
+          setTimeout(() => {
+            setProgress(null);
+          }, 5000);
+        },
+        onError: () => {
           setError("An error occurred while fetching job status.");
-        }
-      }, 2500);
-    }
+        },
+      });
 
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [jobId, setQuestions, onClose]);
+      return () => {
+        stopPolling();
+      };
+    }
+  }, [
+    activeAssignmentId,
+    jobId,
+    onClose,
+    replaceExistingQuestions,
+    setQuestionOrder,
+    setQuestions,
+    setUpdatedAt,
+  ]);
 
   return (
     <Modal onClose={onClose} Title="Generate Questions for your assignment">
@@ -681,6 +662,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
             Total Questions:{" "}
             {Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0)}
           </p>
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
             type="submit"

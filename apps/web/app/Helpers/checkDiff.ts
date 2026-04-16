@@ -447,7 +447,9 @@ export function useChangesSummary(): string {
       diffs.push(graded ? "Enabled grading." : "Disabled grading.");
     }
 
-    if (!safeCompare(requireAllQuestions, originalAssignment.requireAllQuestions)) {
+    if (
+      !safeCompare(requireAllQuestions, originalAssignment.requireAllQuestions)
+    ) {
       if (requireAllQuestions) {
         diffs.push("Enabled required questions enforcement.");
       } else {
@@ -464,12 +466,12 @@ export function useChangesSummary(): string {
       const originalOptional = originalAssignment.optionalQuestionIds || [];
       const currentOptional = optionalQuestionIds || [];
 
-      // Find questions that became optional 
+      // Find questions that became optional
       const becameOptional = currentOptional.filter(
         (id) => !originalOptional.includes(id),
       );
 
-      // Find questions that became required 
+      // Find questions that became required
       const becameRequired = originalOptional.filter(
         (id) => !currentOptional.includes(id),
       );
