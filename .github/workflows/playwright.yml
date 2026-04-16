@@ -2,16 +2,9 @@ name: Playwright Tests
 
 on:
   push:
-    branches: [main, master]
-    paths:
-      - "apps/**"
-      - "tests/**"
-      - "playwright.config.ts"
-      - "scripts/start-e2e.sh"
-      - "scripts/server-common.sh"
-      - ".github/workflows/playwright.yml"
+    branches: [master, fix/playwright-integration]
   pull_request:
-    branches: [main, master]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
