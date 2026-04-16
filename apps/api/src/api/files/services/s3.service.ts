@@ -90,15 +90,9 @@ export class S3Service {
       return true;
     } catch (error: unknown) {
       const typedError = error as {
-        code?: string;
-        name?: string;
         $metadata?: { httpStatusCode?: number };
       };
-      if (
-        typedError?.code === "NotFound" ||
-        typedError?.name === "NotFound" ||
-        typedError?.$metadata?.httpStatusCode === 404
-      ) {
+      if (typedError?.$metadata?.httpStatusCode === 404) {
         return false;
       }
       throw error;
@@ -113,7 +107,7 @@ export class S3Service {
   }
 
   async getSignedUrl(
-    operation: string,
+    operation: "getObject" | "putObject" | "uploadPart",
     parameters: {
       Bucket: string;
       Key: string;
@@ -206,7 +200,7 @@ export class S3Service {
     return client.send(new HeadBucketCommand(parameters));
   }
 
-  getBucketName(uploadType: string): string | undefined {
+  getBucketName(uploadType: string): string {
     const buckets: Record<string, string> = {
       author: process.env.IBM_COS_AUTHOR_BUCKET ?? "",
       learner: process.env.IBM_COS_LEARNER_BUCKET ?? "",

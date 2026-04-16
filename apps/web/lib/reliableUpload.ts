@@ -13,6 +13,7 @@ interface UploadProgress {
   percentage: number;
 }
 
+// Per-part defaults: 3 retries, 1s initial backoff, 5-minute timeout
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY = 1000;
 const DEFAULT_TIMEOUT = 5 * 60 * 1000;
@@ -73,6 +74,7 @@ async function uploadPartWithRetry(
         );
       }
 
+      // S3 returns an ETag per part; collected and sent in the complete call
       const etag = response.headers.get("etag");
       if (!etag) {
         throw new Error("Multipart upload response missing ETag header");
@@ -83,11 +85,13 @@ async function uploadPartWithRetry(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      // Timeout aborts are not retryable
       if (lastError.name === "AbortError") {
         break;
       }
 
       if (attempt < maxRetries) {
+        // Exponential backoff: 1s → 2s → 4s
         const backoffDelay = retryDelay * Math.pow(2, attempt);
         await sleep(backoffDelay);
       }
@@ -116,10 +120,12 @@ export async function reliableUpload(
   let loadedBytes = 0;
 
   for (const part of multipartUpload.urls) {
+    // Compute the byte range for this part
     const start = (part.partNumber - 1) * multipartUpload.partSizeBytes;
     const end = Math.min(start + multipartUpload.partSizeBytes, file.size);
     const chunk = file.slice(start, end);
 
+    // PUT the chunk directly to S3 via its presigned URL; returns the ETag
     const etag = await uploadPartWithRetry(chunk, part.url, {
       onUploadedBytes: (chunkBytes) => {
         loadedBytes += chunkBytes;
@@ -131,6 +137,7 @@ export async function reliableUpload(
       },
     });
 
+    // S3 needs each part's ETag to assemble the final object
     completedParts.push({
       partNumber: part.partNumber,
       etag,
