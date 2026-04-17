@@ -404,7 +404,12 @@ export async function submitAssignment(
               if (typeof result === "string") {
                 try {
                   result = JSON.parse(result);
-                } catch (e) {}
+                } catch (e) {
+                  console.warn(
+                    "SSE Completed: failed to JSON.parse result, returning raw string:",
+                    e,
+                  );
+                }
               }
               resolve(result);
             } else if (data.status === "Failed" && !isCompleted) {
@@ -419,7 +424,9 @@ export async function submitAssignment(
                 reject(new Error(data.progress || "Grading failed"));
               }, 2000);
             }
-          } catch (error) {}
+          } catch (error) {
+            console.error("SSE onmessage handler error:", error);
+          }
         };
 
         eventSource.addEventListener("update", (event: any) => {
@@ -435,7 +442,9 @@ export async function submitAssignment(
               if (data.progress && data.percentage !== undefined) {
                 onProgress?.("processing", data.percentage, data.progress);
               }
-            } catch (error) {}
+            } catch (error) {
+              console.warn("SSE update event parse failed:", error);
+            }
           }
         });
 
@@ -443,8 +452,10 @@ export async function submitAssignment(
           if (!isCompleted) {
             resetTimeout();
             try {
-              const data = JSON.parse(event.data);
-            } catch (error) {}
+              JSON.parse(event.data);
+            } catch (error) {
+              console.warn("SSE heartbeat parse failed:", error);
+            }
           }
         });
 
@@ -462,7 +473,12 @@ export async function submitAssignment(
               if (typeof result === "string") {
                 try {
                   result = JSON.parse(result);
-                } catch (e) {}
+                } catch (e) {
+                  console.warn(
+                    "SSE finalize: failed to JSON.parse result, returning raw string:",
+                    e,
+                  );
+                }
               }
               resolve(result);
             } catch (error) {
@@ -533,7 +549,9 @@ export async function submitAssignment(
                   data.error || "Grading stream reported an error";
                 onProgress?.("failed", 0, streamErrorMessage);
               }
-            } catch (error) {}
+            } catch (error) {
+              console.warn("SSE error-event parse failed:", error);
+            }
             return;
           }
 
@@ -570,7 +588,12 @@ export async function submitAssignment(
               `SSE Connection Failed - Learner Report Fallback\n\nAttempt ID: ${attemptId}\nError Details:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
               cookies,
             );
-          } catch (fallbackError) {}
+          } catch (fallbackError) {
+            console.error(
+              "💥 Author fallback report also failed:",
+              fallbackError,
+            );
+          }
         }
 
         const finalErrorMessage = `Connection failed after ${maxRetries} attempts. Error details have been automatically reported.`;

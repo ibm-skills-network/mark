@@ -212,8 +212,13 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       );
 
       if (Math.abs(totalPointsInFeedback - validatedPoints) > 1) {
-        console.warn(
+        this.logger?.warn(
           `Grading inconsistency detected: feedback mentions ${totalPointsInFeedback} points but grade is ${validatedPoints}`,
+          {
+            feedback_points: totalPointsInFeedback,
+            grade_points: validatedPoints,
+            max_points: maxPoints,
+          },
         );
 
         if (totalPointsInFeedback <= maxPoints && totalPointsInFeedback >= 0) {
