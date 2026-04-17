@@ -37,6 +37,11 @@ import {
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import { RubricCriterion } from "../types/criterion-evidence.types";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
+import {
+  extractExpectedFilenameFromText,
+  filenamesMatch,
+  mentionsFilenameRequirement,
+} from "./spreadsheet-rubric.utils";
 
 type RubricScore = {
   rubricQuestion: string;
@@ -61,6 +66,7 @@ type GradingOutput = {
 
 type SpreadsheetCheckType =
   | "file_open"
+  | "filename_match"
   | "empty_rows"
   | "duplicates"
   | "double_spaces"
@@ -106,6 +112,7 @@ type SpreadsheetRubricEvaluation = {
 type SpreadsheetCheckDefinition = {
   type: SpreadsheetCheckType;
   expectedRowCount?: number;
+  expectedFilename?: string;
 };
 
 @Injectable()
@@ -969,8 +976,13 @@ export class FileGradingService implements IFileGradingService {
       filename.endsWith(".pdf") ||
       fileType.includes("pdf") ||
       sourceType === "pdf";
+    const isSpreadsheet =
+      filename.endsWith(".xlsx") ||
+      filename.endsWith(".xls") ||
+      filename.endsWith(".csv") ||
+      filename.endsWith(".tsv");
 
-    if (!isPdf) return false;
+    if (!isPdf && !isSpreadsheet) return false;
     if (structureQuality === "low") return false;
 
     return true;
@@ -1149,6 +1161,7 @@ export class FileGradingService implements IFileGradingService {
     const lines: string[] = [];
     lines.push(
       "=== VALIDATOR REPORT ===",
+      `uploaded_filename: ${metrics.filename}`,
       `sheet: ${metrics.sheetName}`,
       `data_rows: ${metrics.dataRowCount}`,
       `empty_rows: ${metrics.emptyRowIndices.length}`,
@@ -1846,9 +1859,17 @@ export class FileGradingService implements IFileGradingService {
     const criteriaText = rubric.criteria
       ?.map((criterion) => criterion.description)
       .join(" ");
-    const combinedText = `${rubric.rubricQuestion || ""} ${
-      criteriaText || ""
-    }`.toLowerCase();
+    const rawText = `${rubric.rubricQuestion || ""} ${criteriaText || ""}`;
+    const combinedText = rawText.toLowerCase();
+
+    if (mentionsFilenameRequirement(rawText)) {
+      const expectedFilename = extractExpectedFilenameFromText(rawText);
+      if (!expectedFilename) {
+        return { type: "unknown" };
+      }
+
+      return { type: "filename_match", expectedFilename };
+    }
 
     if (
       /upload|uploaded/.test(combinedText) ||
@@ -1908,6 +1929,22 @@ export class FileGradingService implements IFileGradingService {
           `Workbook "${metrics.filename}" opened with sheet "${metrics.sheetName}".`,
         );
         return { status: "full", evidence };
+      }
+      case "filename_match": {
+        if (!check.expectedFilename) {
+          evidence.push(
+            "Filename requirement detected but expected filename could not be parsed from the rubric.",
+          );
+          return { status: "unknown", evidence };
+        }
+
+        evidence.push(
+          `Uploaded filename: "${metrics.filename}". Expected filename: "${check.expectedFilename}".`,
+        );
+
+        return filenamesMatch(metrics.filename, check.expectedFilename)
+          ? { status: "full", evidence }
+          : { status: "none", evidence };
       }
       case "headers": {
         if (metrics.headerRowIndex < 0) {
