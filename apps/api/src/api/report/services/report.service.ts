@@ -73,6 +73,15 @@ export class ReportsService {
     const token = await this.getInstallationToken();
 
     if (!githubOwner || !githubRepo || !token) {
+      this.logger.error(
+        "fetchGitHubIssueComments: GitHub config or token missing",
+        {
+          issueNumber,
+          owner_set: !!githubOwner,
+          repo_set: !!githubRepo,
+          token_set: !!token,
+        },
+      );
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
       );
@@ -130,6 +139,9 @@ export class ReportsService {
   private getRenewalBaseUrl(): string {
     if (process.env.NODE_ENV === "production") {
       if (!process.env.WEB_APP_URL) {
+        this.logger.error(
+          "getRenewalBaseUrl: WEB_APP_URL env var missing in production",
+        );
         throw new InternalServerErrorException("WEB_APP_URL missing");
       }
       return process.env.WEB_APP_URL;
@@ -186,6 +198,13 @@ export class ReportsService {
     const token = await this.getInstallationToken();
 
     if (!githubOwner || !githubRepo || !token) {
+      this.logger.error("postGithubComment: GitHub config or token missing", {
+        issueNumber,
+        body_length: body?.length,
+        owner_set: !!githubOwner,
+        repo_set: !!githubRepo,
+        token_set: !!token,
+      });
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
       );
@@ -248,11 +267,19 @@ export class ReportsService {
     }
 
     if (!processed.startsWith("-----BEGIN")) {
+      this.logger.error(
+        "getPrivateKey: GITHUB_APP_PRIVATE_KEY missing BEGIN marker",
+        { raw_length: raw.length, processed_length: processed.length },
+      );
       throw new InternalServerErrorException(
         "Invalid private key format: missing BEGIN marker",
       );
     }
     if (!processed.endsWith("-----")) {
+      this.logger.error(
+        "getPrivateKey: GITHUB_APP_PRIVATE_KEY missing END marker",
+        { raw_length: raw.length, processed_length: processed.length },
+      );
       throw new InternalServerErrorException(
         "Invalid private key format: missing END marker",
       );
@@ -264,6 +291,7 @@ export class ReportsService {
   private buildAppJWT(): string {
     const appId = process.env.GITHUB_APP_ID;
     if (!appId) {
+      this.logger.error("buildAppJWT: GITHUB_APP_ID env var missing");
       throw new InternalServerErrorException("GITHUB_APP_ID missing");
     }
     const privateKey = this.getPrivateKey();
@@ -281,7 +309,11 @@ export class ReportsService {
       );
 
       return token;
-    } catch {
+    } catch (error) {
+      this.logger.error("buildAppJWT: jwt.sign failed", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException("Failed to create GitHub App JWT");
     }
   }
@@ -298,6 +330,10 @@ export class ReportsService {
     const owner = process.env.GITHUB_OWNER;
     const repo = process.env.GITHUB_REPO;
     if (!owner || !repo) {
+      this.logger.error(
+        "getInstallationId: GITHUB_OWNER or GITHUB_REPO missing",
+        { owner_set: !!owner, repo_set: !!repo },
+      );
       throw new InternalServerErrorException(
         "GITHUB_OWNER or GITHUB_REPO missing",
       );
@@ -322,6 +358,15 @@ export class ReportsService {
       const message = axios.isAxiosError(error)
         ? error.message
         : "Failed to get GitHub App installation ID";
+      this.logger.error("getInstallationId: GitHub App API call failed", {
+        is_axios: axios.isAxiosError(error),
+        axios_status: axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined,
+        axios_url: axios.isAxiosError(error) ? error.config?.url : undefined,
+        message,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException(message, {
         cause: error instanceof Error ? error : undefined,
       });
@@ -360,6 +405,18 @@ export class ReportsService {
       const message = axios.isAxiosError(error)
         ? error.message
         : "Failed to get GitHub App installation token";
+      this.logger.error(
+        "getInstallationToken: GitHub access token request failed",
+        {
+          is_axios: axios.isAxiosError(error),
+          axios_status: axios.isAxiosError(error)
+            ? error.response?.status
+            : undefined,
+          axios_url: axios.isAxiosError(error) ? error.config?.url : undefined,
+          message,
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
       throw new InternalServerErrorException(message, {
         cause: error instanceof Error ? error : undefined,
       });
@@ -546,6 +603,12 @@ export class ReportsService {
       if (!githubOwner) missingConfig.push("GITHUB_OWNER");
       if (!githubRepo) missingConfig.push("GITHUB_REPO");
       if (!token) missingConfig.push("installation token");
+      this.logger.error("createGitHubIssue: required config missing", {
+        missing: missingConfig,
+        title_length: title?.length,
+        body_length: body?.length,
+        labels,
+      });
       throw new InternalServerErrorException(
         `GitHub repository configuration or token missing: ${missingConfig.join(
           ", ",
@@ -571,12 +634,25 @@ export class ReportsService {
           error.response?.data?.message || error.message;
         const status = error.response?.status;
 
+        this.logger.error(
+          `createGitHubIssue: GitHub API call failed (${status})`,
+          {
+            status,
+            errorMessage,
+            response_data: error.response?.data,
+            url: error.config?.url,
+          },
+        );
         throw new InternalServerErrorException(
           `Failed to create GitHub issue (${status}): ${errorMessage}`,
         );
       } else {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
+        this.logger.error("createGitHubIssue: non-axios error", {
+          errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         throw new InternalServerErrorException(
           `Failed to create GitHub issue: ${errorMessage}`,
         );
@@ -594,6 +670,15 @@ export class ReportsService {
     const githubRepo = process.env.GITHUB_REPO;
     const token = await this.getInstallationToken();
     if (!githubOwner || !githubRepo || !token) {
+      this.logger.error(
+        "checkGitHubIssueStatus: GitHub config or token missing",
+        {
+          issueNumber,
+          owner_set: !!githubOwner,
+          repo_set: !!githubRepo,
+          token_set: !!token,
+        },
+      );
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
       );
@@ -944,6 +1029,12 @@ export class ReportsService {
     const assignmentId = userSession?.assignmentId;
 
     if (!issueType) {
+      this.logger.error("submitReport: missing issueType in DTO", {
+        user_id: userSession?.userId,
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+        dto_keys: dto ? Object.keys(dto) : undefined,
+      });
       throw new InternalServerErrorException("issueType is required");
     }
 
@@ -1099,6 +1190,15 @@ Screenshot Key: \`${finalScreenshotUrl}\`
         const token = await this.getInstallationToken();
 
         if (!githubOwner || !githubRepo || !token) {
+          this.logger.error(
+            "submitReport (duplicate path): GitHub config or token missing",
+            {
+              parent_issue_number: parentIssueNumber,
+              owner_set: !!githubOwner,
+              repo_set: !!githubRepo,
+              token_set: !!token,
+            },
+          );
           throw new InternalServerErrorException(
             "GitHub repository configuration or token missing",
           );
@@ -1597,9 +1697,13 @@ A new related issue has been created: #${issue.number}
               }
             }
           } catch (error) {
-            console.error(
-              `Error syncing GitHub issue status for report ID ${report.id}:`,
-              error,
+            this.logger.error(
+              `Error syncing GitHub issue status for report ID ${report.id}`,
+              {
+                reportId: report.id,
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
             );
           }
         }
@@ -1745,6 +1849,16 @@ A new related issue has been created: #${issue.number}
     const token = await this.getInstallationToken();
 
     if (!githubOwner || !githubRepo || !token || !report.issueNumber) {
+      this.logger.error(
+        "addCommentToGithubIssue: GitHub config, token, or issueNumber missing",
+        {
+          report_id: report?.id,
+          issue_number: report?.issueNumber,
+          owner_set: !!githubOwner,
+          repo_set: !!githubRepo,
+          token_set: !!token,
+        },
+      );
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
       );
@@ -1870,9 +1984,13 @@ A new related issue has been created: #${issue.number}
           }
         }
       } catch (error) {
-        console.error(
-          `Error syncing GitHub issue status for report ID ${reportId}:`,
-          error,
+        this.logger.error(
+          `Error syncing GitHub issue status for report ID ${reportId}`,
+          {
+            reportId,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
         );
       }
     }
@@ -1991,6 +2109,14 @@ A new related issue has been created: #${issue.number}
     const token = await this.getInstallationToken();
 
     if (!githubOwner || !githubRepo || !token) {
+      this.logger.error(
+        "fetchSyncedIssueState: GitHub config or token missing",
+        {
+          owner_set: !!githubOwner,
+          repo_set: !!githubRepo,
+          token_set: !!token,
+        },
+      );
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
       );
@@ -2482,9 +2608,14 @@ A new related issue has been created: #${issue.number}
           }
         }
       } catch (error) {
-        console.error(
-          `Error updating GitHub issue #${report.issueNumber}:`,
-          error,
+        this.logger.error(
+          `Error updating GitHub issue #${report.issueNumber}`,
+          {
+            reportId: report.id,
+            issueNumber: report.issueNumber,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
         );
       }
     }

@@ -320,15 +320,18 @@ export class ApiService {
     forwardingService: DownstreamService,
     request: UserSessionRequest,
   ): Promise<{ data: string; status: number }> {
+    let endpoint: string | undefined;
     try {
       if (!request.originalUrl) {
         throw new BadRequestException();
       }
 
-      const { endpoint, extraHeaders } = this.getForwardingDetails(
+      const forwardingDetails = this.getForwardingDetails(
         forwardingService,
         request,
       );
+      endpoint = forwardingDetails.endpoint;
+      const extraHeaders = forwardingDetails.extraHeaders;
 
       const isMultipart = this.isMultipartRequest(request);
       const isBinaryFile = this.isBinaryFileRequest(request);
@@ -443,7 +446,7 @@ export class ApiService {
           this.forwardRequestUsingHttp(
             request as Request,
             mockResponse as unknown as Response,
-            endpoint,
+            endpoint!,
             extraHeaders,
           )
             .then(() => {
@@ -487,15 +490,36 @@ export class ApiService {
       }
 
       const axiosError = error as AxiosError;
+      const endpointForLog = endpoint ?? "<unknown>";
       if (axiosError.isAxiosError && axiosError.response) {
-        this.logger.error(axiosError.response.status);
-        this.logger.error(axiosError.response.data);
+        this.logger.error(
+          `forward_failed downstream=${axiosError.response.status} ${request.method} ${endpointForLog}`,
+          {
+            downstream_status: axiosError.response.status,
+            downstream_data: axiosError.response.data,
+            downstream_url: endpointForLog,
+            downstream_method: request.method,
+            axios_code: axiosError.code,
+            request_id:
+              request.get("akamai-grn") ?? request.get("x-request-id"),
+          },
+        );
         throw new HttpException(
           axiosError.response?.data ?? "",
           axiosError.response.status,
         );
       }
-      this.logger.error(error);
+      this.logger.error(
+        `forward_failed network/unknown ${request.method} ${endpointForLog}`,
+        {
+          downstream_url: endpointForLog,
+          downstream_method: request.method,
+          axios_code: axiosError.isAxiosError ? axiosError.code : undefined,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          request_id: request.get("akamai-grn") ?? request.get("x-request-id"),
+        },
+      );
       throw new InternalServerErrorException();
     }
   }
