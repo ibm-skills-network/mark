@@ -1,11 +1,10 @@
 #!/bin/sh
+# Extract API_GATEWAY_HOST from environment variable
+API_GATEWAY_HOST_VALUE=${API_GATEWAY_HOST}
 
-if [ -z "${API_GATEWAY_HOST:-}" ]; then
-    echo "❌ API_GATEWAY_HOST must be set before starting the web app."
-    exit 1
-fi
-
-node ./scripts/prepare-next-start.js
+# Replace placeholder text in the specified files
+sed -i "s|http://{API_GATEWAY_HOST}|${API_GATEWAY_HOST_VALUE}|g" .next/required-server-files.json
+sed -i "s|http://{API_GATEWAY_HOST}|${API_GATEWAY_HOST_VALUE}|g" .next/routes-manifest.json
 
 # Start the Next.js application
 yarn next start
