@@ -145,7 +145,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
           ? exception.code
           : undefined;
       if (code === "P2025") return HttpStatus.NOT_FOUND;
-      if (code === "P2002" || code === "P2003") return HttpStatus.CONFLICT;
+      if (code === "P2002") return HttpStatus.CONFLICT;
+      if (code === "P2003") return HttpStatus.BAD_REQUEST;
       if (code && PRISMA_POOL_CODES.has(code))
         return HttpStatus.SERVICE_UNAVAILABLE;
     }
