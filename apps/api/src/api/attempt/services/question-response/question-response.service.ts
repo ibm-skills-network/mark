@@ -476,8 +476,13 @@ export class QuestionResponseService {
       );
       return { responseDto, learnerResponse };
     } else if (requestDto.learnerFileResponse) {
+      let responseType: string | undefined;
+      if (question.responseType === "IMAGES") {
+        responseType = question.responseType;
+      }
       const fileGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.UPLOAD,
+        responseType,
       );
       const isValid = await fileGradingStrategy.validateResponse(
         question,
