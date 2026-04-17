@@ -34,6 +34,7 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { applyQuestionOrder } from "../utils/question-order.util";
 import { PrismaService } from "../../../database/prisma.service";
+import { sanitizeForLog } from "../../../logger/sanitize";
 import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
@@ -708,11 +709,11 @@ export class AttemptServiceV1 {
         authCookie,
       ).catch((error: Error) => {
         this.logger.error("Error queuing LTI grade sync", {
-          assignmentAttemptId,
-          userId,
-          assignmentId,
-          error: error?.message,
-          stack: error?.stack,
+          assignmentAttemptId: sanitizeForLog(assignmentAttemptId),
+          userId: sanitizeForLog(userId),
+          assignmentId: sanitizeForLog(assignmentId),
+          error: sanitizeForLog(error?.message),
+          stack: sanitizeForLog(error?.stack),
         });
       });
     }
@@ -1966,14 +1967,15 @@ export class AttemptServiceV1 {
       this.logger.warn(
         "queueGradeSyncAsync failed, falling back to legacy LTI gateway call",
         {
-          attemptId,
-          userId,
-          assignmentId,
-          grade,
-          error:
+          attemptId: sanitizeForLog(attemptId),
+          userId: sanitizeForLog(userId),
+          assignmentId: sanitizeForLog(assignmentId),
+          grade: sanitizeForLog(grade),
+          error: sanitizeForLog(
             queueError instanceof Error
               ? queueError.message
               : String(queueError),
+          ),
         },
       );
       try {
@@ -1983,14 +1985,15 @@ export class AttemptServiceV1 {
         this.logger.error(
           "Both queueGradeSyncAsync and legacy LTI gateway failed; re-queueing",
           {
-            attemptId,
-            userId,
-            assignmentId,
-            grade,
-            legacy_error:
+            attemptId: sanitizeForLog(attemptId),
+            userId: sanitizeForLog(userId),
+            assignmentId: sanitizeForLog(assignmentId),
+            grade: sanitizeForLog(grade),
+            legacy_error: sanitizeForLog(
               legacyError instanceof Error
                 ? legacyError.message
                 : String(legacyError),
+            ),
           },
         );
         await this.ltiGradeSyncService.createAndSync({
