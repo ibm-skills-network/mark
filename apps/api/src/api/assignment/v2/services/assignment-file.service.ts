@@ -2,9 +2,16 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
+  NotFoundException,
 } from "@nestjs/common";
-import { AssignmentFile, AssignmentFileStatus } from "@prisma/client";
+import {
+  AssignmentFile,
+  AssignmentFileExtractionStatus,
+  AssignmentFileStatus,
+} from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
 
@@ -17,15 +24,21 @@ export interface AssignmentFileResponse {
   storageKey: string;
   storageBucket: string;
   status: AssignmentFileStatus;
+  extractionStatus: AssignmentFileExtractionStatus;
+  extractionError: string | null;
+  extractedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 @Injectable()
 export class AssignmentFileService {
+  private readonly logger = new Logger(AssignmentFileService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
+    private readonly fileContentExtractionService: FileContentExtractionService,
   ) {}
 
   async uploadAssignmentFiles(
@@ -45,6 +58,10 @@ export class AssignmentFileService {
       bucket: string;
       key: string;
       file: Express.Multer.File;
+      extractedText: string | null;
+      extractionStatus: AssignmentFileExtractionStatus;
+      extractionError: string | null;
+      extractedAt: Date | null;
     }> = [];
 
     try {
@@ -58,32 +75,110 @@ export class AssignmentFileService {
           ContentType: file.mimetype,
         });
 
-        uploadedObjects.push({ bucket, key, file });
+        const [extractedFile] =
+          await this.fileContentExtractionService.extractContentFromFiles([
+            {
+              filename: file.originalname,
+              content: "InCos",
+              fileType: file.mimetype || "application/octet-stream",
+              bucket,
+              key,
+            },
+          ]);
+
+        // Extraction failures currently come back as content starting with "[ERROR".
+        const extractionFailed = extractedFile.content.startsWith("[ERROR");
+
+        uploadedObjects.push({
+          bucket,
+          key,
+          file,
+          extractedText: extractionFailed ? null : extractedFile.content,
+          extractionStatus: extractionFailed
+            ? AssignmentFileExtractionStatus.FAILED
+            : AssignmentFileExtractionStatus.READY,
+          extractionError: extractionFailed ? extractedFile.content : null,
+          extractedAt: extractionFailed ? null : new Date(),
+        });
       }
 
       const createdFiles = await this.prisma.$transaction(
-        uploadedObjects.map(({ bucket, key, file }) =>
-          this.prisma.assignmentFile.create({
-            data: {
-              assignmentId,
-              filename: file.originalname,
-              mimeType: file.mimetype || "application/octet-stream",
-              size: file.size,
-              storageKey: key,
-              storageBucket: bucket,
-              status: AssignmentFileStatus.READY,
-            },
-          }),
+        uploadedObjects.map(
+          ({
+            bucket,
+            key,
+            file,
+            extractedText,
+            extractionStatus,
+            extractionError,
+            extractedAt,
+          }) =>
+            this.prisma.assignmentFile.create({
+              data: {
+                assignmentId,
+                filename: file.originalname,
+                mimeType: file.mimetype || "application/octet-stream",
+                size: file.size,
+                storageKey: key,
+                storageBucket: bucket,
+                status: AssignmentFileStatus.READY,
+                extractedText,
+                extractionStatus,
+                extractionError,
+                extractedAt,
+              },
+            }),
         ),
       );
 
       return { files: createdFiles.map((file) => this.toResponse(file)) };
     } catch {
+      // On DB failure, remove uploaded COS objects and let the caller retry the batch.
       await this.cleanupUploadedObjects(uploadedObjects);
       throw new InternalServerErrorException(
         "Failed to upload assignment files",
       );
     }
+  }
+
+  async getAssignmentFiles(
+    assignmentId: number,
+  ): Promise<{ files: AssignmentFileResponse[] }> {
+    const files = await this.prisma.assignmentFile.findMany({
+      where: { assignmentId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return { files: files.map((file) => this.toResponse(file)) };
+  }
+
+  async deleteAssignmentFile(
+    assignmentId: number,
+    fileId: number,
+  ): Promise<void> {
+    const file = await this.prisma.assignmentFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    if (file.assignmentId !== assignmentId) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    await this.prisma.assignmentFile.delete({ where: { id: fileId } });
+
+    await this.s3Service
+      .deleteObject({ Bucket: file.storageBucket, Key: file.storageKey })
+      .catch((error: unknown) => {
+        // Logging and moving on: a dangling s3 object is preferable to returning a failure after the delete succeeded.
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `File ${fileId} deleted from DB but S3 cleanup failed: ${message}`,
+        );
+      });
   }
 
   private generateStorageKey(assignmentId: number, filename: string): string {
@@ -120,6 +215,9 @@ export class AssignmentFileService {
       storageKey: file.storageKey,
       storageBucket: file.storageBucket,
       status: file.status,
+      extractionStatus: file.extractionStatus,
+      extractionError: file.extractionError,
+      extractedAt: file.extractedAt,
       createdAt: file.createdAt,
       updatedAt: file.updatedAt,
     };

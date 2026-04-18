@@ -11,8 +11,9 @@ export interface QuestionGenerationPayload {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
   questionsToGenerate: EnhancedQuestionsToGenerate;
-  fileContents: { filename: string; content: string }[];
-  learningObjectives: string;
+  fileContents?: { filename: string; content: string }[];
+  learningObjectives?: string;
+  contentSource?: "payload" | "stored" | "both";
 }
 export interface EnhancedQuestionsToGenerate extends QuestionsToGenerate {
   url?: number;
