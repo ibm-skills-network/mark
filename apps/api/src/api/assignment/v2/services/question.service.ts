@@ -526,6 +526,29 @@ export class QuestionService {
       throw new BadRequestException("Invalid assignment ID");
     }
 
+    const { multipleChoiceSubtypes } = questionsToGenerate;
+
+    if (multipleChoiceSubtypes !== undefined) {
+      const subtypeTotal =
+        (multipleChoiceSubtypes.short || 0) +
+        (multipleChoiceSubtypes.quantitative || 0) +
+        (multipleChoiceSubtypes.long || 0) +
+        (multipleChoiceSubtypes.scenario || 0);
+
+      if (subtypeTotal === 0) {
+        throw new BadRequestException(
+          "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+        );
+      }
+    }
+
+    const subtypeTotal = multipleChoiceSubtypes
+      ? (multipleChoiceSubtypes.short || 0) +
+        (multipleChoiceSubtypes.quantitative || 0) +
+        (multipleChoiceSubtypes.long || 0) +
+        (multipleChoiceSubtypes.scenario || 0)
+      : 0;
+
     const totalQuestions =
       (questionsToGenerate.multipleChoice || 0) +
       (questionsToGenerate.multipleSelect || 0) +
@@ -533,7 +556,8 @@ export class QuestionService {
       (questionsToGenerate.trueFalse || 0) +
       (questionsToGenerate.url || 0) +
       (questionsToGenerate.upload || 0) +
-      (questionsToGenerate.linkFile || 0);
+      (questionsToGenerate.linkFile || 0) +
+      subtypeTotal;
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(

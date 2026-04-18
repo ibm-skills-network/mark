@@ -8,7 +8,10 @@ import { ScoringType } from "src/api/assignment/question/dto/create.update.quest
 import { IPromptProcessor } from "src/api/llm/core/interfaces/prompt-processor.interface";
 import { Logger } from "winston";
 import { z } from "zod";
-import { EnhancedQuestionsToGenerate } from "../../../../assignment/dto/post.assignment.request.dto";
+import {
+  EnhancedQuestionsToGenerate,
+  MultipleChoiceSubtypes,
+} from "../../../../assignment/dto/post.assignment.request.dto";
 import {
   Choice,
   ScoringDto,
@@ -42,6 +45,13 @@ export enum DifficultyLevel {
   MEDIUM = "MEDIUM",
   CHALLENGING = "CHALLENGING",
   ADVANCED = "ADVANCED",
+}
+
+export enum MCSubtype {
+  SHORT = "short",
+  QUANTITATIVE = "quantitative",
+  LONG = "long",
+  SCENARIO = "scenario",
 }
 
 interface IGeneratedQuestion {
@@ -90,6 +100,7 @@ interface BatchGenerationParameters {
   difficultyLevel: DifficultyLevel;
   content?: string;
   learningObjectives?: string;
+  mcSubtype?: MCSubtype;
 }
 
 @Injectable()
@@ -128,15 +139,57 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     const difficultyLevel = this.mapAssignmentTypeToDifficulty(assignmentType);
     const questionCounts = this.getQuestionCountsByType(questionsToGenerate);
 
-    if (Object.values(questionCounts).every((count) => count === 0)) {
+    // Compute the total SINGLE_CORRECT count including any subtype contributions
+    let subtypeTotal = 0;
+    if (questionsToGenerate.multipleChoiceSubtypes) {
+      subtypeTotal =
+        (questionsToGenerate.multipleChoiceSubtypes.short || 0) +
+        (questionsToGenerate.multipleChoiceSubtypes.quantitative || 0) +
+        (questionsToGenerate.multipleChoiceSubtypes.long || 0) +
+        (questionsToGenerate.multipleChoiceSubtypes.scenario || 0);
+    }
+
+    const effectiveCounts: CountsByType = {
+      ...questionCounts,
+      [QuestionType.SINGLE_CORRECT]:
+        (questionCounts[QuestionType.SINGLE_CORRECT] || 0) + subtypeTotal,
+    };
+
+    if (Object.values(effectiveCounts).every((count) => count === 0)) {
       return [];
     }
 
-    const batches = this.createQuestionBatches(questionCounts);
+    // Regular batches for all non-subtype types (and legacy plain multipleChoice)
+    const regularBatches = this.createQuestionBatches(questionCounts);
+
+    // Subtype-tagged batches for each MC subtype
+    let subtypeBatches: {
+      types: QuestionType[];
+      counts: number[];
+      mcSubtype: MCSubtype;
+    }[] = [];
+    if (questionsToGenerate.multipleChoiceSubtypes) {
+      subtypeBatches = this.createSubtypeBatches(
+        questionsToGenerate.multipleChoiceSubtypes,
+      );
+    }
+
+    const allBatchSpecs: Array<{
+      types: QuestionType[];
+      counts: number[];
+      mcSubtype?: MCSubtype;
+    }> = [
+      ...regularBatches.map((b) => ({
+        ...b,
+        mcSubtype: undefined as MCSubtype | undefined,
+      })),
+      ...subtypeBatches,
+    ];
+
     const allQuestions: IGeneratedQuestion[] = [];
     const batchPromises: Promise<QuestionGenerationResult>[] = [];
 
-    for (const batch of batches) {
+    for (const batch of allBatchSpecs) {
       const batchPromise = this.generateQuestionBatch({
         assignmentId: assignmentId,
         types: batch.types,
@@ -144,6 +197,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
         difficultyLevel,
         content,
         learningObjectives,
+        mcSubtype: batch.mcSubtype,
       });
       batchPromises.push(batchPromise);
 
@@ -165,7 +219,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
 
     return this.finalizeQuestionSet(
       allQuestions,
-      questionCounts,
+      effectiveCounts,
       assignmentId,
       difficultyLevel,
       content,
@@ -210,6 +264,40 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     return batches;
   }
 
+  private createSubtypeBatches(
+    subtypes: MultipleChoiceSubtypes,
+  ): { types: QuestionType[]; counts: number[]; mcSubtype: MCSubtype }[] {
+    const batches: {
+      types: QuestionType[];
+      counts: number[];
+      mcSubtype: MCSubtype;
+    }[] = [];
+
+    const subtypeEntries: [MCSubtype, number][] = [
+      [MCSubtype.SHORT, subtypes.short || 0],
+      [MCSubtype.QUANTITATIVE, subtypes.quantitative || 0],
+      [MCSubtype.LONG, subtypes.long || 0],
+      [MCSubtype.SCENARIO, subtypes.scenario || 0],
+    ];
+
+    for (const [mcSubtype, count] of subtypeEntries) {
+      if (count <= 0) continue;
+
+      let remaining = count;
+      while (remaining > 0) {
+        const batchSize = Math.min(remaining, this.BATCH_SIZE);
+        batches.push({
+          types: [QuestionType.SINGLE_CORRECT],
+          counts: [batchSize],
+          mcSubtype,
+        });
+        remaining -= batchSize;
+      }
+    }
+
+    return batches;
+  }
+
   private async generateQuestionBatch(
     parameters: BatchGenerationParameters,
   ): Promise<QuestionGenerationResult> {
@@ -220,6 +308,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       difficultyLevel,
       content,
       learningObjectives,
+      mcSubtype,
     } = parameters;
     const totalCount = counts.reduce((sum, count) => sum + count, 0);
     let generatedQuestions: IGeneratedQuestion[] = [];
@@ -236,6 +325,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           content,
           learningObjectives,
           parser.getFormatInstructions(),
+          mcSubtype,
         );
 
         this.logger.debug(
@@ -515,6 +605,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
     content?: string,
     learningObjectives?: string,
     formatInstructions?: string,
+    mcSubtype?: MCSubtype,
   ): PromptTemplate {
     const questionTypeInstructions: string[] = [];
     const typeMap = {
@@ -532,7 +623,12 @@ export class QuestionGenerationService implements IQuestionGenerationService {
 
       switch (type) {
         case QuestionType.SINGLE_CORRECT: {
-          questionTypeInstructions.push(`
+          if (mcSubtype) {
+            questionTypeInstructions.push(
+              this.getMCSubtypeInstructions(count, mcSubtype),
+            );
+          } else {
+            questionTypeInstructions.push(`
   Generate ${count} MULTIPLE_CHOICE (SINGLE_CORRECT) questions:
   - Include exactly 4 choices for each question
   - One choice must be clearly correct (1 point)
@@ -540,6 +636,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
   - Distractors should be plausible (not obviously wrong)
   - Each choice must have detailed feedback explaining why it is correct/incorrect
 `);
+          }
           break;
         }
 
@@ -642,6 +739,136 @@ FORMAT INSTRUCTIONS:
         formatInstructions: () => formatInstructions || "",
       },
     });
+  }
+
+  /**
+   * Builds per-subtype instructions from the Context Manager prompt standards.
+   * Because Mark generates the question and all four choices in one structured-output
+   * call (rather than the Context Manager's three-pass pipeline), the question rules,
+   * correct-answer rules, and wrong-answer rules are combined into a single block here.
+   */
+  private getMCSubtypeInstructions(count: number, subtype: MCSubtype): string {
+    // ── Verbatim system-level question rules (system-prompt-questions) ──────
+    const QUESTION_SYSTEM_RULES = `
+  Your questions should reinforce key learning points, not trick the learner. Focus on drawing out the most important concepts and essential information from the provided content.
+
+  Short-type questions should check if the learner paid attention to specific content or reinforce important facts. These questions must ask only one thing — use either a "What" or a "How" format to invoke a short response, but not both in a single question. Do not include examples within the question.
+
+  Scenario-type questions should encourage deeper thinking or simulate real-world interactions a seller might have with a client.
+
+  You MUST follow these question rules:
+  1. When using abbreviations or acronyms in a question, always spell them out followed by the acronym in parentheses (e.g., Central Processing Unit (CPU)), except for IBM, which should remain as "IBM" without expansion.
+  2. If the question is specifically asking for the meaning or definition of an acronym, DO NOT spell it out within the question itself.
+  3. Sentence capitalization.
+  4. Clear, simple language and correct punctuation.
+  5. Gender specific terms are not allowed, use "they" when needed.
+  6. No imprecise modifiers like "best" or "recommended".
+  7. Minimize absolute modifiers like "always" or "never".
+  8. Avoid local or cultural references.
+  9. Avoid slang, jargon, or words with multiple meanings.
+  10. Minimize the usage of negative questions; if needed, capitalize the "NOT".
+  11. Use "clients" not "customers".
+  12. No "true" or "false" questions.
+  13. All questions should be fully formed and end in a question mark (?).
+  14. Do not ask useless questions: no presenter names, publication dates, website URLs, or who manages a product.
+  15. DO NOT include any answers within the question text — the question should just be the question itself.
+  16. The answer must be grounded in the content — the information needed to derive the answer must appear in the provided material, but the question may require the learner to interpret, compare, or apply that information. Do NOT ask about information that cannot be inferred from the content at all.
+  17. FORBIDDEN question stems — NEVER start a question with: "What percentage", "How many", "How much", "What number of", "How often", "What is the name of", "Can you", "Can clients", or "Can the".
+  18. NEVER include URLs, website addresses, API endpoint names, file paths, or version numbers in any question.`;
+
+    // ── Verbatim answer rules (generate-correct-answer + generate-wrong-answers) ──
+    const ANSWER_RULES = `
+  CORRECT ANSWER RULES:
+  - Provide the most accurate response directly based on the content.
+  - Keep the correct answer concise — it will be displayed alongside 3 wrong answers of similar length. Do NOT make the correct answer stand out by being longer or more detailed.
+  - MAXIMUM 70 words.
+  - No one-word answers. Short answers must be a 2-8 word noun phrase — never a single word or bare acronym alone.
+  - NEVER include URLs, website addresses, or API endpoint names.
+  - Do NOT use vague clichés like "reduces risk", "increases efficiency", "single pane of visibility", or "real-time observability" unless that exact phrase appears verbatim in the content.
+  - If the question is a Scenario question recommending a product, state the product and give a one-sentence reason why it fits the client's situation.
+  - Use "IBM" instead of "We/You/I" — neutral prose.
+  - Never write the words CORRECT or INCORRECT in any answer.
+
+  WRONG ANSWER RULES:
+  - Each wrong answer must be factually wrong but sound believable to someone who did not study the material carefully. They should NOT be obvious, joke-tier, or nonsensical.
+  - Plausibility: craft wrong answers to seem correct at first glance, based in the content but containing a subtle flaw.
+  - Length Balance: each wrong answer must be roughly the same length as the correct answer.
+  - Avoid Obvious Errors: errors must be subtle — slight misunderstandings or misinterpretations of the content.
+  - Misleading Detail: introduce small but significant details that could mislead someone not deeply familiar with the material.
+  - MAXIMUM 70 words per wrong answer.
+  - No one-word answers. Short wrong answers must be a 2-8 word noun phrase — never a single word.
+  - The wrong answers must NOT be similar to each other — each must be distinct.
+  - NEVER include URLs, website addresses, or API endpoint names.
+  - Do NOT use vague clichés unless that exact phrase appears verbatim in the content.
+  - Never write the words CORRECT or INCORRECT in any answer.`;
+
+    switch (subtype) {
+      case MCSubtype.SHORT: {
+        return `
+  Generate ${count} MULTIPLE_CHOICE (SINGLE_CORRECT) SHORT-subtype questions.
+
+  SHORT QUESTION RULES:
+  - These questions should be simple and straightforward and show that the learner was paying attention to the content.
+  - Their answers should NOT be quantitative.
+  - Only ask useful questions about the product or market — do NOT ask about websites, who to contact, or where to find more information.
+  - CRITICAL: A Short question MUST be answerable in a 2-8 word noun phrase WITHOUT explanation. If answering the question requires explaining how or why something works, contributes, or helps — it is NOT a Short question. Questions beginning with "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify" require explanation and MUST be typed as Long, not Short.
+    WRONG (do not do this): How does Instana's automated discovery help clients? → Type: Short
+    CORRECT (do this instead): How does Instana's automated discovery help clients? → Type: Long
+
+  SHORT ANSWER LENGTH: at MOST 5-8 words for both the correct answer and each wrong answer.
+
+  ${QUESTION_SYSTEM_RULES}
+  ${ANSWER_RULES}`;
+      }
+
+      case MCSubtype.QUANTITATIVE: {
+        return `
+  Generate ${count} MULTIPLE_CHOICE (SINGLE_CORRECT) QUANTITATIVE-subtype questions.
+
+  QUANTITATIVE QUESTION RULES:
+  - The question MUST require the learner to interpret or apply a statistic from the content — not recall it. Frame it as what a number indicates or why it matters.
+  - The answer is a specific number or measure from the content, but the question tests comprehension of its meaning.
+  - DO NOT start with "What percentage" or "How many".
+
+  QUANTITATIVE ANSWER LENGTH: at MOST 5-8 words for both the correct answer and each wrong answer.
+
+  ${QUESTION_SYSTEM_RULES}
+  ${ANSWER_RULES}`;
+      }
+
+      case MCSubtype.LONG: {
+        return `
+  Generate ${count} MULTIPLE_CHOICE (SINGLE_CORRECT) LONG-subtype questions.
+
+  LONG QUESTION RULES:
+  - These questions should have minimum 20-word formatted answers showing insight and detail.
+  - Construct long questions in a way that encourages comprehensive, detailed responses.
+  - Question stems such as "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify" are always Long questions.
+  - Mix question styles: some should test understanding of specific capabilities or differences (e.g. "How does IBM Granite differ from general-purpose large language models in enterprise deployment?"); others should require the learner to evaluate or explain a concept.
+
+  LONG ANSWER LENGTH: at LEAST 10 words for both the correct answer and each wrong answer.
+
+  ${QUESTION_SYSTEM_RULES}
+  ${ANSWER_RULES}`;
+      }
+
+      case MCSubtype.SCENARIO: {
+        return `
+  Generate ${count} MULTIPLE_CHOICE (SINGLE_CORRECT) SCENARIO-subtype questions.
+
+  SCENARIO QUESTION RULES:
+  - These questions should put the learner into a scenario with a client, asking what they should do next if the client does something, or if a client approaches them with some ask.
+  - Use formats such as: "A client is looking for...", "If a client needs...", "A client approaches you asking about..."
+  - Scenario questions should encourage deeper thinking and simulate real-world interactions a seller might have with a client.
+  - Do NOT disguise a definition-lookup question as a scenario — the question must require a genuine recommendation or decision.
+  - Mix scenario styles: some put the seller in a client interaction ("A client is looking for…, what would you recommend?"); others test how to handle a specific client ask or objection.
+
+  SCENARIO ANSWER LENGTH: at LEAST 10 words for both the correct answer and each wrong answer. If recommending a product, state the product and give a one-sentence reason why it fits the client's situation.
+
+  ${QUESTION_SYSTEM_RULES}
+  ${ANSWER_RULES}`;
+      }
+    }
   }
 
   private processGeneratedQuestions(
