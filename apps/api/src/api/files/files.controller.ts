@@ -131,16 +131,6 @@ export class FilesController {
     const userId = request.userSession.userId;
 
     const bucket = this.s3Service.getBucketName(uploadType);
-    try {
-    } catch (resolutionError) {
-      this.logger.error("[DIRECT UPLOAD] Bucket resolution error", {
-        uploadType,
-        error:
-          resolutionError instanceof Error
-            ? resolutionError.message
-            : String(resolutionError),
-      });
-    }
 
     if (!bucket) {
       this.logger.warn("[DIRECT UPLOAD] Invalid upload type", {
