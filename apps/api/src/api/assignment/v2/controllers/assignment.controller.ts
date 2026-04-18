@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Delete,
   Get,
+  HttpCode,
   Inject,
   Injectable,
   NotFoundException,
@@ -261,6 +263,19 @@ export class AssignmentControllerV2 {
     );
   }
 
+  @Get(":id/files")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "List files for an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    description: "List of files associated with the assignment",
+  })
+  async getAssignmentFiles(@Param("id", ParseIntPipe) id: number) {
+    return this.assignmentFileService.getAssignmentFiles(id);
+  }
+
   @Post(":id/files")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
@@ -297,6 +312,21 @@ export class AssignmentControllerV2 {
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     return this.assignmentFileService.uploadAssignmentFiles(id, files);
+  }
+
+  @Delete(":id/files/:fileId")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Delete a file from an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiParam({ name: "fileId", required: true, description: "File ID" })
+  @ApiResponse({ status: 204, description: "File deleted successfully" })
+  @HttpCode(204)
+  async deleteAssignmentFile(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("fileId", ParseIntPipe) fileId: number,
+  ): Promise<void> {
+    return this.assignmentFileService.deleteAssignmentFile(id, fileId);
   }
 
   /**

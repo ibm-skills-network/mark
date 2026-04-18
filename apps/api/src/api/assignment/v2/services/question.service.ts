@@ -5,7 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { isDeepStrictEqual } from "node:util";
-import { ResponseType } from "@prisma/client";
+import {
+  AssignmentFileExtractionStatus,
+  AssignmentFileStatus,
+  ResponseType,
+} from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
@@ -359,6 +363,10 @@ export class QuestionService {
     userId: string,
   ): Promise<{ message: string; jobId: number }> {
     this.validateQuestionGenerationPayload(payload);
+    const files = await this.resolveQuestionGenerationFiles(
+      assignmentId,
+      payload,
+    );
 
     const job = await this.jobStatusService.createJob(assignmentId, userId);
 
@@ -367,7 +375,7 @@ export class QuestionService {
       job.id,
       payload.assignmentType,
       payload.questionsToGenerate,
-      payload.fileContents,
+      files,
       payload.learningObjectives,
     ).catch((error: unknown) => {
       const errorMessage =
@@ -510,15 +518,34 @@ export class QuestionService {
     payload: QuestionGenerationPayload,
   ): void {
     const {
+      contentSource,
       fileContents,
       learningObjectives,
       questionsToGenerate,
       assignmentId,
     } = payload;
 
-    if (!fileContents && !learningObjectives) {
+    const requiresUploadedContent =
+      contentSource === undefined ||
+      contentSource === "payload" ||
+      contentSource === "both";
+
+    if (
+      requiresUploadedContent &&
+      (!fileContents || fileContents.length === 0) &&
+      !learningObjectives
+    ) {
       throw new BadRequestException(
         "Either file contents or learning objectives are required",
+      );
+    }
+
+    if (
+      contentSource === "both" &&
+      (!fileContents || fileContents.length === 0)
+    ) {
+      throw new BadRequestException(
+        "File contents are required when contentSource is both",
       );
     }
 
@@ -554,6 +581,68 @@ export class QuestionService {
         LINK_FILE: [ResponseType.OTHER],
       };
     }
+  }
+
+  private async resolveQuestionGenerationFiles(
+    assignmentId: number,
+    payload: QuestionGenerationPayload,
+  ): Promise<Array<{ filename: string; content: string }> | undefined> {
+    const contentSource = payload.contentSource ?? "payload";
+    const uploadedFiles = payload.fileContents ?? [];
+
+    if (contentSource === "payload") {
+      return uploadedFiles;
+    }
+
+    const assignmentFiles = await this.prisma.assignmentFile.findMany({
+      where: {
+        assignmentId,
+        status: AssignmentFileStatus.READY,
+        extractionStatus: AssignmentFileExtractionStatus.READY,
+        extractedText: { not: null },
+      },
+      select: {
+        filename: true,
+        extractedText: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    const normalizedAssignmentFiles = assignmentFiles
+      .filter(
+        (
+          file,
+        ): file is {
+          filename: string;
+          extractedText: string;
+        } => Boolean(file.extractedText),
+      )
+      .map((file) => ({
+        filename: file.filename,
+        content: file.extractedText,
+      }));
+
+    if (contentSource === "stored") {
+      if (normalizedAssignmentFiles.length === 0) {
+        throw new BadRequestException(
+          "No extracted assignment files are available for question generation",
+        );
+      }
+
+      return normalizedAssignmentFiles;
+    }
+
+    const combinedFiles = [...uploadedFiles, ...normalizedAssignmentFiles];
+
+    if (combinedFiles.length === 0) {
+      throw new BadRequestException(
+        "No uploaded or assignment file contents are available for question generation",
+      );
+    }
+
+    return combinedFiles;
   }
 
   /**
