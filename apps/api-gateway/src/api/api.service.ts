@@ -23,6 +23,7 @@ import { Logger } from "winston";
 import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
+import { sanitizeForLog } from "../logger/sanitize";
 
 @Injectable()
 export class ApiService {
@@ -492,16 +493,19 @@ export class ApiService {
       const axiosError = error as AxiosError;
       const endpointForLog = endpoint ?? "<unknown>";
       if (axiosError.isAxiosError && axiosError.response) {
+        const safeMethod = sanitizeForLog(request.method);
+        const safeEndpoint = sanitizeForLog(endpointForLog);
         this.logger.error(
-          `forward_failed downstream=${axiosError.response.status} ${request.method} ${endpointForLog}`,
+          `forward_failed downstream=${axiosError.response.status} ${safeMethod} ${safeEndpoint}`,
           {
             downstream_status: axiosError.response.status,
-            downstream_data: axiosError.response.data,
-            downstream_url: endpointForLog,
-            downstream_method: request.method,
-            axios_code: axiosError.code,
-            request_id:
+            downstream_data: sanitizeForLog(axiosError.response.data),
+            downstream_url: safeEndpoint,
+            downstream_method: safeMethod,
+            axios_code: sanitizeForLog(axiosError.code),
+            request_id: sanitizeForLog(
               request.get("akamai-grn") ?? request.get("x-request-id"),
+            ),
           },
         );
         throw new HttpException(
@@ -509,15 +513,25 @@ export class ApiService {
           axiosError.response.status,
         );
       }
+      const safeMethod = sanitizeForLog(request.method);
+      const safeEndpoint = sanitizeForLog(endpointForLog);
       this.logger.error(
-        `forward_failed network/unknown ${request.method} ${endpointForLog}`,
+        `forward_failed network/unknown ${safeMethod} ${safeEndpoint}`,
         {
-          downstream_url: endpointForLog,
-          downstream_method: request.method,
-          axios_code: axiosError.isAxiosError ? axiosError.code : undefined,
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-          request_id: request.get("akamai-grn") ?? request.get("x-request-id"),
+          downstream_url: safeEndpoint,
+          downstream_method: safeMethod,
+          axios_code: sanitizeForLog(
+            axiosError.isAxiosError ? axiosError.code : undefined,
+          ),
+          error: sanitizeForLog(
+            error instanceof Error ? error.message : String(error),
+          ),
+          stack: sanitizeForLog(
+            error instanceof Error ? error.stack : undefined,
+          ),
+          request_id: sanitizeForLog(
+            request.get("akamai-grn") ?? request.get("x-request-id"),
+          ),
         },
       );
       throw new InternalServerErrorException();
