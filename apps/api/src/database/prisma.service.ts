@@ -16,12 +16,14 @@
  */
 
 import {
+  Inject,
   Injectable,
-  Logger,
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
 
 const SLOW_QUERY_THRESHOLD_MS = 500;
 
@@ -45,7 +47,7 @@ export class PrismaService
   >
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(PrismaService.name);
+  private readonly logger: Logger;
   private retryCount = 0;
   private readonly maxRetries = 5;
   private readonly retryDelay = 5000;
@@ -55,7 +57,7 @@ export class PrismaService
    * Prisma log events are emitted (instead of written to stdout) so they can
    * be forwarded through Winston with structured context.
    */
-  constructor() {
+  constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
     super({
       datasources: {
         db: {
@@ -70,6 +72,8 @@ export class PrismaService
       ],
     });
 
+    this.logger = parentLogger.child({ context: PrismaService.name });
+
     this.$on("query", (event) => {
       if (event.duration >= SLOW_QUERY_THRESHOLD_MS) {
         this.logger.warn(
@@ -83,7 +87,7 @@ export class PrismaService
     });
 
     this.$on("info", (event) => {
-      this.logger.log(`prisma_info [target=${event.target}] ${event.message}`);
+      this.logger.info(`prisma_info [target=${event.target}] ${event.message}`);
     });
 
     this.$on("warn", (event) => {
@@ -104,7 +108,7 @@ export class PrismaService
    * @returns {Promise<void>}
    */
   async onModuleInit(): Promise<void> {
-    this.logger.log(
+    this.logger.info(
       `connecting: DATABASE_URL=${redactDatabaseUrl(process.env.DATABASE_URL)}`,
     );
     await this.connectWithRetry();
@@ -117,7 +121,7 @@ export class PrismaService
    * @returns {Promise<void>}
    */
   async onModuleDestroy(): Promise<void> {
-    this.logger.log("disconnecting");
+    this.logger.info("disconnecting");
     await this.$disconnect();
   }
 
@@ -133,14 +137,19 @@ export class PrismaService
     while (this.retryCount < this.maxRetries) {
       try {
         await this.$connect();
-        this.logger.log("Database connected successfully");
+        this.logger.info("Database connected successfully");
         this.retryCount = 0;
         return;
       } catch (error) {
         this.retryCount++;
         this.logger.error(
           `Database connection failed. Retry ${this.retryCount}/${this.maxRetries}`,
-          error,
+          {
+            retry: this.retryCount,
+            max_retries: this.maxRetries,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
         );
 
         if (this.retryCount === this.maxRetries) {
@@ -165,7 +174,10 @@ export class PrismaService
       await this.$queryRaw`SELECT 1`;
       return true;
     } catch (error) {
-      this.logger.error("Database health check failed:", error);
+      this.logger.error("Database health check failed", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       return false;
     }
   }
@@ -182,9 +194,12 @@ export class PrismaService
       this.logger.warn("reconnect: initiating");
       await this.$disconnect();
       await this.$connect();
-      this.logger.log("Database reconnected successfully");
+      this.logger.info("Database reconnected successfully");
     } catch (error) {
-      this.logger.error("Failed to reconnect to database:", error);
+      this.logger.error("Failed to reconnect to database", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }

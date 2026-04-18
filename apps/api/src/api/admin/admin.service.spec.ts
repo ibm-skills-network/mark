@@ -1,8 +1,18 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminService } from "./admin.service";
+
+const mockLogger = {
+  child: jest.fn().mockReturnValue({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  }),
+};
 
 describe("AdminService", () => {
   let service: AdminService;
@@ -38,6 +48,7 @@ describe("AdminService", () => {
           },
         },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
 
