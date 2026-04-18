@@ -794,10 +794,6 @@ export class TranslationMaintenanceController {
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // Background job
-  // ---------------------------------------------------------------------------
-
   async runFixMissingTranslationsJob(
     jobId: string,
     assignmentIds: number[],

@@ -36,6 +36,11 @@ import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { HighlightingGeneratorService } from "./highlighting-generator.service";
 import { ImageDescriptionService } from "./image-description.service";
+import {
+  extractExpectedFilenameFromText,
+  filenamesMatch,
+  mentionsFilenameRequirement,
+} from "./spreadsheet-rubric.utils";
 
 /**
  * Decision categories (not points)
@@ -1018,8 +1023,13 @@ LANGUAGE: {language}
   ): CriterionGradingResult | null {
     if (!report) return null;
 
-    const rubricText =
-      `${criterion.rubricQuestion} ${criterion.description}`.toLowerCase();
+    const criteriaText = criterion.criteria
+      .map((level) => level.description)
+      .join(" ");
+    const rawRubricText = `${criterion.rubricQuestion} ${
+      criterion.description
+    } ${criteriaText}`.trim();
+    const rubricText = rawRubricText.toLowerCase();
     const minPoints = Math.min(
       ...criterion.criteria.map((level) => level.points),
     );
@@ -1053,6 +1063,32 @@ LANGUAGE: {language}
         gradedAt: new Date().toISOString(),
       };
     };
+
+    if (mentionsFilenameRequirement(rawRubricText)) {
+      const expectedFilename = extractExpectedFilenameFromText(rawRubricText);
+      if (!expectedFilename) {
+        return null;
+      }
+
+      const uploadedFilename = readValue("uploaded_filename");
+      const evidenceLine = uploadedFilename
+        ? `uploaded_filename: ${uploadedFilename}`
+        : "uploaded_filename: unknown";
+
+      return filenamesMatch(uploadedFilename || "", expectedFilename)
+        ? makeResult(
+            "meets",
+            maxPoints,
+            [evidenceLine],
+            `Validator report shows uploaded_filename matches "${expectedFilename}".`,
+          )
+        : makeResult(
+            "does_not_meet",
+            minPoints,
+            [evidenceLine],
+            `Validator report shows uploaded_filename does not match "${expectedFilename}".`,
+          );
+    }
 
     if (/spelling|misspell|typo/.test(rubricText)) {
       const spellingStatus = readValue("spelling_check");

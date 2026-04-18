@@ -973,7 +973,6 @@ Provider: Development Console
     issueNumber?: number,
   ): string {
     const issueReference = issueNumber ? `Issue #${issueNumber}` : issueTitle;
-
     return `
       <!DOCTYPE html>
       <html>
@@ -1038,7 +1037,6 @@ Provider: Development Console
     issueNumber?: number,
   ): string {
     const issueReference = issueNumber ? `Issue #${issueNumber}` : issueTitle;
-
     return `
 Are you still experiencing this issue?
 

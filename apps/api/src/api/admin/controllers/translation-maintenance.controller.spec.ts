@@ -10,15 +10,6 @@ import { PrismaService } from "src/database/prisma.service";
 import { JobQueueService } from "src/job-queue/job-queue.service";
 import { TranslationMaintenanceController } from "./translation-maintenance.controller";
 
-/** Drain the microtask queue repeatedly to let background async work complete */
-const flushPromises = () =>
-  new Promise<void>((resolve) => setImmediate(resolve));
-const drainAsync = async (rounds = 15) => {
-  for (let i = 0; i < rounds; i++) {
-    await flushPromises();
-  }
-};
-
 describe("TranslationMaintenanceController", () => {
   let controller: TranslationMaintenanceController;
   const request = {
@@ -179,7 +170,6 @@ describe("TranslationMaintenanceController", () => {
       progress: "Failed to enqueue translation fix job: Redis unavailable",
     });
   });
-
   it("uses the active (current) version questions, not the most recently created version", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
@@ -355,7 +345,6 @@ describe("TranslationMaintenanceController", () => {
       dryRun: false,
     });
 
-    // Should have been called twice: once for the question, once for the variant
     expect(
       translationService.translateContentToLanguages,
     ).toHaveBeenCalledTimes(2);
@@ -424,7 +413,6 @@ describe("TranslationMaintenanceController", () => {
       maxMissing: 2,
     });
 
-    // translateContentToLanguages should only be called once (for Q1, 2 langs)
     expect(
       translationService.translateContentToLanguages,
     ).toHaveBeenCalledTimes(1);
