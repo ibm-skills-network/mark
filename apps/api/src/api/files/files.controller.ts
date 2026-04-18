@@ -30,6 +30,7 @@ import { UploadRequestDto, UploadType } from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
+import { sanitizeForLog } from "../../logger/sanitize";
 
 export interface FileAccessDto {
   filename: string;
@@ -118,8 +119,10 @@ export class FilesController {
             : body.context;
       } catch (error) {
         this.logger.error("[DIRECT UPLOAD] Failed to parse context", {
-          context_raw: body.context,
-          error: error instanceof Error ? error.message : String(error),
+          context_raw: sanitizeForLog(body.context),
+          error: sanitizeForLog(
+            error instanceof Error ? error.message : String(error),
+          ),
         });
         throw new BadRequestException("Invalid context JSON");
       }
@@ -141,8 +144,8 @@ export class FilesController {
 
     if (!bucket) {
       this.logger.warn("[DIRECT UPLOAD] Invalid upload type", {
-        uploadType,
-        userId,
+        uploadType: sanitizeForLog(uploadType),
+        userId: sanitizeForLog(userId),
       });
       throw new BadRequestException("Invalid upload type");
     }
@@ -383,10 +386,12 @@ export class FilesController {
         size: Buffer.byteLength(content, encoding as BufferEncoding),
       };
     } catch (error) {
-      this.logger.error(`[FILES] Content error for ${key}`, {
-        key,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+      this.logger.error(`[FILES] Content error for ${sanitizeForLog(key)}`, {
+        key: sanitizeForLog(key),
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+        stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
       });
 
       if (error instanceof HttpException) {
