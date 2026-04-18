@@ -72,41 +72,28 @@ export class PrismaService
 
     this.$on("query", (event) => {
       if (event.duration >= SLOW_QUERY_THRESHOLD_MS) {
-        this.logger.warn(`slow_query: ${event.duration}ms ${event.query}`, {
-          prisma_event: "query",
-          duration_ms: event.duration,
-          query: event.query,
-          params: event.params,
-          target: event.target,
-        } as unknown as Record<string, unknown>);
+        this.logger.warn(
+          `slow_query [target=${event.target}] ${event.duration}ms ${event.query}`,
+        );
       } else {
-        this.logger.debug(`query: ${event.duration}ms ${event.query}`, {
-          prisma_event: "query",
-          duration_ms: event.duration,
-          query: event.query,
-        } as unknown as Record<string, unknown>);
+        this.logger.debug(
+          `query [target=${event.target}] ${event.duration}ms ${event.query}`,
+        );
       }
     });
 
     this.$on("info", (event) => {
-      this.logger.log(`prisma_info: ${event.message}`, {
-        prisma_event: "info",
-        target: event.target,
-      } as unknown as Record<string, unknown>);
+      this.logger.log(`prisma_info [target=${event.target}] ${event.message}`);
     });
 
     this.$on("warn", (event) => {
-      this.logger.warn(`prisma_warn: ${event.message}`, {
-        prisma_event: "warn",
-        target: event.target,
-      } as unknown as Record<string, unknown>);
+      this.logger.warn(`prisma_warn [target=${event.target}] ${event.message}`);
     });
 
     this.$on("error", (event) => {
-      this.logger.error(`prisma_error: ${event.message}`, {
-        prisma_event: "error",
-        target: event.target,
-      } as unknown as Record<string, unknown>);
+      this.logger.error(
+        `prisma_error [target=${event.target}] ${event.message}`,
+      );
     });
   }
 
