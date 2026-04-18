@@ -447,7 +447,7 @@ export class ApiService {
           this.forwardRequestUsingHttp(
             request as Request,
             mockResponse as unknown as Response,
-            endpoint!,
+            forwardingDetails.endpoint,
             extraHeaders,
           )
             .then(() => {
@@ -492,9 +492,12 @@ export class ApiService {
 
       const axiosError = error as AxiosError;
       const endpointForLog = endpoint ?? "<unknown>";
+      const safeMethod = sanitizeForLog(request.method);
+      const safeEndpoint = sanitizeForLog(endpointForLog);
+      const requestId = sanitizeForLog(
+        request.get("akamai-grn") ?? request.get("x-request-id"),
+      );
       if (axiosError.isAxiosError && axiosError.response) {
-        const safeMethod = sanitizeForLog(request.method);
-        const safeEndpoint = sanitizeForLog(endpointForLog);
         this.logger.error(
           `forward_failed downstream=${axiosError.response.status} ${safeMethod} ${safeEndpoint}`,
           {
@@ -503,9 +506,7 @@ export class ApiService {
             downstream_url: safeEndpoint,
             downstream_method: safeMethod,
             axios_code: sanitizeForLog(axiosError.code),
-            request_id: sanitizeForLog(
-              request.get("akamai-grn") ?? request.get("x-request-id"),
-            ),
+            request_id: requestId,
           },
         );
         throw new HttpException(
@@ -513,8 +514,6 @@ export class ApiService {
           axiosError.response.status,
         );
       }
-      const safeMethod = sanitizeForLog(request.method);
-      const safeEndpoint = sanitizeForLog(endpointForLog);
       this.logger.error(
         `forward_failed network/unknown ${safeMethod} ${safeEndpoint}`,
         {
@@ -529,9 +528,7 @@ export class ApiService {
           stack: sanitizeForLog(
             error instanceof Error ? error.stack : undefined,
           ),
-          request_id: sanitizeForLog(
-            request.get("akamai-grn") ?? request.get("x-request-id"),
-          ),
+          request_id: requestId,
         },
       );
       throw new InternalServerErrorException();

@@ -9,6 +9,12 @@ import {
 } from "sn-messaging-ts-client";
 import { Logger } from "winston";
 
+function formatStreamError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return JSON.stringify(error);
+}
+
 @Injectable()
 export class MessagingService {
   private client: MessagingClient;
@@ -148,12 +154,7 @@ export class MessagingService {
     const wrappedError: ErrorFunction = (error) => {
       this.logger.error(`subscribeService stream error project=${project}`, {
         project,
-        error:
-          error instanceof Error
-            ? error.message
-            : typeof error === "string"
-              ? error
-              : JSON.stringify(error),
+        error: formatStreamError(error),
       });
       errorCallback(error);
     };
@@ -184,12 +185,7 @@ export class MessagingService {
     const wrappedError: ErrorFunction = (error) => {
       this.logger.error(`subscribeUser stream error username=${username}`, {
         username,
-        error:
-          error instanceof Error
-            ? error.message
-            : typeof error === "string"
-              ? error
-              : JSON.stringify(error),
+        error: formatStreamError(error),
       });
       errorCallback(error);
     };

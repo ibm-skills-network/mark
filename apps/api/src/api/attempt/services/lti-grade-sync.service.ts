@@ -135,13 +135,14 @@ export class LtiGradeSyncService {
         ),
       );
 
+      const durationMs = Date.now() - requestStart;
       this.logger.debug(
-        `LTI gateway response ${response.status} (took ${Date.now() - requestStart}ms)`,
+        `LTI gateway response ${response.status} (took ${durationMs}ms)`,
         {
           sync_id: syncId,
           attempt_id: sync.attemptId,
           status: response.status,
-          duration_ms: Date.now() - requestStart,
+          duration_ms: durationMs,
         },
       );
 

@@ -59,6 +59,27 @@ export class ReportsService {
     private readonly adminEmailService: AdminEmailService,
   ) {}
 
+  private async getGithubConfig(
+    logContext: string,
+    extraFields: Record<string, unknown> = {},
+  ): Promise<{ githubOwner: string; githubRepo: string; token: string }> {
+    const githubOwner = process.env.GITHUB_OWNER;
+    const githubRepo = process.env.GITHUB_REPO;
+    const token = await this.getInstallationToken();
+    if (!githubOwner || !githubRepo || !token) {
+      this.logger.error(`${logContext}: GitHub config or token missing`, {
+        ...extraFields,
+        owner_set: !!githubOwner,
+        repo_set: !!githubRepo,
+        token_set: !!token,
+      });
+      throw new InternalServerErrorException(
+        "GitHub repository configuration or token missing",
+      );
+    }
+    return { githubOwner, githubRepo, token };
+  }
+
   private async fetchGitHubIssueComments(issueNumber: number): Promise<
     Array<{
       id: number;
@@ -68,24 +89,10 @@ export class ReportsService {
       url: string;
     }>
   > {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-
-    if (!githubOwner || !githubRepo || !token) {
-      this.logger.error(
-        "fetchGitHubIssueComments: GitHub config or token missing",
-        {
-          issueNumber,
-          owner_set: !!githubOwner,
-          repo_set: !!githubRepo,
-          token_set: !!token,
-        },
-      );
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "fetchGitHubIssueComments",
+      { issueNumber },
+    );
 
     const commentsResponse = await axios.get(
       `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}/comments`,
@@ -193,22 +200,10 @@ export class ReportsService {
   }
 
   private async postGithubComment(issueNumber: number, body: string) {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-
-    if (!githubOwner || !githubRepo || !token) {
-      this.logger.error("postGithubComment: GitHub config or token missing", {
-        issueNumber,
-        body_length: body?.length,
-        owner_set: !!githubOwner,
-        repo_set: !!githubRepo,
-        token_set: !!token,
-      });
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "postGithubComment",
+      { issueNumber, body_length: body?.length },
+    );
 
     await axios.post(
       `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}/comments`,
@@ -666,23 +661,10 @@ export class ReportsService {
     statusMessage: string;
     closureReason?: string;
   }> {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-    if (!githubOwner || !githubRepo || !token) {
-      this.logger.error(
-        "checkGitHubIssueStatus: GitHub config or token missing",
-        {
-          issueNumber,
-          owner_set: !!githubOwner,
-          repo_set: !!githubRepo,
-          token_set: !!token,
-        },
-      );
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "checkGitHubIssueStatus",
+      { issueNumber },
+    );
 
     try {
       const response = await axios.get(
@@ -1185,24 +1167,10 @@ Screenshot Key: \`${finalScreenshotUrl}\`
         isDuplicate = true;
         parentIssueNumber = potentialDuplicate.issueNumber;
 
-        const githubOwner = process.env.GITHUB_OWNER;
-        const githubRepo = process.env.GITHUB_REPO;
-        const token = await this.getInstallationToken();
-
-        if (!githubOwner || !githubRepo || !token) {
-          this.logger.error(
-            "submitReport (duplicate path): GitHub config or token missing",
-            {
-              parent_issue_number: parentIssueNumber,
-              owner_set: !!githubOwner,
-              repo_set: !!githubRepo,
-              token_set: !!token,
-            },
-          );
-          throw new InternalServerErrorException(
-            "GitHub repository configuration or token missing",
-          );
-        }
+        const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+          "submitReport (duplicate path)",
+          { parent_issue_number: parentIssueNumber },
+        );
 
         let commentBody = `
 ## Duplicate Report Detected
@@ -2104,23 +2072,10 @@ A new related issue has been created: #${issue.number}
     developerComment?: string;
     closureReason?: string;
   }> {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-
-    if (!githubOwner || !githubRepo || !token) {
-      this.logger.error(
-        "fetchSyncedIssueState: GitHub config or token missing",
-        {
-          owner_set: !!githubOwner,
-          repo_set: !!githubRepo,
-          token_set: !!token,
-        },
-      );
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "fetchSyncedIssueState",
+      { issueNumber },
+    );
 
     try {
       const issueResponse = await axios.get(
