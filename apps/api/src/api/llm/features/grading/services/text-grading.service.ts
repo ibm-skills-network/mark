@@ -603,9 +603,7 @@ export class TextGradingService implements ITextGradingService {
       { temperature: 0, top_p: 0 },
     );
 
-    const parsedResponse = GradingAttemptSchema.parse(
-      (await parser.parse(response)) as unknown,
-    );
+    const parsedResponse = await parser.parse(response);
 
     this.logger.info(
       `LLM grading result - Points: ${parsedResponse.totalScore}/${maxPossiblePoints}, ` +

@@ -3,9 +3,8 @@
   "globalDependencies": ["**/dev.env"],
   "ui": "stream",
   "tasks": {
-    "download-models": {},
     "build": {
-      "dependsOn": ["^build", "^download-models"],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "lint": {},
@@ -13,12 +12,6 @@
     "seed:update": {},
     "lint:staged": {},
     "dev": {
-      "dependsOn": ["^download-models"],
-      "cache": false,
-      "persistent": true
-    },
-    "dev:e2e": {
-      "dependsOn": ["^download-models"],
       "cache": false,
       "persistent": true
     },
