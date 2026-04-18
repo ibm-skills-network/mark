@@ -526,7 +526,17 @@ export class QuestionService {
       throw new BadRequestException("Invalid assignment ID");
     }
 
-    const { multipleChoiceSubtypes } = questionsToGenerate;
+    const {
+      linkFile,
+      multipleChoice,
+      multipleChoiceSubtypes,
+      multipleSelect,
+      responseTypes,
+      textResponse,
+      trueFalse,
+      upload,
+      url,
+    } = questionsToGenerate;
 
     if (multipleChoiceSubtypes !== undefined) {
       const subtypeTotal =
@@ -550,13 +560,13 @@ export class QuestionService {
       : 0;
 
     const totalQuestions =
-      (questionsToGenerate.multipleChoice || 0) +
-      (questionsToGenerate.multipleSelect || 0) +
-      (questionsToGenerate.textResponse || 0) +
-      (questionsToGenerate.trueFalse || 0) +
-      (questionsToGenerate.url || 0) +
-      (questionsToGenerate.upload || 0) +
-      (questionsToGenerate.linkFile || 0) +
+      (multipleChoice || 0) +
+      (multipleSelect || 0) +
+      (textResponse || 0) +
+      (trueFalse || 0) +
+      (url || 0) +
+      (upload || 0) +
+      (linkFile || 0) +
       subtypeTotal;
 
     if (totalQuestions <= 0) {
@@ -565,12 +575,7 @@ export class QuestionService {
       );
     }
 
-    if (
-      (questionsToGenerate.url > 0 ||
-        questionsToGenerate.upload > 0 ||
-        questionsToGenerate.linkFile > 0) &&
-      !questionsToGenerate.responseTypes
-    ) {
+    if ((url > 0 || upload > 0 || linkFile > 0) && !responseTypes) {
       questionsToGenerate.responseTypes = {
         TEXT: [ResponseType.OTHER],
         URL: [ResponseType.OTHER],

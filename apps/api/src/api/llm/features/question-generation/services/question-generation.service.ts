@@ -70,6 +70,7 @@ interface IGeneratedQuestion {
   liveRecordingConfig?: LiveRecordingConfig;
   difficultyLevel?: DifficultyLevel;
   assignmentId?: number;
+  mcSubtype?: MCSubtype;
 }
 
 interface VideoPresentationConfig {
@@ -138,28 +139,23 @@ export class QuestionGenerationService implements IQuestionGenerationService {
 
     const difficultyLevel = this.mapAssignmentTypeToDifficulty(assignmentType);
     const questionCounts = this.getQuestionCountsByType(questionsToGenerate);
+    const subtypeCounts = questionsToGenerate.multipleChoiceSubtypes;
 
-    // Compute the total SINGLE_CORRECT count including any subtype contributions
-    let subtypeTotal = 0;
-    if (questionsToGenerate.multipleChoiceSubtypes) {
-      subtypeTotal =
-        (questionsToGenerate.multipleChoiceSubtypes.short || 0) +
-        (questionsToGenerate.multipleChoiceSubtypes.quantitative || 0) +
-        (questionsToGenerate.multipleChoiceSubtypes.long || 0) +
-        (questionsToGenerate.multipleChoiceSubtypes.scenario || 0);
-    }
+    const subtypeTotal = subtypeCounts
+      ? (subtypeCounts.short || 0) +
+        (subtypeCounts.quantitative || 0) +
+        (subtypeCounts.long || 0) +
+        (subtypeCounts.scenario || 0)
+      : 0;
 
-    const effectiveCounts: CountsByType = {
-      ...questionCounts,
-      [QuestionType.SINGLE_CORRECT]:
-        (questionCounts[QuestionType.SINGLE_CORRECT] || 0) + subtypeTotal,
-    };
+    const hasAnyQuestions =
+      Object.values(questionCounts).some((c) => c > 0) || subtypeTotal > 0;
 
-    if (Object.values(effectiveCounts).every((count) => count === 0)) {
+    if (!hasAnyQuestions) {
       return [];
     }
 
-    // Regular batches for all non-subtype types (and legacy plain multipleChoice)
+    // Regular batches for non-subtype types (and plain multipleChoice)
     const regularBatches = this.createQuestionBatches(questionCounts);
 
     // Subtype-tagged batches for each MC subtype
@@ -168,10 +164,8 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       counts: number[];
       mcSubtype: MCSubtype;
     }[] = [];
-    if (questionsToGenerate.multipleChoiceSubtypes) {
-      subtypeBatches = this.createSubtypeBatches(
-        questionsToGenerate.multipleChoiceSubtypes,
-      );
+    if (subtypeCounts) {
+      subtypeBatches = this.createSubtypeBatches(subtypeCounts);
     }
 
     const allBatchSpecs: Array<{
@@ -217,14 +211,44 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
-    return this.finalizeQuestionSet(
-      allQuestions,
-      effectiveCounts,
+    // Semantic review pass — only runs when subtype questions are present
+    let reviewedQuestions = allQuestions;
+    if (subtypeTotal > 0) {
+      reviewedQuestions = await this.reviewSubtypeQuestions(
+        allQuestions,
+        assignmentId,
+        content,
+        learningObjectives,
+      );
+    }
+
+    // Enforce per-subtype quotas independently, then finalize non-subtype types
+    const subtypeResults =
+      subtypeCounts && subtypeTotal > 0
+        ? await this.finalizeSubtypeQuestions(
+            reviewedQuestions,
+            subtypeCounts,
+            difficultyLevel,
+            assignmentId,
+            content,
+            learningObjectives,
+          )
+        : [];
+
+    const nonSubtypeQuestions = reviewedQuestions.filter(
+      (q) => q.mcSubtype === undefined,
+    );
+
+    const nonSubtypeResults = this.finalizeQuestionSet(
+      nonSubtypeQuestions,
+      questionCounts,
       assignmentId,
       difficultyLevel,
       content,
       learningObjectives,
     );
+
+    return [...nonSubtypeResults, ...subtypeResults];
   }
 
   private getQuestionCountsByType(
@@ -351,6 +375,12 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           assignmentId,
         );
 
+        if (mcSubtype) {
+          for (const q of processedQuestions) {
+            q.mcSubtype = mcSubtype;
+          }
+        }
+
         const batchRequirements: Partial<EnhancedQuestionsToGenerate> = {};
         for (const [index, type] of types.entries()) {
           const count = counts[index];
@@ -444,6 +474,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
         assignmentId,
         content,
         learningObjectives,
+        mcSubtype,
       );
       generatedQuestions = [...generatedQuestions, ...fallbacks];
     }
@@ -871,6 +902,328 @@ FORMAT INSTRUCTIONS:
     }
   }
 
+  /**
+   * Runs the Context Manager question_review_prompt over the subtype-generated
+   * questions. Removes semantic duplicates, bad-stem questions, stat-recall
+   * questions, and Scenario definition-lookups. Rewrites unclear questions.
+   * Corrects Short → Long type mismatches. When a stem or subtype changes,
+   * regenerates choices to match the updated question.
+   */
+  private async reviewSubtypeQuestions(
+    questions: IGeneratedQuestion[],
+    assignmentId: number,
+    content?: string,
+    learningObjectives?: string,
+  ): Promise<IGeneratedQuestion[]> {
+    const subtypeQuestions = questions.filter((q) => q.mcSubtype !== undefined);
+
+    if (subtypeQuestions.length === 0) {
+      return questions;
+    }
+
+    // Build the review input — "page" carries the index for reconciliation
+    const reviewInput = subtypeQuestions.map((q, questionIndex) => ({
+      question: q.question,
+      type: q.mcSubtype as string,
+      page: questionIndex,
+    }));
+
+    const contentSection = content
+      ? `CONTENT:\n${content}\n\n`
+      : learningObjectives
+        ? `LEARNING OBJECTIVES:\n${learningObjectives}\n\n`
+        : "";
+
+    const template = `
+You are an expert quiz content validator responsible for reviewing autogenerated quiz questions based on the provided content.
+
+Your task is to:
+1. REMOVE duplicate or nearly identical questions. Two questions are semantic duplicates if they would produce the same correct answer, even if phrased differently. Do not compare only question text — compare the implied correct answer. If two questions share the same answer, remove the weaker or more generic version.
+2. REMOVE irrelevant, unsupported, or low-quality questions that do not come directly from the provided content.
+3. FIX unclear, poorly written, or ambiguous questions to ensure clarity and correctness.
+4. KEEP all existing metadata intact (question text, type, and page number).
+5. DO NOT change the question type or the page number unless it is wrong.
+6. ENSURE every question strictly follows the quiz-style rules used in question generation.
+7. ENSURE every question is fully derived from the provided content.
+8. REMOVE any question that starts with "What percentage", "How many", "How much", "What number of", "How often", "What is the name of", "Can you", "Can clients", or "Can the". The first five are trivial stat-lookup questions; the last four are yes/no or naming questions with no learning value. If the underlying concept is valuable, REWRITE the question to ask what the statistic indicates or why it matters.
+9. REMOVE any question that contains a URL, website address, API endpoint, or file path.
+10. REMOVE any question whose correct answer would obviously be a single word or bare acronym (e.g., "What does X stand for?").
+11. REMOVE any Scenario question that is a definition lookup rather than a client-interaction decision.
+12. REMOVE any stat-recall question regardless of how it is phrased. A question is stat-recall if: (a) it embeds "what percentage", "what number", or "how much" mid-sentence (e.g., "According to research, what percentage of..."); (b) its trailing clause forces a numeric answer (e.g., "...in terms of incident response time reduction?"); or (c) it asks about a specific company's measurable outcome (e.g., "What reduction did Mizuho Bank achieve?"). These produce trivial number-guessing items where wrong answers are just different percentages. Ensure no more than 2 out of every 10 questions rely on recalling a specific statistic — remove the weakest ones if exceeded.
+13. CHANGE the type field from "short" to "long" for any question whose stem is "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify". These require explanation answers. Example: {{"question": "How does Instana help teams resolve incidents?", "type": "short"}} MUST become {{"question": "How does Instana help teams resolve incidents?", "type": "long"}}. This is a mandatory field change, not optional.
+
+{contentSection}
+QUESTIONS TO REVIEW:
+{questionsJson}
+
+Output Requirements:
+- Return the revised list of questions ONLY in strict JSON format.
+- KEEP the exact schema: [{{"question": "...", "type": "...", "page": <number>}}]
+- NO additional commentary, no explanations, no Markdown.
+- Output JSON ONLY.
+`;
+
+    const prompt = new PromptTemplate({
+      template,
+      inputVariables: [],
+      partialVariables: {
+        contentSection: () => contentSection,
+        questionsJson: () => JSON.stringify(reviewInput, null, 2),
+      },
+    });
+
+    try {
+      const response = await this.promptProcessor.processPromptForFeature(
+        prompt,
+        assignmentId,
+        AIUsageType.ASSIGNMENT_GENERATION,
+        "question_review",
+      );
+
+      // Strip markdown fences if the model wraps the JSON
+      const cleaned = response
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+
+      const reviewed = JSON.parse(cleaned) as {
+        question: string;
+        type: string;
+        page: number;
+      }[];
+
+      if (!Array.isArray(reviewed)) {
+        this.logger.warn(
+          "Question review returned non-array — skipping review",
+        );
+        return questions;
+      }
+
+      // Build reconciliation map: index → original IGeneratedQuestion
+      const indexMap = new Map<number, IGeneratedQuestion>();
+      for (const [questionIndex, q] of subtypeQuestions.entries()) {
+        indexMap.set(questionIndex, q);
+      }
+
+      const seenPages = new Set<number>();
+      const reconciled: IGeneratedQuestion[] = [];
+      const failedRegenEntries = new Set<IGeneratedQuestion>();
+      const choiceRegenPromises: Promise<void>[] = [];
+
+      for (const item of reviewed) {
+        // Validate page is an in-range integer with no duplicates
+        if (
+          typeof item.page !== "number" ||
+          !Number.isInteger(item.page) ||
+          item.page < 0 ||
+          item.page >= subtypeQuestions.length ||
+          seenPages.has(item.page)
+        ) {
+          this.logger.warn(
+            `Review returned invalid or duplicate page ${item.page} — skipping item`,
+          );
+          continue;
+        }
+
+        // Validate question text is non-empty
+        if (!item.question || item.question.trim().length === 0) {
+          this.logger.warn(
+            `Review returned empty question for page ${item.page} — skipping item`,
+          );
+          continue;
+        }
+
+        // Validate subtype; fall back to original if the LLM returns an unknown value
+        const resolvedSubtype = this.isMCSubtype(item.type)
+          ? item.type
+          : subtypeQuestions[item.page].mcSubtype;
+
+        seenPages.add(item.page);
+        const original = indexMap.get(item.page);
+        if (!original) {
+          continue;
+        }
+
+        const stemChanged =
+          item.question.trim() !== (original.question ?? "").trim();
+        const subtypeChanged = resolvedSubtype !== original.mcSubtype;
+
+        const reconciliationEntry: IGeneratedQuestion = {
+          ...original,
+          question: item.question.trim(),
+          mcSubtype: resolvedSubtype,
+        };
+
+        reconciled.push(reconciliationEntry);
+
+        // Stem or subtype changed — existing choices and feedback are stale
+        if (stemChanged || subtypeChanged) {
+          const regenPromise = this.refreshChoicesForQuestion(
+            reconciliationEntry,
+            assignmentId,
+          )
+            .then((newChoices) => {
+              reconciliationEntry.choices = newChoices;
+            })
+            .catch((error) => {
+              // Choices cannot be refreshed — drop the question so
+              // finalizeSubtypeQuestions fills the gap with a fresh LLM batch
+              failedRegenEntries.add(reconciliationEntry);
+              this.logger.warn(
+                `Choice regeneration failed for rewritten question — dropping question: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            });
+          choiceRegenPromises.push(regenPromise);
+        }
+      }
+
+      await Promise.all(choiceRegenPromises);
+
+      const validReconciled = reconciled.filter(
+        (q) => !failedRegenEntries.has(q),
+      );
+
+      const nonSubtypeQuestions = questions.filter(
+        (q) => q.mcSubtype === undefined,
+      );
+
+      return [...nonSubtypeQuestions, ...validReconciled];
+    } catch (error) {
+      this.logger.warn(
+        `Question review failed — proceeding without review: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return questions;
+    }
+  }
+
+  /**
+   * Regenerates the four answer choices for a question whose stem or subtype
+   * was changed by the review pass. Keeps the question text and other metadata;
+   * only replaces choices and their feedback.
+   */
+  private async refreshChoicesForQuestion(
+    question: IGeneratedQuestion,
+    assignmentId: number,
+  ): Promise<Choice[]> {
+    const parser = StructuredOutputParser.fromZodSchema(
+      z.object({
+        choices: z
+          .array(
+            z.object({
+              choice: z.string().min(1).describe("Answer choice text"),
+              id: z.number().describe("Unique identifier for the choice"),
+              isCorrect: z.boolean().describe("Is this the correct answer?"),
+              points: z.number().int().describe("Points for this choice"),
+              feedback: z
+                .string()
+                .optional()
+                .describe(
+                  "Feedback explaining why this choice is or is not correct",
+                ),
+            }),
+          )
+          .length(4)
+          .describe("Exactly 4 choices: 1 correct, 3 incorrect"),
+      }),
+    );
+
+    const template = `
+You are regenerating answer choices for a multiple-choice question whose stem was rewritten during review.
+
+QUESTION: {questionText}
+SUBTYPE: {subtype}
+
+Generate exactly 4 answer choices:
+- 1 correct answer (isCorrect: true, 1 point)
+- 3 plausible but incorrect answers (isCorrect: false, 0 points)
+
+{subtypeAnswerRule}
+
+Rules:
+- All choices must be similar in length and complexity
+- Wrong answers must be plausible but factually incorrect — not obvious or nonsensical
+- Wrong answers must be distinct from each other
+- Each choice must have feedback explaining why it is or is not correct
+- Never write "CORRECT" or "INCORRECT" in feedback text
+- NEVER include URLs, website addresses, or version numbers in any choice
+
+{formatInstructions}
+`;
+
+    const prompt = new PromptTemplate({
+      template,
+      inputVariables: [],
+      partialVariables: {
+        questionText: () => question.question,
+        subtype: () => {
+          if (!question.mcSubtype) {
+            throw new Error(
+              `refreshChoicesForQuestion called on question without mcSubtype`,
+            );
+          }
+          return question.mcSubtype;
+        },
+        subtypeAnswerRule: () =>
+          this.getSubtypeAnswerLengthRule(question.mcSubtype),
+        formatInstructions: () => parser.getFormatInstructions(),
+      },
+    });
+
+    const response = await this.promptProcessor.processPromptForFeature(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GENERATION,
+      "question_generation",
+    );
+
+    const parsed = await parser.parse(response);
+
+    // Run through the same normalisation pipeline as every other generated question
+    const normalized = this.processChoices({
+      ...question,
+      choices: parsed.choices as Choice[],
+    });
+
+    if (!normalized || normalized.length !== 4) {
+      throw new Error(
+        `Choice regeneration returned ${normalized?.length ?? 0} choices — expected 4`,
+      );
+    }
+
+    const correctCount = normalized.filter((c) => c.isCorrect).length;
+    if (correctCount !== 1) {
+      throw new Error(
+        `Choice regeneration returned ${correctCount} correct choices — expected exactly 1`,
+      );
+    }
+
+    return normalized;
+  }
+
+  private getSubtypeAnswerLengthRule(mcSubtype?: MCSubtype): string {
+    switch (mcSubtype) {
+      case MCSubtype.SHORT: {
+        return "Answer length: MAXIMUM 5-8 words per choice — noun phrases only, never full sentences.";
+      }
+      case MCSubtype.QUANTITATIVE: {
+        return "Answer length: MAXIMUM 5-8 words per choice — a specific number or measure plus brief context.";
+      }
+      case MCSubtype.LONG: {
+        return "Answer length: MINIMUM 10 words per choice — full explanatory sentences.";
+      }
+      case MCSubtype.SCENARIO: {
+        return "Answer length: MINIMUM 10 words per choice — name the recommended product or action and give a one-sentence reason why it fits the scenario.";
+      }
+      default: {
+        return "Answer length: 2-8 words per choice.";
+      }
+    }
+  }
+
   private processGeneratedQuestions(
     rawQuestions: IGeneratedQuestion[],
     assignmentId: number,
@@ -1155,6 +1508,105 @@ FORMAT INSTRUCTIONS:
     }));
   }
 
+  /**
+   * Enforces per-subtype quotas independently. Groups reviewed questions by
+   * mcSubtype, quality-sorts within each group, slices to the required count,
+   * and fills any shortfall with a real LLM generation batch using the correct
+   * subtype prompt. Only falls back to generic templates if the LLM batch fails.
+   */
+  private async finalizeSubtypeQuestions(
+    questions: IGeneratedQuestion[],
+    subtypeCounts: MultipleChoiceSubtypes,
+    difficultyLevel: DifficultyLevel,
+    assignmentId: number,
+    content?: string,
+    learningObjectives?: string,
+  ): Promise<IGeneratedQuestion[]> {
+    const bySubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
+    for (const subtype of Object.values(MCSubtype)) {
+      bySubtype.set(subtype, []);
+    }
+
+    for (const q of questions) {
+      if (q.mcSubtype) {
+        bySubtype.get(q.mcSubtype)?.push(q);
+      }
+    }
+
+    const result: IGeneratedQuestion[] = [];
+
+    const entries: [MCSubtype, number][] = [
+      [MCSubtype.SHORT, subtypeCounts.short || 0],
+      [MCSubtype.QUANTITATIVE, subtypeCounts.quantitative || 0],
+      [MCSubtype.LONG, subtypeCounts.long || 0],
+      [MCSubtype.SCENARIO, subtypeCounts.scenario || 0],
+    ];
+
+    for (const [subtype, required] of entries) {
+      if (required <= 0) continue;
+
+      const pool = this.sortQuestionsByQuality(bySubtype.get(subtype) ?? []);
+      const selected = pool.slice(0, required);
+
+      if (selected.length < required) {
+        const missing = required - selected.length;
+
+        try {
+          // Generate real subtype-specific questions for the shortfall
+          const batchResult = await this.generateQuestionBatch({
+            assignmentId,
+            types: [QuestionType.SINGLE_CORRECT],
+            counts: [missing],
+            difficultyLevel,
+            content,
+            learningObjectives,
+            mcSubtype: subtype,
+          });
+
+          const generated = batchResult.questions.filter(
+            (q) => q.type === QuestionType.SINGLE_CORRECT,
+          );
+
+          // Tag any untagged questions returned by the batch
+          for (const q of generated) {
+            q.mcSubtype = subtype;
+          }
+
+          selected.push(...generated.slice(0, missing));
+        } catch (error) {
+          this.logger.warn(
+            `Subtype batch shortfall generation failed for ${subtype} — using template fallback: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+
+        // If the LLM batch still left a gap, fill with tagged templates as last resort
+        if (selected.length < required) {
+          const stillMissing = required - selected.length;
+          const fallbacks = this.generateFallbackQuestionsOfType(
+            QuestionType.SINGLE_CORRECT,
+            stillMissing,
+            difficultyLevel,
+            assignmentId,
+            content,
+            learningObjectives,
+            subtype,
+          );
+          selected.push(...fallbacks);
+        }
+      }
+
+      result.push(...selected);
+    }
+
+    return result;
+  }
+
+  private isMCSubtype(value: string): value is MCSubtype {
+    return (Object.values(MCSubtype) as string[]).includes(value);
+  }
+
   private sortQuestionsByQuality(
     questions: IGeneratedQuestion[],
   ): IGeneratedQuestion[] {
@@ -1287,6 +1739,7 @@ FORMAT INSTRUCTIONS:
     assignmentId: number,
     content?: string,
     learningObjectives?: string,
+    mcSubtype?: MCSubtype,
   ): IGeneratedQuestion[] {
     const fallbacks: IGeneratedQuestion[] = [];
 
@@ -1302,6 +1755,7 @@ FORMAT INSTRUCTIONS:
             assignmentId,
             content,
             learningObjectives,
+            mcSubtype,
           ),
         );
       }
@@ -1317,20 +1771,23 @@ FORMAT INSTRUCTIONS:
     assignmentId: number,
     content?: string,
     learningObjectives?: string,
+    mcSubtype?: MCSubtype,
   ): IGeneratedQuestion[] {
     const fallbacks: IGeneratedQuestion[] = [];
     const keyTerms = this.extractKeyTerms(content, learningObjectives);
 
     for (let index = 0; index < count; index++) {
-      fallbacks.push(
-        this.createEnhancedTemplateQuestion(
-          type,
-          difficultyLevel,
-          keyTerms,
-          assignmentId,
-          index + 1,
-        ),
+      const q = this.createEnhancedTemplateQuestion(
+        type,
+        difficultyLevel,
+        keyTerms,
+        assignmentId,
+        index + 1,
       );
+      if (mcSubtype) {
+        q.mcSubtype = mcSubtype;
+      }
+      fallbacks.push(q);
     }
 
     return fallbacks;
