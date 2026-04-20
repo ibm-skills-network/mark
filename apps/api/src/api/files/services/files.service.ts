@@ -210,7 +210,7 @@ export class FilesService {
   }
 
   private getMaxUploadBytes(uploadType: UploadType): number {
-    const fallback = 10 * 1024 * 1024;
+    const fallback = 100 * 1024 * 1024;
 
     const perTypeEnvironment: Record<UploadType, string | undefined> = {
       [UploadType.AUTHOR]: process.env.AUTHOR_UPLOAD_MAX_BYTES,
