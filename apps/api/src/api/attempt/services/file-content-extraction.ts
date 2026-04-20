@@ -19,6 +19,8 @@ export interface ExtractedFileContent {
   filename: string;
   content: string;
   fileType: string;
+  /** Set when extraction failed; absence means success. */
+  error?: string;
   extractedText?: string;
   fileUrl?: string;
   useVisionMode?: boolean;
@@ -183,14 +185,15 @@ export class FileContentExtractionService {
             error,
           );
 
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
           return {
             filename: file.filename,
             content:
-              `[ERROR extracting ${file.filename}: ${
-                error instanceof Error ? error.message : "Unknown error"
-              }]\n` +
+              `[ERROR extracting ${file.filename}: ${errorMessage}]\n` +
               `File type: ${file.fileType}\n` +
               `This file could not be processed, but it exists in the submission.`,
+            error: errorMessage,
             fileType: file.fileType,
             metadata: { size: 0 },
           };

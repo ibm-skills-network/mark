@@ -282,7 +282,7 @@ export class AssignmentControllerV2 {
   @UseInterceptors(
     FilesInterceptor("files", 20, {
       storage: memoryStorage(),
-      limits: { fileSize: 50 * 1024 * 1024 },
+      limits: { fileSize: 100 * 1024 * 1024 },
     }),
   )
   @ApiOperation({ summary: "Upload files for an assignment" })
@@ -486,6 +486,7 @@ export class AssignmentControllerV2 {
    */
   @Post(":assignmentId/generate-questions")
   @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Generate questions for the assignment" })
   @ApiParam({
     name: "assignmentId",

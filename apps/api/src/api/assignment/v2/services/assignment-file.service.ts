@@ -86,8 +86,7 @@ export class AssignmentFileService {
             },
           ]);
 
-        // Extraction failures currently come back as content starting with "[ERROR".
-        const extractionFailed = extractedFile.content.startsWith("[ERROR");
+        const extractionFailed = extractedFile.error !== undefined;
 
         uploadedObjects.push({
           bucket,
@@ -97,7 +96,9 @@ export class AssignmentFileService {
           extractionStatus: extractionFailed
             ? AssignmentFileExtractionStatus.FAILED
             : AssignmentFileExtractionStatus.READY,
-          extractionError: extractionFailed ? extractedFile.content : null,
+          extractionError: extractionFailed
+            ? (extractedFile.error ?? null)
+            : null,
           extractedAt: extractionFailed ? null : new Date(),
         });
       }
@@ -132,7 +133,14 @@ export class AssignmentFileService {
       );
 
       return { files: createdFiles.map((file) => this.toResponse(file)) };
-    } catch {
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `uploadAssignmentFiles failed for assignment ${assignmentId}: ${errorMessage}`,
+        errorStack,
+      );
       // On DB failure, remove uploaded COS objects and let the caller retry the batch.
       await this.cleanupUploadedObjects(uploadedObjects);
       throw new InternalServerErrorException(
@@ -147,9 +155,24 @@ export class AssignmentFileService {
     const files = await this.prisma.assignmentFile.findMany({
       where: { assignmentId },
       orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        assignmentId: true,
+        filename: true,
+        mimeType: true,
+        size: true,
+        storageKey: true,
+        storageBucket: true,
+        status: true,
+        extractionStatus: true,
+        extractionError: true,
+        extractedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
-    return { files: files.map((file) => this.toResponse(file)) };
+    return { files };
   }
 
   async deleteAssignmentFile(
@@ -195,7 +218,9 @@ export class AssignmentFileService {
       select: { id: true, storageKey: true, storageBucket: true },
     });
 
-    await Promise.all(
+    // Promise.allSettled so a synchronous throw inside deleteObject (before it
+    // returns a Promise) cannot bypass the per-call catch and block the deletion.
+    await Promise.allSettled(
       files.map((file) =>
         this.s3Service
           .deleteObject({ Bucket: file.storageBucket, Key: file.storageKey })
