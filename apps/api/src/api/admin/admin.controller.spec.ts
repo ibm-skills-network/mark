@@ -2,6 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AdminVerificationService } from "../../auth/services/admin-verification.service";
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
+import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
@@ -51,6 +52,12 @@ describe("AdminController", () => {
           provide: AssignmentServiceV2,
           useValue: {
             publishAssignment: jest.fn(),
+          },
+        },
+        {
+          provide: AssignmentFileService,
+          useValue: {
+            cleanupAssignmentFileObjects: jest.fn(),
           },
         },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
