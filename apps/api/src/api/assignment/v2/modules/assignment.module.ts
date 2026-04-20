@@ -50,6 +50,7 @@ import { VersionManagementService } from "../services/version-management.service
     AssignmentServiceV2,
     VersionManagementService,
     DraftManagementService,
+    AssignmentFileService,
     QuestionService,
     JobStatusServiceV2,
   ],

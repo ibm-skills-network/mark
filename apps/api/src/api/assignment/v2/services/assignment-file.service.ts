@@ -181,6 +181,35 @@ export class AssignmentFileService {
       });
   }
 
+  /**
+   * Deletes all COS/S3 objects for every file belonging to an assignment.
+   * Call this before deleting the assignment so the cascade-delete of
+   * AssignmentFile rows does not leave orphaned objects in object storage.
+   * DB rows are intentionally left intact here — the caller's cascade handles them.
+   * S3 failures are logged as warnings rather than thrown so they never block
+   * the assignment deletion.
+   */
+  async cleanupAssignmentFileObjects(assignmentId: number): Promise<void> {
+    const files = await this.prisma.assignmentFile.findMany({
+      where: { assignmentId },
+      select: { id: true, storageKey: true, storageBucket: true },
+    });
+
+    await Promise.all(
+      files.map((file) =>
+        this.s3Service
+          .deleteObject({ Bucket: file.storageBucket, Key: file.storageKey })
+          .catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `Assignment ${assignmentId}: S3 cleanup failed for file ${file.id} (key=${file.storageKey}): ${message}`,
+            );
+          }),
+      ),
+    );
+  }
+
   private generateStorageKey(assignmentId: number, filename: string): string {
     const safeFilename = this.toSafeFilename(filename);
     return `assignments/${assignmentId}/files/${randomUUID()}-${safeFilename}`;
