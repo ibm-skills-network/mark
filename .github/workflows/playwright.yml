@@ -99,6 +99,9 @@ jobs:
       - name: Install Playwright browsers
         run: yarn playwright:install
 
+      - name: Build web app for E2E
+        run: yarn --cwd apps/web build:e2e
+
       - name: Run Playwright tests
         run: yarn test:e2e:all
         env:
