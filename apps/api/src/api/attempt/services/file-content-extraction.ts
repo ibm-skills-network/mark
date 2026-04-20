@@ -269,6 +269,7 @@ export class FileContentExtractionService {
         const fileContent = await this.downloadFileFromCOS(
           file.bucket,
           file.key,
+          file.buffer,
         );
 
         // Use recordId or questionId if available, otherwise just use filename
@@ -354,7 +355,11 @@ export class FileContentExtractionService {
       };
     }
 
-    const fileContent = await this.downloadFileFromCOS(file.bucket, file.key);
+    const fileContent = await this.downloadFileFromCOS(
+      file.bucket,
+      file.key,
+      file.buffer,
+    );
     this.logger.debug(
       `Downloaded ${file.filename}: ${fileContent.length} bytes`,
     );
@@ -388,9 +393,16 @@ export class FileContentExtractionService {
   }
 
   private async downloadFileFromCOS(
-    bucket: string,
-    key: string,
+    bucket: string | undefined,
+    key: string | undefined,
+    preloadedBuffer?: Buffer,
   ): Promise<Buffer> {
+    if (preloadedBuffer) return preloadedBuffer;
+    if (!bucket || !key) {
+      throw new BadRequestException(
+        "Cannot download file: missing bucket or key",
+      );
+    }
     try {
       this.logger.debug(`Downloading from COS: ${bucket}/${key}`);
 

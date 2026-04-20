@@ -83,6 +83,7 @@ export class AssignmentFileService {
               fileType: file.mimetype || "application/octet-stream",
               bucket,
               key,
+              buffer: file.buffer,
             },
           ]);
 

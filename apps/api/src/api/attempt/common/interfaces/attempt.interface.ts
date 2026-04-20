@@ -67,6 +67,7 @@ export interface LearnerFileUpload {
   contentSummary?: string;
   metadata?: Record<string, unknown>;
   structuredContent?: CanonicalSubmission;
+  buffer?: Buffer;
 }
 
 /**
