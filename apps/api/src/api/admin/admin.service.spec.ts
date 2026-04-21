@@ -1,5 +1,6 @@
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
+import { AssignmentType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
@@ -16,9 +17,7 @@ const mockLogger = {
   }),
 };
 
-describe("AdminService", () => {
-  let service: AdminService;
-  const originalDatabaseUrl = process.env.DATABASE_URL;
+const noopDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
 
 const makeMockPrisma = () => ({
   questionResponse: { deleteMany: noopDeleteMany },
