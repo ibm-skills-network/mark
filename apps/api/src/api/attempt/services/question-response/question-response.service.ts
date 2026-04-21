@@ -163,10 +163,6 @@ export class QuestionResponseService {
           }
         }
 
-        if (this.progressService && role === UserRole.LEARNER) {
-          await this.progressService.markComplete(assignmentAttemptId);
-        }
-
         return questionResponses;
       },
       {

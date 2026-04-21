@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -59,6 +60,7 @@ import {
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
+import { GradingProgressService } from "./grading-progress.service";
 import { QuestionResponseService } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
@@ -80,6 +82,8 @@ export class AttemptSubmissionService {
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
+    @Inject("GradingProgressService")
+    private readonly progressService?: GradingProgressService,
   ) {}
 
   async autoSaveQuestionResponse(
@@ -1020,11 +1024,7 @@ export class AttemptSubmissionService {
         await progressCallback("Finalizing results...", 98);
       }
 
-      const result = await this.updateAssignmentAttemptInDb(
-        attemptId,
-        updateDto,
-        grade,
-      );
+      await this.updateAssignmentAttemptInDb(attemptId, updateDto, grade);
 
       await this.pruneAutoSavedResponses(
         attemptId,
@@ -1035,13 +1035,17 @@ export class AttemptSubmissionService {
         await progressCallback("Grading completed!", 100);
       }
 
+      if (this.progressService) {
+        await this.progressService.markComplete(attemptId);
+      }
+
       return {
-        id: result.id,
-        submitted: result.submitted,
+        id: attemptId,
+        submitted: true,
         success: true,
         totalPointsEarned,
         totalPossiblePoints,
-        grade: assignment.showAssignmentScore ? result.grade : undefined,
+        grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
@@ -1053,9 +1057,14 @@ export class AttemptSubmissionService {
           ),
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      if (this.progressService) {
+        await this.progressService.markFailed(attemptId, errorMessage);
+      }
+
       if (progressCallback) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
         await progressCallback(`Error: ${errorMessage}`, 0);
       }
       throw error;
@@ -1338,8 +1347,11 @@ export class AttemptSubmissionService {
         },
       });
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      // Non-fatal: log and continue so the submission is not failed by cleanup.
+      this.logger.error(
+        `Failed to prune auto-saved responses for attempt ${attemptId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 

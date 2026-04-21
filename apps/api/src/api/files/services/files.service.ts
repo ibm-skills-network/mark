@@ -69,10 +69,11 @@ export class FilesService {
   ): Promise<UploadResponseDto> {
     const { fileName, fileType, uploadType, context = {} } = uploadRequest;
 
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
+    const bucket =
+      this.s3Service.getBucketName(uploadType) ??
+      (() => {
+        throw new BadRequestException("Invalid upload type");
+      })();
 
     let prefix = "";
     const normalizedPath = context.path?.startsWith("/")
@@ -122,14 +123,15 @@ export class FilesService {
       }
 
       case UploadType.DEBUG: {
-        if (typeof context.reportId !== "number") {
-          throw new BadRequestException(
-            "Missing reportId in context for debug upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `debug/${context.reportId}/`;
+        const reportId =
+          typeof context.reportId === "number"
+            ? context.reportId
+            : (() => {
+                throw new BadRequestException(
+                  "Missing reportId in context for debug upload",
+                );
+              })();
+        prefix = normalizedPath ? `${normalizedPath}/` : `debug/${reportId}/`;
         break;
       }
 
@@ -197,10 +199,11 @@ export class FilesService {
       throw new BadRequestException("Path must start with /");
     }
 
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
+    const bucket =
+      this.s3Service.getBucketName(uploadType) ??
+      (() => {
+        throw new BadRequestException("Invalid upload type");
+      })();
 
     const folderKey = path === "/" ? `${name}/` : `${path.slice(1)}/${name}/`;
 

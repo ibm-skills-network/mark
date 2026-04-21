@@ -246,6 +246,7 @@ export class AttemptServiceV2 {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Failed",
         progress: `Grading failed: ${errorMessage}`,
@@ -497,6 +498,13 @@ export class AttemptServiceV2 {
       throw new Error(`Grading job with ID ${gradingJobId} not found.`);
     }
 
+    let parsedResult: any;
+    try {
+      parsedResult = job.result ? JSON.parse(job.result as string) : undefined;
+    } catch {
+      parsedResult = undefined;
+    }
+
     return {
       type: "update",
       data: {
@@ -504,7 +512,7 @@ export class AttemptServiceV2 {
         status: job.status,
         progress: job.progress,
         percentage: job.percentage || 0,
-        result: job.result ? JSON.parse(job.result as string) : undefined,
+        result: parsedResult,
         done: job.status === "Completed" || job.status === "Failed",
       },
     } as unknown as MessageEvent;

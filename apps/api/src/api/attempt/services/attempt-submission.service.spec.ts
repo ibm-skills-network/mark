@@ -1,7 +1,7 @@
 import { HttpService } from "@nestjs/axios";
 import { InternalServerErrorException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { Question } from "@prisma/client";
+import { Question, QuestionType } from "@prisma/client";
 import {
   UserRole,
   UserSession,
@@ -143,6 +143,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         },
         { provide: LtiGradeSyncService, useValue: mockLtiGradeSyncService },
         { provide: HttpService, useValue: mockHttpService },
+        { provide: "GradingProgressService", useValue: null },
       ],
     }).compile();
 
@@ -496,7 +497,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       mockGradingService.calculateGradeForAuthor.mockReturnValue({
         grade: 8 / 12,
         totalPointsEarned: 8,
-        totalPossiblePoints: 12,
       });
 
       const result = await service.updateAssignmentAttempt(
@@ -699,6 +699,119 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       // Should throw because 0 is not a valid maxPossiblePoints
       await expect(calculateTotals(responses, questions)).rejects.toThrow(
         InternalServerErrorException,
+      );
+    });
+  });
+
+  describe("updateAssignmentAttempt - failure semantics (regression)", () => {
+    const assignmentId = 99;
+    const attemptId = 42;
+
+    type UpdateAttemptDto = Parameters<
+      AttemptSubmissionService["updateAssignmentAttempt"]
+    >[2];
+    type UpdateAttemptRequest = Parameters<
+      AttemptSubmissionService["updateAssignmentAttempt"]
+    >[5];
+
+    const learnerRequest = {
+      userSession: {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId,
+        groupId: "group-1",
+        gradingCallbackRequired: true,
+      },
+    };
+
+    const updateDto = {
+      submitted: true,
+      language: "en",
+      responsesForQuestions: [{ id: 1, question: "answer" }],
+    };
+
+    beforeEach(() => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: attemptId,
+        assignmentId,
+        userId: "learner-1",
+        expiresAt: null,
+        questionVariants: [],
+        questionOrder: [],
+      });
+
+      mockTranslationService.preTranslateQuestions.mockResolvedValue(null);
+
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        requireAllQuestions: false,
+        questions: [
+          {
+            id: 1,
+            type: QuestionType.SINGLE_CORRECT,
+            totalPoints: 10,
+            isDeleted: false,
+          },
+        ],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+      });
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({ questionId: 1, totalPoints: 8 }),
+      ]);
+
+      mockGradingService.calculateGradeForLearner.mockReturnValue({
+        grade: 0.8,
+        totalPointsEarned: 8,
+        totalPossiblePoints: 10,
+      });
+
+      mockGradingService.constructFeedbacksForQuestions.mockReturnValue([]);
+    });
+
+    it("does not persist the attempt when a post-grading step fails", async () => {
+      // Simulate LTI callback failing (findMany is called inside handleLtiGradeCallback)
+      mockPrisma.assignmentAttempt.findMany.mockRejectedValue(
+        new Error("LTI DB error"),
+      );
+
+      await expect(
+        service.updateAssignmentAttempt(
+          attemptId,
+          assignmentId,
+          updateDto as UpdateAttemptDto,
+          "auth-cookie",
+          true,
+          learnerRequest as UpdateAttemptRequest,
+        ),
+      ).rejects.toThrow("LTI DB error");
+
+      // The attempt must NOT have been saved to the DB
+      expect(mockPrisma.assignmentAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it("persists the attempt exactly once on success", async () => {
+      mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
+      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+
+      await service.updateAssignmentAttempt(
+        attemptId,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "auth-cookie",
+        true,
+        learnerRequest as UpdateAttemptRequest,
+      );
+
+      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ submitted: true, grade: 0.8 }),
+          where: { id: attemptId },
+        }),
       );
     });
   });

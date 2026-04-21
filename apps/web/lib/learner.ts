@@ -414,6 +414,7 @@ export async function submitAssignment(
               resolve(result);
             } else if (data.status === "Failed" && !isCompleted) {
               isCompleted = true;
+
               onProgress?.("failed", 0, data.progress || "Grading failed");
 
               eventSource.close();
@@ -533,6 +534,7 @@ export async function submitAssignment(
 
               if (data?.status === "Failed") {
                 isCompleted = true;
+
                 const errorMessage =
                   data.progress || data.error || "Grading failed";
                 onProgress?.("failed", 0, errorMessage);
