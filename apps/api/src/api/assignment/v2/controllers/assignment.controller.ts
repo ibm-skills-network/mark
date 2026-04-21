@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Delete,
   Get,
+  HttpCode,
   Inject,
   Injectable,
   NotFoundException,
@@ -14,11 +16,15 @@ import {
   Query,
   Req,
   Sse,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
 import {
   ApiBody,
+  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiParam,
@@ -28,6 +34,7 @@ import {
   refs,
 } from "@nestjs/swagger";
 import { Request } from "express";
+import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
 import { AdminService } from "src/api/admin/admin.service";
@@ -56,6 +63,7 @@ import {
   UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
+import { AssignmentFileService } from "../services/assignment-file.service";
 import { AssignmentServiceV2 } from "../services/assignment.service";
 import { JobStatusServiceV2 } from "../services/job-status.service";
 import { QuestionService } from "../services/question.service";
@@ -114,6 +122,7 @@ export class AssignmentControllerV2 {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private readonly parentLogger: Logger,
     private readonly assignmentService: AssignmentServiceV2,
+    private readonly assignmentFileService: AssignmentFileService,
     private readonly questionService: QuestionService,
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
@@ -252,6 +261,72 @@ export class AssignmentControllerV2 {
       updatedAssignment,
       request.userSession.userId,
     );
+  }
+
+  @Get(":id/files")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "List files for an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    description: "List of files associated with the assignment",
+  })
+  async getAssignmentFiles(@Param("id", ParseIntPipe) id: number) {
+    return this.assignmentFileService.getAssignmentFiles(id);
+  }
+
+  @Post(":id/files")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @UseInterceptors(
+    FilesInterceptor("files", 20, {
+      storage: memoryStorage(),
+      limits: { fileSize: 100 * 1024 * 1024 },
+    }),
+  )
+  @ApiOperation({ summary: "Upload files for an assignment" })
+  @ApiConsumes("multipart/form-data")
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          items: {
+            type: "string",
+            format: "binary",
+          },
+        },
+      },
+      required: ["files"],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Files uploaded successfully",
+  })
+  async uploadAssignmentFiles(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.assignmentFileService.uploadAssignmentFiles(id, files);
+  }
+
+  @Delete(":id/files/:fileId")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Delete a file from an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiParam({ name: "fileId", required: true, description: "File ID" })
+  @ApiResponse({ status: 204, description: "File deleted successfully" })
+  @HttpCode(204)
+  async deleteAssignmentFile(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("fileId", ParseIntPipe) fileId: number,
+  ): Promise<void> {
+    return this.assignmentFileService.deleteAssignmentFile(id, fileId);
   }
 
   /**
@@ -411,6 +486,7 @@ export class AssignmentControllerV2 {
    */
   @Post(":assignmentId/generate-questions")
   @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Generate questions for the assignment" })
   @ApiParam({
     name: "assignmentId",

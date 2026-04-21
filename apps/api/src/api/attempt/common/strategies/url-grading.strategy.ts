@@ -394,7 +394,11 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
               };
             }
           } catch (error) {
-            console.error("Error fetching GitHub content:", error);
+            this.logger?.error("Error fetching GitHub content", {
+              url,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            });
           }
         }
 

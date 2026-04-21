@@ -1,11 +1,22 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { AdminVerificationService } from "../../auth/services/admin-verification.service";
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
+import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
+
+const mockLogger = {
+  child: jest.fn().mockReturnValue({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  }),
+};
 
 describe("AdminController", () => {
   let controller: AdminController;
@@ -53,11 +64,18 @@ describe("AdminController", () => {
             publishAssignment: jest.fn(),
           },
         },
+        {
+          provide: AssignmentFileService,
+          useValue: {
+            cleanupAssignmentFileObjects: jest.fn(),
+          },
+        },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
         {
           provide: AdminVerificationService,
           useValue: mockAdminVerificationService,
         },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
 

@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 /* eslint-disable unicorn/no-process-exit */
+if (process.env.NODE_ENV === "production") {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-var-requires, unicorn/prefer-module
+  require("@instana/collector")();
+}
 /**
  * Application Bootstrap File
  *
@@ -27,9 +31,33 @@ import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { SerializeDatesInterceptor } from "./common/interceptors/serialize-dates.interceptor";
 import { winstonOptions } from "./logger/config";
 
+function redactDatabaseUrl(url: string | undefined): string {
+  if (!url) return "<unset>";
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) parsed.password = "***"; // pragma: allowlist secret
+    if (parsed.username) parsed.username = "***"; // pragma: allowlist secret
+    return parsed.toString();
+  } catch {
+    return "<unparseable>";
+  }
+}
 
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
+  const bootStart = Date.now();
+
+  logger.log(`booting pid=${process.pid} node=${process.version}`);
+  logger.log(
+    `env NODE_ENV=${process.env.NODE_ENV ?? "<unset>"} API_PORT=${
+      process.env.API_PORT ?? "<unset>"
+    } DATABASE_URL=${redactDatabaseUrl(process.env.DATABASE_URL)}`,
+  );
+  logger.log(
+    `feature flags: PGBOUNCER=${process.env.PGBOUNCER ?? "<unset>"} ` +
+      `WATSONX_PROJECT_ID=${process.env.WATSONX_PROJECT_ID ? "set" : "<unset>"} ` +
+      `SENDGRID_API_KEY=${process.env.SENDGRID_API_KEY ? "set" : "<unset>"}`,
+  );
 
   try {
     /**
@@ -133,7 +161,10 @@ async function bootstrap() {
     const port =
       configService.get<number>("API_PORT") || process.env.API_PORT || 3000;
     await app.listen(port);
-    logger.log(`Application is running on port ${port}`);
+    const bootMs = Date.now() - bootStart;
+    logger.log(
+      `Application is running on port ${port} (boot_time_ms=${bootMs})`,
+    );
     logger.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 
     /**
@@ -152,6 +183,7 @@ async function bootstrap() {
      * @param {string} signal - The signal received (SIGTERM, SIGINT, etc.)
      */
     const shutdown = async (signal: string) => {
+      const shutdownStart = Date.now();
       logger.log(`${signal} signal received, starting graceful shutdown`);
 
       try {
@@ -164,10 +196,17 @@ async function bootstrap() {
 
         clearTimeout(shutdownTimeout);
 
-        logger.log("Application closed successfully");
+        logger.log(
+          `Application closed successfully (shutdown_time_ms=${
+            Date.now() - shutdownStart
+          })`,
+        );
         process.exit(0);
       } catch (error) {
-        logger.error("Error during graceful shutdown:", error);
+        logger.error(
+          `Error during graceful shutdown after ${Date.now() - shutdownStart}ms:`,
+          error,
+        );
         throw error;
       }
     };
