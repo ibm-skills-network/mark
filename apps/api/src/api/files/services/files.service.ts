@@ -128,11 +128,7 @@ export class FilesService {
 
     switch (uploadType) {
       case UploadType.AUTHOR: {
-        if (normalizedPath) {
-          prefix = `${normalizedPath}/`;
-        } else {
-          prefix = `authors/${userId}/`;
-        }
+        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
         break;
       }
 
@@ -182,11 +178,9 @@ export class FilesService {
             "Missing reportId in context for debug upload",
           );
         }
-        if (normalizedPath) {
-          prefix = `${normalizedPath}/`;
-        } else {
-          prefix = `debug/${context.reportId}/`;
-        }
+        prefix = normalizedPath
+          ? `${normalizedPath}/`
+          : `debug/${context.reportId}/`;
         break;
       }
 
