@@ -311,6 +311,13 @@ export class AssignmentControllerV2 {
     @Param("id", ParseIntPipe) id: number,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
+    const totalBytes = (files ?? []).reduce(
+      (sum, f) => sum + (f.size > 0 ? f.size : 0),
+      0,
+    );
+    this.logger.info(
+      `[upload-controller] POST /assignment/${id}/files received fileCount=${files?.length ?? 0} totalBytes=${totalBytes} (${(totalBytes / 1024 / 1024).toFixed(2)}MB)`,
+    );
     return this.assignmentFileService.uploadAssignmentFiles(id, files);
   }
 

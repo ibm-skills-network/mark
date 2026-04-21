@@ -49,6 +49,24 @@ export class AssignmentFileService {
       throw new BadRequestException("No files provided");
     }
 
+    const overallStart = Date.now();
+    const totalBytes = files.reduce(
+      (sum, f) => sum + (f.size > 0 ? f.size : 0),
+      0,
+    );
+    this.logger.log(
+      `[upload] assignment=${assignmentId} start: ${files.length} file(s), totalSize=${totalBytes} bytes (${(
+        totalBytes /
+        1024 /
+        1024
+      ).toFixed(2)}MB)`,
+    );
+    for (const [index, file] of files.entries()) {
+      this.logger.log(
+        `[upload] assignment=${assignmentId} file[${index}]: name="${file.originalname}" size=${file.size} mime=${file.mimetype} bufferLen=${file.buffer?.length ?? "n/a"}`,
+      );
+    }
+
     const bucket = this.s3Service.getBucketName("author");
     if (!bucket) {
       throw new BadRequestException("Author upload bucket is not configured");
@@ -65,16 +83,27 @@ export class AssignmentFileService {
     }> = [];
 
     try {
-      for (const file of files) {
+      for (const [index, file] of files.entries()) {
         const key = this.generateStorageKey(assignmentId, file.originalname);
 
+        this.logger.log(
+          `[upload] assignment=${assignmentId} file[${index}] s3.putObject start: key=${key} size=${file.size}`,
+        );
+        const s3Start = Date.now();
         await this.s3Service.putObject({
           Bucket: bucket,
           Key: key,
           Body: file.buffer,
           ContentType: file.mimetype,
         });
+        this.logger.log(
+          `[upload] assignment=${assignmentId} file[${index}] s3.putObject done in ${Date.now() - s3Start}ms`,
+        );
 
+        this.logger.log(
+          `[upload] assignment=${assignmentId} file[${index}] extraction start: ${file.originalname}`,
+        );
+        const extractStart = Date.now();
         const [extractedFile] =
           await this.fileContentExtractionService.extractContentFromFiles([
             {
@@ -86,6 +115,9 @@ export class AssignmentFileService {
               buffer: file.buffer,
             },
           ]);
+        this.logger.log(
+          `[upload] assignment=${assignmentId} file[${index}] extraction done in ${Date.now() - extractStart}ms, error=${extractedFile.error ?? "none"}, contentLen=${extractedFile.content?.length ?? 0}`,
+        );
 
         const extractionFailed = extractedFile.error !== undefined;
 
@@ -104,6 +136,10 @@ export class AssignmentFileService {
         });
       }
 
+      this.logger.log(
+        `[upload] assignment=${assignmentId} db.transaction start: ${uploadedObjects.length} row(s)`,
+      );
+      const txStart = Date.now();
       const createdFiles = await this.prisma.$transaction(
         uploadedObjects.map(
           ({
@@ -133,13 +169,19 @@ export class AssignmentFileService {
         ),
       );
 
+      this.logger.log(
+        `[upload] assignment=${assignmentId} db.transaction done in ${Date.now() - txStart}ms, created=${createdFiles.length}`,
+      );
+      this.logger.log(
+        `[upload] assignment=${assignmentId} complete in ${Date.now() - overallStart}ms`,
+      );
       return { files: createdFiles.map((file) => this.toResponse(file)) };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
-        `uploadAssignmentFiles failed for assignment ${assignmentId}: ${errorMessage}`,
+        `[upload] assignment=${assignmentId} FAILED after ${Date.now() - overallStart}ms (uploadedSoFar=${uploadedObjects.length}/${files.length}): ${errorMessage}`,
         errorStack,
       );
       // On DB failure, remove uploaded COS objects and let the caller retry the batch.

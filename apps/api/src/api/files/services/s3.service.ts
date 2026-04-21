@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   CopyObjectCommand,
   CopyObjectCommandInput,
@@ -29,6 +29,7 @@ import { getSignedUrl as getS3SignedUrl } from "@aws-sdk/s3-request-presigner";
 
 @Injectable()
 export class S3Service {
+  private readonly logger = new Logger(S3Service.name);
   private s3ClientEast: S3Client;
   private s3ClientSouth: S3Client;
 
@@ -145,7 +146,30 @@ export class S3Service {
     parameters: PutObjectCommandInput,
   ): Promise<PutObjectCommandOutput> {
     const client = this.getS3Client(parameters.Bucket);
-    return client.send(new PutObjectCommand(parameters));
+    const bodySize =
+      parameters.Body instanceof Buffer
+        ? parameters.Body.length
+        : typeof parameters.Body === "string"
+          ? parameters.Body.length
+          : "unknown";
+    const start = Date.now();
+    this.logger.log(
+      `[s3.putObject] start bucket=${parameters.Bucket} key=${parameters.Key} bodySize=${bodySize} contentType=${parameters.ContentType ?? "n/a"}`,
+    );
+    try {
+      const result = await client.send(new PutObjectCommand(parameters));
+      this.logger.log(
+        `[s3.putObject] done bucket=${parameters.Bucket} key=${parameters.Key} in ${Date.now() - start}ms httpStatus=${result.$metadata?.httpStatusCode ?? "n/a"}`,
+      );
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const name = error instanceof Error ? error.name : "Error";
+      this.logger.error(
+        `[s3.putObject] FAILED bucket=${parameters.Bucket} key=${parameters.Key} after ${Date.now() - start}ms name=${name} message=${message}`,
+      );
+      throw error;
+    }
   }
 
   async deleteObject(
