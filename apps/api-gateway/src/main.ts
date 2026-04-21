@@ -14,6 +14,20 @@ import { winstonOptions } from "./logger/config";
 
 async function bootstrap() {
   const logger = WinstonModule.createLogger(winstonOptions);
+  const bootStart = Date.now();
+
+  logger.log(
+    `booting pid=${process.pid} node=${process.version} env=${
+      process.env.NODE_ENV ?? "<unset>"
+    } instana=${process.env.NODE_ENV === "production" ? "on" : "off"}`,
+  );
+  logger.log(
+    `downstream: MARK_API_ENDPOINT=${
+      process.env.MARK_API_ENDPOINT ? "set" : "<unset>"
+    } LTI_CREDENTIAL_MANAGER_ENDPOINT=${
+      process.env.LTI_CREDENTIAL_MANAGER_ENDPOINT ? "set" : "<unset>"
+    }`,
+  );
 
   try {
     const app = await NestFactory.create(AppModule, {
@@ -62,7 +76,10 @@ async function bootstrap() {
     const port = process.env.API_GATEWAY_PORT ?? 3000;
     await app.listen(port, "0.0.0.0");
 
-    logger.log(`🚀 API Gateway is running on port ${port}`);
+    const bootMs = Date.now() - bootStart;
+    logger.log(
+      `🚀 API Gateway is running on port ${port} (boot_time_ms=${bootMs})`,
+    );
     logger.log(
       `📚 API Documentation available at http://localhost:${port}/api`,
     );

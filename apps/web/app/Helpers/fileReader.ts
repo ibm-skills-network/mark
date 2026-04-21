@@ -296,7 +296,9 @@ export const readPptx = async (
             presentationText += slideText + "\n\n";
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn("fileReader: failed to extract text from slide:", err);
+      }
     }
 
     const sanitized = sanitizeContent(presentationText, "pptx");

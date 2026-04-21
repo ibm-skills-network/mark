@@ -1,13 +1,24 @@
 import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { AssignmentType } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminService } from "./admin.service";
 
-const noopDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
+const mockLogger = {
+  child: jest.fn().mockReturnValue({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  }),
+};
+
+describe("AdminService", () => {
+  let service: AdminService;
+  const originalDatabaseUrl = process.env.DATABASE_URL;
 
 const makeMockPrisma = () => ({
   questionResponse: { deleteMany: noopDeleteMany },
@@ -59,6 +70,7 @@ describe("AdminService", () => {
           useValue: mockAssignmentFileService,
         },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
 
