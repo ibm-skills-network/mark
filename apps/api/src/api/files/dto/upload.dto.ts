@@ -52,6 +52,15 @@ export class UploadRequestDto {
   context?: UploadContextDto;
 }
 
+export class DirectUploadDto {
+  @IsEnum(UploadType)
+  uploadType: UploadType;
+
+  @IsOptional()
+  @IsString()
+  context?: string;
+}
+
 export class UploadResponseDto {
   presignedUrl: string;
   key: string;

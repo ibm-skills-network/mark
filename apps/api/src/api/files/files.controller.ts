@@ -28,6 +28,8 @@ import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
 import {
   CompleteMultipartUploadRequestDto,
+  DirectUploadDto,
+  UploadContextDto,
   UploadRequestDto,
   UploadType,
 } from "./dto/upload.dto";
@@ -127,22 +129,17 @@ export class FilesController {
   })
   async directUpload(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: any,
+    @Body() body: DirectUploadDto,
     @Req() request: UserSessionRequest,
   ) {
     if (!file) {
       throw new BadRequestException("No file provided");
     }
 
-    const uploadType = body.uploadType;
-    let context: any = {};
-
+    let context: UploadContextDto = {};
     if (body.context) {
       try {
-        context =
-          typeof body.context === "string"
-            ? JSON.parse(body.context)
-            : body.context;
+        context = JSON.parse(body.context);
       } catch (error) {
         this.logger.error("[DIRECT UPLOAD] Failed to parse context", {
           context_raw: sanitizeForLog(body.context),
@@ -156,61 +153,16 @@ export class FilesController {
 
     const userId = request.userSession.userId;
 
-    const bucket = this.s3Service.getBucketName(uploadType);
-
-    if (!bucket) {
-      this.logger.warn("[DIRECT UPLOAD] Invalid upload type", {
-        uploadType: sanitizeForLog(uploadType),
-        userId: sanitizeForLog(userId),
-      });
-      throw new BadRequestException("Invalid upload type");
-    }
-
-    let prefix = "";
-    const normalizedPath = context.path?.startsWith("/")
-      ? context.path.slice(1)
-      : (context.path ?? "");
-
-    switch (uploadType) {
-      case "author": {
-        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
-        break;
-      }
-      case "learner": {
-        if (typeof context.assignmentId !== "number") {
-          throw new BadRequestException(
-            "Missing assignmentId in context for learner upload",
-          );
-        }
-        if (typeof context.questionId !== "number") {
-          throw new BadRequestException(
-            "Missing questionId in context for learner upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `${context.assignmentId}/${userId}/${context.questionId}/`;
-        break;
-      }
-      case "debug": {
-        if (typeof context.reportId !== "number") {
-          throw new BadRequestException(
-            "Missing reportId in context for debug upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `debug/${context.reportId}/`;
-        break;
-      }
-      default: {
-        throw new BadRequestException("Invalid upload type");
-      }
-    }
-
-    const uniqueId =
-      Date.now().toString(36) + Math.random().toString(36).slice(2);
-    const key = `${prefix}${uniqueId}-${file.originalname}`;
+    const { bucket, key } = this.filesService.resolveUploadTarget(
+      {
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadType: body.uploadType,
+        context,
+      },
+      userId,
+    );
 
     const result = await this.filesService.directUpload(file, bucket, key);
 
@@ -220,7 +172,7 @@ export class FilesController {
       bucket,
       fileType: file.mimetype,
       fileName: file.originalname,
-      uploadType,
+      uploadType: body.uploadType,
       size: file.size,
       etag: result.etag,
     };

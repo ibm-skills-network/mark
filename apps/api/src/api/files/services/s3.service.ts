@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import {
   CompleteMultipartUploadCommand,
   CompleteMultipartUploadCommandInput,
@@ -200,17 +200,29 @@ export class S3Service {
     return client.send(new HeadBucketCommand(parameters));
   }
 
+  private static readonly BUCKET_ENV_VAR_BY_TYPE: Record<string, string> = {
+    author: "IBM_COS_AUTHOR_BUCKET",
+    learner: "IBM_COS_LEARNER_BUCKET",
+    "learner-prod": "IBM_COS_LEARNER_BUCKET_PROD",
+    debug: "IBM_COS_DEBUG_BUCKET",
+  };
+
   getBucketName(uploadType: string): string {
-    const buckets: Record<string, string> = {
-      author: process.env.IBM_COS_AUTHOR_BUCKET ?? "",
-      learner: process.env.IBM_COS_LEARNER_BUCKET ?? "",
-      "learner-prod": process.env.IBM_COS_LEARNER_BUCKET_PROD ?? "",
-      debug: process.env.IBM_COS_DEBUG_BUCKET ?? "",
-    };
-    if (buckets[uploadType]) {
-      return buckets[uploadType];
+    const environmentVariable = S3Service.BUCKET_ENV_VAR_BY_TYPE[uploadType];
+    if (!environmentVariable) {
+      throw new BadRequestException(
+        `Unknown upload type '${uploadType}'. Valid types: ${Object.keys(
+          S3Service.BUCKET_ENV_VAR_BY_TYPE,
+        ).join(", ")}`,
+      );
     }
-    throw new Error(`Bucket not found for upload type: ${uploadType}`);
+    const bucket = process.env[environmentVariable];
+    if (!bucket) {
+      throw new Error(
+        `Bucket env var ${environmentVariable} is not set (upload type: '${uploadType}')`,
+      );
+    }
+    return bucket;
   }
 
   /**

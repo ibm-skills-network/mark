@@ -92,7 +92,7 @@ export class FilesService {
     return configured;
   }
 
-  private resolveUploadTarget(
+  resolveUploadTarget(
     uploadRequest: UploadRequestDto,
     userId: string,
   ): {
