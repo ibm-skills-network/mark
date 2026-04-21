@@ -6,7 +6,6 @@
  */
 
 import { Injectable, Logger } from "@nestjs/common";
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as crypto from "node:crypto";
 import { createCanvas } from "canvas";
 import type {
@@ -63,6 +62,7 @@ export class PdfStructureExtractorService {
 
     try {
       const uint8Array = new Uint8Array(buffer);
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       const loadingTask = pdfjs.getDocument({
         data: uint8Array,
         useSystemFonts: true,
