@@ -783,9 +783,35 @@ export class ApiService {
       });
 
       if (isMultipart || isBinaryFile) {
+        const pipeStart = Date.now();
+        let bytesPiped = 0;
+        const contentLengthHeader = clientRequest.headers["content-length"];
         this.logger.info(
-          `Piping ${isMultipart ? "multipart" : "binary"} request stream`,
+          `[proxy-multipart] Piping ${isMultipart ? "multipart" : "binary"} request stream, contentLength=${contentLengthHeader ?? "n/a"}`,
         );
+        clientRequest.on("data", (chunk: Buffer) => {
+          bytesPiped += chunk.length;
+        });
+        clientRequest.on("end", () => {
+          this.logger.info(
+            `[proxy-multipart] clientRequest stream ended after ${Date.now() - pipeStart}ms, bytesPiped=${bytesPiped}`,
+          );
+        });
+        clientRequest.on("error", (error) => {
+          this.logger.error(
+            `[proxy-multipart] clientRequest stream error after ${Date.now() - pipeStart}ms bytesPiped=${bytesPiped}: ${error.message}`,
+          );
+        });
+        clientRequest.on("aborted", () => {
+          this.logger.error(
+            `[proxy-multipart] clientRequest ABORTED after ${Date.now() - pipeStart}ms bytesPiped=${bytesPiped}`,
+          );
+        });
+        proxyRequest.on("finish", () => {
+          this.logger.info(
+            `[proxy-multipart] proxyRequest finished writing in ${Date.now() - pipeStart}ms, bytesPiped=${bytesPiped}`,
+          );
+        });
         clientRequest.pipe(proxyRequest);
       } else {
         if (clientRequest.body) {
