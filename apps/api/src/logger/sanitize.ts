@@ -1,4 +1,6 @@
 const MAX_LEN = 500;
+
+// handles various escape chars, \r,\n
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
 

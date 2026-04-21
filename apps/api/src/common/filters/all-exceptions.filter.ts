@@ -6,8 +6,7 @@
  * error is from Prisma) the error code plus current circuit-breaker state.
  *
  * Without this filter, NestJS's default behavior is to return a bare 500 with
- * no stack and no context — exactly the "500 with no logs" symptom reported
- * during DB pool exhaustion incidents.
+ * no context
  *
  * @module common/filters
  */

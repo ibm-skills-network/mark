@@ -1624,6 +1624,12 @@ export const createMockPrismaService = () => ({
     findMany: jest.fn().mockResolvedValue([createMockReport()]),
     create: jest.fn().mockResolvedValue(createMockReport()),
   },
+  assignmentFile: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue(undefined),
+  },
   $transaction: jest.fn(<T>(callback: (() => T) | Promise<T>[]) => {
     if (typeof callback === "function") {
       return callback();

@@ -11,7 +11,9 @@ jest.mock("@/lib/talkToBackend", () => ({
 }));
 
 describe("question-generation client helpers", () => {
-  const mockUploadFiles = uploadFiles as jest.MockedFunction<typeof uploadFiles>;
+  const mockUploadFiles = uploadFiles as jest.MockedFunction<
+    typeof uploadFiles
+  >;
   const mockGetJobStatus = getJobStatus as jest.MockedFunction<
     typeof getJobStatus
   >;
