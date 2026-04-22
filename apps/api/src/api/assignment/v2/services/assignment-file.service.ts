@@ -196,24 +196,66 @@ export class AssignmentFileService {
       ]);
 
     const extractionFailed = extractedFile.error !== undefined;
+    const safeExtractedText = extractionFailed
+      ? null
+      : this.sanitizeForTextColumn(extractedFile.content);
+    const safeExtractionError = extractionFailed
+      ? this.sanitizeForTextColumn(extractedFile.error ?? null)
+      : null;
 
-    const updated = await this.prisma.assignmentFile.update({
-      where: { id: fileId },
-      data: {
-        status: AssignmentFileStatus.READY,
-        extractedText: extractionFailed ? null : extractedFile.content,
-        extractionStatus: extractionFailed
-          ? AssignmentFileExtractionStatus.FAILED
-          : AssignmentFileExtractionStatus.READY,
-        extractionError: extractionFailed
-          ? (extractedFile.error ?? null)
-          : null,
-        extractedAt: extractionFailed ? null : new Date(),
-        uploadId: null,
-      },
-    });
+    let updated: AssignmentFile;
+    try {
+      updated = await this.prisma.assignmentFile.update({
+        where: { id: fileId },
+        data: {
+          status: AssignmentFileStatus.READY,
+          extractedText: safeExtractedText,
+          extractionStatus: extractionFailed
+            ? AssignmentFileExtractionStatus.FAILED
+            : AssignmentFileExtractionStatus.READY,
+          extractionError: safeExtractionError,
+          extractedAt: extractionFailed ? null : new Date(),
+          uploadId: null,
+        },
+      });
+    } catch (error) {
+      // Extractor output can be unsafe for Postgres TEXT even after sanitization
+      // (invalid UTF-8, oversized payloads). Keep the row usable — flip to READY
+      // with extractionStatus=FAILED so the file is not permanently stuck in UPLOADING.
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `completeAssignmentFileUpload: persisting extraction output failed for file ${fileId}: ${message}`,
+      );
+      updated = await this.prisma.assignmentFile.update({
+        where: { id: fileId },
+        data: {
+          status: AssignmentFileStatus.READY,
+          extractedText: null,
+          extractionStatus: AssignmentFileExtractionStatus.FAILED,
+          extractionError: "Extraction output rejected by storage layer",
+          extractedAt: null,
+          uploadId: null,
+        },
+      });
+    }
 
     return this.toResponse(updated);
+  }
+
+  /**
+   * Postgres TEXT columns reject null bytes (\u0000) and raise
+   * "unexpected end of hex escape" on some malformed byte sequences.
+   * Strip those characters and cap length so binary-parse noise from the
+   * extractor cannot make the whole transaction unrecoverable.
+   */
+  private sanitizeForTextColumn(value: string | null): string | null {
+    if (value == null) {
+      return null;
+    }
+    const NUL = String.fromCodePoint(0);
+    const stripped = value.replaceAll(NUL, "");
+    const MAX_LEN = 2_000_000;
+    return stripped.length > MAX_LEN ? stripped.slice(0, MAX_LEN) : stripped;
   }
 
   async abortAssignmentFileUpload(

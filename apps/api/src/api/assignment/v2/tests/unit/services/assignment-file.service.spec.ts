@@ -299,6 +299,76 @@ describe("AssignmentFileService", () => {
         AssignmentFileExtractionStatus.FAILED,
       );
     });
+
+    it("strips NUL bytes from extracted content before persisting", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      extractor.extractContentFromFiles.mockResolvedValue([
+        {
+          filename: "test.txt",
+          content: "hel lo world",
+          fileType: "text/plain",
+          metadata: { size: 13 },
+        },
+      ]);
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.READY,
+          extractedText: "helloworld",
+          uploadId: null,
+        }),
+      );
+
+      await service.completeAssignmentFileUpload(1, 1, validDto as any);
+
+      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            extractedText: "helloworld",
+          }),
+        }),
+      );
+    });
+
+    it("recovers when the first update throws — marks READY/FAILED instead of leaving row stuck in UPLOADING", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      prisma.assignmentFile.update
+        .mockRejectedValueOnce(
+          new Error("unexpected end of hex escape at line 1 column 226"),
+        )
+        .mockResolvedValueOnce(
+          makeDbFile({
+            status: AssignmentFileStatus.READY,
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+            extractionError: "Extraction output rejected by storage layer",
+            extractedText: null,
+            uploadId: null,
+          }),
+        );
+
+      const result = await service.completeAssignmentFileUpload(
+        1,
+        1,
+        validDto as any,
+      );
+
+      expect(prisma.assignmentFile.update).toHaveBeenCalledTimes(2);
+      expect(prisma.assignmentFile.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: AssignmentFileStatus.READY,
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+            extractionError: "Extraction output rejected by storage layer",
+            extractedText: null,
+            uploadId: null,
+          }),
+        }),
+      );
+      expect(result.status).toBe(AssignmentFileStatus.READY);
+      expect(result.extractionStatus).toBe(
+        AssignmentFileExtractionStatus.FAILED,
+      );
+    });
   });
 
   describe("abortAssignmentFileUpload", () => {
