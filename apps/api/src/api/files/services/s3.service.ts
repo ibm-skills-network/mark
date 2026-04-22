@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import {
+  AbortMultipartUploadCommand,
+  AbortMultipartUploadCommandInput,
+  AbortMultipartUploadCommandOutput,
   CompleteMultipartUploadCommand,
   CompleteMultipartUploadCommandInput,
   CompleteMultipartUploadCommandOutput,
@@ -165,6 +168,13 @@ export class S3Service {
   ): Promise<CompleteMultipartUploadCommandOutput> {
     const client = this.getS3Client(parameters.Bucket);
     return client.send(new CompleteMultipartUploadCommand(parameters));
+  }
+
+  async abortMultipartUpload(
+    parameters: AbortMultipartUploadCommandInput,
+  ): Promise<AbortMultipartUploadCommandOutput> {
+    const client = this.getS3Client(parameters.Bucket);
+    return client.send(new AbortMultipartUploadCommand(parameters));
   }
 
   async putObject(

@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
@@ -14,6 +13,12 @@ import { randomUUID } from "node:crypto";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
+import {
+  CompleteAssignmentFileDto,
+  InitiateAssignmentFileItemResponseDto,
+  InitiateAssignmentFilesDto,
+  InitiateAssignmentFilesResponseDto,
+} from "../dtos/assignment-file-upload.dto";
 
 export interface AssignmentFileResponse {
   id: number;
@@ -31,6 +36,10 @@ export interface AssignmentFileResponse {
   updatedAt: Date;
 }
 
+const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_PRESIGNED_URL_TTL_SECONDS = 300;
+const DEFAULT_PRESIGNED_URL_TTL_SECONDS = 120;
+
 @Injectable()
 export class AssignmentFileService {
   private readonly logger = new Logger(AssignmentFileService.name);
@@ -41,113 +50,205 @@ export class AssignmentFileService {
     private readonly fileContentExtractionService: FileContentExtractionService,
   ) {}
 
-  async uploadAssignmentFiles(
+  async initiateAssignmentFileUploads(
     assignmentId: number,
-    files: Express.Multer.File[],
-  ): Promise<{ files: AssignmentFileResponse[] }> {
-    if (!files || files.length === 0) {
-      throw new BadRequestException("No files provided");
-    }
-
+    dto: InitiateAssignmentFilesDto,
+    userId: string,
+  ): Promise<InitiateAssignmentFilesResponseDto> {
     const bucket = this.s3Service.getBucketName("author");
-    if (!bucket) {
-      throw new BadRequestException("Author upload bucket is not configured");
-    }
+    const partSizeBytes = this.getMultipartPartSizeBytes();
+    const expiresInSeconds = this.getPresignedUrlTtlSeconds();
 
-    const uploadedObjects: Array<{
-      bucket: string;
-      key: string;
-      file: Express.Multer.File;
-      extractedText: string | null;
-      extractionStatus: AssignmentFileExtractionStatus;
-      extractionError: string | null;
-      extractedAt: Date | null;
-    }> = [];
+    const uploads: InitiateAssignmentFileItemResponseDto[] = [];
 
-    try {
-      for (const file of files) {
-        const key = this.generateStorageKey(assignmentId, file.originalname);
+    for (const file of dto.files) {
+      const key = this.generateStorageKey(assignmentId, file.fileName);
 
-        await this.s3Service.putObject({
-          Bucket: bucket,
-          Key: key,
-          Body: file.buffer,
-          ContentType: file.mimetype,
-        });
+      const multipartUpload = await this.s3Service.createMultipartUpload({
+        Bucket: bucket,
+        Key: key,
+        ContentType: file.mimeType || "application/octet-stream",
+      });
 
-        const [extractedFile] =
-          await this.fileContentExtractionService.extractContentFromFiles([
-            {
-              filename: file.originalname,
-              content: "InCos",
-              fileType: file.mimetype || "application/octet-stream",
-              bucket,
-              key,
-              buffer: file.buffer,
-            },
-          ]);
-
-        const extractionFailed = extractedFile.error !== undefined;
-
-        uploadedObjects.push({
-          bucket,
-          key,
-          file,
-          extractedText: extractionFailed ? null : extractedFile.content,
-          extractionStatus: extractionFailed
-            ? AssignmentFileExtractionStatus.FAILED
-            : AssignmentFileExtractionStatus.READY,
-          extractionError: extractionFailed
-            ? (extractedFile.error ?? null)
-            : null,
-          extractedAt: extractionFailed ? null : new Date(),
-        });
+      const uploadId = multipartUpload.UploadId;
+      if (!uploadId) {
+        throw new BadRequestException("Failed to initiate multipart upload");
       }
 
-      const createdFiles = await this.prisma.$transaction(
-        uploadedObjects.map(
-          ({
-            bucket,
-            key,
-            file,
-            extractedText,
-            extractionStatus,
-            extractionError,
-            extractedAt,
-          }) =>
-            this.prisma.assignmentFile.create({
-              data: {
-                assignmentId,
-                filename: file.originalname,
-                mimeType: file.mimetype || "application/octet-stream",
-                size: file.size,
-                storageKey: key,
-                storageBucket: bucket,
-                status: AssignmentFileStatus.READY,
-                extractedText,
-                extractionStatus,
-                extractionError,
-                extractedAt,
-              },
-            }),
-        ),
-      );
+      try {
+        const partCount = Math.ceil(file.fileSize / partSizeBytes);
+        const urls = await Promise.all(
+          Array.from({ length: partCount }, async (_, index) => {
+            const partNumber = index + 1;
+            const url = await this.s3Service.getSignedUrl("uploadPart", {
+              Bucket: bucket,
+              Key: key,
+              UploadId: uploadId,
+              PartNumber: partNumber,
+              Expires: expiresInSeconds,
+            });
+            return { partNumber, url };
+          }),
+        );
 
-      return { files: createdFiles.map((file) => this.toResponse(file)) };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
-        `uploadAssignmentFiles failed for assignment ${assignmentId}: ${errorMessage}`,
-        errorStack,
-      );
-      // On DB failure, remove uploaded COS objects and let the caller retry the batch.
-      await this.cleanupUploadedObjects(uploadedObjects);
-      throw new InternalServerErrorException(
-        "Failed to upload assignment files",
+        const created = await this.prisma.assignmentFile.create({
+          data: {
+            assignmentId,
+            filename: file.fileName,
+            mimeType: file.mimeType || "application/octet-stream",
+            size: file.fileSize,
+            storageKey: key,
+            storageBucket: bucket,
+            status: AssignmentFileStatus.UPLOADING,
+            extractionStatus: AssignmentFileExtractionStatus.PENDING,
+            uploadId,
+          },
+        });
+
+        uploads.push({
+          fileId: created.id,
+          uploadId,
+          key,
+          bucket,
+          partSizeBytes,
+          urls,
+        });
+      } catch (error) {
+        // Presign/DB failed after MPU init — release the S3 upload so it does not linger.
+        await this.s3Service
+          .abortMultipartUpload({
+            Bucket: bucket,
+            Key: key,
+            UploadId: uploadId,
+          })
+          .catch((abortError: unknown) => {
+            const message =
+              abortError instanceof Error
+                ? abortError.message
+                : String(abortError);
+            this.logger.warn(
+              `initiateAssignmentFileUploads: abort cleanup failed for ${key}: ${message}`,
+            );
+          });
+        throw error;
+      }
+    }
+
+    this.logger.debug(
+      `initiateAssignmentFileUploads: ${dto.files.length} files for assignment ${assignmentId} by user ${userId}`,
+    );
+
+    return { uploads };
+  }
+
+  async completeAssignmentFileUpload(
+    assignmentId: number,
+    fileId: number,
+    dto: CompleteAssignmentFileDto,
+  ): Promise<AssignmentFileResponse> {
+    const file = await this.prisma.assignmentFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+    if (file.assignmentId !== assignmentId) {
+      throw new BadRequestException(
+        `File ${fileId} does not belong to assignment ${assignmentId}`,
       );
     }
+    if (file.status !== AssignmentFileStatus.UPLOADING) {
+      throw new BadRequestException(`File ${fileId} is not in UPLOADING state`);
+    }
+    if (file.uploadId !== dto.uploadId) {
+      throw new BadRequestException(`uploadId mismatch for file ${fileId}`);
+    }
+
+    await this.s3Service.completeMultipartUpload({
+      Bucket: file.storageBucket,
+      Key: file.storageKey,
+      UploadId: dto.uploadId,
+      MultipartUpload: {
+        Parts: dto.parts.map((part) => ({
+          PartNumber: part.partNumber,
+          ETag: part.etag,
+        })),
+      },
+    });
+
+    const object = await this.s3Service.getObject({
+      Bucket: file.storageBucket,
+      Key: file.storageKey,
+    });
+    const buffer = await this.collectBodyToBuffer(object.Body);
+
+    const [extractedFile] =
+      await this.fileContentExtractionService.extractContentFromFiles([
+        {
+          filename: file.filename,
+          content: "InCos",
+          fileType: file.mimeType || "application/octet-stream",
+          bucket: file.storageBucket,
+          key: file.storageKey,
+          buffer,
+        },
+      ]);
+
+    const extractionFailed = extractedFile.error !== undefined;
+
+    const updated = await this.prisma.assignmentFile.update({
+      where: { id: fileId },
+      data: {
+        status: AssignmentFileStatus.READY,
+        extractedText: extractionFailed ? null : extractedFile.content,
+        extractionStatus: extractionFailed
+          ? AssignmentFileExtractionStatus.FAILED
+          : AssignmentFileExtractionStatus.READY,
+        extractionError: extractionFailed
+          ? (extractedFile.error ?? null)
+          : null,
+        extractedAt: extractionFailed ? null : new Date(),
+        uploadId: null,
+      },
+    });
+
+    return this.toResponse(updated);
+  }
+
+  async abortAssignmentFileUpload(
+    assignmentId: number,
+    fileId: number,
+  ): Promise<void> {
+    const file = await this.prisma.assignmentFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+    if (file.assignmentId !== assignmentId) {
+      throw new BadRequestException(
+        `File ${fileId} does not belong to assignment ${assignmentId}`,
+      );
+    }
+
+    if (file.uploadId) {
+      try {
+        await this.s3Service.abortMultipartUpload({
+          Bucket: file.storageBucket,
+          Key: file.storageKey,
+          UploadId: file.uploadId,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `abortAssignmentFileUpload: S3 abort failed for file ${fileId} (uploadId=${file.uploadId}): ${message}`,
+        );
+      }
+    }
+
+    await this.prisma.assignmentFile.delete({ where: { id: fileId } });
   }
 
   async getAssignmentFiles(
@@ -250,14 +351,54 @@ export class AssignmentFileService {
     return sanitized || "file";
   }
 
-  private async cleanupUploadedObjects(
-    uploadedObjects: Array<{ bucket: string; key: string }>,
-  ): Promise<void> {
-    await Promise.allSettled(
-      uploadedObjects.map(({ bucket, key }) =>
-        this.s3Service.deleteObject({ Bucket: bucket, Key: key }),
-      ),
+  private getMultipartPartSizeBytes(): number {
+    const configured = Number(
+      process.env.MULTIPART_UPLOAD_PART_SIZE_BYTES ?? MIN_PART_SIZE_BYTES,
     );
+    if (!Number.isFinite(configured) || configured < MIN_PART_SIZE_BYTES) {
+      return MIN_PART_SIZE_BYTES;
+    }
+    return configured;
+  }
+
+  private getPresignedUrlTtlSeconds(): number {
+    const fromEnvironment = Number(
+      process.env.UPLOAD_PRESIGNED_URL_TTL_SECONDS ??
+        DEFAULT_PRESIGNED_URL_TTL_SECONDS,
+    );
+    if (!Number.isFinite(fromEnvironment) || fromEnvironment <= 0) {
+      return DEFAULT_PRESIGNED_URL_TTL_SECONDS;
+    }
+    return Math.min(fromEnvironment, MAX_PRESIGNED_URL_TTL_SECONDS);
+  }
+
+  private async collectBodyToBuffer(body: unknown): Promise<Buffer> {
+    if (!body) {
+      return Buffer.alloc(0);
+    }
+    if (Buffer.isBuffer(body)) {
+      return body;
+    }
+    if (body instanceof Uint8Array) {
+      return Buffer.from(body);
+    }
+
+    const chunks: Buffer[] = [];
+    const stream = body as NodeJS.ReadableStream;
+
+    return new Promise<Buffer>((resolve, reject) => {
+      stream.on("data", (chunk: unknown) => {
+        if (Buffer.isBuffer(chunk)) {
+          chunks.push(chunk);
+        } else if (chunk instanceof Uint8Array) {
+          chunks.push(Buffer.from(chunk));
+        } else if (typeof chunk === "string") {
+          chunks.push(Buffer.from(chunk));
+        }
+      });
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+      stream.on("error", reject);
+    });
   }
 
   private toResponse(file: AssignmentFile): AssignmentFileResponse {
