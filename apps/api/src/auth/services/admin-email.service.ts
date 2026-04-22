@@ -30,7 +30,6 @@ import * as nodemailer from "nodemailer";
 
 type EmailProvider = "sendgrid" | "google" | "none";
 const sgMail = require("@sendgrid/mail");
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 @Injectable()
 export class AdminEmailService {
   private readonly logger = new Logger(AdminEmailService.name);
