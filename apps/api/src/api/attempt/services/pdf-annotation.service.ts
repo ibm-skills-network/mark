@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.js";
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from "pdf-lib";
 import type {
   PDFDocumentProxy,
@@ -953,7 +954,6 @@ export class PdfAnnotationService {
 
     try {
       const uint8Array = new Uint8Array(originalPdfBuffer);
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       const loadingTask = pdfjs.getDocument({
         data: uint8Array,
         useSystemFonts: true,
