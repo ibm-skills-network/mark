@@ -981,6 +981,14 @@ export class AttemptSubmissionService {
         );
 
       if (totalPossiblePoints <= 0) {
+        this.logger.error("submitLearnerAttempt: invalid totalPossiblePoints", {
+          attemptId,
+          assignmentId,
+          totalPossiblePoints,
+          response_count: successfulQuestionResponses.length,
+          question_count: assignment.questions.length,
+          missing_question_count: missingQuestions.length,
+        });
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) calculated for attemptId ${attemptId}. ` +
             `This indicates a critical grading error. ` +
@@ -996,6 +1004,13 @@ export class AttemptSubmissionService {
         );
 
       if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        this.logger.error("submitLearnerAttempt: invalid grade out of [0,1]", {
+          attemptId,
+          assignmentId,
+          grade,
+          totalPointsEarned,
+          totalPossiblePoints,
+        });
         throw new InternalServerErrorException(
           `Invalid grade calculated: ${grade}. ` +
             `totalPointsEarned: ${totalPointsEarned}, ` +
@@ -1118,6 +1133,11 @@ export class AttemptSubmissionService {
         );
 
       if (totalPossiblePoints <= 0) {
+        this.logger.error("authorPreview: invalid totalPossiblePoints", {
+          assignmentId,
+          totalPossiblePoints,
+          response_count: successfulQuestionResponses.length,
+        });
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) in author preview for assignmentId ${assignmentId}.`,
         );
@@ -1130,6 +1150,12 @@ export class AttemptSubmissionService {
         );
 
       if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        this.logger.error("authorPreview: invalid grade out of [0,1]", {
+          assignmentId,
+          grade,
+          totalPointsEarned,
+          totalPossiblePoints,
+        });
         throw new InternalServerErrorException(
           `Invalid grade calculated in author preview: ${grade}. ` +
             `totalPointsEarned: ${totalPointsEarned}, ` +
@@ -1446,6 +1472,13 @@ export class AttemptSubmissionService {
 
     if (missingQuestionIds.length > 0) {
       if (!allowDatabaseFallback) {
+        this.logger.error(
+          "calculateTotalPossiblePoints: missing questions in author preview (no DB fallback)",
+          {
+            missing_question_ids: missingQuestionIds,
+            total_so_far: totalPossiblePoints,
+          },
+        );
         throw new InternalServerErrorException(
           `Cannot calculate totalPossiblePoints: Question ${missingQuestionIds[0]} not found ` +
             `in provided questions. This prevents accurate grading.`,
@@ -1474,6 +1507,14 @@ export class AttemptSubmissionService {
             totalPossiblePoints += points;
             missingQuestions.push(questionId);
           } else {
+            this.logger.error(
+              "calculateTotalPossiblePoints: question not in DB either",
+              {
+                question_id: questionId,
+                missing_question_ids: missingQuestionIds,
+                points_seen: points,
+              },
+            );
             throw new InternalServerErrorException(
               `Cannot calculate totalPossiblePoints: Question ${questionId} not found ` +
                 `in database. This prevents accurate grading.`,
@@ -1484,6 +1525,14 @@ export class AttemptSubmissionService {
         if (error instanceof InternalServerErrorException) {
           throw error;
         }
+        this.logger.error(
+          "calculateTotalPossiblePoints: Prisma query for deleted questions failed",
+          {
+            missing_question_ids: missingQuestionIds,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        );
         throw new InternalServerErrorException(
           `Failed to query deleted questions for grade calculation: ${
             error instanceof Error ? error.message : String(error)

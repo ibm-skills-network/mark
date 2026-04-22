@@ -1672,7 +1672,9 @@ export const MarkChat = () => {
         if (!cancelled) {
           setUser(userData);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error("MarkChat: fetchUser failed:", error);
+      }
     };
     void fetchUser();
     return () => {
@@ -2270,7 +2272,12 @@ export const MarkChat = () => {
               fileToolCalls,
               browserCookies,
             );
-          } catch (error) {}
+          } catch (error) {
+            console.error(
+              "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
+              error,
+            );
+          }
         }
 
         didSendSucceed = await sendMessage(stream, {
@@ -2324,7 +2331,12 @@ export const MarkChat = () => {
                   if (markerMatch) {
                     try {
                       toolCallsData = JSON.parse(markerMatch[1]);
-                    } catch (error) {}
+                    } catch (e) {
+                      console.warn(
+                        "MarkChat: failed to JSON.parse CLIENT_EXECUTION_MARKER payload:",
+                        e,
+                      );
+                    }
                   }
                 }
 
@@ -2335,7 +2347,12 @@ export const MarkChat = () => {
                   toolCallsData,
                 );
                 hasPersistedAssistant = true;
-              } catch (error) {}
+              } catch (error) {
+                console.error(
+                  "MarkChat: addMessageToChat(ASSISTANT) failed — assistant reply may not be persisted:",
+                  error,
+                );
+              }
             }
           } finally {
             isPersistingAssistant = false;

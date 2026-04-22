@@ -562,6 +562,13 @@ export class QuestionResponseService {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to save question response", {
+        questionId,
+        assignmentAttemptId,
+        role,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException(
         `Failed to save question response: ${errorMessage}`,
       );
