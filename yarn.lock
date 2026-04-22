@@ -2325,7 +2325,7 @@
 
 "@langchain/core@^0.3.77", "@langchain/core@~0.3.77":
   version "0.3.80"
-  resolved "https://registry.npmjs.org/@langchain/core/-/core-0.3.80.tgz#c494a6944e53ab28bf32dc531e257b17cfc8f797"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.80.tgz#c494a6944e53ab28bf32dc531e257b17cfc8f797"
   integrity sha512-vcJDV2vk1AlCwSh3aBm/urQ1ZrlXFFBocv11bz/NBUfLWD5/UDNMzwPdaAd2dKvNmTWa9FM2lirLU3+JCf4cRA==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
@@ -2343,7 +2343,7 @@
 
 "@langchain/openai@>=0.1.0 <0.7.0", "@langchain/openai@>=0.2.0 <0.7.0", "@langchain/openai@^0.6.9", "@langchain/openai@~0.6.13":
   version "0.6.17"
-  resolved "https://registry.npmjs.org/@langchain/openai/-/openai-0.6.17.tgz#6e87064316d6834b7cfb88a2df2ea7ee2a4b0325"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-0.6.17.tgz#6e87064316d6834b7cfb88a2df2ea7ee2a4b0325"
   integrity sha512-JVSzD+FL5v/2UQxKd+ikB1h4PQOtn0VlK8nqW2kPp0fshItCv4utrjBKXC/rubBnSXoRTyonBINe8QRZ6OojVQ==
   dependencies:
     js-tiktoken "^1.0.12"
@@ -3221,7 +3221,7 @@
 
 "@prisma/client@5.3.1", "@prisma/client@^5.3.1":
   version "5.3.1"
-  resolved "https://registry.npmjs.org/@prisma/client/-/client-5.3.1.tgz#fc7fc2d91e814cc4fe18a4bc5e78bf851c26985e"
+  resolved "https://registry.yarnpkg.com/@prisma/client/-/client-5.3.1.tgz#fc7fc2d91e814cc4fe18a4bc5e78bf851c26985e"
   integrity sha512-ArOKjHwdFZIe1cGU56oIfy7wRuTn0FfZjGuU/AjgEBOQh+4rDkB6nF+AGHP8KaVpkBIiHGPQh3IpwQ3xDMdO0Q==
   dependencies:
     "@prisma/engines-version" "5.3.1-2.61e140623197a131c2a6189271ffee05a7aa9a59"
@@ -7121,7 +7121,7 @@ class-transformer@0.5.1, class-transformer@^0.5.1:
 
 class-validator@0.14.0, class-validator@^0.14.0:
   version "0.14.0"
-  resolved "https://registry.npmjs.org/class-validator/-/class-validator-0.14.0.tgz#40ed0ecf3c83b2a8a6a320f4edb607be0f0df159"
+  resolved "https://registry.yarnpkg.com/class-validator/-/class-validator-0.14.0.tgz#40ed0ecf3c83b2a8a6a320f4edb607be0f0df159"
   integrity sha512-ct3ltplN8I9fOwUd8GrP8UQixwff129BkEtuWDKL5W45cQuLd19xqmTLu5ge78YDm/fdje6FMt0hGOhl0lii3A==
   dependencies:
     "@types/validator" "^13.7.10"
@@ -11405,7 +11405,7 @@ kuler@^2.0.0:
 
 "langchain@>=0.2.3 <0.3.0 || >=0.3.4 <0.4.0", langchain@^0.3.34, langchain@~0.3.34:
   version "0.3.37"
-  resolved "https://registry.npmjs.org/langchain/-/langchain-0.3.37.tgz#6931ee5af763a6df35c0ac467eab028ba0ad17de"
+  resolved "https://registry.yarnpkg.com/langchain/-/langchain-0.3.37.tgz#6931ee5af763a6df35c0ac467eab028ba0ad17de"
   integrity sha512-1jPsZ6xsxkcQPUvqRjvfuOLwZLLyt49hzcOK7OYAJovIkkOxd5gzK4Yw6giPUQ8g4XHyvULNlWBz+subdkcokw==
   dependencies:
     "@langchain/openai" ">=0.1.0 <0.7.0"
@@ -13700,7 +13700,7 @@ prisma@5.3.1, prisma@^5.3.1:
 
 prismjs@1.30.0, prismjs@^1.27.0, prismjs@^1.30.0, prismjs@~1.27.0:
   version "1.30.0"
-  resolved "https://registry.npmjs.org/prismjs/-/prismjs-1.30.0.tgz#d9709969d9d4e16403f6f348c63553b19f0975a9"
+  resolved "https://registry.yarnpkg.com/prismjs/-/prismjs-1.30.0.tgz#d9709969d9d4e16403f6f348c63553b19f0975a9"
   integrity sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw==
 
 process-nextick-args@~2.0.0:

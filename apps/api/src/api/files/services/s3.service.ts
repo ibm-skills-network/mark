@@ -41,6 +41,11 @@ export class S3Service {
   private s3ClientSouth: S3Client;
 
   constructor() {
+    const requestHandlerOptions = {
+      connectionTimeout: 10_000,
+      requestTimeout: 120_000,
+    };
+
     this.s3ClientEast = new S3Client({
       endpoint: process.env.IBM_COS_ENDPOINT ?? "",
       credentials: {
@@ -49,6 +54,7 @@ export class S3Service {
       },
       forcePathStyle: true,
       region: process.env.IBM_COS_REGION ?? "us-east",
+      requestHandler: requestHandlerOptions,
     });
 
     this.s3ClientSouth = new S3Client({
@@ -59,6 +65,7 @@ export class S3Service {
       },
       forcePathStyle: true,
       region: process.env.IBM_COS_REGION_SOUTH ?? "us-south",
+      requestHandler: requestHandlerOptions,
     });
   }
 

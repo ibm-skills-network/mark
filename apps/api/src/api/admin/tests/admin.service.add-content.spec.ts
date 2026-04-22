@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
 import { AssignmentServiceV2 } from "../../assignment/v2/services/assignment.service";
+import { AssignmentFileService } from "../../assignment/v2/services/assignment-file.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 import { AdminService } from "../admin.service";
 import { AdminAddContentToAssignmentRequestDto } from "../dto/assignment/add.content.to.assignment.request.dto";
@@ -158,6 +159,12 @@ describe("AdminService - addContentToAssignment", () => {
               jobId: 1,
               message: "Publishing started",
             }),
+          },
+        },
+        {
+          provide: AssignmentFileService,
+          useValue: {
+            cleanupAssignmentFileObjects: jest.fn(),
           },
         },
         {

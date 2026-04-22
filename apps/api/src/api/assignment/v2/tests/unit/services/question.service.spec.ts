@@ -376,6 +376,104 @@ describe("QuestionService", () => {
           ),
         ).rejects.toThrow(BadRequestException);
       });
+
+      describe("contentSource routing", () => {
+        const userId = "author-123";
+        const assignmentId = 1;
+        const mockJob = { id: 42 };
+        const storedFile = {
+          filename: "stored.txt",
+          extractedText: "stored content",
+        };
+
+        beforeEach(() => {
+          jobStatusService.createJob.mockResolvedValue(mockJob);
+          jest
+            .spyOn(questionService as any, "startQuestionGenerationProcess")
+            .mockResolvedValue(undefined);
+        });
+
+        it('contentSource="payload" uses caller-supplied fileContents, never queries DB', async () => {
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "payload",
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          expect(prismaService.assignmentFile.findMany).not.toHaveBeenCalled();
+        });
+
+        it('contentSource="stored" queries DB and filters to READY rows with non-null extractedText', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([storedFile]);
+
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "stored",
+            fileContents: undefined,
+            learningObjectives: "some objective",
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          expect(prismaService.assignmentFile.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+              where: expect.objectContaining({
+                assignmentId,
+                extractedText: { not: null },
+              }),
+            }),
+          );
+        });
+
+        it('contentSource="stored" throws BadRequestException when no READY files exist', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([]);
+
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "stored",
+            fileContents: undefined,
+            learningObjectives: "some objective",
+          });
+
+          await expect(
+            questionService.generateQuestions(assignmentId, payload, userId),
+          ).rejects.toThrow(BadRequestException);
+        });
+
+        it('contentSource="both" concatenates caller fileContents and stored files', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([storedFile]);
+
+          const callerFile = { filename: "caller.txt", content: "caller data" };
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "both",
+            fileContents: [callerFile],
+          });
+
+          const startSpy = jest
+            .spyOn(questionService as any, "startQuestionGenerationProcess")
+            .mockResolvedValue(undefined);
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          const filesArg = startSpy.mock.calls[0][4] as Array<{
+            filename: string;
+            content: string;
+          }>;
+          const filenames = filesArg.map((f) => f.filename);
+          expect(filenames).toContain("caller.txt");
+          expect(filenames).toContain("stored.txt");
+        });
+      });
     });
 
     describe("updateQuestionGradingContext", () => {
