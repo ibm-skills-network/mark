@@ -43,6 +43,9 @@ jobs:
           yarn config set network-concurrency 1
           yarn config set child-concurrency 1
 
+      - name: Install canvas system dependencies
+        run: sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile --verbose
         env:
