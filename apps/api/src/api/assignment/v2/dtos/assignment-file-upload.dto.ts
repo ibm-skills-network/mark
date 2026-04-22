@@ -28,11 +28,11 @@ export class InitiateAssignmentFileItemDto {
 export class InitiateAssignmentFilesDto {
   @ApiProperty({
     type: [InitiateAssignmentFileItemDto],
-    description: "Files to initiate (1 to 20 per request)",
+    description: "Files to initiate (1 to 10 per request)",
   })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(20)
+  @ArrayMaxSize(10)
   @ValidateNested({ each: true })
   @Type(() => InitiateAssignmentFileItemDto)
   files: InitiateAssignmentFileItemDto[];

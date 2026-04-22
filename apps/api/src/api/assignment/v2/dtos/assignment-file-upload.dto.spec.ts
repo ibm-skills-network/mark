@@ -22,9 +22,9 @@ describe("InitiateAssignmentFilesDto", () => {
     expect(errors).toHaveLength(0);
   });
 
-  it("accepts exactly 20 files (max)", async () => {
+  it("accepts exactly 10 files (max)", async () => {
     const dto = plainToInstance(InitiateAssignmentFilesDto, {
-      files: Array.from({ length: 20 }, () => makeItem()),
+      files: Array.from({ length: 10 }, () => makeItem()),
     });
     const errors = await validate(dto);
     expect(errors).toHaveLength(0);
@@ -38,9 +38,9 @@ describe("InitiateAssignmentFilesDto", () => {
     expect(errors[0].constraints?.arrayMinSize).toBeDefined();
   });
 
-  it("rejects more than 20 files", async () => {
+  it("rejects more than 10 files", async () => {
     const dto = plainToInstance(InitiateAssignmentFilesDto, {
-      files: Array.from({ length: 21 }, () => makeItem()),
+      files: Array.from({ length: 11 }, () => makeItem()),
     });
     const errors = await validate(dto);
     expect(errors).toHaveLength(1);
