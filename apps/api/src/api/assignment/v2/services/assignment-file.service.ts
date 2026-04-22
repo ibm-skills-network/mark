@@ -202,6 +202,11 @@ export class AssignmentFileService {
     const safeExtractionError = extractionFailed
       ? this.sanitizeForTextColumn(extractedFile.error ?? null)
       : null;
+    const extractedLength = safeExtractedText?.length ?? 0;
+    const errorLength = safeExtractionError?.length ?? 0;
+    this.logger.log(
+      `completeAssignmentFileUpload: fileId=${fileId} extractionFailed=${String(extractionFailed)} extractedLen=${extractedLength} errorLen=${errorLength}`,
+    );
 
     let updated: AssignmentFile;
     try {
@@ -218,25 +223,53 @@ export class AssignmentFileService {
           uploadId: null,
         },
       });
+      this.logger.log(
+        `completeAssignmentFileUpload: fileId=${fileId} primary update OK status=READY`,
+      );
     } catch (error) {
       // Extractor output can be unsafe for Postgres TEXT even after sanitization
-      // (invalid UTF-8, oversized payloads). Keep the row usable — flip to READY
-      // with extractionStatus=FAILED so the file is not permanently stuck in UPLOADING.
+      // (Prisma query engine rejects malformed UTF-8 / truncated \u escapes with
+      // "unexpected end of hex escape"). Fall back to storing a fixed-ASCII
+      // error marker via $executeRaw — that bypasses the query engine's JSON
+      // boundary so it cannot fail on extractor output. Keep the row usable.
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `completeAssignmentFileUpload: persisting extraction output failed for file ${fileId}: ${message}`,
+      this.logger.error(
+        `completeAssignmentFileUpload: primary update failed for fileId=${fileId}: ${message}`,
       );
-      updated = await this.prisma.assignmentFile.update({
+      try {
+        await this.prisma.$executeRaw`
+          UPDATE "AssignmentFile"
+          SET "status" = 'READY'::"AssignmentFileStatus",
+              "extractedText" = NULL,
+              "extractionStatus" = 'FAILED'::"AssignmentFileExtractionStatus",
+              "extractionError" = 'Extraction output rejected by storage layer',
+              "extractedAt" = NULL,
+              "uploadId" = NULL,
+              "updatedAt" = NOW()
+          WHERE "id" = ${fileId}
+        `;
+        this.logger.log(
+          `completeAssignmentFileUpload: fileId=${fileId} fallback raw update OK status=READY/FAILED`,
+        );
+      } catch (fallbackError) {
+        const fm =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : String(fallbackError);
+        this.logger.error(
+          `completeAssignmentFileUpload: FALLBACK update ALSO failed for fileId=${fileId}: ${fm}`,
+        );
+        throw fallbackError;
+      }
+      const reloaded = await this.prisma.assignmentFile.findUnique({
         where: { id: fileId },
-        data: {
-          status: AssignmentFileStatus.READY,
-          extractedText: null,
-          extractionStatus: AssignmentFileExtractionStatus.FAILED,
-          extractionError: "Extraction output rejected by storage layer",
-          extractedAt: null,
-          uploadId: null,
-        },
       });
+      if (!reloaded) {
+        throw new NotFoundException(
+          `File with ID ${fileId} not found after fallback update`,
+        );
+      }
+      updated = reloaded;
     }
 
     return this.toResponse(updated);
@@ -253,9 +286,12 @@ export class AssignmentFileService {
       return null;
     }
     const NUL = String.fromCodePoint(0);
-    const stripped = value.replaceAll(NUL, "");
+    const noNul = value.replaceAll(NUL, "");
+    // UTF-8 round-trip replaces malformed / lone-surrogate sequences with
+    // U+FFFD, avoiding Prisma query-engine "unexpected end of hex escape".
+    const utf8Safe = Buffer.from(noNul, "utf8").toString("utf8");
     const MAX_LEN = 2_000_000;
-    return stripped.length > MAX_LEN ? stripped.slice(0, MAX_LEN) : stripped;
+    return utf8Safe.length > MAX_LEN ? utf8Safe.slice(0, MAX_LEN) : utf8Safe;
   }
 
   async abortAssignmentFileUpload(

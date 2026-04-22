@@ -330,12 +330,9 @@ describe("AssignmentFileService", () => {
       );
     });
 
-    it("recovers when the first update throws — marks READY/FAILED instead of leaving row stuck in UPLOADING", async () => {
-      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
-      prisma.assignmentFile.update
-        .mockRejectedValueOnce(
-          new Error("unexpected end of hex escape at line 1 column 226"),
-        )
+    it("recovers via raw SQL fallback when the first update throws — never leaves row stuck in UPLOADING", async () => {
+      prisma.assignmentFile.findUnique
+        .mockResolvedValueOnce(makeDbFile())
         .mockResolvedValueOnce(
           makeDbFile({
             status: AssignmentFileStatus.READY,
@@ -345,6 +342,10 @@ describe("AssignmentFileService", () => {
             uploadId: null,
           }),
         );
+      prisma.assignmentFile.update.mockRejectedValueOnce(
+        new Error("unexpected end of hex escape at line 1 column 226"),
+      );
+      prisma.$executeRaw = jest.fn().mockResolvedValue(1);
 
       const result = await service.completeAssignmentFileUpload(
         1,
@@ -352,18 +353,8 @@ describe("AssignmentFileService", () => {
         validDto as any,
       );
 
-      expect(prisma.assignmentFile.update).toHaveBeenCalledTimes(2);
-      expect(prisma.assignmentFile.update).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: AssignmentFileStatus.READY,
-            extractionStatus: AssignmentFileExtractionStatus.FAILED,
-            extractionError: "Extraction output rejected by storage layer",
-            extractedText: null,
-            uploadId: null,
-          }),
-        }),
-      );
+      expect(prisma.assignmentFile.update).toHaveBeenCalledTimes(1);
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
       expect(result.status).toBe(AssignmentFileStatus.READY);
       expect(result.extractionStatus).toBe(
         AssignmentFileExtractionStatus.FAILED,
