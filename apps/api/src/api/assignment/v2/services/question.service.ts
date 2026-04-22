@@ -565,26 +565,18 @@ export class QuestionService {
       url,
     } = questionsToGenerate;
 
-    if (multipleChoiceSubtypes !== undefined) {
-      const subtypeTotal =
-        (multipleChoiceSubtypes.short || 0) +
-        (multipleChoiceSubtypes.quantitative || 0) +
-        (multipleChoiceSubtypes.long || 0) +
-        (multipleChoiceSubtypes.scenario || 0);
-
-      if (subtypeTotal === 0) {
-        throw new BadRequestException(
-          "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
-        );
-      }
-    }
-
     const subtypeTotal = multipleChoiceSubtypes
       ? (multipleChoiceSubtypes.short || 0) +
         (multipleChoiceSubtypes.quantitative || 0) +
         (multipleChoiceSubtypes.long || 0) +
         (multipleChoiceSubtypes.scenario || 0)
       : 0;
+
+    if (multipleChoiceSubtypes !== undefined && subtypeTotal === 0) {
+      throw new BadRequestException(
+        "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+      );
+    }
 
     const totalQuestions =
       (multipleChoice || 0) +

@@ -35,6 +35,20 @@ interface FileUploadModalProps {
   questionId: number;
 }
 
+type MultipleChoiceSubtypeCounts = NonNullable<
+  QuestionGenerationPayload["questionsToGenerate"]["multipleChoiceSubtypes"]
+>;
+
+const multipleChoiceSubtypeFields: Array<{
+  key: keyof MultipleChoiceSubtypeCounts;
+  label: string;
+}> = [
+  { key: "short", label: "Short" },
+  { key: "quantitative", label: "Quantitative" },
+  { key: "long", label: "Long" },
+  { key: "scenario", label: "Scenario" },
+];
+
 const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const [fileUploaded, setFileUploaded] = useAuthorStore((state) => [
     state.fileUploaded,
@@ -131,6 +145,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     upload: 0,
     linkFile: 0,
   });
+  const [multipleChoiceSubtypes, setMultipleChoiceSubtypes] =
+    useState<MultipleChoiceSubtypeCounts>({
+      short: 0,
+      quantitative: 0,
+      long: 0,
+      scenario: 0,
+    });
 
   const [selectedResponseTypes] = useState({
     TEXT: "OTHER" as ResponseType,
@@ -164,12 +185,18 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     setStatusData(null);
     setError(null);
 
+    const subtypeTotal = Object.values(multipleChoiceSubtypes).reduce(
+      (total, count) => total + count,
+      0,
+    );
+    const totalRequestedQuestions =
+      Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0) +
+      subtypeTotal;
+
     if (fileUploaded.length === 0 && learningObjectives.length === 0) {
       toast.error("Please upload files or enter learning objectives.");
       return;
-    } else if (
-      Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0) === 0
-    ) {
+    } else if (totalRequestedQuestions === 0) {
       toast.error("Please select at least one question type to generate.");
       return;
     } else if (learningObjectives.length > MAX_CHAR_LIMIT) {
@@ -191,6 +218,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           url: selectedQuestionTypes.url,
           upload: selectedQuestionTypes.upload,
           linkFile: selectedQuestionTypes.linkFile,
+          ...(subtypeTotal > 0 ? { multipleChoiceSubtypes } : {}),
           responseTypes: selectedResponseTypes,
         },
         fileContents: fileUploaded,
@@ -511,6 +539,39 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <label className="text-sm font-medium text-gray-700">
                   Multiple Choice
                 </label>
+              </div>
+
+              <div className="ml-8 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Multiple Choice Subtypes
+                </p>
+                <p className="mt-1 text-xs text-gray-600">
+                  Optional. These counts generate Mark-style multiple-choice
+                  questions by subtype and are added separately from the
+                  standard multiple-choice count above.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {multipleChoiceSubtypeFields.map(({ key, label }) => (
+                    <div key={key} className="flex items-center space-x-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={multipleChoiceSubtypes[key]}
+                        onChange={(e) =>
+                          setMultipleChoiceSubtypes((prev) => ({
+                            ...prev,
+                            [key]: Number.parseInt(e.target.value, 10) || 0,
+                          }))
+                        }
+                        className="w-16 p-1 border border-gray-300 rounded-md"
+                      />
+                      <label className="text-sm font-medium text-gray-700">
+                        {label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center space-x-2">

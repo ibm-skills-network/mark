@@ -1,5 +1,5 @@
 import { QuestionType } from "@prisma/client";
-import { QuestionsToGenerate } from "../../../../assignment/dto/post.assignment.request.dto";
+import { EnhancedQuestionsToGenerate } from "../../../../assignment/dto/post.assignment.request.dto";
 import {
   Choice,
   RubricDto,
@@ -14,7 +14,7 @@ export interface IQuestionGenerationService {
   generateAssignmentQuestions(
     assignmentId: number,
     assignmentType: AssignmentTypeEnum,
-    questionsToGenerate: QuestionsToGenerate,
+    questionsToGenerate: EnhancedQuestionsToGenerate,
     content?: string,
     learningObjectives?: string,
   ): Promise<

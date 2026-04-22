@@ -357,6 +357,8 @@ TOOL USAGE:
 - Use generateQuestionVariant for creating variations
 - Use deleteQuestion for removing questions
 - Use generateQuestionsFromObjectives for AI-generated content
+  and provide multipleChoiceSubtypes when the author asks for short,
+  quantitative, long, or scenario multiple-choice questions
 - Use updateLearningObjectives for curriculum planning
 - Use reportIssue only for technical issues after exhausting troubleshooting options
 - Use provideFeedback for sharing general feedback about teaching experience
@@ -607,7 +609,51 @@ RESPONSE STYLE:
           count: z
             .number()
             .optional()
-            .describe("The number of questions to generate"),
+            .describe(
+              "The number of regular non-subtype questions to generate across questionTypes",
+            ),
+          multipleChoiceSubtypes: z
+            .object({
+              short: z
+                .number()
+                .int()
+                .nonnegative()
+                .optional()
+                .describe("Number of short multiple-choice questions"),
+              quantitative: z
+                .number()
+                .int()
+                .nonnegative()
+                .optional()
+                .describe("Number of quantitative multiple-choice questions"),
+              long: z
+                .number()
+                .int()
+                .nonnegative()
+                .optional()
+                .describe("Number of long multiple-choice questions"),
+              scenario: z
+                .number()
+                .int()
+                .nonnegative()
+                .optional()
+                .describe("Number of scenario multiple-choice questions"),
+            })
+            .refine(
+              (value) =>
+                Object.values(value).some(
+                  (subtypeCount) =>
+                    typeof subtypeCount === "number" && subtypeCount > 0,
+                ),
+              {
+                message:
+                  "At least one multiple-choice subtype count must be greater than 0",
+              },
+            )
+            .optional()
+            .describe(
+              "Optional Mark-owned multiple-choice subtype counts. Use these when the author asks for short, quantitative, long, or scenario multiple-choice questions.",
+            ),
         }),
         execute: async (parameters: any) =>
           JSON.stringify({

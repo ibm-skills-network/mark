@@ -38,7 +38,7 @@ import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
-import { QuestionsToGenerate } from "../../dto/post.assignment.request.dto";
+import { EnhancedQuestionsToGenerate } from "../../dto/post.assignment.request.dto";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
 import {
@@ -354,7 +354,7 @@ export class AssignmentServiceV1 {
     assignmentId: number,
     jobId: number,
     assignmentType: AssignmentTypeEnum,
-    questionsToGenerate: QuestionsToGenerate,
+    questionsToGenerate: EnhancedQuestionsToGenerate,
     files?: { filename: string; content: string }[],
     learningObjectives?: string,
   ): Promise<void> {
@@ -377,7 +377,7 @@ export class AssignmentServiceV1 {
     assignmentId: number,
     jobId: number,
     assignmentType: AssignmentTypeEnum,
-    questionsToGenerate: QuestionsToGenerate,
+    questionsToGenerate: EnhancedQuestionsToGenerate,
     files?: { filename: string; content: string }[],
     learningObjectives?: string,
   ): Promise<void> {

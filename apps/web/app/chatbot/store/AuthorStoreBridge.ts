@@ -2,7 +2,7 @@
 
 "use client";
 
-import { QuestionType } from "@/config/types";
+import { QuestionGenerationPayload, QuestionType } from "@/config/types";
 import {
   buildQuestionGenerationPayloadFromObjectives,
   coerceCreateQuestionTypeForPrompt,
@@ -14,6 +14,17 @@ import { OptionalQuestion, useAuthorStore } from "@/stores/author";
 import { useEffect } from "react";
 
 /* eslint-disable */
+
+type MultipleChoiceSubtypeCounts = NonNullable<
+  QuestionGenerationPayload["questionsToGenerate"]["multipleChoiceSubtypes"]
+>;
+
+type GenerateQuestionsFromObjectivesInput = {
+  learningObjectives: string;
+  questionTypes?: string[];
+  count?: number;
+  multipleChoiceSubtypes?: Partial<MultipleChoiceSubtypeCounts>;
+};
 
 declare global {
   interface Window {
@@ -45,8 +56,9 @@ declare global {
       deleteQuestion: (questionId: number) => any;
       generateQuestionsFromObjectives: (
         learningObjectives: string,
-        questionTypes: string[],
-        count: number,
+        questionTypes?: string[],
+        count?: number,
+        multipleChoiceSubtypes?: Partial<MultipleChoiceSubtypeCounts>,
       ) => any;
       updateLearningObjectives: (learningObjectives: string) => any;
       setQuestionTitle: (questionId: number, title: string) => any;
@@ -108,7 +120,8 @@ export default function AuthorStoreBridge() {
         learningObjectives,
         questionTypes,
         count,
-      }): Promise<QuestionGenerationPipelineResult> => {
+        multipleChoiceSubtypes,
+      }: GenerateQuestionsFromObjectivesInput): Promise<QuestionGenerationPipelineResult> => {
         const authorStore = useAuthorStore.getState();
 
         if (!learningObjectives || !learningObjectives.trim()) {
@@ -125,6 +138,7 @@ export default function AuthorStoreBridge() {
           learningObjectives,
           questionTypes,
           count,
+          multipleChoiceSubtypes,
         });
 
         const jobId = await startQuestionGenerationJob(payload);
@@ -591,6 +605,7 @@ export default function AuthorStoreBridge() {
           learningObjectives,
           questionTypes,
           count,
+          multipleChoiceSubtypes,
         ) => {
           console.group("Bridge: generateQuestionsFromObjectives");
 
@@ -600,6 +615,7 @@ export default function AuthorStoreBridge() {
                 learningObjectives,
                 questionTypes,
                 count,
+                multipleChoiceSubtypes,
               });
             } catch (error) {
               const errorMessage =

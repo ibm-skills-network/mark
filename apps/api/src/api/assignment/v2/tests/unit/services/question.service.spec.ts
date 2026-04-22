@@ -377,6 +377,86 @@ describe("QuestionService", () => {
         ).rejects.toThrow(BadRequestException);
       });
 
+      it("should reject subtype mode when all multiple-choice subtype counts are zero", async () => {
+        const assignmentId = 1;
+        const userId = "author-123";
+        const invalidPayload = createMockQuestionGenerationPayload({
+          questionsToGenerate: {
+            multipleChoice: 0,
+            multipleSelect: 0,
+            textResponse: 0,
+            trueFalse: 0,
+            url: 0,
+            upload: 0,
+            linkFile: 0,
+            multipleChoiceSubtypes: {
+              short: 0,
+              quantitative: 0,
+              long: 0,
+              scenario: 0,
+            },
+            responseTypes: {
+              TEXT: [ResponseType.ESSAY],
+            },
+          },
+        });
+
+        await expect(
+          questionService.generateQuestions(
+            assignmentId,
+            invalidPayload,
+            userId,
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it("should accept subtype mode when at least one multiple-choice subtype count is requested", async () => {
+        const assignmentId = 1;
+        const userId = "author-123";
+        const mockJob = createMockJob({ id: 7 });
+        const payload = createMockQuestionGenerationPayload({
+          questionsToGenerate: {
+            multipleChoice: 0,
+            multipleSelect: 0,
+            textResponse: 0,
+            trueFalse: 0,
+            url: 0,
+            upload: 0,
+            linkFile: 0,
+            multipleChoiceSubtypes: {
+              short: 2,
+              quantitative: 0,
+              long: 0,
+              scenario: 0,
+            },
+            responseTypes: {
+              TEXT: [ResponseType.ESSAY],
+            },
+          },
+        });
+
+        jobStatusService.createJob.mockResolvedValue(mockJob);
+        const startSpy = jest
+          .spyOn(questionService as any, "startQuestionGenerationProcess")
+          .mockResolvedValue(undefined);
+
+        await expect(
+          questionService.generateQuestions(assignmentId, payload, userId),
+        ).resolves.toEqual({
+          message: "Question generation started",
+          jobId: mockJob.id,
+        });
+
+        expect(startSpy).toHaveBeenCalledWith(
+          assignmentId,
+          mockJob.id,
+          payload.assignmentType,
+          payload.questionsToGenerate,
+          payload.fileContents,
+          payload.learningObjectives,
+        );
+      });
+
       describe("contentSource routing", () => {
         const userId = "author-123";
         const assignmentId = 1;
