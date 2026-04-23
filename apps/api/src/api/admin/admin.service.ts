@@ -18,6 +18,7 @@ import {
   UpdateAssignmentQuestionsDto,
   VariantDto,
 } from "../assignment/dto/update.questions.request.dto";
+import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { toAiUsageCounterNumber } from "../llm/core/utils/ai-usage-counter.util";
@@ -52,6 +53,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assignmentService: AssignmentServiceV2,
+    private readonly assignmentFileService: AssignmentFileService,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
   ) {}
@@ -2044,6 +2046,11 @@ export class AdminService {
     if (!assignmentExists) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
+
+    // Clean up COS objects before the cascade-delete removes the AssignmentFile
+    // rows, so we still have the storageKey/storageBucket references.
+    // S3 failures are logged as warnings and never block the deletion.
+    await this.assignmentFileService.cleanupAssignmentFileObjects(id);
 
     await this.prisma.assignment.delete({
       where: { id },

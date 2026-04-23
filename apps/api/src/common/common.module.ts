@@ -1,5 +1,6 @@
 import { Module, Global } from "@nestjs/common";
-import { APP_INTERCEPTOR, Reflector } from "@nestjs/core";
+import { APP_FILTER, APP_INTERCEPTOR, Reflector } from "@nestjs/core";
+import { AllExceptionsFilter } from "./filters/all-exceptions.filter";
 import { DataTransformInterceptor } from "./interceptors/data-transform.interceptor";
 
 /**
@@ -13,6 +14,10 @@ import { DataTransformInterceptor } from "./interceptors/data-transform.intercep
     {
       provide: APP_INTERCEPTOR,
       useClass: DataTransformInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
     },
   ],
   exports: [DataTransformInterceptor],

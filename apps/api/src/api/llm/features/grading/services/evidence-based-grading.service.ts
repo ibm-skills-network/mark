@@ -805,13 +805,11 @@ LANGUAGE: {language}
     const sanitized = this.sanitizeJsonResponse(response);
 
     try {
-      const parsed = (await parser.parse(sanitized)) as unknown;
-      return EvidenceOutputSchema.parse(parsed);
+      return await parser.parse(sanitized);
     } catch (parseError) {
       const extracted = this.extractJsonPayload(sanitized);
       if (extracted && extracted !== sanitized) {
-        const parsed = (await parser.parse(extracted)) as unknown;
-        return EvidenceOutputSchema.parse(parsed);
+        return await parser.parse(extracted);
       }
       throw parseError;
     }

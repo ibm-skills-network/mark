@@ -476,8 +476,13 @@ export class QuestionResponseService {
       );
       return { responseDto, learnerResponse };
     } else if (requestDto.learnerFileResponse) {
+      let responseType: string | undefined;
+      if (question.responseType === "IMAGES") {
+        responseType = question.responseType;
+      }
       const fileGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.UPLOAD,
+        responseType,
       );
       const isValid = await fileGradingStrategy.validateResponse(
         question,
@@ -557,6 +562,13 @@ export class QuestionResponseService {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to save question response", {
+        questionId,
+        assignmentAttemptId,
+        role,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException(
         `Failed to save question response: ${errorMessage}`,
       );
