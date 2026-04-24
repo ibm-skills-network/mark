@@ -2,6 +2,7 @@
 
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { MessagingClient } from "sn-messaging-ts-client";
 import { MessagingService } from "./messaging.service";
 
@@ -11,6 +12,15 @@ describe("MessagingService", () => {
   let service: MessagingService;
   let configService: ConfigService;
   let mockMessagingClient: jest.Mocked<MessagingClient>;
+
+  const mockLogger = {
+    child: jest.fn().mockReturnValue({
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    }),
+  };
 
   beforeEach(async () => {
     mockMessagingClient = {
@@ -43,6 +53,7 @@ describe("MessagingService", () => {
             }),
           },
         },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
 
@@ -286,7 +297,7 @@ describe("MessagingService", () => {
         project,
         messageCallback,
         undefined,
-        errorCallback,
+        expect.any(Function),
       );
     });
 
@@ -343,7 +354,7 @@ describe("MessagingService", () => {
       expect(mockMessagingClient.subscribeUser).toHaveBeenCalledWith(
         username,
         messageCallback,
-        errorCallback,
+        expect.any(Function),
       );
     });
 
@@ -382,7 +393,11 @@ describe("MessagingService", () => {
       await service.subscribeUser("user", jest.fn(), errorCallback);
 
       const callArguments = mockMessagingClient.subscribeUser.mock.calls[0];
-      expect(callArguments[2]).toBe(errorCallback);
+      expect(callArguments[2]).toEqual(expect.any(Function));
+      const wrappedError = callArguments[2] as (error: Error) => void;
+      const boom = new Error("boom");
+      wrappedError(boom);
+      expect(errorCallback).toHaveBeenCalledWith(boom);
     });
   });
 });

@@ -2,7 +2,7 @@
 /* eslint-disable unicorn/no-process-exit */
 if (process.env.NODE_ENV === "production") {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-var-requires, unicorn/prefer-module
-  require("@instana/collector")();
+  require("@instana/collector")({ autoProfile: true });
 }
 /**
  * Application Bootstrap File
