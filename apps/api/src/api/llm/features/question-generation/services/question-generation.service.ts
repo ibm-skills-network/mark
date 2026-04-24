@@ -928,10 +928,23 @@ FORMAT INSTRUCTIONS:
       page: questionIndex,
     }));
 
+    // Truncate long inputs and defensively escape curly braces so LangChain's
+    // PromptTemplate doesn't re-interpret literal `{...}` inside the content
+    // as a template placeholder.
+    const CONTENT_TRUNCATION_LIMIT = 8000;
+    const truncateAndEscape = (raw: string): string => {
+      const truncated =
+        raw.length > CONTENT_TRUNCATION_LIMIT
+          ? raw.slice(0, CONTENT_TRUNCATION_LIMIT) +
+            "\n\n[content truncated for review]"
+          : raw;
+      return truncated.replaceAll("{", "{{").replaceAll("}", "}}");
+    };
+
     const contentSection = content
-      ? `CONTENT:\n${content}\n\n`
+      ? `CONTENT:\n${truncateAndEscape(content)}\n\n`
       : learningObjectives
-        ? `LEARNING OBJECTIVES:\n${learningObjectives}\n\n`
+        ? `LEARNING OBJECTIVES:\n${truncateAndEscape(learningObjectives)}\n\n`
         : "";
 
     const template = `
@@ -1006,43 +1019,68 @@ Output Requirements:
       }
 
       const seenPages = new Set<number>();
+      const claimedPositions = new Set<number>();
       const reconciled: IGeneratedQuestion[] = [];
       const failedRegenEntries = new Set<IGeneratedQuestion>();
       const choiceRegenPromises: Promise<void>[] = [];
+      let droppedCount = 0;
 
-      for (const item of reviewed) {
-        // Validate page is an in-range integer with no duplicates
-        if (
-          typeof item.page !== "number" ||
-          !Number.isInteger(item.page) ||
-          item.page < 0 ||
-          item.page >= subtypeQuestions.length ||
-          seenPages.has(item.page)
-        ) {
-          this.logger.warn(
-            `Review returned invalid or duplicate page ${item.page} — skipping item`,
-          );
-          continue;
-        }
-
-        // Validate question text is non-empty
+      for (const [reviewOutputIndex, item] of reviewed.entries()) {
+        // Empty question text is always a drop — no reconciliation possible
         if (!item.question || item.question.trim().length === 0) {
           this.logger.warn(
-            `Review returned empty question for page ${item.page} — skipping item`,
+            `Review returned empty question at index ${reviewOutputIndex} — skipping item`,
           );
+          droppedCount += 1;
           continue;
         }
 
-        // Validate subtype; fall back to original if the LLM returns an unknown value
+        // Attempt page-based reconciliation first (in-range integer, not already claimed)
+        const pageIsValid =
+          typeof item.page === "number" &&
+          Number.isInteger(item.page) &&
+          item.page >= 0 &&
+          item.page < subtypeQuestions.length &&
+          !seenPages.has(item.page);
+
+        let matchedPage: number | undefined;
+        let original: IGeneratedQuestion | undefined;
+
+        if (pageIsValid) {
+          matchedPage = item.page;
+          original = indexMap.get(item.page);
+        } else {
+          // Positional fallback: use subtypeQuestions[reviewOutputIndex] if it
+          // exists and hasn't been claimed via page or position by a prior item
+          const fallbackCandidate = subtypeQuestions[reviewOutputIndex];
+          if (
+            fallbackCandidate &&
+            !claimedPositions.has(reviewOutputIndex) &&
+            !seenPages.has(reviewOutputIndex)
+          ) {
+            this.logger.warn(
+              `Review returned invalid or duplicate page ${item.page} — falling back to positional match at index ${reviewOutputIndex}`,
+            );
+            matchedPage = reviewOutputIndex;
+            original = fallbackCandidate;
+          }
+        }
+
+        if (matchedPage === undefined || !original) {
+          this.logger.warn(
+            `Review item at index ${reviewOutputIndex} could not be matched by page or position — skipping item`,
+          );
+          droppedCount += 1;
+          continue;
+        }
+
+        // Validate subtype; normalize to lowercase and fall back to original if unknown
         const resolvedSubtype = this.isMCSubtype(item.type)
-          ? item.type
-          : subtypeQuestions[item.page].mcSubtype;
+          ? (item.type.toLowerCase() as MCSubtype)
+          : original.mcSubtype;
 
-        seenPages.add(item.page);
-        const original = indexMap.get(item.page);
-        if (!original) {
-          continue;
-        }
+        seenPages.add(matchedPage);
+        claimedPositions.add(reviewOutputIndex);
 
         const stemChanged =
           item.question.trim() !== (original.question ?? "").trim();
@@ -1077,6 +1115,12 @@ Output Requirements:
             });
           choiceRegenPromises.push(regenPromise);
         }
+      }
+
+      if (droppedCount > 0) {
+        this.logger.warn(
+          `Review dropped ${droppedCount} of ${subtypeQuestions.length} subtype questions (invalid page/empty question)`,
+        );
       }
 
       await Promise.all(choiceRegenPromises);
@@ -1533,8 +1577,6 @@ Rules:
       }
     }
 
-    const result: IGeneratedQuestion[] = [];
-
     const entries: [MCSubtype, number][] = [
       [MCSubtype.SHORT, subtypeCounts.short || 0],
       [MCSubtype.QUANTITATIVE, subtypeCounts.quantitative || 0],
@@ -1542,69 +1584,130 @@ Rules:
       [MCSubtype.SCENARIO, subtypeCounts.scenario || 0],
     ];
 
-    for (const [subtype, required] of entries) {
-      if (required <= 0) continue;
+    type SubtypeBucket = {
+      subtype: MCSubtype;
+      fromPool: IGeneratedQuestion[];
+      fromShortfall: IGeneratedQuestion[];
+      fromFallback: IGeneratedQuestion[];
+    };
 
-      const pool = this.sortQuestionsByQuality(bySubtype.get(subtype) ?? []);
-      const selected = pool.slice(0, required);
+    // Each subtype's shortfall generation runs independently — parallelize
+    const tasks = entries
+      .filter(([, required]) => required > 0)
+      .map(async ([subtype, required]): Promise<SubtypeBucket> => {
+        const pool = this.sortQuestionsByQuality(bySubtype.get(subtype) ?? []);
+        const fromPool = pool.slice(0, required);
+        const fromShortfall: IGeneratedQuestion[] = [];
+        const fromFallback: IGeneratedQuestion[] = [];
 
-      if (selected.length < required) {
-        const missing = required - selected.length;
+        let currentCount = fromPool.length;
 
-        try {
-          // Generate real subtype-specific questions for the shortfall
-          const batchResult = await this.generateQuestionBatch({
-            assignmentId,
-            types: [QuestionType.SINGLE_CORRECT],
-            counts: [missing],
-            difficultyLevel,
-            content,
-            learningObjectives,
-            mcSubtype: subtype,
-          });
+        if (currentCount < required) {
+          const missing = required - currentCount;
 
-          const generated = batchResult.questions.filter(
-            (q) => q.type === QuestionType.SINGLE_CORRECT,
-          );
+          try {
+            // Generate real subtype-specific questions for the shortfall
+            const batchResult = await this.generateQuestionBatch({
+              assignmentId,
+              types: [QuestionType.SINGLE_CORRECT],
+              counts: [missing],
+              difficultyLevel,
+              content,
+              learningObjectives,
+              mcSubtype: subtype,
+            });
 
-          // Tag any untagged questions returned by the batch
-          for (const q of generated) {
-            q.mcSubtype = subtype;
+            const generated = batchResult.questions.filter(
+              (q) => q.type === QuestionType.SINGLE_CORRECT,
+            );
+
+            // Tag any untagged questions returned by the batch
+            for (const q of generated) {
+              q.mcSubtype = subtype;
+            }
+
+            fromShortfall.push(...generated.slice(0, missing));
+            currentCount += fromShortfall.length;
+          } catch (error) {
+            this.logger.warn(
+              `Subtype batch shortfall generation failed for ${subtype} — using template fallback: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
           }
 
-          selected.push(...generated.slice(0, missing));
-        } catch (error) {
-          this.logger.warn(
-            `Subtype batch shortfall generation failed for ${subtype} — using template fallback: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
+          // If the LLM batch still left a gap, fill with tagged templates as last resort
+          if (currentCount < required) {
+            const stillMissing = required - currentCount;
+            const fallbacks = this.generateFallbackQuestionsOfType(
+              QuestionType.SINGLE_CORRECT,
+              stillMissing,
+              difficultyLevel,
+              assignmentId,
+              content,
+              learningObjectives,
+              subtype,
+            );
+            fromFallback.push(...fallbacks);
+          }
         }
 
-        // If the LLM batch still left a gap, fill with tagged templates as last resort
-        if (selected.length < required) {
-          const stillMissing = required - selected.length;
-          const fallbacks = this.generateFallbackQuestionsOfType(
-            QuestionType.SINGLE_CORRECT,
-            stillMissing,
-            difficultyLevel,
-            assignmentId,
-            content,
-            learningObjectives,
-            subtype,
-          );
-          selected.push(...fallbacks);
+        return { subtype, fromPool, fromShortfall, fromFallback };
+      });
+
+    const buckets = await Promise.all(tasks);
+
+    // Re-review all shortfall-generated questions together so they pass through
+    // the same semantic filter as the originally generated batch. Template
+    // fallbacks stay out — they're last-resort synthetic data.
+    const allShortfall = buckets.flatMap((b) => b.fromShortfall);
+
+    let reviewedBySubtype: Map<MCSubtype, IGeneratedQuestion[]> | undefined;
+    if (allShortfall.length > 0) {
+      try {
+        const reviewedShortfall = await this.reviewSubtypeQuestions(
+          allShortfall,
+          assignmentId,
+          content,
+          learningObjectives,
+        );
+
+        reviewedBySubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
+        for (const q of reviewedShortfall) {
+          if (q.mcSubtype) {
+            const list = reviewedBySubtype.get(q.mcSubtype) ?? [];
+            list.push(q);
+            reviewedBySubtype.set(q.mcSubtype, list);
+          }
         }
+      } catch (error) {
+        this.logger.warn(
+          `Re-review of shortfall questions failed — using unreviewed shortfall: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        reviewedBySubtype = undefined;
       }
+    }
 
-      result.push(...selected);
+    const result: IGeneratedQuestion[] = [];
+    for (const bucket of buckets) {
+      const reviewedShortfallForSubtype = reviewedBySubtype
+        ? (reviewedBySubtype.get(bucket.subtype) ?? [])
+        : bucket.fromShortfall;
+      result.push(
+        ...bucket.fromPool,
+        ...reviewedShortfallForSubtype,
+        ...bucket.fromFallback,
+      );
     }
 
     return result;
   }
 
   private isMCSubtype(value: string): value is MCSubtype {
-    return (Object.values(MCSubtype) as string[]).includes(value);
+    const normalized = value?.toLowerCase();
+    return (Object.values(MCSubtype) as string[]).includes(normalized);
   }
 
   private sortQuestionsByQuality(

@@ -546,9 +546,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   Multiple Choice Subtypes
                 </p>
                 <p className="mt-1 text-xs text-gray-600">
-                  Optional. These counts generate Mark-style multiple-choice
-                  questions by subtype and are added separately from the
-                  standard multiple-choice count above.
+                  Optional. These Mark-style subtype questions are generated{" "}
+                  <strong>in addition to</strong> the standard Multiple Choice
+                  count above — they don&apos;t replace it. Leave all fields at
+                  0 to skip.
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   {multipleChoiceSubtypeFields.map(({ key, label }) => (
@@ -561,7 +562,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                         onChange={(e) =>
                           setMultipleChoiceSubtypes((prev) => ({
                             ...prev,
-                            [key]: Number.parseInt(e.target.value, 10) || 0,
+                            [key]: Math.min(
+                              50,
+                              Math.max(
+                                0,
+                                Number.parseInt(e.target.value, 10) || 0,
+                              ),
+                            ),
                           }))
                         }
                         className="w-16 p-1 border border-gray-300 rounded-md"
