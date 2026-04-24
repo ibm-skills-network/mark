@@ -471,7 +471,7 @@ export class QuestionService {
         jobId,
         {
           status: "In Progress",
-          progress: "Mark is thinking generating questions.",
+          progress: "Mark is brainstorming some questions.",
         },
         false,
       );

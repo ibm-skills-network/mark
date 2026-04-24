@@ -406,7 +406,7 @@ export class AssignmentServiceV1 {
       await this.prisma.job.update({
         where: { id: jobId },
         data: {
-          progress: "Mark is thinking generating questions.",
+          progress: "Mark is brainstorming some questions.",
         },
       });
 
