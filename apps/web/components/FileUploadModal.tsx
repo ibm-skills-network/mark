@@ -49,6 +49,16 @@ const multipleChoiceSubtypeFields: Array<{
   { key: "scenario", label: "Scenario" },
 ];
 
+// Show an empty string when the value is 0 so users can backspace and type
+// a new number without fighting a persistent "0". Placeholder still shows "0".
+const toDisplayValue = (n: number): string | number => (n === 0 ? "" : n);
+
+const clampNonNegative = (raw: string, max?: number): number => {
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return max !== undefined ? Math.min(max, parsed) : parsed;
+};
+
 const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   const [fileUploaded, setFileUploaded] = useAuthorStore((state) => [
     state.fileUploaded,
@@ -189,12 +199,18 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
       (total, count) => total + count,
       0,
     );
-    const totalRequestedQuestions =
-      Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0) +
-      subtypeTotal;
+    const multipleChoiceTotal = selectedQuestionTypes.multipleChoice;
+    const totalRequestedQuestions = Object.values(
+      selectedQuestionTypes,
+    ).reduce((a, b) => a + b, 0);
 
     if (fileUploaded.length === 0 && learningObjectives.length === 0) {
       toast.error("Please upload files or enter learning objectives.");
+      return;
+    } else if (subtypeTotal > multipleChoiceTotal) {
+      toast.error(
+        `Styled multiple choice counts (${subtypeTotal}) exceed the total (${multipleChoiceTotal}).`,
+      );
       return;
     } else if (totalRequestedQuestions === 0) {
       toast.error("Please select at least one question type to generate.");
@@ -211,7 +227,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         assignmentId: activeAssignmentId,
         assignmentType: selectedDifficulty,
         questionsToGenerate: {
-          multipleChoice: selectedQuestionTypes.multipleChoice,
+          multipleChoice: multipleChoiceTotal - subtypeTotal,
           multipleSelect: selectedQuestionTypes.multipleSelect,
           textResponse: selectedQuestionTypes.textResponse,
           trueFalse: selectedQuestionTypes.trueFalse,
@@ -526,73 +542,126 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Multiple Choice
                 </p>
-                <p className="mt-1 text-xs text-gray-600">
-                  How many of each style? The total Multiple Choice count is the
-                  sum of all fields below.
+                <div className="mt-3 flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    value={toDisplayValue(selectedQuestionTypes.multipleChoice)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    onChange={(e) => {
+                      const next = clampNonNegative(e.target.value, 100);
+                      setSelectedQuestionTypes((prev) => ({
+                        ...prev,
+                        multipleChoice: next,
+                      }));
+                    }}
+                    className="w-16 p-1 border border-gray-300 rounded-md"
+                  />
+                  <label className="text-sm font-medium text-gray-700">
+                    Total
+                  </label>
+                </div>
+                <p className="mt-3 text-xs text-gray-600">
+                  Optionally steer the style of some questions. The rest are
+                  generated as standard multiple choice.
                 </p>
-                <div className="mt-3 flex flex-col space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={selectedQuestionTypes.multipleChoice}
-                      onChange={(e) =>
-                        setSelectedQuestionTypes((prev) => ({
-                          ...prev,
-                          multipleChoice: Math.min(
-                            100,
-                            Math.max(
-                              0,
-                              Number.parseInt(e.target.value, 10) || 0,
-                            ),
-                          ),
-                        }))
-                      }
-                      className="w-16 p-1 border border-gray-300 rounded-md"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Standard
-                    </label>
-                  </div>
-                  {multipleChoiceSubtypeFields.map(({ key, label }) => (
-                    <div key={key} className="flex items-center space-x-2">
+                <div className="mt-2 flex flex-col space-y-2">
+                  {multipleChoiceSubtypeFields.map((field) => (
+                    <div
+                      key={field.key}
+                      className="flex items-center space-x-2"
+                    >
                       <input
                         type="number"
                         min="0"
                         max="50"
-                        value={multipleChoiceSubtypes[key]}
-                        onChange={(e) =>
+                        placeholder="0"
+                        value={toDisplayValue(multipleChoiceSubtypes[field.key])}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        onChange={(e) => {
+                          const next = clampNonNegative(e.target.value, 50);
+                          const targetKey = field.key;
                           setMultipleChoiceSubtypes((prev) => ({
                             ...prev,
-                            [key]: Math.min(
-                              50,
-                              Math.max(
-                                0,
-                                Number.parseInt(e.target.value, 10) || 0,
-                              ),
-                            ),
-                          }))
-                        }
+                            [targetKey]: next,
+                          }));
+                        }}
                         className="w-16 p-1 border border-gray-300 rounded-md"
                       />
                       <label className="text-sm font-medium text-gray-700">
-                        {label}
+                        {field.label}
                       </label>
                     </div>
                   ))}
                 </div>
+                {(() => {
+                  const activeSubtypes = multipleChoiceSubtypeFields
+                    .map(({ key, label }) => ({
+                      label: label.toLowerCase(),
+                      count: Number(multipleChoiceSubtypes[key]) || 0,
+                    }))
+                    .filter((entry) => entry.count > 0);
+                  const subtypeSum = activeSubtypes.reduce(
+                    (acc, entry) => acc + entry.count,
+                    0,
+                  );
+                  const total =
+                    Number(selectedQuestionTypes.multipleChoice) || 0;
+                  const standard = total - subtypeSum;
+
+                  if (total === 0 && subtypeSum === 0) return null;
+
+                  if (subtypeSum > total) {
+                    const subtypeParts = activeSubtypes
+                      .map((e) => `${e.count} ${e.label}`)
+                      .join(" + ");
+                    return (
+                      <p className="mt-3 text-xs text-red-600 font-medium">
+                        {subtypeParts} = {subtypeSum}, exceeds total of {total}.
+                        Reduce the counts or raise the total.
+                      </p>
+                    );
+                  }
+
+                  const parts: string[] = [];
+                  if (standard > 0) parts.push(`${standard} standard`);
+                  for (const entry of activeSubtypes) {
+                    parts.push(`${entry.count} ${entry.label}`);
+                  }
+                  if (parts.length <= 1) return null;
+
+                  const text = `${parts.join(" + ")} = ${total} total`;
+
+                  // key={text} forces remount each text change so the readout
+                  // stays correct even when a sibling component's hydration
+                  // mismatch leaves React reconciliation in a degraded state.
+                  return (
+                    <p
+                      key={text}
+                      translate="no"
+                      className="mt-3 text-xs text-gray-600"
+                    >
+                      {text}
+                    </p>
+                  );
+                })()}
               </div>
 
               <div className="flex items-center space-x-2">
                 <input
                   type="number"
                   min="0"
-                  value={selectedQuestionTypes.multipleSelect}
+                  placeholder="0"
+                  value={toDisplayValue(selectedQuestionTypes.multipleSelect)}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
-                      multipleSelect: parseInt(e.target.value, 10),
+                      multipleSelect: clampNonNegative(e.target.value),
                     }))
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
@@ -607,11 +676,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <input
                   type="number"
                   min="0"
-                  value={selectedQuestionTypes.textResponse}
+                  placeholder="0"
+                  value={toDisplayValue(selectedQuestionTypes.textResponse)}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
-                      textResponse: parseInt(e.target.value, 10),
+                      textResponse: clampNonNegative(e.target.value),
                     }))
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
@@ -626,11 +697,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <input
                   type="number"
                   min="0"
-                  value={selectedQuestionTypes.trueFalse}
+                  placeholder="0"
+                  value={toDisplayValue(selectedQuestionTypes.trueFalse)}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
-                      trueFalse: parseInt(e.target.value, 10),
+                      trueFalse: clampNonNegative(e.target.value),
                     }))
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
@@ -645,11 +718,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <input
                   type="number"
                   min="0"
-                  value={selectedQuestionTypes.url}
+                  placeholder="0"
+                  value={toDisplayValue(selectedQuestionTypes.url)}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
-                      url: parseInt(e.target.value, 10),
+                      url: clampNonNegative(e.target.value),
                     }))
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
@@ -674,11 +749,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <input
                   type="number"
                   min="0"
-                  value={selectedQuestionTypes.upload}
+                  placeholder="0"
+                  value={toDisplayValue(selectedQuestionTypes.upload)}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
-                      upload: parseInt(e.target.value, 10),
+                      upload: clampNonNegative(e.target.value),
                     }))
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
@@ -703,11 +780,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 <input
                   type="number"
                   min="0"
-                  value={selectedQuestionTypes.linkFile}
+                  placeholder="0"
+                  value={toDisplayValue(selectedQuestionTypes.linkFile)}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
-                      linkFile: parseInt(e.target.value, 10),
+                      linkFile: clampNonNegative(e.target.value),
                     }))
                   }
                   className="w-16 p-1 border border-gray-300 rounded-md"
