@@ -26,6 +26,7 @@ import {
   VariantType,
 } from "../../dto/update.questions.request.dto";
 import { applyQuestionOrder } from "../../utils/question-order.util";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
@@ -552,6 +553,8 @@ export class QuestionService {
     if (Number.isNaN(assignmentId)) {
       throw new BadRequestException("Invalid assignment ID");
     }
+
+    assertQuestionCountsWithinCaps(questionsToGenerate);
 
     const {
       linkFile,

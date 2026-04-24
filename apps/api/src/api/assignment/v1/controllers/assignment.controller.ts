@@ -47,6 +47,7 @@ import {
   LearnerGetAssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { QuestionGenerationPayload } from "../../dto/post.assignment.request.dto";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
 import {
@@ -538,6 +539,8 @@ export class AssignmentControllerV1 {
     if (typeof userId !== "string" || userId.trim() === "") {
       throw new BadRequestException("Invalid user ID");
     }
+
+    assertQuestionCountsWithinCaps(questionsToGenerate);
 
     const subtypeTotal = questionsToGenerate.multipleChoiceSubtypes
       ? (Number(questionsToGenerate.multipleChoiceSubtypes.short) || 0) +

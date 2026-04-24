@@ -522,36 +522,39 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 </p>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <input
-                  type="number"
-                  min="0"
-                  value={selectedQuestionTypes.multipleChoice}
-                  onChange={(e) =>
-                    setSelectedQuestionTypes((prev) => ({
-                      ...prev,
-                      multipleChoice: parseInt(e.target.value, 10),
-                    }))
-                  }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
-                />
-
-                <label className="text-sm font-medium text-gray-700">
-                  Multiple Choice
-                </label>
-              </div>
-
-              <div className="ml-8 rounded-md border border-gray-200 bg-gray-50 p-3">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Multiple Choice Subtypes
+                  Multiple Choice
                 </p>
                 <p className="mt-1 text-xs text-gray-600">
-                  Optional. These Mark-style subtype questions are generated{" "}
-                  <strong>in addition to</strong> the standard Multiple Choice
-                  count above — they don&apos;t replace it. Leave all fields at
-                  0 to skip.
+                  How many of each style? The total Multiple Choice count is the
+                  sum of all fields below.
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="mt-3 flex flex-col space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={selectedQuestionTypes.multipleChoice}
+                      onChange={(e) =>
+                        setSelectedQuestionTypes((prev) => ({
+                          ...prev,
+                          multipleChoice: Math.min(
+                            100,
+                            Math.max(
+                              0,
+                              Number.parseInt(e.target.value, 10) || 0,
+                            ),
+                          ),
+                        }))
+                      }
+                      className="w-16 p-1 border border-gray-300 rounded-md"
+                    />
+                    <label className="text-sm font-medium text-gray-700">
+                      Standard
+                    </label>
+                  </div>
                   {multipleChoiceSubtypeFields.map(({ key, label }) => (
                     <div key={key} className="flex items-center space-x-2">
                       <input
