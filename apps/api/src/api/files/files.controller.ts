@@ -29,6 +29,7 @@ import { RenameFileDto } from "./dto/rename-file.dto";
 import { UploadRequestDto, UploadType } from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
+import { sanitizeUploadPath } from "./services/path-sanitizer";
 import { S3Service } from "./services/s3.service";
 import { sanitizeForLog } from "../../logger/sanitize";
 
@@ -141,9 +142,7 @@ export class FilesController {
     }
 
     let prefix = "";
-    const normalizedPath = context.path?.startsWith("/")
-      ? context.path.slice(1)
-      : (context.path ?? "");
+    const normalizedPath = sanitizeUploadPath(context.path);
 
     switch (uploadType) {
       case "author": {
