@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -30,8 +31,33 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
     const { userSession, params, method, originalUrl } = request;
     const { assignmentId: assignmentIdString, id } = params;
     const assignmentId = Number(assignmentIdString);
+    if (!assignmentId || Number.isNaN(assignmentId)) {
+      this.logger.warn("question_access_denied: invalid assignment id", {
+        denial_reason: "invalid_assignment_id",
+        param_assignmentId: assignmentIdString,
+        param_id: id,
+        user_id: userSession?.userId,
+        method,
+        url: originalUrl,
+      });
+      throw new ForbiddenException("Invalid assignment ID");
+    }
 
     const questionId = id ? Number(id) : undefined;
+    if (
+      id !== undefined &&
+      (questionId === undefined || Number.isNaN(questionId))
+    ) {
+      this.logger.warn("question_access_denied: invalid question id", {
+        denial_reason: "invalid_question_id",
+        param_assignmentId: assignmentIdString,
+        param_id: id,
+        user_id: userSession?.userId,
+        method,
+        url: originalUrl,
+      });
+      throw new ForbiddenException("Invalid question ID");
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [

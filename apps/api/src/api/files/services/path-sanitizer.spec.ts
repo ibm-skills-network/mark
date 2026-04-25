@@ -39,7 +39,7 @@ describe("sanitizeUploadPath", () => {
     });
   });
 
-  describe("rejects mixed-separator bypass (CWE-22 / Windows-style)", () => {
+  describe("rejects mixed-separator bypass (Windows-style)", () => {
     it.each([
       ["backslash-traversal", "..\\..\\authors"],
       ["mixed forward+back", "foo/..\\bar"],
@@ -48,7 +48,7 @@ describe("sanitizeUploadPath", () => {
     });
   });
 
-  describe("rejects non-string types (Pitfall 8 — direct-upload bypasses class-validator)", () => {
+  describe("rejects non-string types (direct-upload bypasses class-validator)", () => {
     it.each([
       ["array", ["..", ".."]],
       ["number", 42],

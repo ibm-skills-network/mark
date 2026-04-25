@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -38,6 +39,48 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       role: role,
     } = params;
     const assignmentId = Number(assignmentIdString);
+    if (!assignmentId || Number.isNaN(assignmentId)) {
+      this.logger.warn("attempt_access_denied: invalid assignment id", {
+        denial_reason: "invalid_assignment_id",
+        param_assignmentId: assignmentIdString,
+        param_attemptId: attemptIdString,
+        param_questionId: questionIdString,
+        user_id: userSession?.userId,
+        method,
+        url: originalUrl,
+      });
+      throw new ForbiddenException("Invalid assignment ID");
+    }
+
+    if (attemptIdString !== undefined) {
+      const parsedAttemptId = Number(attemptIdString);
+      if (!parsedAttemptId || Number.isNaN(parsedAttemptId)) {
+        this.logger.warn("attempt_access_denied: invalid attempt id", {
+          denial_reason: "invalid_attempt_id",
+          param_assignmentId: assignmentIdString,
+          param_attemptId: attemptIdString,
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("Invalid attempt ID");
+      }
+    }
+
+    if (questionIdString !== undefined) {
+      const parsedQuestionId = Number(questionIdString);
+      if (!parsedQuestionId || Number.isNaN(parsedQuestionId)) {
+        this.logger.warn("attempt_access_denied: invalid question id", {
+          denial_reason: "invalid_question_id",
+          param_assignmentId: assignmentIdString,
+          param_questionId: questionIdString,
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("Invalid question ID");
+      }
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
@@ -77,12 +120,12 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
             userId: true,
           },
         });
-        if (userId.userId !== suspeciousUserId) {
+        if (!userId || userId.userId !== suspeciousUserId) {
           this.logger.warn("attempt_access_denied: attempt not owned by user", {
-            denial_reason: "attempt_not_owned",
+            denial_reason: userId ? "attempt_not_owned" : "attempt_not_found",
             assignment_id: assignmentId,
             attempt_id: Number(attemptIdString),
-            attempt_owner: userId.userId,
+            attempt_owner: userId?.userId,
             requesting_user_id: suspeciousUserId,
             method,
             url: originalUrl,
