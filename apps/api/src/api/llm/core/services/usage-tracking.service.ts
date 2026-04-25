@@ -36,8 +36,7 @@ export class UsageTrackerService implements IUsageTracker {
       // Validate via the BigInt helper (range-safety) then convert back to
       // `number` because the AIUsage Prisma columns are typed as Int (not
       // BigInt) — without this the schema-level type rejects the bigint at
-      // compile time. This is a pre-existing build break unblocked here as a
-      // Rule 3 deviation (see PLAN 01-A SUMMARY).
+      // compile time.
       const tokensInToStore = toAiUsageCounterNumber(
         toAiUsageCounterBigInt(tokensIn, "tokensIn"),
         "tokensIn",
