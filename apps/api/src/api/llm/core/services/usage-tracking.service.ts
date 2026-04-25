@@ -4,7 +4,10 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
-import { toAiUsageCounterBigInt } from "../utils/ai-usage-counter.util";
+import {
+  toAiUsageCounterBigInt,
+  toAiUsageCounterNumber,
+} from "../utils/ai-usage-counter.util";
 
 @Injectable()
 export class UsageTrackerService implements IUsageTracker {
@@ -30,8 +33,19 @@ export class UsageTrackerService implements IUsageTracker {
   ): Promise<void> {
     try {
       const assignmentIdToDatabase = Number(assignmentId);
-      const tokensInToStore = toAiUsageCounterBigInt(tokensIn, "tokensIn");
-      const tokensOutToStore = toAiUsageCounterBigInt(tokensOut, "tokensOut");
+      // Validate via the BigInt helper (range-safety) then convert back to
+      // `number` because the AIUsage Prisma columns are typed as Int (not
+      // BigInt) — without this the schema-level type rejects the bigint at
+      // compile time. This is a pre-existing build break unblocked here as a
+      // Rule 3 deviation (see PLAN 01-A SUMMARY).
+      const tokensInToStore = toAiUsageCounterNumber(
+        toAiUsageCounterBigInt(tokensIn, "tokensIn"),
+        "tokensIn",
+      );
+      const tokensOutToStore = toAiUsageCounterNumber(
+        toAiUsageCounterBigInt(tokensOut, "tokensOut"),
+        "tokensOut",
+      );
       const assignmentExists = await this.prisma.assignment.findUnique({
         where: { id: assignmentIdToDatabase },
       });
@@ -53,7 +67,7 @@ export class UsageTrackerService implements IUsageTracker {
         update: {
           tokensIn: { increment: tokensInToStore },
           tokensOut: { increment: tokensOutToStore },
-          usageCount: { increment: BigInt(1) },
+          usageCount: { increment: 1 },
           updatedAt: new Date(),
           ...(modelKey && { modelKey }),
         },
@@ -62,7 +76,7 @@ export class UsageTrackerService implements IUsageTracker {
           usageType,
           tokensIn: tokensInToStore,
           tokensOut: tokensOutToStore,
-          usageCount: BigInt(1),
+          usageCount: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
           modelKey,

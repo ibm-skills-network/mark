@@ -1316,11 +1316,7 @@ export class AdminService {
                 ...(Object.keys(dateFilter).length > 0
                   ? { createdAt: dateFilter }
                   : {}),
-                ...(filters?.userId
-                  ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
-                    }
-                  : {}),
+                ...(filters?.userId ? { userId: filters.userId } : {}),
               },
               _count: { id: true },
             })
@@ -1335,14 +1331,7 @@ export class AdminService {
                   ...(Object.keys(dateFilter).length > 0
                     ? { createdAt: dateFilter }
                     : {}),
-                  ...(filters?.userId
-                    ? {
-                        userId: {
-                          contains: filters.userId,
-                          mode: "insensitive",
-                        },
-                      }
-                    : {}),
+                  ...(filters?.userId ? { userId: filters.userId } : {}),
                 },
               });
               return {
@@ -1362,9 +1351,7 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
-              ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
-                : {}),
+              ...(filters?.userId ? { userId: filters.userId } : {}),
             },
           })
         : 0,
@@ -1377,11 +1364,7 @@ export class AdminService {
                 ...(Object.keys(dateFilter).length > 0
                   ? { createdAt: dateFilter }
                   : {}),
-                ...(filters?.userId
-                  ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
-                    }
-                  : {}),
+                ...(filters?.userId ? { userId: filters.userId } : {}),
               },
             })
             .then(async (total) => {
@@ -1391,14 +1374,7 @@ export class AdminService {
                   ...(Object.keys(dateFilter).length > 0
                     ? { createdAt: dateFilter }
                     : {}),
-                  ...(filters?.userId
-                    ? {
-                        userId: {
-                          contains: filters.userId,
-                          mode: "insensitive",
-                        },
-                      }
-                    : {}),
+                  ...(filters?.userId ? { userId: filters.userId } : {}),
                 },
               });
               return { totalReports: total._count.id, openReports: open };
@@ -1415,9 +1391,7 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
-              ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
-                : {}),
+              ...(filters?.userId ? { userId: filters.userId } : {}),
             },
             take: 10,
             orderBy: { createdAt: "desc" },
@@ -1444,11 +1418,7 @@ export class AdminService {
                 ...(Object.keys(dateFilter).length > 0
                   ? { createdAt: dateFilter }
                   : {}),
-                ...(filters?.userId
-                  ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
-                    }
-                  : {}),
+                ...(filters?.userId ? { userId: filters.userId } : {}),
               },
             })
             .then((users) => users.length)
@@ -1493,9 +1463,7 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
-              ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
-                : {}),
+              ...(filters?.userId ? { userId: filters.userId } : {}),
             },
             _avg: { assignmentRating: true },
           })
