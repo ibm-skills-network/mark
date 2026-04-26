@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID } from "class-validator";
+import { IsEmail, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class DashboardStatsQueryDto {
   @IsOptional()
@@ -18,6 +18,7 @@ export class DashboardStatsQueryDto {
   assignmentName?: string;
 
   @IsOptional()
-  @IsUUID("4")
+  @IsEmail()
+  @MaxLength(254)
   userId?: string;
 }
