@@ -11,6 +11,8 @@
     "./ensureDb.js",
     "test",
     "dist",
+    "legacy",
+    "legacy/**",
     "**/*spec.ts",
     "**/*.test.ts",
     "**/tests/**"

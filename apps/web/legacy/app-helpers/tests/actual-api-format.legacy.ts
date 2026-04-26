@@ -14,12 +14,12 @@ describe("Actual API Response Format", () => {
       type: "SINGLE_CORRECT",
       responseType: "OTHER",
       question:
-        "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSBpbiBQb3N0Z3JlU1FMPzwvcD4=",
+        "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSBpbiBQb3N0Z3JlU1FMPzwvcD4=", // pragma: allowlist secret
       maxWords: null,
       scoring: null,
       // NOTE: choices comes as a JSON STRING, not an array!
       choices:
-        '[{"choice":"U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==","isCorrect":true,"points":2,"feedback":"Q29ycmVjdCEgVGhpcyBxdWVyeSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSB1c2luZyB0aGUgTElNSVQgY2xhdXNlLg=="},{"choice":"U0VMRUNUIFRPUCAxMDAgKiBGUk9NIHNhbGVzX2RldGFpbDs=","isCorrect":false,"points":0,"feedback":"SW5jb3JyZWN0LiBUaGUgVE9QIGNsYXVzZSBpcyB1c2VkIGluIFNRTCBTZXJ2ZXIsIG5vdCBpbiBQb3N0Z3JlU1FMLg=="}]',
+        '[{"choice":"U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==","isCorrect":true,"points":2,"feedback":"Q29ycmVjdCEgVGhpcyBxdWVyeSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSB1c2luZyB0aGUgTElNSVQgY2xhdXNlLg=="},{"choice":"U0VMRUNUIFRPUCAxMDAgKiBGUk9NIHNhbGVzX2RldGFpbDs=","isCorrect":false,"points":0,"feedback":"SW5jb3JyZWN0LiBUaGUgVE9QIGNsYXVzZSBpcyB1c2VkIGluIFNRTCBTZXJ2ZXIsIG5vdCBpbiBQb3N0Z3JlU1FMLg=="}]', // pragma: allowlist secret
       randomizedChoices: true,
     };
 
@@ -76,9 +76,9 @@ describe("Actual API Response Format", () => {
           id: 2246,
           questionId: 6998,
           question:
-            "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSBpbiBQb3N0Z3JlU1FMPzwvcD4=",
+            "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSBpbiBQb3N0Z3JlU1FMPzwvcD4=", // pragma: allowlist secret
           choices:
-            '[{"choice":"U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==","isCorrect":true,"points":2,"feedback":"Q29ycmVjdCEgVGhpcyBxdWVyeSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSB1c2luZyB0aGUgTElNSVQgY2xhdXNlLg=="}]',
+            '[{"choice":"U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==","isCorrect":true,"points":2,"feedback":"Q29ycmVjdCEgVGhpcyBxdWVyeSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSB1c2luZyB0aGUgTElNSVQgY2xhdXNlLg=="}]', // pragma: allowlist secret
         },
       ],
     };

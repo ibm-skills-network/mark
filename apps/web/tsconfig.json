@@ -31,5 +31,10 @@
     ".next/types/**/*.ts",
     "../api/src/api/report/helpers/program.ts"
   ],
-  "exclude": ["node_modules", "components/depreciated"]
+  "exclude": [
+    "node_modules",
+    "components/depreciated",
+    "legacy",
+    "legacy/**"
+  ]
 }

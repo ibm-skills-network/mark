@@ -7,7 +7,6 @@ import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { decodeIfBase64 } from "src/helpers/decoder";
 import { Logger } from "winston";
 import { z } from "zod";
 import { Choice } from "../../../../assignment/dto/update.questions.request.dto";
@@ -171,9 +170,8 @@ export class TranslationService implements ITranslationService {
 
     for (const [index, text] of texts.entries()) {
       if (!text || !text.trim()) continue;
-      const decodedText = decodeIfBase64(text) || text;
       textsNeedingGPT.push({
-        text: decodedText.slice(0, 500),
+        text: text.slice(0, 500),
         index,
       });
     }
@@ -286,9 +284,7 @@ INSTRUCTIONS:
   async getLanguageCode(text: string, assignmentId = 1): Promise<string> {
     if (!text) return "unknown";
 
-    const decodedText = decodeIfBase64(text) || text;
-
-    const textSample = decodedText.slice(0, 500);
+    const textSample = text.slice(0, 500);
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -373,10 +369,8 @@ INSTRUCTIONS:
     questionText: string,
     targetLanguage: string,
   ): Promise<string> {
-    const decodedQuestionText = decodeIfBase64(questionText) || questionText;
-
     const { cleanedText, placeholders } =
-      this.stripHtmlPreserveImages(decodedQuestionText);
+      this.stripHtmlPreserveImages(questionText);
 
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
@@ -803,8 +797,6 @@ INSTRUCTIONS:
     const normalizedInput = this.normalizeTranslatableText(text);
     if (!normalizedInput) return "";
 
-    const decodedText = decodeIfBase64(normalizedInput) || normalizedInput;
-
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -819,7 +811,7 @@ INSTRUCTIONS:
       template: this.getGeneralTranslationTemplate(),
       inputVariables: [],
       partialVariables: {
-        text: decodedText,
+        text: normalizedInput,
         target_language: targetLanguageName,
         format_instructions: formatInstructions,
       },
@@ -853,7 +845,7 @@ INSTRUCTIONS:
             `TEXT:\n{text}`,
           inputVariables: [],
           partialVariables: {
-            text: decodedText,
+            text: normalizedInput,
             target_language: targetLanguageName,
           },
         });

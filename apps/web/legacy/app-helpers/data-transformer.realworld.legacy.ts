@@ -12,18 +12,18 @@ describe("DataTransformer Web - Real-World Scenarios", () => {
         id: 1025,
         name: "SQL Fundamentals",
         introduction:
-          "PHA+VGhpcyBhc3NpZ25tZW50IHRlc3RzIHlvdXIgU1FMIGtub3dsZWRnZS48L3A+",
+          "PHA+VGhpcyBhc3NpZ25tZW50IHRlc3RzIHlvdXIgU1FMIGtub3dsZWRnZS48L3A+", // pragma: allowlist secret
         instructions:
-          "PHA+Q29tcGxldGUgYWxsIHF1ZXN0aW9ucyB0byB0aGUgYmVzdCBvZiB5b3VyIGFiaWxpdHkuPC9wPg==",
+          "PHA+Q29tcGxldGUgYWxsIHF1ZXN0aW9ucyB0byB0aGUgYmVzdCBvZiB5b3VyIGFiaWxpdHkuPC9wPg==", // pragma: allowlist secret
         questions: [
           {
             id: 2246,
             question:
-              "PHA+V2hpY2ggU1FMIHF1ZXJ5IHJldHJpZXZlcyB0aGUgZmlyc3QgMTAwIHJvd3M/PC9wPg==",
+              "PHA+V2hpY2ggU1FMIHF1ZXJ5IHJldHJpZXZlcyB0aGUgZmlyc3QgMTAwIHJvd3M/PC9wPg==", // pragma: allowlist secret
             choices: [
               {
-                choice: "U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==",
-                feedback: "Q29ycmVjdCEgVXNlcyB0aGUgTElNSVQgY2xhdXNlLg==",
+                choice: "U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==", // pragma: allowlist secret
+                feedback: "Q29ycmVjdCEgVXNlcyB0aGUgTElNSVQgY2xhdXNlLg==", // pragma: allowlist secret
               },
             ],
           },
@@ -54,7 +54,7 @@ describe("DataTransformer Web - Real-World Scenarios", () => {
         questionVersions: [
           {
             id: 2246,
-            question: "PHA+V2hhdCBpcyB0aGUgb3V0cHV0IG9mIDIrMj88L3A+",
+            question: "PHA+V2hhdCBpcyB0aGUgb3V0cHV0IG9mIDIrMj88L3A+", // pragma: allowlist secret
             choices: [
               {
                 choice: "Mw==",
@@ -69,10 +69,10 @@ describe("DataTransformer Web - Real-World Scenarios", () => {
               rubrics: [
                 {
                   rubricQuestion:
-                    "RGlkIHRoZSBsZWFybmVyIGFuc3dlciBjb3JyZWN0bHk/",
+                    "RGlkIHRoZSBsZWFybmVyIGFuc3dlciBjb3JyZWN0bHk/", // pragma: allowlist secret
                   criteria: [
                     {
-                      description: "SW5jb3JyZWN0IGFuc3dlcg==",
+                      description: "SW5jb3JyZWN0IGFuc3dlcg==", // pragma: allowlist secret
                     },
                   ],
                 },
@@ -152,31 +152,31 @@ describe("DataTransformer Web - Real-World Scenarios", () => {
           rubrics: [
             {
               rubricQuestion:
-                "RGlkIHRoZSBsZWFybmVyIGNyZWF0ZSBhIC5naXRodWIvSVNTVUVfVEVNUExBVEUgZm9sZGVyPw==",
+                "RGlkIHRoZSBsZWFybmVyIGNyZWF0ZSBhIC5naXRodWIvSVNTVUVfVEVNUExBVEUgZm9sZGVyPw==", // pragma: allowlist secret
               criteria: [
                 {
                   points: 0,
-                  description: "Tm8gSVNTVUVfVEVNUExBVEUgZm9sZGVyIGZvdW5k",
+                  description: "Tm8gSVNTVUVfVEVNUExBVEUgZm9sZGVyIGZvdW5k", // pragma: allowlist secret
                 },
                 {
                   points: 1,
                   description:
-                    "SVNTVUVfVEVNUExBVEUgZm9sZGVyIGV4aXN0cyB3aXRoIHRlbXBsYXRlcw==",
+                    "SVNTVUVfVEVNUExBVEUgZm9sZGVyIGV4aXN0cyB3aXRoIHRlbXBsYXRlcw==", // pragma: allowlist secret
                 },
               ],
             },
             {
               rubricQuestion:
-                "RG9lcyB0aGUgUkVBRE1FLm1kIGNvbnRhaW4gaW5zdGFsbGF0aW9uIGluc3RydWN0aW9ucz8=",
+                "RG9lcyB0aGUgUkVBRE1FLm1kIGNvbnRhaW4gaW5zdGFsbGF0aW9uIGluc3RydWN0aW9ucz8=", // pragma: allowlist secret
               criteria: [
                 {
                   points: 0,
-                  description: "Tm8gaW5zdGFsbGF0aW9uIGluc3RydWN0aW9ucw==",
+                  description: "Tm8gaW5zdGFsbGF0aW9uIGluc3RydWN0aW9ucw==", // pragma: allowlist secret
                 },
                 {
                   points: 1,
                   description:
-                    "Q2xlYXIgaW5zdGFsbGF0aW9uIGluc3RydWN0aW9ucyBwcm92aWRlZA==",
+                    "Q2xlYXIgaW5zdGFsbGF0aW9uIGluc3RydWN0aW9ucyBwcm92aWRlZA==", // pragma: allowlist secret
                 },
               ],
             },
@@ -424,7 +424,7 @@ console.log(validateInput("Hello!")); // false`,
         id: 456,
         createdAt: "2024-01-01T00:00:00Z",
         updatedAt: "2024-01-15T12:00:00Z",
-        question: "PHA+V2hhdCBpcyBKYXZhU2NyaXB0PzwvcD4=",
+        question: "PHA+V2hhdCBpcyBKYXZhU2NyaXB0PzwvcD4=", // pragma: allowlist secret
         metadata: {
           author: "John Doe",
           version: 2,
@@ -432,7 +432,7 @@ console.log(validateInput("Hello!")); // false`,
         choices: [
           {
             id: 1,
-            choice: "QSBwcm9ncmFtbWluZyBsYW5ndWFnZQ==",
+            choice: "QSBwcm9ncmFtbWluZyBsYW5ndWFnZQ==", // pragma: allowlist secret
             isCorrect: true,
           },
         ],
@@ -502,7 +502,7 @@ console.log(validateInput("Hello!")); // false`,
       const apiResponse = {
         id: 1,
         name: "New Assignment",
-        question: "PHA+TmV3IHF1ZXN0aW9uPC9wPg==",
+        question: "PHA+TmV3IHF1ZXN0aW9uPC9wPg==", // pragma: allowlist secret
       };
 
       const decoded = DataTransformer.decodeFromAPI(apiResponse, {

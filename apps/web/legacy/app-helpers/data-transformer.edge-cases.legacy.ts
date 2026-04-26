@@ -159,11 +159,11 @@ describe("DataTransformer Web - Critical Edge Cases", () => {
         id: 2246,
         questionId: 6998,
         question:
-          "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzPzwvcD4=",
+          "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzPzwvcD4=", // pragma: allowlist secret
         choices: [
           {
-            choice: "U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==",
-            feedback: "Q29ycmVjdCEgVXNlcyB0aGUgTElNSVQgY2xhdXNlLg==",
+            choice: "U0VMRUNUICogRlJPTSBzYWxlc19kZXRhaWwgTElNSVQgMTAwOw==", // pragma: allowlist secret
+            feedback: "Q29ycmVjdCEgVXNlcyB0aGUgTElNSVQgY2xhdXNlLg==", // pragma: allowlist secret
           },
         ],
       };

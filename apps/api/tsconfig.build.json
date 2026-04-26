@@ -5,6 +5,8 @@
     "../../node_modules",
     "test",
     "dist",
+    "legacy",
+    "legacy/**",
     "**/*spec.ts",
     "**/*.test.ts",
     "**/tests/**",

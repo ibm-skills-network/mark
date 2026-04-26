@@ -1,14 +1,9 @@
-import {
-  DataTransformer,
-  TransformConfig,
-} from "@/app/Helpers/data-transformer";
-import { API_DECODE_CONFIG } from "@/app/Helpers/transform-config";
 import { toast } from "sonner";
 
 interface APIClientConfig {
   baseURL?: string;
   autoTransform?: boolean;
-  transformConfig?: TransformConfig;
+  transformConfig?: unknown;
   defaultHeaders?: Record<string, string>;
   timeout?: number;
 }
@@ -17,38 +12,27 @@ interface RequestOptions {
   headers?: Record<string, string>;
   transformRequest?: boolean;
   transformResponse?: boolean;
-  transformConfig?: TransformConfig;
+  transformConfig?: unknown;
   signal?: AbortSignal;
 }
 
-/**
- * Enhanced HTTP client with automatic data transformation
- */
 export class APIClient {
   private baseURL: string;
   private autoTransform: boolean;
-  private transformConfig: TransformConfig;
   private defaultHeaders: Record<string, string>;
   private timeout: number;
 
   constructor(config: APIClientConfig = {}) {
     this.baseURL = config.baseURL || "";
-    this.autoTransform = config.autoTransform ?? true;
-    this.transformConfig = config.transformConfig || {};
+    this.autoTransform = config.autoTransform ?? false;
     this.defaultHeaders = config.defaultHeaders || {};
     this.timeout = config.timeout || 60000;
   }
 
-  /**
-   * Make GET request with automatic response transformation
-   */
   async get<T = any>(url: string, options: RequestOptions = {}): Promise<T> {
     return this.request<T>("GET", url, undefined, options);
   }
 
-  /**
-   * Make POST request with automatic request/response transformation
-   */
   async post<T = any>(
     url: string,
     data?: any,
@@ -57,9 +41,6 @@ export class APIClient {
     return this.request<T>("POST", url, data, options);
   }
 
-  /**
-   * Make PUT request with automatic request/response transformation
-   */
   async put<T = any>(
     url: string,
     data?: any,
@@ -68,9 +49,6 @@ export class APIClient {
     return this.request<T>("PUT", url, data, options);
   }
 
-  /**
-   * Make PATCH request with automatic request/response transformation
-   */
   async patch<T = any>(
     url: string,
     data?: any,
@@ -86,35 +64,19 @@ export class APIClient {
     return this.request<T>("DELETE", url, undefined, options);
   }
 
-  /**
-   * Core request method with transformation logic
-   */
   private async request<T>(
     method: string,
     url: string,
     data?: any,
     options: RequestOptions = {},
   ): Promise<T> {
-    const {
-      headers = {},
-      transformRequest = this.autoTransform,
-      transformResponse = this.autoTransform,
-      transformConfig,
-      signal,
-    } = options;
+    const { headers = {}, signal } = options;
 
-    const finalTransformConfig = {
-      ...this.transformConfig,
-      ...transformConfig,
-    };
     const fullURL = this.buildURL(url);
 
     let requestBody: string | undefined;
     if (data) {
-      const processedData = transformRequest
-        ? DataTransformer.encodeForAPI(data, finalTransformConfig).data
-        : data;
-      requestBody = JSON.stringify(processedData);
+      requestBody = JSON.stringify(data);
     }
 
     const requestHeaders = {
@@ -161,9 +123,7 @@ export class APIClient {
 
       const responseData = await response.json();
 
-      return transformResponse
-        ? DataTransformer.decodeFromAPI(responseData, finalTransformConfig)
-        : responseData;
+      return responseData;
     } catch (error) {
       clearTimeout(timeoutId);
 
@@ -192,11 +152,6 @@ export class APIClient {
     if (config.baseURL !== undefined) this.baseURL = config.baseURL;
     if (config.autoTransform !== undefined)
       this.autoTransform = config.autoTransform;
-    if (config.transformConfig)
-      this.transformConfig = {
-        ...this.transformConfig,
-        ...config.transformConfig,
-      };
     if (config.defaultHeaders)
       this.defaultHeaders = {
         ...this.defaultHeaders,
@@ -212,7 +167,6 @@ export class APIClient {
     return new APIClient({
       baseURL: this.baseURL,
       autoTransform: this.autoTransform,
-      transformConfig: this.transformConfig,
       defaultHeaders: this.defaultHeaders,
       timeout: this.timeout,
       ...config,
@@ -239,8 +193,7 @@ export class APIError extends Error {
  */
 export const apiClient = new APIClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "",
-  autoTransform: true,
-  transformConfig: API_DECODE_CONFIG,
+  autoTransform: false,
 });
 
 /**

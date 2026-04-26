@@ -2125,7 +2125,6 @@ export const useAuthorStore = createWithEqualityFn<
 
             if (isDraft) {
               const { createDraftVersion } = await import("@/lib/author");
-              const { encodeFields } = await import("@/app/Helpers/encoder");
               const { processQuestions } = await import(
                 "@/app/Helpers/processQuestionsBeforePublish"
               );
@@ -2138,12 +2137,6 @@ export const useAuthorStore = createWithEqualityFn<
               const configData = configStore.useAssignmentConfig.getState();
               const feedbackData =
                 feedbackStore.useAssignmentFeedbackConfig.getState();
-
-              const encodedFields = encodeFields({
-                introduction: state.introduction,
-                instructions: state.instructions,
-                gradingCriteriaOverview: state.gradingCriteriaOverview,
-              });
 
               let processedQuestions = null;
               if (state.questions && state.questions.length > 0) {
@@ -2170,7 +2163,9 @@ export const useAuthorStore = createWithEqualityFn<
 
               newVersion = await createDraftVersion(state.activeAssignmentId, {
                 assignmentData: {
-                  ...encodedFields,
+                  introduction: state.introduction,
+                  instructions: state.instructions,
+                  gradingCriteriaOverview: state.gradingCriteriaOverview,
                   name: state.name,
                   numAttempts: configData.numAttempts,
                   attemptsBeforeCoolDown: configData.attemptsBeforeCoolDown,

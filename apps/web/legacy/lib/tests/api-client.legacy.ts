@@ -1,7 +1,7 @@
-import { APIClient, APIError } from "../api-client";
-import { DataTransformer } from "../../app/Helpers/data-transformer";
+import { APIClient, APIError } from "../../api-client";
+import { DataTransformer } from "../../../app/Helpers/legacy/data-transformer";
 
-jest.mock("../../app/Helpers/data-transformer", () => ({
+jest.mock("../../../app/Helpers/legacy/data-transformer", () => ({
   DataTransformer: {
     encodeForAPI: jest.fn(),
     decodeFromAPI: jest.fn(),
