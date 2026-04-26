@@ -4,7 +4,7 @@ import {
   TransformConfig,
   smartEncode,
   smartDecode,
-} from "@/app/Helpers/data-transformer";
+} from "@/app/Helpers/legacy/data-transformer";
 
 export interface UseDataTransformerOptions {
   autoEncode?: boolean;

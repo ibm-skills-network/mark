@@ -231,7 +231,7 @@ describe("Choice and Feedback Decoding", () => {
           type: "SINGLE_CORRECT",
           responseType: "OTHER",
           question:
-            "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSBpbiBQb3N0Z3JlU1FMPzwvcD4=",
+            "PHA+V2hpY2ggU1FMIHF1ZXJ5IGNvcnJlY3RseSByZXRyaWV2ZXMgdGhlIGZpcnN0IDEwMCByb3dzIGZyb20gdGhlIHNhbGVzX2RldGFpbCB0YWJsZSBpbiBQb3N0Z3JlU1FMPzwvcD4=", // pragma: allowlist secret
           maxWords: null,
           maxCharacters: null,
           totalPoints: 2,

@@ -1,4 +1,4 @@
-import { TransformConfig } from "@/app/Helpers/data-transformer";
+import { TransformConfig } from "@/app/Helpers/legacy/data-transformer";
 
 /**
  * Global configuration for data transformation

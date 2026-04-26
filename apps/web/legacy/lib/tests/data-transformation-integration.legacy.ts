@@ -1,4 +1,4 @@
-import { DataTransformer } from "@/app/Helpers/data-transformer";
+import { DataTransformer } from "../../../app/Helpers/legacy/data-transformer";
 
 /**
  * Integration tests for the complete data transformation pipeline

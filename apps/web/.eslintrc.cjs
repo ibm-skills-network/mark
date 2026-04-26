@@ -46,6 +46,8 @@ module.exports = {
   ignorePatterns: [
     "app/learner/\\(components\\)/**/*.js",
     "dist/",
+    "legacy/",
+    "legacy/**",
     "node_modules/",
     ".turbo",
     "tailwind.config.ts",

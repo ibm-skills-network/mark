@@ -8,7 +8,6 @@ import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { USAGE_TRACKER } from "../../llm.constants";
 import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
@@ -118,29 +117,8 @@ export class PromptProcessorService implements IPromptProcessor {
     if (typeof prompt === "string") {
       input = prompt;
     } else {
-      if (prompt.partialVariables) {
-        const stringVariables: { [key: string]: string | null } = {};
-
-        for (const key in prompt.partialVariables) {
-          const value = prompt.partialVariables[key];
-          if (
-            (typeof value === "string" || value === null) &&
-            typeof value !== "function"
-          ) {
-            stringVariables[key] = value;
-          }
-        }
-
-        const decodedVariables = decodeFields(stringVariables);
-
-        for (const key in decodedVariables) {
-          prompt.partialVariables[key] = decodedVariables[key];
-        }
-      }
-
       try {
         input = await prompt.format({});
-        input = decodeIfBase64(input) || input;
       } catch (formatError: unknown) {
         const errorMessage =
           formatError instanceof Error ? formatError.message : "Unknown error";
@@ -207,37 +185,9 @@ export class PromptProcessorService implements IPromptProcessor {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4.1-mini");
 
-      if (prompt.partialVariables) {
-        const stringVariables: { [key: string]: string | null } = {};
+      const textContent = await prompt.format({});
 
-        for (const key in prompt.partialVariables) {
-          const value = prompt.partialVariables[key];
-          if (
-            (typeof value === "string" || value === null) &&
-            typeof value !== "function"
-          ) {
-            stringVariables[key] = value;
-          }
-        }
-
-        const decodedVariables = decodeFields(stringVariables);
-
-        for (const key in decodedVariables) {
-          prompt.partialVariables[key] = decodedVariables[key];
-        }
-      }
-
-      let textContent = await prompt.format({});
-
-      textContent = decodeIfBase64(textContent) || textContent;
-
-      const decodedImageData = decodeIfBase64(imageData) || imageData;
-
-      const result = await llm.invokeWithImage(
-        textContent,
-        decodedImageData,
-        options,
-      );
+      const result = await llm.invokeWithImage(textContent, imageData, options);
 
       const response = this.cleanResponse(result.content);
 

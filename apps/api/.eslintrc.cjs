@@ -34,6 +34,8 @@ module.exports = {
   ignorePatterns: [
     "dist/",
     "**/dist/**",
+    "legacy/",
+    "legacy/**",
     "node_modules/",
     "coverage/",
     "jest.config.ts",

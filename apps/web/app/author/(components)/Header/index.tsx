@@ -3,7 +3,6 @@
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChatbot } from "@/hooks/useChatbot";
-import { encodeFields } from "@/app/Helpers/encoder";
 import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
 import Modal from "@/components/Modal";
@@ -529,18 +528,10 @@ function AuthorHeader() {
       JSON.stringify(clonedCurrentQuestions) !==
       JSON.stringify(clonedOriginalQuestions);
 
-    const encodedFields = encodeFields({
+    const assignmentData: ReplaceAssignmentRequest = {
       introduction,
       instructions,
       gradingCriteriaOverview,
-    }) as {
-      introduction: string;
-      instructions: string;
-      gradingCriteriaOverview: string;
-    } & { [key: string]: string | null };
-
-    const assignmentData: ReplaceAssignmentRequest = {
-      ...encodedFields,
       numAttempts,
       retakeAttemptCoolDownMinutes,
       attemptsBeforeCoolDown,
