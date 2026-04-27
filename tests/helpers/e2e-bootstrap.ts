@@ -293,12 +293,22 @@ export async function ensureTestAssignments(
 
   if (!learnerAssignment) {
     console.log("Creating learner assignment...");
-    learnerAssignment = await createLearnerAssignment(config);
+    try {
+      learnerAssignment = await createLearnerAssignment(config);
+    } catch (error) {
+      console.error("Failed to create learner assignment:", error);
+      throw error;
+    }
   }
 
   if (!authorAssignment) {
     console.log("Creating author assignment...");
-    authorAssignment = await createAuthorAssignment(config);
+    try {
+      authorAssignment = await createAuthorAssignment(config);
+    } catch (error) {
+      console.error("Failed to create author assignment:", error);
+      throw error;
+    }
   }
 
   const assignments: TestAssignments = {
@@ -358,6 +368,9 @@ function printSummary(
 
 export async function bootstrapPlaywrightState() {
   const config = getTestEnvironmentConfig();
+  console.log(`Mark API:  ${config.markApiBaseUrl}`);
+  console.log(`Gateway:   ${config.gatewayBaseUrl}`);
+  console.log(`Web:       ${config.webBaseUrl}`);
   const assignments = await ensureTestAssignments(config);
   writeAuthStorageStates(assignments, config);
   printSummary(assignments, config);
