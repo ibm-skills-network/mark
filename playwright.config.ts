@@ -92,7 +92,7 @@ export default defineConfig({
 
   webServer: {
     command: "yarn start:e2e",
-    url: testEnvironment.webBaseUrl,
+    url: `${testEnvironment.markApiBaseUrl}/health/readiness`,
     timeout: 600_000,
     reuseExistingServer: !process.env.CI,
   },
