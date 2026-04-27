@@ -673,6 +673,7 @@ enum LtiSyncStatus {
   SUCCESS /// Successfully synced
   FAILED /// Failed after all retries
   SCHEDULED /// Scheduled for retry
+  AUTH_EXPIRED /// Course platform session expired (401/403 from LTI gateway); needs instructor action
 }
 
 /// Tracks LTI grade synchronization with retry mechanism

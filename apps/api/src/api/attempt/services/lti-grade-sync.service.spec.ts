@@ -1,5 +1,6 @@
 /* eslint-disable */
 import { HttpService } from "@nestjs/axios";
+import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import { LtiSyncStatus } from "@prisma/client";
 import { AxiosResponse } from "axios";
@@ -48,6 +49,17 @@ describe("LtiGradeSyncService", () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: HttpService, useValue: mockHttpService },
         { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key: string) => {
+              if (key === "GRADING_LTI_GATEWAY_URL")
+                return "https://test-lti-gateway.com/grades";
+              if (key === "GRADING_LTI_GATEWAY_TIMEOUT") return undefined;
+              return undefined;
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -159,7 +171,6 @@ describe("LtiGradeSyncService", () => {
           headers: {
             Cookie: "authentication=test-cookie",
           },
-          timeout: 30_000,
         },
       );
 
@@ -557,7 +568,8 @@ describe("LtiGradeSyncService", () => {
         .mockResolvedValueOnce(5)
         .mockResolvedValueOnce(12)
         .mockResolvedValueOnce(234)
-        .mockResolvedValueOnce(3);
+        .mockResolvedValueOnce(3)
+        .mockResolvedValueOnce(2);
 
       const stats = await service.getSystemStats();
 
@@ -566,7 +578,8 @@ describe("LtiGradeSyncService", () => {
         scheduledCount: 12,
         successCount: 234,
         pendingCount: 3,
-        total: 254,
+        authExpiredCount: 2,
+        total: 256,
       });
     });
   });
@@ -634,5 +647,673 @@ describe("LtiGradeSyncService", () => {
 
       expect(result.success).toBe(false);
     });
+  });
+});
+
+describe("OnModuleInit fast-fail (BUG-04)", () => {
+  const mockPrismaService = {
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    ltiSyncErrorLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
+    userNotification: {
+      create: jest.fn(),
+    },
+  };
+
+  const mockHttpService = {
+    put: jest.fn(),
+  };
+
+  const mockAdminEmailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+
+  const buildService = async (urlValue: string | undefined) => {
+    const module = await Test.createTestingModule({
+      providers: [
+        LtiGradeSyncService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest
+              .fn()
+              .mockImplementation((key: string) =>
+                key === "GRADING_LTI_GATEWAY_URL" ? urlValue : undefined,
+              ),
+          },
+        },
+      ],
+    }).compile();
+    return module.get<LtiGradeSyncService>(LtiGradeSyncService);
+  };
+
+  it("throws when GRADING_LTI_GATEWAY_URL is unset", async () => {
+    const service = await buildService(undefined);
+    expect(() => service.onModuleInit()).toThrow(
+      /GRADING_LTI_GATEWAY_URL is required/,
+    );
+  });
+
+  it("throws when GRADING_LTI_GATEWAY_URL is empty string", async () => {
+    const service = await buildService("");
+    expect(() => service.onModuleInit()).toThrow(
+      /GRADING_LTI_GATEWAY_URL is required/,
+    );
+  });
+
+  it("throws when GRADING_LTI_GATEWAY_URL is whitespace-only", async () => {
+    const service = await buildService("   ");
+    expect(() => service.onModuleInit()).toThrow(
+      /GRADING_LTI_GATEWAY_URL is required/,
+    );
+  });
+
+  it("does not throw when GRADING_LTI_GATEWAY_URL is set", async () => {
+    const service = await buildService("https://lti.example.test/grade");
+    expect(() => service.onModuleInit()).not.toThrow();
+  });
+});
+
+describe("4xx body logging (SEC-03)", () => {
+  let service: LtiGradeSyncService;
+  let warnSpy: jest.SpyInstance;
+
+  const mockPrismaService = {
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    ltiSyncErrorLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
+    userNotification: {
+      create: jest.fn(),
+    },
+  };
+
+  const mockHttpService = {
+    put: jest.fn(),
+  };
+
+  const mockAdminEmailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+
+  const baseSync = {
+    id: 1,
+    attemptId: 123,
+    userId: "user-456",
+    assignmentId: 789,
+    grade: 0.85,
+    authCookie: "test-cookie",
+    ltiGatewayUrl: "https://test-lti-gateway.com/grades",
+    retryCount: 0,
+    maxRetries: 5,
+    status: LtiSyncStatus.PENDING,
+    errorHistory: [],
+    attempt: {},
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LtiGradeSyncService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key: string) => {
+              if (key === "GRADING_LTI_GATEWAY_URL")
+                return "https://test-lti-gateway.com/grades";
+              return undefined;
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<LtiGradeSyncService>(LtiGradeSyncService);
+
+    // Default mocks for handleSyncError flow.
+    mockPrismaService.ltiGradeSync.findUnique.mockResolvedValue(baseSync);
+    mockPrismaService.ltiGradeSync.update.mockImplementation((arguments_) =>
+      Promise.resolve({ ...baseSync, ...arguments_.data }),
+    );
+    mockPrismaService.ltiSyncErrorLog.create.mockResolvedValue({});
+    mockPrismaService.userNotification.create.mockResolvedValue({});
+
+    // Spy on the private NestJS Logger instance's warn method.
+    warnSpy = jest.spyOn(
+      (service as unknown as { logger: { warn: jest.Mock } }).logger,
+      "warn",
+    );
+  });
+
+  it.each([400, 401, 403, 422, 499])(
+    "logs lti_gateway_4xx when gateway returns %d",
+    async (status) => {
+      mockHttpService.put.mockReturnValue(
+        throwError(() => ({
+          response: { status, data: { errorMessage: "rejected" } },
+          message: `Request failed with status code ${status}`,
+        })),
+      );
+      await expect(service.attemptSync(1)).resolves.toBeDefined();
+
+      // Smoke check FIRST: if this fails, the NestJS Logger interception path
+      // bypassed jest.spyOn — switch to jest.mock("@nestjs/common") before
+      // debugging structured-field assertions.
+      expect(warnSpy).toHaveBeenCalled();
+
+      const calls = warnSpy.mock.calls.filter(
+        (c) => c[0] === "lti_gateway_4xx",
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0][1]).toEqual(
+        expect.objectContaining({
+          sync_id: expect.anything(),
+          attempt_id: expect.anything(),
+          status,
+          body_excerpt: expect.any(String),
+          body_truncated: expect.any(Boolean),
+          body_full_length: expect.any(Number),
+        }),
+      );
+
+      // D-09 lock: structured-context object MUST contain EXACTLY these six keys.
+      const actualKeys = Object.keys(
+        calls[0][1] as Record<string, unknown>,
+      ).sort();
+      expect(actualKeys).toEqual(
+        [
+          "attempt_id",
+          "body_excerpt",
+          "body_full_length",
+          "body_truncated",
+          "status",
+          "sync_id",
+        ].sort(),
+      );
+    },
+  );
+
+  it("does not log lti_gateway_4xx for 5xx responses", async () => {
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: { status: 502, data: { errorMessage: "bad gateway" } },
+        message: "Request failed with status code 502",
+      })),
+    );
+    await expect(service.attemptSync(1)).resolves.toBeDefined();
+    const calls = warnSpy.mock.calls.filter((c) => c[0] === "lti_gateway_4xx");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("redacts auth-key values in body_excerpt", async () => {
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: {
+          status: 400,
+          data: { cookie: "very-secret-value", attemptId: 42 },
+        },
+        message: "Request failed with status code 400",
+      })),
+    );
+    await expect(service.attemptSync(1)).resolves.toBeDefined();
+    expect(warnSpy).toHaveBeenCalled();
+    const call = warnSpy.mock.calls.find((c) => c[0] === "lti_gateway_4xx");
+    expect(call).toBeDefined();
+    const ctx = call![1] as Record<string, unknown>;
+    const excerpt = ctx.body_excerpt as string;
+    expect(excerpt).not.toContain("very-secret-value");
+    expect(excerpt).toContain("[REDACTED]");
+    // Business field preserved
+    expect(excerpt).toContain("attemptId");
+  });
+
+  it("reports body_truncated=true and body_full_length unchanged when body > 500 chars", async () => {
+    const longBody = { errorMessage: "x".repeat(700) };
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: { status: 400, data: longBody },
+        message: "Request failed with status code 400",
+      })),
+    );
+    await expect(service.attemptSync(1)).resolves.toBeDefined();
+    const call = warnSpy.mock.calls.find((c) => c[0] === "lti_gateway_4xx");
+    expect(call).toBeDefined();
+    const ctx = call![1] as Record<string, unknown>;
+    expect(ctx.body_truncated).toBe(true);
+    expect(ctx.body_full_length as number).toBeGreaterThan(500);
+    expect((ctx.body_excerpt as string).length).toBeLessThanOrEqual(501); // 500 + the "…" suffix
+  });
+
+  it("logs warn BEFORE prisma.ltiSyncErrorLog.create", async () => {
+    const createSpy = mockPrismaService.ltiSyncErrorLog.create as jest.Mock;
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: { status: 400, data: { errorMessage: "rejected" } },
+        message: "Request failed with status code 400",
+      })),
+    );
+    await expect(service.attemptSync(1)).resolves.toBeDefined();
+    const warnCallIndex = warnSpy.mock.calls.findIndex(
+      (c) => c[0] === "lti_gateway_4xx",
+    );
+    expect(warnCallIndex).toBeGreaterThanOrEqual(0);
+    const warnIdx = warnSpy.mock.invocationCallOrder[warnCallIndex];
+    const createIdx = createSpy.mock.invocationCallOrder[0];
+    expect(warnIdx).toBeLessThan(createIdx);
+  });
+});
+
+describe("AUTH_EXPIRED detection (BUG-02 / BUG-03)", () => {
+  let service: LtiGradeSyncService;
+
+  const mockPrismaService = {
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    ltiSyncErrorLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
+    userNotification: {
+      create: jest.fn(),
+    },
+  };
+
+  const mockHttpService = {
+    put: jest.fn(),
+  };
+
+  const mockAdminEmailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+
+  const baseSync = {
+    id: 1,
+    attemptId: 100,
+    userId: "noah@example.test",
+    assignmentId: 200,
+    grade: 0.85,
+    authCookie: "test-cookie",
+    ltiGatewayUrl: "https://test-lti-gateway.com/grades",
+    retryCount: 0,
+    maxRetries: 5,
+    status: LtiSyncStatus.PENDING,
+    errorHistory: [],
+    attempt: {},
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LtiGradeSyncService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key: string) => {
+              if (key === "GRADING_LTI_GATEWAY_URL")
+                return "https://test-lti-gateway.com/grades";
+              return undefined;
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<LtiGradeSyncService>(LtiGradeSyncService);
+
+    mockPrismaService.ltiGradeSync.findUnique.mockResolvedValue(baseSync);
+    mockPrismaService.ltiGradeSync.update.mockImplementation((arguments_) =>
+      Promise.resolve({ ...baseSync, ...arguments_.data }),
+    );
+    mockPrismaService.ltiSyncErrorLog.create.mockResolvedValue({});
+    mockPrismaService.userNotification.create.mockResolvedValue({});
+    (mockAdminEmailService.sendGenericEmail as jest.Mock).mockClear();
+    (mockAdminEmailService.sendGenericEmail as jest.Mock).mockResolvedValue(
+      true,
+    );
+  });
+
+  it.each([401, 403])(
+    "marks sync AUTH_EXPIRED on %d (no retry, no errorHistory push)",
+    async (status) => {
+      mockHttpService.put.mockReturnValue(
+        throwError(() => ({
+          response: { status, data: { error: "auth expired" } },
+          message: `Request failed with status code ${status}`,
+        })),
+      );
+
+      const result = await service.attemptSync(baseSync.id);
+
+      expect(result.status).toBe(LtiSyncStatus.AUTH_EXPIRED);
+      expect(result.success).toBe(false);
+
+      // Locate the AUTH_EXPIRED transition update among all update calls (the
+      // service issues an IN_PROGRESS update at the top of attemptSync first).
+      const authExpiredUpdate =
+        mockPrismaService.ltiGradeSync.update.mock.calls.find(
+          (call) =>
+            (call[0] as { data: { status?: LtiSyncStatus } }).data.status ===
+            LtiSyncStatus.AUTH_EXPIRED,
+        );
+      expect(authExpiredUpdate).toBeDefined();
+      const updatePayload = (
+        authExpiredUpdate as [{ data: Record<string, unknown> }]
+      )[0].data;
+      expect(updatePayload).toMatchObject({
+        status: LtiSyncStatus.AUTH_EXPIRED,
+        lastError: expect.any(String),
+      });
+      expect(updatePayload).not.toHaveProperty("retryCount");
+      expect(updatePayload).not.toHaveProperty("errorHistory");
+      expect(updatePayload).not.toHaveProperty("nextRetryAt");
+
+      // Audit row preserved (D-10)
+      expect(mockPrismaService.ltiSyncErrorLog.create).toHaveBeenCalledTimes(1);
+
+      // No SCHEDULED or FAILED transition occurred
+      const otherTerminalUpdate =
+        mockPrismaService.ltiGradeSync.update.mock.calls.find((call) => {
+          const s = (call[0] as { data: { status?: LtiSyncStatus } }).data
+            .status;
+          return s === LtiSyncStatus.SCHEDULED || s === LtiSyncStatus.FAILED;
+        });
+      expect(otherTerminalUpdate).toBeUndefined();
+    },
+  );
+
+  it("sends learner notification with the verbatim D-14 title and body via createLearnerNotification", async () => {
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: { status: 401, data: { error: "auth expired" } },
+        message: "Request failed with status code 401",
+      })),
+    );
+
+    const notifySpy = jest.spyOn(
+      service as unknown as {
+        createLearnerNotification: (...args: unknown[]) => Promise<void>;
+      },
+      "createLearnerNotification",
+    );
+
+    await service.attemptSync(baseSync.id);
+
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    const callArgs = notifySpy.mock.calls[0] as unknown as [
+      unknown,
+      string,
+      string,
+      Date | null,
+    ];
+    const [, title, body] = callArgs;
+    expect(title).toBe("Grade sync needs your instructor's attention");
+    expect(body).toBe(
+      "Your course platform's session expired before we could record this grade. " +
+        "Your grade is safely stored in Mark — please contact your instructor to refresh " +
+        "your course session, then it will sync automatically.",
+    );
+  });
+
+  it("delivers the verbatim D-14 title and body to the email path (sendGenericEmail) per D-15", async () => {
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: { status: 401, data: { error: "auth expired" } },
+        message: "Request failed with status code 401",
+      })),
+    );
+
+    await service.attemptSync(baseSync.id);
+
+    const emailMock = mockAdminEmailService.sendGenericEmail as jest.Mock;
+    expect(emailMock).toHaveBeenCalledTimes(1);
+    const [recipient, subject, emailBody] = emailMock.mock.calls[0] as [
+      string,
+      string,
+      string,
+    ];
+    expect(typeof recipient).toBe("string");
+    // sendEmailNotification prefixes the subject with "Mark - " so verify the
+    // verbatim D-14 title is present in the assembled subject line.
+    expect(subject).toContain("Grade sync needs your instructor's attention");
+    expect(emailBody).toContain(
+      "Your course platform's session expired before we could record this grade",
+    );
+  });
+
+  it("does not call httpService.put again on AUTH_EXPIRED (single attempt)", async () => {
+    mockHttpService.put.mockReturnValue(
+      throwError(() => ({
+        response: { status: 401, data: { error: "auth expired" } },
+        message: "Request failed with status code 401",
+      })),
+    );
+    await service.attemptSync(baseSync.id);
+    expect(mockHttpService.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("manualRetry AUTH_EXPIRED guard (BUG-02 / BUG-03 admin UX)", () => {
+  let service: LtiGradeSyncService;
+
+  const mockPrismaService = {
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    ltiSyncErrorLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
+    userNotification: {
+      create: jest.fn(),
+    },
+  };
+
+  const mockHttpService = {
+    put: jest.fn(),
+  };
+
+  const mockAdminEmailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LtiGradeSyncService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key: string) => {
+              if (key === "GRADING_LTI_GATEWAY_URL")
+                return "https://test-lti-gateway.com/grades";
+              return undefined;
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<LtiGradeSyncService>(LtiGradeSyncService);
+  });
+
+  it("returns AUTH_EXPIRED short-circuit without calling httpService.put", async () => {
+    mockPrismaService.ltiGradeSync.findUnique.mockResolvedValue({
+      id: 7,
+      status: LtiSyncStatus.AUTH_EXPIRED,
+      attemptId: 100,
+      retryCount: 0,
+    });
+    const result = await service.manualRetry(7);
+    expect(result.status).toBe(LtiSyncStatus.AUTH_EXPIRED);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/manual retry will not bypass/);
+    expect(mockHttpService.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("getStatusExplanation AUTH_EXPIRED arm", () => {
+  let service: LtiGradeSyncService;
+
+  const mockPrismaService = {
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    ltiSyncErrorLog: { create: jest.fn(), findMany: jest.fn() },
+    userNotification: { create: jest.fn() },
+  };
+  const mockHttpService = { put: jest.fn() };
+  const mockAdminEmailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LtiGradeSyncService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest
+              .fn()
+              .mockImplementation((key: string) =>
+                key === "GRADING_LTI_GATEWAY_URL"
+                  ? "https://test-lti-gateway.com/grades"
+                  : undefined,
+              ),
+          },
+        },
+      ],
+    }).compile();
+    service = module.get<LtiGradeSyncService>(LtiGradeSyncService);
+  });
+
+  it("returns the AUTH_EXPIRED-specific copy (not the generic default)", () => {
+    const explanation = (
+      service as unknown as {
+        getStatusExplanation: (s: LtiSyncStatus, n: Date | null) => string;
+      }
+    ).getStatusExplanation(LtiSyncStatus.AUTH_EXPIRED, null);
+    expect(explanation).toMatch(
+      /^Your course platform's login session expired/,
+    );
+    expect(explanation).not.toMatch(/being processed/);
+  });
+});
+
+describe("getSystemStats AUTH_EXPIRED count", () => {
+  let service: LtiGradeSyncService;
+
+  const mockPrismaService = {
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    ltiSyncErrorLog: { create: jest.fn(), findMany: jest.fn() },
+    userNotification: { create: jest.fn() },
+  };
+  const mockHttpService = { put: jest.fn() };
+  const mockAdminEmailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LtiGradeSyncService,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: mockHttpService },
+        { provide: AdminEmailService, useValue: mockAdminEmailService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest
+              .fn()
+              .mockImplementation((key: string) =>
+                key === "GRADING_LTI_GATEWAY_URL"
+                  ? "https://test-lti-gateway.com/grades"
+                  : undefined,
+              ),
+          },
+        },
+      ],
+    }).compile();
+    service = module.get<LtiGradeSyncService>(LtiGradeSyncService);
+  });
+
+  it("includes authExpiredCount in the returned stats and queries Prisma with the AUTH_EXPIRED status", async () => {
+    const countCalls: unknown[] = [];
+    mockPrismaService.ltiGradeSync.count.mockImplementation((args: unknown) => {
+      countCalls.push(args);
+      return Promise.resolve(0);
+    });
+    const stats = await service.getSystemStats();
+    expect(stats).toHaveProperty("authExpiredCount");
+    expect(
+      typeof (stats as { authExpiredCount: unknown }).authExpiredCount,
+    ).toBe("number");
+    const queriedAuthExpired = countCalls.some((c) => {
+      const where = (c as { where?: { status?: LtiSyncStatus } }).where;
+      return where?.status === LtiSyncStatus.AUTH_EXPIRED;
+    });
+    expect(queriedAuthExpired).toBe(true);
   });
 });

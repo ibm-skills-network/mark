@@ -1,9 +1,12 @@
 import { HttpService } from "@nestjs/axios";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { LtiSyncStatus, Prisma } from "@prisma/client";
 import { firstValueFrom } from "rxjs";
 import { AdminEmailService } from "../../../auth/services/admin-email.service";
 import { PrismaService } from "../../../database/prisma.service";
+import { redactAuthSecrets } from "../../../logger/redact";
+import { sanitizeForLog } from "../../../logger/sanitize";
 
 interface CreateSyncRequest {
   attemptId: number;
@@ -33,9 +36,9 @@ type ErrorHistoryEntry = {
 };
 
 @Injectable()
-export class LtiGradeSyncService {
+export class LtiGradeSyncService implements OnModuleInit {
   private readonly logger = new Logger(LtiGradeSyncService.name);
-  private readonly ltiGatewayUrl: string;
+  private ltiGatewayUrl!: string; // assigned in onModuleInit
   private readonly maxRetries = 5;
 
   // Retry delays in minutes: 5min, 1hr, 2hrs, 1day, 3days
@@ -46,13 +49,26 @@ export class LtiGradeSyncService {
     private readonly prisma: PrismaService,
     private readonly httpService: HttpService,
     private readonly emailService: AdminEmailService,
-  ) {
-    this.ltiGatewayUrl = process.env.GRADING_LTI_GATEWAY_URL || "";
+    private readonly configService: ConfigService,
+  ) {}
 
-    if (!this.ltiGatewayUrl) {
-      this.logger.warn(
-        "GRADING_LTI_GATEWAY_URL is not set. LTI grade syncing will be disabled.",
+  onModuleInit(): void {
+    const url = this.configService.get<string>("GRADING_LTI_GATEWAY_URL");
+    if (!url || url.trim() === "") {
+      throw new Error(
+        "GRADING_LTI_GATEWAY_URL is required. Set it in apps/api/.env " +
+          "(see apps/api/.env.template) or via your deploy overlay.",
       );
+    }
+    this.ltiGatewayUrl = url;
+    this.logger.log(`LTI gateway URL configured (host=${this.maskHost(url)})`);
+  }
+
+  private maskHost(url: string): string {
+    try {
+      return new URL(url).host;
+    } catch {
+      return "<unparseable>";
     }
   }
 
@@ -130,7 +146,6 @@ export class LtiGradeSyncService {
             headers: {
               Cookie: `authentication=${sync.authCookie}`,
             },
-            timeout: 30_000,
           },
         ),
       );
@@ -187,6 +202,24 @@ export class LtiGradeSyncService {
     const { errorMessage, httpStatus, responseBody, errorStack } =
       this.getErrorDetails(error);
 
+    if (
+      typeof httpStatus === "number" &&
+      httpStatus >= 400 &&
+      httpStatus < 500
+    ) {
+      const fullLength = responseBody?.length ?? 0;
+      const redacted = redactAuthSecrets(responseBody ?? "");
+      const excerpt = sanitizeForLog(redacted);
+      this.logger.warn("lti_gateway_4xx", {
+        sync_id: sync.id,
+        attempt_id: sync.attemptId,
+        status: httpStatus,
+        body_excerpt: excerpt,
+        body_truncated: fullLength > 500,
+        body_full_length: fullLength,
+      });
+    }
+
     this.logger.error(
       `Failed to sync grade for attempt ${sync.attemptId}: ${errorMessage}`,
       errorStack,
@@ -207,6 +240,46 @@ export class LtiGradeSyncService {
         },
       },
     });
+
+    if (httpStatus === 401 || httpStatus === 403) {
+      // 401/403 here can only originate from the LTI gateway PUT in attemptSync
+      // above — safe to interpret as auth-cookie expiry. Terminal state after
+      // exactly one attempt: no retryCount increment, no errorHistory push,
+      // no nextRetryAt scheduling.
+      await this.prisma.ltiGradeSync.update({
+        where: { id: sync.id },
+        data: {
+          status: LtiSyncStatus.AUTH_EXPIRED,
+          lastError: errorMessage,
+        },
+      });
+
+      this.logger.warn(
+        `Grade sync marked AUTH_EXPIRED for attempt ${sync.attemptId} (status ${httpStatus})`,
+        {
+          sync_id: sync.id,
+          attempt_id: sync.attemptId,
+          status: httpStatus,
+        },
+      );
+
+      await this.createLearnerNotification(
+        sync,
+        "Grade sync needs your instructor's attention",
+        "Your course platform's session expired before we could record this grade. " +
+          "Your grade is safely stored in Mark — please contact your instructor to refresh " +
+          "your course session, then it will sync automatically.",
+        null,
+      );
+
+      return {
+        success: false,
+        syncId: sync.id,
+        status: LtiSyncStatus.AUTH_EXPIRED,
+        message:
+          "Your course platform's session expired. Please contact your instructor.",
+      };
+    }
 
     const newRetryCount = sync.retryCount + 1;
     const hasRetriesLeft = newRetryCount < this.maxRetries;
@@ -455,6 +528,14 @@ If you have questions, please contact your instructor.
       return `After multiple attempts, we were unable to sync your grade to your course platform. This may be due to a configuration issue or extended outage. Your grade is safely stored in our system. If your grade doesn't appear in your course within 24 hours, please contact your instructor or support team.`;
     }
 
+    if (status === LtiSyncStatus.AUTH_EXPIRED) {
+      return (
+        "Your course platform's login session expired before we could send your grade. " +
+        "This is not a Mark issue — only your instructor refreshing their course platform " +
+        "session will let the sync complete. Your grade is safely stored in Mark in the meantime."
+      );
+    }
+
     return `Your grade sync is being processed.`;
   }
 
@@ -563,6 +644,16 @@ If you have questions, please contact your instructor.
         syncId,
         status: LtiSyncStatus.SUCCESS,
         message: "Grade already successfully synced",
+      };
+    }
+
+    if (sync.status === LtiSyncStatus.AUTH_EXPIRED) {
+      return {
+        success: false,
+        syncId,
+        status: LtiSyncStatus.AUTH_EXPIRED,
+        message:
+          "AUTH_EXPIRED sync needs instructor action — manual retry will not bypass cookie expiry.",
       };
     }
 
@@ -710,34 +801,51 @@ If you have questions, please contact your instructor.
   async getSystemStats() {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-    const [failedCount, scheduledCount, successCount, pendingCount] =
-      await Promise.all([
-        this.prisma.ltiGradeSync.count({
-          where: {
-            status: LtiSyncStatus.FAILED,
-            createdAt: { gte: oneHourAgo },
-          },
-        }),
-        this.prisma.ltiGradeSync.count({
-          where: { status: LtiSyncStatus.SCHEDULED },
-        }),
-        this.prisma.ltiGradeSync.count({
-          where: {
-            status: LtiSyncStatus.SUCCESS,
-            createdAt: { gte: oneHourAgo },
-          },
-        }),
-        this.prisma.ltiGradeSync.count({
-          where: { status: LtiSyncStatus.PENDING },
-        }),
-      ]);
+    const [
+      failedCount,
+      scheduledCount,
+      successCount,
+      pendingCount,
+      authExpiredCount,
+    ] = await Promise.all([
+      this.prisma.ltiGradeSync.count({
+        where: {
+          status: LtiSyncStatus.FAILED,
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+      this.prisma.ltiGradeSync.count({
+        where: { status: LtiSyncStatus.SCHEDULED },
+      }),
+      this.prisma.ltiGradeSync.count({
+        where: {
+          status: LtiSyncStatus.SUCCESS,
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+      this.prisma.ltiGradeSync.count({
+        where: { status: LtiSyncStatus.PENDING },
+      }),
+      this.prisma.ltiGradeSync.count({
+        where: {
+          status: LtiSyncStatus.AUTH_EXPIRED,
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+    ]);
 
     return {
       failedCount,
       scheduledCount,
       successCount,
       pendingCount,
-      total: failedCount + scheduledCount + successCount + pendingCount,
+      authExpiredCount,
+      total:
+        failedCount +
+        scheduledCount +
+        successCount +
+        pendingCount +
+        authExpiredCount,
     };
   }
 }
