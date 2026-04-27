@@ -407,9 +407,6 @@ describe("QuestionService", () => {
 
         beforeEach(() => {
           jobStatusService.createJob.mockResolvedValue(mockJob);
-          jest
-            .spyOn(questionService as any, "startQuestionGenerationProcess")
-            .mockResolvedValue(undefined);
         });
 
         it('contentSource="payload" uses caller-supplied fileContents, never queries DB', async () => {
@@ -474,17 +471,14 @@ describe("QuestionService", () => {
             fileContents: [callerFile],
           });
 
-          const startSpy = jest
-            .spyOn(questionService as any, "startQuestionGenerationProcess")
-            .mockResolvedValue(undefined);
-
           await questionService.generateQuestions(
             assignmentId,
             payload,
             userId,
           );
 
-          const filesArg = startSpy.mock.calls[0][4] as Array<{
+          const filesArg = jobQueueService.enqueue.mock.calls[0][2]
+            .fileContents as Array<{
             filename: string;
             content: string;
           }>;
