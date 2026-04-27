@@ -108,10 +108,23 @@ export class LtiGradeSyncService {
       },
     });
 
+    const targetUrl = sync.ltiGatewayUrl || this.ltiGatewayUrl;
+    const requestStart = Date.now();
+    this.logger.debug(
+      `LTI gateway PUT → ${targetUrl} (sync ${syncId}, attempt ${sync.attemptId})`,
+      {
+        sync_id: syncId,
+        attempt_id: sync.attemptId,
+        grade: sync.grade,
+        target_url: targetUrl,
+        retry_count: sync.retryCount,
+      },
+    );
+
     try {
       const response = await firstValueFrom(
         this.httpService.put(
-          sync.ltiGatewayUrl || this.ltiGatewayUrl,
+          targetUrl,
           { score: sync.grade },
           {
             headers: {
@@ -120,6 +133,17 @@ export class LtiGradeSyncService {
             timeout: 30_000,
           },
         ),
+      );
+
+      const durationMs = Date.now() - requestStart;
+      this.logger.debug(
+        `LTI gateway response ${response.status} (took ${durationMs}ms)`,
+        {
+          sync_id: syncId,
+          attempt_id: sync.attemptId,
+          status: response.status,
+          duration_ms: durationMs,
+        },
       );
 
       if (response.status === 200) {

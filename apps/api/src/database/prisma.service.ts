@@ -10,33 +10,54 @@
  * - Health check functionality for monitoring
  * - Graceful connection/disconnection on module lifecycle
  * - Connection recovery mechanisms
+ * - Structured Winston log forwarding for Prisma query/info/warn/error events
  *
  * @module database
  */
 
 import {
+  Inject,
   Injectable,
-  Logger,
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
+
+const SLOW_QUERY_THRESHOLD_MS = 500;
+
+function redactDatabaseUrl(url: string | undefined): string {
+  if (!url) return "<unset>";
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) parsed.password = "***"; // pragma: allowlist secret
+    if (parsed.username) parsed.username = "***"; // pragma: allowlist secret
+    return parsed.toString();
+  } catch {
+    return "<unparseable>";
+  }
+}
 
 @Injectable()
 export class PrismaService
-  extends PrismaClient
+  extends PrismaClient<
+    Prisma.PrismaClientOptions,
+    "query" | "info" | "warn" | "error"
+  >
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(PrismaService.name);
+  private readonly logger: Logger;
   private retryCount = 0;
   private readonly maxRetries = 5;
   private readonly retryDelay = 5000;
 
   /**
-   * Initializes the Prisma client with database configuration
-   * Sets up logging for warnings and errors to stdout
+   * Initializes the Prisma client with database configuration.
+   * Prisma log events are emitted (instead of written to stdout) so they can
+   * be forwarded through Winston with structured context.
    */
-  constructor() {
+  constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
     super({
       datasources: {
         db: {
@@ -44,9 +65,39 @@ export class PrismaService
         },
       },
       log: [
-        { level: "warn", emit: "stdout" },
-        { level: "error", emit: "stdout" },
+        { level: "query", emit: "event" },
+        { level: "info", emit: "event" },
+        { level: "warn", emit: "event" },
+        { level: "error", emit: "event" },
       ],
+    });
+
+    this.logger = parentLogger.child({ context: PrismaService.name });
+
+    this.$on("query", (event) => {
+      if (event.duration >= SLOW_QUERY_THRESHOLD_MS) {
+        this.logger.warn(
+          `slow_query [target=${event.target}] ${event.duration}ms ${event.query}`,
+        );
+      } else {
+        this.logger.debug(
+          `query [target=${event.target}] ${event.duration}ms ${event.query}`,
+        );
+      }
+    });
+
+    this.$on("info", (event) => {
+      this.logger.info(`prisma_info [target=${event.target}] ${event.message}`);
+    });
+
+    this.$on("warn", (event) => {
+      this.logger.warn(`prisma_warn [target=${event.target}] ${event.message}`);
+    });
+
+    this.$on("error", (event) => {
+      this.logger.error(
+        `prisma_error [target=${event.target}] ${event.message}`,
+      );
     });
   }
 
@@ -57,6 +108,9 @@ export class PrismaService
    * @returns {Promise<void>}
    */
   async onModuleInit(): Promise<void> {
+    this.logger.info(
+      `connecting: DATABASE_URL=${redactDatabaseUrl(process.env.DATABASE_URL)}`,
+    );
     await this.connectWithRetry();
   }
 
@@ -67,6 +121,7 @@ export class PrismaService
    * @returns {Promise<void>}
    */
   async onModuleDestroy(): Promise<void> {
+    this.logger.info("disconnecting");
     await this.$disconnect();
   }
 
@@ -82,14 +137,19 @@ export class PrismaService
     while (this.retryCount < this.maxRetries) {
       try {
         await this.$connect();
-        this.logger.log("Database connected successfully");
+        this.logger.info("Database connected successfully");
         this.retryCount = 0;
         return;
       } catch (error) {
         this.retryCount++;
         this.logger.error(
           `Database connection failed. Retry ${this.retryCount}/${this.maxRetries}`,
-          error,
+          {
+            retry: this.retryCount,
+            max_retries: this.maxRetries,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
         );
 
         if (this.retryCount === this.maxRetries) {
@@ -114,7 +174,10 @@ export class PrismaService
       await this.$queryRaw`SELECT 1`;
       return true;
     } catch (error) {
-      this.logger.error("Database health check failed:", error);
+      this.logger.error("Database health check failed", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       return false;
     }
   }
@@ -128,11 +191,15 @@ export class PrismaService
    */
   async reconnect(): Promise<void> {
     try {
+      this.logger.warn("reconnect: initiating");
       await this.$disconnect();
       await this.$connect();
-      this.logger.log("Database reconnected successfully");
+      this.logger.info("Database reconnected successfully");
     } catch (error) {
-      this.logger.error("Failed to reconnect to database:", error);
+      this.logger.error("Failed to reconnect to database", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }

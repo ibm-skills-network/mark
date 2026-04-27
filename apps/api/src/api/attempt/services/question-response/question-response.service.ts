@@ -228,10 +228,9 @@ export class QuestionResponseService {
     } = updateDto;
     /* eslint-enable @typescript-eslint/no-unused-vars */
 
-    // Read the current version before entering the write transaction
     const current = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
-      select: { version: true, submitted: true },
+      select: { submitted: true },
     });
 
     if (!current) {
@@ -245,8 +244,6 @@ export class QuestionResponseService {
         `Attempt ${assignmentAttemptId} has already been submitted.`,
       );
     }
-
-    const expectedVersion = current.version;
 
     return this.prisma.$transaction(
       async (tx) => {
@@ -266,14 +263,13 @@ export class QuestionResponseService {
           );
         }
 
-        // Atomically update AssignmentAttempt — only if version matches (optimistic lock)
+        // Atomically update AssignmentAttempt only if it is still not submitted.
         const updateResult = await (
           tx as PrismaTransactionalClient
         ).assignmentAttempt.updateMany({
           where: {
             id: assignmentAttemptId,
             submitted: false,
-            version: expectedVersion,
           },
           data: {
             ...cleanedUpdateDto,
@@ -281,7 +277,6 @@ export class QuestionResponseService {
             preferredLanguage: language ?? "en",
             expiresAt: new Date(),
             grade,
-            version: { increment: 1 },
           },
         });
 
@@ -879,6 +874,13 @@ export class QuestionResponseService {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to save question response", {
+        questionId,
+        assignmentAttemptId,
+        role,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException(
         `Failed to save question response: ${errorMessage}`,
       );

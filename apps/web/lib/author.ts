@@ -272,7 +272,9 @@ export async function publishAssignment(
       message: string;
     };
     return { jobId, message };
-  } catch (err) {}
+  } catch (err) {
+    console.error("💥 publishAssignment failed:", err);
+  }
 }
 
 /**

@@ -52,21 +52,43 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
-    this.logger.debug(`Invoking LLM with ${inputTokens} input tokens`);
+    this.logger.debug(`Invoking LLM with ${inputTokens} input tokens`, {
+      model_name: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
+      input_tokens: inputTokens,
+      max_tokens: options?.maxTokens,
+      temperature: options?.temperature ?? 0,
+    });
 
-    const result = await model.invoke(messages);
-    const responseContent = result.content.toString();
-    const outputTokens = this.tokenCounter.countTokens(responseContent);
+    const start = Date.now();
+    try {
+      const result = await model.invoke(messages);
+      const responseContent = result.content.toString();
+      const outputTokens = this.tokenCounter.countTokens(responseContent);
 
-    this.logger.debug(`LLM responded with ${outputTokens} output tokens`);
+      this.logger.debug(`LLM responded with ${outputTokens} output tokens`, {
+        model_name: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        duration_ms: Date.now() - start,
+      });
 
-    return {
-      content: responseContent,
-      tokenUsage: {
-        input: inputTokens,
-        output: outputTokens,
-      },
-    };
+      return {
+        content: responseContent,
+        tokenUsage: {
+          input: inputTokens,
+          output: outputTokens,
+        },
+      };
+    } catch (error) {
+      this.logger.error("OpenAiLlmService.invoke failed", {
+        model_name: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
+        input_tokens: inputTokens,
+        duration_ms: Date.now() - start,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -113,11 +135,13 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
         },
       };
     } catch (error) {
-      this.logger.error(
-        `Error processing image with LLM: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
+      this.logger.error("OpenAiLlmService.invokeWithImage failed", {
+        model_name: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
+        input_tokens: inputTokens,
+        text_length: textContent?.length,
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }

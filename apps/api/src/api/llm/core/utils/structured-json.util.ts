@@ -1,3 +1,7 @@
+import { Logger } from "@nestjs/common";
+
+const logger = new Logger("StructuredJsonUtil");
+
 function looksLikeSchemaObject(object: unknown): boolean {
   if (!object || typeof object !== "object") return false;
   const rec = object as Record<string, unknown>;
@@ -40,8 +44,8 @@ export function extractStructuredJSON(response: string): string {
     JSON.parse(response);
     return response;
   } catch (error) {
-    console.warn(
-      `Error parsing JSON: ${
+    logger.warn(
+      `extractStructuredJSON: top-level JSON.parse failed, falling back to regex extraction: ${
         error instanceof Error ? error.message : "Unknown error"
       }`,
     );
@@ -56,8 +60,8 @@ export function extractStructuredJSON(response: string): string {
       JSON.parse(candidate);
       codeBlocks.push(candidate);
     } catch {
-      console.warn(
-        "Could not parse JSON block from response, trying other methods",
+      logger.warn(
+        "extractStructuredJSON: ```json code-block parse failed, trying other methods",
       );
     }
   }
@@ -96,8 +100,8 @@ export function extractStructuredJSON(response: string): string {
       JSON.parse(candidate);
       objectBlocks.push(candidate);
     } catch {
-      console.warn(
-        "Could not parse JSON object from response, trying other methods",
+      logger.warn(
+        "extractStructuredJSON: bare-object regex parse failed, trying other methods",
       );
     }
   }

@@ -140,6 +140,8 @@ export class ReportingService {
       }
 
       localStorage.setItem("mark_error_logs", JSON.stringify(errorLogs));
-    } catch (e) {}
+    } catch (e) {
+      console.warn("reportingService: failed to persist error log:", e);
+    }
   }
 }

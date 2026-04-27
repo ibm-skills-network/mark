@@ -435,7 +435,6 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
 
   it("throws ConflictException when the attempt is already submitted", async () => {
     mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-      version: 2,
       submitted: true,
     });
 
@@ -444,9 +443,8 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it("throws ConflictException when updateMany count is 0 (version mismatch — concurrent submission)", async () => {
+  it("throws ConflictException when updateMany count is 0 (concurrent submission)", async () => {
     mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-      version: 1,
       submitted: false,
     });
 
@@ -455,7 +453,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
       .spyOn(service as any, "saveResponseToDatabase")
       .mockResolvedValue(undefined);
 
-    // updateMany returns count=0 → optimistic lock conflict
+    // updateMany returns count=0 -> attempt was submitted concurrently
     mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
@@ -465,7 +463,6 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
 
   it("writes all GradedItems and updates the attempt atomically on success", async () => {
     mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-      version: 3,
       submitted: false,
     });
 
@@ -503,41 +500,14 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     expect(saveResponseSpy).toHaveBeenCalledTimes(2);
     expect(mockTx.assignmentAttempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 50, submitted: false, version: 3 },
+        where: { id: 50, submitted: false },
         data: expect.objectContaining({
           submitted: true,
           grade: 85,
-          version: { increment: 1 },
         }),
       }),
     );
     expect(result).toEqual({ id: 50, submitted: true, grade: 85 });
-  });
-
-  it("uses the correct version for the optimistic lock guard", async () => {
-    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-      version: 7,
-      submitted: false,
-    });
-
-    jest
-      .spyOn(service as any, "saveResponseToDatabase")
-      .mockResolvedValue(undefined);
-
-    mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
-    mockTx.assignmentAttempt.findUnique.mockResolvedValue({
-      id: 60,
-      submitted: true,
-      grade: 90,
-    });
-
-    await service.commitAttemptWithResponses(60, [], 90, baseUpdateDto);
-
-    expect(mockTx.assignmentAttempt.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ version: 7 }),
-      }),
-    );
   });
 });
 
