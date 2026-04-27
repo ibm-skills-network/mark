@@ -4,6 +4,7 @@ set -euo pipefail
 # Allow each backgrounded service to own a process group so cleanup can stop
 # the full tree instead of only the parent shell wrapper.
 set -m
+if [ -n "${CI:-}" ]; then set -x; fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
