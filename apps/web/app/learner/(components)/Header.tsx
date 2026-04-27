@@ -42,6 +42,9 @@ import { toast } from "sonner";
 import Button from "../../../components/Button";
 import GradingProgressModal from "./GradingProgressModal";
 
+const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
+  "Translations are only available after publishing this assignment. Publish to preview translated content.";
+
 function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -115,6 +118,8 @@ function LearnerHeader() {
   const getUserPreferedLanguageFromLTI = useLearnerStore(
     (state) => state.getUserPreferedLanguageFromLTI,
   );
+
+  const isAuthorPreview = searchParams.get("authorMode") === "true";
 
   useEffect(() => {
     async function fetchData() {
@@ -439,7 +444,7 @@ function LearnerHeader() {
 
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1">
-              {!isSuccessPage && role === "learner" && (
+              {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
                 <>
                   {languages.length > 1 ? (
                     <div className="flex-1 max-w-[180px]">
@@ -452,6 +457,12 @@ function LearnerHeader() {
                         setSelectedItem={handleChangeLanguage}
                         placeholder="Language"
                         disableUiTranslation={true}
+                        disabled={isAuthorPreview}
+                        disabledTooltip={
+                          isAuthorPreview
+                            ? TRANSLATION_PREVIEW_DISABLED_TOOLTIP
+                            : undefined
+                        }
                       />
                     </div>
                   ) : null}
@@ -513,7 +524,7 @@ function LearnerHeader() {
           </div>
 
           <div className="flex items-center gap-x-4">
-            {!isSuccessPage && role === "learner" && (
+            {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
               <>
                 {languages.length > 1 ? (
                   <Dropdown
@@ -525,6 +536,12 @@ function LearnerHeader() {
                     setSelectedItem={handleChangeLanguage}
                     placeholder="Language"
                     disableUiTranslation={true}
+                    disabled={isAuthorPreview}
+                    disabledTooltip={
+                      isAuthorPreview
+                        ? TRANSLATION_PREVIEW_DISABLED_TOOLTIP
+                        : undefined
+                    }
                   />
                 ) : null}
               </>
