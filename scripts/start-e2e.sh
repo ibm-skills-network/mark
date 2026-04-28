@@ -105,6 +105,10 @@ echo "🚀 Starting E2E servers..."
 run_server_preflight_checks
 
 if [ -z "${CI:-}" ]; then
+    echo "🏗️ Building API for E2E..."
+    yarn --cwd "${REPO_ROOT}/apps/api" build
+    echo "🏗️ Building API Gateway for E2E..."
+    yarn --cwd "${REPO_ROOT}/apps/api-gateway" build
     echo "🏗️ Building web app for E2E..."
     yarn --cwd "${REPO_ROOT}/apps/web" build:e2e
 fi

@@ -14,7 +14,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:latest
+        image: postgres:16
         env:
           POSTGRES_USER: mark-pg-user
           POSTGRES_PASSWORD: mark-pg-password # pragma: allowlist secret
@@ -34,7 +34,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.0.0"
+          node-version: "24.0.0"
           cache: "yarn"
 
       - name: Configure Yarn
@@ -84,26 +84,36 @@ jobs:
       - name: Create API Gateway dev.env
         run: |
           cat > apps/api-gateway/dev.env <<'EOF'
-          NODE_ENV=development
-          API_GATEWAY_PORT=8000
-          MARK_API_ENDPOINT=http://localhost:4222
-          AUTH_DISABLED=true
-          SECRET=devsecret # pragma: allowlist secret
+          export NODE_ENV=development
+          export API_GATEWAY_PORT=8000
+          export MARK_API_ENDPOINT=http://127.0.0.1:4222
+          export SECRET=devsecret # pragma: allowlist secret
           EOF
 
       - name: Run database migrations
         run: |
-          cd apps/api
           export DATABASE_URL="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
           export DATABASE_URL_DIRECT="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
-          npx prisma migrate deploy
-          npx prisma generate
+          yarn --cwd apps/api prisma migrate deploy
+          yarn --cwd apps/api prisma generate
 
       - name: Install Playwright browsers
         run: yarn playwright:install
 
+      - name: Build API for E2E
+        run: yarn --cwd apps/api build
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Build API Gateway for E2E
+        run: yarn --cwd apps/api-gateway build
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
       - name: Build web app for E2E
         run: yarn --cwd apps/web build:e2e
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Run Playwright tests
         run: yarn test:e2e:all

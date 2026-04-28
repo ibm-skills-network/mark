@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "lint:staged": "eslint",
     "start": "dotenv -e ./dev.env -- nest start",
-    "start:e2e": "dotenv -e ./dev.env -- env AUTH_DISABLED=false nest start",
+    "start:e2e": "dotenv -e ./dev.env -- env AUTH_DISABLED=false node dist/main",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
