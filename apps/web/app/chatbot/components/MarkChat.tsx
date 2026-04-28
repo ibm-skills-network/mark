@@ -2354,6 +2354,8 @@ export const MarkChat = () => {
                 );
               }
             }
+          } catch (saveError) {
+            console.error("MarkChat: saveAssistantMessage failed:", saveError);
           } finally {
             isPersistingAssistant = false;
           }

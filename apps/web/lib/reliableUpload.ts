@@ -1,7 +1,11 @@
-/**
- * Reliable single-request upload service with retry logic and progress tracking.
- * For a single presigned PUT URL, we should upload the full file in one request.
- */
+import { getBaseApiPath } from "@/config/constants";
+import type {
+  MultipartUploadCompleteRequest,
+  MultipartUploadCompletedPart,
+  MultipartUploadInitiateResponse,
+  UploadRequest,
+} from "@config/types";
+import { apiClient } from "./api-client";
 
 interface UploadProgress {
   loaded: number;
@@ -9,13 +13,7 @@ interface UploadProgress {
   percentage: number;
 }
 
-interface ReliableUploadOptions {
-  onProgress?: (progress: UploadProgress) => void;
-  maxRetries?: number;
-  retryDelay?: number;
-  timeout?: number;
-}
-
+// Per-part defaults: 3 retries, 1s initial backoff, 5-minute timeout
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY = 1000;
 const DEFAULT_TIMEOUT = 5 * 60 * 1000;
@@ -24,16 +22,35 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function uploadSinglePutWithRetry(
-  file: File,
-  presignedUrl: string,
-  options: ReliableUploadOptions = {},
+async function initiateMultipartUpload(
+  uploadRequest: UploadRequest,
+): Promise<MultipartUploadInitiateResponse> {
+  const url = `${getBaseApiPath("v1")}/files/upload/initiate`;
+  return apiClient.post<MultipartUploadInitiateResponse>(url, uploadRequest);
+}
+
+async function completeMultipartUpload(
+  request: MultipartUploadCompleteRequest,
 ): Promise<void> {
+  const url = `${getBaseApiPath("v1")}/files/upload/complete`;
+  await apiClient.post(url, request);
+}
+
+async function uploadPartWithRetry(
+  chunk: Blob,
+  partUrl: string,
+  options: {
+    maxRetries?: number;
+    retryDelay?: number;
+    timeout?: number;
+    onUploadedBytes?: (loadedBytes: number) => void;
+  } = {},
+): Promise<string> {
   const {
-    onProgress,
     maxRetries = DEFAULT_MAX_RETRIES,
     retryDelay = DEFAULT_RETRY_DELAY,
     timeout = DEFAULT_TIMEOUT,
+    onUploadedBytes,
   } = options;
 
   let lastError: Error | undefined;
@@ -43,12 +60,9 @@ async function uploadSinglePutWithRetry(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      const response = await fetch(presignedUrl, {
+      const response = await fetch(partUrl, {
         method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
+        body: chunk,
         signal: controller.signal,
       });
 
@@ -60,91 +74,88 @@ async function uploadSinglePutWithRetry(
         );
       }
 
-      if (onProgress) {
-        onProgress({
-          loaded: file.size,
-          total: file.size,
-          percentage: 100,
-        });
+      // S3 returns an ETag per part; collected and sent in the complete call
+      const etag = response.headers.get("etag");
+      if (!etag) {
+        throw new Error("Multipart upload response missing ETag header");
       }
 
-      return;
+      onUploadedBytes?.(chunk.size);
+      return etag;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      // Timeout aborts are not retryable
       if (lastError.name === "AbortError") {
         break;
       }
 
       if (attempt < maxRetries) {
+        // Exponential backoff: 1s → 2s → 4s
         const backoffDelay = retryDelay * Math.pow(2, attempt);
         await sleep(backoffDelay);
       }
     }
   }
 
-  throw lastError || new Error("Upload failed");
+  throw lastError || new Error("Multipart upload failed");
 }
 
-/**
- * Kept for backwards compatibility; now always uses a single PUT request.
- */
-export async function uploadWithChunking(
+export async function reliableUpload(
   file: File,
-  presignedUrl: string,
-  options: ReliableUploadOptions = {},
-): Promise<void> {
+  uploadRequest: UploadRequest,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<MultipartUploadInitiateResponse> {
   if (file.size === 0) {
     throw new Error("Cannot upload empty file");
   }
 
-  await uploadSinglePutWithRetry(file, presignedUrl, options);
-}
+  const multipartUpload = await initiateMultipartUpload(uploadRequest);
 
-/**
- * Upload with fetch retries first, then axios fallback for client-side progress events.
- */
-export async function reliableUpload(
-  file: File,
-  presignedUrl: string,
-  onProgress?: (progress: UploadProgress) => void,
-): Promise<void> {
-  try {
-    await uploadWithChunking(file, presignedUrl, {
-      onProgress,
-      maxRetries: DEFAULT_MAX_RETRIES,
-      retryDelay: DEFAULT_RETRY_DELAY,
-      timeout: DEFAULT_TIMEOUT,
-    });
-  } catch (error) {
-    const axios = (await import("axios")).default;
-
-    try {
-      await axios.put(presignedUrl, file, {
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        onUploadProgress: onProgress
-          ? (progressEvent) => {
-              if (progressEvent.total) {
-                onProgress({
-                  loaded: progressEvent.loaded,
-                  total: progressEvent.total,
-                  percentage: Math.round(
-                    (progressEvent.loaded / progressEvent.total) * 100,
-                  ),
-                });
-              }
-            }
-          : undefined,
-        timeout: 10 * 60 * 1000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      });
-    } catch {
-      throw new Error(
-        `Upload failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+  if (!multipartUpload.uploadId || !multipartUpload.urls?.length) {
+    throw new Error("Failed to initialize multipart upload");
   }
+
+  const completedParts: MultipartUploadCompletedPart[] = [];
+  let loadedBytes = 0;
+
+  for (const part of multipartUpload.urls) {
+    // Compute the byte range for this part
+    const start = (part.partNumber - 1) * multipartUpload.partSizeBytes;
+    const end = Math.min(start + multipartUpload.partSizeBytes, file.size);
+    const chunk = file.slice(start, end);
+
+    // PUT the chunk directly to S3 via its presigned URL; returns the ETag
+    const etag = await uploadPartWithRetry(chunk, part.url, {
+      onUploadedBytes: (chunkBytes) => {
+        loadedBytes += chunkBytes;
+        onProgress?.({
+          loaded: loadedBytes,
+          total: file.size,
+          percentage: Math.round((loadedBytes / file.size) * 100),
+        });
+      },
+    });
+
+    // S3 needs each part's ETag to assemble the final object
+    completedParts.push({
+      partNumber: part.partNumber,
+      etag,
+    });
+  }
+
+  await completeMultipartUpload({
+    uploadId: multipartUpload.uploadId,
+    key: multipartUpload.key,
+    uploadType: uploadRequest.uploadType,
+    parts: completedParts,
+  });
+
+  onProgress?.({
+    loaded: file.size,
+    total: file.size,
+    percentage: 100,
+  });
+
+  return multipartUpload;
 }

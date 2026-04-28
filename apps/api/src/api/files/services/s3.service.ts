@@ -1,8 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import {
+  AbortMultipartUploadCommand,
+  AbortMultipartUploadCommandInput,
+  AbortMultipartUploadCommandOutput,
+  CompleteMultipartUploadCommand,
+  CompleteMultipartUploadCommandInput,
+  CompleteMultipartUploadCommandOutput,
   CopyObjectCommand,
   CopyObjectCommandInput,
   CopyObjectCommandOutput,
+  CreateMultipartUploadCommand,
+  CreateMultipartUploadCommandInput,
+  CreateMultipartUploadCommandOutput,
   DeleteObjectCommand,
   DeleteObjectCommandInput,
   DeleteObjectCommandOutput,
@@ -24,6 +33,8 @@ import {
   PutObjectCommandInput,
   PutObjectCommandOutput,
   S3Client,
+  UploadPartCommand,
+  UploadPartCommandInput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl as getS3SignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -89,15 +100,9 @@ export class S3Service {
       return true;
     } catch (error: unknown) {
       const typedError = error as {
-        code?: string;
-        name?: string;
         $metadata?: { httpStatusCode?: number };
       };
-      if (
-        typedError?.code === "NotFound" ||
-        typedError?.name === "NotFound" ||
-        typedError?.$metadata?.httpStatusCode === 404
-      ) {
+      if (typedError?.$metadata?.httpStatusCode === 404) {
         return false;
       }
       throw error;
@@ -112,7 +117,7 @@ export class S3Service {
   }
 
   async getSignedUrl(
-    operation: string,
+    operation: "getObject" | "putObject" | "uploadPart",
     parameters: {
       Bucket: string;
       Key: string;
@@ -138,7 +143,38 @@ export class S3Service {
       });
     }
 
-    throw new Error(`Unsupported signed URL operation: ${operation}`);
+    if (operation === "uploadPart") {
+      return getS3SignedUrl(
+        client,
+        new UploadPartCommand(commandParameters as UploadPartCommandInput),
+        {
+          expiresIn,
+        },
+      );
+    }
+
+    throw new Error("Unsupported signed URL operation");
+  }
+
+  async createMultipartUpload(
+    parameters: CreateMultipartUploadCommandInput,
+  ): Promise<CreateMultipartUploadCommandOutput> {
+    const client = this.getS3Client(parameters.Bucket);
+    return client.send(new CreateMultipartUploadCommand(parameters));
+  }
+
+  async completeMultipartUpload(
+    parameters: CompleteMultipartUploadCommandInput,
+  ): Promise<CompleteMultipartUploadCommandOutput> {
+    const client = this.getS3Client(parameters.Bucket);
+    return client.send(new CompleteMultipartUploadCommand(parameters));
+  }
+
+  async abortMultipartUpload(
+    parameters: AbortMultipartUploadCommandInput,
+  ): Promise<AbortMultipartUploadCommandOutput> {
+    const client = this.getS3Client(parameters.Bucket);
+    return client.send(new AbortMultipartUploadCommand(parameters));
   }
 
   async putObject(
@@ -181,17 +217,29 @@ export class S3Service {
     return client.send(new HeadBucketCommand(parameters));
   }
 
-  getBucketName(uploadType: string): string | undefined {
-    const buckets: Record<string, string> = {
-      author: process.env.IBM_COS_AUTHOR_BUCKET ?? "",
-      learner: process.env.IBM_COS_LEARNER_BUCKET ?? "",
-      "learner-prod": process.env.IBM_COS_LEARNER_BUCKET_PROD ?? "",
-      debug: process.env.IBM_COS_DEBUG_BUCKET ?? "",
-    };
-    if (buckets[uploadType]) {
-      return buckets[uploadType];
+  private static readonly BUCKET_ENV_VAR_BY_TYPE: Record<string, string> = {
+    author: "IBM_COS_AUTHOR_BUCKET",
+    learner: "IBM_COS_LEARNER_BUCKET",
+    "learner-prod": "IBM_COS_LEARNER_BUCKET_PROD",
+    debug: "IBM_COS_DEBUG_BUCKET",
+  };
+
+  getBucketName(uploadType: string): string {
+    const environmentVariable = S3Service.BUCKET_ENV_VAR_BY_TYPE[uploadType];
+    if (!environmentVariable) {
+      throw new BadRequestException(
+        `Unknown upload type '${uploadType}'. Valid types: ${Object.keys(
+          S3Service.BUCKET_ENV_VAR_BY_TYPE,
+        ).join(", ")}`,
+      );
     }
-    throw new Error(`Bucket not found for upload type: ${uploadType}`);
+    const bucket = process.env[environmentVariable];
+    if (!bucket) {
+      throw new Error(
+        `Bucket env var ${environmentVariable} is not set (upload type: '${uploadType}')`,
+      );
+    }
+    return bucket;
   }
 
   /**

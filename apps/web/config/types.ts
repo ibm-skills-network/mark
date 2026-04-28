@@ -92,6 +92,37 @@ export interface UploadResponse {
   maxAllowedBytes: number;
 }
 
+export interface MultipartUploadPartUrl {
+  partNumber: number;
+  url: string;
+}
+
+export interface MultipartUploadInitiateResponse {
+  uploadId: string;
+  key: string;
+  bucket: string;
+  fileType: string;
+  fileName: string;
+  uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
+  partSizeBytes: number;
+  urls: MultipartUploadPartUrl[];
+}
+
+export interface MultipartUploadCompletedPart {
+  partNumber: number;
+  etag: string;
+}
+
+export interface MultipartUploadCompleteRequest {
+  uploadId: string;
+  key: string;
+  uploadType: UploadType;
+  parts: MultipartUploadCompletedPart[];
+}
+
 export interface FileMetadata {
   cosKey: string;
   cosBucket: string;

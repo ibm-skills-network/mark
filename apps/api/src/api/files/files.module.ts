@@ -11,7 +11,7 @@ import { S3Service } from "./services/s3.service";
   imports: [
     MulterModule.register({
       storage: memoryStorage(),
-      limits: { fileSize: 50 * 1024 * 1024 },
+      limits: { fileSize: 100 * 1024 * 1024 },
     }),
   ],
   controllers: [FilesController],
