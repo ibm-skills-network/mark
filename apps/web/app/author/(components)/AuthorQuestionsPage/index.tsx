@@ -704,7 +704,7 @@ const AuthorQuestionsPage: FC<Props> = ({
           {...attributes}
         >
           <div
-            className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
+            className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-400 w-full ${
               focusedQuestionId === question.id
                 ? "border-1 border-violet-600 shadow-md"
                 : "shadow-sm"
