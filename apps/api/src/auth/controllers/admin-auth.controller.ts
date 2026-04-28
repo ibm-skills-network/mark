@@ -188,7 +188,7 @@ export class AdminAuthController {
       const sessionToken =
         await this.adminVerificationService.generateAdminSession(email);
       const expiresAt = new Date(
-        Date.now() + 24 * 60 * 60 * 1000,
+        Date.now() + AdminVerificationService.ADMIN_SESSION_TTL_MS,
       ).toISOString();
 
       return {
@@ -232,6 +232,40 @@ export class AdminAuthController {
     } catch {
       throw new BadRequestException("Failed to logout");
     }
+  }
+
+  @Post("logout-all")
+  @ApiOperation({
+    summary: "Logout every admin session for the current admin",
+    description:
+      "Revokes every active admin session that belongs to the same email as the supplied session token.",
+  })
+  @ApiResponse({ status: 200, description: "All sessions revoked" })
+  @ApiResponse({ status: 403, description: "Invalid or expired admin session" })
+  async logoutAll(
+    @Body() request: { sessionToken: string },
+  ): Promise<{ message: string; revokedCount: number }> {
+    const { sessionToken } = request;
+
+    if (!sessionToken) {
+      throw new BadRequestException("Session token is required");
+    }
+
+    const userInfo =
+      await this.adminVerificationService.verifyAdminSession(sessionToken);
+    if (!userInfo) {
+      throw new ForbiddenException("Invalid or expired admin session");
+    }
+
+    const revokedCount =
+      await this.adminVerificationService.revokeAllSessionsForEmail(
+        userInfo.email,
+      );
+
+    return {
+      message: "All admin sessions revoked",
+      revokedCount,
+    };
   }
 
   @Post("test-email")

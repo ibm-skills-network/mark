@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Mail, Shield, Users, MessageSquare } from "lucide-react";
+import { writeAdminSessionToStorage } from "@/lib/admin-session";
 
 interface AdminLoginProps {
   onAuthenticated: (sessionToken: string) => void;
@@ -75,9 +76,11 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
         throw new Error(data.message || "Failed to verify code");
       }
 
-      localStorage.setItem("adminSessionToken", data.sessionToken);
-      localStorage.setItem("adminEmail", email);
-      localStorage.setItem("adminExpiresAt", data.expiresAt);
+      writeAdminSessionToStorage({
+        sessionToken: data.sessionToken,
+        email,
+        expiresAt: data.expiresAt,
+      });
 
       onAuthenticated(data.sessionToken);
     } catch (err) {
