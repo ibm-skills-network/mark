@@ -4,7 +4,6 @@ set -euo pipefail
 # Allow each backgrounded service to own a process group so cleanup can stop
 # the full tree instead of only the parent shell wrapper.
 set -m
-if [ -n "${CI:-}" ]; then set -x; fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -119,6 +118,7 @@ start_service "web app" yarn --cwd "${REPO_ROOT}/apps/web" start:e2e
 
 wait_for_http_ready "Mark API" "${PW_MARK_API_BASE_URL:-http://127.0.0.1:${API_PORT:-4222}}/health/readiness" 120 ensure_services_running
 wait_for_http_ready "API gateway" "${PW_GATEWAY_BASE_URL:-${API_GATEWAY_HOST:-http://127.0.0.1:${API_GATEWAY_PORT:-8000}}}/health/readiness" 120 ensure_services_running
+wait_for_http_ready "web app" "${PW_WEB_BASE_URL:-http://localhost:${PORT:-3010}}" 120 ensure_services_running
 
-echo "✅ E2E servers are running. Waiting for Playwright's web check..."
+echo "✅ E2E servers are ready."
 monitor_services
