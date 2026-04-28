@@ -2,11 +2,10 @@ import { HttpModule } from "@nestjs/axios";
 import { Logger, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
-import { PrismaService } from "../../database/prisma.service";
+import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { LtiGradeSyncService } from "./services/lti-grade-sync.service";
 import { LtiSyncScheduler } from "./schedulers/lti-sync-scheduler";
 import { LtiSyncAdminController } from "./controllers/lti-sync-admin.controller";
-import { AdminEmailService } from "../../auth/services/admin-email.service";
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
 
@@ -60,11 +59,9 @@ export function resolveTimeoutSeconds(
       },
     }),
     ScheduleModule.forRoot(),
+    AdminAuthModule,
   ],
   providers: [
-    PrismaService,
-    AdminEmailService,
-    ConfigService,
     LtiGradeSyncService,
     {
       provide: "LtiGradeSyncService",

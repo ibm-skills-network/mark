@@ -162,7 +162,6 @@ model publishJob {
   updatedAt    DateTime @updatedAt
   result       Json?
 }
-
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
   id           Int             @id @default(autoincrement()) /// Unique identifier for the AI usage log
@@ -297,7 +296,6 @@ model Assignment {
   GradingAudit                 GradingAudit[]
 
   Chat Chat[]
-
   GradingJob       GradingJob[]
   AssignmentAuthor AssignmentAuthor[]
   versions         AssignmentVersion[] @relation("AssignmentVersions")
@@ -478,7 +476,6 @@ model AssignmentAttempt {
   comments            String? /// Additional comments or notes for the assignment attempt from the system
   preferredLanguage   String?
   gradingProgress     GradingProgress?
-
   GradingJob   GradingJob[]
   LtiGradeSync LtiGradeSync[]
 
@@ -563,6 +560,8 @@ model QuestionResponse {
   feedback            Json /// Feedback on the student's response, stored as JSON
   metadata            Json? /// Optional additional metadata about the response
   gradedAt            DateTime? /// Timestamp for when the response was graded
+
+  @@index([assignmentAttemptId])
 }
 
 /// This model captures feedback and regrading requests for assignments

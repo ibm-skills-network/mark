@@ -127,21 +127,98 @@ describe("AssignmentAttemptAccessControlGuard — hostile input", () => {
       expect(Number.isNaN(arg?.where?.id)).toBe(false);
     }
   });
+});
 
-  it("throws NotFoundException (not TypeError) when a learner's attempt pre-check returns null", async () => {
-    // The LEARNER-only pre-check previously assumed findUnique always returned
-    // a row; if the attemptId doesn't exist it returned null and the guard
-    // NPE'd on `userId.userId`.
-    prisma.assignmentAttempt.findUnique.mockResolvedValue(null);
+describe("AssignmentAttemptAccessControlGuard", () => {
+  const mockPrisma = {
+    assignment: {
+      findUnique: jest.fn(),
+    },
+    assignmentGroup: {
+      findFirst: jest.fn(),
+    },
+    assignmentAttempt: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    question: {
+      findFirst: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  } as unknown as PrismaService;
 
-    const context = buildContext(
-      { assignmentId: "1", attemptId: "999999" },
-      UserRole.LEARNER,
+  const logger = {
+    child: jest.fn().mockReturnValue({
+      warn: jest.fn(),
+    }),
+  };
+
+  let guard: AssignmentAttemptAccessControlGuard;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    guard = new AssignmentAttemptAccessControlGuard(
+      new Reflector(),
+      mockPrisma,
+      logger as never,
     );
+  });
 
-    const promise = guard.canActivate(context);
+  const createContext = (): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          userSession: {
+            userId: "learner-1",
+            role: UserRole.LEARNER,
+            groupId: "group-1",
+          },
+          params: {
+            assignmentId: "42",
+            attemptId: "88",
+          },
+          method: "GET",
+          originalUrl: "/assignments/42/attempts/88",
+        }),
+      }),
+    }) as ExecutionContext;
 
-    await expect(promise).rejects.toBeInstanceOf(NotFoundException);
-    await expect(promise).rejects.not.toBeInstanceOf(TypeError);
+  it("checks learner-owned attempt access with a single attempt query inside the transaction", async () => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { id: 42 },
+        { id: 1, assignmentId: 42, groupId: "group-1" },
+        { id: 88, assignmentId: 42, userId: "learner-1" },
+        undefined,
+      ]);
+
+    await expect(guard.canActivate(createContext())).resolves.toBe(true);
+
+    expect(mockPrisma.assignmentAttempt.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.assignmentAttempt.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 88,
+        assignmentId: 42,
+        userId: "learner-1",
+      },
+    });
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws not found when the learner does not own the attempt", async () => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { id: 42 },
+        { id: 1, assignmentId: 42, groupId: "group-1" },
+        null,
+        undefined,
+      ]);
+
+    await expect(guard.canActivate(createContext())).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(mockPrisma.assignmentAttempt.findUnique).not.toHaveBeenCalled();
   });
 });

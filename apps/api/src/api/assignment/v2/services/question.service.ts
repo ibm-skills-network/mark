@@ -13,6 +13,8 @@ import {
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   EnhancedQuestionsToGenerate,
@@ -42,6 +44,7 @@ export class QuestionService {
     private readonly translationService: TranslationService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobQueueService: JobQueueService,
   ) {}
 
   async getQuestionsForAssignment(
@@ -106,7 +109,7 @@ export class QuestionService {
   async processQuestionsForPublishing(
     assignmentId: number,
     questions: QuestionDto[],
-    jobId?: number,
+    jobId?: string,
     progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
   ): Promise<Map<number, number>> {
@@ -237,7 +240,7 @@ export class QuestionService {
           assignmentId,
           upsertedQuestion.id,
           questionDto,
-          jobId || 0,
+          jobId,
           true,
         );
 
@@ -361,7 +364,7 @@ export class QuestionService {
     assignmentId: number,
     payload: QuestionGenerationPayload,
     userId: string,
-  ): Promise<{ message: string; jobId: number }> {
+  ): Promise<{ message: string; jobId: string }> {
     this.validateQuestionGenerationPayload(payload);
     const files = await this.resolveQuestionGenerationFiles(
       assignmentId,
@@ -369,23 +372,35 @@ export class QuestionService {
     );
 
     const job = await this.jobStatusService.createJob(assignmentId, userId);
-
-    this.startQuestionGenerationProcess(
-      assignmentId,
-      job.id,
-      payload.assignmentType,
-      payload.questionsToGenerate,
-      files,
-      payload.learningObjectives,
-    ).catch((error: unknown) => {
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS,
+        {
+          assignmentId,
+          assignmentType: payload.assignmentType,
+          fileContents: files,
+          jobId: job.id,
+          learningObjectives: payload.learningObjectives,
+          questionsToGenerate: payload.questionsToGenerate,
+        },
+        {
+          jobId: job.id,
+        },
+      );
+    } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
-        `Question generation failed: ${errorMessage}`,
-        errorStack,
+      await this.jobStatusService.updateJobStatus(
+        job.id,
+        {
+          status: "Failed",
+          progress: `Failed to enqueue question generation job: ${errorMessage}`,
+        },
+        false,
       );
-    });
+      throw error;
+    }
 
     return { message: "Question generation started", jobId: job.id };
   }
@@ -432,9 +447,9 @@ export class QuestionService {
 
     await Promise.all(updates);
   }
-  private async startQuestionGenerationProcess(
+  async runQuestionGenerationJob(
     assignmentId: number,
-    jobId: number,
+    jobId: string,
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: EnhancedQuestionsToGenerate,
     files?: { filename: string; content: string }[],
@@ -660,7 +675,7 @@ export class QuestionService {
     questionId: number,
     variants: VariantDto[],
     existingVariants: VariantDto[],
-    jobId?: number,
+    jobId?: string,
     forceTranslation = false,
   ): Promise<void> {
     const existingVariantsMap = new Map<string, VariantDto>();
@@ -752,7 +767,7 @@ export class QuestionService {
           questionId,
           updatedVariant.id,
           updatedVariant as unknown as VariantDto,
-          jobId || 0,
+          jobId,
           true,
         );
       } else {
@@ -772,7 +787,7 @@ export class QuestionService {
           questionId,
           newVariant.id,
           newVariant as unknown as VariantDto,
-          jobId || 0,
+          jobId,
           true,
         );
       }

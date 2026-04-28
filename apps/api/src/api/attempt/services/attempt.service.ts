@@ -2,9 +2,9 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
 import { Inject, Injectable } from "@nestjs/common";
-import { GradingJob, ReportType } from "@prisma/client";
+import { ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
-import { catchError, Observable, of, Subject } from "rxjs";
+import { Observable } from "rxjs";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -21,13 +21,20 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
+import { randomUUID } from "node:crypto";
 import {
   UserRole,
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import {
+  JOB_NAMES,
+  JOB_QUEUE_NAMES,
+} from "../../../job-queue/job-queue.constants";
+import { JobQueueService } from "../../../job-queue/job-queue.service";
+import { JobStateService } from "../../../job-queue/job-state.service";
+import { JobStateRecord } from "../../../job-queue/job-state.types";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -36,53 +43,72 @@ import { GradingProgressService } from "./grading-progress.service";
 
 @Injectable()
 export class AttemptServiceV2 {
-  private gradingJobStreams = new Map<number, Subject<MessageEvent>>();
   constructor(
     private readonly prisma: PrismaService,
     private readonly submissionService: AttemptSubmissionService,
     private readonly feedbackService: AttemptFeedbackService,
     private readonly regradingService: AttemptRegradingService,
     private readonly reportingService: AttemptReportingService,
-    private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobStateService: JobStateService,
+    private readonly jobQueueService: JobQueueService,
     @Inject("GradingProgressService")
     private readonly gradingProgressService?: GradingProgressService,
   ) {}
+
+  private buildGradingActiveKey(
+    userId: string,
+    assignmentId: number,
+    attemptId: number | null,
+  ): string {
+    return [
+      "grading",
+      userId,
+      String(assignmentId),
+      attemptId === null ? "author-preview" : String(attemptId),
+    ].join(":");
+  }
 
   /**
    * Create a grading job for author preview (no attemptId)
    */
   async createAuthorGradingJob(
     assignmentId: number,
-    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    authCookie: string,
+    _updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    _authCookie: string,
     request: UserSessionRequest,
-  ): Promise<{ gradingJobId: number; message: string }> {
-    const existingJob = await this.prisma.gradingJob.findFirst({
-      where: {
-        attemptId: null,
-        assignmentId,
-        userId: request.userSession.userId,
-        status: { in: ["Pending", "Processing"] },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+  ): Promise<{ gradingJobId: string; message: string }> {
+    void _updateDto;
+    void _authCookie;
+    const activeKey = this.buildGradingActiveKey(
+      request.userSession.userId,
+      assignmentId,
+      null,
+    );
+    const temporaryJobId = randomUUID();
+    const existingJobId = await this.jobStateService.acquireActiveJobLock(
+      activeKey,
+      temporaryJobId,
+    );
 
-    if (existingJob) {
+    if (existingJobId !== null) {
       return {
-        gradingJobId: existingJob.id,
+        gradingJobId: existingJobId,
         message:
           "Author preview job is already in progress. Reusing existing job.",
       };
     }
 
-    const gradingJob = await this.prisma.gradingJob.create({
-      data: {
-        attemptId: null,
-        assignmentId,
-        userId: request.userSession.userId,
-        status: "Pending",
-        progress: "Author preview job created",
-      },
+    const gradingJob = await this.jobStateService.createJob({
+      queueName: JOB_QUEUE_NAMES.ATTEMPT,
+      jobName: JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW,
+      kind: "attempt-author-preview",
+      attemptId: null,
+      assignmentId,
+      userId: request.userSession.userId,
+      status: "Pending",
+      progress: "Author preview job created",
+      activeKey,
+      reservedId: temporaryJobId,
     });
 
     return {
@@ -97,36 +123,42 @@ export class AttemptServiceV2 {
   async createGradingJob(
     attemptId: number,
     assignmentId: number,
-    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    authCookie: string,
+    _updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    _authCookie: string,
     request: UserSessionRequest,
-  ): Promise<{ gradingJobId: number; message: string }> {
-    const existingJob = await this.prisma.gradingJob.findFirst({
-      where: {
-        attemptId,
-        assignmentId,
-        userId: request.userSession.userId,
-        status: { in: ["Pending", "Processing"] },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+  ): Promise<{ gradingJobId: string; message: string }> {
+    void _updateDto;
+    void _authCookie;
+    const activeKey = this.buildGradingActiveKey(
+      request.userSession.userId,
+      assignmentId,
+      attemptId,
+    );
+    const temporaryJobId = randomUUID();
+    const existingJobId = await this.jobStateService.acquireActiveJobLock(
+      activeKey,
+      temporaryJobId,
+    );
 
-    if (existingJob) {
+    if (existingJobId !== null) {
       return {
-        gradingJobId: existingJob.id,
+        gradingJobId: existingJobId,
         message:
           "A grading job is already running for this attempt. Reusing existing job.",
       };
     }
 
-    const gradingJob = await this.prisma.gradingJob.create({
-      data: {
-        attemptId,
-        assignmentId,
-        userId: request.userSession.userId,
-        status: "Pending",
-        progress: "Grading job created",
-      },
+    const gradingJob = await this.jobStateService.createJob({
+      queueName: JOB_QUEUE_NAMES.ATTEMPT,
+      jobName: JOB_NAMES.ATTEMPT_GRADE,
+      kind: "attempt-grading",
+      attemptId,
+      assignmentId,
+      userId: request.userSession.userId,
+      status: "Pending",
+      progress: "Grading job created",
+      activeKey,
+      reservedId: temporaryJobId,
     });
 
     return {
@@ -135,11 +167,93 @@ export class AttemptServiceV2 {
     };
   }
 
+  async enqueueGradingJob(
+    gradingJobId: string,
+    attemptId: number,
+    assignmentId: number,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    authCookie: string,
+    request: UserSessionRequest,
+  ): Promise<void> {
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ATTEMPT,
+        JOB_NAMES.ATTEMPT_GRADE,
+        {
+          assignmentId,
+          attemptId,
+          gradingJobId,
+          updateDto,
+          userSession: {
+            gradingCallbackRequired:
+              request.userSession.gradingCallbackRequired,
+            role: request.userSession.role,
+            userId: request.userSession.userId,
+          },
+          ...(request.userSession.gradingCallbackRequired && authCookie
+            ? { authCookie }
+            : {}),
+        },
+        {
+          jobId: gradingJobId,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.updateGradingJobStatus(gradingJobId, {
+        status: "Failed",
+        progress: `Failed to enqueue grading job: ${errorMessage}`,
+        percentage: 0,
+      });
+      throw error;
+    }
+  }
+
+  async enqueueAuthorPreviewJob(
+    gradingJobId: string,
+    assignmentId: number,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    _authCookie: string,
+    request: UserSessionRequest,
+  ): Promise<void> {
+    void _authCookie;
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ATTEMPT,
+        JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW,
+        {
+          assignmentId,
+          gradingJobId,
+          updateDto,
+          userSession: {
+            gradingCallbackRequired:
+              request.userSession.gradingCallbackRequired,
+            role: request.userSession.role,
+            userId: request.userSession.userId,
+          },
+        },
+        {
+          jobId: gradingJobId,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.updateGradingJobStatus(gradingJobId, {
+        status: "Failed",
+        progress: `Failed to enqueue author preview job: ${errorMessage}`,
+        percentage: 0,
+      });
+      throw error;
+    }
+  }
+
   /**
    * Process author preview job asynchronously
    */
   async processAuthorPreviewJob(
-    gradingJobId: number,
+    gradingJobId: string,
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
@@ -190,7 +304,7 @@ export class AttemptServiceV2 {
    * Process the grading job asynchronously
    */
   async processGradingJob(
-    gradingJobId: number,
+    gradingJobId: string,
     attemptId: number,
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
@@ -254,6 +368,10 @@ export class AttemptServiceV2 {
 
       if (this.gradingProgressService) {
         this.gradingProgressService.removeProgressCallback(attemptId);
+        // Guard against author preview jobs which use attemptId = -1
+        if (attemptId > 0) {
+          await this.gradingProgressService.markFailed(attemptId, errorMessage);
+        }
       }
       throw error;
     }
@@ -262,17 +380,15 @@ export class AttemptServiceV2 {
   /**
    * Get grading job by ID
    */
-  async getGradingJob(gradingJobId: number): Promise<GradingJob | null> {
-    return this.prisma.gradingJob.findUnique({
-      where: { id: gradingJobId },
-    });
+  async getGradingJob(gradingJobId: string): Promise<JobStateRecord | null> {
+    return this.jobStateService.getJob(gradingJobId);
   }
 
   /**
    * Update grading job status
    */
   async updateGradingJobStatus(
-    gradingJobId: number,
+    gradingJobId: string,
     statusUpdate: {
       status: string;
       progress: string;
@@ -280,352 +396,21 @@ export class AttemptServiceV2 {
       result?: any;
     },
   ): Promise<void> {
-    await this.prisma.gradingJob.update({
-      where: { id: gradingJobId },
-      data: {
-        status: statusUpdate.status,
-        progress: statusUpdate.progress,
-        percentage: statusUpdate.percentage,
-        result: statusUpdate.result
-          ? JSON.stringify(statusUpdate.result)
-          : undefined,
-        updatedAt: new Date(),
-      },
-    });
-
-    this.emitGradingJobStatusUpdate(gradingJobId, statusUpdate);
+    await this.jobStateService.updateJobStatus(gradingJobId, statusUpdate);
   }
 
   /**
    * Get grading job status stream with improved reliability
    */
-  getGradingJobStatusStream(gradingJobId: number): Observable<MessageEvent> {
-    if (!this.gradingJobStreams.has(gradingJobId)) {
-      this.gradingJobStreams.set(gradingJobId, new Subject<MessageEvent>());
-    }
-
-    const statusSubject = this.gradingJobStreams.get(gradingJobId);
-    if (!statusSubject) {
-      throw new Error(
-        `Grading job status stream for jobId ${gradingJobId} not found.`,
-      );
-    }
-
-    let lastUpdateTime = Date.now();
-    let heartbeatInterval: NodeJS.Timeout;
-    let isStreamActive = true;
-
-    return new Observable<MessageEvent>((subscriber) => {
-      subscriber.next({
-        type: "update",
-        data: JSON.stringify({
-          message: "Connected to grading service...",
-          timestamp: new Date().toISOString(),
-          connectionId: `${gradingJobId}-${Date.now()}`,
-        }),
-      } as MessageEvent);
-
-      heartbeatInterval = setInterval(() => {
-        if (isStreamActive && Date.now() - lastUpdateTime > 15_000) {
-          subscriber.next({
-            type: "heartbeat",
-            data: JSON.stringify({
-              heartbeat: true,
-              timestamp: new Date().toISOString(),
-              jobId: gradingJobId,
-            }),
-          } as MessageEvent);
-        }
-      }, 10_000);
-      this.getInitialGradingJobStatus(gradingJobId)
-        .then((initialEvent) => {
-          if (initialEvent && isStreamActive) {
-            lastUpdateTime = Date.now();
-            subscriber.next(initialEvent);
-          }
-        })
-        .catch(() => {
-          subscriber.next({
-            type: "error",
-            data: JSON.stringify({
-              error: "Failed to get initial job status",
-              retryable: true,
-              timestamp: new Date().toISOString(),
-            }),
-          } as MessageEvent);
-        });
-
-      const pollScheduleMs = [
-        1000, 1000, 2000, 4000, 8000, 16_000, 28_000, 60_000,
-      ];
-      const steadyStatePollMs = 60_000;
-      let pollIndex = 0;
-      let consecutiveErrors = 0;
-
-      const getNextPollDelay = () =>
-        pollIndex < pollScheduleMs.length
-          ? pollScheduleMs[pollIndex]
-          : steadyStatePollMs;
-
-      const scheduleNextPoll = () => {
-        if (!isStreamActive) return;
-        const delay = getNextPollDelay();
-        pollIndex += 1;
-        setTimeout(() => void pollJob(), delay);
-      };
-
-      const pollJob = async () => {
-        if (!isStreamActive) return;
-
-        try {
-          const statusEvent = await this.pollGradingJobStatus(gradingJobId);
-
-          if (statusEvent && isStreamActive) {
-            lastUpdateTime = Date.now();
-            consecutiveErrors = 0;
-
-            subscriber.next(statusEvent);
-
-            const status = (statusEvent as { data?: { status?: string } })?.data
-              ?.status;
-
-            if (status === "Completed" || status === "Failed") {
-              isStreamActive = false;
-
-              setTimeout(() => {
-                subscriber.next({
-                  type: "finalize",
-                  data: JSON.stringify({
-                    status: "Stream completed",
-                    finalStatus: status,
-                    timestamp: new Date().toISOString(),
-                  }),
-                } as MessageEvent);
-                subscriber.complete();
-              }, 500);
-              return;
-            }
-          }
-        } catch {
-          consecutiveErrors++;
-
-          if (consecutiveErrors >= 3) {
-            subscriber.next({
-              type: "error",
-              data: JSON.stringify({
-                error: "Multiple polling failures detected",
-                consecutiveErrors,
-                nextRetryIn: getNextPollDelay(),
-                timestamp: new Date().toISOString(),
-              }),
-            } as MessageEvent);
-          }
-
-          if (consecutiveErrors >= 10) {
-            isStreamActive = false;
-            subscriber.error(
-              new Error(
-                `Job ${gradingJobId} monitoring failed after ${consecutiveErrors} consecutive errors`,
-              ),
-            );
-            return;
-          }
-        }
-
-        if (isStreamActive) {
-          scheduleNextPoll();
-        }
-      };
-
-      scheduleNextPoll();
-
-      const statusSubscription = statusSubject.asObservable().subscribe({
-        next: (event) => {
-          if (isStreamActive) {
-            lastUpdateTime = Date.now();
-            subscriber.next(event);
-          }
-        },
-        error: (error) => {
-          if (isStreamActive) {
-            subscriber.next({
-              type: "error",
-              data: JSON.stringify({
-                error: "Internal status update failed",
-                details: error instanceof Error ? error.message : String(error),
-                timestamp: new Date().toISOString(),
-              }),
-            } as MessageEvent);
-          }
-        },
-      });
-
-      return () => {
-        isStreamActive = false;
-
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-        }
-
-        statusSubscription.unsubscribe();
-        void this.cleanupGradingJobStream(gradingJobId);
-      };
-    }).pipe(
-      catchError((error: Error) => {
-        return of({
-          type: "error",
-          data: JSON.stringify({
-            error: "Stream connection failed",
-            details: error.message,
-            timestamp: new Date().toISOString(),
-            jobId: gradingJobId,
-          }),
-        } as MessageEvent);
-      }),
-    );
-  }
-
-  /**
-   * Get initial grading job status
-   */
-  private async getInitialGradingJobStatus(
-    gradingJobId: number,
-  ): Promise<MessageEvent> {
-    const job = await this.getGradingJob(gradingJobId);
-
-    if (!job) {
-      throw new Error(`Grading job with ID ${gradingJobId} not found.`);
-    }
-
-    return {
-      type: "update",
-      data: {
-        timestamp: new Date().toISOString(),
-        status: job.status,
-        progress: job.progress,
-        percentage: job.percentage || 0,
-        result: job.result ? JSON.parse(job.result as string) : undefined,
-        done: job.status === "Completed" || job.status === "Failed",
-      },
-    } as unknown as MessageEvent;
-  }
-
-  /**
-   * Poll grading job status with enhanced error handling
-   */
-  private async pollGradingJobStatus(
-    gradingJobId: number,
-  ): Promise<MessageEvent | null> {
-    try {
-      const job = await this.getGradingJob(gradingJobId);
-
-      if (!job) {
-        return {
-          type: "error",
-          data: JSON.stringify({
-            error: "Grading job not found",
-            jobId: gradingJobId,
-            timestamp: new Date().toISOString(),
-            retryable: false,
-          }),
-        } as MessageEvent;
-      }
-
-      let messageType = "update";
-      if (job.status === "Completed") {
-        messageType = "finalize";
-      } else if (job.status === "Failed") {
-        messageType = "error";
-      }
-
-      let parsedResult: any;
-      try {
-        parsedResult = job.result
-          ? JSON.parse(job.result as string)
-          : undefined;
-      } catch {
-        parsedResult = {
-          error: "Result parsing failed",
-          rawResult: job.result,
-        };
-      }
-
-      return {
-        type: messageType,
-        data: JSON.stringify({
-          timestamp: new Date().toISOString(),
-          status: job.status,
-          progress: job.progress || "Processing...",
-          percentage: job.percentage || 0,
-          result: parsedResult,
-          jobId: gradingJobId,
-          done: job.status === "Completed" || job.status === "Failed",
-        }),
-      } as MessageEvent;
-    } catch (error) {
-      throw new Error(
-        `Database error while polling job ${gradingJobId}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
-    }
-  }
-
-  /**
-   * Emit grading job status update
-   */
-  private emitGradingJobStatusUpdate(
-    gradingJobId: number,
-    statusUpdate: {
-      status: string;
-      progress: string;
-      percentage?: number;
-      result?: any;
-    },
-  ): void {
-    const subject = this.gradingJobStreams.get(gradingJobId);
-    if (subject) {
-      let messageType = "update";
-      if (statusUpdate.status === "Completed") {
-        messageType = "finalize";
-      } else if (statusUpdate.status === "Failed") {
-        messageType = "error";
-      }
-
-      subject.next({
-        type: messageType,
-        data: {
-          timestamp: new Date().toISOString(),
-          ...statusUpdate,
-          result: statusUpdate.result
-            ? JSON.stringify(statusUpdate.result)
-            : undefined,
-          done:
-            statusUpdate.status === "Completed" ||
-            statusUpdate.status === "Failed",
-        },
-      } as unknown as MessageEvent);
-
-      if (
-        statusUpdate.status === "Completed" ||
-        statusUpdate.status === "Failed"
-      ) {
-        setTimeout(() => {
-          void this.cleanupGradingJobStream(gradingJobId);
-        }, 1000);
-      }
-    }
+  getGradingJobStatusStream(gradingJobId: string): Observable<MessageEvent> {
+    return this.jobStateService.getJobStatusStream(gradingJobId);
   }
 
   /**
    * Cleanup grading job stream
    */
-  async cleanupGradingJobStream(gradingJobId: number): Promise<void> {
-    const subject = this.gradingJobStreams.get(gradingJobId);
-    if (subject) {
-      subject.complete();
-      this.gradingJobStreams.delete(gradingJobId);
-    }
+  async cleanupGradingJobStream(gradingJobId: string): Promise<void> {
+    await this.jobStateService.cleanupJobStream(gradingJobId);
   }
 
   /**

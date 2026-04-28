@@ -14,8 +14,10 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   createMockJob,
+  createMockJobQueueService,
   createMockJobStatusService,
   createMockLlmFacadeService,
   createMockPrismaService,
@@ -40,6 +42,7 @@ describe("QuestionService", () => {
   let translationService: ReturnType<typeof createMockTranslationService>;
   let llmFacadeService: ReturnType<typeof createMockLlmFacadeService>;
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
+  let jobQueueService: ReturnType<typeof createMockJobQueueService>;
 
   beforeEach(async () => {
     prismaService = createMockPrismaService();
@@ -48,6 +51,7 @@ describe("QuestionService", () => {
     translationService = createMockTranslationService();
     llmFacadeService = createMockLlmFacadeService();
     jobStatusService = createMockJobStatusService();
+    jobQueueService = createMockJobQueueService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,6 +79,10 @@ describe("QuestionService", () => {
         {
           provide: JobStatusServiceV2,
           useValue: jobStatusService,
+        },
+        {
+          provide: JobQueueService,
+          useValue: jobQueueService,
         },
       ],
     }).compile();
@@ -311,10 +319,6 @@ describe("QuestionService", () => {
 
         jobStatusService.createJob.mockResolvedValue(mockJob);
 
-        jest
-          .spyOn(questionService as any, "startQuestionGenerationProcess")
-          .mockResolvedValue(undefined);
-
         const result = await questionService.generateQuestions(
           assignmentId,
           payload,
@@ -324,6 +328,21 @@ describe("QuestionService", () => {
         expect(jobStatusService.createJob).toHaveBeenCalledWith(
           assignmentId,
           userId,
+        );
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          "mark.assignment.v2",
+          "assignment-v2.generate-questions",
+          {
+            assignmentId,
+            assignmentType: payload.assignmentType,
+            fileContents: payload.fileContents,
+            jobId: mockJob.id,
+            learningObjectives: payload.learningObjectives,
+            questionsToGenerate: payload.questionsToGenerate,
+          },
+          {
+            jobId: mockJob.id,
+          },
         );
         expect(result).toEqual({
           message: "Question generation started",
@@ -388,9 +407,6 @@ describe("QuestionService", () => {
 
         beforeEach(() => {
           jobStatusService.createJob.mockResolvedValue(mockJob);
-          jest
-            .spyOn(questionService as any, "startQuestionGenerationProcess")
-            .mockResolvedValue(undefined);
         });
 
         it('contentSource="payload" uses caller-supplied fileContents, never queries DB', async () => {
@@ -455,17 +471,14 @@ describe("QuestionService", () => {
             fileContents: [callerFile],
           });
 
-          const startSpy = jest
-            .spyOn(questionService as any, "startQuestionGenerationProcess")
-            .mockResolvedValue(undefined);
-
           await questionService.generateQuestions(
             assignmentId,
             payload,
             userId,
           );
 
-          const filesArg = startSpy.mock.calls[0][4] as Array<{
+          const filesArg = jobQueueService.enqueue.mock.calls[0][2]
+            .fileContents as Array<{
             filename: string;
             content: string;
           }>;

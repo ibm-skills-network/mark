@@ -7,7 +7,6 @@ import {
   Injectable,
   NotFoundException,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Put,
@@ -28,8 +27,7 @@ import {
 } from "@nestjs/swagger";
 import { ReportType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { concatWith, interval, Observable, of } from "rxjs";
-import { catchError, finalize, map, mergeMap } from "rxjs/operators";
+import { Observable } from "rxjs";
 import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
@@ -144,37 +142,20 @@ export class AssignmentControllerV1 {
   }
 
   @Get("jobs/:jobId/status-stream")
+  @Roles(UserRole.AUTHOR)
   @ApiOperation({ summary: "Stream publish job status" })
   @ApiParam({ name: "jobId", required: true, description: "Job ID" })
   @Sse("jobs/:jobId/status-stream")
-  sendPublishJobStatus(
-    @Param("jobId", ParseIntPipe) jobId: number,
-  ): Observable<MessageEvent> {
-    return this.jobStatusService.getJobStatusStream(jobId).pipe(
-      map((event) => ({
-        ...event,
-        type: (event.data as { done: boolean }).done ? "finalize" : "update",
-      })),
-      concatWith(
-        of({
-          type: "close",
-          data: { message: "Stream completed" },
-        } as MessageEvent),
-      ),
-      finalize(() => {
-        this.jobStatusService.cleanupJobStream(jobId);
-      }),
+  async sendPublishJobStatus(
+    @Param("jobId") jobId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<Observable<MessageEvent>> {
+    const job = await this.assignmentService.getJobStatus(jobId);
+    if (!job || job.userId !== request.userSession.userId) {
+      throw new NotFoundException("Job not found");
+    }
 
-      catchError((error: Error) => {
-        return of({
-          type: "error",
-          data: {
-            error: error.message,
-            done: true,
-          },
-        } as MessageEvent);
-      }),
-    );
+    return this.jobStatusService.getJobStatusStream(jobId);
   }
   @Put(":id/publish")
   @Roles(UserRole.AUTHOR)
@@ -191,7 +172,7 @@ export class AssignmentControllerV1 {
     @Param("id") id: number,
     @Body() updatedAssignment: UpdateAssignmentQuestionsDto,
     @Req() request: UserSessionRequest,
-  ): Promise<{ jobId: number; message: string }> {
+  ): Promise<{ jobId: string; message: string }> {
     if (
       updatedAssignment === undefined ||
       updatedAssignment.questions === undefined ||
@@ -294,41 +275,26 @@ export class AssignmentControllerV1 {
   }
 
   @Get("jobs/:jobId/status")
-  async getJobStatus(@Param("jobId", ParseIntPipe) jobId: number): Promise<{
+  @Roles(UserRole.AUTHOR)
+  async getJobStatus(
+    @Param("jobId") jobId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<{
     status: string;
     progress: string;
     questions?: LLMResponseQuestion[];
   }> {
     const job = await this.assignmentService.getJobStatus(jobId);
-    if (!job) {
+    if (!job || job.userId !== request.userSession.userId) {
       throw new NotFoundException("Job not found");
     }
     return job.status === "Completed"
       ? {
           status: job.status,
           progress: job.progress,
-          questions: job.result as unknown as LLMResponseQuestion[],
+          questions: job.result as LLMResponseQuestion[],
         }
       : { status: job.status, progress: job.progress };
-  }
-
-  @Sse("jobs/:jobId/status-stream")
-  sendJobStatus(@Param("jobId") jobId: number): Observable<MessageEvent> {
-    return interval(1000).pipe(
-      mergeMap(async () => {
-        const job = await this.assignmentService.getJobStatus(jobId);
-        if (!job) {
-          throw new NotFoundException("Job not found");
-        }
-        return { data: { status: job.status, progress: job.progress } };
-      }),
-      map(
-        (data) =>
-          ({
-            data,
-          }) as MessageEvent,
-      ),
-    );
   }
 
   @Post(":assignmentId/report")
@@ -516,7 +482,7 @@ export class AssignmentControllerV1 {
     @Param("assignmentId") assignmentId: number,
     @Body() body: QuestionGenerationPayload,
     @Req() request: UserSessionRequest,
-  ): Promise<{ message: string; jobId: number }> {
+  ): Promise<{ message: string; jobId: string }> {
     const {
       fileContents,
       learningObjectives,
@@ -573,7 +539,7 @@ export class AssignmentControllerV1 {
       userId,
     );
 
-    void this.assignmentService.handleFileContents(
+    await this.assignmentService.handleFileContents(
       assignmentIdNumber,
       job.id,
       assignmentType,

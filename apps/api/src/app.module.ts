@@ -16,6 +16,7 @@ import { UserSessionMiddleware } from "./auth/middleware/user.session.middleware
 import { CommonModule } from "./common/common.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
+import { JobQueueModule } from "./job-queue/job-queue.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
@@ -34,6 +35,7 @@ import { routes } from "./routes";
     AuthModule,
     AdminAuthModule,
     DatabaseModule,
+    JobQueueModule,
   ],
   providers: [AppService],
 })
@@ -50,6 +52,7 @@ export class AppModule implements NestModule {
         { path: "/v1/reports*", method: RequestMethod.ALL },
         { path: "/v1/chats*", method: RequestMethod.ALL },
         { path: "/v1/files*", method: RequestMethod.ALL },
+        { path: "/v1/admin/translations*", method: RequestMethod.ALL },
         { path: "/v2/assignments/*", method: RequestMethod.ALL },
         { path: "/v1/admin-dashboard/*", method: RequestMethod.GET },
       );

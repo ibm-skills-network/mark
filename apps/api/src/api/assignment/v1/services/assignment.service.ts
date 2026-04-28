@@ -12,7 +12,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { Job, Prisma, QuestionVariant, ReportType } from "@prisma/client";
+import { Prisma, QuestionVariant, ReportType } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
@@ -24,11 +24,14 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import { Logger } from "winston";
 import {
   getAllLanguageCodes,
   getLanguageNameFromCode,
 } from "../../attempt/helper/languages";
+import { JobStateRecord } from "src/job-queue/job-state.types";
 import {
   BaseAssignmentResponseDto,
   UpdateAssignmentQuestionsResponseDto,
@@ -69,33 +72,26 @@ export class AssignmentServiceV1 {
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV1,
+    private readonly jobQueueService: JobQueueService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV1" });
     this.languageTranslation =
       process.env.NODE_ENV === "development" ? false : true;
   }
-  async createJob(assignmentId: number, userId: string): Promise<Job> {
-    return await this.prisma.job.create({
-      data: {
-        assignmentId,
-        userId,
-        status: "Pending",
-        progress: "Job created",
-      },
-    });
+  async createJob(
+    assignmentId: number,
+    userId: string,
+  ): Promise<JobStateRecord> {
+    return this.jobStatusService.createJob(assignmentId, userId);
   }
 
-  async getJobStatus(jobId: number): Promise<Job> {
-    return await this.prisma.job.findUnique({
-      where: { id: jobId },
-    });
+  async getJobStatus(jobId: string): Promise<JobStateRecord | null> {
+    return this.jobStatusService.getJobStatus(jobId);
   }
 
-  async getPublishJobStatus(jobId: number): Promise<Job> {
-    return await this.prisma.publishJob.findUnique({
-      where: { id: Number(jobId) },
-    });
+  async getPublishJobStatus(jobId: string): Promise<JobStateRecord | null> {
+    return this.jobStatusService.getJobStatus(jobId);
   }
   async get(
     assignmentId: number,
@@ -352,30 +348,42 @@ export class AssignmentServiceV1 {
   // eslint-disable-next-line @typescript-eslint/require-await
   async handleFileContents(
     assignmentId: number,
-    jobId: number,
+    jobId: string,
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     files?: { filename: string; content: string }[],
     learningObjectives?: string,
   ): Promise<void> {
-    setImmediate(() => {
-      this.processJob(
-        assignmentId,
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V1,
+        JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
+        {
+          assignmentId,
+          assignmentType,
+          files,
+          jobId,
+          learningObjectives,
+          questionsToGenerate,
+        },
+        {
+          jobId: String(jobId),
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(
         jobId,
-        assignmentType,
-        questionsToGenerate,
-        files,
-        learningObjectives,
-      ).catch((error) => {
-        this.logger.error(
-          `Error processing job ID ${jobId}: ${(error as Error).message}`,
-        );
-      });
-    });
+        `Failed to enqueue job: ${errorMessage}`,
+        "Failed",
+      );
+      throw error;
+    }
   }
-  private async processJob(
+  async runGenerateQuestionsJob(
     assignmentId: number,
-    jobId: number,
+    jobId: string,
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: QuestionsToGenerate,
     files?: { filename: string; content: string }[],
@@ -384,31 +392,25 @@ export class AssignmentServiceV1 {
     try {
       let content = "";
       if (files) {
-        await this.prisma.job.update({
-          where: { id: jobId },
-          data: {
-            progress: "Mark is organizing the notes merging file contents.",
-          },
-        });
+        await this.jobStatusService.updateJobStatus(
+          jobId,
+          "Mark is organizing the notes merging file contents.",
+        );
 
         const mergedContent = files.map((file) => file.content).join("\n");
 
-        await this.prisma.job.update({
-          where: { id: jobId },
-          data: {
-            progress: "Mark is proofreading the content sanitizing material.",
-          },
-        });
+        await this.jobStatusService.updateJobStatus(
+          jobId,
+          "Mark is proofreading the content sanitizing material.",
+        );
 
         content = this.llmFacadeService.sanitizeContent(mergedContent);
       }
 
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          progress: "Mark is thinking generating questions.",
-        },
-      });
+      await this.jobStatusService.updateJobStatus(
+        jobId,
+        "Mark is thinking generating questions.",
+      );
 
       const llmResponse = (await this.llmFacadeService.processMergedContent(
         assignmentId,
@@ -418,27 +420,22 @@ export class AssignmentServiceV1 {
         learningObjectives,
       )) as LLMResponseQuestion[];
 
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          status: "Completed",
-          progress:
-            "Mark has prepared the questions. Job completed successfully.",
-          result: JSON.stringify(llmResponse),
-        },
-      });
+      await this.jobStatusService.updateJobStatus(
+        jobId,
+        "Mark has prepared the questions. Job completed successfully.",
+        "Completed",
+        llmResponse,
+      );
     } catch (error: unknown) {
       this.logger.error(
         `Error processing job ID ${jobId}: ${(error as Error).message}`,
       );
 
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          status: "Failed",
-          progress: "Mark hit a snag, we are sorry for the inconvenience",
-        },
-      });
+      await this.jobStatusService.updateJobStatus(
+        jobId,
+        "Mark hit a snag, we are sorry for the inconvenience",
+        "Failed",
+      );
     }
   }
 
@@ -516,24 +513,13 @@ export class AssignmentServiceV1 {
   }
 
   async updateJobStatus(
-    job: Job,
+    job: JobStateRecord,
     progress: string,
     status = "In Progress",
     result?: unknown,
     percentage?: number,
   ): Promise<void> {
-    await this.prisma.publishJob.update({
-      where: { id: job.id },
-      data: {
-        progress,
-        status,
-        percentage,
-        result: result ? JSON.stringify(result) : undefined,
-        updatedAt: new Date(),
-      },
-    });
-
-    this.jobStatusService.updateJobStatus(
+    await this.jobStatusService.updateJobStatus(
       job.id,
       progress,
       status,
@@ -546,25 +532,35 @@ export class AssignmentServiceV1 {
     assignmentId: number,
     updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
     userId: string,
-  ): Promise<{ jobId: number; message: string }> {
-    const job = await this.prisma.publishJob.create({
-      data: {
-        assignmentId,
-        userId,
-        status: "In Progress",
-        progress: "Initializing assignment publishing...",
-      },
-    });
-    this.processPublishingJob(
-      job.id,
+  ): Promise<{ jobId: string; message: string }> {
+    const job = await this.jobStatusService.createPublishJob(
       assignmentId,
-      updateAssignmentQuestionsDto,
       userId,
-    ).catch((error) => {
-      this.logger.error(
-        `Error processing publishing job: ${(error as Error).message}`,
+    );
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V1,
+        JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
+        {
+          assignmentId,
+          jobId: job.id,
+          updateDto: updateAssignmentQuestionsDto,
+          userId,
+        },
+        {
+          jobId: job.id,
+        },
       );
-    });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(
+        job.id,
+        `Failed to enqueue publish job: ${errorMessage}`,
+        "Failed",
+      );
+      throw error;
+    }
 
     return { jobId: job.id, message: "Publishing started." };
   }
@@ -583,12 +579,12 @@ export class AssignmentServiceV1 {
    * - Applies translations only for changed questions/variants, skipping if it already exists
    * - Ensures (questionId, variantId) is always captured in translations
    */
-  private async processPublishingJob(
-    jobId: number,
+  async runPublishJob(
+    jobId: string,
     assignmentId: number,
     updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
     userId: string,
-  ): Promise<{ jobId: number; message: string }> {
+  ): Promise<{ jobId: string; message: string }> {
     const {
       introduction,
       instructions,
@@ -625,9 +621,7 @@ export class AssignmentServiceV1 {
       throw new UnprocessableEntityException("Introduction not provided.");
     }
 
-    const job = await this.prisma.publishJob.findUnique({
-      where: { id: jobId },
-    });
+    const job = await this.jobStatusService.getJobStatus(jobId);
     if (!job) {
       this.logger.error(`Job not found: ${jobId}`);
       throw new Error("Job not found");
@@ -1060,7 +1054,7 @@ export class AssignmentServiceV1 {
   private async handleAssignmentTranslations(
     assignmentId: number,
     languages: string[],
-    job?: Job,
+    job?: JobStateRecord,
   ): Promise<void> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
@@ -1229,7 +1223,7 @@ export class AssignmentServiceV1 {
    * - If there's a variantId, we do not call this method; we use handleVariantTranslations instead.
    */
   private async handleQuestionTranslations(
-    job: Job,
+    job: JobStateRecord,
     assignmentId: number,
     questionId: number,
     question: UpdateAssignmentQuestionsDto["questions"][number],
@@ -1360,7 +1354,7 @@ export class AssignmentServiceV1 {
    * - Reuses an existing variant’s translation if the text matches, else calls LLM.
    */
   private async handleVariantTranslations(
-    job: Job,
+    job: JobStateRecord,
     assignmentId: number,
     questionId: number,
     variant: QuestionVariant,

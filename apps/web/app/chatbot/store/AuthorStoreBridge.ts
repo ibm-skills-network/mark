@@ -80,14 +80,14 @@ export default function AuthorStoreBridge() {
         success: true;
         message: string;
         questionIds: number[];
-        jobId: number;
+        jobId: string;
       };
 
       type QuestionGenerationPipelineFailure = {
         success: false;
         message: string;
         error: string;
-        jobId?: number;
+        jobId?: string;
       };
 
       type QuestionGenerationPipelineResult =
