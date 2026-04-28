@@ -27,7 +27,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
   const Component = as ?? "section";
   return (
     <Component
-      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid max-md:px-5 "
+      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid border-gray-400 max-md:px-5 "
       {...rest}
     >
       <div className="flex flex-col gap-y-1.5">
