@@ -23,7 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowLeft,
   Users,
   FileText,
   DollarSign,
@@ -42,7 +41,13 @@ import {
 import {
   getCurrentAdminUser,
   getDetailedAssignmentInsights,
+  isAdminAuthError,
 } from "@/lib/shared";
+import {
+  buildAdminLoginRedirect,
+  clearAdminSessionStorage,
+  readAdminSessionFromStorage,
+} from "@/lib/admin-session";
 import { FeedbackModal } from "@/components/modals/FeedbackModal";
 import { ReportModal } from "@/components/modals/ReportModal";
 import { formatPricePerMillionTokens } from "@/config/constants";
@@ -215,30 +220,41 @@ export default function AssignmentInsightsPage() {
     const fetchData = async () => {
       if (!assignmentId) return;
 
-      const sessionToken = localStorage.getItem("adminSessionToken");
-
-      if (!sessionToken) {
-        router.push(
-          `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
-        );
+      const stored = readAdminSessionFromStorage();
+      if (!stored) {
+        clearAdminSessionStorage();
+        router.replace(buildAdminLoginRedirect(window.location.pathname));
         return;
       }
 
+      const handleAuthFailure = () => {
+        clearAdminSessionStorage();
+        router.replace(buildAdminLoginRedirect(window.location.pathname));
+      };
+
       try {
-        const user = await getCurrentAdminUser(sessionToken);
+        const user = await getCurrentAdminUser(stored.sessionToken);
         setIsUserAdmin(user.isAdmin);
       } catch (err) {
+        if (isAdminAuthError(err)) {
+          handleAuthFailure();
+          return;
+        }
         setError(err instanceof Error ? err.message : "Failed to fetch user");
       }
 
       try {
         setLoading(true);
         const response = await getDetailedAssignmentInsights(
-          sessionToken,
+          stored.sessionToken,
           parseInt(assignmentId),
         );
         setData(response);
       } catch (err) {
+        if (isAdminAuthError(err)) {
+          handleAuthFailure();
+          return;
+        }
         setError(
           err instanceof Error ? err.message : "Failed to fetch insights",
         );
@@ -378,28 +394,10 @@ export default function AssignmentInsightsPage() {
   }
 
   if (error || !data) {
-    const isAuthError =
-      error?.includes("Invalid or expired admin session") ||
-      error?.includes("authentication") ||
-      error?.includes("Unauthorized");
-
     return (
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center py-12 gap-4">
           <div className="text-red-600">Error: {error || "No data found"}</div>
-          {isAuthError && (
-            <Button
-              onClick={() =>
-                router.push(
-                  `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
-                )
-              }
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Go to Admin Login
-            </Button>
-          )}
         </div>
       </div>
     );
