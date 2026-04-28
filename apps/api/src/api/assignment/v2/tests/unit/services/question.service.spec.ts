@@ -455,9 +455,6 @@ describe("QuestionService", () => {
         });
 
         jobStatusService.createJob.mockResolvedValue(mockJob);
-        const startSpy = jest
-          .spyOn(questionService as any, "startQuestionGenerationProcess")
-          .mockResolvedValue(undefined);
 
         await expect(
           questionService.generateQuestions(assignmentId, payload, userId),
@@ -466,13 +463,20 @@ describe("QuestionService", () => {
           jobId: mockJob.id,
         });
 
-        expect(startSpy).toHaveBeenCalledWith(
-          assignmentId,
-          mockJob.id,
-          payload.assignmentType,
-          payload.questionsToGenerate,
-          payload.fileContents,
-          payload.learningObjectives,
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          "mark.assignment.v2",
+          "assignment-v2.generate-questions",
+          {
+            assignmentId,
+            assignmentType: payload.assignmentType,
+            fileContents: payload.fileContents,
+            jobId: mockJob.id,
+            learningObjectives: payload.learningObjectives,
+            questionsToGenerate: payload.questionsToGenerate,
+          },
+          {
+            jobId: mockJob.id,
+          },
         );
       });
 

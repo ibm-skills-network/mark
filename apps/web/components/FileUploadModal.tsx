@@ -200,9 +200,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
       0,
     );
     const multipleChoiceTotal = selectedQuestionTypes.multipleChoice;
-    const totalRequestedQuestions = Object.values(
-      selectedQuestionTypes,
-    ).reduce((a, b) => a + b, 0);
+    const totalRequestedQuestions = Object.values(selectedQuestionTypes).reduce(
+      (a, b) => a + b,
+      0,
+    );
 
     if (fileUploaded.length === 0 && learningObjectives.length === 0) {
       toast.error("Please upload files or enter learning objectives.");
@@ -579,7 +580,9 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                         min="0"
                         max="50"
                         placeholder="0"
-                        value={toDisplayValue(multipleChoiceSubtypes[field.key])}
+                        value={toDisplayValue(
+                          multipleChoiceSubtypes[field.key],
+                        )}
                         onFocus={(e) => e.currentTarget.select()}
                         onWheel={(e) => e.currentTarget.blur()}
                         onChange={(e) => {
