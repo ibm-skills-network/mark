@@ -35,7 +35,6 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       assignmentId: assignmentIdString,
       attemptId: attemptIdString,
       questionId: questionIdString,
-      role: role,
     } = params;
     const assignmentId = Number(assignmentIdString);
 
@@ -64,33 +63,6 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
       if (userSession.role === UserRole.LEARNER) {
         whereClause.userId = userSession.userId;
-      }
-
-      if (userSession.role === UserRole.LEARNER) {
-        const suspeciousUserId = userSession.userId;
-
-        const userId = await this.prisma.assignmentAttempt.findUnique({
-          where: {
-            id: Number(attemptIdString),
-          },
-          select: {
-            userId: true,
-          },
-        });
-        if (userId.userId !== suspeciousUserId) {
-          this.logger.warn("attempt_access_denied: attempt not owned by user", {
-            denial_reason: "attempt_not_owned",
-            assignment_id: assignmentId,
-            attempt_id: Number(attemptIdString),
-            attempt_owner: userId.userId,
-            requesting_user_id: suspeciousUserId,
-            method,
-            url: originalUrl,
-          });
-          throw new NotFoundException(
-            "Attempt not found or not owned by the user",
-          );
-        }
       }
 
       queries.push(
@@ -138,7 +110,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       return false;
     }
 
-    if (attemptIdString && !attempt && role === UserRole.LEARNER) {
+    if (attemptIdString && !attempt && userSession.role === UserRole.LEARNER) {
       this.logger.warn(
         "attempt_access_denied: attempt not found or not owned",
         {
@@ -146,7 +118,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
           assignment_id: assignmentId,
           attempt_id: Number(attemptIdString),
           user_id: userSession?.userId,
-          role,
+          role: userSession.role,
           method,
           url: originalUrl,
         },

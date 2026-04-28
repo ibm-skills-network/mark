@@ -8,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Req,
   UsePipes,
   ValidationPipe,
 } from "@nestjs/common";
@@ -26,7 +27,10 @@ import {
 import { getAllLanguageCodes } from "src/api/assignment/attempt/helper/languages";
 import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
 import { TranslationService } from "src/api/assignment/v2/services/translation.service";
+import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 
 class MissingTranslationsRequestDto {
   @IsOptional()
@@ -299,6 +303,7 @@ export class TranslationMaintenanceController {
     private readonly prisma: PrismaService,
     private readonly translationService: TranslationService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobQueueService: JobQueueService,
   ) {}
 
   @Post("missing/find")
@@ -639,9 +644,10 @@ export class TranslationMaintenanceController {
   })
   async fixMissingTranslations(
     @Body() body: FixMissingTranslationsRequestDto,
+    @Req() request: UserSessionRequest,
   ): Promise<{
     success: true;
-    jobId: number;
+    jobId: string;
     message: string;
     assignmentIds: number[];
     dryRun: boolean;
@@ -661,10 +667,38 @@ export class TranslationMaintenanceController {
 
     const job = await this.jobStatusService.createPublishJob(
       assignmentIds[0],
-      "admin",
+      request.userSession.userId,
+      {
+        jobName: JOB_NAMES.ADMIN_FIX_MISSING_TRANSLATIONS,
+        kind: "admin-translation-maintenance",
+        progress: "Translation maintenance job created",
+        queueName: JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+        status: "Pending",
+      },
     );
 
-    void this.runTranslationsInBackground(job.id, assignmentIds, body);
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+        JOB_NAMES.ADMIN_FIX_MISSING_TRANSLATIONS,
+        {
+          assignmentIds,
+          body,
+          jobId: job.id,
+        },
+        {
+          jobId: job.id,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: `Failed to enqueue translation fix job: ${errorMessage}`,
+      });
+      throw error;
+    }
 
     return {
       success: true,
@@ -677,9 +711,12 @@ export class TranslationMaintenanceController {
 
   @Get("missing/fix/status/:jobId")
   @ApiOperation({ summary: "Check the status of a fix-translations job" })
-  async getFixJobStatus(@Param("jobId", ParseIntPipe) jobId: number): Promise<{
+  async getFixJobStatus(
+    @Param("jobId") jobId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<{
     success: true;
-    jobId: number;
+    jobId: string;
     status: string;
     progress: string;
     percentage: number | null;
@@ -687,24 +724,14 @@ export class TranslationMaintenanceController {
     createdAt: Date;
     updatedAt: Date;
   }> {
-    const job = await this.prisma.publishJob.findUnique({
-      where: { id: jobId },
-    });
+    const job = await this.jobStatusService.getJobStatus(jobId);
 
     if (!job) {
       throw new NotFoundException(`Translation job ${jobId} not found`);
     }
 
-    let result: unknown = null;
-    if (job.result) {
-      try {
-        result =
-          typeof job.result === "string"
-            ? (JSON.parse(job.result) as unknown)
-            : job.result;
-      } catch {
-        result = job.result;
-      }
+    if (job.userId !== request.userSession.userId) {
+      throw new NotFoundException(`Translation job ${jobId} not found`);
     }
 
     return {
@@ -713,9 +740,9 @@ export class TranslationMaintenanceController {
       status: job.status,
       progress: job.progress,
       percentage: job.percentage ?? null,
-      result,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
+      result: job.result ?? null,
+      createdAt: new Date(job.createdAt),
+      updatedAt: new Date(job.updatedAt),
     };
   }
 
@@ -726,9 +753,40 @@ export class TranslationMaintenanceController {
   })
   async sweepMissingTranslations(
     @Body() body: SweepTranslationsRequestDto,
-  ): Promise<{ success: true; jobId: number; message: string }> {
-    const job = await this.jobStatusService.createPublishJob(0, "admin");
-    void this.runSweepInBackground(job.id, body);
+    @Req() request: UserSessionRequest,
+  ): Promise<{ success: true; jobId: string; message: string }> {
+    const job = await this.jobStatusService.createPublishJob(
+      0,
+      request.userSession.userId,
+      {
+        jobName: JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS,
+        kind: "admin-translation-maintenance",
+        progress: "Translation sweep job created",
+        queueName: JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+        status: "Pending",
+      },
+    );
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+        JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS,
+        {
+          body,
+          jobId: job.id,
+        },
+        {
+          jobId: job.id,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: `Failed to enqueue translation sweep job: ${errorMessage}`,
+      });
+      throw error;
+    }
     return {
       success: true,
       jobId: job.id,
@@ -736,8 +794,8 @@ export class TranslationMaintenanceController {
     };
   }
 
-  private async runTranslationsInBackground(
-    jobId: number,
+  async runFixMissingTranslationsJob(
+    jobId: string,
     assignmentIds: number[],
     body: FixMissingTranslationsRequestDto,
   ): Promise<void> {
@@ -1223,8 +1281,8 @@ export class TranslationMaintenanceController {
    * translates each batch, then pauses before the next batch. The cursor
    * advances so that no assignment is ever scanned twice within a single run.
    */
-  private async runSweepInBackground(
-    jobId: number,
+  async runSweepMissingTranslationsJob(
+    jobId: string,
     body: SweepTranslationsRequestDto,
   ): Promise<void> {
     const batchSize = body.batchSize ?? 5;

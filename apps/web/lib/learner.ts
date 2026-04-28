@@ -256,7 +256,7 @@ export async function submitAssignment(
     progress: number,
     message: string,
   ) => void,
-  onGradingJobCreated?: (gradingJobId: number) => void,
+  onGradingJobCreated?: (gradingJobId: string) => void,
 ): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}`;
 
@@ -308,7 +308,7 @@ export async function submitAssignment(
       throw new Error("No grading job ID returned");
     }
 
-    onGradingJobCreated?.(Number(gradingJobId));
+    onGradingJobCreated?.(gradingJobId);
 
     const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
 

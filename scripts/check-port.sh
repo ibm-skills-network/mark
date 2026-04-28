@@ -4,10 +4,9 @@
 # Usage: check_port <port> <service_name>
 
 check_port() {
-    local port=$1
-    local service=$2
+    local port="$1"
 
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+    if lsof -Pi :"${port}" -sTCP:LISTEN -t >/dev/null 2>&1; then
         return 1  # Port is in use
     else
         return 0  # Port is free
@@ -16,8 +15,8 @@ check_port() {
 
 # Get the process using a port
 get_port_process() {
-    local port=$1
-    lsof -Pi :$port -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}'
+    local port="$1"
+    lsof -Pi :"${port}" -sTCP:LISTEN | tail -n +2 | awk '{print $1, "(PID:", $2 ")"}'
 }
 
 # Export functions for use in other scripts

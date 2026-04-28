@@ -120,7 +120,7 @@ export async function createQuestion(
  * Subscribes to job status updates.
  */
 export function subscribeToJobStatus(
-  jobId: number,
+  jobId: string,
   onProgress?: (percentage: number, progressText?: string) => void,
   setQuestions?: (questions: Question[]) => void,
 ): Promise<[boolean, Question[]]> {
@@ -256,7 +256,7 @@ export async function publishAssignment(
   assignmentId: number,
   updatedAssignment: ReplaceAssignmentRequest,
   cookies?: string,
-): Promise<{ jobId: number; message: string } | undefined> {
+): Promise<{ jobId: string; message: string } | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/publish`;
 
   const payload = {
@@ -268,7 +268,7 @@ export async function publishAssignment(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     })) as {
-      jobId: number;
+      jobId: string;
       message: string;
     };
     return { jobId, message };
@@ -451,7 +451,7 @@ export async function getAttempts(
 export async function uploadFiles(
   payload: QuestionGenerationPayload,
   cookies?: string,
-): Promise<{ success: boolean; jobId?: number }> {
+): Promise<{ success: boolean; jobId?: string }> {
   const endpointURL = `${getApiRoutes().assignments}/${payload.assignmentId}/generate-questions`;
 
   try {
@@ -467,7 +467,7 @@ export async function uploadFiles(
       },
     )) as {
       success: boolean;
-      jobId?: number;
+      jobId?: string;
     };
 
     if (data.jobId) {
@@ -487,7 +487,7 @@ export async function uploadFiles(
  * Fetches the status of a job by its ID.
  */
 export async function getJobStatus(
-  jobId: number,
+  jobId: string,
   cookies?: string,
   opts: { retries?: number; timeoutMs?: number } = {},
 ): Promise<

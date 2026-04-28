@@ -240,7 +240,7 @@ export function buildQuestionGenerationPayloadFromObjectives({
 }
 
 type PollQuestionGenerationJobOptions = {
-  jobId: number;
+  jobId: string;
   intervalMs?: number;
   onUpdate: (status: QuestionGenerationStatus) => void;
   onCompleted: (status: QuestionGenerationStatus) => void;
@@ -253,7 +253,7 @@ type PollQuestionGenerationJobOptions = {
  */
 export async function startQuestionGenerationJob(
   payload: QuestionGenerationPayload,
-): Promise<number> {
+): Promise<string> {
   const response = await uploadFiles(payload);
 
   if (!response.success || !response.jobId) {

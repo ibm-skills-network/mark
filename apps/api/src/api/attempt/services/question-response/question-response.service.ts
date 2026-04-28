@@ -5,6 +5,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -14,7 +15,10 @@ import { QuestionType } from "@prisma/client";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { authorAssignmentDetailsDTO } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import {
+  authorAssignmentDetailsDTO,
+  LearnerUpdateAssignmentAttemptRequestDto,
+} from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
   CreateQuestionResponseAttemptResponseDto,
@@ -36,6 +40,17 @@ type PrismaTransactionalClient = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use"
 >;
 
+/**
+ * A graded question item produced by Phase 2 (grading, no DB write).
+ * Passed to commitAttemptWithResponses for Phase 3 (atomic DB write).
+ */
+export interface GradedItem {
+  questionId: number;
+  /** Raw extracted learner response (to be stored in QuestionResponse.learnerResponse) */
+  learnerResponse: unknown;
+  responseDto: CreateQuestionResponseAttemptResponseDto;
+}
+
 @Injectable()
 export class QuestionResponseService {
   private readonly logger: Logger;
@@ -54,8 +69,244 @@ export class QuestionResponseService {
     });
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Phase 1+2: Grade learner questions (no DB writes)
+  // ─────────────────────────────────────────────────────────────────────────────
+
   /**
-   * Submit all questions for an assignment attempt
+   * Grade all questions for a learner submission without writing to the database.
+   *
+   * Phase 1 (short read tx): loads question DTOs and validates dependency order.
+   * Phase 2 (no tx): calls LLM/grading strategies, maintains an in-memory context
+   *   map so context questions graded earlier in the batch can be referenced without
+   *   touching the DB.
+   *
+   * The caller is responsible for writing results via commitAttemptWithResponses().
+   */
+  async gradeQuestionsForLearner(
+    responsesForQuestions: CreateQuestionResponseAttemptRequestDto[],
+    assignmentAttemptId: number,
+    assignmentId: number,
+    language: string,
+    preTranslatedQuestions?: Map<number, QuestionDto>,
+  ): Promise<GradedItem[]> {
+    // ── Phase 1: Read (short transaction) ────────────────────────────────────
+    const { questionDtos, sorted, adj, inDegree } =
+      await this.prisma.$transaction(
+        async (tx) => {
+          const questionDtos: QuestionDto[] = await Promise.all(
+            responsesForQuestions.map(async (response) => {
+              const { question } = await this.getLearnerQuestion(
+                response.id,
+                assignmentAttemptId,
+                assignmentId,
+                preTranslatedQuestions,
+                tx as PrismaTransactionalClient,
+              );
+              return question;
+            }),
+          );
+          const sortResult = this.buildAndSortDependencies(questionDtos);
+          return { questionDtos, ...sortResult };
+        },
+        { timeout: 10_000 },
+      );
+
+    if (sorted.length !== responsesForQuestions.length) {
+      const nodesInCycle: number[] = [];
+      for (const [questionId, degree] of inDegree.entries()) {
+        if (degree > 0) nodesInCycle.push(questionId);
+      }
+      this.logger.error(
+        `Cycle detected in question dependencies for assignment ${assignmentId}`,
+        { inDegree, adj, nodesInCycle },
+      );
+      throw new InternalServerErrorException(
+        `A cycle was detected in the question dependencies: ${nodesInCycle.join(
+          ", ",
+        )}`,
+      );
+    }
+
+    // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
+    const totalQuestions = sorted.length;
+    if (this.progressService) {
+      await this.progressService.initializeProgress(
+        assignmentAttemptId,
+        totalQuestions,
+      );
+    }
+
+    const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
+    const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
+    // In-memory responses for context questions graded earlier in this batch.
+    // Key = questionId, value = JSON-stringified learnerResponse (matches DB format).
+    const inMemoryContextResponses = new Map<number, string>();
+    const gradedItems: GradedItem[] = [];
+
+    for (const [index, questionId] of sorted.entries()) {
+      const questionNumber = index + 1;
+      const questionResponse = requestMap.get(questionId);
+      if (!questionResponse) continue;
+
+      if (this.progressService) {
+        await this.progressService.updateQuestionProgress(
+          assignmentAttemptId,
+          questionNumber,
+          totalQuestions,
+          `Grading question ${questionNumber} of ${totalQuestions}...`,
+        );
+      }
+
+      const question = questionMap.get(questionId);
+      if (!question) continue;
+      questionResponse.language = language;
+
+      const assignmentContext = await this.getAssignmentContext(
+        assignmentId,
+        questionId,
+        assignmentAttemptId,
+        undefined,
+        inMemoryContextResponses,
+      );
+
+      const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
+        question,
+        questionResponse,
+        assignmentContext,
+        assignmentId,
+        language,
+        UserRole.LEARNER,
+        assignmentAttemptId,
+      );
+
+      // Make this response available as context for subsequent questions
+      inMemoryContextResponses.set(
+        questionId,
+        JSON.stringify(learnerResponse ?? ""),
+      );
+
+      responseDto.questionId = questionId;
+      responseDto.question = question.question;
+      gradedItems.push({ questionId, learnerResponse, responseDto });
+    }
+
+    if (this.progressService) {
+      await this.progressService.markComplete(assignmentAttemptId);
+    }
+
+    return gradedItems;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt grade)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Atomically write all graded question responses and update the AssignmentAttempt
+   * grade in a single short transaction (<5s). This eliminates the gap between
+   * QuestionResponse inserts and the grade update that could leave orphan state.
+   *
+   * Uses an optimistic lock on AssignmentAttempt.version to detect concurrent writes.
+   * Throws ConflictException if the attempt was concurrently submitted by another worker.
+   */
+  async commitAttemptWithResponses(
+    assignmentAttemptId: number,
+    gradedItems: GradedItem[],
+    grade: number,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+  ): Promise<{ id: number; submitted: boolean; grade: number | null }> {
+    /* eslint-disable @typescript-eslint/no-unused-vars */
+    const {
+      responsesForQuestions: _r,
+      authorQuestions: _aq,
+      authorAssignmentDetails: _aad,
+      language,
+      preTranslatedQuestions: _pt,
+      expiresAt: _ignoredExpiresAt,
+      ...cleanedUpdateDto
+    } = updateDto;
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+
+    const current = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: assignmentAttemptId },
+      select: { submitted: true },
+    });
+
+    if (!current) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+      );
+    }
+
+    if (current.submitted) {
+      throw new ConflictException(
+        `Attempt ${assignmentAttemptId} has already been submitted.`,
+      );
+    }
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Write all QuestionResponse records
+        for (const {
+          questionId,
+          learnerResponse,
+          responseDto,
+        } of gradedItems) {
+          await this.saveResponseToDatabase(
+            assignmentAttemptId,
+            questionId,
+            learnerResponse,
+            responseDto,
+            UserRole.LEARNER,
+            tx as PrismaTransactionalClient,
+          );
+        }
+
+        // Atomically update AssignmentAttempt only if it is still not submitted.
+        const updateResult = await (
+          tx as PrismaTransactionalClient
+        ).assignmentAttempt.updateMany({
+          where: {
+            id: assignmentAttemptId,
+            submitted: false,
+          },
+          data: {
+            ...cleanedUpdateDto,
+            submitted: true,
+            preferredLanguage: language ?? "en",
+            expiresAt: new Date(),
+            grade,
+          },
+        });
+
+        if (updateResult.count === 0) {
+          throw new ConflictException(
+            `Attempt ${assignmentAttemptId} was concurrently submitted. ` +
+              `Grading results were discarded to prevent duplicate submission.`,
+          );
+        }
+
+        return (tx as PrismaTransactionalClient).assignmentAttempt.findUnique({
+          where: { id: assignmentAttemptId },
+          select: { id: true, submitted: true, grade: true },
+        });
+      },
+      { timeout: 60_000 },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Legacy entry point (author preview + backward compat)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Submit all questions for an assignment attempt.
+   *
+   * For LEARNER: prefer the split gradeQuestionsForLearner() + commitAttemptWithResponses()
+   * flow so that the grade write is atomic with the response writes. This method
+   * is kept for AUTHOR preview (no DB writes) and for cases where the split API
+   * is not available.
    */
   async submitQuestions(
     responsesForQuestions: CreateQuestionResponseAttemptRequestDto[],
@@ -67,112 +318,154 @@ export class QuestionResponseService {
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
-    // Use 15 minute timeout for grading operations (includes LLM calls + judge validation)
-    return this.prisma.$transaction(
-      async (tx) => {
-        const questionDtos: QuestionDto[] = await Promise.all(
-          responsesForQuestions.map(async (response) => {
-            const questionId = response.id;
-            if (role === UserRole.LEARNER) {
-              const { question } = await this.getLearnerQuestion(
-                questionId,
-                assignmentAttemptId,
-                assignmentId,
-                preTranslatedQuestions,
-                tx as PrismaTransactionalClient,
-              );
-              return question;
-            } else if (role === UserRole.AUTHOR) {
-              const { question } = this.getAuthorQuestion(
-                questionId,
-                authorQuestions,
-                assignmentDetails,
-              );
-              return question;
-            } else {
-              throw new BadRequestException(`Unsupported user role: ${role}`);
-            }
-          }),
-        );
-
-        const { sorted, adj, inDegree } =
-          this.buildAndSortDependencies(questionDtos);
-
-        if (sorted.length !== responsesForQuestions.length) {
-          const nodesInCycle = [];
-          for (const [questionId, degree] of inDegree.entries()) {
-            if (degree > 0) {
-              nodesInCycle.push(questionId);
-            }
-          }
-          this.logger.error(
-            `Cycle detected in question dependencies for assignment ${assignmentId}`,
-            {
-              inDegree,
-              adj,
-              nodesInCycle,
-            },
+    // ── Phase 1: Read (short transaction) ────────────────────────────────────
+    const { questionDtos, sorted, adj, inDegree } =
+      await this.prisma.$transaction(
+        async (tx) => {
+          const questionDtos: QuestionDto[] = await Promise.all(
+            responsesForQuestions.map(async (response) => {
+              const questionId = response.id;
+              if (role === UserRole.LEARNER) {
+                const { question } = await this.getLearnerQuestion(
+                  questionId,
+                  assignmentAttemptId,
+                  assignmentId,
+                  preTranslatedQuestions,
+                  tx as PrismaTransactionalClient,
+                );
+                return question;
+              } else if (role === UserRole.AUTHOR) {
+                const { question } = this.getAuthorQuestion(
+                  questionId,
+                  authorQuestions,
+                  assignmentDetails,
+                );
+                return question;
+              } else {
+                throw new BadRequestException(`Unsupported user role: ${role}`);
+              }
+            }),
           );
-          throw new InternalServerErrorException(
-            `A cycle was detected in the question dependencies: ${nodesInCycle.join(
-              ", ",
-            )}`,
-          );
+          const sortResult = this.buildAndSortDependencies(questionDtos);
+          return { questionDtos, ...sortResult };
+        },
+        { timeout: 10_000 },
+      );
+
+    if (sorted.length !== responsesForQuestions.length) {
+      const nodesInCycle = [];
+      for (const [questionId, degree] of inDegree.entries()) {
+        if (degree > 0) {
+          nodesInCycle.push(questionId);
         }
+      }
+      this.logger.error(
+        `Cycle detected in question dependencies for assignment ${assignmentId}`,
+        { inDegree, adj, nodesInCycle },
+      );
+      throw new InternalServerErrorException(
+        `A cycle was detected in the question dependencies: ${nodesInCycle.join(
+          ", ",
+        )}`,
+      );
+    }
 
-        const totalQuestions = sorted.length;
-        if (this.progressService && role === UserRole.LEARNER) {
-          await this.progressService.initializeProgress(
-            assignmentAttemptId,
-            totalQuestions,
-          );
-        }
+    // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
+    const totalQuestions = sorted.length;
+    if (this.progressService && role === UserRole.LEARNER) {
+      await this.progressService.initializeProgress(
+        assignmentAttemptId,
+        totalQuestions,
+      );
+    }
 
-        const questionResponses: CreateQuestionResponseAttemptResponseDto[] =
-          [];
-        const responseMap = new Map(
-          responsesForQuestions.map((r) => [r.id, r]),
+    const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
+    const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
+    const inMemoryContextResponses = new Map<number, string>();
+    const gradedItems: GradedItem[] = [];
+
+    for (const [index, questionId] of sorted.entries()) {
+      const questionNumber = index + 1;
+      const questionResponse = requestMap.get(questionId);
+      if (!questionResponse) continue;
+
+      if (this.progressService && role === UserRole.LEARNER) {
+        await this.progressService.updateQuestionProgress(
+          assignmentAttemptId,
+          questionNumber,
+          totalQuestions,
+          `Grading question ${questionNumber} of ${totalQuestions}...`,
         );
+      }
 
-        for (const [index, questionId] of sorted.entries()) {
-          const questionNumber = index + 1;
-          const questionResponse = responseMap.get(questionId);
+      const question = questionMap.get(questionId);
+      if (!question) continue;
+      questionResponse.language = language;
 
-          if (questionResponse) {
-            if (this.progressService && role === UserRole.LEARNER) {
-              await this.progressService.updateQuestionProgress(
-                assignmentAttemptId,
-                questionNumber,
-                totalQuestions,
-                `Grading question ${questionNumber} of ${totalQuestions}...`,
-              );
-            }
-
-            const result = await this.createQuestionResponse(
-              assignmentAttemptId,
-              questionResponse,
-              role,
+      const assignmentContext: {
+        assignmentInstructions: string;
+        questionAnswerContext: QuestionAnswerContext[];
+      } =
+        role === UserRole.LEARNER
+          ? await this.getAssignmentContext(
               assignmentId,
-              language,
-              authorQuestions,
-              assignmentDetails,
-              preTranslatedQuestions,
+              questionId,
+              assignmentAttemptId,
+              undefined,
+              inMemoryContextResponses,
+            )
+          : {
+              assignmentInstructions: assignmentDetails?.instructions ?? "",
+              questionAnswerContext: [],
+            };
+
+      const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
+        question,
+        questionResponse,
+        assignmentContext,
+        assignmentId,
+        language,
+        role,
+        assignmentAttemptId,
+      );
+
+      inMemoryContextResponses.set(
+        questionId,
+        JSON.stringify(learnerResponse ?? ""),
+      );
+      responseDto.questionId = questionId;
+      responseDto.question = question.question;
+      gradedItems.push({ questionId, learnerResponse, responseDto });
+    }
+
+    if (this.progressService && role === UserRole.LEARNER) {
+      await this.progressService.markComplete(assignmentAttemptId);
+    }
+
+    // ── Phase 3: Write (short transaction) — LEARNER only ────────────────────
+    if (role !== UserRole.AUTHOR) {
+      await this.prisma.$transaction(
+        async (tx) => {
+          for (const {
+            questionId,
+            learnerResponse,
+            responseDto,
+          } of gradedItems) {
+            await this.saveResponseToDatabase(
+              assignmentAttemptId,
+              questionId,
+              learnerResponse,
+              responseDto,
+              role,
               tx as PrismaTransactionalClient,
             );
-            questionResponses.push(result);
           }
-        }
+        },
+        { timeout: 60_000 },
+      );
+    }
 
-        if (this.progressService && role === UserRole.LEARNER) {
-          await this.progressService.markComplete(assignmentAttemptId);
-        }
-
-        return questionResponses;
-      },
-      {
-        timeout: 900_000, // 15 minutes for LLM grading operations
-      },
-    );
+    return gradedItems.map((g) => g.responseDto);
   }
 
   private buildAndSortDependencies(questions: QuestionDto[]): {
@@ -226,7 +519,7 @@ export class QuestionResponseService {
   }
 
   /**
-   * Create a question response
+   * Create a question response (used by autoSave — writes immediately)
    */
   async createQuestionResponse(
     assignmentAttemptId: number,
@@ -267,25 +560,60 @@ export class QuestionResponseService {
       throw new BadRequestException(`Unsupported user role: ${role}`);
     }
 
-    if (this.isEmptyResponse(createQuestionResponseAttemptRequestDto)) {
+    const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
+      question,
+      createQuestionResponseAttemptRequestDto,
+      assignmentContext,
+      assignmentId,
+      language,
+      role,
+      assignmentAttemptId,
+    );
+
+    if (role !== UserRole.AUTHOR) {
+      await this.saveResponseToDatabase(
+        assignmentAttemptId,
+        questionId,
+        learnerResponse,
+        responseDto,
+        role,
+        tx,
+      );
+    }
+
+    responseDto.questionId = questionId;
+    responseDto.question = question.question;
+
+    return responseDto;
+  }
+
+  /**
+   * Grade a single question without writing to the database.
+   * Used by both the gradeQuestionsForLearner Phase 2 and the legacy submitQuestions.
+   */
+  private async gradeQuestionNoSave(
+    question: QuestionDto,
+    requestDto: CreateQuestionResponseAttemptRequestDto,
+    assignmentContext: {
+      assignmentInstructions: string;
+      questionAnswerContext: QuestionAnswerContext[];
+    },
+    assignmentId: number,
+    language: string,
+    role: UserRole,
+    assignmentAttemptId: number,
+  ): Promise<{
+    learnerResponse: unknown;
+    responseDto: CreateQuestionResponseAttemptResponseDto;
+  }> {
+    const questionId = question.id;
+
+    if (this.isEmptyResponse(requestDto)) {
       const { responseDto, learnerResponse } =
         this.handleEmptyResponse(language);
-
-      if (role !== UserRole.AUTHOR) {
-        await this.saveResponseToDatabase(
-          assignmentAttemptId,
-          questionId,
-          learnerResponse,
-          responseDto,
-          role,
-          tx,
-        );
-      }
-
       responseDto.questionId = questionId;
       responseDto.question = question.question;
-
-      return responseDto;
+      return { learnerResponse, responseDto };
     }
 
     const gradingContext: GradingContext = {
@@ -299,17 +627,16 @@ export class QuestionResponseService {
         questionType: question.type,
         responseType: question.responseType,
       },
-      tx,
     };
 
     let responseDto: CreateQuestionResponseAttemptResponseDto;
-    let learnerResponse;
+    let learnerResponse: unknown;
 
     try {
       if (question.type === QuestionType.LINK_FILE) {
         ({ responseDto, learnerResponse } = await this.handleLinkFileQuestion(
           question,
-          createQuestionResponseAttemptRequestDto,
+          requestDto,
           gradingContext,
         ));
       } else {
@@ -351,24 +678,23 @@ export class QuestionResponseService {
         this.logger.debug("Validating response", { questionId });
         const isValid = await gradingStrategy.validateResponse(
           question,
-          createQuestionResponseAttemptRequestDto,
+          requestDto,
         );
 
         if (!isValid) {
           this.logger.warn("Response validation failed", {
             questionId,
-            language: createQuestionResponseAttemptRequestDto.language,
+            language: requestDto.language,
             strategyName: gradingStrategy.constructor.name,
           });
           throw new BadRequestException(
-            `Invalid response for question ID ${questionId}: ${createQuestionResponseAttemptRequestDto.language}`,
+            `Invalid response for question ID ${questionId}: ${requestDto.language}`,
           );
         }
 
         this.logger.debug("Extracting learner response", { questionId });
-        learnerResponse = await gradingStrategy.extractLearnerResponse(
-          createQuestionResponseAttemptRequestDto,
-        );
+        learnerResponse =
+          await gradingStrategy.extractLearnerResponse(requestDto);
 
         this.logger.info("Grading response with strategy", {
           questionId,
@@ -421,21 +747,7 @@ export class QuestionResponseService {
       );
     }
 
-    if (role !== UserRole.AUTHOR) {
-      await this.saveResponseToDatabase(
-        assignmentAttemptId,
-        questionId,
-        learnerResponse,
-        responseDto,
-        role,
-        tx,
-      );
-    }
-
-    responseDto.questionId = questionId;
-    responseDto.question = question.question;
-
-    return responseDto;
+    return { learnerResponse, responseDto };
   }
 
   /**
@@ -698,13 +1010,18 @@ export class QuestionResponseService {
   }
 
   /**
-   * Get assignment context for grading
+   * Get assignment context for grading.
+   *
+   * @param inMemoryResponses - Optional map of questionId → JSON-stringified learnerResponse.
+   *   When provided (Phase 2 grading), context responses are read from memory instead of the
+   *   database so we don't need to write them first.
    */
   private async getAssignmentContext(
     assignmentId: number,
     questionId: number,
     assignmentAttemptId: number,
     tx?: PrismaTransactionalClient,
+    inMemoryResponses?: Map<number, string>,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -749,29 +1066,43 @@ export class QuestionResponseService {
       select: { id: true, question: true, type: true },
     });
 
-    const questionResponses = await prisma.questionResponse.findMany({
-      where: {
-        assignmentAttemptId: assignmentAttemptId,
-        questionId: {
-          in: question.gradingContextQuestionIds,
-        },
-      },
-      orderBy: {
-        id: "desc",
-      },
-    });
+    // Build the response lookup: prefer in-memory (Phase 2) over DB
+    const responsesByQuestionId: Record<number, string> = {};
+    if (inMemoryResponses && inMemoryResponses.size > 0) {
+      for (const contextQ of contextQuestions) {
+        const inMemory = inMemoryResponses.get(contextQ.id);
+        if (inMemory !== undefined) {
+          responsesByQuestionId[contextQ.id] = inMemory;
+        }
+      }
+    }
 
-    const responsesByQuestionId: Record<number, any> = {};
-    for (const response of questionResponses) {
-      if (!responsesByQuestionId[response.questionId]) {
-        responsesByQuestionId[response.questionId] = response;
+    // Fall back to DB for any context questions not yet in memory
+    const missingIds = contextQuestions
+      .filter((contextQ) => responsesByQuestionId[contextQ.id] === undefined)
+      .map((contextQ) => contextQ.id);
+
+    if (missingIds.length > 0) {
+      const questionResponses = await prisma.questionResponse.findMany({
+        where: {
+          assignmentAttemptId: assignmentAttemptId,
+          questionId: { in: missingIds },
+        },
+        orderBy: { id: "desc" },
+      });
+
+      const seenIds = new Set<number>();
+      for (const response of questionResponses) {
+        if (!seenIds.has(response.questionId)) {
+          seenIds.add(response.questionId);
+          responsesByQuestionId[response.questionId] = response.learnerResponse;
+        }
       }
     }
 
     const questionAnswerContext = await Promise.all(
       contextQuestions.map(async (contextQuestion) => {
-        const response = responsesByQuestionId[contextQuestion.id];
-        let learnerResponse = response?.learnerResponse || "";
+        let learnerResponse = responsesByQuestionId[contextQuestion.id] || "";
 
         if (contextQuestion.type === QuestionType.URL && learnerResponse) {
           try {

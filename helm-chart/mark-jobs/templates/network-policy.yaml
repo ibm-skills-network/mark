@@ -1,0 +1,30 @@
+---
+# Allow mark-jobs egress to postgres, redis, and external HTTPS (e.g. OpenAI).
+# No ingress rules: this is a worker with no inbound connections.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mark-jobs.fullname" . }}-policy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mark-jobs.fullname" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer
+    - to:
+      - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 6379
+    - ports:
+        - protocol: TCP
+          port: 443
+  policyTypes:
+    - Egress

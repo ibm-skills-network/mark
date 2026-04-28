@@ -72,6 +72,20 @@ api:
   usePgBouncer: true
   env:
     API_PORT: 3000
+    ENABLE_JOB_SCHEDULERS: "false"
+  secretEnv: {}
+
+jobs:
+  enabled: false
+  autoscaling:
+    enabled: false
+  replicaCount: 1
+  image:
+    repository: icr.io/skills-network/mark-jobs
+    pullPolicy: IfNotPresent
+  resources: {}
+  env:
+    ENABLE_JOB_SCHEDULERS: "true"
   secretEnv: {}
 
 # UI configurations
@@ -145,6 +159,12 @@ postgres:
   password: ""
   hostname: ""
   port: 5432
+
+redis:
+  url: ""
+
+jobQueue:
+  secret: ""
 
 serviceAccount:
   # Specifies whether a service account should be created

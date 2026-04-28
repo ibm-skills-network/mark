@@ -47,9 +47,11 @@ describe("question-generation client helpers", () => {
 
   describe("startQuestionGenerationJob", () => {
     it("returns jobId when backend starts a generation job", async () => {
-      mockUploadFiles.mockResolvedValue({ success: true, jobId: 321 });
+      mockUploadFiles.mockResolvedValue({ success: true, jobId: "job-321" });
 
-      await expect(startQuestionGenerationJob(payload)).resolves.toBe(321);
+      await expect(startQuestionGenerationJob(payload)).resolves.toBe(
+        "job-321",
+      );
       expect(mockUploadFiles).toHaveBeenCalledWith(payload);
     });
 
@@ -143,7 +145,7 @@ describe("question-generation client helpers", () => {
       const onError = jest.fn();
 
       const stop = pollQuestionGenerationJob({
-        jobId: 123,
+        jobId: "job-123",
         intervalMs: 2500,
         onUpdate,
         onCompleted,
@@ -177,7 +179,7 @@ describe("question-generation client helpers", () => {
       const onError = jest.fn();
 
       pollQuestionGenerationJob({
-        jobId: 456,
+        jobId: "job-456",
         intervalMs: 2500,
         onUpdate,
         onCompleted,
@@ -204,7 +206,7 @@ describe("question-generation client helpers", () => {
       const onError = jest.fn();
 
       pollQuestionGenerationJob({
-        jobId: 789,
+        jobId: "job-789",
         intervalMs: 2500,
         onUpdate,
         onCompleted,
