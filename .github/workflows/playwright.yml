@@ -116,7 +116,7 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Run Playwright tests
-        run: yarn test:e2e:all
+        run: yarn test:e2e
         env:
           CI: true
 
