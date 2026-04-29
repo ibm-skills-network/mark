@@ -21,7 +21,7 @@ export type ProgressUpdateCallback = (
 @Injectable()
 export class GradingProgressService {
   private readonly logger = new Logger(GradingProgressService.name);
-  private progressCallbacks = new Map<number, ProgressUpdateCallback>();
+  private progressCallbacks = new Map<string, ProgressUpdateCallback>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -29,22 +29,40 @@ export class GradingProgressService {
   ) {}
 
   /**
+   * Compose the Map key for a callback. The composite (attemptId, jobId) shape
+   * disambiguates concurrent grading runs for the same attemptId — for example,
+   * an admin-fired regrade while the original learner grading is still in flight.
+   * Without this, the second registration silently overwrites the first and the
+   * original SSE stream receives the wrong job's events.
+   */
+  private buildCallbackKey(attemptId: number, jobId: string): string {
+    return `${attemptId}:${jobId}`;
+  }
+
+  /**
    * Register a callback for progress updates
    */
   setProgressCallback(
     attemptId: number,
+    jobId: string,
     callback: ProgressUpdateCallback,
   ): void {
-    this.progressCallbacks.set(attemptId, callback);
-    this.logger.log(`Registered progress callback for attempt ${attemptId}`);
+    const key = this.buildCallbackKey(attemptId, jobId);
+    this.progressCallbacks.set(key, callback);
+    this.logger.log(
+      `Registered progress callback for attempt ${attemptId} job ${jobId}`,
+    );
   }
 
   /**
    * Remove progress callback
    */
-  removeProgressCallback(attemptId: number): void {
-    this.progressCallbacks.delete(attemptId);
-    this.logger.log(`Removed progress callback for attempt ${attemptId}`);
+  removeProgressCallback(attemptId: number, jobId: string): void {
+    const key = this.buildCallbackKey(attemptId, jobId);
+    this.progressCallbacks.delete(key);
+    this.logger.log(
+      `Removed progress callback for attempt ${attemptId} job ${jobId}`,
+    );
   }
 
   /**
@@ -52,6 +70,7 @@ export class GradingProgressService {
    */
   async initializeProgress(
     attemptId: number,
+    jobId: string,
     totalQuestions: number,
   ): Promise<void> {
     try {
@@ -74,13 +93,15 @@ export class GradingProgressService {
         },
       });
 
-      const callback = this.progressCallbacks.get(attemptId);
+      const callback = this.progressCallbacks.get(
+        this.buildCallbackKey(attemptId, jobId),
+      );
       if (callback) {
         await callback("Processing", "Initializing grading process...", 0);
       }
     } catch (error) {
       this.logger.error(
-        `Failed to initialize progress for attempt ${attemptId}`,
+        `Failed to initialize progress for attempt ${attemptId} job ${jobId}`,
         error,
       );
     }
@@ -91,6 +112,7 @@ export class GradingProgressService {
    */
   async updateProgress(
     attemptId: number,
+    jobId: string,
     update: GradingProgressUpdate,
   ): Promise<void> {
     try {
@@ -99,13 +121,15 @@ export class GradingProgressService {
         data: update,
       });
 
-      const callback = this.progressCallbacks.get(attemptId);
+      const callback = this.progressCallbacks.get(
+        this.buildCallbackKey(attemptId, jobId),
+      );
       if (callback && update.currentStage) {
         await callback("Processing", update.currentStage, update.progress);
       }
     } catch (error) {
       this.logger.error(
-        `Failed to update progress for attempt ${attemptId}`,
+        `Failed to update progress for attempt ${attemptId} job ${jobId}`,
         error,
       );
     }
@@ -116,6 +140,7 @@ export class GradingProgressService {
    */
   async updateQuestionProgress(
     attemptId: number,
+    jobId: string,
     questionNumber: number,
     totalQuestions: number,
     stage: string,
@@ -123,7 +148,7 @@ export class GradingProgressService {
     // Grading questions takes up 90% of progress, reserve 10% for finalizing
     const progress = Math.round((questionNumber / totalQuestions) * 90);
 
-    await this.updateProgress(attemptId, {
+    await this.updateProgress(attemptId, jobId, {
       currentQuestion: questionNumber,
       currentStage: stage,
       progress,
@@ -133,7 +158,7 @@ export class GradingProgressService {
   /**
    * Mark grading as complete
    */
-  async markComplete(attemptId: number): Promise<void> {
+  async markComplete(attemptId: number, jobId: string): Promise<void> {
     try {
       const gradingProgress = await this.prisma.gradingProgress.findUnique({
         where: { attemptId },
@@ -152,7 +177,7 @@ export class GradingProgressService {
         },
       });
 
-      this.removeProgressCallback(attemptId);
+      this.removeProgressCallback(attemptId, jobId);
 
       if (
         gradingProgress?.notifyOnComplete &&
@@ -187,7 +212,7 @@ export class GradingProgressService {
       }
     } catch (error) {
       this.logger.error(
-        `Failed to mark grading complete for attempt ${attemptId}`,
+        `Failed to mark grading complete for attempt ${attemptId} job ${jobId}`,
         error,
       );
     }
@@ -196,7 +221,11 @@ export class GradingProgressService {
   /**
    * Mark grading as failed
    */
-  async markFailed(attemptId: number, error: string): Promise<void> {
+  async markFailed(
+    attemptId: number,
+    jobId: string,
+    error: string,
+  ): Promise<void> {
     try {
       await this.prisma.gradingProgress.update({
         where: { attemptId },
@@ -206,9 +235,15 @@ export class GradingProgressService {
           completedAt: new Date(),
         },
       });
+
+      // Symmetric cleanup with markComplete: without this, a failed grading
+      // leaves the callback resident in the Map until process restart. The
+      // double-remove on the worker's outer-catch failure path is a no-op
+      // because Map.delete on an absent key returns false.
+      this.removeProgressCallback(attemptId, jobId);
     } catch (error_) {
       this.logger.error(
-        `Failed to mark grading as failed for attempt ${attemptId}`,
+        `Failed to mark grading as failed for attempt ${attemptId} job ${jobId}`,
         error_,
       );
     }

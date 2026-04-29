@@ -89,7 +89,14 @@ export class QuestionResponseService {
     assignmentId: number,
     language: string,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    jobId?: string,
   ): Promise<GradedItem[]> {
+    // The progress service Map is keyed by (attemptId, jobId) so concurrent
+    // grading runs for the same attempt (e.g., regrade-while-grading) do not
+    // overwrite each other's callbacks. Real workers always supply a UUID;
+    // direct invocations / legacy tests fall back to a deterministic synthetic
+    // id so the composite-key API still resolves.
+    const effectiveJobId = jobId ?? `synthetic-${assignmentAttemptId}`;
     // ── Phase 1: Read (short transaction) ────────────────────────────────────
     const { questionDtos, sorted, adj, inDegree } =
       await this.prisma.$transaction(
@@ -133,6 +140,7 @@ export class QuestionResponseService {
     if (this.progressService) {
       await this.progressService.initializeProgress(
         assignmentAttemptId,
+        effectiveJobId,
         totalQuestions,
       );
     }
@@ -152,6 +160,7 @@ export class QuestionResponseService {
       if (this.progressService) {
         await this.progressService.updateQuestionProgress(
           assignmentAttemptId,
+          effectiveJobId,
           questionNumber,
           totalQuestions,
           `Grading question ${questionNumber} of ${totalQuestions}...`,
@@ -192,7 +201,10 @@ export class QuestionResponseService {
     }
 
     if (this.progressService) {
-      await this.progressService.markComplete(assignmentAttemptId);
+      await this.progressService.markComplete(
+        assignmentAttemptId,
+        effectiveJobId,
+      );
     }
 
     return gradedItems;
@@ -317,7 +329,14 @@ export class QuestionResponseService {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    jobId?: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
+    // The LEARNER-gated progress callsites below need a composite (attemptId,
+    // jobId) key — this branch is unreachable in current architecture (only
+    // AUTHOR preview reaches submitQuestions, and the LEARNER guards skip it),
+    // but the signature must compile cleanly. Synthetic fallback mirrors
+    // gradeQuestionsForLearner.
+    const effectiveJobId = jobId ?? `synthetic-${assignmentAttemptId}`;
     // ── Phase 1: Read (short transaction) ────────────────────────────────────
     const { questionDtos, sorted, adj, inDegree } =
       await this.prisma.$transaction(
@@ -375,6 +394,7 @@ export class QuestionResponseService {
     if (this.progressService && role === UserRole.LEARNER) {
       await this.progressService.initializeProgress(
         assignmentAttemptId,
+        effectiveJobId,
         totalQuestions,
       );
     }
@@ -392,6 +412,7 @@ export class QuestionResponseService {
       if (this.progressService && role === UserRole.LEARNER) {
         await this.progressService.updateQuestionProgress(
           assignmentAttemptId,
+          effectiveJobId,
           questionNumber,
           totalQuestions,
           `Grading question ${questionNumber} of ${totalQuestions}...`,
@@ -439,7 +460,10 @@ export class QuestionResponseService {
     }
 
     if (this.progressService && role === UserRole.LEARNER) {
-      await this.progressService.markComplete(assignmentAttemptId);
+      await this.progressService.markComplete(
+        assignmentAttemptId,
+        effectiveJobId,
+      );
     }
 
     // ── Phase 3: Write (short transaction) — LEARNER only ────────────────────

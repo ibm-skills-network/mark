@@ -368,6 +368,11 @@ export class AttemptSubmissionService {
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    // Optional grading-job identifier threaded down to the per-question
+    // progress service so its in-process callback Map can be keyed by
+    // (attemptId, jobId). Real workers always pass a UUID; legacy/test
+    // callers may omit it (downstream synthesizes a fallback id).
+    jobId?: string,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role } = request.userSession;
     if (role === UserRole.LEARNER) {
@@ -379,12 +384,14 @@ export class AttemptSubmissionService {
         gradingCallbackRequired,
         request,
         progressCallback,
+        jobId,
       );
     } else if (role === UserRole.AUTHOR) {
       return this.updateAuthorAttempt(
         assignmentId,
         updateDto,
         progressCallback,
+        jobId,
       );
     } else {
       throw new NotFoundException(
@@ -698,6 +705,7 @@ export class AttemptSubmissionService {
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    jobId?: string,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
@@ -801,6 +809,7 @@ export class AttemptSubmissionService {
           assignmentId,
           updateDto.language,
           updateDto.preTranslatedQuestions,
+          jobId,
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
@@ -932,6 +941,7 @@ export class AttemptSubmissionService {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    jobId?: string,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
@@ -967,6 +977,8 @@ export class AttemptSubmissionService {
           updateDto.language,
           updateDto.authorQuestions,
           updateDto.authorAssignmentDetails,
+          undefined,
+          jobId,
         );
 
       if (progressCallback) {

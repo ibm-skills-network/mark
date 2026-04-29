@@ -302,6 +302,7 @@ export class AttemptServiceV2 {
             percentage: percentage || 0,
           });
         },
+        gradingJobId,
       );
 
       await this.updateGradingJobStatus(gradingJobId, {
@@ -356,6 +357,7 @@ export class AttemptServiceV2 {
       if (this.gradingProgressService) {
         this.gradingProgressService.setProgressCallback(
           attemptId,
+          gradingJobId,
           async (status: string, progress: string, percentage?: number) => {
             await this.updateGradingJobStatus(gradingJobId, {
               status,
@@ -366,37 +368,48 @@ export class AttemptServiceV2 {
         );
       }
 
-      await this.updateGradingJobStatus(gradingJobId, {
-        status: "Processing",
-        progress: "Starting grading process...",
-        percentage: 0,
-      });
+      try {
+        await this.updateGradingJobStatus(gradingJobId, {
+          status: "Processing",
+          progress: "Starting grading process...",
+          percentage: 0,
+        });
 
-      const result = await this.submissionService.updateAssignmentAttempt(
-        attemptId,
-        assignmentId,
-        updateDto,
-        authCookie,
-        request.userSession.gradingCallbackRequired,
-        request,
-        async (progress: string, percentage?: number) => {
-          await this.updateGradingJobStatus(gradingJobId, {
-            status: "Processing",
-            progress,
-            percentage,
-          });
-        },
-      );
+        const result = await this.submissionService.updateAssignmentAttempt(
+          attemptId,
+          assignmentId,
+          updateDto,
+          authCookie,
+          request.userSession.gradingCallbackRequired,
+          request,
+          async (progress: string, percentage?: number) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status: "Processing",
+              progress,
+              percentage,
+            });
+          },
+          gradingJobId,
+        );
 
-      await this.updateGradingJobStatus(gradingJobId, {
-        status: "Completed",
-        progress: "Grading completed successfully",
-        percentage: 100,
-        result,
-      });
-
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(attemptId);
+        await this.updateGradingJobStatus(gradingJobId, {
+          status: "Completed",
+          progress: "Grading completed successfully",
+          percentage: 100,
+          result,
+        });
+      } finally {
+        // Guarantee callback removal even when intermediate code throws
+        // (updateGradingJobStatus, submissionService.updateAssignmentAttempt,
+        // a downstream Prisma error, etc.). Without the finally, an exception
+        // thrown after registration but before the success-path cleanup leaks
+        // the callback in the in-process Map until process restart.
+        if (this.gradingProgressService) {
+          this.gradingProgressService.removeProgressCallback(
+            attemptId,
+            gradingJobId,
+          );
+        }
       }
     } catch (error) {
       const errorMessage =
@@ -407,12 +420,16 @@ export class AttemptServiceV2 {
         percentage: 0,
       });
 
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(attemptId);
-        // Guard against author preview jobs which use attemptId = -1
-        if (attemptId > 0) {
-          await this.gradingProgressService.markFailed(attemptId, errorMessage);
-        }
+      if (this.gradingProgressService && attemptId > 0) {
+        // Guard against author preview jobs which use attemptId = -1.
+        // markFailed itself calls removeProgressCallback symmetrically; the
+        // double-remove (already removed by the inner finally) is safe —
+        // Map.delete on an absent key is a no-op.
+        await this.gradingProgressService.markFailed(
+          attemptId,
+          gradingJobId,
+          errorMessage,
+        );
       }
       throw error;
     }
