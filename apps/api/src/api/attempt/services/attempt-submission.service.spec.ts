@@ -1,5 +1,8 @@
 import { HttpService } from "@nestjs/axios";
-import { InternalServerErrorException } from "@nestjs/common";
+import {
+  ConflictException,
+  InternalServerErrorException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
 import {
@@ -74,6 +77,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
   const mockQuestionResponseService = {
     submitQuestions: jest.fn(),
+    gradeQuestionsForLearner: jest.fn(),
+    commitAttemptWithResponses: jest.fn(),
   };
 
   const mockTranslationService = {
@@ -1013,6 +1018,229 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       callRemoveSensitiveData([question]);
 
       expect(question.scoring?.rubrics).toBe(rubrics);
+    });
+  });
+
+  // ─── finalization rollback + commit-then-LTI ordering invariants ────────
+  describe("finalization rollback — commit-then-LTI ordering", () => {
+    type ServicePrivate = {
+      updateLearnerAttempt: (
+        attemptId: number,
+        assignmentId: number,
+        updateDto: unknown,
+        authCookie: string,
+        gradingCallbackRequired: boolean,
+        request: unknown,
+        progressCallback?: (progress: string, pct?: number) => Promise<void>,
+      ) => Promise<unknown>;
+      handleLtiGradeCallback: (
+        attemptId: number,
+        grade: number,
+        authCookie: string,
+        assignmentId: number,
+        userId: string,
+      ) => Promise<void>;
+      pruneAutoSavedResponses: (
+        attemptId: number,
+        responses: unknown[],
+      ) => Promise<void>;
+    };
+
+    const ATTEMPT_ID = 42;
+    const ASSIGNMENT_ID = 7;
+    const LEARNER_USER_ID = "learner@example.com";
+
+    const mockUpdateDto = {
+      submitted: true,
+      language: "en",
+      responsesForQuestions: [
+        {
+          id: 100,
+          questionId: 100,
+          question: "Q1",
+          learnerTextResponse: "answer",
+        },
+      ],
+    };
+
+    const mockUserSessionRequest = (overrides: { userId: string }) =>
+      ({
+        userSession: {
+          userId: overrides.userId,
+          role: UserRole.LEARNER,
+          assignmentId: ASSIGNMENT_ID,
+          groupId: "group-1",
+        },
+      }) as unknown as Parameters<ServicePrivate["updateLearnerAttempt"]>[5];
+
+    const mockGradedItems = [
+      {
+        questionId: 100,
+        learnerResponse: "answer",
+        responseDto: {
+          id: 100,
+          questionId: 100,
+          question: "Q1",
+          totalPoints: 8,
+          feedback: [],
+          metadata: { maxPossiblePoints: 10 },
+        },
+      },
+    ];
+
+    const mockCommitResult = {
+      id: ATTEMPT_ID,
+      submitted: true,
+      grade: 0.8,
+    };
+
+    let handleLtiGradeCallbackSpy: jest.SpyInstance;
+    let pruneSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      const sp = service as unknown as ServicePrivate;
+      handleLtiGradeCallbackSpy = jest
+        .spyOn(sp, "handleLtiGradeCallback")
+        .mockResolvedValue(undefined);
+      pruneSpy = jest
+        .spyOn(sp, "pruneAutoSavedResponses")
+        .mockResolvedValue(undefined);
+
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: ATTEMPT_ID,
+        expiresAt: new Date(Date.now() + 60_000),
+        questionVariants: [],
+        questionOrder: [100],
+      });
+      mockValidationService.isAttemptExpired.mockReturnValue(false);
+      mockTranslationService.preTranslateQuestions.mockResolvedValue(new Map());
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: ASSIGNMENT_ID,
+        questions: [{ id: 100, totalPoints: 10 } as Question],
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+      mockQuestionResponseService.gradeQuestionsForLearner.mockResolvedValue(
+        mockGradedItems,
+      );
+      mockGradingService.calculateGradeForLearner.mockReturnValue({
+        grade: 0.8,
+        totalPointsEarned: 8,
+        totalPossiblePoints: 10,
+      });
+      mockGradingService.constructFeedbacksForQuestions.mockReturnValue([]);
+    });
+
+    afterEach(() => {
+      handleLtiGradeCallbackSpy.mockRestore();
+      pruneSpy.mockRestore();
+    });
+
+    it.each([
+      [
+        "ConflictException (concurrent submit)",
+        new ConflictException(
+          "Attempt was already submitted by another request",
+        ),
+      ],
+      ["transient DB error", new Error("DB transient: connection reset")],
+    ])(
+      "commit failure (%s) does NOT invoke handleLtiGradeCallback — orphan LTI sync prevented",
+      async (_label, thrown) => {
+        mockQuestionResponseService.commitAttemptWithResponses.mockRejectedValue(
+          thrown,
+        );
+
+        const progressCallbackCalls: Array<{
+          progress: string;
+          pct: number | undefined;
+        }> = [];
+        const progressCallback = jest.fn(
+          async (progress: string, pct?: number) => {
+            progressCallbackCalls.push({ progress, pct });
+          },
+        );
+
+        await expect(
+          (service as unknown as ServicePrivate).updateLearnerAttempt(
+            ATTEMPT_ID,
+            ASSIGNMENT_ID,
+            mockUpdateDto,
+            "test-cookie",
+            true, // gradingCallbackRequired — would otherwise sync to LTI
+            mockUserSessionRequest({ userId: LEARNER_USER_ID }),
+            progressCallback,
+          ),
+        ).rejects.toThrow(thrown.message);
+
+        // Critical invariant: handleLtiGradeCallback was NEVER called.
+        expect(handleLtiGradeCallbackSpy).not.toHaveBeenCalled();
+
+        // Sanity: commitAttemptWithResponses WAS called (it's what threw).
+        expect(
+          mockQuestionResponseService.commitAttemptWithResponses,
+        ).toHaveBeenCalledTimes(1);
+
+        // Progress sequence: "Finalizing results..." fired (commit prelude);
+        // "Sending grade to LTI..." NEVER fired.
+        const finalizingCall = progressCallbackCalls.find(
+          (c) => c.progress === "Finalizing results...",
+        );
+        const ltiCall = progressCallbackCalls.find(
+          (c) => c.progress === "Sending grade to LTI...",
+        );
+        expect(finalizingCall).toBeDefined();
+        expect(ltiCall).toBeUndefined();
+      },
+    );
+
+    it("ordering invariant on success path: commit → handleLtiGradeCallback", async () => {
+      const callOrder: string[] = [];
+      mockQuestionResponseService.commitAttemptWithResponses.mockImplementation(
+        async () => {
+          callOrder.push("commit");
+          return mockCommitResult;
+        },
+      );
+      handleLtiGradeCallbackSpy.mockImplementation(async () => {
+        callOrder.push("ltiCallback");
+      });
+
+      await (service as unknown as ServicePrivate).updateLearnerAttempt(
+        ATTEMPT_ID,
+        ASSIGNMENT_ID,
+        mockUpdateDto,
+        "test-cookie",
+        true,
+        mockUserSessionRequest({ userId: LEARNER_USER_ID }),
+        jest.fn(),
+      );
+
+      // Ordering invariant: commit ran BEFORE ltiCallback.
+      expect(callOrder).toEqual(["commit", "ltiCallback"]);
+    });
+
+    it("gradingCallbackRequired=false: handleLtiGradeCallback never called regardless of commit outcome", async () => {
+      mockQuestionResponseService.commitAttemptWithResponses.mockResolvedValue(
+        mockCommitResult,
+      );
+
+      await (service as unknown as ServicePrivate).updateLearnerAttempt(
+        ATTEMPT_ID,
+        ASSIGNMENT_ID,
+        mockUpdateDto,
+        "test-cookie",
+        /* gradingCallbackRequired */ false,
+        mockUserSessionRequest({ userId: LEARNER_USER_ID }),
+        jest.fn(),
+      );
+
+      expect(
+        mockQuestionResponseService.commitAttemptWithResponses,
+      ).toHaveBeenCalledTimes(1);
+      expect(handleLtiGradeCallbackSpy).not.toHaveBeenCalled();
     });
   });
 });

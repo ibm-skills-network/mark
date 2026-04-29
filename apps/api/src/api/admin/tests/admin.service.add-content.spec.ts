@@ -10,6 +10,7 @@ import {
   ResponseType,
 } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
+import { JobStateService } from "../../../job-queue/job-state.service";
 import { AssignmentServiceV2 } from "../../assignment/v2/services/assignment.service";
 import { AssignmentFileService } from "../../assignment/v2/services/assignment-file.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
@@ -172,6 +173,10 @@ describe("AdminService - addContentToAssignment", () => {
           useValue: {
             calculateCostWithBreakdown: jest.fn(),
           },
+        },
+        {
+          provide: JobStateService,
+          useValue: { getActiveLockCount: jest.fn().mockReturnValue(0) },
         },
       ],
     }).compile();

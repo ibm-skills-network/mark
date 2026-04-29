@@ -111,6 +111,16 @@ class FakeRedis {
     return existed ? 1 : 0;
   }
 
+  // Configurable scan stub: callers may replace this to control SCAN
+  // behavior in OnModuleInit tests. By default, returns no keys.
+  public scan: (
+    cursor: string,
+    matchKw: "MATCH",
+    pattern: string,
+    countKw: "COUNT",
+    count: number,
+  ) => Promise<[string, string[]]> = async () => ["0", []];
+
   async publish(channel: string, message: string): Promise<number> {
     let deliveries = 0;
 
@@ -488,5 +498,182 @@ describe("JobStateService", () => {
     await service.onModuleDestroy();
 
     expect(fakeRedis.quit).toHaveBeenCalledTimes(1);
+  });
+
+  describe("GRADE-03 active-lock counter (D-10)", () => {
+    it("acquireActiveJobLock increments the counter when the lock is acquired (result !== null from Redis SET NX)", async () => {
+      expect(service.getActiveLockCount()).toBe(0);
+
+      const result = await service.acquireActiveJobLock(
+        "grading:user@example.com:7:42",
+        "temp-job-id",
+      );
+
+      expect(result).toBeNull();
+      expect(service.getActiveLockCount()).toBe(1);
+    });
+
+    it("acquireActiveJobLock does NOT increment the counter when the lock is already held (result === null from Redis SET NX)", async () => {
+      // First call acquires the lock.
+      await service.acquireActiveJobLock(
+        "grading:user@example.com:7:42",
+        "first-temp",
+      );
+      expect(service.getActiveLockCount()).toBe(1);
+
+      // Second call — same activeKey, lock already held.
+      const second = await service.acquireActiveJobLock(
+        "grading:user@example.com:7:42",
+        "second-temp",
+      );
+      expect(second).toBe("first-temp");
+      // No additional increment for the conflict.
+      expect(service.getActiveLockCount()).toBe(1);
+    });
+
+    it("updateJobStatus decrements the counter on non-terminal → terminal transition", async () => {
+      const job = await service.createJob({
+        queueName: "mark.attempt",
+        jobName: "attempt-grade",
+        kind: "attempt-grading",
+        userId: "user@example.com",
+        status: "Pending",
+        progress: "Queued",
+        activeKey: "grading:user@example.com:7:42",
+      });
+      // Seed via acquire so the counter starts at 1 (matches steady-state usage).
+      await service.acquireActiveJobLock(
+        "grading:user@example.com:7:42:seed",
+        "seed-temp",
+      );
+      expect(service.getActiveLockCount()).toBe(1);
+
+      await service.updateJobStatus(job.id, {
+        status: "Completed",
+        progress: "Done",
+        percentage: 100,
+      });
+
+      expect(service.getActiveLockCount()).toBe(0);
+    });
+
+    it("updateJobStatus does NOT double-decrement on a repeat terminal-status update (idempotent guard)", async () => {
+      const job = await service.createJob({
+        queueName: "mark.attempt",
+        jobName: "attempt-grade",
+        kind: "attempt-grading",
+        userId: "user@example.com",
+        status: "Pending",
+        progress: "Queued",
+        activeKey: "grading:user@example.com:7:42",
+      });
+      await service.acquireActiveJobLock(
+        "grading:user@example.com:7:42:seed",
+        "seed-temp",
+      );
+      expect(service.getActiveLockCount()).toBe(1);
+
+      // First terminal update — decrements 1 → 0.
+      await service.updateJobStatus(job.id, {
+        status: "Completed",
+        progress: "Done",
+        percentage: 100,
+      });
+      expect(service.getActiveLockCount()).toBe(0);
+
+      // Second terminal update — existingJob.status is now "Completed", guard
+      // prevents double-decrement. Floor at 0 would catch it anyway, but the
+      // guard prevents the spurious decrement entirely.
+      await service.updateJobStatus(job.id, {
+        status: "Completed",
+        progress: "Done again",
+        percentage: 100,
+      });
+      expect(service.getActiveLockCount()).toBe(0);
+    });
+
+    it("updateJobStatus does NOT decrement on a non-terminal → non-terminal update", async () => {
+      const job = await service.createJob({
+        queueName: "mark.attempt",
+        jobName: "attempt-grade",
+        kind: "attempt-grading",
+        userId: "user@example.com",
+        status: "Pending",
+        progress: "Queued",
+        activeKey: "grading:user@example.com:7:42",
+      });
+      await service.acquireActiveJobLock(
+        "grading:user@example.com:7:42:seed",
+        "seed-temp",
+      );
+      expect(service.getActiveLockCount()).toBe(1);
+
+      await service.updateJobStatus(job.id, {
+        status: "Processing",
+        progress: "Working",
+        percentage: 50,
+      });
+
+      // Counter unchanged — non-terminal update.
+      expect(service.getActiveLockCount()).toBe(1);
+    });
+
+    it("OnModuleInit resyncs activeLockCount from Redis SCAN", async () => {
+      const scanCalls: Array<[string, string, string, string, number]> = [];
+      fakeRedis.scan = async (
+        cursor,
+        matchKw,
+        pattern,
+        countKw,
+        count,
+      ): Promise<[string, string[]]> => {
+        scanCalls.push([cursor, matchKw, pattern, countKw, count]);
+        return [
+          "0",
+          [
+            "mark:jobs:active:hashA",
+            "mark:jobs:active:hashB",
+            "mark:jobs:active:hashC",
+          ],
+        ];
+      };
+
+      await service.onModuleInit();
+
+      expect(service.getActiveLockCount()).toBe(3);
+      expect(scanCalls).toHaveLength(1);
+      expect(scanCalls[0]).toEqual([
+        "0",
+        "MATCH",
+        "mark:jobs:active:*",
+        "COUNT",
+        1000,
+      ]);
+    });
+
+    it("OnModuleInit handles multi-cursor SCAN (cursor !== '0' on first iteration)", async () => {
+      let callCount = 0;
+      fakeRedis.scan = async (): Promise<[string, string[]]> => {
+        callCount += 1;
+        if (callCount === 1) {
+          return ["123", ["k1", "k2", "k3", "k4"]];
+        }
+        return ["0", ["k5", "k6"]];
+      };
+
+      await service.onModuleInit();
+
+      expect(service.getActiveLockCount()).toBe(6);
+      expect(callCount).toBe(2);
+    });
+
+    it("OnModuleInit failure resilience: a Redis error sets the counter to 0 without throwing", async () => {
+      fakeRedis.scan = async (): Promise<[string, string[]]> => {
+        throw new Error("ECONNREFUSED");
+      };
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+      expect(service.getActiveLockCount()).toBe(0);
+    });
   });
 });

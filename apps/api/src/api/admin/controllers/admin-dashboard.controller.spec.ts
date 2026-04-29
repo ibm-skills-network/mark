@@ -27,6 +27,10 @@ const mockAdminService = {
     pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
   }),
   getDetailedAssignmentInsights: jest.fn().mockResolvedValue({}),
+  getGradingStreamsMetric: jest.fn().mockResolvedValue({
+    activeLockCount: 7,
+    observedAt: "2026-04-29T00:00:00.000Z",
+  }),
 };
 
 const mockScheduledTasksService = {
@@ -134,6 +138,25 @@ describe("AdminDashboardController", () => {
         expect.anything(),
         expect.objectContaining({ userId: VALID_EMAIL }),
       );
+    });
+  });
+
+  describe("GET internal/grading-streams (GRADE-03 metric)", () => {
+    it("delegates to AdminService.getGradingStreamsMetric with the requester's userId and returns the response unchanged", async () => {
+      const fakeRequest = {
+        userSession: { userId: "admin@example.com", role: "ADMIN" },
+      } as unknown as UserSessionRequest;
+
+      const response = await controller.getGradingStreamsMetric(fakeRequest);
+
+      expect(mockAdminService.getGradingStreamsMetric).toHaveBeenCalledTimes(1);
+      expect(mockAdminService.getGradingStreamsMetric).toHaveBeenCalledWith(
+        "admin@example.com",
+      );
+      expect(response).toEqual({
+        activeLockCount: 7,
+        observedAt: "2026-04-29T00:00:00.000Z",
+      });
     });
   });
 });

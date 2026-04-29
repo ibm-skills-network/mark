@@ -11,6 +11,7 @@ import {
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import { JobStateService } from "../../job-queue/job-state.service";
 import {
   Choice,
   QuestionDto,
@@ -56,7 +57,27 @@ export class AdminService {
     private readonly assignmentFileService: AssignmentFileService,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
+    private readonly jobStateService: JobStateService,
   ) {}
+
+  /**
+   * Returns the active grading-job lock count for observability.
+   * Per-replica counter; OnModuleInit resync covers process-restart loss.
+   * Reads are logged with the requesting userId for audit forensics.
+   */
+  async getGradingStreamsMetric(requesterUserId: string): Promise<{
+    activeLockCount: number;
+    observedAt: string;
+  }> {
+    const activeLockCount = this.jobStateService.getActiveLockCount();
+    const observedAt = new Date().toISOString();
+    this.logger.log("admin_grading_streams_metric_read", {
+      requesterUserId,
+      activeLockCount,
+      observedAt,
+    });
+    return { activeLockCount, observedAt };
+  }
 
   /**
    * Helper method to get cached insights data

@@ -306,4 +306,242 @@ describe("AttemptServiceV2", () => {
       expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
     });
   });
+
+  // ─── Concurrent submission idempotency (controller-side lock) ────────────
+
+  describe("concurrent createGradingJob — controller-side active-lock idempotency", () => {
+    it("3-tab pile-on: three concurrent createGradingJob calls resolve to a single job via acquireActiveJobLock", async () => {
+      // In-memory atomic SET-NX shim — models Redis SET NX. JS is single-threaded
+      // so the first synchronous map.set call within the same microtask wins;
+      // subsequent calls see the existing entry and return the stored jobId.
+      const lockMap = new Map<string, string>();
+      mockJobStateService.acquireActiveJobLock!.mockImplementation(
+        async (activeKey: string, temporaryJobId: string) => {
+          if (lockMap.has(activeKey)) {
+            // Lock already held → return existing jobId
+            return lockMap.get(activeKey)!;
+          }
+          lockMap.set(activeKey, temporaryJobId);
+          // eslint-disable-next-line unicorn/no-null
+          return null;
+        },
+      );
+
+      mockJobStateService.createJob!.mockImplementation(async (opts: any) => ({
+        id: opts.reservedId,
+        queueName: opts.queueName,
+        jobName: opts.jobName,
+        kind: opts.kind,
+        userId: opts.userId,
+        assignmentId: opts.assignmentId,
+        attemptId: opts.attemptId,
+        status: "Pending",
+        progress: "Grading job created",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+
+      const userSessionRequest = makeRequest("learner@example.com");
+      const promises = [
+        service.createGradingJob(
+          42,
+          7,
+          {} as any,
+          "cookie",
+          userSessionRequest,
+        ),
+        service.createGradingJob(
+          42,
+          7,
+          {} as any,
+          "cookie",
+          userSessionRequest,
+        ),
+        service.createGradingJob(
+          42,
+          7,
+          {} as any,
+          "cookie",
+          userSessionRequest,
+        ),
+      ];
+      const results = await Promise.all(promises);
+
+      // Layer 1 invariant: exactly one createJob call across three concurrent submitters.
+      expect(mockJobStateService.createJob).toHaveBeenCalledTimes(1);
+
+      // All three callers receive the same gradingJobId.
+      const ids = new Set(results.map((r) => r.gradingJobId));
+      expect(ids.size).toBe(1);
+
+      // The two losing callers see the reuse message; the winner sees the new-job message.
+      const reuseMessages = results.filter((r) =>
+        r.message.includes("Reusing existing job"),
+      );
+      expect(reuseMessages.length).toBe(2);
+
+      // Sanity: acquireActiveJobLock was called three times (every caller attempted to acquire).
+      expect(mockJobStateService.acquireActiveJobLock).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ─── Worker-side redelivery guard (terminal-status read-before-act) ──────
+
+  describe("worker redelivery guard — terminal-status short-circuit", () => {
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      // The Logger field is private; bracket-access is intentional spec-only.
+      warnSpy = jest
+        .spyOn((service as any)["logger"], "warn")
+        .mockImplementation(() => undefined);
+      mockSubmissionService.updateAssignmentAttempt!.mockResolvedValue(
+        {} as any,
+      );
+      mockJobStateService.updateJobStatus!.mockResolvedValue({} as any);
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it.each([
+      ["Completed", "redelivery after success"],
+      ["Failed", "redelivery after failure"],
+    ])(
+      "processGradingJob short-circuits when JobStateService reports status %s (%s)",
+      async (status, _label) => {
+        mockJobStateService.getJob!.mockResolvedValue({
+          id: "job-123",
+          queueName: "mark.attempt",
+          jobName: "attempt-grade",
+          kind: "attempt-grading",
+          userId: "learner@example.com",
+          assignmentId: 7,
+          attemptId: 42,
+          status,
+          progress: "...",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        await service.processGradingJob(
+          "job-123",
+          42,
+          7,
+          {} as any,
+          "cookie",
+          makeRequest("learner@example.com"),
+        );
+
+        // Critical invariant: the redelivered run did NOT call updateAssignmentAttempt.
+        expect(
+          mockSubmissionService.updateAssignmentAttempt,
+        ).not.toHaveBeenCalled();
+
+        // Structured log captures the canonical fields.
+        expect(warnSpy).toHaveBeenCalledWith(
+          "grading_job_redelivery_skipped",
+          expect.objectContaining({
+            gradingJobId: "job-123",
+            status,
+            attemptId: 42,
+            userId: "learner@example.com",
+          }),
+        );
+      },
+    );
+
+    it("processGradingJob proceeds when JobStateService.getJob returns null (no prior record)", async () => {
+      // eslint-disable-next-line unicorn/no-null
+      mockJobStateService.getJob!.mockResolvedValue(null);
+
+      await service.processGradingJob(
+        "job-123",
+        42,
+        7,
+        {} as any,
+        "cookie",
+        makeRequest("learner@example.com"),
+      );
+
+      expect(
+        mockSubmissionService.updateAssignmentAttempt,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["Pending", "Processing"])(
+      "processGradingJob proceeds when status is non-terminal (%s)",
+      async (status) => {
+        mockJobStateService.getJob!.mockResolvedValue({
+          id: "job-123",
+          queueName: "mark.attempt",
+          jobName: "attempt-grade",
+          kind: "attempt-grading",
+          userId: "learner@example.com",
+          assignmentId: 7,
+          attemptId: 42,
+          status,
+          progress: "...",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        await service.processGradingJob(
+          "job-123",
+          42,
+          7,
+          {} as any,
+          "cookie",
+          makeRequest("learner@example.com"),
+        );
+
+        expect(
+          mockSubmissionService.updateAssignmentAttempt,
+        ).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("processAuthorPreviewJob applies the same guard (symmetry)", async () => {
+      mockJobStateService.getJob!.mockResolvedValue({
+        id: "preview-456",
+        queueName: "mark.attempt",
+        jobName: "attempt-author-preview",
+        kind: "attempt-author-preview",
+        userId: "author@example.com",
+        assignmentId: 9,
+        // eslint-disable-next-line unicorn/no-null
+        attemptId: null,
+        status: "Completed",
+        progress: "...",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      await service.processAuthorPreviewJob(
+        "preview-456",
+        9,
+        {} as any,
+        "cookie",
+        makeRequest("author@example.com", UserRole.AUTHOR),
+      );
+
+      expect(
+        mockSubmissionService.updateAssignmentAttempt,
+      ).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        "grading_job_redelivery_skipped",
+        expect.objectContaining({
+          kind: "author-preview",
+          status: "Completed",
+        }),
+      );
+    });
+  });
 });

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { Observable } from "rxjs";
@@ -54,6 +54,8 @@ export class AttemptServiceV2 {
     @Inject("GradingProgressService")
     private readonly gradingProgressService?: GradingProgressService,
   ) {}
+
+  private readonly logger = new Logger(AttemptServiceV2.name);
 
   private buildGradingActiveKey(
     userId: string,
@@ -260,6 +262,26 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
+      // Worker-side redelivery guard. If this job has already reached a
+      // terminal status (Completed | Failed), the queue has redelivered it
+      // after the original DB writes succeeded but the API ack was lost.
+      // Re-running it would duplicate the LTI sync, the grade write, and the
+      // SSE terminal events. Short-circuit and log.
+      const existingJob = await this.jobStateService.getJob(gradingJobId);
+      if (
+        existingJob?.status === "Completed" ||
+        existingJob?.status === "Failed"
+      ) {
+        this.logger.warn("grading_job_redelivery_skipped", {
+          gradingJobId,
+          status: existingJob.status,
+          assignmentId,
+          userId: request.userSession.userId,
+          kind: "author-preview",
+        });
+        return;
+      }
+
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
         progress: "Starting author preview grading...",
@@ -312,6 +334,25 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
+      // Worker-side redelivery guard. If this job has already reached a
+      // terminal status (Completed | Failed), the queue has redelivered it
+      // after the original DB writes succeeded but the API ack was lost.
+      // Re-running it would duplicate the LTI sync, the grade write, and the
+      // SSE terminal events. Short-circuit and log.
+      const existingJob = await this.jobStateService.getJob(gradingJobId);
+      if (
+        existingJob?.status === "Completed" ||
+        existingJob?.status === "Failed"
+      ) {
+        this.logger.warn("grading_job_redelivery_skipped", {
+          gradingJobId,
+          status: existingJob.status,
+          attemptId,
+          userId: request.userSession.userId,
+        });
+        return;
+      }
+
       if (this.gradingProgressService) {
         this.gradingProgressService.setProgressCallback(
           attemptId,

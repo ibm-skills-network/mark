@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AssignmentType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../database/prisma.service";
+import { JobStateService } from "../../job-queue/job-state.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
@@ -70,6 +71,10 @@ describe("AdminService", () => {
         },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
+        {
+          provide: JobStateService,
+          useValue: { getActiveLockCount: jest.fn().mockReturnValue(0) },
+        },
       ],
     }).compile();
 
