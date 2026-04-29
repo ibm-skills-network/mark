@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import IORedis from "ioredis";
 import { Observable } from "rxjs";
 import {
@@ -18,9 +23,15 @@ const TERMINAL_JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
 const NULL_SENTINEL = "__null__";
 
 @Injectable()
-export class JobStateService implements OnModuleDestroy {
+export class JobStateService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobStateService.name);
   private connection?: IORedis;
+  // In-process counter of currently-held active-job locks. Per-replica;
+  // OnModuleInit resyncs from Redis on startup so a process restart doesn't
+  // lose the count. Counter divergence in multi-replica deploys is acceptable
+  // (single-replica today makes it exact; an hourly Redis SCAN resync is
+  // listed as deferred work).
+  private activeLockCount = 0;
 
   private getConnection(): IORedis {
     if (!this.connection) {
@@ -90,12 +101,24 @@ export class JobStateService implements OnModuleDestroy {
       "NX",
     );
     if (result === null) {
-      // Lock already held – return existing jobId
+      // Lock already held – return existing jobId. Do NOT increment counter.
       const existingJobId = await this.getConnection().get(redisKey);
       return existingJobId;
     }
-    // Lock acquired – return null to signal caller to proceed
+    // Lock acquired – increment in-process counter, then return null to signal
+    // caller to proceed.
+    this.activeLockCount += 1;
     return null;
+  }
+
+  /**
+   * Returns the current count of active grading-job locks held by this
+   * replica. Per-replica; multi-replica deploys see drift between counters.
+   * Single-replica deploys (Mark's current posture) are exact. The
+   * OnModuleInit resync covers process-restart loss.
+   */
+  getActiveLockCount(): number {
+    return this.activeLockCount;
   }
 
   async findActiveJob(activeKey: string): Promise<JobStateRecord | null> {
@@ -165,6 +188,13 @@ export class JobStateService implements OnModuleDestroy {
     if (existingJob.activeKeyHash) {
       if (this.isTerminalStatus(updatedJob.status)) {
         transaction.del(this.getActiveJobKey(existingJob.activeKeyHash));
+        // Decrement only on a TRANSITION non-terminal → terminal. Idempotent
+        // re-update (e.g., updateJobStatus called twice with terminal status)
+        // would otherwise double-decrement. Floor at 0 protects against any
+        // pre-counter drift edge case.
+        if (!this.isTerminalStatus(existingJob.status)) {
+          this.activeLockCount = Math.max(0, this.activeLockCount - 1);
+        }
       } else {
         transaction.set(
           this.getActiveJobKey(existingJob.activeKeyHash),
@@ -278,6 +308,48 @@ export class JobStateService implements OnModuleDestroy {
 
   async cleanupJobStream(_jobId: string): Promise<void> {
     void _jobId;
+  }
+
+  async onModuleInit(): Promise<void> {
+    try {
+      let cursor = "0";
+      let scannedCount = 0;
+      let iterations = 0;
+      do {
+        const [nextCursor, keys] = await this.getConnection().scan(
+          cursor,
+          "MATCH",
+          "mark:jobs:active:*",
+          "COUNT",
+          1000,
+        );
+        scannedCount += keys.length;
+        cursor = nextCursor;
+        iterations += 1;
+        // Safety bound: SCAN guarantees forward progress under normal Redis
+        // ops, but a buggy Redis or a runaway loop deserves a circuit breaker.
+        if (iterations > 10_000) {
+          this.logger.error("active_lock_resync_aborted_iteration_limit", {
+            scannedCount,
+            iterations,
+          });
+          break;
+        }
+      } while (cursor !== "0");
+      this.activeLockCount = scannedCount;
+      this.logger.log("active_lock_resync_complete", {
+        initial_count: scannedCount,
+        scan_iterations: iterations,
+      });
+    } catch (error) {
+      // A Redis-unreachable startup is non-fatal. Counter starts at 0; every
+      // increment from acquireActiveJobLock is still correct from this moment
+      // forward. Log with structured context — do NOT swallow silently.
+      this.activeLockCount = 0;
+      this.logger.error("active_lock_resync_failed", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

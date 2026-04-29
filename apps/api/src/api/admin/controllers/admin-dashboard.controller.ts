@@ -262,4 +262,31 @@ export class AdminDashboardController {
       };
     }
   }
+
+  /**
+   * Internal observability endpoint exposing the active grading-job lock count.
+   * Admin-only — system-wide grading metrics are not author-visible.
+   */
+  @Get("internal/grading-streams")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: "Get the count of currently-active grading-job locks",
+    description:
+      "Internal observability endpoint exposing the active-lock count. Admin-only.",
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 401 })
+  @ApiResponse({ status: 403 })
+  async getGradingStreamsMetric(
+    @Req() request: UserSessionRequest,
+  ): Promise<{ activeLockCount: number; observedAt: string }> {
+    // Class-level @UseGuards(AdminGuard) + method-level @Roles(UserRole.ADMIN)
+    // gate this endpoint. Per the project hostile-frontend rule, server-side
+    // authz is on every handler; the @Roles decorator is the canonical Mark
+    // pattern. The endpoint takes no inputs (no path params, body, or query),
+    // so there is no input validation surface.
+    return this.adminService.getGradingStreamsMetric(
+      request.userSession.userId,
+    );
+  }
 }

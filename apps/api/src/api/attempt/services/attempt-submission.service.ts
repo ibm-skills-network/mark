@@ -853,21 +853,18 @@ export class AttemptSubmissionService {
         );
       }
 
-      if (gradingCallbackRequired) {
-        if (progressCallback) {
-          await progressCallback("Sending grade to LTI...", 95);
-        }
-        await this.handleLtiGradeCallback(
-          attemptId,
-          grade,
-          authCookie,
-          assignmentId,
-          request.userSession.userId,
-        );
-      }
-
+      // Finalization order: commitAttemptWithResponses BEFORE handleLtiGradeCallback.
+      // Rationale: if commit throws (concurrent submitter wins the updateMany claim,
+      // transient DB error inside the per-question write loop, etc.), no orphan
+      // ltiGradeSync record is created. Running the LTI sync first would leave a
+      // sync row pointing at an attempt with submitted: false on rollback.
+      //
+      // The LTI sync stays outside the commit transaction by design:
+      // ltiGradeSync.create owns its own retry path via LtiGradeSyncService and
+      // would block the tx behind a network call to the gateway. The reorder is
+      // sufficient — a commit failure aborts before any LTI side effect fires.
       if (progressCallback) {
-        await progressCallback("Finalizing results...", 98);
+        await progressCallback("Finalizing results...", 95);
       }
 
       // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
@@ -883,6 +880,19 @@ export class AttemptSubmissionService {
         attemptId,
         successfulQuestionResponses,
       );
+
+      if (gradingCallbackRequired) {
+        if (progressCallback) {
+          await progressCallback("Sending grade to LTI...", 97);
+        }
+        await this.handleLtiGradeCallback(
+          attemptId,
+          grade,
+          authCookie,
+          assignmentId,
+          request.userSession.userId,
+        );
+      }
 
       if (progressCallback) {
         await progressCallback("Grading completed!", 100);
