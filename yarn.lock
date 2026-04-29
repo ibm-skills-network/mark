@@ -6133,10 +6133,6 @@ acorn@^8.15.0:
   resolved "https://registry.npmjs.org/acorn/-/acorn-8.16.0.tgz#4ce79c89be40afe7afe8f3adb902a1f1ce9ac08a"
   integrity sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw==
 
-add@^2.0.6:
-  version "2.0.6"
-  resolved "https://registry.npmjs.org/add/-/add-2.0.6.tgz#248f0a9f6e5a528ef2295dbeec30532130ae2235"
-  integrity sha512-j5QzrmsokwWWp6kUcJQySpbG+xfOBqqKnup3OIk1pz+kB/80SLorZ9V8zHFLO92Lcd+hbvq8bT+zOGoPkmBV0Q==
 afinn-165-financialmarketnews@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/afinn-165-financialmarketnews/-/afinn-165-financialmarketnews-3.0.0.tgz#cf422577775bf94f9bc156f3f001a1f29338c3d8"

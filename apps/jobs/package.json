@@ -9,7 +9,7 @@
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",
     "lint:staged": "eslint",
-    "start": "dotenv -e ../api/dev.env -- nest start",
+    "start": "dotenv -e ../api/.env -- nest start",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/src/main.js",

@@ -213,6 +213,7 @@ describe("AttemptServiceV2", () => {
 
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
+        "job-1",
         "LLM timeout",
       );
     });
