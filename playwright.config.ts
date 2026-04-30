@@ -91,7 +91,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: "yarn start:e2e",
+    command: "exec bash scripts/start-e2e.sh",
     url: `${testEnvironment.markApiBaseUrl}/health/readiness`,
     timeout: 600_000,
     reuseExistingServer: !process.env.CI,
