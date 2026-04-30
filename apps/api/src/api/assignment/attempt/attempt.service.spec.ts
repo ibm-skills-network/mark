@@ -3,6 +3,7 @@ import { HttpService } from "@nestjs/axios";
 import { UnprocessableEntityException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { LtiSyncStatus } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../../database/prisma.service";
 import { LlmFacadeService } from "../../llm/llm-facade.service";
 import { QuestionService } from "../question/question.service";
@@ -53,6 +54,15 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
     findOne: jest.fn(),
   };
 
+  const mockLogger = {
+    child: jest.fn().mockReturnValue({
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -63,6 +73,7 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
         { provide: QuestionService, useValue: mockQuestionService },
         { provide: AssignmentServiceV1, useValue: mockAssignmentService },
         { provide: LtiGradeSyncService, useValue: mockLtiGradeSyncService },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
 
@@ -517,6 +528,7 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
           { provide: LlmFacadeService, useValue: mockLlmFacadeService },
           { provide: QuestionService, useValue: mockQuestionService },
           { provide: AssignmentServiceV1, useValue: mockAssignmentService },
+          { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
         ],
       }).compile();
 

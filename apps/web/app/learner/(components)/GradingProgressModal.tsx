@@ -9,7 +9,7 @@ interface GradingProgressModalProps {
   isOpen: boolean;
   assignmentId: number;
   attemptId: number | null;
-  gradingJobId: number | null;
+  gradingJobId: string | null;
 }
 
 interface ProgressState {

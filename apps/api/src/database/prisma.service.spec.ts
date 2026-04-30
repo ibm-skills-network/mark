@@ -1,5 +1,4 @@
 /* eslint-disable */
-import { Logger } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
 
 describe("PrismaService", () => {
@@ -19,14 +18,20 @@ describe("PrismaService", () => {
     }
   });
 
-  const silenceLogger = () => {
-    jest.spyOn(Logger.prototype, "log").mockImplementation(() => {});
-    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
-    jest.spyOn(Logger.prototype, "error").mockImplementation(() => {});
-  };
+  const createMockLogger = () => ({
+    child: jest.fn().mockReturnValue({
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    }),
+  });
+
+  // Kept for API compatibility with existing tests; the mock logger is silent.
+  const silenceLogger = () => {};
 
   const createService = () => {
-    const service = new PrismaService();
+    const service = new PrismaService(createMockLogger() as any);
     service.$connect = jest.fn().mockResolvedValue() as any;
     service.$disconnect = jest.fn().mockResolvedValue() as any;
     service.$queryRaw = jest.fn().mockResolvedValue() as any;

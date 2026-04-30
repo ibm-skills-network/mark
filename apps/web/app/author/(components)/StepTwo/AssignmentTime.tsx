@@ -313,7 +313,7 @@ const Component: FC<Props> = () => {
               </div>
               <div className="border-t border-gray-200 p-2 bg-gray-50">
                 <p className="text-xs text-amber-600">
-                    Click on a question title to toggle.
+                  Click on a question title to toggle.
                 </p>
               </div>
             </div>

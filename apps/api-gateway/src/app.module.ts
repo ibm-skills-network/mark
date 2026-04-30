@@ -5,10 +5,11 @@ import {
   RequestMethod,
 } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { RouterModule } from "@nestjs/core";
+import { APP_FILTER, RouterModule } from "@nestjs/core";
 import { WinstonModule } from "nest-winston";
 import { ApiModule } from "./api/api.module";
 import { AppService } from "./app.service";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { HealthModule } from "./health/health.module";
 import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
@@ -24,7 +25,13 @@ import { routes } from "./routes";
     RouterModule.register(routes),
     MessagingModule,
   ],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

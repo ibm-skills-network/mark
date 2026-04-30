@@ -8,8 +8,9 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { AssignmentRepository } from "../../assignment/v2/repositories/assignment.repository";
+import { AttemptQuestionsMapper } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
+import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
@@ -67,8 +68,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     constructFeedbacksForQuestions: jest.fn(),
   };
 
-  const mockAssignmentRepository = {
-    findById: jest.fn(),
+  const mockAttemptAccessCacheService = {
+    getQuestionDtosForAttemptAccess: jest.fn(),
   };
 
   const mockQuestionResponseService = {
@@ -131,7 +132,10 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AttemptValidationService, useValue: mockValidationService },
         { provide: AttemptGradingService, useValue: mockGradingService },
-        { provide: AssignmentRepository, useValue: mockAssignmentRepository },
+        {
+          provide: AttemptAccessCacheService,
+          useValue: mockAttemptAccessCacheService,
+        },
         {
           provide: QuestionResponseService,
           useValue: mockQuestionResponseService,
@@ -300,27 +304,21 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       questionOrder: [],
       displayOrder: null,
       allotedTimeMinutes: undefined,
+      questions: [],
     };
 
     beforeEach(() => {
-      mockAssignmentRepository.findById.mockResolvedValue(baseAssignment);
       mockValidationService.validateNewAttempt.mockResolvedValue(undefined);
       mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
       mockPrisma.assignmentAttempt.update.mockResolvedValue({});
     });
 
-    it("batches question variant lookup by questionId", async () => {
+    it("reuses the assignment query for validation and variant mapping", async () => {
       const questionVersions = [
         makeQuestionVersion({ id: 1001, questionId: 10, question: "Q1" }),
         makeQuestionVersion({ id: 1002, questionId: 20, question: "Q2" }),
         makeQuestionVersion({ id: 1003, questionId: null, question: "Q3" }),
       ];
-
-      mockPrisma.assignment.findUnique.mockResolvedValue({
-        currentVersionId: 9,
-        currentVersion: { questionVersions },
-        questions: [],
-      });
 
       const variant = {
         id: 501,
@@ -334,10 +332,15 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         isDeleted: false,
       };
 
-      mockPrisma.question.findMany.mockResolvedValue([
-        { id: 10, variants: [variant] },
-        { id: 20, variants: [] },
-      ]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [
+          { id: 10, variants: [variant] },
+          { id: 20, variants: [] },
+        ],
+      });
 
       const result = await service.createAssignmentAttempt(
         assignmentId,
@@ -346,10 +349,31 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       expect(result).toEqual({ id: 55, success: true });
       expect(mockPrisma.question.findUnique).not.toHaveBeenCalled();
-      expect(mockPrisma.question.findMany).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.question.findMany).toHaveBeenCalledWith({
-        where: { id: { in: [10, 20] } },
-        include: { variants: { where: { isDeleted: false } } },
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(mockValidationService.validateNewAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: assignmentId,
+          success: true,
+        }),
+        userSession,
+      );
+      expect(mockPrisma.assignment.findUnique).toHaveBeenCalledWith({
+        where: { id: assignmentId },
+        include: {
+          currentVersion: {
+            include: {
+              questionVersions: true,
+            },
+          },
+          questions: {
+            where: { isDeleted: false },
+            include: {
+              variants: {
+                where: { isDeleted: false },
+              },
+            },
+          },
+        },
       });
       expect(
         mockQuestionVariantService.createAttemptQuestionVariants,
@@ -407,20 +431,14 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         makeQuestionVersion({ id: 3003, questionId: 30, question: "Q3" }),
       ];
 
-      mockAssignmentRepository.findById.mockResolvedValue({
-        ...baseAssignment,
-        questionOrder: [20, 10],
-      });
       mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        success: true,
+        questionOrder: [20, 10],
         currentVersionId: 9,
         currentVersion: { questionVersions },
         questions: [],
       });
-      mockPrisma.question.findMany.mockResolvedValue([
-        { id: 10, variants: [] },
-        { id: 20, variants: [] },
-        { id: 30, variants: [] },
-      ]);
 
       await service.createAssignmentAttempt(assignmentId, userSession);
 
@@ -439,6 +457,160 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           questionOrder: [20, 10, 30],
         },
       });
+    });
+  });
+
+  describe("attempt access reads", () => {
+    const assignmentAttempt = {
+      id: 71,
+      assignmentId: 99,
+      assignmentVersionId: 12,
+      questionOrder: [101, 202],
+      questionResponses: [],
+      questionVariants: [],
+      preferredLanguage: "en",
+      grade: 0.9,
+      comments: "done",
+      submitted: true,
+      assignmentVersion: {
+        questionVersions: [],
+      },
+    };
+
+    const cachedQuestionDtos = [
+      {
+        id: 101,
+        question: "Question 101",
+        type: "TEXT",
+        assignmentId: 99,
+        totalPoints: 5,
+        choices: [],
+        scoring: { type: "CRITERIA_BASED", rubrics: [] },
+        answer: "true",
+        gradingContextQuestionIds: [],
+        responseType: "TEXT",
+        isDeleted: false,
+        randomizedChoices: "false",
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+      },
+      {
+        id: 202,
+        question: "Question 202",
+        type: "TEXT",
+        assignmentId: 99,
+        totalPoints: 5,
+        choices: [],
+        scoring: { type: "CRITERIA_BASED", rubrics: [] },
+        answer: "false",
+        gradingContextQuestionIds: [],
+        responseType: "TEXT",
+        isDeleted: false,
+        randomizedChoices: "false",
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+      },
+    ];
+
+    beforeEach(() => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue(
+        assignmentAttempt,
+      );
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101, 202],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersion: {
+          correctAnswerVisibility: "ALWAYS",
+        },
+      });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        cachedQuestionDtos,
+      );
+    });
+
+    it("gets learner attempts from the cache-backed question DTO loader", async () => {
+      const mapperSpy = jest
+        .spyOn(service as never, "applyVisibilitySettings")
+        .mockImplementation(() => undefined);
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      expect(
+        mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess,
+      ).toHaveBeenCalledWith({
+        assignmentId: 99,
+        assignmentUpdatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        assignmentVersionId: 12,
+        questionVersions: [],
+      });
+      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+      expect(buildSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.arrayContaining([
+          expect.objectContaining({ id: 101, answer: "true" }),
+          expect.objectContaining({ id: 202, answer: "false" }),
+        ]),
+        expect.any(Object),
+        mockPrisma,
+        "en",
+      );
+      expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
+
+      buildSpy.mockRestore();
+      mapperSpy.mockRestore();
+    });
+
+    it("uses cached questions for translation-aware attempt reads", async () => {
+      const translationMap = new Map();
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        translationMap,
+      );
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
+      const removeSensitiveSpy = jest
+        .spyOn(service as never, "removeSensitiveData")
+        .mockImplementation(() => undefined);
+
+      const result = await service.getAssignmentAttempt(71, "fr");
+
+      expect(
+        mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess,
+      ).toHaveBeenCalledWith({
+        assignmentId: 99,
+        assignmentUpdatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        assignmentVersionId: 12,
+        questionVersions: [],
+      });
+      expect(
+        mockTranslationService.getTranslationsForAttempt,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 71 }),
+        expect.arrayContaining([
+          expect.objectContaining({ id: 101, answer: true }),
+          expect.objectContaining({ id: 202, answer: false }),
+        ]),
+      );
+      expect(translationBuildSpy).toHaveBeenCalled();
+      expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
+
+      translationBuildSpy.mockRestore();
+      removeSensitiveSpy.mockRestore();
     });
   });
 
@@ -751,6 +923,96 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       // The validation in updateLearnerAttempt should catch this
       expect(grade.grade).toBeNaN();
       // In actual code, this triggers: if (isNaN(grade) || grade < 0 || grade > 1) throw Error
+    });
+  });
+
+  // ─── Change 4: authorComment bug fix ─────────────────────────────────────
+
+  describe("removeSensitiveData — authorComment always null (Change 4)", () => {
+    type QuestionLike = {
+      authorComment: string | null;
+      scoring?: { showRubricsToLearner?: boolean; rubrics?: unknown };
+      choices?: Array<{
+        points?: number;
+        isCorrect?: boolean;
+        feedback?: string;
+      }>;
+    };
+
+    const callRemoveSensitiveData = (
+      questions: QuestionLike[],
+      correctAnswerVisibility = "NEVER",
+      grade = 0,
+      passingGrade = 0,
+    ) =>
+      (
+        service as unknown as {
+          removeSensitiveData: (
+            questions: QuestionLike[],
+            assignment: { correctAnswerVisibility: string },
+            grade: number,
+            passingGrade: number,
+          ) => void;
+        }
+      ).removeSensitiveData(
+        questions,
+        { correctAnswerVisibility },
+        grade,
+        passingGrade,
+      );
+
+    it("sets authorComment to null for every question", () => {
+      const questions: QuestionLike[] = [
+        { authorComment: "Internal note only for graders" },
+        { authorComment: "Another internal note" },
+      ];
+
+      callRemoveSensitiveData(questions);
+
+      expect(questions[0].authorComment).toBeNull();
+      expect(questions[1].authorComment).toBeNull();
+    });
+
+    it("sets authorComment to null even when it was already null", () => {
+      const questions: QuestionLike[] = [{ authorComment: null }];
+
+      callRemoveSensitiveData(questions);
+
+      expect(questions[0].authorComment).toBeNull();
+    });
+
+    it("sets authorComment to null regardless of grade or passing threshold", () => {
+      const question: QuestionLike = { authorComment: "Should be hidden" };
+
+      // High grade — still must be null
+      callRemoveSensitiveData([question], "PASSING", 1, 0.5);
+      expect(question.authorComment).toBeNull();
+    });
+
+    it("does not expose rubrics when showRubricsToLearner is false", () => {
+      const question: QuestionLike = {
+        authorComment: "hidden",
+        scoring: {
+          showRubricsToLearner: false,
+          rubrics: { criterion: "fluency" },
+        },
+      };
+
+      callRemoveSensitiveData([question]);
+
+      expect(question.scoring?.rubrics).toBeUndefined();
+    });
+
+    it("preserves rubrics when showRubricsToLearner is true", () => {
+      const rubrics = { criterion: "fluency" };
+      const question: QuestionLike = {
+        authorComment: "hidden",
+        scoring: { showRubricsToLearner: true, rubrics },
+      };
+
+      callRemoveSensitiveData([question]);
+
+      expect(question.scoring?.rubrics).toBe(rubrics);
     });
   });
 });
