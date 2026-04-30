@@ -90,12 +90,24 @@ export default defineConfig({
     ]),
   ],
 
-  webServer: {
-    command: "exec bash scripts/start-e2e.sh",
-    url: `${testEnvironment.markApiBaseUrl}/health/readiness`,
-    timeout: 600_000,
-    reuseExistingServer: !process.env.CI,
-    stdout: "ignore",
-    stderr: "ignore",
-  },
+  webServer: [
+    {
+      command: "yarn --cwd apps/api start:e2e",
+      url: `${testEnvironment.markApiBaseUrl}/health/readiness`,
+      timeout: 120_000,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: "yarn --cwd apps/api-gateway start:e2e",
+      url: `${testEnvironment.gatewayBaseUrl}/health/readiness`,
+      timeout: 120_000,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: "yarn --cwd apps/web start:e2e",
+      url: testEnvironment.webBaseUrl,
+      timeout: 120_000,
+      reuseExistingServer: !process.env.CI,
+    },
+  ],
 });
