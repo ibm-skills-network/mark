@@ -11,6 +11,14 @@ jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      POSTGRES_USER: mark-pg-user
+      POSTGRES_PASSWORD: mark-pg-password # pragma: allowlist secret
+      POSTGRES_DB: mark-pg
+      DATABASE_URL: postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg # pragma: allowlist secret
+      DATABASE_URL_DIRECT: postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg # pragma: allowlist secret
 
     services:
       postgres:
@@ -34,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.0.0"
+          node-version: "22.0.0"
           cache: "yarn"
 
       - name: Configure Yarn
@@ -66,9 +74,9 @@ jobs:
           export POSTGRES_HOST=localhost
           export POSTGRES_PORT=5432
           export POSTGRES_EXTERNAL_PORT=5432
-          export POSTGRES_USER=mark-pg-user
-          export POSTGRES_PASSWORD=mark-pg-password # pragma: allowlist secret
-          export POSTGRES_DB=mark-pg
+          export POSTGRES_USER=${{ env.POSTGRES_USER }}
+          export POSTGRES_PASSWORD=${{ env.POSTGRES_PASSWORD }}
+          export POSTGRES_DB=${{ env.POSTGRES_DB }}
           SECRET=devsecret # pragma: allowlist secret
           EOF
 
@@ -77,8 +85,8 @@ jobs:
           cat > apps/api/dev.env <<'EOF'
           export NODE_ENV=development
           export API_PORT=4222
-          export DATABASE_URL=postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg # pragma: allowlist secret
-          export DATABASE_URL_DIRECT=postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg # pragma: allowlist secret
+          export DATABASE_URL=${{ env.DATABASE_URL }}
+          export DATABASE_URL_DIRECT=${{ env.DATABASE_URL_DIRECT }}
           EOF
 
       - name: Create API Gateway dev.env
@@ -92,13 +100,8 @@ jobs:
 
       - name: Run database migrations
         run: |
-          export DATABASE_URL="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
-          export DATABASE_URL_DIRECT="postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark-pg" # pragma: allowlist secret
           yarn --cwd apps/api prisma migrate deploy
           yarn --cwd apps/api prisma generate
-
-      - name: Install Playwright browsers
-        run: yarn playwright:install
 
       - name: Build API for E2E
         run: yarn --cwd apps/api build
@@ -114,6 +117,9 @@ jobs:
         run: yarn --cwd apps/web build:e2e
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Install Playwright browsers
+        run: yarn playwright:install
 
       - name: Run Playwright tests
         run: yarn test:e2e
