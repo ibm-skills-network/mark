@@ -95,5 +95,7 @@ export default defineConfig({
     url: `${testEnvironment.markApiBaseUrl}/health/readiness`,
     timeout: 600_000,
     reuseExistingServer: !process.env.CI,
+    stdout: "ignore",
+    stderr: "ignore",
   },
 });
