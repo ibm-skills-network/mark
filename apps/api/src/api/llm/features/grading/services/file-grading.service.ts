@@ -1018,7 +1018,9 @@ export class FileGradingService implements IFileGradingService {
     }
 
     const textBlocks = this.splitTextIntoEvidenceBlocks(normalized, blockIndex);
-    blocks.push(...textBlocks);
+    for (const textBlock of textBlocks) {
+      blocks.push(textBlock);
+    }
 
     const wordCount = normalized
       ? normalized.split(/\s+/).filter(Boolean).length

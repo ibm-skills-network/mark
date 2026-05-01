@@ -6,6 +6,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -766,7 +767,11 @@ export class QuestionResponseService {
         stack: error instanceof Error ? error.stack : undefined,
       });
 
-      throw new BadRequestException(
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(
         `Failed to process question response: ${errorMessage}`,
       );
     }
