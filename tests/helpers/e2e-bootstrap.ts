@@ -293,22 +293,12 @@ export async function ensureTestAssignments(
 
   if (!learnerAssignment) {
     console.log("Creating learner assignment...");
-    try {
-      learnerAssignment = await createLearnerAssignment(config);
-    } catch (error) {
-      console.error("Failed to create learner assignment:", error);
-      throw error;
-    }
+    learnerAssignment = await createLearnerAssignment(config);
   }
 
   if (!authorAssignment) {
     console.log("Creating author assignment...");
-    try {
-      authorAssignment = await createAuthorAssignment(config);
-    } catch (error) {
-      console.error("Failed to create author assignment:", error);
-      throw error;
-    }
+    authorAssignment = await createAuthorAssignment(config);
   }
 
   const assignments: TestAssignments = {

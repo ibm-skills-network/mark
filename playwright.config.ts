@@ -17,6 +17,7 @@ export default defineConfig({
   fullyParallel: !process.env.CI,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // tests share a single assignment — per-worker fixtures needed before re-enabling parallelism
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["html"], ["list"]] : "html",
   use: {

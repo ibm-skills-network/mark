@@ -221,7 +221,6 @@ export function getGroupId(): string {
 export async function createApiContext(
   config = getTestEnvironmentConfig(),
 ): Promise<APIRequestContext> {
-  console.log(`API context: ${config.markApiBaseUrl}`);
   return await request.newContext({
     baseURL: config.markApiBaseUrl,
   });

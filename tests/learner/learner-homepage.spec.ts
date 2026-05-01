@@ -37,8 +37,14 @@ test.describe("Learner - Assignment Homepage", () => {
     await dismissLanguageModalIfPresent(page);
   });
 
+  // Verify assignment title appears in both banner and main content
   test("should display assignment title and header", async ({ page }) => {
-    // Verify assignment title appears in main content
+    await expect(
+      page
+        .getByRole("banner")
+        .getByRole("heading", { name: "Playwright Assignment" }),
+    ).toBeVisible();
+
     await expect(
       page
         .getByRole("main")

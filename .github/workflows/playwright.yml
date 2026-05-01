@@ -42,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.0.0"
+          node-version: "22.x"
           cache: "yarn"
 
       - name: Configure Yarn
@@ -50,9 +50,6 @@ jobs:
           yarn config set network-timeout 600000
           yarn config set network-concurrency 1
           yarn config set child-concurrency 1
-
-      - name: Install canvas system dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile --verbose

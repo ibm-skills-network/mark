@@ -6,7 +6,7 @@
  */
 
 import { Injectable, Logger } from "@nestjs/common";
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.js";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as crypto from "node:crypto";
 import { createCanvas } from "canvas";
 import type {
@@ -434,6 +434,7 @@ export class PdfStructureExtractorService {
 
         if (canvasContext) {
           const renderContext: RenderParameters = {
+            canvas: null,
             canvasContext: canvasContext as unknown as CanvasRenderingContext2D,
             viewport,
           };

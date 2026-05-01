@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.js";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from "pdf-lib";
 import type {
   PDFDocumentProxy,

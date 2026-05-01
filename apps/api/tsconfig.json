@@ -7,6 +7,7 @@
     "baseUrl": "./",
     "resolveJsonModule": true
   },
+  "include": ["src/**/*"],
   "exclude": [
     "./ensureDb.js",
     "test",
