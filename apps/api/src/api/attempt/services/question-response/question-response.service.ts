@@ -63,7 +63,7 @@ export class QuestionResponseService {
     private readonly gradingFactoryService: GradingFactoryService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     @Inject("GradingProgressService")
-    private readonly progressService?: GradingProgressService,
+    private readonly progressService?: GradingProgressService
   ) {
     this.logger = parentLogger.child({
       context: QuestionResponseService.name,
@@ -90,7 +90,7 @@ export class QuestionResponseService {
     assignmentId: number,
     language: string,
     preTranslatedQuestions?: Map<number, QuestionDto>,
-    jobId?: string,
+    jobId?: string
   ): Promise<GradedItem[]> {
     // The progress service Map is keyed by (attemptId, jobId) so concurrent
     // grading runs for the same attempt (e.g., regrade-while-grading) do not
@@ -109,15 +109,15 @@ export class QuestionResponseService {
                 assignmentAttemptId,
                 assignmentId,
                 preTranslatedQuestions,
-                tx as PrismaTransactionalClient,
+                tx as PrismaTransactionalClient
               );
               return question;
-            }),
+            })
           );
           const sortResult = this.buildAndSortDependencies(questionDtos);
           return { questionDtos, ...sortResult };
         },
-        { timeout: 10_000 },
+        { timeout: 10_000 }
       );
 
     if (sorted.length !== responsesForQuestions.length) {
@@ -127,12 +127,12 @@ export class QuestionResponseService {
       }
       this.logger.error(
         `Cycle detected in question dependencies for assignment ${assignmentId}`,
-        { inDegree, adj, nodesInCycle },
+        { inDegree, adj, nodesInCycle }
       );
       throw new InternalServerErrorException(
         `A cycle was detected in the question dependencies: ${nodesInCycle.join(
-          ", ",
-        )}`,
+          ", "
+        )}`
       );
     }
 
@@ -142,7 +142,7 @@ export class QuestionResponseService {
       await this.progressService.initializeProgress(
         assignmentAttemptId,
         effectiveJobId,
-        totalQuestions,
+        totalQuestions
       );
     }
 
@@ -164,7 +164,7 @@ export class QuestionResponseService {
           effectiveJobId,
           questionNumber,
           totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
+          `Grading question ${questionNumber} of ${totalQuestions}...`
         );
       }
 
@@ -177,7 +177,7 @@ export class QuestionResponseService {
         questionId,
         assignmentAttemptId,
         undefined,
-        inMemoryContextResponses,
+        inMemoryContextResponses
       );
 
       const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
@@ -187,13 +187,13 @@ export class QuestionResponseService {
         assignmentId,
         language,
         UserRole.LEARNER,
-        assignmentAttemptId,
+        assignmentAttemptId
       );
 
       // Make this response available as context for subsequent questions
       inMemoryContextResponses.set(
         questionId,
-        JSON.stringify(learnerResponse ?? ""),
+        JSON.stringify(learnerResponse ?? "")
       );
 
       responseDto.questionId = questionId;
@@ -204,7 +204,7 @@ export class QuestionResponseService {
     if (this.progressService) {
       await this.progressService.markComplete(
         assignmentAttemptId,
-        effectiveJobId,
+        effectiveJobId
       );
     }
 
@@ -227,7 +227,7 @@ export class QuestionResponseService {
     assignmentAttemptId: number,
     gradedItems: GradedItem[],
     grade: number,
-    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto
   ): Promise<{ id: number; submitted: boolean; grade: number | null }> {
     /* eslint-disable @typescript-eslint/no-unused-vars */
     const {
@@ -248,13 +248,13 @@ export class QuestionResponseService {
 
     if (!current) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
       );
     }
 
     if (current.submitted) {
       throw new ConflictException(
-        `Attempt ${assignmentAttemptId} has already been submitted.`,
+        `Attempt ${assignmentAttemptId} has already been submitted.`
       );
     }
 
@@ -272,7 +272,7 @@ export class QuestionResponseService {
             learnerResponse,
             responseDto,
             UserRole.LEARNER,
-            tx as PrismaTransactionalClient,
+            tx as PrismaTransactionalClient
           );
         }
 
@@ -296,7 +296,7 @@ export class QuestionResponseService {
         if (updateResult.count === 0) {
           throw new ConflictException(
             `Attempt ${assignmentAttemptId} was concurrently submitted. ` +
-              `Grading results were discarded to prevent duplicate submission.`,
+              `Grading results were discarded to prevent duplicate submission.`
           );
         }
 
@@ -305,7 +305,7 @@ export class QuestionResponseService {
           select: { id: true, submitted: true, grade: true },
         });
       },
-      { timeout: 60_000 },
+      { timeout: 60_000 }
     );
   }
 
@@ -330,7 +330,7 @@ export class QuestionResponseService {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
-    jobId?: string,
+    jobId?: string
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     // The LEARNER-gated progress callsites below need a composite (attemptId,
     // jobId) key — this branch is unreachable in current architecture (only
@@ -351,25 +351,25 @@ export class QuestionResponseService {
                   assignmentAttemptId,
                   assignmentId,
                   preTranslatedQuestions,
-                  tx as PrismaTransactionalClient,
+                  tx as PrismaTransactionalClient
                 );
                 return question;
               } else if (role === UserRole.AUTHOR) {
                 const { question } = this.getAuthorQuestion(
                   questionId,
                   authorQuestions,
-                  assignmentDetails,
+                  assignmentDetails
                 );
                 return question;
               } else {
                 throw new BadRequestException(`Unsupported user role: ${role}`);
               }
-            }),
+            })
           );
           const sortResult = this.buildAndSortDependencies(questionDtos);
           return { questionDtos, ...sortResult };
         },
-        { timeout: 10_000 },
+        { timeout: 10_000 }
       );
 
     if (sorted.length !== responsesForQuestions.length) {
@@ -381,12 +381,12 @@ export class QuestionResponseService {
       }
       this.logger.error(
         `Cycle detected in question dependencies for assignment ${assignmentId}`,
-        { inDegree, adj, nodesInCycle },
+        { inDegree, adj, nodesInCycle }
       );
       throw new InternalServerErrorException(
         `A cycle was detected in the question dependencies: ${nodesInCycle.join(
-          ", ",
-        )}`,
+          ", "
+        )}`
       );
     }
 
@@ -396,7 +396,7 @@ export class QuestionResponseService {
       await this.progressService.initializeProgress(
         assignmentAttemptId,
         effectiveJobId,
-        totalQuestions,
+        totalQuestions
       );
     }
 
@@ -416,7 +416,7 @@ export class QuestionResponseService {
           effectiveJobId,
           questionNumber,
           totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
+          `Grading question ${questionNumber} of ${totalQuestions}...`
         );
       }
 
@@ -434,7 +434,7 @@ export class QuestionResponseService {
               questionId,
               assignmentAttemptId,
               undefined,
-              inMemoryContextResponses,
+              inMemoryContextResponses
             )
           : {
               assignmentInstructions: assignmentDetails?.instructions ?? "",
@@ -448,12 +448,12 @@ export class QuestionResponseService {
         assignmentId,
         language,
         role,
-        assignmentAttemptId,
+        assignmentAttemptId
       );
 
       inMemoryContextResponses.set(
         questionId,
-        JSON.stringify(learnerResponse ?? ""),
+        JSON.stringify(learnerResponse ?? "")
       );
       responseDto.questionId = questionId;
       responseDto.question = question.question;
@@ -463,7 +463,7 @@ export class QuestionResponseService {
     if (this.progressService && role === UserRole.LEARNER) {
       await this.progressService.markComplete(
         assignmentAttemptId,
-        effectiveJobId,
+        effectiveJobId
       );
     }
 
@@ -482,11 +482,11 @@ export class QuestionResponseService {
               learnerResponse,
               responseDto,
               role,
-              tx as PrismaTransactionalClient,
+              tx as PrismaTransactionalClient
             );
           }
         },
-        { timeout: 60_000 },
+        { timeout: 60_000 }
       );
     }
 
@@ -555,7 +555,7 @@ export class QuestionResponseService {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
-    tx?: PrismaTransactionalClient,
+    tx?: PrismaTransactionalClient
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const questionId = createQuestionResponseAttemptRequestDto.id;
 
@@ -573,13 +573,13 @@ export class QuestionResponseService {
         assignmentAttemptId,
         assignmentId,
         preTranslatedQuestions,
-        tx,
+        tx
       ));
     } else if (role === UserRole.AUTHOR) {
       ({ question, assignmentContext } = this.getAuthorQuestion(
         questionId,
         authorQuestions,
-        assignmentDetails,
+        assignmentDetails
       ));
     } else {
       throw new BadRequestException(`Unsupported user role: ${role}`);
@@ -592,7 +592,7 @@ export class QuestionResponseService {
       assignmentId,
       language,
       role,
-      assignmentAttemptId,
+      assignmentAttemptId
     );
 
     if (role !== UserRole.AUTHOR) {
@@ -602,7 +602,7 @@ export class QuestionResponseService {
         learnerResponse,
         responseDto,
         role,
-        tx,
+        tx
       );
     }
 
@@ -626,7 +626,7 @@ export class QuestionResponseService {
     assignmentId: number,
     language: string,
     role: UserRole,
-    assignmentAttemptId: number,
+    assignmentAttemptId: number
   ): Promise<{
     learnerResponse: unknown;
     responseDto: CreateQuestionResponseAttemptResponseDto;
@@ -662,7 +662,7 @@ export class QuestionResponseService {
         ({ responseDto, learnerResponse } = await this.handleLinkFileQuestion(
           question,
           requestDto,
-          gradingContext,
+          gradingContext
         ));
       } else {
         const startTime = Date.now();
@@ -679,7 +679,7 @@ export class QuestionResponseService {
 
         const gradingStrategy = this.gradingFactoryService.getStrategy(
           question.type,
-          question.responseType,
+          question.responseType
         );
 
         if (!gradingStrategy) {
@@ -689,7 +689,7 @@ export class QuestionResponseService {
             responseType: question.responseType,
           });
           throw new BadRequestException(
-            `No grading strategy found for question type: ${question.type}`,
+            `No grading strategy found for question type: ${question.type}`
           );
         }
 
@@ -703,7 +703,7 @@ export class QuestionResponseService {
         this.logger.debug("Validating response", { questionId });
         const isValid = await gradingStrategy.validateResponse(
           question,
-          requestDto,
+          requestDto
         );
 
         if (!isValid) {
@@ -713,13 +713,14 @@ export class QuestionResponseService {
             strategyName: gradingStrategy.constructor.name,
           });
           throw new BadRequestException(
-            `Invalid response for question ID ${questionId}: ${requestDto.language}`,
+            `Invalid response for question ID ${questionId}: ${requestDto.language}`
           );
         }
 
         this.logger.debug("Extracting learner response", { questionId });
-        learnerResponse =
-          await gradingStrategy.extractLearnerResponse(requestDto);
+        learnerResponse = await gradingStrategy.extractLearnerResponse(
+          requestDto
+        );
 
         this.logger.info("Grading response with strategy", {
           questionId,
@@ -729,7 +730,7 @@ export class QuestionResponseService {
         responseDto = await gradingStrategy.gradeResponse(
           question,
           learnerResponse,
-          gradingContext,
+          gradingContext
         );
 
         if (!responseDto) {
@@ -738,7 +739,7 @@ export class QuestionResponseService {
             strategyName: gradingStrategy.constructor.name,
           });
           throw new BadRequestException(
-            `Failed to grade response for question ID ${questionId}`,
+            `Failed to grade response for question ID ${questionId}`
           );
         }
 
@@ -771,8 +772,12 @@ export class QuestionResponseService {
         throw error;
       }
 
+      // Internal-error responses must not leak the underlying error string —
+      // Prisma errors expose schema names, LLM gateway errors expose provider
+      // URLs, and filesystem errors expose absolute paths. Detail stays in
+      // the structured log above; the client gets a generic message.
       throw new InternalServerErrorException(
-        `Failed to process question response: ${errorMessage}`,
+        `Failed to process question response for question ${questionId}.`
       );
     }
 
@@ -785,14 +790,14 @@ export class QuestionResponseService {
   private async handleLinkFileQuestion(
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
-    gradingContext: GradingContext,
+    gradingContext: GradingContext
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: any;
   }> {
     if (requestDto.learnerUrlResponse) {
       const urlGradingStrategy = this.gradingFactoryService.getStrategy(
-        QuestionType.URL,
+        QuestionType.URL
       );
       const url = requestDto.learnerUrlResponse;
       const rawUrl = this.convertGitHubUrlToRaw(url);
@@ -801,19 +806,20 @@ export class QuestionResponseService {
       }
       const isValid = await urlGradingStrategy.validateResponse(
         question,
-        requestDto,
+        requestDto
       );
       if (!isValid) {
         throw new BadRequestException(
-          `Invalid URL response for question ID ${question.id}: ${requestDto.language}`,
+          `Invalid URL response for question ID ${question.id}: ${requestDto.language}`
         );
       }
-      const learnerResponse =
-        await urlGradingStrategy.extractLearnerResponse(requestDto);
+      const learnerResponse = await urlGradingStrategy.extractLearnerResponse(
+        requestDto
+      );
       const responseDto = await urlGradingStrategy.gradeResponse(
         question,
         learnerResponse,
-        gradingContext,
+        gradingContext
       );
       return { responseDto, learnerResponse };
     } else if (requestDto.learnerFileResponse) {
@@ -823,29 +829,30 @@ export class QuestionResponseService {
       }
       const fileGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.UPLOAD,
-        responseType,
+        responseType
       );
       const isValid = await fileGradingStrategy.validateResponse(
         question,
-        requestDto,
+        requestDto
       );
       if (!isValid) {
         throw new BadRequestException(
-          `Invalid file response for question ID ${question.id}: ${requestDto.language}`,
+          `Invalid file response for question ID ${question.id}: ${requestDto.language}`
         );
       }
-      const learnerResponse =
-        await fileGradingStrategy.extractLearnerResponse(requestDto);
+      const learnerResponse = await fileGradingStrategy.extractLearnerResponse(
+        requestDto
+      );
       const responseDto = await fileGradingStrategy.gradeResponse(
         question,
         learnerResponse,
-        gradingContext,
+        gradingContext
       );
       return { responseDto, learnerResponse };
     }
 
     throw new BadRequestException(
-      "Expected a file-based or URL-based response, but did not receive one.",
+      "Expected a file-based or URL-based response, but did not receive one."
     );
   }
 
@@ -858,13 +865,13 @@ export class QuestionResponseService {
     learnerResponse: any,
     responseDto: CreateQuestionResponseAttemptResponseDto,
     role: UserRole,
-    tx?: PrismaTransactionalClient,
+    tx?: PrismaTransactionalClient
   ): Promise<void> {
     const prisma = tx ?? this.prisma;
     try {
       type FeedbackWithUrl = { annotatedPdfUrl?: string };
       const feedbackArray: FeedbackWithUrl[] = Array.isArray(
-        responseDto.feedback,
+        responseDto.feedback
       )
         ? (responseDto.feedback as FeedbackWithUrl[])
         : [];
@@ -880,7 +887,7 @@ export class QuestionResponseService {
             attemptId: assignmentAttemptId,
             feedbackCount: feedbackArray.length,
             annotatedPdfUrls,
-          },
+          }
         );
       }
 
@@ -911,7 +918,7 @@ export class QuestionResponseService {
         stack: error instanceof Error ? error.stack : undefined,
       });
       throw new InternalServerErrorException(
-        `Failed to save question response: ${errorMessage}`,
+        `Failed to save question response: ${errorMessage}`
       );
     }
   }
@@ -924,7 +931,7 @@ export class QuestionResponseService {
     assignmentAttemptId: number,
     assignmentId: number,
     preTranslatedQuestions?: Map<number, QuestionDto>,
-    tx?: PrismaTransactionalClient,
+    tx?: PrismaTransactionalClient
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -939,7 +946,7 @@ export class QuestionResponseService {
         assignmentId,
         questionId,
         assignmentAttemptId,
-        tx,
+        tx
       );
       return { question, assignmentContext };
     }
@@ -958,12 +965,12 @@ export class QuestionResponseService {
 
     if (!assignmentAttempt) {
       throw new NotFoundException(
-        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
+        `AssignmentAttempt with Id ${assignmentAttemptId} not found.`
       );
     }
 
     const variantMapping = assignmentAttempt.questionVariants.find(
-      (qv) => qv.questionId === questionId,
+      (qv) => qv.questionId === questionId
     );
 
     let question: QuestionDto;
@@ -1002,7 +1009,7 @@ export class QuestionResponseService {
       assignmentId,
       questionId,
       assignmentAttemptId,
-      tx,
+      tx
     );
 
     return { question, assignmentContext };
@@ -1014,7 +1021,7 @@ export class QuestionResponseService {
   private getAuthorQuestion(
     questionId: number,
     authorQuestions: QuestionDto[],
-    assignmentDetails: any,
+    assignmentDetails: any
   ): {
     question: QuestionDto;
     assignmentContext: {
@@ -1026,7 +1033,7 @@ export class QuestionResponseService {
 
     if (!question) {
       throw new NotFoundException(
-        `Question with ID ${questionId} not found in author questions.`,
+        `Question with ID ${questionId} not found in author questions.`
       );
     }
 
@@ -1050,7 +1057,7 @@ export class QuestionResponseService {
     questionId: number,
     assignmentAttemptId: number,
     tx?: PrismaTransactionalClient,
-    inMemoryResponses?: Map<number, string>,
+    inMemoryResponses?: Map<number, string>
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
@@ -1063,7 +1070,7 @@ export class QuestionResponseService {
 
     if (!assignment) {
       throw new NotFoundException(
-        `Assignment with ID ${assignmentId} not found.`,
+        `Assignment with ID ${assignmentId} not found.`
       );
     }
 
@@ -1165,7 +1172,7 @@ export class QuestionResponseService {
           questionId: contextQuestion.id,
           questionType: contextQuestion.type,
         };
-      }),
+      })
     );
 
     return {
@@ -1190,7 +1197,7 @@ export class QuestionResponseService {
    * Check if a response is empty
    */
   private isEmptyResponse(
-    requestDto: CreateQuestionResponseAttemptRequestDto,
+    requestDto: CreateQuestionResponseAttemptRequestDto
   ): boolean {
     return (
       (!requestDto.learnerFileResponse ||
@@ -1222,7 +1229,7 @@ export class QuestionResponseService {
     const noResponseFeedback = new GeneralFeedbackDto();
     noResponseFeedback.feedback = this.localizationService.getLocalizedString(
       "noResponse",
-      language,
+      language
     );
 
     responseDto.feedback = [noResponseFeedback];
@@ -1252,7 +1259,7 @@ export class QuestionResponseService {
    */
   private convertGitHubUrlToRaw(url: string): string | null {
     const match = url.match(
-      /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
+      /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/
     );
     if (!match) {
       return null;
@@ -1265,7 +1272,7 @@ export class QuestionResponseService {
    * Fetch content from a URL
    */
   private async fetchUrlContent(
-    url: string,
+    url: string
   ): Promise<{ body: string; isFunctional: boolean }> {
     const MAX_CONTENT_SIZE = 100_000;
     try {
@@ -1287,7 +1294,7 @@ export class QuestionResponseService {
         } else {
           try {
             const repoMatch = url.match(
-              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
+              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/
             );
             if (repoMatch) {
               const [, user, repo] = repoMatch;
@@ -1305,8 +1312,9 @@ export class QuestionResponseService {
               } catch {
                 try {
                   const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
-                  const masterReadmeResponse =
-                    await axios.get<string>(masterReadmeUrl);
+                  const masterReadmeResponse = await axios.get<string>(
+                    masterReadmeUrl
+                  );
                   if (masterReadmeResponse.status === 200) {
                     let body = masterReadmeResponse.data;
                     if (body.length > MAX_CONTENT_SIZE) {
@@ -1346,7 +1354,7 @@ export class QuestionResponseService {
             const $ = cheerio.load(response.data);
 
             $(
-              "script, style, noscript, iframe, noembed, embed, object",
+              "script, style, noscript, iframe, noembed, embed, object"
             ).remove();
 
             let content = "";
@@ -1360,7 +1368,7 @@ export class QuestionResponseService {
               }
 
               const fileList = $(
-                "div.js-details-container div.js-navigation-container tr.js-navigation-item",
+                "div.js-details-container div.js-navigation-container tr.js-navigation-item"
               );
               if (fileList.length > 0) {
                 content += "Repository Files:\n";
