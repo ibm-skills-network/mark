@@ -181,6 +181,9 @@ function Component(props: Props) {
     return () => clearInterval(interval);
   }, [loadingTranslation]);
   const fetchTranslation = async () => {
+    if (assignmentId == null || questionId == null) {
+      return;
+    }
     try {
       setLoadingTranslation(true);
       const translation = await translateQuestion(
