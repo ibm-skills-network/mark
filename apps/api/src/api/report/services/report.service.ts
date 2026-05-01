@@ -59,6 +59,27 @@ export class ReportsService {
     private readonly adminEmailService: AdminEmailService,
   ) {}
 
+  private async getGithubConfig(
+    logContext: string,
+    extraFields: Record<string, unknown> = {},
+  ): Promise<{ githubOwner: string; githubRepo: string; token: string }> {
+    const githubOwner = process.env.GITHUB_OWNER;
+    const githubRepo = process.env.GITHUB_REPO;
+    const token = await this.getInstallationToken();
+    if (!githubOwner || !githubRepo || !token) {
+      this.logger.error(`${logContext}: GitHub config or token missing`, {
+        ...extraFields,
+        owner_set: !!githubOwner,
+        repo_set: !!githubRepo,
+        token_set: !!token,
+      });
+      throw new InternalServerErrorException(
+        "GitHub repository configuration or token missing",
+      );
+    }
+    return { githubOwner, githubRepo, token };
+  }
+
   private async fetchGitHubIssueComments(issueNumber: number): Promise<
     Array<{
       id: number;
@@ -68,15 +89,10 @@ export class ReportsService {
       url: string;
     }>
   > {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-
-    if (!githubOwner || !githubRepo || !token) {
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "fetchGitHubIssueComments",
+      { issueNumber },
+    );
 
     const commentsResponse = await axios.get(
       `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}/comments`,
@@ -130,6 +146,9 @@ export class ReportsService {
   private getRenewalBaseUrl(): string {
     if (process.env.NODE_ENV === "production") {
       if (!process.env.WEB_APP_URL) {
+        this.logger.error(
+          "getRenewalBaseUrl: WEB_APP_URL env var missing in production",
+        );
         throw new InternalServerErrorException("WEB_APP_URL missing");
       }
       return process.env.WEB_APP_URL;
@@ -181,15 +200,10 @@ export class ReportsService {
   }
 
   private async postGithubComment(issueNumber: number, body: string) {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-
-    if (!githubOwner || !githubRepo || !token) {
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "postGithubComment",
+      { issueNumber, body_length: body?.length },
+    );
 
     await axios.post(
       `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}/comments`,
@@ -248,11 +262,19 @@ export class ReportsService {
     }
 
     if (!processed.startsWith("-----BEGIN")) {
+      this.logger.error(
+        "getPrivateKey: GITHUB_APP_PRIVATE_KEY missing BEGIN marker",
+        { raw_length: raw.length, processed_length: processed.length },
+      );
       throw new InternalServerErrorException(
         "Invalid private key format: missing BEGIN marker",
       );
     }
     if (!processed.endsWith("-----")) {
+      this.logger.error(
+        "getPrivateKey: GITHUB_APP_PRIVATE_KEY missing END marker",
+        { raw_length: raw.length, processed_length: processed.length },
+      );
       throw new InternalServerErrorException(
         "Invalid private key format: missing END marker",
       );
@@ -264,6 +286,7 @@ export class ReportsService {
   private buildAppJWT(): string {
     const appId = process.env.GITHUB_APP_ID;
     if (!appId) {
+      this.logger.error("buildAppJWT: GITHUB_APP_ID env var missing");
       throw new InternalServerErrorException("GITHUB_APP_ID missing");
     }
     const privateKey = this.getPrivateKey();
@@ -281,7 +304,11 @@ export class ReportsService {
       );
 
       return token;
-    } catch {
+    } catch (error) {
+      this.logger.error("buildAppJWT: jwt.sign failed", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException("Failed to create GitHub App JWT");
     }
   }
@@ -298,6 +325,10 @@ export class ReportsService {
     const owner = process.env.GITHUB_OWNER;
     const repo = process.env.GITHUB_REPO;
     if (!owner || !repo) {
+      this.logger.error(
+        "getInstallationId: GITHUB_OWNER or GITHUB_REPO missing",
+        { owner_set: !!owner, repo_set: !!repo },
+      );
       throw new InternalServerErrorException(
         "GITHUB_OWNER or GITHUB_REPO missing",
       );
@@ -322,6 +353,15 @@ export class ReportsService {
       const message = axios.isAxiosError(error)
         ? error.message
         : "Failed to get GitHub App installation ID";
+      this.logger.error("getInstallationId: GitHub App API call failed", {
+        is_axios: axios.isAxiosError(error),
+        axios_status: axios.isAxiosError(error)
+          ? error.response?.status
+          : undefined,
+        axios_url: axios.isAxiosError(error) ? error.config?.url : undefined,
+        message,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new InternalServerErrorException(message, {
         cause: error instanceof Error ? error : undefined,
       });
@@ -360,6 +400,18 @@ export class ReportsService {
       const message = axios.isAxiosError(error)
         ? error.message
         : "Failed to get GitHub App installation token";
+      this.logger.error(
+        "getInstallationToken: GitHub access token request failed",
+        {
+          is_axios: axios.isAxiosError(error),
+          axios_status: axios.isAxiosError(error)
+            ? error.response?.status
+            : undefined,
+          axios_url: axios.isAxiosError(error) ? error.config?.url : undefined,
+          message,
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
       throw new InternalServerErrorException(message, {
         cause: error instanceof Error ? error : undefined,
       });
@@ -546,6 +598,12 @@ export class ReportsService {
       if (!githubOwner) missingConfig.push("GITHUB_OWNER");
       if (!githubRepo) missingConfig.push("GITHUB_REPO");
       if (!token) missingConfig.push("installation token");
+      this.logger.error("createGitHubIssue: required config missing", {
+        missing: missingConfig,
+        title_length: title?.length,
+        body_length: body?.length,
+        labels,
+      });
       throw new InternalServerErrorException(
         `GitHub repository configuration or token missing: ${missingConfig.join(
           ", ",
@@ -571,12 +629,25 @@ export class ReportsService {
           error.response?.data?.message || error.message;
         const status = error.response?.status;
 
+        this.logger.error(
+          `createGitHubIssue: GitHub API call failed (${status})`,
+          {
+            status,
+            errorMessage,
+            response_data: error.response?.data,
+            url: error.config?.url,
+          },
+        );
         throw new InternalServerErrorException(
           `Failed to create GitHub issue (${status}): ${errorMessage}`,
         );
       } else {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
+        this.logger.error("createGitHubIssue: non-axios error", {
+          errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         throw new InternalServerErrorException(
           `Failed to create GitHub issue: ${errorMessage}`,
         );
@@ -590,14 +661,10 @@ export class ReportsService {
     statusMessage: string;
     closureReason?: string;
   }> {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-    if (!githubOwner || !githubRepo || !token) {
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "checkGitHubIssueStatus",
+      { issueNumber },
+    );
 
     try {
       const response = await axios.get(
@@ -944,6 +1011,12 @@ export class ReportsService {
     const assignmentId = userSession?.assignmentId;
 
     if (!issueType) {
+      this.logger.error("submitReport: missing issueType in DTO", {
+        user_id: userSession?.userId,
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+        dto_keys: dto ? Object.keys(dto) : undefined,
+      });
       throw new InternalServerErrorException("issueType is required");
     }
 
@@ -1094,15 +1167,10 @@ Screenshot Key: \`${finalScreenshotUrl}\`
         isDuplicate = true;
         parentIssueNumber = potentialDuplicate.issueNumber;
 
-        const githubOwner = process.env.GITHUB_OWNER;
-        const githubRepo = process.env.GITHUB_REPO;
-        const token = await this.getInstallationToken();
-
-        if (!githubOwner || !githubRepo || !token) {
-          throw new InternalServerErrorException(
-            "GitHub repository configuration or token missing",
-          );
-        }
+        const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+          "submitReport (duplicate path)",
+          { parent_issue_number: parentIssueNumber },
+        );
 
         let commentBody = `
 ## Duplicate Report Detected
@@ -1597,9 +1665,13 @@ A new related issue has been created: #${issue.number}
               }
             }
           } catch (error) {
-            console.error(
-              `Error syncing GitHub issue status for report ID ${report.id}:`,
-              error,
+            this.logger.error(
+              `Error syncing GitHub issue status for report ID ${report.id}`,
+              {
+                reportId: report.id,
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
             );
           }
         }
@@ -1745,6 +1817,16 @@ A new related issue has been created: #${issue.number}
     const token = await this.getInstallationToken();
 
     if (!githubOwner || !githubRepo || !token || !report.issueNumber) {
+      this.logger.error(
+        "addCommentToGithubIssue: GitHub config, token, or issueNumber missing",
+        {
+          report_id: report?.id,
+          issue_number: report?.issueNumber,
+          owner_set: !!githubOwner,
+          repo_set: !!githubRepo,
+          token_set: !!token,
+        },
+      );
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
       );
@@ -1870,9 +1952,13 @@ A new related issue has been created: #${issue.number}
           }
         }
       } catch (error) {
-        console.error(
-          `Error syncing GitHub issue status for report ID ${reportId}:`,
-          error,
+        this.logger.error(
+          `Error syncing GitHub issue status for report ID ${reportId}`,
+          {
+            reportId,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
         );
       }
     }
@@ -1986,15 +2072,10 @@ A new related issue has been created: #${issue.number}
     developerComment?: string;
     closureReason?: string;
   }> {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
-
-    if (!githubOwner || !githubRepo || !token) {
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
+      "fetchSyncedIssueState",
+      { issueNumber },
+    );
 
     try {
       const issueResponse = await axios.get(
@@ -2482,9 +2563,14 @@ A new related issue has been created: #${issue.number}
           }
         }
       } catch (error) {
-        console.error(
-          `Error updating GitHub issue #${report.issueNumber}:`,
-          error,
+        this.logger.error(
+          `Error updating GitHub issue #${report.issueNumber}`,
+          {
+            reportId: report.id,
+            issueNumber: report.issueNumber,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
         );
       }
     }

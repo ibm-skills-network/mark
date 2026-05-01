@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "build:docker": "docker buildx build -f ./apps/api-gateway/Dockerfile -t mark-api-gateway --no-cache --platform linux/amd64 . &> build-gateway.log && docker buildx build -f ./apps/web/Dockerfile -t mark-web --no-cache --platform linux/amd64 . &> build-web.log && docker buildx build -f ./apps/api/Dockerfile -t mark-api --no-cache --platform linux/amd64 . &> build-api.log",
+    "build:docker": "docker buildx build -f ./apps/api-gateway/Dockerfile -t mark-api-gateway --no-cache --platform linux/amd64 . &> build-gateway.log && docker buildx build -f ./apps/web/Dockerfile -t mark-web --no-cache --platform linux/amd64 . &> build-web.log && docker buildx build -f ./apps/api/Dockerfile -t mark-api --no-cache --platform linux/amd64 . &> build-api.log && docker buildx build -f ./apps/jobs/Dockerfile -t mark-jobs --no-cache --platform linux/amd64 . &> build-jobs.log",
     "db": "scripts/start-db.sh",
     "db:stop": "docker-compose stop",
     "db:down": "docker-compose down",
@@ -47,6 +47,7 @@
     "setup": "scripts/setup.sh",
     "setup:no-git": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma migrate dev && npx prisma generate; cd ../../",
     "test": "turbo run test",
+    "test:insomnia:jobs": "scripts/test-insomnia-jobs.sh",
     "test:e2e": "playwright test --project=author-chromium --project=learner-chromium",
     "test:e2e:all": "playwright test",
     "test:e2e:author": "playwright test --project=author-chromium --project=author-firefox --project=author-webkit",

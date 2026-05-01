@@ -971,6 +971,7 @@ Provider: Development Console
     reportedAt?: string,
     issueNumber?: number,
   ): string {
+    const issueReference = issueNumber ? `Issue #${issueNumber}` : issueTitle;
     return `
       <!DOCTYPE html>
       <html>
@@ -1004,8 +1005,9 @@ Provider: Development Console
           <div class="content">
             <p>We noticed the bug you reported hasn't been resolved yet. Let us know if you're still experiencing it.</p>
             <div class="summary">
-              <p class="summary-title">${issueTitle}</p>
+              <p class="summary-title">${issueReference}</p>
               <p class="meta">Reported ${this.formatReportedAt(reportedAt)}</p>
+              ${issueReference === issueTitle ? "" : `<p class="summary-title">${issueTitle}</p>`}
               <p class="summary-title">Description</p>
               <div class="body">${issueBody}</div>
             </div>
@@ -1033,12 +1035,14 @@ Provider: Development Console
     reportedAt?: string,
     issueNumber?: number,
   ): string {
+    const issueReference = issueNumber ? `Issue #${issueNumber}` : issueTitle;
     return `
 Are you still experiencing this issue?
 
 We noticed the bug you reported hasn't been resolved yet. Let us know if you're still experiencing it.
 
-${issueTitle}
+${issueReference}
+${issueReference === issueTitle ? "" : issueTitle}
 Reported: ${this.formatReportedAt(reportedAt)}
 
 Description:

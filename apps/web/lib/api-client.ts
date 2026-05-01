@@ -21,6 +21,17 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export function getDefaultApiBaseURL(
+  isBrowser = typeof window !== "undefined",
+): string {
+  // Browser requests should stay same-origin so they can use Next.js rewrites.
+  if (isBrowser) {
+    return "";
+  }
+
+  return process.env.NEXT_PUBLIC_API_URL || "";
+}
+
 /**
  * Enhanced HTTP client with automatic data transformation
  */
@@ -238,7 +249,7 @@ export class APIError extends Error {
  * Default API client instance
  */
 export const apiClient = new APIClient({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "",
+  baseURL: getDefaultApiBaseURL(),
   autoTransform: true,
   transformConfig: API_DECODE_CONFIG,
 });

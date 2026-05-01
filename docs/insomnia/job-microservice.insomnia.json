@@ -1,0 +1,566 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-04-07T00:00:00.000Z",
+  "__export_source": "mark:job-microservice",
+  "resources": [
+    {
+      "_id": "wrk_job_microservice",
+      "parentId": null,
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Job Microservice",
+      "description": "Contract tests for the Mark API internal job executor callback used by apps/jobs.",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_job_microservice_base",
+      "parentId": "wrk_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Base environment",
+      "data": {
+        "base_url": "http://localhost:4222",
+        "job_queue_header_value": "mark-local-job-queue-key-change-me",
+        "wrong_job_queue_header_value": "not-the-job-queue-key",
+        "user_session_header": "{\"userId\":\"insomnia-admin\",\"role\":\"admin\",\"assignmentId\":0,\"groupId\":\"insomnia-group\"}"
+      },
+      "_type": "environment"
+    },
+    {
+      "_id": "env_job_microservice_local",
+      "parentId": "env_job_microservice_base",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "local",
+      "data": {
+        "base_url": "http://localhost:4222",
+        "job_queue_header_value": "mark-local-job-queue-key-change-me",
+        "wrong_job_queue_header_value": "not-the-job-queue-key",
+        "user_session_header": "{\"userId\":\"insomnia-admin\",\"role\":\"admin\",\"assignmentId\":0,\"groupId\":\"insomnia-group\"}"
+      },
+      "_type": "environment"
+    },
+    {
+      "_id": "env_job_microservice_staging",
+      "parentId": "env_job_microservice_base",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "staging",
+      "data": {
+        "base_url": "https://mark-api.staging.skills.network",
+        "job_queue_header_value": "replace-with-staging-job-queue-key",
+        "wrong_job_queue_header_value": "not-the-job-queue-key",
+        "user_session_header": "{\"userId\":\"insomnia-admin\",\"role\":\"admin\",\"assignmentId\":0,\"groupId\":\"insomnia-group\"}"
+      },
+      "_type": "environment"
+    },
+    {
+      "_id": "env_job_microservice_production",
+      "parentId": "env_job_microservice_base",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "production",
+      "data": {
+        "base_url": "https://mark-api.skills.network",
+        "job_queue_header_value": "replace-with-production-job-queue-key",
+        "wrong_job_queue_header_value": "not-the-job-queue-key",
+        "user_session_header": "{\"userId\":\"insomnia-admin\",\"role\":\"admin\",\"assignmentId\":0,\"groupId\":\"insomnia-group\"}"
+      },
+      "_type": "environment"
+    },
+    {
+      "_id": "fld_job_executor_contract",
+      "parentId": "wrk_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Internal Job Executor Contract",
+      "description": "Safe requests for testing the API callback used by the jobs worker.",
+      "environment": {},
+      "_type": "request_group"
+    },
+    {
+      "_id": "req_health_readiness",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Health - Readiness",
+      "description": "Preflight check that the Mark API is reachable before job callback checks run.",
+      "method": "GET",
+      "url": "{{ base_url }}/health/readiness",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_get_not_found",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - GET is not exposed",
+      "description": "The internal job executor must not expose a GET endpoint.",
+      "method": "GET",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_no_secret",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Missing secret",
+      "description": "Requests without x-job-queue-secret must be rejected.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.assignment.v1\",\n  \"jobName\": \"assignment-v1.publish\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-no-secret\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_wrong_secret",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Wrong secret",
+      "description": "Requests with the wrong x-job-queue-secret must be rejected.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.assignment.v1\",\n  \"jobName\": \"assignment-v1.publish\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-wrong-secret\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ wrong_job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_malformed_json",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Malformed JSON body",
+      "description": "Malformed request bodies should fail before job execution.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_missing_body",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Missing job fields",
+      "description": "A valid secret with missing job metadata must still be rejected by the executor.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_unsupported_queue",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Unsupported queue",
+      "description": "Unknown queues must not be dispatched.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.unknown\",\n  \"jobName\": \"unsupported.job\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-unsupported-queue\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_assignment_v1_unsupported_job",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Assignment v1 unsupported job",
+      "description": "Assignment v1 queue should reject unknown job names.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.assignment.v1\",\n  \"jobName\": \"unsupported.job\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-assignment-v1-unsupported\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_assignment_v2_unsupported_job",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Assignment v2 unsupported job",
+      "description": "Assignment v2 queue should reject unknown job names.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.assignment.v2\",\n  \"jobName\": \"unsupported.job\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-assignment-v2-unsupported\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_attempt_unsupported_job",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Attempt unsupported job",
+      "description": "Attempt queue should reject unknown job names.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.attempt\",\n  \"jobName\": \"unsupported.job\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-attempt-unsupported\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_execute_admin_translation_unsupported_job",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Execute - Admin translation unsupported job",
+      "description": "Admin translation queue should reject unknown job names.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/internal/jobs/execute",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"queueName\": \"mark.admin.translation\",\n  \"jobName\": \"unsupported.job\",\n  \"payload\": {},\n  \"bullJobId\": \"insomnia-admin-translation-unsupported\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "x-job-queue-secret",
+          "value": "{{ job_queue_header_value }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_translation_fix_dry_run",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Translation fix - Dry run",
+      "description": "Starts a safe dry-run translation fix job and returns a pollable job ID.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/v1/admin/translations/missing/fix",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"assignmentId\": 1,\n  \"dryRun\": true,\n  \"languageCodes\": [\"es\"],\n  \"maxMissing\": 1\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "user-session",
+          "value": "{{ user_session_header }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "req_translation_sweep_dry_run",
+      "parentId": "fld_job_executor_contract",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Translation sweep - Dry run",
+      "description": "Starts a safe dry-run translation sweep job and returns a pollable job ID.",
+      "method": "POST",
+      "url": "{{ base_url }}/api/v1/admin/translations/sweep",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"dryRun\": true,\n  \"batchSize\": 1,\n  \"maxBatches\": 1,\n  \"delayBetweenBatchesMs\": 0,\n  \"includeAll\": true,\n  \"languageCodes\": [\"es\"]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        },
+        {
+          "name": "user-session",
+          "value": "{{ user_session_header }}",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "_type": "request"
+    },
+    {
+      "_id": "uts_job_microservice",
+      "parentId": "wrk_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "Job Microservice",
+      "_type": "unit_test_suite"
+    },
+    {
+      "_id": "ut_health_readiness",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "readiness endpoint returns OK",
+      "requestId": "req_health_readiness",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(200);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.status).to.equal(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_get_not_found",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "executor does not expose GET",
+      "requestId": "req_execute_get_not_found",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(404);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(404);\nexpect(body.message).to.contain(\"Cannot GET /api/internal/jobs/execute\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_no_secret",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "executor rejects missing shared secret",
+      "requestId": "req_execute_no_secret",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(403);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(403);\nexpect(body.error).to.equal(\"Forbidden\");\nexpect(body.message).to.equal(\"Invalid job queue secret\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_wrong_secret",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "executor rejects wrong shared secret",
+      "requestId": "req_execute_wrong_secret",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(403);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(403);\nexpect(body.error).to.equal(\"Forbidden\");\nexpect(body.message).to.equal(\"Invalid job queue secret\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_malformed_json",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "executor rejects malformed JSON before dispatch",
+      "requestId": "req_execute_malformed_json",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_missing_body",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "executor rejects missing job metadata",
+      "requestId": "req_execute_missing_body",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body.message).to.contain(\"Unsupported job queue\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_unsupported_queue",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "executor rejects unsupported queue names",
+      "requestId": "req_execute_unsupported_queue",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body.message).to.equal(\"Unsupported job queue: \\\"mark.unknown\\\"\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_assignment_v1_unsupported_job",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "assignment v1 queue rejects unsupported job names",
+      "requestId": "req_execute_assignment_v1_unsupported_job",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body.message).to.equal(\"Unsupported assignment v1 job: unsupported.job\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_assignment_v2_unsupported_job",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "assignment v2 queue rejects unsupported job names",
+      "requestId": "req_execute_assignment_v2_unsupported_job",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body.message).to.equal(\"Unsupported assignment v2 job: unsupported.job\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_attempt_unsupported_job",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "attempt queue rejects unsupported job names",
+      "requestId": "req_execute_attempt_unsupported_job",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body.message).to.equal(\"Unsupported attempt job: unsupported.job\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_execute_admin_translation_unsupported_job",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "admin translation queue rejects unsupported job names",
+      "requestId": "req_execute_admin_translation_unsupported_job",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(400);\nexpect(response.headers[\"content-type\"]).to.contain(\"application/json\");\nconst body = JSON.parse(response.data || \"{}\");\nexpect(body.statusCode).to.equal(400);\nexpect(body.error).to.equal(\"Bad Request\");\nexpect(body.message).to.equal(\"Unsupported admin translation job: unsupported.job\");\nexpect(body).to.not.have.property(\"ok\");",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_translation_fix_dry_run",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "translation fix dry run enqueues successfully",
+      "requestId": "req_translation_fix_dry_run",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(201);\nconst body = JSON.parse(response.data || '{}');\nexpect(body.success).to.equal(true);\nexpect(body.jobId).to.be.a('string');\nexpect(body.assignmentIds).to.deep.equal([1]);\nexpect(body.dryRun).to.equal(true);",
+      "_type": "unit_test"
+    },
+    {
+      "_id": "ut_translation_sweep_dry_run",
+      "parentId": "uts_job_microservice",
+      "modified": 1775520000000,
+      "created": 1775520000000,
+      "name": "translation sweep dry run enqueues successfully",
+      "requestId": "req_translation_sweep_dry_run",
+      "code": "const response = await insomnia.send();\nexpect(response.status).to.equal(201);\nconst body = JSON.parse(response.data || '{}');\nexpect(body.success).to.equal(true);\nexpect(body.jobId).to.be.a('string');",
+      "_type": "unit_test"
+    }
+  ]
+}

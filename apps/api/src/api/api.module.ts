@@ -1,4 +1,6 @@
 import { Module } from "@nestjs/common";
+import { JobExecutorController } from "src/job-queue/job-executor.controller";
+import { JobExecutorService } from "src/job-queue/job-executor.service";
 import { SharedModule } from "src/shared.module";
 import { AdminModule } from "./admin/admin.module";
 import { ApiController } from "./api.controller";
@@ -14,8 +16,8 @@ import { ReportsModule } from "./report/report.module";
 import { ChatModule } from "./user/modules/chat.module";
 
 @Module({
-  controllers: [ApiController],
-  providers: [ApiService],
+  controllers: [ApiController, JobExecutorController],
+  providers: [ApiService, JobExecutorService],
   imports: [
     SharedModule,
     LlmModule,

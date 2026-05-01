@@ -33,12 +33,21 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     private adminService: AdminService,
   ) {}
 
+  private areSchedulersEnabled(): boolean {
+    return process.env.ENABLE_JOB_SCHEDULERS === "true";
+  }
+
   /**
    * Runs initial tasks when the application starts
    *
    * @returns {Promise<void>}
    */
   async onApplicationBootstrap(): Promise<void> {
+    if (!this.areSchedulersEnabled()) {
+      this.logger.log("Background schedulers are disabled for this process");
+      return;
+    }
+
     this.logger.log("Application started - running initial tasks");
     await Promise.all([this.migrateExistingAuthors(), this.updateLLMPricing()]);
   }
@@ -81,7 +90,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
   //       });
 
   //       // Create a publish job to trigger translation
-  //       await this.prismaService.publishJob.create({
   //         data: {
   //           userId: "SYSTEM_SCHEDULED_TASK",
   //           assignmentId: assignment.assignmentId,
@@ -112,7 +120,11 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    * @returns {Promise<void>}
    */
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
-  async migrateExistingAuthors(): Promise<void> {
+  async migrateExistingAuthors(allowWhenDisabled = false): Promise<void> {
+    if (!allowWhenDisabled && !this.areSchedulersEnabled()) {
+      return;
+    }
+
     this.logger.log(
       "Starting scheduled task: Migrate existing authors to AssignmentAuthor table",
     );
@@ -183,65 +195,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         }
       }
       this.logger.log("Processed AI usage authors");
-
-      // Job authors — paginated
-      skip = 0;
-      hasMore = true;
-      while (hasMore) {
-        const page = await this.prismaService.job.findMany({
-          select: { userId: true, assignmentId: true },
-          distinct: ["userId", "assignmentId"],
-          take: PAGE_SIZE,
-          skip,
-        });
-        if (page.length === 0) break;
-
-        const authors = page.map((jobRecord) => ({
-          userId: jobRecord.userId,
-          assignmentId: jobRecord.assignmentId,
-        }));
-
-        const result = await this.batchUpsertAuthors(authors);
-        totalCreated += result.created;
-        totalUpdated += result.updated;
-        totalSkipped += result.skipped;
-
-        hasMore = page.length === PAGE_SIZE;
-        if (hasMore) {
-          skip += PAGE_SIZE;
-        }
-      }
-      this.logger.log("Processed job authors");
-
-      // Publish job authors — paginated
-      skip = 0;
-      hasMore = true;
-      while (hasMore) {
-        const page = await this.prismaService.publishJob.findMany({
-          where: { userId: { not: "SYSTEM_SCHEDULED_TASK" } },
-          select: { userId: true, assignmentId: true },
-          distinct: ["userId", "assignmentId"],
-          take: PAGE_SIZE,
-          skip,
-        });
-        if (page.length === 0) break;
-
-        const authors = page.map((p) => ({
-          userId: p.userId,
-          assignmentId: p.assignmentId,
-        }));
-
-        const result = await this.batchUpsertAuthors(authors);
-        totalCreated += result.created;
-        totalUpdated += result.updated;
-        totalSkipped += result.skipped;
-
-        hasMore = page.length === PAGE_SIZE;
-        if (hasMore) {
-          skip += PAGE_SIZE;
-        }
-      }
-      this.logger.log("Processed publish job authors");
 
       this.logger.log(
         `Completed scheduled task: Created ${totalCreated} new authors, ` +
@@ -364,11 +317,22 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    * @returns {Promise<Object>} Cleanup results
    */
   @Cron(CronExpression.EVERY_WEEK)
-  async cleanupOldDrafts(customDaysOld?: number): Promise<{
+  async cleanupOldDrafts(
+    customDaysOld?: number,
+    allowWhenDisabled = false,
+  ): Promise<{
     deletedCount: number;
     daysOld: number;
     cutoffDate: string;
   }> {
+    if (!allowWhenDisabled && !this.areSchedulersEnabled()) {
+      return {
+        deletedCount: 0,
+        daysOld: customDaysOld === undefined ? 60 : customDaysOld,
+        cutoffDate: "DISABLED",
+      };
+    }
+
     const daysOld = customDaysOld === undefined ? 60 : customDaysOld;
     const isDeleteAll = daysOld === 0;
 
@@ -473,7 +437,11 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    * @returns {Promise<void>}
    */
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
-  async updateLLMPricing(): Promise<void> {
+  async updateLLMPricing(allowWhenDisabled = false): Promise<void> {
+    if (!allowWhenDisabled && !this.areSchedulersEnabled()) {
+      return;
+    }
+
     this.logger.log("Starting scheduled task: Update LLM pricing");
 
     try {
@@ -511,7 +479,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    */
   async manualUpdateLLMPricing(): Promise<void> {
     this.logger.log("Manual update of LLM pricing requested");
-    await this.updateLLMPricing();
+    await this.updateLLMPricing(true);
   }
 
   /**
@@ -526,7 +494,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
         daysOld === undefined ? "" : ` (${daysOld} days old)`
       }`,
     );
-    return await this.cleanupOldDrafts(daysOld);
+    return await this.cleanupOldDrafts(daysOld, true);
   }
 
   /**
@@ -536,7 +504,11 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    * @returns {Promise<void>}
    */
   @Cron(CronExpression.EVERY_6_HOURS)
-  async precomputeInsights(): Promise<void> {
+  async precomputeInsights(allowWhenDisabled = false): Promise<void> {
+    if (!allowWhenDisabled && !this.areSchedulersEnabled()) {
+      return;
+    }
+
     this.logger.log(
       "Starting scheduled task: Precompute insights for popular assignments",
     );
@@ -556,6 +528,6 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
    */
   async manualPrecomputeInsights(): Promise<void> {
     this.logger.log("Manual precomputation of insights requested");
-    await this.precomputeInsights();
+    await this.precomputeInsights(true);
   }
 }

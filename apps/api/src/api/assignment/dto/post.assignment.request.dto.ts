@@ -7,17 +7,27 @@ export interface QuestionsToGenerate {
   textResponse: number;
   trueFalse: number;
 }
+
+export interface MultipleChoiceSubtypes {
+  short?: number;
+  quantitative?: number;
+  long?: number;
+  scenario?: number;
+}
+
 export interface QuestionGenerationPayload {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
   questionsToGenerate: EnhancedQuestionsToGenerate;
-  fileContents: { filename: string; content: string }[];
-  learningObjectives: string;
+  fileContents?: { filename: string; content: string }[];
+  learningObjectives?: string;
+  contentSource?: "payload" | "stored" | "both";
 }
 export interface EnhancedQuestionsToGenerate extends QuestionsToGenerate {
   url?: number;
   upload?: number;
   linkFile?: number;
+  multipleChoiceSubtypes?: MultipleChoiceSubtypes;
   responseTypes?: {
     [key in QuestionType]?: ResponseType[];
   };
