@@ -117,4 +117,40 @@ describe("AssignmentQuestionAccessControlGuard — hostile input", () => {
       expect(Number.isNaN(arg?.where?.id)).toBe(false);
     }
   });
+
+  describe.each([
+    ["decimal", "1.5"],
+    ["exponent", "1e3"],
+    ["hex", "0x1"],
+    ["leading whitespace", " 1"],
+    ["leading plus", "+1"],
+    ["leading zero", "01"],
+    ["zero", "0"],
+    ["negative", "-1"],
+  ])("rejects non-canonical assignmentId (%s: %j)", (_label, raw) => {
+    it("throws ForbiddenException without touching Prisma", async () => {
+      const context = buildContext({ assignmentId: raw, id: "7" });
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.assignment.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each([
+    ["decimal", "1.5"],
+    ["exponent", "1e3"],
+    ["hex", "0x1"],
+    ["zero", "0"],
+    ["negative", "-7"],
+  ])("rejects non-canonical questionId (%s: %j)", (_label, raw) => {
+    it("throws ForbiddenException without touching Prisma", async () => {
+      const context = buildContext({ assignmentId: "1", id: raw });
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
 });
