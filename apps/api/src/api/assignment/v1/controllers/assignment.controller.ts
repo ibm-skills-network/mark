@@ -45,6 +45,7 @@ import {
   LearnerGetAssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { QuestionGenerationPayload } from "../../dto/post.assignment.request.dto";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
 import {
@@ -505,6 +506,24 @@ export class AssignmentControllerV1 {
       throw new BadRequestException("Invalid user ID");
     }
 
+    assertQuestionCountsWithinCaps(questionsToGenerate);
+
+    const subtypeTotal = questionsToGenerate.multipleChoiceSubtypes
+      ? (Number(questionsToGenerate.multipleChoiceSubtypes.short) || 0) +
+        (Number(questionsToGenerate.multipleChoiceSubtypes.quantitative) || 0) +
+        (Number(questionsToGenerate.multipleChoiceSubtypes.long) || 0) +
+        (Number(questionsToGenerate.multipleChoiceSubtypes.scenario) || 0)
+      : 0;
+
+    if (
+      questionsToGenerate.multipleChoiceSubtypes !== undefined &&
+      subtypeTotal === 0
+    ) {
+      throw new BadRequestException(
+        "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+      );
+    }
+
     const totalQuestions =
       (Number(questionsToGenerate.multipleChoice) || 0) +
       (Number(questionsToGenerate.multipleSelect) || 0) +
@@ -512,7 +531,8 @@ export class AssignmentControllerV1 {
       (Number(questionsToGenerate.trueFalse) || 0) +
       (Number(questionsToGenerate.url) || 0) +
       (Number(questionsToGenerate.upload) || 0) +
-      (Number(questionsToGenerate.linkFile) || 0);
+      (Number(questionsToGenerate.linkFile) || 0) +
+      subtypeTotal;
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(

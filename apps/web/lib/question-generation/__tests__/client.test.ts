@@ -1,6 +1,7 @@
 import { AssignmentTypeEnum, QuestionGenerationPayload } from "@/config/types";
 import { getJobStatus, uploadFiles } from "@/lib/talkToBackend";
 import {
+  buildQuestionGenerationPayloadFromObjectives,
   pollQuestionGenerationJob,
   startQuestionGenerationJob,
 } from "../client";
@@ -60,6 +61,57 @@ describe("question-generation client helpers", () => {
       await expect(startQuestionGenerationJob(payload)).rejects.toThrow(
         "Failed to upload files",
       );
+    });
+  });
+
+  describe("buildQuestionGenerationPayloadFromObjectives", () => {
+    it("builds subtype-only requests without adding default regular questions", () => {
+      const builtPayload = buildQuestionGenerationPayloadFromObjectives({
+        assignmentId: 1,
+        learningObjectives: "Understand core concepts",
+        multipleChoiceSubtypes: {
+          short: 2,
+          quantitative: 1,
+        },
+      });
+
+      expect(builtPayload.questionsToGenerate).toMatchObject({
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 2,
+          quantitative: 1,
+          long: 0,
+          scenario: 0,
+        },
+      });
+    });
+
+    it("can combine subtype requests with explicit regular question counts", () => {
+      const builtPayload = buildQuestionGenerationPayloadFromObjectives({
+        assignmentId: 1,
+        learningObjectives: "Understand core concepts",
+        questionTypes: ["TEXT"],
+        count: 2,
+        multipleChoiceSubtypes: {
+          scenario: 1,
+        },
+      });
+
+      expect(builtPayload.questionsToGenerate).toMatchObject({
+        textResponse: 2,
+        multipleChoiceSubtypes: {
+          short: 0,
+          quantitative: 0,
+          long: 0,
+          scenario: 1,
+        },
+      });
     });
   });
 

@@ -28,6 +28,7 @@ import {
   VariantType,
 } from "../../dto/update.questions.request.dto";
 import { applyQuestionOrder } from "../../utils/question-order.util";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
@@ -486,7 +487,7 @@ export class QuestionService {
         jobId,
         {
           status: "In Progress",
-          progress: "Mark is thinking generating questions.",
+          progress: "Mark is brainstorming some questions.",
         },
         false,
       );
@@ -568,14 +569,42 @@ export class QuestionService {
       throw new BadRequestException("Invalid assignment ID");
     }
 
+    assertQuestionCountsWithinCaps(questionsToGenerate);
+
+    const {
+      linkFile,
+      multipleChoice,
+      multipleChoiceSubtypes,
+      multipleSelect,
+      responseTypes,
+      textResponse,
+      trueFalse,
+      upload,
+      url,
+    } = questionsToGenerate;
+
+    const subtypeTotal = multipleChoiceSubtypes
+      ? (multipleChoiceSubtypes.short || 0) +
+        (multipleChoiceSubtypes.quantitative || 0) +
+        (multipleChoiceSubtypes.long || 0) +
+        (multipleChoiceSubtypes.scenario || 0)
+      : 0;
+
+    if (multipleChoiceSubtypes !== undefined && subtypeTotal === 0) {
+      throw new BadRequestException(
+        "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+      );
+    }
+
     const totalQuestions =
-      (questionsToGenerate.multipleChoice || 0) +
-      (questionsToGenerate.multipleSelect || 0) +
-      (questionsToGenerate.textResponse || 0) +
-      (questionsToGenerate.trueFalse || 0) +
-      (questionsToGenerate.url || 0) +
-      (questionsToGenerate.upload || 0) +
-      (questionsToGenerate.linkFile || 0);
+      (multipleChoice || 0) +
+      (multipleSelect || 0) +
+      (textResponse || 0) +
+      (trueFalse || 0) +
+      (url || 0) +
+      (upload || 0) +
+      (linkFile || 0) +
+      subtypeTotal;
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(
@@ -583,12 +612,7 @@ export class QuestionService {
       );
     }
 
-    if (
-      (questionsToGenerate.url > 0 ||
-        questionsToGenerate.upload > 0 ||
-        questionsToGenerate.linkFile > 0) &&
-      !questionsToGenerate.responseTypes
-    ) {
+    if ((url > 0 || upload > 0 || linkFile > 0) && !responseTypes) {
       questionsToGenerate.responseTypes = {
         TEXT: [ResponseType.OTHER],
         URL: [ResponseType.OTHER],

@@ -67,6 +67,8 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     const processedQuestions = processQuestions(questions);
     localStorage.setItem("questions", JSON.stringify(processedQuestions));
     localStorage.setItem("assignmentConfig", JSON.stringify(assignmentConfig));
+    localStorage.removeItem(`learner-${assignmentId}`);
+    localStorage.removeItem(`learner-overview-${assignmentId}`);
     window.open(`/learner/${assignmentId}?authorMode=true`, "_blank");
   }
   return (

@@ -22,11 +22,16 @@ type SupportedQuestionType =
   | "UPLOAD"
   | "LINK_FILE";
 
+type MultipleChoiceSubtypeCounts = NonNullable<
+  QuestionGenerationPayload["questionsToGenerate"]["multipleChoiceSubtypes"]
+>;
+
 type BuildPayloadFromObjectivesInput = {
   assignmentId: number;
   learningObjectives: string;
   questionTypes?: string[];
   count?: number;
+  multipleChoiceSubtypes?: Partial<MultipleChoiceSubtypeCounts>;
   assignmentType?: AssignmentTypeEnum;
 };
 
@@ -37,7 +42,7 @@ type CoerceCreateQuestionTypeInput = {
 
 type QuestionGenerationCountKey = Exclude<
   keyof QuestionGenerationPayload["questionsToGenerate"],
-  "responseTypes"
+  "multipleChoiceSubtypes" | "responseTypes"
 >;
 
 const DEFAULT_CHAT_COUNT = 5;
@@ -141,6 +146,42 @@ function getSafeQuestionCount(count?: number): number {
   return Math.max(1, Math.floor(count));
 }
 
+function normalizeMultipleChoiceSubtypeCounts(
+  multipleChoiceSubtypes?: Partial<MultipleChoiceSubtypeCounts>,
+): MultipleChoiceSubtypeCounts | undefined {
+  if (!multipleChoiceSubtypes) {
+    return undefined;
+  }
+
+  const normalizedSubtypeCounts: MultipleChoiceSubtypeCounts = {
+    short: Math.max(0, Math.floor(multipleChoiceSubtypes.short || 0)),
+    quantitative: Math.max(
+      0,
+      Math.floor(multipleChoiceSubtypes.quantitative || 0),
+    ),
+    long: Math.max(0, Math.floor(multipleChoiceSubtypes.long || 0)),
+    scenario: Math.max(0, Math.floor(multipleChoiceSubtypes.scenario || 0)),
+  };
+
+  const subtypeTotal = Object.values(normalizedSubtypeCounts).reduce(
+    (total, subtypeCount) => total + subtypeCount,
+    0,
+  );
+
+  return subtypeTotal > 0 ? normalizedSubtypeCounts : undefined;
+}
+
+function getRegularQuestionCount(
+  count: number | undefined,
+  hasSubtypeCounts: boolean,
+): number {
+  if (hasSubtypeCounts && (!Number.isFinite(count) || !count || count <= 0)) {
+    return 0;
+  }
+
+  return getSafeQuestionCount(count);
+}
+
 function getDefaultResponseTypes(): QuestionGenerationPayload["questionsToGenerate"]["responseTypes"] {
   return {
     TEXT: "OTHER" as ResponseType,
@@ -158,9 +199,14 @@ export function buildQuestionGenerationPayloadFromObjectives({
   learningObjectives,
   questionTypes,
   count,
+  multipleChoiceSubtypes,
   assignmentType = AssignmentTypeEnum.PRACTICE,
 }: BuildPayloadFromObjectivesInput): QuestionGenerationPayload {
-  const safeCount = getSafeQuestionCount(count);
+  const hasRequestedSubtypeMode = multipleChoiceSubtypes !== undefined;
+  const normalizedSubtypeCounts = normalizeMultipleChoiceSubtypeCounts(
+    multipleChoiceSubtypes,
+  );
+  const safeCount = getRegularQuestionCount(count, hasRequestedSubtypeMode);
   const normalizedTypes = normalizeQuestionTypeList(questionTypes);
 
   const questionsToGenerate: QuestionGenerationPayload["questionsToGenerate"] =
@@ -173,6 +219,9 @@ export function buildQuestionGenerationPayloadFromObjectives({
       upload: 0,
       linkFile: 0,
       responseTypes: getDefaultResponseTypes(),
+      ...(normalizedSubtypeCounts
+        ? { multipleChoiceSubtypes: normalizedSubtypeCounts }
+        : {}),
     };
 
   for (let index = 0; index < safeCount; index++) {
