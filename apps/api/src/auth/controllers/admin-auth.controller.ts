@@ -3,10 +3,14 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Inject,
   Injectable,
   Post,
 } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
+import { sanitizeForLog } from "../../logger/sanitize";
 import { AdminEmailService } from "../services/admin-email.service";
 import { AdminVerificationService } from "../services/admin-verification.service";
 
@@ -38,10 +42,15 @@ interface VerifyCodeResponse {
   version: "1",
 })
 export class AdminAuthController {
+  private readonly logger: Logger;
+
   constructor(
     private readonly adminVerificationService: AdminVerificationService,
     private readonly adminEmailService: AdminEmailService,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: AdminAuthController.name });
+  }
 
   @Post("me")
   @ApiOperation({
@@ -77,16 +86,12 @@ export class AdminAuthController {
   @ApiOperation({
     summary: "Send verification code to admin email",
     description:
-      "Sends a 6-digit verification code to the specified email if it's in the admin list",
+      "Always returns 200 with a generic message regardless of whether the email is authorized — this avoids leaking the admin allowlist to anonymous probes. If the email is authorized, a 6-digit code is emailed.",
   })
   @ApiResponse({
     status: 200,
-    description: "Verification code sent successfully",
+    description: "Generic acknowledgement (does not confirm authorization)",
     type: Object,
-  })
-  @ApiResponse({
-    status: 403,
-    description: "Email not authorized for admin access",
   })
   @ApiResponse({
     status: 400,
@@ -102,13 +107,24 @@ export class AdminAuthController {
       throw new BadRequestException("Invalid email format");
     }
 
-    const isAuthorized =
-      await this.adminVerificationService.isAuthorizedEmail(email);
-    if (!isAuthorized) {
-      throw new ForbiddenException("Email not authorized for admin access");
-    }
+    // Generic ack returned on every code path so an anonymous caller
+    // cannot distinguish authorized from unauthorized emails.
+    const genericResponse: SendCodeResponse = {
+      message: "If the email is authorized, a verification code has been sent.",
+      success: true,
+    };
 
     try {
+      const isAuthorized =
+        await this.adminVerificationService.isAuthorizedEmail(email);
+
+      if (!isAuthorized) {
+        this.logger.info("admin_send_code_unauthorized_email", {
+          email: sanitizeForLog(email),
+        });
+        return genericResponse;
+      }
+
       const code =
         await this.adminVerificationService.generateAndStoreCode(email);
 
@@ -118,21 +134,20 @@ export class AdminAuthController {
       );
 
       if (!emailSent) {
-        throw new BadRequestException("Failed to send verification code");
+        // SMTP failure surfaces only in logs — the client cannot tell
+        // a delivery failure from an unauthorized email.
+        this.logger.error("admin_send_code_smtp_failed", {
+          email: sanitizeForLog(email),
+        });
       }
 
-      return {
-        message: "Verification code sent to your email",
-        success: true,
-      };
+      return genericResponse;
     } catch (error) {
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ForbiddenException
-      ) {
-        throw error;
-      }
-      throw new BadRequestException("Failed to send verification code");
+      this.logger.error("admin_send_code_unexpected_error", {
+        email: sanitizeForLog(email),
+        error: error instanceof Error ? error.message : "unknown",
+      });
+      return genericResponse;
     }
   }
 
@@ -140,7 +155,7 @@ export class AdminAuthController {
   @ApiOperation({
     summary: "Verify admin access code",
     description:
-      "Verifies the 6-digit code and returns a session token for admin access",
+      "Verifies the 6-digit code and returns a session token. Returns the same generic 400 for unauthorized email, unknown code, expired code, or already-used code so the response cannot be used to enumerate the admin allowlist.",
   })
   @ApiResponse({
     status: 200,
@@ -149,11 +164,8 @@ export class AdminAuthController {
   })
   @ApiResponse({
     status: 400,
-    description: "Invalid or expired code",
-  })
-  @ApiResponse({
-    status: 403,
-    description: "Email not authorized",
+    description:
+      "Invalid or expired code, or the email is not authorized (response does not distinguish)",
   })
   async verifyCode(
     @Body() request: VerifyCodeRequest,
@@ -169,20 +181,31 @@ export class AdminAuthController {
       throw new BadRequestException("Invalid code format");
     }
 
-    const isAuthorized =
-      await this.adminVerificationService.isAuthorizedEmail(email);
-    if (!isAuthorized) {
-      throw new ForbiddenException("Email not authorized for admin access");
-    }
+    const genericInvalid = new BadRequestException(
+      "Invalid or expired verification code",
+    );
 
     try {
-      const isValidCode = await this.adminVerificationService.verifyCode(
-        email,
-        code,
-      );
+      // Run authorization + code lookup unconditionally so the response
+      // shape and timing do not differ between unauthorized email and
+      // wrong code. Both must succeed to issue a session.
+      const [isAuthorized, isValidCode] = await Promise.all([
+        this.adminVerificationService.isAuthorizedEmail(email),
+        this.adminVerificationService.verifyCode(email, code),
+      ]);
+
+      if (!isAuthorized) {
+        this.logger.info("admin_verify_code_unauthorized_email", {
+          email: sanitizeForLog(email),
+        });
+        throw genericInvalid;
+      }
 
       if (!isValidCode) {
-        throw new BadRequestException("Invalid or expired verification code");
+        this.logger.info("admin_verify_code_invalid", {
+          email: sanitizeForLog(email),
+        });
+        throw genericInvalid;
       }
 
       const sessionToken =
@@ -198,13 +221,14 @@ export class AdminAuthController {
         expiresAt,
       };
     } catch (error) {
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ForbiddenException
-      ) {
+      if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException("Failed to verify code");
+      this.logger.error("admin_verify_code_unexpected_error", {
+        email: sanitizeForLog(email),
+        error: error instanceof Error ? error.message : "unknown",
+      });
+      throw genericInvalid;
     }
   }
 

@@ -47,7 +47,12 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
         throw new Error(data.message || "Failed to send verification code");
       }
 
-      setSuccess("Verification code sent to your email!");
+      // Use the server's neutral message — it does not confirm whether the
+      // email is on the admin allowlist, by design.
+      setSuccess(
+        data.message ||
+          "If the email is authorized, a verification code has been sent.",
+      );
       setStep("code");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
