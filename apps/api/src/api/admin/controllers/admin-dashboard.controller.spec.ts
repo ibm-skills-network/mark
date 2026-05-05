@@ -136,4 +136,78 @@ describe("AdminDashboardController", () => {
       );
     });
   });
+
+  describe("getDashboardStats assignmentId validation", () => {
+    const validationPipe = new ValidationPipe({ whitelist: true });
+
+    async function validateQuery(
+      query: Record<string, unknown>,
+    ): Promise<DashboardStatsQueryDto> {
+      const result = await validationPipe.transform(query, {
+        type: "query",
+        metatype: DashboardStatsQueryDto,
+      });
+      return result as DashboardStatsQueryDto;
+    }
+
+    it("accepts a positive integer string", async () => {
+      const result = await validateQuery({ assignmentId: "42" });
+      expect(result.assignmentId).toBe("42");
+    });
+
+    it("rejects mixed alphanumeric like '1abc'", async () => {
+      await expect(validateQuery({ assignmentId: "1abc" })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("rejects non-numeric strings", async () => {
+      await expect(validateQuery({ assignmentId: "abc" })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("rejects zero", async () => {
+      await expect(validateQuery({ assignmentId: "0" })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("rejects negative integers", async () => {
+      await expect(validateQuery({ assignmentId: "-1" })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("rejects leading-zero values like '01'", async () => {
+      await expect(validateQuery({ assignmentId: "01" })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("rejects decimal values", async () => {
+      await expect(validateQuery({ assignmentId: "1.5" })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it("accepts an absent assignmentId (optional)", async () => {
+      const result = await validateQuery({});
+      expect(result.assignmentId).toBeUndefined();
+    });
+
+    it("controller converts validated assignmentId to a Number before calling service", async () => {
+      const valid = await validateQuery({ assignmentId: "7" });
+      const fakeRequest = {
+        userSession: { userId: "admin-1", role: "ADMIN" },
+      } as unknown as UserSessionRequest;
+
+      await controller.getDashboardStats(fakeRequest, valid);
+
+      expect(mockAdminService.getDashboardStats).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ assignmentId: 7 }),
+      );
+    });
+  });
 });

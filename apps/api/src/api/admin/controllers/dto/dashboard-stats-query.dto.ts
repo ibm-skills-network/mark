@@ -1,4 +1,10 @@
-import { IsEmail, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from "class-validator";
 
 export class DashboardStatsQueryDto {
   @IsOptional()
@@ -11,6 +17,9 @@ export class DashboardStatsQueryDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^[1-9]\d*$/, {
+    message: "assignmentId must be a positive integer",
+  })
   assignmentId?: string;
 
   @IsOptional()

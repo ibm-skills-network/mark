@@ -1316,7 +1316,14 @@ export class AdminService {
                 ...(Object.keys(dateFilter).length > 0
                   ? { createdAt: dateFilter }
                   : {}),
-                ...(filters?.userId ? { userId: filters.userId } : {}),
+                ...(filters?.userId
+                  ? {
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
+                    }
+                  : {}),
               },
               _count: { id: true },
             })
@@ -1331,7 +1338,14 @@ export class AdminService {
                   ...(Object.keys(dateFilter).length > 0
                     ? { createdAt: dateFilter }
                     : {}),
-                  ...(filters?.userId ? { userId: filters.userId } : {}),
+                  ...(filters?.userId
+                    ? {
+                        userId: {
+                          equals: filters.userId,
+                          mode: "insensitive" as const,
+                        },
+                      }
+                    : {}),
                 },
               });
               return {
@@ -1351,7 +1365,14 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
-              ...(filters?.userId ? { userId: filters.userId } : {}),
+              ...(filters?.userId
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
+                : {}),
             },
           })
         : 0,
@@ -1364,7 +1385,14 @@ export class AdminService {
                 ...(Object.keys(dateFilter).length > 0
                   ? { createdAt: dateFilter }
                   : {}),
-                ...(filters?.userId ? { userId: filters.userId } : {}),
+                ...(filters?.userId
+                  ? {
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
+                    }
+                  : {}),
               },
             })
             .then(async (total) => {
@@ -1374,7 +1402,14 @@ export class AdminService {
                   ...(Object.keys(dateFilter).length > 0
                     ? { createdAt: dateFilter }
                     : {}),
-                  ...(filters?.userId ? { userId: filters.userId } : {}),
+                  ...(filters?.userId
+                    ? {
+                        userId: {
+                          equals: filters.userId,
+                          mode: "insensitive" as const,
+                        },
+                      }
+                    : {}),
                 },
               });
               return { totalReports: total._count.id, openReports: open };
@@ -1391,7 +1426,14 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
-              ...(filters?.userId ? { userId: filters.userId } : {}),
+              ...(filters?.userId
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
+                : {}),
             },
             take: 10,
             orderBy: { createdAt: "desc" },
@@ -1418,7 +1460,14 @@ export class AdminService {
                 ...(Object.keys(dateFilter).length > 0
                   ? { createdAt: dateFilter }
                   : {}),
-                ...(filters?.userId ? { userId: filters.userId } : {}),
+                ...(filters?.userId
+                  ? {
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
+                    }
+                  : {}),
               },
             })
             .then((users) => users.length)
@@ -1463,7 +1512,14 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
-              ...(filters?.userId ? { userId: filters.userId } : {}),
+              ...(filters?.userId
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
+                : {}),
             },
             _avg: { assignmentRating: true },
           })

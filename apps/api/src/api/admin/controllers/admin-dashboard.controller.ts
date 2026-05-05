@@ -123,9 +123,7 @@ export class AdminDashboardController {
     return this.adminService.getDashboardStats(request.userSession, {
       startDate: query.startDate,
       endDate: query.endDate,
-      assignmentId: query.assignmentId
-        ? Number.parseInt(query.assignmentId, 10)
-        : undefined,
+      assignmentId: query.assignmentId ? Number(query.assignmentId) : undefined,
       assignmentName: query.assignmentName,
       userId: query.userId,
     });
