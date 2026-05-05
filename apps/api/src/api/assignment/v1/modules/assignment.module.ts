@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmModule } from "../../../llm/llm.module";
 import { LtiSyncModule } from "../../../attempt/lti-sync.module";
+import { JobQueueModule } from "../../../../job-queue/job-queue.module";
 import { AttemptControllerV1 } from "../../attempt/attempt.controller";
 import { AttemptServiceV1 } from "../../attempt/attempt.service";
 import { QuestionController } from "../../question/question.controller";
@@ -22,7 +23,7 @@ import { AssignmentServiceV1 } from "../services/assignment.service";
     JobStatusServiceV1,
     AttemptServiceV1,
   ],
-  imports: [HttpModule, LlmModule, LtiSyncModule],
-  exports: [QuestionService, JobStatusServiceV1],
+  imports: [HttpModule, LlmModule, LtiSyncModule, JobQueueModule],
+  exports: [AssignmentServiceV1, QuestionService, JobStatusServiceV1],
 })
 export class AssignmentModuleV1 {}

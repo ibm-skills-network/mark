@@ -182,41 +182,51 @@ async function bootstrap() {
      *
      * @param {string} signal - The signal received (SIGTERM, SIGINT, etc.)
      */
+    let shutdownPromise: Promise<void> | undefined;
     const shutdown = async (signal: string) => {
-      const shutdownStart = Date.now();
-      logger.log(`${signal} signal received, starting graceful shutdown`);
+      shutdownPromise ??= (async () => {
+        logger.log(`${signal} signal received, starting graceful shutdown`);
+        const shutdownStart = Date.now();
 
-      try {
         const shutdownTimeout = setTimeout(() => {
           logger.error("Graceful shutdown timeout, forcing exit");
-          throw new Error("Graceful shutdown timeout");
+          process.exit(1);
         }, 30_000);
 
-        await app.close();
+        try {
+          await app.close();
+          clearTimeout(shutdownTimeout);
+          logger.log(
+            `Application closed successfully (shutdown_time_ms=${
+              Date.now() - shutdownStart
+            })`,
+          );
+          process.exit(0);
+        } catch (error) {
+          clearTimeout(shutdownTimeout);
+          logger.error(
+            `Error during graceful shutdown after ${
+              Date.now() - shutdownStart
+            }ms:`,
+            error,
+          );
+          process.exit(1);
+        }
+      })();
 
-        clearTimeout(shutdownTimeout);
-
-        logger.log(
-          `Application closed successfully (shutdown_time_ms=${
-            Date.now() - shutdownStart
-          })`,
-        );
-        process.exit(0);
-      } catch (error) {
-        logger.error(
-          `Error during graceful shutdown after ${Date.now() - shutdownStart}ms:`,
-          error,
-        );
-        throw error;
-      }
+      await shutdownPromise;
     };
 
     /**
      * Register signal handlers for container orchestration
      * These signals are commonly used by Docker/Kubernetes for shutdown
      */
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => {
+      void shutdown("SIGTERM");
+    });
+    process.once("SIGINT", () => {
+      void shutdown("SIGINT");
+    });
 
     /**
      * Handle uncaught exceptions and unhandled promise rejections

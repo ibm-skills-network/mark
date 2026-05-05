@@ -160,18 +160,10 @@ export class PromptProcessorService implements IPromptProcessor {
       }
     }
 
-    try {
-      const result = await llm.invoke([new HumanMessage(input)], options);
-      const response = this.cleanResponse(result.content);
-      await this.usageTracker.trackUsage(
-        assignmentId,
-        usageType,
-        result.tokenUsage.input,
-        result.tokenUsage.output,
-        llm.key,
-      );
+    let result: any;
 
-      return response;
+    try {
+      result = await llm.invoke([new HumanMessage(input)], options);
     } catch (error) {
       this.logger.error(
         `Provider invocation failed: ${
@@ -184,6 +176,18 @@ export class PromptProcessorService implements IPromptProcessor {
           : new Error(`Failed provider invoke: ${JSON.stringify(error)}`);
       throw error_;
     }
+
+    const response = this.cleanResponse(result.content);
+
+    await this.trackUsageSafely(
+      assignmentId,
+      usageType,
+      result.tokenUsage?.input ?? 0,
+      result.tokenUsage?.output ?? 0,
+      llm.key,
+    );
+
+    return response;
   }
 
   /**
@@ -237,11 +241,11 @@ export class PromptProcessorService implements IPromptProcessor {
 
       const response = this.cleanResponse(result.content);
 
-      await this.usageTracker.trackUsage(
+      await this.trackUsageSafely(
         assignmentId,
         usageType,
-        result.tokenUsage.input,
-        result.tokenUsage.output,
+        result.tokenUsage?.input ?? 0,
+        result.tokenUsage?.output ?? 0,
         llm.key,
       );
 
@@ -279,5 +283,29 @@ export class PromptProcessorService implements IPromptProcessor {
       .replaceAll("```", "")
       .replaceAll("`", "")
       .trim();
+  }
+
+  private async trackUsageSafely(
+    assignmentId: number,
+    usageType: AIUsageType,
+    tokensIn: number,
+    tokensOut: number,
+    modelKey?: string,
+  ): Promise<void> {
+    try {
+      await this.usageTracker.trackUsage(
+        assignmentId,
+        usageType,
+        tokensIn,
+        tokensOut,
+        modelKey,
+      );
+    } catch (error) {
+      this.logger.error(
+        `AI usage tracking failed after successful provider response for assignment ${assignmentId} (${usageType}): ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
   }
 }

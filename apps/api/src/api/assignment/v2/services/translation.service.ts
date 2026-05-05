@@ -44,7 +44,7 @@ interface IExistingTranslation {
 }
 
 interface ProgressTracker {
-  jobId: number;
+  jobId: string;
   totalItems: number;
   completedItems: number;
   currentItemIndex: number;
@@ -84,8 +84,8 @@ export class TranslationService implements OnModuleDestroy {
   private readonly MAX_STUCK_OPERATIONS = 15;
 
   private stuckOperations = new Set<string>();
-  private jobStartTimes = new Map<number, number>();
-  private jobCancellationFlags = new Map<number, boolean>();
+  private jobStartTimes = new Map<string, number>();
+  private jobCancellationFlags = new Map<string, boolean>();
   private readonly limiterHealthInterval: NodeJS.Timeout;
   private readonly jobTimeoutInterval: NodeJS.Timeout;
   private operationStats = {
@@ -811,7 +811,7 @@ export class TranslationService implements OnModuleDestroy {
    * Initialize a progress tracker for comprehensive job status updates
    */
   private initializeProgressTracker(
-    jobId: number,
+    jobId: string,
     totalItems: number,
     startPercentage: number,
     endPercentage: number,
@@ -883,7 +883,7 @@ export class TranslationService implements OnModuleDestroy {
     operationName: string,
     translationFunction: () => Promise<T>,
     maxAttempts = this.MAX_RETRY_ATTEMPTS,
-    _jobId?: number,
+    _jobId?: string,
   ): Promise<T> {
     void _jobId;
     let attempts = 0;
@@ -965,7 +965,7 @@ export class TranslationService implements OnModuleDestroy {
   /**
    * Cancel a job and mark it for termination
    */
-  async cancelJob(jobId: number): Promise<void> {
+  async cancelJob(jobId: string): Promise<void> {
     this.logger.warn(`Cancelling job ${jobId}`);
     this.jobCancellationFlags.set(jobId, true);
 
@@ -984,7 +984,7 @@ export class TranslationService implements OnModuleDestroy {
   /**
    * Check if a job should be cancelled
    */
-  private isJobCancelled(jobId?: number): boolean {
+  private isJobCancelled(jobId?: string): boolean {
     if (!jobId) return false;
     return this.jobCancellationFlags.get(jobId) === true;
   }
@@ -992,7 +992,7 @@ export class TranslationService implements OnModuleDestroy {
   /**
    * Clean up cancelled job resources
    */
-  private cleanupCancelledJob(jobId: number): void {
+  private cleanupCancelledJob(jobId: string): void {
     this.jobCancellationFlags.delete(jobId);
     this.jobStartTimes.delete(jobId);
   }
@@ -1002,7 +1002,7 @@ export class TranslationService implements OnModuleDestroy {
    */
   private checkJobTimeouts(): void {
     const now = Date.now();
-    const expiredJobs: number[] = [];
+    const expiredJobs: string[] = [];
 
     for (const [jobId, startTime] of this.jobStartTimes.entries()) {
       if (now - startTime > this.JOB_TIMEOUT) {
@@ -1041,7 +1041,7 @@ export class TranslationService implements OnModuleDestroy {
   async retranslateAssignmentForLanguages(
     assignmentId: number,
     languageCodes: string[],
-    jobId?: number,
+    jobId?: string,
   ): Promise<void> {
     if (languageCodes.length === 0) {
       return;
@@ -1297,7 +1297,7 @@ export class TranslationService implements OnModuleDestroy {
    */
   async translateAssignment(
     assignmentId: number,
-    jobId?: number,
+    jobId?: string,
     progressRange?: { start: number; end: number },
   ): Promise<void> {
     if (!this.languageTranslation) {
@@ -1452,10 +1452,10 @@ export class TranslationService implements OnModuleDestroy {
     assignmentId: number,
     questionId: number,
     question: QuestionDto,
-    jobId?: number,
+    jobId?: string,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = typeof jobId === "number" && jobId > 0;
+    const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {
@@ -1620,10 +1620,10 @@ export class TranslationService implements OnModuleDestroy {
     questionId: number,
     variantId: number,
     variant: VariantDto,
-    jobId?: number,
+    jobId?: string,
     forceRetranslation = false,
   ): Promise<void> {
-    const hasValidJobId = typeof jobId === "number" && jobId > 0;
+    const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
     if (!this.languageTranslation) {
       if (hasValidJobId) {

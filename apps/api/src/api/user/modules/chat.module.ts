@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common";
+<<<<<<< feat/assistant-supports-file-upload
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { PdfStructureExtractorService } from "src/api/attempt/services/pdf-structure-extractor.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
+=======
+>>>>>>> master
 import { ChatController } from "../controllers/chat.controller";
 import { ChatAccessControlGuard } from "../guards/chat.access.control.guard";
 import { ChatRepository } from "../repositories/chat.repository";
@@ -14,7 +17,6 @@ import { ChatService } from "../services/chat.service";
   providers: [
     ChatService,
     MarkChatService,
-    PrismaService,
     ChatAccessControlGuard,
     ChatRepository,
     FileContentExtractionService,

@@ -49,7 +49,7 @@ function LearnerHeader() {
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
-  const [currentGradingJobId, setCurrentGradingJobId] = useState<number | null>(
+  const [currentGradingJobId, setCurrentGradingJobId] = useState<string | null>(
     null,
   );
 

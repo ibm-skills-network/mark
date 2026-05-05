@@ -13,12 +13,19 @@ export class LtiSyncScheduler {
 
   constructor(private readonly ltiGradeSyncService: LtiGradeSyncService) {}
 
+  private areSchedulersEnabled(): boolean {
+    return process.env.ENABLE_JOB_SCHEDULERS === "true";
+  }
+
   /**
    * Process scheduled LTI grade sync retries every 5 minutes.
    * This balances timely retry processing with minimal server load.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduledRetries() {
+    if (!this.areSchedulersEnabled()) {
+      return;
+    }
     const tickStart = Date.now();
     this.logger.debug("cron_tick handleScheduledRetries");
 
@@ -60,6 +67,9 @@ export class LtiSyncScheduler {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async reportSyncHealth() {
+    if (!this.areSchedulersEnabled()) {
+      return;
+    }
     this.logger.debug("cron_tick reportSyncHealth");
     try {
       const stats = await this.ltiGradeSyncService.getSystemStats();

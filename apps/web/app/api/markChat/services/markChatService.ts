@@ -190,7 +190,8 @@ export class MarkChatService {
           "generateQuestionsFromObjectives",
           params.learningObjectives,
           params.questionTypes,
-          params.count || 5,
+          params.multipleChoiceSubtypes ? params.count : (params.count ?? 5),
+          params.multipleChoiceSubtypes,
         );
 
       default:

@@ -190,6 +190,39 @@ yarn studio
 
 This opens Prisma Studio to view and edit database records.
 
+## Testing
+
+To run end-to-end tests with Playwright:
+
+```bash
+# First time: install Playwright browsers
+yarn playwright:install
+
+# Prepare setup state using the Playwright setup project
+yarn test:setup
+
+# Local default: Chromium author + learner projects
+yarn test:e2e
+
+# Full browser matrix
+yarn test:e2e:all
+
+# Role-specific full-matrix runs
+yarn playwright:learner
+yarn playwright:author
+```
+
+**Note**: `yarn playwright:install` downloads browser binaries (~300MB). This is separate from `yarn install` and only needs to be run once.
+
+For detailed testing documentation including:
+
+- Test architecture and authentication
+- Writing and recording tests
+- Troubleshooting test failures
+- CI/CD integration
+
+See [TESTING.md](./TESTING.md).
+
 ## Troubleshooting Common Issues
 
 ### "Docker is not installed or not in PATH"

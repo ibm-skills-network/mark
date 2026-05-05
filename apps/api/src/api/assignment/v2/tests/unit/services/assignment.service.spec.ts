@@ -14,10 +14,13 @@ import {
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   createMockAssignmentRepository,
   createMockAssignmentResponseDto,
   createMockGetAssignmentResponseDto,
+  createMockJobQueueService,
   createMockJobStatusService,
   createMockLearnerGetAssignmentResponseDto,
   createMockLlmFacadeService,
@@ -49,6 +52,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     typeof createMockVersionManagementService
   >;
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
+  let jobQueueService: ReturnType<typeof createMockJobQueueService>;
+  let prismaService: ReturnType<typeof createMockPrismaService>;
   let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
@@ -57,6 +62,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     translationService = createMockTranslationService();
     versionManagementService = createMockVersionManagementService();
     jobStatusService = createMockJobStatusService();
+    jobQueueService = createMockJobQueueService();
+    prismaService = createMockPrismaService();
     const llmService = createMockLlmFacadeService();
     logger = createMockLogger();
 
@@ -71,8 +78,9 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
           useValue: versionManagementService,
         },
         { provide: JobStatusServiceV2, useValue: jobStatusService },
+        { provide: JobQueueService, useValue: jobQueueService },
         { provide: LlmFacadeService, useValue: llmService },
-        { provide: PrismaService, useValue: createMockPrismaService() },
+        { provide: PrismaService, useValue: prismaService },
         { provide: WINSTON_MODULE_PROVIDER, useValue: { child: () => logger } },
       ],
     }).compile();
@@ -216,34 +224,43 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       const dto: UpdateAssignmentQuestionsDto =
         createMockUpdateAssignmentQuestionsDto();
 
-      const spy = jest
-        .spyOn<any, any>(service as any, "startPublishingProcess")
-        .mockResolvedValue(undefined);
-
       const response = await service.publishAssignment(1, dto, "author-123");
 
       expect(jobStatusService.createPublishJob).toHaveBeenCalledWith(
         1,
         "author-123",
       );
-      expect(spy).toHaveBeenCalledWith(1, 1, dto, "author-123");
+      expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
+        {
+          assignmentId: 1,
+          jobId: 1,
+          updateDto: dto,
+          userId: "author-123",
+        },
+        {
+          jobId: 1,
+        },
+      );
       expect(response).toEqual({ jobId: 1, message: "Publishing started" });
     });
 
-    it("logs an error but still returns jobId if async publish fails", async () => {
+    it("marks the job failed and rethrows if queue enqueue fails", async () => {
       const dto = createMockUpdateAssignmentQuestionsDto();
-      jest
-        .spyOn<any, any>(service as any, "startPublishingProcess")
-        .mockRejectedValue(new Error("fail"));
+      jobQueueService.enqueue.mockRejectedValueOnce(new Error("fail"));
 
-      const response = await service.publishAssignment(1, dto, "author-123");
-
-      expect(response).toEqual({ jobId: 1, message: "Publishing started" });
-      expect(logger.error).toHaveBeenCalled();
+      await expect(
+        service.publishAssignment(1, dto, "author-123"),
+      ).rejects.toThrow("fail");
+      expect(jobStatusService.updateJobStatus).toHaveBeenCalledWith(1, {
+        status: "Failed",
+        progress: "Failed to enqueue publish job: fail",
+      });
     });
   });
 
-  describe("startPublishingProcess (private) – happy path", () => {
+  describe("runPublishJob", () => {
     it("runs all steps when content changes", async () => {
       const assignmentId = 1;
       const jobId = 1;
@@ -259,12 +276,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
         .mockReturnValue(true);
 
-      await service["startPublishingProcess"](
-        jobId,
-        assignmentId,
-        dto,
-        "author-123",
-      );
+      await service.runPublishJob(jobId, assignmentId, dto, "author-123");
 
       expect(
         questionService.processQuestionsForPublishing,
@@ -316,12 +328,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
     assignmentRepository.findById.mockResolvedValue(existingAssignment);
 
-    await service["startPublishingProcess"](
-      jobId,
-      assignmentId,
-      dto,
-      "author-123",
-    );
+    await service.runPublishJob(jobId, assignmentId, dto, "author-123");
 
     expect(translationService.translateAssignment).not.toHaveBeenCalled();
     expect(questionService.updateQuestionGradingContext).not.toHaveBeenCalled();
@@ -357,12 +364,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       >(service as any, "haveTranslatableAssignmentFieldsChanged")
       .mockReturnValue(false);
 
-    await service["startPublishingProcess"](
-      jobId,
-      assignmentId,
-      dto,
-      "author-123",
-    );
+    await service.runPublishJob(jobId, assignmentId, dto, "author-123");
 
     expect(assignmentRepository.update).toHaveBeenCalledWith(
       assignmentId,
@@ -372,7 +374,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
   it("maps temporary frontend question ids to persisted backend ids before saving question order", async () => {
     const assignmentId = 1;
-    const jobId = 1;
+    const jobId = "publish-job-1";
     const tempQuestionId = 966_122_647;
     const persistedQuestionId = 3;
     const dto = createMockUpdateAssignmentQuestionsDto(
@@ -411,12 +413,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
       .mockReturnValue(false);
 
-    await service["startPublishingProcess"](
-      jobId,
-      assignmentId,
-      dto,
-      "author-123",
-    );
+    await service.runPublishJob(jobId, assignmentId, dto, "author-123");
 
     expect(assignmentRepository.update).toHaveBeenCalledWith(
       assignmentId,
