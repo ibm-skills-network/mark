@@ -69,10 +69,7 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       requestDto.learnerFileResponse.length === 0
     ) {
       throw new BadRequestException(
-        this.localizationService.getLocalizedString(
-          "expectedImageResponse",
-          requestDto.language,
-        ),
+        "Please upload at least one image to submit this question.",
       );
     }
 
