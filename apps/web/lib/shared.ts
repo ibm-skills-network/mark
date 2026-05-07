@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
-import { apiClient } from "./api-client";
+import { apiClient, APIError } from "./api-client";
 import type {
   Assignment,
   BaseBackendResponse,
@@ -1420,6 +1420,28 @@ export async function verifyAdminCode(
 }
 
 /**
+ * Returns true when an error from an admin-token-protected request indicates
+ * that the session is missing, invalid, or expired. Prefers HTTP status from
+ * APIError; falls back to a defensive message check for any callers that still
+ * throw plain Error objects.
+ */
+export function isAdminAuthError(err: unknown): boolean {
+  if (err instanceof APIError) {
+    return err.status === 401 || err.status === 403;
+  }
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return (
+      msg.includes("invalid or expired admin session") ||
+      msg.includes("admin authentication required") ||
+      msg.includes("unauthorized") ||
+      msg.includes("forbidden")
+    );
+  }
+  return false;
+}
+
+/**
  * Get current admin user information
  */
 export async function getCurrentAdminUser(sessionToken: string): Promise<{
@@ -1441,7 +1463,11 @@ export async function getCurrentAdminUser(sessionToken: string): Promise<{
     const errorBody = (await res
       .json()
       .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get current admin user");
+    throw new APIError(
+      errorBody.message || "Failed to get current admin user",
+      res.status,
+      res.statusText,
+    );
   }
 
   return await res.json();

@@ -44,7 +44,6 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
-import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
@@ -126,7 +125,6 @@ export class AssignmentControllerV2 {
     private readonly questionService: QuestionService,
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
-    private readonly prisma: PrismaService,
     private readonly adminService: AdminService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV2.name });
@@ -207,20 +205,23 @@ export class AssignmentControllerV2 {
    * Stream job status updates for publishing an assignment
    */
   @Get("jobs/:jobId/status-stream")
+  @Roles(UserRole.AUTHOR)
   @ApiOperation({ summary: "Stream publish job status" })
   @ApiParam({ name: "jobId", required: true, description: "Job ID" })
   @Sse()
   async sendPublishJobStatus(
-    @Param("jobId", ParseIntPipe) jobId: number,
-    @Req() request: Request,
+    @Param("jobId") jobId: string,
+    @Req() request: UserSessionRequest & Request,
   ): Promise<Observable<MessageEvent>> {
-    const job = await this.prisma.publishJob.findUnique({
-      where: { id: jobId },
-    });
-
+    const job = await this.jobStatusService.getJobStatus(jobId);
     if (!job) {
       throw new NotFoundException(`Publish job with ID ${jobId} not found`);
     }
+
+    if (job.userId !== request.userSession.userId) {
+      throw new NotFoundException(`Publish job with ID ${jobId} not found`);
+    }
+
     request.on("close", () => {
       this.logger.info(`Client disconnected from job ${jobId} stream`);
       void this.jobStatusService.cleanupJobStream(jobId);
@@ -245,7 +246,7 @@ export class AssignmentControllerV2 {
     schema: {
       type: "object",
       properties: {
-        jobId: { type: "number", description: "Job ID for tracking progress" },
+        jobId: { type: "string", description: "Job ID for tracking progress" },
         message: { type: "string", description: "Status message" },
       },
     },
@@ -255,7 +256,7 @@ export class AssignmentControllerV2 {
     @Body(new ValidationPipe({ transform: true }))
     updatedAssignment: UpdateAssignmentQuestionsDto,
     @Req() request: UserSessionRequest,
-  ): Promise<{ jobId: number; message: string }> {
+  ): Promise<{ jobId: string; message: string }> {
     return this.assignmentService.publishAssignment(
       id,
       updatedAssignment,
@@ -412,6 +413,7 @@ export class AssignmentControllerV2 {
    * Get the status of a job
    */
   @Get("jobs/:jobId/status")
+  @Roles(UserRole.AUTHOR)
   @ApiOperation({ summary: "Get job status" })
   @ApiParam({ name: "jobId", required: true, description: "Job ID" })
   @ApiResponse({
@@ -429,7 +431,10 @@ export class AssignmentControllerV2 {
       },
     },
   })
-  async getJobStatus(@Param("jobId", ParseIntPipe) jobId: number): Promise<{
+  async getJobStatus(
+    @Param("jobId") jobId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<{
     status: string;
     progress: string;
     questions?: QuestionDto[];
@@ -439,13 +444,15 @@ export class AssignmentControllerV2 {
       throw new NotFoundException("Job not found");
     }
 
+    if (job.userId !== request.userSession.userId) {
+      throw new NotFoundException("Job not found");
+    }
+
     return job.status === "Completed"
       ? {
           status: job.status,
           progress: job.progress,
-          questions: job.result
-            ? (JSON.parse(job.result as string) as QuestionDto[])
-            : undefined,
+          questions: job.result as QuestionDto[] | undefined,
         }
       : { status: job.status, progress: job.progress };
   }
@@ -504,7 +511,7 @@ export class AssignmentControllerV2 {
       type: "object",
       properties: {
         message: { type: "string", description: "Status message" },
-        jobId: { type: "number", description: "Job ID for tracking progress" },
+        jobId: { type: "string", description: "Job ID for tracking progress" },
       },
     },
   })
@@ -513,7 +520,7 @@ export class AssignmentControllerV2 {
     @Body(new ValidationPipe({ transform: true }))
     payload: QuestionGenerationPayload,
     @Req() request: UserSessionRequest,
-  ): Promise<{ message: string; jobId: number }> {
+  ): Promise<{ message: string; jobId: string }> {
     return this.questionService.generateQuestions(
       assignmentId,
       payload,

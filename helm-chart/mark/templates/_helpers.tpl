@@ -99,6 +99,21 @@ app.kubernetes.io/name: {{ include "mark.api.name" . }}
 
 {{/*
 ###############################
+jobs helpers
+###############################
+*/}}
+
+{{- define "mark.jobs.name" -}}
+{{- printf "%s-%s" (include "mark.fullname" .) "jobs" | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "mark.jobs.labels" -}}
+app.kubernetes.io/name: {{ include "mark.jobs.name" . }}
+{{ include "mark.selectorLabels" . }}
+{{- end }}
+
+{{/*
+###############################
 ui helpers
 ###############################
 */}}
@@ -208,4 +223,3 @@ Migration annotations
 "helm.sh/hook": pre-install,pre-upgrade
 "helm.sh/hook-weight": "-5"
 {{- end }}
-

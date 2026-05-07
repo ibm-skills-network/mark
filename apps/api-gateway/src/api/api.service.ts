@@ -23,6 +23,7 @@ import { Logger } from "winston";
 import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
+import { sanitizeForLog } from "../logger/sanitize";
 
 @Injectable()
 export class ApiService {
@@ -320,15 +321,18 @@ export class ApiService {
     forwardingService: DownstreamService,
     request: UserSessionRequest,
   ): Promise<{ data: string; status: number }> {
+    let endpoint: string | undefined;
     try {
       if (!request.originalUrl) {
         throw new BadRequestException();
       }
 
-      const { endpoint, extraHeaders } = this.getForwardingDetails(
+      const forwardingDetails = this.getForwardingDetails(
         forwardingService,
         request,
       );
+      endpoint = forwardingDetails.endpoint;
+      const extraHeaders = forwardingDetails.extraHeaders;
 
       const isMultipart = this.isMultipartRequest(request);
       const isBinaryFile = this.isBinaryFileRequest(request);
@@ -443,7 +447,7 @@ export class ApiService {
           this.forwardRequestUsingHttp(
             request as Request,
             mockResponse as unknown as Response,
-            endpoint,
+            forwardingDetails.endpoint,
             extraHeaders,
           )
             .then(() => {
@@ -487,15 +491,46 @@ export class ApiService {
       }
 
       const axiosError = error as AxiosError;
+      const endpointForLog = endpoint ?? "<unknown>";
+      const safeMethod = sanitizeForLog(request.method);
+      const safeEndpoint = sanitizeForLog(endpointForLog);
+      const requestId = sanitizeForLog(
+        request.get("akamai-grn") ?? request.get("x-request-id"),
+      );
       if (axiosError.isAxiosError && axiosError.response) {
-        this.logger.error(axiosError.response.status);
-        this.logger.error(axiosError.response.data);
+        this.logger.error(
+          `forward_failed downstream=${axiosError.response.status} ${safeMethod} ${safeEndpoint}`,
+          {
+            downstream_status: axiosError.response.status,
+            downstream_data: sanitizeForLog(axiosError.response.data),
+            downstream_url: safeEndpoint,
+            downstream_method: safeMethod,
+            axios_code: sanitizeForLog(axiosError.code),
+            request_id: requestId,
+          },
+        );
         throw new HttpException(
           axiosError.response?.data ?? "",
           axiosError.response.status,
         );
       }
-      this.logger.error(error);
+      this.logger.error(
+        `forward_failed network/unknown ${safeMethod} ${safeEndpoint}`,
+        {
+          downstream_url: safeEndpoint,
+          downstream_method: safeMethod,
+          axios_code: sanitizeForLog(
+            axiosError.isAxiosError ? axiosError.code : undefined,
+          ),
+          error: sanitizeForLog(
+            error instanceof Error ? error.message : String(error),
+          ),
+          stack: sanitizeForLog(
+            error instanceof Error ? error.stack : undefined,
+          ),
+          request_id: requestId,
+        },
+      );
       throw new InternalServerErrorException();
     }
   }

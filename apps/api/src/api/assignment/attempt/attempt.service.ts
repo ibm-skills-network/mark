@@ -3,12 +3,15 @@ import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
   Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
 import {
   Assignment,
   Question,
@@ -31,6 +34,7 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { applyQuestionOrder } from "../utils/question-order.util";
 import { PrismaService } from "../../../database/prisma.service";
+import { sanitizeForLog } from "../../../logger/sanitize";
 import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
@@ -91,6 +95,8 @@ type ExtendedQuestion = Question & { variantId?: number };
 
 @Injectable()
 export class AttemptServiceV1 {
+  private readonly logger: Logger;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
@@ -98,7 +104,10 @@ export class AttemptServiceV1 {
     private readonly assignmentService: AssignmentServiceV1,
     private readonly httpService: HttpService,
     @Optional() private readonly ltiGradeSyncService: LtiGradeSyncService,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: AttemptServiceV1.name });
+  }
 
   async submitFeedback(
     assignmentId: number,
@@ -699,7 +708,13 @@ export class AttemptServiceV1 {
         highestOverall,
         authCookie,
       ).catch((error: Error) => {
-        console.error("Error queuing LTI grade sync:", error);
+        this.logger.error("Error queuing LTI grade sync", {
+          assignmentAttemptId: sanitizeForLog(assignmentAttemptId),
+          userId: sanitizeForLog(userId),
+          assignmentId: sanitizeForLog(assignmentId),
+          error: sanitizeForLog(error?.message),
+          stack: sanitizeForLog(error?.stack),
+        });
       });
     }
     if (role === UserRole.AUTHOR) {
@@ -1136,6 +1151,14 @@ export class AttemptServiceV1 {
       const normalizedChoices: Choice[] = this.parseChoices(baseChoicesRaw);
 
       if (!Array.isArray(normalizedChoices)) {
+        this.logger.error("Malformed choices for question", {
+          question_id: originalQ.id,
+          choices_type: typeof baseChoicesRaw,
+          choices_preview:
+            typeof baseChoicesRaw === "string"
+              ? baseChoicesRaw.slice(0, 200)
+              : undefined,
+        });
         throw new InternalServerErrorException(
           `Malformed choices for question ${originalQ.id}`,
         );
@@ -1149,7 +1172,17 @@ export class AttemptServiceV1 {
             randomizedChoicesArray = JSON.parse(
               qv.randomizedChoices,
             ) as Choice[];
-          } catch {
+          } catch (parseError) {
+            this.logger.warn(
+              "Failed to JSON.parse randomizedChoices, falling back to []",
+              {
+                question_id: originalQ.id,
+                error:
+                  parseError instanceof Error
+                    ? parseError.message
+                    : String(parseError),
+              },
+            );
             randomizedChoicesArray = [];
           }
         } else {
@@ -1754,7 +1787,18 @@ export class AttemptServiceV1 {
           return;
         }
         parsed = temporary;
-      } catch {
+      } catch (parseError) {
+        this.logger.warn(
+          "shuffleChoices: failed to JSON.parse choices string, returning early",
+          {
+            error:
+              parseError instanceof Error
+                ? parseError.message
+                : String(parseError),
+            choices_preview:
+              typeof choices === "string" ? choices.slice(0, 200) : undefined,
+          },
+        );
         return;
       }
     } else {
@@ -1815,6 +1859,11 @@ export class AttemptServiceV1 {
       .map((response) => response.reason as string);
 
     if (failedResponses.length > 0) {
+      this.logger.error("submitQuestions: one or more responses failed", {
+        failed_count: failedResponses.length,
+        successful_count: successfulResponses.length,
+        failed_reasons: failedResponses.slice(0, 10),
+      });
       throw new InternalServerErrorException(
         `Failed to submit questions: ${failedResponses.join(", ")}`,
       );
@@ -1914,11 +1963,39 @@ export class AttemptServiceV1 {
         grade,
         authCookie,
       });
-    } catch {
+    } catch (queueError) {
+      this.logger.warn(
+        "queueGradeSyncAsync failed, falling back to legacy LTI gateway call",
+        {
+          attemptId: sanitizeForLog(attemptId),
+          userId: sanitizeForLog(userId),
+          assignmentId: sanitizeForLog(assignmentId),
+          grade: sanitizeForLog(grade),
+          error: sanitizeForLog(
+            queueError instanceof Error
+              ? queueError.message
+              : String(queueError),
+          ),
+        },
+      );
       try {
         await this.sendGradeToLtiGateway(grade, authCookie);
-      } catch {
+      } catch (legacyError) {
         // put it back to the queue if the legacy method also fails
+        this.logger.error(
+          "Both queueGradeSyncAsync and legacy LTI gateway failed; re-queueing",
+          {
+            attemptId: sanitizeForLog(attemptId),
+            userId: sanitizeForLog(userId),
+            assignmentId: sanitizeForLog(assignmentId),
+            grade: sanitizeForLog(grade),
+            legacy_error: sanitizeForLog(
+              legacyError instanceof Error
+                ? legacyError.message
+                : String(legacyError),
+            ),
+          },
+        );
         await this.ltiGradeSyncService.createAndSync({
           attemptId,
           userId,
@@ -1954,6 +2031,14 @@ export class AttemptServiceV1 {
       .toPromise();
 
     if (ltiGatewayResponse.status !== 200) {
+      this.logger.error(
+        "sendGradeToLtiGateway: non-200 response from LTI gateway",
+        {
+          gateway_url: process.env.GRADING_LTI_GATEWAY_URL,
+          status: ltiGatewayResponse.status,
+          grade,
+        },
+      );
       throw new InternalServerErrorException(GRADE_SUBMISSION_EXCEPTION);
     }
   }
@@ -2017,8 +2102,19 @@ export class AttemptServiceV1 {
           id: { notIn: responseIds },
         },
       });
-    } catch {
+    } catch (cleanupError) {
       // Best-effort cleanup; stale question responses should not fail the request.
+      this.logger.warn(
+        "pruneAutoSavedResponses: deleteMany failed (non-fatal)",
+        {
+          assignmentAttemptId,
+          retained_response_ids_count: responseIds.length,
+          error:
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError),
+        },
+      );
     }
   }
 
@@ -2524,7 +2620,17 @@ export class AttemptServiceV1 {
             question.choices = JSON.parse(
               translation.translatedChoices,
             ) as Choice[];
-          } catch {
+          } catch (parseError) {
+            this.logger.warn(
+              "Failed to JSON.parse translatedChoices, falling back to []",
+              {
+                question_id: question?.id,
+                error:
+                  parseError instanceof Error
+                    ? parseError.message
+                    : String(parseError),
+              },
+            );
             question.choices = [];
           }
         } else if (Array.isArray(translation.translatedChoices)) {

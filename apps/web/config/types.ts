@@ -762,6 +762,12 @@ interface QuestionsToGenerate {
   url: number;
   upload: number;
   linkFile: number;
+  multipleChoiceSubtypes?: {
+    short: number;
+    quantitative: number;
+    long: number;
+    scenario: number;
+  };
   responseTypes: {
     TEXT: ResponseType;
     URL: ResponseType;

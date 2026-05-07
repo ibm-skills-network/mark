@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "bash -c 'cat ../../dev.env .env.local > .env.merged && dotenv -e .env.merged -- next dev'",
+    "build:e2e": "INSTANA_ENABLED=false bash ./scripts/with-merged-env.sh next build",
+    "dev": "bash ./scripts/with-merged-env.sh next dev",
+    "dev:e2e": "yarn dev",
     "lint": "next lint",
     "check": "yarn lint && yarn test && yarn build",
     "lint:fix": "next lint --fix",
@@ -15,6 +17,7 @@
     "prestart": "yarn download-models",
     "prebuild": "yarn download-models",
     "start": "next start",
+    "start:e2e": "INSTANA_ENABLED=false bash ./scripts/with-merged-env.sh ./entrypoint.sh",
     "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
@@ -88,6 +91,10 @@
     "zustand": "^4.4.1"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/node": "20.19.1",
     "@types/papaparse": "^5.3.15",

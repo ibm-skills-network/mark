@@ -11,6 +11,8 @@ interface DropdownProps<T> {
   items: { value: T; label: string; description?: string }[];
   placeholder?: string;
   disableUiTranslation?: boolean;
+  disabled?: boolean;
+  disabledTooltip?: string;
   [key: string]: unknown;
 }
 
@@ -20,6 +22,8 @@ function Dropdown<T>({
   items,
   placeholder = "Select an item",
   disableUiTranslation = false,
+  disabled = false,
+  disabledTooltip,
   ...rest
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -42,6 +46,7 @@ function Dropdown<T>({
   }, []);
 
   const toggleDropdown = () => {
+    if (disabled) return;
     setIsOpen((prevState) => !prevState);
   };
 
@@ -55,6 +60,7 @@ function Dropdown<T>({
   };
 
   const handleSelectItem = (newItem: T) => {
+    if (disabled) return;
     setSelectedItem(newItem);
     setIsOpen(false);
   };
@@ -108,53 +114,66 @@ function Dropdown<T>({
     </div>
   );
 
+  const triggerButton = (
+    <button
+      type="button"
+      onClick={toggleDropdown}
+      disabled={disabled}
+      className={cn(
+        "rounded-lg w-full transition-all flex justify-between items-center pl-4 px-3 py-2 text-left border border-gray-300 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-violet-600 disabled:opacity-50 disabled:cursor-not-allowed",
+        isOpen ? "ring-violet-600 ring-1" : "",
+      )}
+      {...rest}
+    >
+      <p
+        className={cn(
+          "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm transition-colors",
+          selectedItem
+            ? "font-medium text-gray-700"
+            : "text-gray-500 dark:text-gray-500",
+        )}
+      >
+        {items.find((item) => item.value === selectedItem)?.label ??
+          placeholder}
+      </p>
+
+      <svg
+        className={cn("transition", isOpen ? "rotate-180" : "")}
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <title>Dropdown Arrow</title>
+        <path
+          strokeWidth={1}
+          d="M6 9L10 13L14 9"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+
+  const showDisabledTooltip = disabled && Boolean(disabledTooltip);
+
   return (
     <div
       className="relative w-full"
       ref={dropdownRef}
       data-no-ui-translate={disableUiTranslation ? "true" : undefined}
     >
-      <Tooltip distance={0} content="" disabled={true}>
-        <button
-          type="button"
-          onClick={toggleDropdown}
-          className={cn(
-            "rounded-lg w-full transition-all flex justify-between items-center pl-4 px-3 py-2 text-left border border-gray-300 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-violet-600",
-            isOpen ? "ring-violet-600 ring-1" : "",
-          )}
-          {...rest}
-        >
-          <p
-            className={cn(
-              "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm transition-colors",
-              selectedItem
-                ? "font-medium text-gray-700"
-                : "text-gray-500 dark:text-gray-500",
-            )}
-          >
-            {items.find((item) => item.value === selectedItem)?.label ??
-              placeholder}
-          </p>
-
-          <svg
-            className={cn("transition", isOpen ? "rotate-180" : "")}
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <title>Dropdown Arrow</title>
-            <path
-              strokeWidth={1}
-              d="M6 9L10 13L14 9"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      </Tooltip>
+      {showDisabledTooltip ? (
+        <Tooltip content={disabledTooltip} disabled={false}>
+          {triggerButton}
+        </Tooltip>
+      ) : (
+        <Tooltip distance={0} content="" disabled={true}>
+          {triggerButton}
+        </Tooltip>
+      )}
 
       {isOpen && portalContainer ? createPortal(menu, portalContainer) : null}
     </div>

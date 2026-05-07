@@ -49,6 +49,7 @@ import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
 } from "../assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
+import { UpdateAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { CreateQuestionResponseAttemptRequestDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
@@ -188,7 +189,7 @@ export class AttemptControllerV2 {
       type: "object",
       properties: {
         gradingJobId: {
-          type: "number",
+          type: "string",
           description: "Job ID for tracking grading progress",
         },
         message: { type: "string", description: "Status message" },
@@ -217,7 +218,10 @@ export class AttemptControllerV2 {
     @Body()
     learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     @Req() request: UserSessionRequest,
-  ): Promise<any> {
+  ): Promise<
+    | { gradingJobId: string; message: string }
+    | UpdateAssignmentAttemptResponseDto
+  > {
     const parsedAttemptId = Number(attemptId);
     const parsedAssignmentId = Number(assignmentId);
 
@@ -245,18 +249,14 @@ export class AttemptControllerV2 {
           request,
         );
 
-      this.attemptService
-        .processGradingJob(
-          gradingJobId,
-          parsedAttemptId,
-          parsedAssignmentId,
-          learnerUpdateAssignmentAttemptDto,
-          authCookie,
-          request,
-        )
-        .catch((error) => {
-          this.logger.error(`Grading job ${gradingJobId} failed:`, error);
-        });
+      await this.attemptService.enqueueGradingJob(
+        gradingJobId,
+        parsedAttemptId,
+        parsedAssignmentId,
+        learnerUpdateAssignmentAttemptDto,
+        authCookie,
+        request,
+      );
 
       return { gradingJobId, message };
     } else if (needsLongRunningGrading && isAuthorMode) {
@@ -268,20 +268,13 @@ export class AttemptControllerV2 {
           request,
         );
 
-      this.attemptService
-        .processAuthorPreviewJob(
-          gradingJobId,
-          parsedAssignmentId,
-          learnerUpdateAssignmentAttemptDto,
-          authCookie,
-          request,
-        )
-        .catch((error) => {
-          this.logger.error(
-            `Author preview job ${gradingJobId} failed:`,
-            error,
-          );
-        });
+      await this.attemptService.enqueueAuthorPreviewJob(
+        gradingJobId,
+        parsedAssignmentId,
+        learnerUpdateAssignmentAttemptDto,
+        authCookie,
+        request,
+      );
 
       return { gradingJobId, message };
     } else {
@@ -337,14 +330,20 @@ export class AttemptControllerV2 {
   @Sse()
   async streamGradingStatus(
     @Param("attemptId") attemptId: number,
-    @Param("gradingJobId") gradingJobId: number,
+    @Param("gradingJobId") gradingJobId: string,
     @Req() request: UserSessionRequest,
   ): Promise<Observable<MessageEvent>> {
-    const job = await this.attemptService.getGradingJob(Number(gradingJobId));
+    const job = await this.attemptService.getGradingJob(gradingJobId);
 
     if (!job) {
       throw new NotFoundException(
         `Grading job with ID ${gradingJobId} not found`,
+      );
+    }
+
+    if (job.userId !== request.userSession.userId) {
+      throw new BadRequestException(
+        `Grading job ${gradingJobId} does not belong to the current user`,
       );
     }
 
@@ -358,10 +357,10 @@ export class AttemptControllerV2 {
       this.logger.info(
         `Client disconnected from grading job ${gradingJobId} stream`,
       );
-      void this.attemptService.cleanupGradingJobStream(Number(gradingJobId));
+      void this.attemptService.cleanupGradingJobStream(gradingJobId);
     });
 
-    return this.attemptService.getGradingJobStatusStream(Number(gradingJobId));
+    return this.attemptService.getGradingJobStatusStream(gradingJobId);
   }
 
   @Post(":attemptId/feedback")

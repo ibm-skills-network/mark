@@ -7,6 +7,14 @@ export interface QuestionsToGenerate {
   textResponse: number;
   trueFalse: number;
 }
+
+export interface MultipleChoiceSubtypes {
+  short?: number;
+  quantitative?: number;
+  long?: number;
+  scenario?: number;
+}
+
 export interface QuestionGenerationPayload {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
@@ -19,6 +27,7 @@ export interface EnhancedQuestionsToGenerate extends QuestionsToGenerate {
   url?: number;
   upload?: number;
   linkFile?: number;
+  multipleChoiceSubtypes?: MultipleChoiceSubtypes;
   responseTypes?: {
     [key in QuestionType]?: ResponseType[];
   };

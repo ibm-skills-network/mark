@@ -22,6 +22,7 @@ export class LoggerMiddleware implements NestMiddleware {
       request_id: requestId,
       client_ip: request.get("true-client-ip"),
       user_agent: request.get("user-agent") || "",
+      referer: request.get("referer") || "",
       content_length_in: request.get("content-length"),
     });
 
@@ -38,6 +39,7 @@ export class LoggerMiddleware implements NestMiddleware {
         status_code: response.statusCode,
         content_length: response.get("content-length"),
         user_agent: request.get("user-agent") || "",
+        referer: request.get("referer") || "",
         response_time_ms: Number(responseTimeMs.toFixed(2)),
       };
 
@@ -77,6 +79,8 @@ export class LoggerMiddleware implements NestMiddleware {
             method: request.method,
             url: request.originalUrl,
             request_id: requestId,
+            user_agent: request.get("user-agent") || "",
+            referer: request.get("referer") || "",
             response_time_ms: Number(responseTimeMs.toFixed(2)),
             client_disconnected: true,
           },
