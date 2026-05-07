@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import {
+  BadRequestException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -12,6 +13,7 @@ import {
   AssignmentAttempt,
   AssignmentQuestionDisplayOrder,
   CorrectAnswerVisibility,
+  GradingStatus,
   Question,
   QuestionType,
   QuestionVariant,
@@ -415,6 +417,9 @@ export class AttemptSubmissionService {
             questionVersions: true,
           },
         },
+        gradingProgress: {
+          select: { status: true, error: true },
+        },
       },
     });
 
@@ -513,6 +518,17 @@ export class AttemptSubmissionService {
 
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
+    // Expose a pending AI feedback error so the success page can show the
+    // rerun banner even after a page reload. Only present when the grading job
+    // completed (attempt saved) but the AI feedback step failed, and only when
+    // feedback display is enabled (otherwise the banner is never shown anyway).
+    const aiFeedbackError =
+      assignment.showSubmissionFeedback &&
+      assignmentAttempt.gradingProgress?.status === GradingStatus.COMPLETED &&
+      assignmentAttempt.gradingProgress.error
+        ? assignmentAttempt.gradingProgress.error
+        : null;
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
@@ -524,7 +540,87 @@ export class AttemptSubmissionService {
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
+      aiFeedbackError,
     };
+  }
+
+  /**
+   * Re-runs the AI feedback step for a submitted deterministic-only attempt
+   * that previously had AI feedback generation fail. On success the error
+   * marker on GradingProgress is cleared; the attempt itself is not touched.
+   */
+  async rerunAiFeedbackForDeterministicAttempt(
+    attemptId: number,
+    assignmentId: number,
+  ): Promise<{ success: boolean }> {
+    const gradingProgress = await this.prisma.gradingProgress.findUnique({
+      where: { attemptId },
+      select: { status: true, error: true },
+    });
+
+    if (
+      gradingProgress?.status !== GradingStatus.COMPLETED ||
+      !gradingProgress.error
+    ) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} does not have a pending AI feedback error.`,
+      );
+    }
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: {
+        showSubmissionFeedback: true,
+        questions: { where: { isDeleted: false }, select: { type: true } },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(`Assignment ${assignmentId} not found.`);
+    }
+
+    if (!this.isAssignmentFullyDeterministic(assignment.questions)) {
+      throw new BadRequestException(
+        `AI feedback rerun is only supported for fully deterministic assignments.`,
+      );
+    }
+
+    if (!assignment.showSubmissionFeedback) {
+      throw new BadRequestException(
+        `Feedback is not enabled for assignment ${assignmentId}.`,
+      );
+    }
+
+    try {
+      await this.generateAiFeedbackForDeterministicAttempt(
+        [],
+        assignmentId,
+        attemptId,
+      );
+    } catch (feedbackError) {
+      const errorMessage =
+        feedbackError instanceof Error
+          ? feedbackError.message
+          : String(feedbackError);
+      this.logger.warn("AI feedback rerun failed", {
+        attemptId,
+        assignmentId,
+        error: errorMessage,
+      });
+      if (this.progressService) {
+        await this.progressService.markCompleteWithAiFeedbackError(
+          attemptId,
+          errorMessage,
+        );
+      }
+      throw feedbackError;
+    }
+
+    if (this.progressService) {
+      await this.progressService.clearAiFeedbackError(attemptId);
+    }
+
+    return { success: true };
   }
 
   /**
@@ -875,25 +971,61 @@ export class AttemptSubmissionService {
       }
 
       // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
-      const result =
-        await this.questionResponseService.commitAttemptWithResponses(
-          attemptId,
-          gradedItems,
-          grade,
-          updateDto,
-        );
+      await this.questionResponseService.commitAttemptWithResponses(
+        attemptId,
+        gradedItems,
+        grade,
+        updateDto,
+      );
 
       await this.pruneAutoSavedResponses(
         attemptId,
         successfulQuestionResponses,
       );
 
+      // ── Optional AI feedback for deterministic-only assignments ──────────────
+      // Scoring is already committed. This separate step can fail without
+      // invalidating the saved attempt. If showSubmissionFeedback is false there
+      // is nothing to display, so we keep the existing hard-failure behaviour.
+      let aiFeedbackError: string | null = null;
+      if (this.isAssignmentFullyDeterministic(assignment.questions)) {
+        try {
+          await this.generateAiFeedbackForDeterministicAttempt(
+            gradedItems,
+            assignmentId,
+            attemptId,
+          );
+        } catch (feedbackError) {
+          const errorMessage =
+            feedbackError instanceof Error
+              ? feedbackError.message
+              : String(feedbackError);
+
+          if (assignment.showSubmissionFeedback) {
+            this.logger.warn(
+              "AI feedback generation failed for deterministic attempt; attempt saved, feedback can be retried",
+              { attemptId, assignmentId, error: errorMessage },
+            );
+            aiFeedbackError = errorMessage;
+          } else {
+            throw feedbackError;
+          }
+        }
+      }
+
       if (progressCallback) {
         await progressCallback("Grading completed!", 100);
       }
 
       if (this.progressService) {
-        await this.progressService.markComplete(attemptId);
+        if (aiFeedbackError) {
+          await this.progressService.markCompleteWithAiFeedbackError(
+            attemptId,
+            aiFeedbackError,
+          );
+        } else {
+          await this.progressService.markComplete(attemptId);
+        }
       }
 
       return {
@@ -912,6 +1044,7 @@ export class AttemptSubmissionService {
             successfulQuestionResponses,
             assignment,
           ),
+        aiFeedbackError,
       };
     } catch (error) {
       const errorMessage =
@@ -1689,6 +1822,37 @@ export class AttemptSubmissionService {
       return "en";
     }
     return language.toLowerCase().split("-")[0];
+  }
+
+  /**
+   * Returns true only when every non-deleted question in the assignment is one
+   * of the three deterministic types (no LLM call during scoring).
+   */
+  private isAssignmentFullyDeterministic(
+    questions: { type: QuestionType }[],
+  ): boolean {
+    if (questions.length === 0) return false;
+    const deterministicTypes = new Set<QuestionType>([
+      QuestionType.SINGLE_CORRECT,
+      QuestionType.MULTIPLE_CORRECT,
+      QuestionType.TRUE_FALSE,
+    ]);
+    return questions.every((q) => deterministicTypes.has(q.type));
+  }
+
+  /**
+   * Optional post-scoring step that generates AI-enriched feedback for
+   * deterministic questions. Failures here are caught by the caller and
+   * surfaced via GradingProgress.error — the attempt is still saved.
+   *
+   * Wire an LLM call here when AI feedback for deterministic questions is added.
+   */
+  private async generateAiFeedbackForDeterministicAttempt(
+    _gradedItems: GradedItem[],
+    _assignmentId: number,
+    _attemptId: number,
+  ): Promise<void> {
+    // No-op placeholder — extend when deterministic AI feedback is implemented.
   }
 
   /**

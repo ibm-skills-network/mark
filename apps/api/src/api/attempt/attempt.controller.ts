@@ -403,6 +403,34 @@ export class AttemptControllerV2 {
     );
   }
 
+  @Post(":attemptId/rerun-ai-feedback")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Re-run the AI feedback step for a submitted deterministic-only attempt " +
+      "that previously had AI feedback generation fail.",
+  })
+  @ApiResponse({
+    status: 201,
+    schema: { type: "object", properties: { success: { type: "boolean" } } },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "No pending AI feedback error, or assignment is not deterministic-only, or feedback is disabled.",
+  })
+  @ApiResponse({ status: 403 })
+  rerunAiFeedback(
+    @Param("attemptId") attemptId: number,
+    @Param("assignmentId") assignmentId: number,
+  ): Promise<{ success: boolean }> {
+    return this.attemptService.rerunAiFeedbackForDeterministicAttempt(
+      Number(attemptId),
+      Number(assignmentId),
+    );
+  }
+
   @Post(":attemptId/regrade")
   @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)

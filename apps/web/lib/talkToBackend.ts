@@ -78,6 +78,7 @@ export const getFeedback = apiLearner.getFeedback;
 export const submitFeedback = apiLearner.submitFeedback;
 export const submitRegradingRequest = apiLearner.submitRegradingRequest;
 export const submitReportLearner = apiLearner.submitReportLearner;
+export const rerunAiFeedback = apiLearner.rerunAiFeedback;
 
 export const AuthorizeGithubBackend = apiGithub.authorizeGithubBackend;
 export const getStoredGithubToken = apiGithub.getStoredGithubToken;

@@ -600,6 +600,19 @@ export class AttemptServiceV2 {
   }
 
   /**
+   * Re-run AI feedback for a submitted deterministic-only attempt.
+   */
+  async rerunAiFeedbackForDeterministicAttempt(
+    attemptId: number,
+    assignmentId: number,
+  ): Promise<{ success: boolean }> {
+    return this.submissionService.rerunAiFeedbackForDeterministicAttempt(
+      attemptId,
+      assignmentId,
+    );
+  }
+
+  /**
    * Create a report
    */
   async createReport(

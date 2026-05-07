@@ -14,6 +14,7 @@ import {
   getAttempts,
   getUser,
   submitFeedback,
+  rerunAiFeedback,
 } from "@/lib/talkToBackend";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -111,6 +112,8 @@ function SuccessPage() {
   >([]);
 
   const [userPreferredLanguage, setUserPreferredLanguage] = useState("en");
+  const [aiFeedbackError, setAiFeedbackError] = useState<string | null>(null);
+  const [isRerunningAiFeedback, setIsRerunningAiFeedback] = useState(false);
 
   const logState = (step: string, detail?: string) => {
     setStateTimeline((prev) => [
@@ -173,6 +176,7 @@ function SuccessPage() {
           );
           setShowQuestions(submissionDetails.showQuestions);
           setUserPreferredLanguage(submissionDetails.preferredLanguage);
+          setAiFeedbackError(submissionDetails.aiFeedbackError ?? null);
           setGrade(submissionDetails.grade * 100);
           if (submissionDetails.totalPointsEarned) {
             setTotalPoints(submissionDetails.totalPointsEarned);
@@ -416,6 +420,19 @@ function SuccessPage() {
     return "Keep Pushing Forward!";
   };
 
+  const handleRerunAiFeedback = async () => {
+    setIsRerunningAiFeedback(true);
+    try {
+      await rerunAiFeedback(assignmentId, attemptId);
+      setAiFeedbackError(null);
+      toast.success("AI feedback regenerated successfully.");
+    } catch {
+      toast.error("AI feedback rerun failed. Please try again.");
+    } finally {
+      setIsRerunningAiFeedback(false);
+    }
+  };
+
   const handleSubmitFeedback = async () => {
     if (assignmentId === null || attemptId === null) {
       return;
@@ -640,6 +657,26 @@ function SuccessPage() {
               attemptId={attemptId}
               assignmentId={assignmentId}
             />
+          </motion.div>
+        )}
+
+        {role === "learner" && aiFeedbackError && showSubmissionFeedback && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
+          >
+            <p className="text-sm text-amber-800">
+              AI feedback failed during grading. Your result was still saved. Do
+              you want to rerun it?
+            </p>
+            <button
+              onClick={handleRerunAiFeedback}
+              disabled={isRerunningAiFeedback}
+              className="shrink-0 px-4 py-2 text-sm font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-md transition"
+            >
+              {isRerunningAiFeedback ? "Rerunning…" : "Rerun AI Feedback"}
+            </button>
           </motion.div>
         )}
 

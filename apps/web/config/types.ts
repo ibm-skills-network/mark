@@ -674,6 +674,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   correctAnswerVisibility?: CorrectAnswerVisibility;
   comments?: string;
   preferredLanguage?: string;
+  aiFeedbackError?: string | null;
 }
 
 export interface QuestionControls {
@@ -739,6 +740,7 @@ export interface SubmitAssignmentResponse extends BaseBackendResponse {
   totalPointsEarned: number;
   totalPossiblePoints: number;
   gradingJobId?: string;
+  aiFeedbackError?: string | null;
 }
 
 export type LearnerAssignmentState =

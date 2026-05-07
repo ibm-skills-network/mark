@@ -194,6 +194,53 @@ export class GradingProgressService {
   }
 
   /**
+   * Mark grading as complete but record that the optional AI feedback step
+   * failed. The attempt itself was saved successfully — only the AI feedback
+   * portion needs to be retried. Consumers can distinguish this from a hard
+   * failure by checking status === COMPLETED with a non-null error.
+   */
+  async markCompleteWithAiFeedbackError(
+    attemptId: number,
+    aiFeedbackError: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.gradingProgress.update({
+        where: { attemptId },
+        data: {
+          status: GradingStatus.COMPLETED,
+          progress: 100,
+          currentStage: "Grading complete!",
+          completedAt: new Date(),
+          error: aiFeedbackError,
+        },
+      });
+      this.removeProgressCallback(attemptId);
+    } catch (updateError) {
+      this.logger.error(
+        `Failed to persist AI feedback error for attempt ${attemptId}`,
+        updateError,
+      );
+    }
+  }
+
+  /**
+   * Clear a previously recorded AI feedback error after a successful rerun.
+   */
+  async clearAiFeedbackError(attemptId: number): Promise<void> {
+    try {
+      await this.prisma.gradingProgress.update({
+        where: { attemptId },
+        data: { error: null },
+      });
+    } catch (updateError) {
+      this.logger.error(
+        `Failed to clear AI feedback error for attempt ${attemptId}`,
+        updateError,
+      );
+    }
+  }
+
+  /**
    * Mark grading as failed
    */
   async markFailed(attemptId: number, error: string): Promise<void> {

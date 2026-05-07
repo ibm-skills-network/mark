@@ -837,6 +837,19 @@ export async function getGradingProgress(
 }
 
 /**
+ * Re-run AI feedback for a submitted deterministic-only attempt that had an
+ * AI feedback failure. Clears the error once feedback succeeds.
+ */
+export async function rerunAiFeedback(
+  assignmentId: number,
+  attemptId: number,
+): Promise<{ success: boolean }> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/rerun-ai-feedback`;
+  const response = await apiClient.post<{ success: boolean }>(endpointURL, {});
+  return response;
+}
+
+/**
  * Subscribe to email notification when grading is complete
  */
 export async function subscribeToGradingNotification(

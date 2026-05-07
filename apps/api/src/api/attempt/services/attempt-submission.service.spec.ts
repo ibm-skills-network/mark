@@ -74,6 +74,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
   const mockQuestionResponseService = {
     submitQuestions: jest.fn(),
+    gradeQuestionsForLearner: jest.fn(),
+    commitAttemptWithResponses: jest.fn(),
   };
 
   const mockTranslationService = {
@@ -538,11 +540,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     it("gets learner attempts from the cache-backed question DTO loader", async () => {
       const mapperSpy = jest
-        .spyOn(service as never, "applyVisibilitySettings")
+        .spyOn(service as any, "applyVisibilitySettings")
         .mockImplementation(() => undefined);
       const buildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
+        .mockResolvedValue([{ id: 101 }, { id: 202 }] as any);
 
       const result = await service.getLearnerAssignmentAttempt(71, {
         userId: "learner-1",
@@ -583,9 +585,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
       const translationBuildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
-        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
+        .mockResolvedValue([{ id: 101 }, { id: 202 }] as any);
       const removeSensitiveSpy = jest
-        .spyOn(service as never, "removeSensitiveData")
+        .spyOn(service as any, "removeSensitiveData")
         .mockImplementation(() => undefined);
 
       const result = await service.getAssignmentAttempt(71, "fr");
@@ -931,9 +933,19 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         showSubmissionFeedback: true,
       });
 
-      mockQuestionResponseService.submitQuestions.mockResolvedValue([
-        makeResponse({ questionId: 1, totalPoints: 8 }),
+      mockQuestionResponseService.gradeQuestionsForLearner.mockResolvedValue([
+        {
+          questionId: 1,
+          learnerResponse: "answer",
+          responseDto: makeResponse({ questionId: 1, totalPoints: 8 }),
+        },
       ]);
+      mockQuestionResponseService.commitAttemptWithResponses.mockResolvedValue(
+        undefined,
+      );
+      mockLtiGradeSyncService.createAndSync.mockResolvedValue({
+        success: true,
+      });
 
       mockGradingService.calculateGradeForLearner.mockReturnValue({
         grade: 0.8,
@@ -961,13 +973,14 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         ),
       ).rejects.toThrow("LTI DB error");
 
-      // The attempt must NOT have been saved to the DB
-      expect(mockPrisma.assignmentAttempt.update).not.toHaveBeenCalled();
+      // commitAttemptWithResponses is the Phase 3 DB write — must not be reached
+      expect(
+        mockQuestionResponseService.commitAttemptWithResponses,
+      ).not.toHaveBeenCalled();
     });
 
     it("persists the attempt exactly once on success", async () => {
       mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
-      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
 
       await service.updateAssignmentAttempt(
         attemptId,
@@ -978,12 +991,16 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         learnerRequest as UpdateAttemptRequest,
       );
 
-      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ submitted: true, grade: 0.8 }),
-          where: { id: attemptId },
-        }),
+      expect(
+        mockQuestionResponseService.commitAttemptWithResponses,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mockQuestionResponseService.commitAttemptWithResponses,
+      ).toHaveBeenCalledWith(
+        attemptId,
+        expect.any(Array),
+        0.8,
+        expect.objectContaining({ submitted: true }),
       );
     });
   });

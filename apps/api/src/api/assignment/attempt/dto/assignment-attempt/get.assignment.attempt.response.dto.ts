@@ -127,6 +127,17 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     disableRightClick?: boolean;
     disablePrint?: boolean;
   };
+
+  @ApiPropertyOptional({
+    description:
+      "Set when the grading job completed but AI feedback generation failed for " +
+      "a deterministic-only assignment. Null once feedback has been successfully " +
+      "generated or no error occurred.",
+    type: String,
+    nullable: true,
+  })
+  @Optional()
+  aiFeedbackError?: string | null;
 }
 
 export class AssignmentAttemptQuestions {
