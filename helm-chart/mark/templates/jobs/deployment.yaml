@@ -1,0 +1,39 @@
+{{- if .Values.jobs.enabled }}
+{{- with .Values.jobs }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mark.jobs.name" $ }}
+  labels:
+    {{- include "mark.jobs.labels" $ | nindent 4 }}
+spec:
+  {{- if not .autoscaling.enabled }}
+  replicas: {{ .replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mark.jobs.labels" $ | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/secrets: {{ include (print $.Template.BasePath "/jobs/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/jobs/configmap.yaml") $ | sha256sum }}
+      labels:
+        {{- include "mark.jobs.labels" $ | nindent 8 }}
+    spec:
+      imagePullSecrets:
+        {{- include "mark.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: {{ include "mark.serviceAccountName" $ }}
+      containers:
+        - name: {{ include "mark.jobs.name" $ }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "mark.jobs.name" $ }}-config
+            - secretRef:
+                name: {{ include "mark.jobs.name" $ }}-secrets
+{{- end }}
+{{- end }}

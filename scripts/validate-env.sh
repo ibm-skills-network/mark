@@ -10,6 +10,8 @@ CRITICAL_ENV_VARS=(
     "POSTGRES_HOST"
     "POSTGRES_PORT"
     "POSTGRES_EXTERNAL_PORT"
+    "REDIS_URL"
+    "JOB_QUEUE_SECRET"
     "API_PORT"
     "API_GATEWAY_PORT"
     "API_GATEWAY_HOST"
@@ -19,7 +21,6 @@ CRITICAL_ENV_VARS=(
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 missing_vars=()
@@ -28,6 +29,7 @@ echo "🔍 Validating critical environment variables..."
 
 # Source dev.env if it exists
 if [ -f "dev.env" ]; then
+    # shellcheck source=/dev/null
     source dev.env
 else
     echo -e "${RED}❌ Error: dev.env file not found!${NC}"

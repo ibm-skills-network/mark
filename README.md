@@ -10,6 +10,7 @@
 
 - [Getting Started](#getting-started)
 - [Setup Guide](./SETUP.md)
+- [Testing Guide](./TESTING.md)
 - [Key Features](#key-features)
 - [Technology Stack](#technology-stack)
 - [Contributing](./docs/CONTRIBUTING.md)
@@ -59,7 +60,7 @@ Mark is designed for educational institutions looking to scale their assessment 
 | **Database**   | PostgreSQL + Prisma ORM                      |
 | **AI/LLM**     | OpenAI GPT-4o, extensible to other providers |
 | **Messaging**  | NATS                                         |
-| **Testing**    | Jest                                         |
+| **Testing**    | Jest (unit), Playwright (E2E)                |
 | **Deployment** | Docker, GitHub Actions                       |
 
 ---

@@ -8,7 +8,9 @@ jest.mock("@/lib/utils", () => ({
 
 describe("normalizeGeneratedQuestionsForAuthorStore", () => {
   const mockGenerateTempQuestionId =
-    generateTempQuestionId as jest.MockedFunction<typeof generateTempQuestionId>;
+    generateTempQuestionId as jest.MockedFunction<
+      typeof generateTempQuestionId
+    >;
 
   beforeEach(() => {
     jest.clearAllMocks();

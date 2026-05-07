@@ -3,6 +3,7 @@
 set -e
 
 CONTAINER_NAME="mark-postgres"
+REDIS_CONTAINER_NAME="mark-redis"
 POSTGRES_EXTERNAL_PORT="6001"
 
 # Check if Docker is installed
@@ -42,6 +43,7 @@ echo "🔍 Checking database container status..."
 
 # Source environment variables
 if [ -f "dev.env" ]; then
+    # shellcheck source=/dev/null
     source dev.env
     export POSTGRES_USER
     export POSTGRES_PASSWORD
@@ -86,7 +88,7 @@ else
         COMPOSE_CMD="docker-compose"
     fi
 
-    $COMPOSE_CMD up -d postgres
+    $COMPOSE_CMD up -d postgres redis
 
     # Wait for the database to be ready
     echo "⏳ Waiting for database to be ready..."
@@ -114,6 +116,9 @@ fi
 
 echo ""
 echo "✅ Database container '$CONTAINER_NAME' is running on host port ${POSTGRES_EXTERNAL_PORT:-6001}"
+if docker ps -q -f name="^${REDIS_CONTAINER_NAME}$" | grep -q .; then
+    echo "✅ Redis container '$REDIS_CONTAINER_NAME' is running on host port ${REDIS_EXTERNAL_PORT:-6379}"
+fi
 echo ""
 echo "📋 Next steps:"
 echo "   → Run 'yarn setup' to run database migrations and generate Prisma client"

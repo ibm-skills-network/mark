@@ -5,6 +5,13 @@ import { LtiGradeSyncService } from "../services/lti-grade-sync.service";
 describe("LtiSyncScheduler", () => {
   let scheduler: LtiSyncScheduler;
   let ltiGradeSyncService: LtiGradeSyncService;
+  const originalEnableJobSchedulers = process.env.ENABLE_JOB_SCHEDULERS;
+  let loggerSpies: {
+    debug: jest.SpyInstance;
+    error: jest.SpyInstance;
+    log: jest.SpyInstance;
+    warn: jest.SpyInstance;
+  };
 
   const mockLtiGradeSyncService = {
     processScheduledRetries: jest.fn(),
@@ -12,6 +19,8 @@ describe("LtiSyncScheduler", () => {
   };
 
   beforeEach(async () => {
+    process.env.ENABLE_JOB_SCHEDULERS = "true";
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LtiSyncScheduler,
@@ -24,8 +33,35 @@ describe("LtiSyncScheduler", () => {
 
     scheduler = module.get<LtiSyncScheduler>(LtiSyncScheduler);
     ltiGradeSyncService = module.get<LtiGradeSyncService>(LtiGradeSyncService);
+    loggerSpies = {
+      debug: jest
+        .spyOn((scheduler as any).logger, "debug")
+        .mockImplementation(() => undefined),
+      error: jest
+        .spyOn((scheduler as any).logger, "error")
+        .mockImplementation(() => undefined),
+      log: jest
+        .spyOn((scheduler as any).logger, "log")
+        .mockImplementation(() => undefined),
+      warn: jest
+        .spyOn((scheduler as any).logger, "warn")
+        .mockImplementation(() => undefined),
+    };
 
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    loggerSpies.debug.mockRestore();
+    loggerSpies.error.mockRestore();
+    loggerSpies.log.mockRestore();
+    loggerSpies.warn.mockRestore();
+
+    if (originalEnableJobSchedulers === undefined) {
+      delete process.env.ENABLE_JOB_SCHEDULERS;
+    } else {
+      process.env.ENABLE_JOB_SCHEDULERS = originalEnableJobSchedulers;
+    }
   });
 
   describe("handleScheduledRetries", () => {
@@ -67,6 +103,7 @@ describe("LtiSyncScheduler", () => {
       );
 
       await expect(scheduler.handleScheduledRetries()).resolves.not.toThrow();
+      expect(loggerSpies.error).toHaveBeenCalled();
     });
 
     it("should reset processing flag after completion", async () => {
@@ -93,6 +130,7 @@ describe("LtiSyncScheduler", () => {
       expect(
         mockLtiGradeSyncService.processScheduledRetries,
       ).toHaveBeenCalledTimes(2);
+      expect(loggerSpies.error).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -112,8 +150,6 @@ describe("LtiSyncScheduler", () => {
     });
 
     it("should warn on high failure count", async () => {
-      const warnSpy = jest.spyOn(scheduler["logger"], "warn");
-
       mockLtiGradeSyncService.getSystemStats.mockResolvedValue({
         failedCount: 15,
         scheduledCount: 5,
@@ -124,12 +160,10 @@ describe("LtiSyncScheduler", () => {
 
       await scheduler.reportSyncHealth();
 
-      expect(warnSpy).toHaveBeenCalled();
+      expect(loggerSpies.warn).toHaveBeenCalled();
     });
 
     it("should warn on high scheduled count", async () => {
-      const warnSpy = jest.spyOn(scheduler["logger"], "warn");
-
       mockLtiGradeSyncService.getSystemStats.mockResolvedValue({
         failedCount: 0,
         scheduledCount: 15,
@@ -140,7 +174,7 @@ describe("LtiSyncScheduler", () => {
 
       await scheduler.reportSyncHealth();
 
-      expect(warnSpy).toHaveBeenCalled();
+      expect(loggerSpies.warn).toHaveBeenCalled();
     });
 
     it("should handle getSystemStats errors", async () => {
@@ -149,6 +183,19 @@ describe("LtiSyncScheduler", () => {
       );
 
       await expect(scheduler.reportSyncHealth()).resolves.not.toThrow();
+      expect(loggerSpies.error).toHaveBeenCalled();
+    });
+
+    it("should skip scheduled work when schedulers are disabled", async () => {
+      process.env.ENABLE_JOB_SCHEDULERS = "false";
+
+      await scheduler.reportSyncHealth();
+      await scheduler.handleScheduledRetries();
+
+      expect(mockLtiGradeSyncService.getSystemStats).not.toHaveBeenCalled();
+      expect(
+        mockLtiGradeSyncService.processScheduledRetries,
+      ).not.toHaveBeenCalled();
     });
   });
 });

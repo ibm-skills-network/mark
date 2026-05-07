@@ -5,10 +5,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { isDeepStrictEqual } from "node:util";
-import { ResponseType } from "@prisma/client";
+import {
+  AssignmentFileExtractionStatus,
+  AssignmentFileStatus,
+  ResponseType,
+} from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   EnhancedQuestionsToGenerate,
@@ -22,6 +28,7 @@ import {
   VariantType,
 } from "../../dto/update.questions.request.dto";
 import { applyQuestionOrder } from "../../utils/question-order.util";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
@@ -38,6 +45,7 @@ export class QuestionService {
     private readonly translationService: TranslationService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobQueueService: JobQueueService,
   ) {}
 
   async getQuestionsForAssignment(
@@ -102,7 +110,7 @@ export class QuestionService {
   async processQuestionsForPublishing(
     assignmentId: number,
     questions: QuestionDto[],
-    jobId?: number,
+    jobId?: string,
     progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
   ): Promise<Map<number, number>> {
@@ -233,7 +241,7 @@ export class QuestionService {
           assignmentId,
           upsertedQuestion.id,
           questionDto,
-          jobId || 0,
+          jobId,
           true,
         );
 
@@ -357,27 +365,43 @@ export class QuestionService {
     assignmentId: number,
     payload: QuestionGenerationPayload,
     userId: string,
-  ): Promise<{ message: string; jobId: number }> {
+  ): Promise<{ message: string; jobId: string }> {
     this.validateQuestionGenerationPayload(payload);
+    const files = await this.resolveQuestionGenerationFiles(
+      assignmentId,
+      payload,
+    );
 
     const job = await this.jobStatusService.createJob(assignmentId, userId);
-
-    this.startQuestionGenerationProcess(
-      assignmentId,
-      job.id,
-      payload.assignmentType,
-      payload.questionsToGenerate,
-      payload.fileContents,
-      payload.learningObjectives,
-    ).catch((error: unknown) => {
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS,
+        {
+          assignmentId,
+          assignmentType: payload.assignmentType,
+          fileContents: files,
+          jobId: job.id,
+          learningObjectives: payload.learningObjectives,
+          questionsToGenerate: payload.questionsToGenerate,
+        },
+        {
+          jobId: job.id,
+        },
+      );
+    } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
-        `Question generation failed: ${errorMessage}`,
-        errorStack,
+      await this.jobStatusService.updateJobStatus(
+        job.id,
+        {
+          status: "Failed",
+          progress: `Failed to enqueue question generation job: ${errorMessage}`,
+        },
+        false,
       );
-    });
+      throw error;
+    }
 
     return { message: "Question generation started", jobId: job.id };
   }
@@ -424,9 +448,9 @@ export class QuestionService {
 
     await Promise.all(updates);
   }
-  private async startQuestionGenerationProcess(
+  async runQuestionGenerationJob(
     assignmentId: number,
-    jobId: number,
+    jobId: string,
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: EnhancedQuestionsToGenerate,
     files?: { filename: string; content: string }[],
@@ -463,7 +487,7 @@ export class QuestionService {
         jobId,
         {
           status: "In Progress",
-          progress: "Mark is thinking generating questions.",
+          progress: "Mark is brainstorming some questions.",
         },
         false,
       );
@@ -510,15 +534,34 @@ export class QuestionService {
     payload: QuestionGenerationPayload,
   ): void {
     const {
+      contentSource,
       fileContents,
       learningObjectives,
       questionsToGenerate,
       assignmentId,
     } = payload;
 
-    if (!fileContents && !learningObjectives) {
+    const requiresUploadedContent =
+      contentSource === undefined ||
+      contentSource === "payload" ||
+      contentSource === "both";
+
+    if (
+      requiresUploadedContent &&
+      (!fileContents || fileContents.length === 0) &&
+      !learningObjectives
+    ) {
       throw new BadRequestException(
         "Either file contents or learning objectives are required",
+      );
+    }
+
+    if (
+      contentSource === "both" &&
+      (!fileContents || fileContents.length === 0)
+    ) {
+      throw new BadRequestException(
+        "File contents are required when contentSource is both",
       );
     }
 
@@ -526,14 +569,42 @@ export class QuestionService {
       throw new BadRequestException("Invalid assignment ID");
     }
 
+    assertQuestionCountsWithinCaps(questionsToGenerate);
+
+    const {
+      linkFile,
+      multipleChoice,
+      multipleChoiceSubtypes,
+      multipleSelect,
+      responseTypes,
+      textResponse,
+      trueFalse,
+      upload,
+      url,
+    } = questionsToGenerate;
+
+    const subtypeTotal = multipleChoiceSubtypes
+      ? (multipleChoiceSubtypes.short || 0) +
+        (multipleChoiceSubtypes.quantitative || 0) +
+        (multipleChoiceSubtypes.long || 0) +
+        (multipleChoiceSubtypes.scenario || 0)
+      : 0;
+
+    if (multipleChoiceSubtypes !== undefined && subtypeTotal === 0) {
+      throw new BadRequestException(
+        "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+      );
+    }
+
     const totalQuestions =
-      (questionsToGenerate.multipleChoice || 0) +
-      (questionsToGenerate.multipleSelect || 0) +
-      (questionsToGenerate.textResponse || 0) +
-      (questionsToGenerate.trueFalse || 0) +
-      (questionsToGenerate.url || 0) +
-      (questionsToGenerate.upload || 0) +
-      (questionsToGenerate.linkFile || 0);
+      (multipleChoice || 0) +
+      (multipleSelect || 0) +
+      (textResponse || 0) +
+      (trueFalse || 0) +
+      (url || 0) +
+      (upload || 0) +
+      (linkFile || 0) +
+      subtypeTotal;
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(
@@ -541,12 +612,7 @@ export class QuestionService {
       );
     }
 
-    if (
-      (questionsToGenerate.url > 0 ||
-        questionsToGenerate.upload > 0 ||
-        questionsToGenerate.linkFile > 0) &&
-      !questionsToGenerate.responseTypes
-    ) {
+    if ((url > 0 || upload > 0 || linkFile > 0) && !responseTypes) {
       questionsToGenerate.responseTypes = {
         TEXT: [ResponseType.OTHER],
         URL: [ResponseType.OTHER],
@@ -554,6 +620,68 @@ export class QuestionService {
         LINK_FILE: [ResponseType.OTHER],
       };
     }
+  }
+
+  private async resolveQuestionGenerationFiles(
+    assignmentId: number,
+    payload: QuestionGenerationPayload,
+  ): Promise<Array<{ filename: string; content: string }> | undefined> {
+    const contentSource = payload.contentSource ?? "payload";
+    const uploadedFiles = payload.fileContents ?? [];
+
+    if (contentSource === "payload") {
+      return uploadedFiles;
+    }
+
+    const assignmentFiles = await this.prisma.assignmentFile.findMany({
+      where: {
+        assignmentId,
+        status: AssignmentFileStatus.READY,
+        extractionStatus: AssignmentFileExtractionStatus.READY,
+        extractedText: { not: null },
+      },
+      select: {
+        filename: true,
+        extractedText: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    const normalizedAssignmentFiles = assignmentFiles
+      .filter(
+        (
+          file,
+        ): file is {
+          filename: string;
+          extractedText: string;
+        } => Boolean(file.extractedText),
+      )
+      .map((file) => ({
+        filename: file.filename,
+        content: file.extractedText,
+      }));
+
+    if (contentSource === "stored") {
+      if (normalizedAssignmentFiles.length === 0) {
+        throw new BadRequestException(
+          "No extracted assignment files are available for question generation",
+        );
+      }
+
+      return normalizedAssignmentFiles;
+    }
+
+    const combinedFiles = [...uploadedFiles, ...normalizedAssignmentFiles];
+
+    if (combinedFiles.length === 0) {
+      throw new BadRequestException(
+        "No uploaded or assignment file contents are available for question generation",
+      );
+    }
+
+    return combinedFiles;
   }
 
   /**
@@ -571,7 +699,7 @@ export class QuestionService {
     questionId: number,
     variants: VariantDto[],
     existingVariants: VariantDto[],
-    jobId?: number,
+    jobId?: string,
     forceTranslation = false,
   ): Promise<void> {
     const existingVariantsMap = new Map<string, VariantDto>();
@@ -663,7 +791,7 @@ export class QuestionService {
           questionId,
           updatedVariant.id,
           updatedVariant as unknown as VariantDto,
-          jobId || 0,
+          jobId,
           true,
         );
       } else {
@@ -683,7 +811,7 @@ export class QuestionService {
           questionId,
           newVariant.id,
           newVariant as unknown as VariantDto,
-          jobId || 0,
+          jobId,
           true,
         );
       }

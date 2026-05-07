@@ -6,6 +6,10 @@ import Loading from "@/components/Loading";
 import animationData from "@/animations/LoadSN.json";
 import { AdminLogin } from "./components/AdminLogin";
 import { OptimizedAdminDashboard } from "./components/AdminDashboard";
+import {
+  clearAdminSessionStorage,
+  readAdminSessionFromStorage,
+} from "@/lib/admin-session";
 
 export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -19,51 +23,39 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAdminAccess = async () => {
       try {
-        const adminToken = localStorage.getItem("adminSessionToken");
-        const adminEmail = localStorage.getItem("adminEmail");
-        const expiresAt = localStorage.getItem("adminExpiresAt");
+        const stored = readAdminSessionFromStorage();
 
-        if (adminToken && adminEmail && expiresAt) {
-          const expireDate = new Date(expiresAt);
+        if (!stored) {
+          clearAdminSessionStorage();
+          return;
+        }
 
-          if (expireDate > new Date()) {
-            try {
-              const response = await fetch(
-                "/api/v1/reports/feedback?page=1&limit=1",
-                {
-                  headers: {
-                    "x-admin-token": adminToken,
-                  },
-                },
-              );
+        try {
+          const response = await fetch(
+            "/api/v1/reports/feedback?page=1&limit=1",
+            {
+              headers: {
+                "x-admin-token": stored.sessionToken,
+              },
+            },
+          );
 
-              if (response.ok) {
-                setSessionToken(adminToken);
-                setIsAuthenticated(true);
-                setUserRole("admin");
-                setIsLoading(false);
+          if (response.ok) {
+            setSessionToken(stored.sessionToken);
+            setIsAuthenticated(true);
+            setUserRole("admin");
+            setIsLoading(false);
 
-                if (returnTo) {
-                  router.push(returnTo);
-                }
-                return;
-              } else {
-                localStorage.removeItem("adminSessionToken");
-                localStorage.removeItem("adminEmail");
-                localStorage.removeItem("adminExpiresAt");
-              }
-            } catch (apiError) {
-              console.error("Error validating session with backend:", apiError);
-
-              localStorage.removeItem("adminSessionToken");
-              localStorage.removeItem("adminEmail");
-              localStorage.removeItem("adminExpiresAt");
+            if (returnTo) {
+              router.push(returnTo);
             }
-          } else {
-            localStorage.removeItem("adminSessionToken");
-            localStorage.removeItem("adminEmail");
-            localStorage.removeItem("adminExpiresAt");
+            return;
           }
+
+          clearAdminSessionStorage();
+        } catch (apiError) {
+          console.error("Error validating session with backend:", apiError);
+          clearAdminSessionStorage();
         }
       } catch (error) {
         console.error("Failed to check admin access:", error);
@@ -86,25 +78,23 @@ export default function AdminPage() {
   };
 
   const handleLogout = async () => {
-    const adminToken = localStorage.getItem("adminSessionToken");
+    const stored = readAdminSessionFromStorage();
 
-    if (adminToken) {
+    if (stored) {
       try {
         await fetch("/api/v1/auth/admin/logout", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ sessionToken: adminToken }),
+          body: JSON.stringify({ sessionToken: stored.sessionToken }),
         });
       } catch (error) {
         console.error("Failed to logout:", error);
       }
     }
 
-    localStorage.removeItem("adminSessionToken");
-    localStorage.removeItem("adminEmail");
-    localStorage.removeItem("adminExpiresAt");
+    clearAdminSessionStorage();
 
     setSessionToken(null);
     setIsAuthenticated(false);

@@ -1,4 +1,4 @@
-import { APIClient, APIError } from "../api-client";
+import { APIClient, APIError, getDefaultApiBaseURL } from "../api-client";
 import { DataTransformer } from "../../app/Helpers/data-transformer";
 
 jest.mock("../../app/Helpers/data-transformer", () => ({
@@ -28,6 +28,30 @@ describe("APIClient Data Transformation", () => {
         ],
         deep: true,
       },
+    });
+  });
+
+  describe("Default Base URL", () => {
+    const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+    afterEach(() => {
+      if (originalApiUrl === undefined) {
+        delete process.env.NEXT_PUBLIC_API_URL;
+      } else {
+        process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
+      }
+    });
+
+    it("uses same-origin requests in the browser", () => {
+      process.env.NEXT_PUBLIC_API_URL = "http://mark-api-gateway";
+
+      expect(getDefaultApiBaseURL(true)).toBe("");
+    });
+
+    it("uses the configured API URL on the server", () => {
+      process.env.NEXT_PUBLIC_API_URL = "http://mark-api-gateway";
+
+      expect(getDefaultApiBaseURL(false)).toBe("http://mark-api-gateway");
     });
   });
 

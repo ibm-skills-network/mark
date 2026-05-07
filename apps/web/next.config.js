@@ -1,4 +1,24 @@
 /** @type {import('next').NextConfig} */
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.INSTANA_ENABLED !== "false"
+) {
+  const instana = require("@instana/collector");
+  instana({
+    level: "warn",
+    tracing: {
+      stackTraceLength: 20,
+      http: {
+        captureAsyncContext: true,
+        extraHttpHeadersToCapture: [
+          "user-agent",
+          "x-request-id",
+          "x-correlation-id",
+        ],
+      },
+    },
+  });
+}
 const nextConfig = {
   reactStrictMode: true,
   compiler: {
