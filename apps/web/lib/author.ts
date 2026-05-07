@@ -232,15 +232,93 @@ export function subscribeToJobStatus(
         (event: MessageEvent<string>) => {},
       );
 
-      eventSource.onerror = (err) => {
-        if (!isResolved) {
-          if (eventSource?.readyState === EventSource.CLOSED) {
-            handleError("Connection closed unexpectedly");
-          } else {
-            setTimeout(() => {
-              if (!isResolved) handleError("Connection error");
-            }, 2000);
+      // SSE drop is non-fatal: the publish job runs server-side via BullMQ and
+      // is fully decoupled from the browser tab's lifetime. On EventSource
+      // error, fall back to a one-shot job-status fetch and surface whatever
+      // the server says — never re-enqueue a publish from this code path.
+      const recoverViaJobStatus = async (): Promise<void> => {
+        if (isResolved) return;
+        clearTimeout(timeoutId);
+
+        const jobStatusUrl = `${getApiRoutes().assignments}/jobs/${jobId}/status`;
+
+        const fetchOnce = async (): Promise<
+          | {
+              status?: string;
+              progress?: string;
+              questions?: QuestionAuthorStore[];
+            }
+          | undefined
+        > => {
+          try {
+            return (await apiClient.get(jobStatusUrl)) as {
+              status?: string;
+              progress?: string;
+              questions?: QuestionAuthorStore[];
+            };
+          } catch (fetchError) {
+            console.warn(
+              "Publish job-status fallback fetch failed",
+              fetchError,
+            );
+            return undefined;
           }
+        };
+
+        const applyJobState = (
+          job:
+            | {
+                status?: string;
+                progress?: string;
+                questions?: QuestionAuthorStore[];
+              }
+            | undefined,
+        ): boolean => {
+          if (!job) return false;
+          if (job.questions && Array.isArray(job.questions)) {
+            receivedQuestions = job.questions;
+            if (setQuestions) {
+              setQuestions(receivedQuestions);
+            }
+          }
+          if (job.status === "Completed" || job.status === "Failed") {
+            handleCompletion(job.status === "Completed");
+            return true;
+          }
+          return false;
+        };
+
+        const firstJob = await fetchOnce();
+        if (applyJobState(firstJob)) return;
+
+        // Server says still running. Wait 10s and try once more.
+        await new Promise((r) => setTimeout(r, 10_000));
+        if (isResolved) return;
+
+        const secondJob = await fetchOnce();
+        if (applyJobState(secondJob)) return;
+
+        // Still running — resolve optimistically; the caller's page reload
+        // will pick up the final state from the database.
+        if (!isResolved) {
+          console.warn(
+            "Publish job is still running server-side; the page will reload to fetch the final state",
+          );
+          isResolved = true;
+          cleanUp();
+          resolve([true, receivedQuestions]);
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (isResolved) return;
+
+        if (eventSource?.readyState === EventSource.CLOSED) {
+          void recoverViaJobStatus();
+        } else {
+          setTimeout(() => {
+            if (!isResolved) void recoverViaJobStatus();
+          }, 2000);
         }
       };
     } catch (error) {

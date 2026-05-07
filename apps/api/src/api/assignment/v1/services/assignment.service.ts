@@ -742,6 +742,12 @@ export class AssignmentServiceV1 {
         targetPercentage: 20,
         shouldRun: () => safeQuestions.length > 0,
         run: async () => {
+          this.logger.info("v1.publish.questions.start", {
+            assignmentId,
+            incomingCount: safeQuestions.length,
+            jobId: job.id,
+          });
+
           const existingQuestions = await this.prisma.question.findMany({
             where: { assignmentId },
             include: { variants: true },
@@ -755,11 +761,16 @@ export class AssignmentServiceV1 {
             existingQuestionsMap.set(q.id, q);
           }
 
-          const newQuestionIds = new Set<number>(
-            safeQuestions.map((q) => q.id),
-          );
+          // Compute orphan basis from rows actually owned by this assignment,
+          // not from raw set-difference against caller-supplied ids.
+          const claimedExistingIds = new Set<number>();
+          for (const q of safeQuestions) {
+            if (existingQuestionsMap.has(q.id)) {
+              claimedExistingIds.add(q.id);
+            }
+          }
           const questionsToDelete = activeQuestions.filter(
-            (q) => !newQuestionIds.has(q.id),
+            (q) => !claimedExistingIds.has(q.id),
           );
           if (questionsToDelete.length > 0) {
             await this.prisma.question.updateMany({
@@ -802,6 +813,35 @@ export class AssignmentServiceV1 {
                 assignment: { connect: { id: assignmentId } },
               };
 
+              // updateMany does not accept relation-connect operators; build a
+              // scalar-only payload for the matched-update branch.
+              const updateManyData: Prisma.QuestionUpdateManyMutationInput = {
+                question: questionDto.question,
+                type: questionDto.type,
+                answer: questionDto.answer ?? false,
+                totalPoints: questionDto.totalPoints ?? 0,
+                choices: questionDto.choices
+                  ? (JSON.parse(
+                      JSON.stringify(questionDto.choices),
+                    ) as Prisma.JsonValue)
+                  : Prisma.JsonNull,
+                scoring: questionDto.scoring
+                  ? (JSON.parse(
+                      JSON.stringify(questionDto.scoring),
+                    ) as Prisma.JsonValue)
+                  : Prisma.JsonNull,
+                maxWords: questionDto.maxWords,
+                maxCharacters: questionDto.maxCharacters,
+                responseType: questionDto.responseType,
+                randomizedChoices: questionDto.randomizedChoices,
+                liveRecordingConfig: questionDto?.liveRecordingConfig,
+                videoPresentationConfig: questionDto?.videoPresentationConfig
+                  ? (JSON.parse(
+                      JSON.stringify(questionDto.videoPresentationConfig),
+                    ) as Prisma.JsonValue)
+                  : Prisma.JsonNull,
+              };
+
               if (
                 existingQuestion &&
                 existingQuestion.question !== questionDto.question
@@ -811,16 +851,33 @@ export class AssignmentServiceV1 {
                 );
               }
 
-              const upsertedQuestion = await this.prisma.question.upsert({
-                where: {
-                  id: existingQuestion ? existingQuestion.id : questionDto.id,
-                },
-                update: questionData,
-                create: questionData,
-              });
+              const wantsUpdate = existingQuestionsMap.has(questionDto.id);
+              let upsertedQuestion: { id: number };
 
-              if (!existingQuestion) {
-                frontendToBackendIdMap.set(questionDto.id, upsertedQuestion.id);
+              if (wantsUpdate) {
+                const result = await this.prisma.question.updateMany({
+                  where: { id: questionDto.id, assignmentId },
+                  data: updateManyData,
+                });
+                if (result.count === 1) {
+                  upsertedQuestion = { id: questionDto.id };
+                } else {
+                  this.logger.warn("v1.publish.questions.ownership-miss", {
+                    assignmentId,
+                    attemptedId: questionDto.id,
+                  });
+                  const created = await this.prisma.question.create({
+                    data: questionData,
+                  });
+                  upsertedQuestion = { id: created.id };
+                  frontendToBackendIdMap.set(questionDto.id, created.id);
+                }
+              } else {
+                const created = await this.prisma.question.create({
+                  data: questionData,
+                });
+                upsertedQuestion = { id: created.id };
+                frontendToBackendIdMap.set(questionDto.id, created.id);
               }
 
               await this.handleQuestionTranslations(
@@ -912,6 +969,13 @@ export class AssignmentServiceV1 {
               }
             }),
           );
+
+          this.logger.info("v1.publish.questions.done", {
+            assignmentId,
+            incomingCount: safeQuestions.length,
+            claimedCount: claimedExistingIds.size,
+            deletedCount: questionsToDelete.length,
+          });
         },
       },
       {

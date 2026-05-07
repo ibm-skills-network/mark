@@ -1688,6 +1688,8 @@ export const createMockQuestionRepository = () => ({
       createMockQuestionDto({ id: 2 }, QuestionType.MULTIPLE_CORRECT),
     ]),
   upsert: jest.fn().mockResolvedValue(createMockQuestionDto()),
+  createForAssignment: jest.fn().mockResolvedValue(createMockQuestionDto()),
+  updateOwnedById: jest.fn().mockResolvedValue(createMockQuestionDto()),
   markAsDeleted: jest.fn().mockResolvedValue(undefined),
   createMany: jest
     .fn()
