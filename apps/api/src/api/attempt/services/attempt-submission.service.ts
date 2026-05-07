@@ -1018,14 +1018,12 @@ export class AttemptSubmissionService {
       }
 
       if (this.progressService) {
-        if (aiFeedbackError) {
-          await this.progressService.markCompleteWithAiFeedbackError(
-            attemptId,
-            aiFeedbackError,
-          );
-        } else {
-          await this.progressService.markComplete(attemptId);
-        }
+        await (aiFeedbackError
+          ? this.progressService.markCompleteWithAiFeedbackError(
+              attemptId,
+              aiFeedbackError,
+            )
+          : this.progressService.markComplete(attemptId));
       }
 
       return {
