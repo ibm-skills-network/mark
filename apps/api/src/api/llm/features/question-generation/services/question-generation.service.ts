@@ -360,6 +360,8 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           assignmentId,
           AIUsageType.ASSIGNMENT_GENERATION,
           "question_generation",
+          "gpt-4o-mini",
+          { maxTokens: 8000 },
         );
 
         const parsed = (await parser.parse(response)) as {
@@ -540,7 +542,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
             maxWords: z
               .number()
               .int()
-              .positive()
+              .nonnegative()
               .optional()
               .describe(
                 "Maximum word limit for text responses (only include for TEXT question types, omit otherwise)",
@@ -548,7 +550,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
             maxCharacters: z
               .number()
               .int()
-              .positive()
+              .nonnegative()
               .optional()
               .describe(
                 "Maximum character limit for text responses (only include for TEXT question types, omit otherwise)",
@@ -1222,6 +1224,8 @@ Rules:
       assignmentId,
       AIUsageType.ASSIGNMENT_GENERATION,
       "question_generation",
+      "gpt-4o-mini",
+      { maxTokens: 4000 },
     );
 
     const parsed = await parser.parse(response);
