@@ -7,6 +7,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Put,
@@ -19,14 +20,18 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiQuery, ApiResponse } from "@nestjs/swagger";
 import { memoryStorage } from "multer";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import { Logger } from "winston";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
 import { UploadRequestDto, UploadType } from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
+import { sanitizeUploadPath } from "./services/path-sanitizer";
 import { S3Service } from "./services/s3.service";
+import { sanitizeForLog } from "../../logger/sanitize";
 
 export interface FileAccessDto {
   filename: string;
@@ -52,10 +57,15 @@ export interface FileContentDto {
   version: "1",
 })
 export class FilesController {
+  private readonly logger: Logger;
+
   constructor(
     private readonly filesService: FilesService,
     private readonly s3Service: S3Service,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: FilesController.name });
+  }
 
   @Get("public-url")
   async getPublicUrl(@Query("key") key: string) {
@@ -109,11 +119,12 @@ export class FilesController {
             ? JSON.parse(body.context)
             : body.context;
       } catch (error) {
-        console.error(
-          "[DIRECT UPLOAD] Failed to parse context:",
-          body.context,
-          error,
-        );
+        this.logger.error("[DIRECT UPLOAD] Failed to parse context", {
+          context_raw: sanitizeForLog(body.context),
+          error: sanitizeForLog(
+            error instanceof Error ? error.message : String(error),
+          ),
+        });
         throw new BadRequestException("Invalid context JSON");
       }
     }
@@ -121,22 +132,17 @@ export class FilesController {
     const userId = request.userSession.userId;
 
     const bucket = this.s3Service.getBucketName(uploadType);
-    try {
-    } catch (resolutionError) {
-      console.error(
-        "[DIRECT UPLOAD] Bucket resolution error:",
-        resolutionError,
-      );
-    }
 
     if (!bucket) {
+      this.logger.warn("[DIRECT UPLOAD] Invalid upload type", {
+        uploadType: sanitizeForLog(uploadType),
+        userId: sanitizeForLog(userId),
+      });
       throw new BadRequestException("Invalid upload type");
     }
 
     let prefix = "";
-    const normalizedPath = context.path?.startsWith("/")
-      ? context.path.slice(1)
-      : (context.path ?? "");
+    const normalizedPath = sanitizeUploadPath(context.path);
 
     switch (uploadType) {
       case "author": {
@@ -272,7 +278,10 @@ export class FilesController {
         textContentUrl,
       };
     } catch (error) {
-      console.error("[FILES] File access error:", error);
+      this.logger.error("[FILES] File access error", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       const errorMessage =
         error instanceof Error && error.message
           ? error.message
@@ -366,7 +375,13 @@ export class FilesController {
         size: Buffer.byteLength(content, encoding as BufferEncoding),
       };
     } catch (error) {
-      console.error(`[FILES] Content error for ${key}:`, error);
+      this.logger.error(`[FILES] Content error for ${sanitizeForLog(key)}`, {
+        key: sanitizeForLog(key),
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+        stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
+      });
 
       if (error instanceof HttpException) {
         throw error;

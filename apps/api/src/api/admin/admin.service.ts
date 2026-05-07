@@ -18,8 +18,10 @@ import {
   UpdateAssignmentQuestionsDto,
   VariantDto,
 } from "../assignment/dto/update.questions.request.dto";
+import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
+import { toAiUsageCounterNumber } from "../llm/core/utils/ai-usage-counter.util";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { AdminAddContentToAssignmentRequestDto } from "./dto/assignment/add.content.to.assignment.request.dto";
@@ -51,6 +53,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assignmentService: AssignmentServiceV2,
+    private readonly assignmentFileService: AssignmentFileService,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
   ) {}
@@ -357,11 +360,11 @@ export class AdminService {
    */
   private async calculateHistoricalCosts(
     aiUsageRecords: Array<{
-      tokensIn: number;
-      tokensOut: number;
+      tokensIn: bigint | number;
+      tokensOut: bigint | number;
       createdAt: Date;
       usageType?: string;
-      modelKey?: string;
+      modelKey?: string | null;
     }>,
   ): Promise<{
     totalCost: number;
@@ -400,6 +403,14 @@ export class AdminService {
     };
 
     for (const usage of aiUsageRecords) {
+      const tokensIn = toAiUsageCounterNumber(
+        usage.tokensIn,
+        "AIUsage.tokensIn",
+      );
+      const tokensOut = toAiUsageCounterNumber(
+        usage.tokensOut,
+        "AIUsage.tokensOut",
+      );
       let modelKey = usage.modelKey;
 
       if (!modelKey) {
@@ -428,8 +439,8 @@ export class AdminService {
       const costBreakdown =
         await this.llmPricingService.calculateCostWithBreakdown(
           modelKey,
-          usage.tokensIn,
-          usage.tokensOut,
+          tokensIn,
+          tokensOut,
           usage.createdAt,
           usage.usageType,
         );
@@ -455,10 +466,10 @@ export class AdminService {
         const outputPricePerMillion =
           costBreakdown.outputTokenPrice * 1_000_000;
         const calculationSteps = {
-          inputCalculation: `${usage.tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
+          inputCalculation: `${tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
             2,
           )}/1M tokens = $${costBreakdown.inputCost.toFixed(8)}`,
-          outputCalculation: `${usage.tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
+          outputCalculation: `${tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
             2,
           )}/1M tokens = $${costBreakdown.outputCost.toFixed(8)}`,
           totalCalculation: `$${costBreakdown.inputCost.toFixed(
@@ -469,8 +480,8 @@ export class AdminService {
         };
 
         detailedBreakdown.push({
-          tokensIn: usage.tokensIn,
-          tokensOut: usage.tokensOut,
+          tokensIn,
+          tokensOut,
           inputCost: costBreakdown.inputCost,
           outputCost: costBreakdown.outputCost,
           totalCost: costBreakdown.totalCost,
@@ -498,8 +509,8 @@ export class AdminService {
 
         const prices =
           fallbackPrices[modelKey] || fallbackPrices["gpt-4o-mini"];
-        const inputCost = usage.tokensIn * prices.input;
-        const outputCost = usage.tokensOut * prices.output;
+        const inputCost = tokensIn * prices.input;
+        const outputCost = tokensOut * prices.output;
         const fallbackCost = inputCost + outputCost;
 
         totalCost += fallbackCost;
@@ -508,10 +519,10 @@ export class AdminService {
         const inputPricePerMillion = prices.input * 1_000_000;
         const outputPricePerMillion = prices.output * 1_000_000;
         const calculationSteps = {
-          inputCalculation: `${usage.tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
+          inputCalculation: `${tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
             2,
           )}/1M tokens = $${inputCost.toFixed(8)} (fallback)`,
-          outputCalculation: `${usage.tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
+          outputCalculation: `${tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
             2,
           )}/1M tokens = $${outputCost.toFixed(8)} (fallback)`,
           totalCalculation: `$${inputCost.toFixed(8)} + $${outputCost.toFixed(
@@ -520,8 +531,8 @@ export class AdminService {
         };
 
         detailedBreakdown.push({
-          tokensIn: usage.tokensIn,
-          tokensOut: usage.tokensOut,
+          tokensIn,
+          tokensOut,
           inputCost,
           outputCost,
           totalCost: fallbackCost,
@@ -1307,7 +1318,10 @@ export class AdminService {
                   : {}),
                 ...(filters?.userId
                   ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
                     }
                   : {}),
               },
@@ -1327,8 +1341,8 @@ export class AdminService {
                   ...(filters?.userId
                     ? {
                         userId: {
-                          contains: filters.userId,
-                          mode: "insensitive",
+                          equals: filters.userId,
+                          mode: "insensitive" as const,
                         },
                       }
                     : {}),
@@ -1352,7 +1366,12 @@ export class AdminService {
                 ? { createdAt: dateFilter }
                 : {}),
               ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
                 : {}),
             },
           })
@@ -1368,7 +1387,10 @@ export class AdminService {
                   : {}),
                 ...(filters?.userId
                   ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
                     }
                   : {}),
               },
@@ -1383,8 +1405,8 @@ export class AdminService {
                   ...(filters?.userId
                     ? {
                         userId: {
-                          contains: filters.userId,
-                          mode: "insensitive",
+                          equals: filters.userId,
+                          mode: "insensitive" as const,
                         },
                       }
                     : {}),
@@ -1405,7 +1427,12 @@ export class AdminService {
                 ? { createdAt: dateFilter }
                 : {}),
               ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
                 : {}),
             },
             take: 10,
@@ -1435,7 +1462,10 @@ export class AdminService {
                   : {}),
                 ...(filters?.userId
                   ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
                     }
                   : {}),
               },
@@ -1483,7 +1513,12 @@ export class AdminService {
                 ? { createdAt: dateFilter }
                 : {}),
               ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
                 : {}),
             },
             _avg: { assignmentRating: true },
@@ -1762,9 +1797,15 @@ export class AdminService {
 
         return {
           usageType: usage.usageType,
-          tokensIn: usage.tokensIn,
-          tokensOut: usage.tokensOut,
-          usageCount: usage.usageCount,
+          tokensIn: toAiUsageCounterNumber(usage.tokensIn, "AIUsage.tokensIn"),
+          tokensOut: toAiUsageCounterNumber(
+            usage.tokensOut,
+            "AIUsage.tokensOut",
+          ),
+          usageCount: toAiUsageCounterNumber(
+            usage.usageCount,
+            "AIUsage.usageCount",
+          ),
           inputCost: detailedCost.inputCost,
           outputCost: detailedCost.outputCost,
           totalCost: detailedCost.totalCost,
@@ -2029,6 +2070,11 @@ export class AdminService {
     if (!assignmentExists) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
+
+    // Clean up COS objects before the cascade-delete removes the AssignmentFile
+    // rows, so we still have the storageKey/storageBucket references.
+    // S3 failures are logged as warnings and never block the deletion.
+    await this.assignmentFileService.cleanupAssignmentFileObjects(id);
 
     await this.prisma.assignment.delete({
       where: { id },

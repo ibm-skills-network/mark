@@ -131,6 +131,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     ]);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isAuthorPreview = searchParams.get("authorMode") === "true";
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
     userPreferedLanguage,
@@ -594,6 +595,12 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                     setSelectedItem={setSelectedLanguage}
                     placeholder="Select language"
                     disableUiTranslation={true}
+                    disabled={isAuthorPreview}
+                    disabledTooltip={
+                      isAuthorPreview
+                        ? "Translations are only available after publishing this assignment. Publish to preview translated content."
+                        : undefined
+                    }
                   />
                 </div>
               )}

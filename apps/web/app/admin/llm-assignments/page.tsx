@@ -32,6 +32,12 @@ import {
 } from "lucide-react";
 import { formatPricePerMillionTokens } from "@/config/constants";
 import { apiClient } from "@/lib/api-client";
+import { isAdminAuthError } from "@/lib/shared";
+import {
+  buildAdminLoginRedirect,
+  clearAdminSessionStorage,
+  readAdminSessionFromStorage,
+} from "@/lib/admin-session";
 
 interface AIFeature {
   id: number;
@@ -84,12 +90,15 @@ export default function LLMAssignmentsPage() {
     fetchData();
   }, []);
 
+  const redirectToLogin = () => {
+    clearAdminSessionStorage();
+    router.replace(buildAdminLoginRedirect(window.location.pathname));
+  };
+
   const fetchData = async () => {
-    const sessionToken = localStorage.getItem("adminSessionToken");
-    if (!sessionToken) {
-      router.push(
-        `/admin?returnTo=${encodeURIComponent(window.location.pathname)}`,
-      );
+    const stored = readAdminSessionFromStorage();
+    if (!stored) {
+      redirectToLogin();
       return;
     }
 
@@ -99,16 +108,20 @@ export default function LLMAssignmentsPage() {
 
       const [featuresData, modelsData] = await Promise.all([
         apiClient.get<any>("/api/v1/llm-assignments/features", {
-          headers: { "x-admin-token": sessionToken },
+          headers: { "x-admin-token": stored.sessionToken },
         }),
         apiClient.get<any>("/api/v1/llm-assignments/models", {
-          headers: { "x-admin-token": sessionToken },
+          headers: { "x-admin-token": stored.sessionToken },
         }),
       ]);
 
       setFeatures(featuresData.data || []);
       setModels(modelsData.data || []);
     } catch (err) {
+      if (isAdminAuthError(err)) {
+        redirectToLogin();
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to fetch data");
     } finally {
       setLoading(false);
@@ -133,8 +146,11 @@ export default function LLMAssignmentsPage() {
   const saveChanges = async () => {
     if (changes.size === 0) return;
 
-    const sessionToken = localStorage.getItem("adminSessionToken");
-    if (!sessionToken) return;
+    const stored = readAdminSessionFromStorage();
+    if (!stored) {
+      redirectToLogin();
+      return;
+    }
 
     try {
       setSaving(true);
@@ -152,10 +168,15 @@ export default function LLMAssignmentsPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-token": sessionToken,
+          "x-admin-token": stored.sessionToken,
         },
         body: JSON.stringify({ assignments }),
       });
+
+      if (response.status === 401 || response.status === 403) {
+        redirectToLogin();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error("Failed to save assignments");
@@ -182,8 +203,11 @@ export default function LLMAssignmentsPage() {
   };
 
   const resetToDefaults = async () => {
-    const sessionToken = localStorage.getItem("adminSessionToken");
-    if (!sessionToken) return;
+    const stored = readAdminSessionFromStorage();
+    if (!stored) {
+      redirectToLogin();
+      return;
+    }
 
     try {
       setSaving(true);
@@ -194,9 +218,14 @@ export default function LLMAssignmentsPage() {
         "/api/v1/llm-assignments/reset-to-defaults",
         {
           method: "POST",
-          headers: { "x-admin-token": sessionToken },
+          headers: { "x-admin-token": stored.sessionToken },
         },
       );
+
+      if (response.status === 401 || response.status === 403) {
+        redirectToLogin();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error("Failed to reset to defaults");

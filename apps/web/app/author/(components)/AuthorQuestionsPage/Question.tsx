@@ -387,7 +387,7 @@ const Question: FC<QuestionProps> = ({
       },
       {
         value: "UPLOAD",
-        label: "Upload",
+        label: "File Upload",
         icon: <DocumentArrowUpIcon className="w-5 h-5 stroke-gray-500" />,
       },
       {

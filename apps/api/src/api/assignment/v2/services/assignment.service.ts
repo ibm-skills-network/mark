@@ -2,6 +2,8 @@ import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import { Logger } from "winston";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
@@ -39,6 +41,7 @@ export class AssignmentServiceV2 {
     private readonly translationService: TranslationService,
     private readonly versionManagementService: VersionManagementService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobQueueService: JobQueueService,
     private readonly prisma: PrismaService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
@@ -163,7 +166,7 @@ export class AssignmentServiceV2 {
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
-  ): Promise<{ jobId: number; message: string }> {
+  ): Promise<{ jobId: string; message: string }> {
     this.logger.info(
       `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
     );
@@ -172,26 +175,37 @@ export class AssignmentServiceV2 {
       userId,
     );
 
-    this.startPublishingProcess(job.id, assignmentId, updateDto, userId).catch(
-      (error: unknown) => {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        this.logger.error(`Publishing failed: ${errorMessage}`, errorStack);
-        void this.jobStatusService.updateJobStatus(job.id, {
-          status: "Failed",
-          progress: `Error: ${errorMessage}`,
-        });
-      },
-    );
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
+        {
+          assignmentId,
+          jobId: job.id,
+          updateDto,
+          userId,
+        },
+        {
+          jobId: job.id,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: `Failed to enqueue publish job: ${errorMessage}`,
+      });
+      throw error;
+    }
 
     return {
       jobId: job.id,
       message: "Publishing started",
     };
   }
-  private async startPublishingProcess(
-    jobId: number,
+  async runPublishJob(
+    jobId: string,
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,

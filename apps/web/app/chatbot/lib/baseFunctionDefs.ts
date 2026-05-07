@@ -210,7 +210,8 @@ const authorFunctions = [
         },
         numberOfQuestions: {
           type: "number",
-          description: "The number of questions to generate",
+          description:
+            "The number of regular non-subtype questions to generate across questionTypes",
         },
         questionTypes: {
           type: "array",
@@ -219,6 +220,51 @@ const authorFunctions = [
             enum: ["TEXT", "SINGLE_CORRECT", "MULTIPLE_CORRECT", "TRUE_FALSE"],
           },
           description: "The types of questions to generate",
+        },
+        multipleChoiceSubtypes: {
+          type: "object",
+          description:
+            "Optional Mark-owned multiple-choice subtype counts. Use these when the author asks for short, quantitative, long, or scenario multiple-choice questions. At least one value must be greater than 0; omit this field entirely if all values are 0.",
+          properties: {
+            short: {
+              type: "number",
+              minimum: 0,
+              description: "Number of short multiple-choice questions",
+            },
+            quantitative: {
+              type: "number",
+              minimum: 0,
+              description: "Number of quantitative multiple-choice questions",
+            },
+            long: {
+              type: "number",
+              minimum: 0,
+              description: "Number of long multiple-choice questions",
+            },
+            scenario: {
+              type: "number",
+              minimum: 0,
+              description: "Number of scenario multiple-choice questions",
+            },
+          },
+          anyOf: [
+            {
+              required: ["short"],
+              properties: { short: { minimum: 1 } },
+            },
+            {
+              required: ["quantitative"],
+              properties: { quantitative: { minimum: 1 } },
+            },
+            {
+              required: ["long"],
+              properties: { long: { minimum: 1 } },
+            },
+            {
+              required: ["scenario"],
+              properties: { scenario: { minimum: 1 } },
+            },
+          ],
         },
       },
       required: ["assignmentId", "learningObjectives"],

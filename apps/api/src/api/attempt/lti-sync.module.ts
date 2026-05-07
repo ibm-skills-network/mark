@@ -1,11 +1,10 @@
 import { Module } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
 import { ScheduleModule } from "@nestjs/schedule";
-import { PrismaService } from "../../database/prisma.service";
+import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { LtiGradeSyncService } from "./services/lti-grade-sync.service";
 import { LtiSyncScheduler } from "./schedulers/lti-sync-scheduler";
 import { LtiSyncAdminController } from "./controllers/lti-sync-admin.controller";
-import { AdminEmailService } from "../../auth/services/admin-email.service";
 
 /**
  * Module for LTI grade synchronization functionality.
@@ -18,10 +17,9 @@ import { AdminEmailService } from "../../auth/services/admin-email.service";
       maxRedirects: 5,
     }),
     ScheduleModule.forRoot(),
+    AdminAuthModule,
   ],
   providers: [
-    PrismaService,
-    AdminEmailService,
     LtiGradeSyncService,
     {
       provide: "LtiGradeSyncService",

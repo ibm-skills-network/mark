@@ -9,7 +9,11 @@ on:
     paths:
       - "apps/api-gateway/**"
       - "apps/api/**"
+      - "apps/jobs/**"
       - "apps/web/**"
+      - "docs/insomnia/**"
+      - "package.json"
+      - "yarn.lock"
       - ".github/workflows/build-images.yml"
   pull_request:
     branches:
@@ -21,6 +25,10 @@ on:
       suffix:
         description: Custom suffix for tag
         required: false
+      insomnia_environment:
+        description: Insomnia environment to test for the job microservice
+        required: false
+        default: staging
   repository_dispatch:
 
 jobs:
@@ -32,7 +40,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [api-gateway, api, web]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -220,7 +228,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        service: [api-gateway, api, web]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -275,6 +283,69 @@ jobs:
         run: yarn turbo run test --filter=${{ matrix.service }} --only -- -- --watchAll=false
         timeout-minutes: 10
 
+  job-microservice-contract-test:
+    name: Job Microservice Insomnia Tests
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    permissions:
+      contents: read
+    env:
+      INSO_VERSION: 12.5.0
+      INSOMNIA_ENV: ${{ github.event.inputs.insomnia_environment || vars.INSOMNIA_ENV || 'staging' }}
+      MARK_API_BASE_URL: ${{ secrets.INSOMNIA_MARK_API_BASE_URL }}
+      JOB_QUEUE_HEADER_VALUE: ${{ secrets.INSOMNIA_JOB_QUEUE_SECRET }} # pragma: allowlist secret
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Insomnia test configuration
+        id: insomnia-config
+        run: |
+          if [ -z "${MARK_API_BASE_URL:-}" ] || [ -z "${JOB_QUEUE_HEADER_VALUE:-}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Insomnia job tests because the required Insomnia base URL or queue key input is not configured."
+            exit 0
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install Inso CLI
+        if: steps.insomnia-config.outputs.enabled == 'true'
+        run: |
+          curl -L --fail --silent --show-error \
+            "https://github.com/Kong/insomnia/releases/download/core%40${INSO_VERSION}/inso-linux-x64-${INSO_VERSION}.tar.xz" \
+            -o /tmp/inso-linux.tar.xz
+          mkdir -p /tmp/inso
+          tar -xf /tmp/inso-linux.tar.xz -C /tmp/inso
+          sudo install /tmp/inso/inso /usr/local/bin/inso
+          inso --version
+
+      - name: Run Insomnia job microservice tests
+        if: steps.insomnia-config.outputs.enabled == 'true'
+        run: |
+          collection="docs/insomnia/job-microservice.insomnia.json"
+          runtime_collection="$(mktemp)"
+
+          if ! jq -e --arg envName "$INSOMNIA_ENV" '.resources[] | select(._type == "environment" and .name == $envName)' "$collection" >/dev/null; then
+            echo "Unknown Insomnia environment: $INSOMNIA_ENV"
+            exit 1
+          fi
+
+          jq \
+            --arg envName "$INSOMNIA_ENV" \
+            --arg baseUrl "$MARK_API_BASE_URL" \
+            --arg queueHeaderValue "$JOB_QUEUE_HEADER_VALUE" \
+            '(.resources[] | select(._type == "environment" and .name == $envName) | .data.base_url) = $baseUrl
+             | (.resources[] | select(._type == "environment" and .name == $envName) | .data.job_queue_header_value) = $queueHeaderValue' \
+            "$collection" > "$runtime_collection"
+
+          inso run test "Job Microservice" \
+            --env "$INSOMNIA_ENV" \
+            --workingDir "$runtime_collection" \
+            --ci \
+            --bail \
+            --requestTimeout 10000
+
   build-and-deploy:
     name: Build & Deploy - ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -287,7 +358,7 @@ jobs:
       attestations: write
     strategy:
       matrix:
-        service: [api-gateway, api, web]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     outputs:
       image-tag: ${{ steps.meta.outputs.image-tag }}

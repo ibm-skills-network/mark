@@ -1336,11 +1336,7 @@ export const MarkChat = () => {
     return assignmentId != null && Number.isFinite(Number(assignmentId))
       ? Number(assignmentId)
       : undefined;
-  }, [
-    userRole,
-    learnerContext.assignmentId,
-    authorContext.activeAssignmentId,
-  ]);
+  }, [userRole, learnerContext.assignmentId, authorContext.activeAssignmentId]);
   const [dragStartPosition, setDragStartPosition] = useState({ x: 0, y: 0 });
   const [dragStartTime, setDragStartTime] = useState(0);
   const [touchStartTime, setTouchStartTime] = useState(0);
@@ -1713,7 +1709,9 @@ export const MarkChat = () => {
         if (!cancelled) {
           setUser(userData);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error("MarkChat: fetchUser failed:", error);
+      }
     };
     void fetchUser();
     return () => {
@@ -2307,7 +2305,12 @@ export const MarkChat = () => {
               undefined,
               browserCookies,
             );
-          } catch (error) {}
+          } catch (error) {
+            console.error(
+              "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
+              error,
+            );
+          }
         }
 
         didSendSucceed = await sendMessage(stream, {
@@ -2362,7 +2365,12 @@ export const MarkChat = () => {
                   if (markerMatch) {
                     try {
                       toolCallsData = JSON.parse(markerMatch[1]);
-                    } catch (e) {}
+                    } catch (e) {
+                      console.warn(
+                        "MarkChat: failed to JSON.parse CLIENT_EXECUTION_MARKER payload:",
+                        e,
+                      );
+                    }
                   }
                 }
 
@@ -2373,7 +2381,12 @@ export const MarkChat = () => {
                   toolCallsData,
                 );
                 hasPersistedAssistant = true;
-              } catch (error) {}
+              } catch (error) {
+                console.error(
+                  "MarkChat: addMessageToChat(ASSISTANT) failed — assistant reply may not be persisted:",
+                  error,
+                );
+              }
             }
           } finally {
             isPersistingAssistant = false;
