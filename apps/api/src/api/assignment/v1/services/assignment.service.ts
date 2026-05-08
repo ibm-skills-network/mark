@@ -535,9 +535,40 @@ export class AssignmentServiceV1 {
     updateAssignmentQuestionsDto: UpdateAssignmentQuestionsDto,
     userId: string,
   ): Promise<{ jobId: string; message: string }> {
+    // Deterministic per-assignment publish job id. Mirror v2's pattern
+    // (commit 7c53b651): two concurrent publishes for the same assignment
+    // would otherwise both run and race on Question reconciliation —
+    // markAsDeleted/createForAssignment writes interleaving on the same
+    // row set causes question loss. BullMQ silently no-ops a duplicate
+    // `add` when {jobId} matches an in-flight job, so this gives queue-
+    // layer dedup without a separate lock. removeOnComplete/Fail ends the
+    // dedup window as soon as the previous publish terminates.
+    const deterministicJobId = `publish:v1:${assignmentId}`;
+
+    const existing = await this.jobQueueService.findActiveJob(
+      JOB_QUEUE_NAMES.ASSIGNMENT_V1,
+      deterministicJobId,
+    );
+    if (existing) {
+      this.logger.warn(
+        `Publish dedup hit (v1): assignment ${assignmentId} already has an active publish job (${existing.state})`,
+        {
+          assignmentId,
+          jobId: existing.id,
+          state: existing.state,
+          requestedByUserId: userId,
+        },
+      );
+      return {
+        jobId: existing.id,
+        message: "Publishing already in progress",
+      };
+    }
+
     const job = await this.jobStatusService.createPublishJob(
       assignmentId,
       userId,
+      { reservedId: deterministicJobId },
     );
     try {
       await this.jobQueueService.enqueue(
@@ -556,6 +587,11 @@ export class AssignmentServiceV1 {
           // re-introduce a concurrent-execution race against an already-
           // running publish. If publish fails, the user retries by hand.
           attempts: 1,
+          // End the dedup window as soon as the job terminates (success or
+          // failure). Without this, completed/failed jobs linger in BullMQ
+          // history and a deterministic id would pin to the stale record.
+          removeOnComplete: true,
+          removeOnFail: true,
         },
       );
     } catch (error: unknown) {

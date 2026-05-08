@@ -335,4 +335,111 @@ describe("AssignmentServiceV1 - runPublishJob - Processing questions", () => {
     // for the matched-update branch must omit assignment.connect.
     expect(writeUpdates[0].args.data.assignment).toBeUndefined();
   });
+
+  describe("publishAssignment dedup (v1)", () => {
+    const buildPublishModule = async () => {
+      const prisma = setupPrismaMock(new Map());
+      logger = {
+        child: jest.fn().mockReturnThis(),
+        info: jest.fn(),
+        log: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+      };
+
+      const llmFacadeService = {
+        getLanguageCode: jest.fn().mockResolvedValue("en"),
+        applyGuardRails: jest.fn().mockResolvedValue(true),
+        generateQuestionGradingContext: jest.fn().mockResolvedValue(new Map()),
+      };
+
+      const jobStatusService = {
+        getJobStatus: jest.fn(),
+        updateJobStatus: jest.fn().mockResolvedValue(undefined),
+        createPublishJob: jest.fn(async (assignmentId, userId, overrides) => ({
+          id: overrides?.reservedId ?? "job-fresh",
+          assignmentId,
+          userId,
+        })),
+        createJob: jest.fn(),
+      };
+
+      const jobQueueService = {
+        enqueue: jest.fn().mockResolvedValue(undefined),
+        findActiveJob: jest.fn().mockResolvedValue(null),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AssignmentServiceV1,
+          { provide: PrismaService, useValue: prisma },
+          { provide: LlmFacadeService, useValue: llmFacadeService },
+          { provide: JobStatusServiceV1, useValue: jobStatusService },
+          { provide: JobQueueService, useValue: jobQueueService },
+          { provide: WINSTON_MODULE_PROVIDER, useValue: logger },
+        ],
+      }).compile();
+
+      return {
+        service: module.get<AssignmentServiceV1>(AssignmentServiceV1),
+        jobStatusService,
+        jobQueueService,
+      };
+    };
+
+    it("returns the in-flight job's id and skips enqueue when a v1 publish is already active for the assignment", async () => {
+      const { service, jobStatusService, jobQueueService } =
+        await buildPublishModule();
+      jobQueueService.findActiveJob.mockResolvedValueOnce({
+        id: "publish:v1:42",
+        state: "active",
+      });
+
+      const result = await service.publishAssignment(
+        42,
+        buildPayload(),
+        "author-B",
+      );
+
+      expect(result).toEqual({
+        jobId: "publish:v1:42",
+        message: "Publishing already in progress",
+      });
+      expect(jobQueueService.findActiveJob).toHaveBeenCalledWith(
+        "mark.assignment.v1",
+        "publish:v1:42",
+      );
+      expect(jobStatusService.createPublishJob).not.toHaveBeenCalled();
+      expect(jobQueueService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("creates a fresh publish job with the deterministic id when none is in flight", async () => {
+      const { service, jobStatusService, jobQueueService } =
+        await buildPublishModule();
+
+      const result = await service.publishAssignment(
+        42,
+        buildPayload(),
+        "author-A",
+      );
+
+      expect(result.jobId).toBe("publish:v1:42");
+      expect(result.message).toBe("Publishing started.");
+      expect(jobStatusService.createPublishJob).toHaveBeenCalledWith(
+        42,
+        "author-A",
+        { reservedId: "publish:v1:42" },
+      );
+      expect(jobQueueService.enqueue).toHaveBeenCalledTimes(1);
+      const enqueueOpts = jobQueueService.enqueue.mock.calls[0][3] as Record<
+        string,
+        unknown
+      >;
+      expect(enqueueOpts.jobId).toBe("publish:v1:42");
+      expect(enqueueOpts.attempts).toBe(1);
+      expect(enqueueOpts.removeOnComplete).toBe(true);
+      expect(enqueueOpts.removeOnFail).toBe(true);
+    });
+  });
 });
