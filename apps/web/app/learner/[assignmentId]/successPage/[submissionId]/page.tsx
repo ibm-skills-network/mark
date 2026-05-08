@@ -173,19 +173,25 @@ function SuccessPage() {
           );
           setShowQuestions(submissionDetails.showQuestions);
           setUserPreferredLanguage(submissionDetails.preferredLanguage);
-          setGrade(submissionDetails.grade * 100);
-          if (submissionDetails.totalPointsEarned) {
-            setTotalPoints(submissionDetails.totalPointsEarned);
+
+          if (submissionDetails.showAssignmentScore === false) {
+            setGrade(Number.NaN);
+            setTotalPoints(0);
+            setTotalPointsEarned(0);
           } else {
-            const totalPoints = submissionDetails.questions.reduce(
-              (acc, question) => acc + question.totalPoints,
+            const rawGrade = submissionDetails.grade;
+            const possible = submissionDetails.questions.reduce(
+              (acc, question) => acc + (question.totalPoints ?? 0),
               0,
             );
-            const totalPointsEarned = totalPoints * submissionDetails.grade;
-            setTotalPoints(
-              totalPoints || submissionDetails.totalPossiblePoints,
+            const earned =
+              typeof rawGrade === "number" ? possible * rawGrade : 0;
+
+            setGrade(
+              typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
             );
-            setTotalPointsEarned(totalPointsEarned);
+            setTotalPoints(possible);
+            setTotalPointsEarned(earned);
           }
           setAssignmentDetails({
             passingGrade: submissionDetails.passingGrade,
