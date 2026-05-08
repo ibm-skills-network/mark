@@ -284,8 +284,16 @@ export function subscribeToJobStatus(
               setQuestions(receivedQuestions);
             }
           }
-          if (job.status === "Completed" || job.status === "Failed") {
-            handleCompletion(job.status === "Completed");
+          // Match the SSE `update` handler's semantics: Completed resolves,
+          // Failed rejects. Resolving on Failed lets the caller's success
+          // branch fire (the caller doesn't always check the boolean), so
+          // route Failed through handleError instead.
+          if (job.status === "Completed") {
+            handleCompletion(true);
+            return true;
+          }
+          if (job.status === "Failed") {
+            handleError(job.progress || "Publish failed");
             return true;
           }
           return false;
