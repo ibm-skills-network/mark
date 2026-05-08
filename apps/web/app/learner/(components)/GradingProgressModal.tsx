@@ -272,7 +272,10 @@ export default function GradingProgressModal({
   );
 
   const rawProgress = useMotionValue(0);
-  const springProgress = useSpring(rawProgress, { stiffness: 100, damping: 25 });
+  const springProgress = useSpring(rawProgress, {
+    stiffness: 100,
+    damping: 25,
+  });
   const strokeDasharrayMotion = useTransform(
     springProgress,
     (v) => `${v * 2.64} 264`,
@@ -638,7 +641,10 @@ export default function GradingProgressModal({
                       <div className="relative bg-gray-100 rounded-full h-3 overflow-hidden shadow-inner">
                         <motion.div
                           className="h-full rounded-full bg-gradient-to-r from-purple-500 via-blue-500 to-purple-500 relative shadow-lg"
-                          style={{ width: `${displayProgress}%`, backgroundSize: "200% 100%" }}
+                          style={{
+                            width: `${displayProgress}%`,
+                            backgroundSize: "200% 100%",
+                          }}
                         >
                           <motion.div
                             animate={{
