@@ -187,7 +187,12 @@ export class AssignmentServiceV2 {
     if (existing) {
       this.logger.warn(
         `Publish dedup hit: assignment ${assignmentId} already has an active publish job (${existing.state})`,
-        { assignmentId, jobId: existing.id, state: existing.state },
+        {
+          assignmentId,
+          jobId: existing.id,
+          state: existing.state,
+          requestedByUserId: userId,
+        },
       );
       return {
         jobId: existing.id,

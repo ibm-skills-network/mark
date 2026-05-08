@@ -41,9 +41,12 @@ import { AdminService } from "src/api/admin/admin.service";
 import { AdminGuard } from "src/auth/guards/admin.guard";
 import {
   UserRole,
+  UserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { PrismaService } from "src/database/prisma.service";
+import { JobStateRecord } from "src/job-queue/job-state.types";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
@@ -126,8 +129,37 @@ export class AssignmentControllerV2 {
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly adminService: AdminService,
+    private readonly prisma: PrismaService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV2.name });
+  }
+
+  // Returns true when the caller may read this publish job's status. Allows the
+  // job's creator OR any author whose group is linked to the job's assignment.
+  // Co-author access is required because publishAssignment dedups by
+  // assignmentId and returns an in-flight job's id to a second author who hits
+  // publish on the same assignment — they need to watch it complete.
+  private async canReadPublishJob(
+    job: JobStateRecord,
+    userSession: UserSession,
+  ): Promise<boolean> {
+    if (job.userId === userSession.userId) {
+      return true;
+    }
+
+    if (typeof job.assignmentId !== "number") {
+      return false;
+    }
+
+    const link = await this.prisma.assignmentGroup.findFirst({
+      where: {
+        assignmentId: job.assignmentId,
+        groupId: userSession.groupId,
+      },
+      select: { assignmentId: true },
+    });
+
+    return link !== null;
   }
 
   /**
@@ -218,7 +250,8 @@ export class AssignmentControllerV2 {
       throw new NotFoundException(`Publish job with ID ${jobId} not found`);
     }
 
-    if (job.userId !== request.userSession.userId) {
+    const allowed = await this.canReadPublishJob(job, request.userSession);
+    if (!allowed) {
       throw new NotFoundException(`Publish job with ID ${jobId} not found`);
     }
 
@@ -444,7 +477,8 @@ export class AssignmentControllerV2 {
       throw new NotFoundException("Job not found");
     }
 
-    if (job.userId !== request.userSession.userId) {
+    const allowed = await this.canReadPublishJob(job, request.userSession);
+    if (!allowed) {
       throw new NotFoundException("Job not found");
     }
 
