@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { LearnerLiveRecordingFeedback } from "../assignment/attempt/dto/assignment-attempt/types";
-import { QuestionsToGenerate } from "../assignment/dto/post.assignment.request.dto";
+import { EnhancedQuestionsToGenerate } from "../assignment/dto/post.assignment.request.dto";
 import {
   Choice,
   QuestionDto,
@@ -207,7 +207,7 @@ export class LlmFacadeService {
   async processMergedContent(
     assignmentId: number,
     assignmentType: AssignmentTypeEnum,
-    questionsToGenerate: QuestionsToGenerate,
+    questionsToGenerate: EnhancedQuestionsToGenerate,
     content?: string,
     learningObjectives?: string,
   ): Promise<

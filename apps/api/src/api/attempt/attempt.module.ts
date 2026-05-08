@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { AdminEmailService } from "../../auth/services/admin-email.service";
-import { PrismaService } from "../../database/prisma.service";
+import { AdminAuthModule } from "../../auth/admin-auth.module";
+import { JobQueueModule } from "../../job-queue/job-queue.module";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
@@ -32,6 +32,7 @@ import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
 import { LocalizationService } from "./common/utils/localization.service";
 import { LtiSyncModule } from "./lti-sync.module";
 import { AttemptFeedbackService } from "./services/attempt-feedback.service";
+import { AttemptAccessCacheService } from "./services/attempt-access-cache.service";
 import { AttemptGradingService } from "./services/attempt-grading.service";
 import { AttemptRegradingService } from "./services/attempt-regrading.service";
 import { AttemptReportingService } from "./services/attempt-reporting.service";
@@ -49,10 +50,17 @@ import { QuestionVariantService } from "./services/question-variant/question-var
 import { TranslationService } from "./services/translation/translation.service";
 
 @Module({
-  imports: [LlmModule, AssignmentModuleV2, LtiSyncModule],
+  imports: [
+    LlmModule,
+    AssignmentModuleV2,
+    LtiSyncModule,
+    JobQueueModule,
+    AdminAuthModule,
+  ],
   controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,
+    AttemptAccessCacheService,
     AttemptSubmissionService,
     AttemptValidationService,
     AttemptGradingService,
@@ -80,7 +88,6 @@ import { TranslationService } from "./services/translation/translation.service";
       provide: GRADING_AUDIT_SERVICE,
       useClass: GradingAuditService,
     },
-    PrismaService,
     {
       provide: FILE_CONTENT_EXTRACTION_SERVICE,
       useClass: FileContentExtractionService,
@@ -101,9 +108,7 @@ import { TranslationService } from "./services/translation/translation.service";
     CriterionJudgeService,
     QuestionVariantService,
     LocalizationService,
-
     AssignmentAttemptAccessControlGuard,
-    AdminEmailService,
   ],
   exports: [
     AttemptServiceV2,

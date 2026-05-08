@@ -28,6 +28,20 @@ export interface CostBreakdown {
 }
 
 const OPENAI_PRICING_URL = "https://openai.com/api/pricing";
+const HELICONE_REGISTRY_URL =
+  "https://api.helicone.ai/v1/public/model-registry/models";
+const PRICING_CACHE_KEY = "llm_pricing_registry";
+
+const REGISTRY_PROVIDER_PRIORITY: Record<string, number> = {
+  openai: 0,
+  azure: 1,
+  deepinfra: 2,
+  groq: 3,
+  cerebras: 4,
+  baseten: 5,
+  openrouter: 6,
+  helicone: 7,
+};
 
 type ExtractResult = {
   modelKey: string;
@@ -36,6 +50,8 @@ type ExtractResult = {
   sourceUrl: string;
   fetchedAt: string;
   lastModified?: string | null;
+  registryProvider?: string;
+  canonicalModelId?: string;
 };
 
 /**
@@ -43,6 +59,172 @@ type ExtractResult = {
  */
 function dollarsPerTokenFromPerMillion(perMillionUSD: number): number {
   return perMillionUSD / 1_000_000;
+}
+
+function parseRegistryNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function normalizeRegistryPricing(value: unknown): {
+  inputPerToken: number;
+  outputPerToken: number;
+} | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const pricing = value as Record<string, unknown>;
+  const inputPerMillion = parseRegistryNumber(
+    pricing.inputTokensPerMillion ??
+      pricing.inputPer1M ??
+      pricing.promptTokensPerMillion ??
+      pricing.promptPer1M ??
+      pricing.prompt ??
+      pricing.input,
+  );
+  const outputPerMillion = parseRegistryNumber(
+    pricing.outputTokensPerMillion ??
+      pricing.outputPer1M ??
+      pricing.completionTokensPerMillion ??
+      pricing.completionPer1M ??
+      pricing.completion ??
+      pricing.output,
+  );
+
+  if (inputPerMillion == null && outputPerMillion == null) {
+    return null;
+  }
+
+  return {
+    inputPerToken: dollarsPerTokenFromPerMillion(inputPerMillion ?? 0),
+    outputPerToken: dollarsPerTokenFromPerMillion(outputPerMillion ?? 0),
+  };
+}
+
+function getRegistryProviderPriority(provider: string): number {
+  return REGISTRY_PROVIDER_PRIORITY[provider.toLowerCase()] ?? 99;
+}
+
+async function fetchPricingFromHeliconeRegistry(): Promise<ExtractResult[]> {
+  const logger = new Logger("LLMPricingRegistry");
+
+  try {
+    const response = await fetch(HELICONE_REGISTRY_URL, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      logger.warn(
+        `Helicone registry returned ${response.status}: ${response.statusText}`,
+      );
+      return [];
+    }
+
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== "object") {
+      logger.warn("Helicone registry returned an unexpected payload");
+      return [];
+    }
+
+    const root = payload as { data?: { models?: unknown[] } };
+    const models = Array.isArray(root.data?.models) ? root.data.models : [];
+    const fetchedAt = new Date().toISOString();
+    const bestByModelKey = new Map<
+      string,
+      { result: ExtractResult; priority: number }
+    >();
+
+    const setBestResult = (
+      modelKey: string,
+      result: ExtractResult,
+      priority: number,
+    ) => {
+      const current = bestByModelKey.get(modelKey);
+      if (!current || priority < current.priority) {
+        bestByModelKey.set(modelKey, { result, priority });
+      }
+    };
+
+    for (const model of models) {
+      if (!model || typeof model !== "object") continue;
+
+      const modelRecord = model as {
+        id?: string;
+        endpoints?: Array<{
+          provider?: string;
+          pricing?: unknown;
+          endpoint?: {
+            providerModelId?: string;
+            pricing?: unknown;
+          };
+        }>;
+      };
+
+      if (!modelRecord.id || !Array.isArray(modelRecord.endpoints)) {
+        continue;
+      }
+
+      for (const endpoint of modelRecord.endpoints) {
+        const provider = endpoint.provider?.toLowerCase();
+        if (!provider) continue;
+
+        const normalizedPricing =
+          normalizeRegistryPricing(endpoint.pricing) ||
+          normalizeRegistryPricing(
+            Array.isArray(endpoint.endpoint?.pricing)
+              ? endpoint.endpoint?.pricing[0]
+              : endpoint.endpoint?.pricing,
+          );
+
+        if (!normalizedPricing) continue;
+
+        const priority = getRegistryProviderPriority(provider);
+        const canonicalResult: ExtractResult = {
+          modelKey: modelRecord.id,
+          canonicalModelId: modelRecord.id,
+          inputPerToken: normalizedPricing.inputPerToken,
+          outputPerToken: normalizedPricing.outputPerToken,
+          sourceUrl: HELICONE_REGISTRY_URL,
+          fetchedAt,
+          registryProvider: provider,
+        };
+
+        setBestResult(modelRecord.id, canonicalResult, priority);
+
+        const providerModelId = endpoint.endpoint?.providerModelId;
+        if (providerModelId && providerModelId !== modelRecord.id) {
+          setBestResult(
+            providerModelId,
+            {
+              ...canonicalResult,
+              modelKey: providerModelId,
+            },
+            priority,
+          );
+        }
+      }
+    }
+
+    const results = Array.from(bestByModelKey.values()).map(
+      (entry) => entry.result,
+    );
+    logger.log(
+      `Helicone registry resolved pricing for ${results.length} model keys`,
+    );
+    return results;
+  } catch (error) {
+    logger.error("Failed to fetch Helicone registry pricing:", error);
+    return [];
+  }
 }
 
 /**
@@ -666,18 +848,17 @@ export class LLMPricingService {
    * Get cached pricing data or fetch fresh data if cache is expired
    */
   private async getCachedPricingData(): Promise<ExtractResult[]> {
-    const cacheKey = "openai_pricing";
-    const cached = this.pricingCache.get(cacheKey);
+    const cached = this.pricingCache.get(PRICING_CACHE_KEY);
 
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       this.logger.log("Using cached pricing data");
       return cached.data;
     }
 
-    this.logger.log("Fetching fresh pricing data from OpenAI");
-    const freshData = await scrapeAllPricingFromOpenAI();
+    this.logger.log("Fetching fresh pricing data from Helicone registry");
+    const freshData = await fetchPricingFromHeliconeRegistry();
 
-    this.pricingCache.set(cacheKey, {
+    this.pricingCache.set(PRICING_CACHE_KEY, {
       data: freshData,
       timestamp: Date.now(),
     });
@@ -691,7 +872,7 @@ export class LLMPricingService {
    */
   async fetchCurrentPricing(): Promise<ModelPricing[]> {
     this.logger.log(
-      "Fetching current pricing from OpenAI website via web scraping",
+      "Fetching current pricing from Helicone public model registry",
     );
 
     try {
@@ -706,11 +887,11 @@ export class LLMPricingService {
         `Found ${openaiModels.length} OpenAI models to fetch pricing for`,
       );
 
-      const scrapedPricing = await this.getCachedPricingData();
+      const registryPricing = await this.getCachedPricingData();
 
-      if (scrapedPricing.length === 0) {
+      if (registryPricing.length === 0) {
         this.logger.warn(
-          "No pricing data scraped, falling back to manual pricing",
+          "No pricing data available from registry, falling back to manual pricing",
         );
         return this.getFallbackPricingForAllModels();
       }
@@ -719,34 +900,37 @@ export class LLMPricingService {
       const modelsWithPricing: Set<string> = new Set();
 
       for (const model of openaiModels) {
-        const scrapedModel = scrapedPricing.find(
+        const resolvedModel = registryPricing.find(
           (p) => p.modelKey === model.modelKey,
         );
 
-        if (scrapedModel) {
+        if (resolvedModel) {
           currentPricing.push({
-            modelKey: scrapedModel.modelKey,
-            inputTokenPrice: scrapedModel.inputPerToken,
-            outputTokenPrice: scrapedModel.outputPerToken,
+            modelKey: resolvedModel.modelKey,
+            inputTokenPrice: resolvedModel.inputPerToken,
+            outputTokenPrice: resolvedModel.outputPerToken,
             effectiveDate: new Date(),
             source: PricingSource.WEB_SCRAPING,
             metadata: {
-              sourceUrl: scrapedModel.sourceUrl,
-              fetchedAt: scrapedModel.fetchedAt,
-              lastModified: scrapedModel.lastModified,
+              sourceUrl: resolvedModel.sourceUrl,
+              fetchedAt: resolvedModel.fetchedAt,
+              lastModified: resolvedModel.lastModified,
+              pricingSource: "helicone_registry",
+              registryProvider: resolvedModel.registryProvider,
+              canonicalModelId: resolvedModel.canonicalModelId,
             },
           });
 
           modelsWithPricing.add(model.modelKey);
           this.logger.log(
-            `Successfully fetched pricing for ${model.modelKey}: input=$${scrapedModel.inputPerToken}, output=$${scrapedModel.outputPerToken}`,
+            `Resolved pricing for ${model.modelKey}: input=$${resolvedModel.inputPerToken}, output=$${resolvedModel.outputPerToken}`,
           );
         } else {
           const fallbackPricing = this.getFallbackPricing(model.modelKey);
           if (fallbackPricing) {
             currentPricing.push(fallbackPricing);
             this.logger.warn(
-              `Using fallback pricing for ${model.modelKey} (not available on OpenAI website yet)`,
+              `Using fallback pricing for ${model.modelKey} (not available in registry)`,
             );
           } else {
             this.logger.error(`No pricing found for model ${model.modelKey}`);
@@ -757,7 +941,7 @@ export class LLMPricingService {
       this.logger.log(
         `Successfully processed pricing for ${currentPricing.length} models (${
           modelsWithPricing.size
-        } from scraping, ${
+        } from registry, ${
           currentPricing.length - modelsWithPricing.size
         } from fallback)`,
       );
@@ -767,14 +951,14 @@ export class LLMPricingService {
 
       const fallbackPricing = this.getFallbackPricingForAllModels();
       this.logger.warn(
-        `Returning fallback pricing for ${fallbackPricing.length} models due to scraping failure`,
+        `Returning fallback pricing for ${fallbackPricing.length} models due to registry fetch failure`,
       );
       return fallbackPricing;
     }
   }
 
   /**
-   * Get fallback pricing for a specific model when web scraping fails
+   * Get fallback pricing for a specific model when registry lookup fails
    * Pricing based on OpenAI Standard tier as of Jan 2025
    */
   private getFallbackPricing(modelKey: string): ModelPricing | null {
@@ -789,6 +973,7 @@ export class LLMPricingService {
       "gpt-5": { input: 0.000_001_25, output: 0.000_01 },
       "gpt-5-mini": { input: 0.000_000_25, output: 0.000_002 },
       "gpt-5-nano": { input: 0.000_000_05, output: 0.000_000_4 },
+      "gpt-oss-120b": { input: 0.000_000_15, output: 0.000_000_6 },
 
       o1: { input: 0.000_015, output: 0.000_06 },
       "o1-pro": { input: 0.000_15, output: 0.0006 },
@@ -817,13 +1002,13 @@ export class LLMPricingService {
         source: "Fallback pricing",
         notes: modelKey.startsWith("gpt-5")
           ? "Estimated pricing for unreleased model"
-          : "Known pricing when web scraping failed",
+          : "Known pricing when registry lookup failed",
       },
     };
   }
 
   /**
-   * Get fallback pricing for all known models when web scraping completely fails
+   * Get fallback pricing for all known models when registry lookup completely fails
    */
   private getFallbackPricingForAllModels(): ModelPricing[] {
     const modelKeys = [
@@ -835,6 +1020,7 @@ export class LLMPricingService {
       "gpt-5",
       "gpt-5-mini",
       "gpt-5-nano",
+      "gpt-oss-120b",
       "o1",
       "o1-pro",
       "o1-mini",
@@ -1327,7 +1513,7 @@ export class LLMPricingService {
    */
   clearWebScrapingCache(): void {
     this.pricingCache.clear();
-    this.logger.log("Web scraping cache cleared");
+    this.logger.log("Pricing registry cache cleared");
   }
 
   /**
@@ -1339,7 +1525,7 @@ export class LLMPricingService {
     cacheCount: number;
     cacheTTL: number;
   } {
-    const cached = this.pricingCache.get("openai_pricing");
+    const cached = this.pricingCache.get(PRICING_CACHE_KEY);
     return {
       hasCachedData: !!cached,
       cacheAge: cached ? Date.now() - cached.timestamp : null,
@@ -1358,12 +1544,12 @@ export class LLMPricingService {
     fallbackUsed?: boolean;
   }> {
     try {
-      this.logger.log(`Testing scraping functionality for ${modelKey}`);
+      this.logger.log(`Testing pricing lookup for ${modelKey}`);
 
-      this.pricingCache.delete("openai_pricing");
-      const scrapedData = await this.getCachedPricingData();
+      this.pricingCache.delete(PRICING_CACHE_KEY);
+      const registryData = await this.getCachedPricingData();
 
-      const result = scrapedData.find((p) => p.modelKey === modelKey);
+      const result = registryData.find((p) => p.modelKey === modelKey);
 
       if (result) {
         return { success: true, pricing: result };
@@ -1383,7 +1569,7 @@ export class LLMPricingService {
             }
           : {
               success: false,
-              error: `Model ${modelKey} not found in scraped data or fallback`,
+              error: `Model ${modelKey} not found in registry data or fallback`,
             };
       }
     } catch (error) {
@@ -1409,7 +1595,7 @@ export class LLMPricingService {
         where: { provider: "OpenAI", isActive: true },
       });
 
-      const scrapedData = await this.getCachedPricingData();
+      const registryData = await this.getCachedPricingData();
       const cacheStatus = this.getCacheStatus();
 
       let scrapedSuccessfully = 0;
@@ -1417,8 +1603,10 @@ export class LLMPricingService {
       let notFound = 0;
 
       for (const model of models) {
-        const scraped = scrapedData.find((p) => p.modelKey === model.modelKey);
-        if (scraped) {
+        const resolved = registryData.find(
+          (p) => p.modelKey === model.modelKey,
+        );
+        if (resolved) {
           scrapedSuccessfully++;
         } else {
           const fallback = this.getFallbackPricing(model.modelKey);

@@ -20,7 +20,7 @@ function makeChunk(id: string, text: string): ExtractedChunk {
 
 /** Helper: construct the service with mocked DI dependencies */
 function makeService(
-  promptReturnValue = "not valid json",
+  promptReturnValue = JSON.stringify({ evidence: [] }),
 ): CriterionEvidenceRetrievalService {
   return new CriterionEvidenceRetrievalService(
     {

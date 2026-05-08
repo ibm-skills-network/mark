@@ -78,6 +78,46 @@ describe("FilesService", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it("rejects upload requests with traversal in context.path", async () => {
+    // Order matters: mock getBucketName so the bucket check at
+    // files.service.ts:73 does NOT pre-empt the sanitizer test.
+    const s3 = mockS3Service as unknown as {
+      getBucketName: jest.Mock;
+    };
+    s3.getBucketName.mockReturnValue("learner-bucket");
+
+    await expect(
+      service.generateUploadUrl(
+        {
+          fileName: "x.txt",
+          fileType: "text/plain",
+          uploadType: UploadType.LEARNER,
+          context: { path: "../../../etc", assignmentId: 1, questionId: 1 },
+        },
+        "user-123",
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects upload requests with null byte in context.path", async () => {
+    const s3 = mockS3Service as unknown as {
+      getBucketName: jest.Mock;
+    };
+    s3.getBucketName.mockReturnValue("learner-bucket");
+
+    await expect(
+      service.generateUploadUrl(
+        {
+          fileName: "x.txt",
+          fileType: "text/plain",
+          uploadType: UploadType.LEARNER,
+          context: { path: "abc\0def", assignmentId: 1, questionId: 1 },
+        },
+        "user-123",
+      ),
+    ).rejects.toThrow(/Invalid upload path/);
+  });
+
   it("generates public read URLs from the public bucket", async () => {
     process.env.S3_PUBLIC_BUCKET = "public-bucket";
     const s3 = mockS3Service as unknown as {

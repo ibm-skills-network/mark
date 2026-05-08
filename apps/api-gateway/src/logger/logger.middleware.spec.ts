@@ -176,7 +176,7 @@ describe("LoggerMiddleware", () => {
       mockResponse.emit("finish");
 
       setTimeout(() => {
-        expect(mockLogger.info).toHaveBeenCalledWith(
+        expect(mockLogger.warn).toHaveBeenCalledWith(
           expect.stringContaining("GET /api/test 400"),
           expect.any(Object),
         );
@@ -199,7 +199,7 @@ describe("LoggerMiddleware", () => {
       mockResponse.emit("finish");
 
       setTimeout(() => {
-        expect(mockLogger.info).toHaveBeenCalledWith(
+        expect(mockLogger.warn).toHaveBeenCalledWith(
           expect.stringContaining("GET /api/test 404"),
           expect.any(Object),
         );
@@ -222,7 +222,7 @@ describe("LoggerMiddleware", () => {
       mockResponse.emit("finish");
 
       setTimeout(() => {
-        expect(mockLogger.info).toHaveBeenCalledWith(
+        expect(mockLogger.error).toHaveBeenCalledWith(
           expect.stringContaining("GET /api/test 500"),
           expect.any(Object),
         );
@@ -387,7 +387,7 @@ describe("LoggerMiddleware", () => {
       setTimeout(() => {
         expect(mockLogger.info).toHaveBeenCalledWith(
           expect.stringContaining("GET /api/test 200"),
-          {
+          expect.objectContaining({
             client_ip: "10.0.0.1",
             transaction_id: "transaction-abc",
             request_id: "akamai-xyz",
@@ -396,7 +396,7 @@ describe("LoggerMiddleware", () => {
             status_code: 200,
             content_length: "5678",
             user_agent: "Test Agent/1.0",
-          },
+          }),
         );
         done();
       }, 10);
@@ -492,7 +492,7 @@ describe("LoggerMiddleware", () => {
       mockResponse.emit("finish");
 
       setTimeout(() => {
-        expect(mockLogger.info).toHaveBeenCalledWith(
+        expect(mockLogger.error).toHaveBeenCalledWith(
           expect.stringContaining("GET /api/test 503"),
           expect.any(Object),
         );

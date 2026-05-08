@@ -1,0 +1,13 @@
+{
+  "extends": "tsconfig/nestjs.json",
+  "compilerOptions": {
+    "lib": ["es2022", "dom"],
+    "types": ["node"],
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "target": "es2022",
+    "useDefineForClassFields": false,
+    "resolveJsonModule": true
+  },
+  "exclude": ["dist", "test", "**/*spec.ts", "**/*.test.ts", "**/tests/**"]
+}

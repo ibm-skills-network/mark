@@ -1,367 +1,106 @@
-/* eslint-disable unicorn/prevent-abbreviations */
-/* eslint-disable @typescript-eslint/require-await */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/unbound-method */
-/* eslint-disable unicorn/no-useless-undefined */
-/* eslint-disable unicorn/no-null */
 import { Test, TestingModule } from "@nestjs/testing";
-import { firstValueFrom } from "rxjs";
-import { PrismaService } from "src/database/prisma.service";
-import {
-  createMockJob,
-  createMockPrismaService,
-} from "../__mocks__/ common-mocks";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobStateService } from "src/job-queue/job-state.service";
+import { JobStateRecord } from "src/job-queue/job-state.types";
 import { JobStatusServiceV2 } from "../../../services/job-status.service";
 
 describe("JobStatusServiceV2", () => {
-  let jobStatusService: JobStatusServiceV2;
-  let prismaService: ReturnType<typeof createMockPrismaService>;
+  let service: JobStatusServiceV2;
+  let jobStateService: {
+    createJob: jest.Mock;
+    getJobStatusStream: jest.Mock;
+    getJob: jest.Mock;
+    cleanupJobStream: jest.Mock;
+    updateJobStatus: jest.Mock;
+  };
+
+  const mockJob: JobStateRecord = {
+    id: "job-123",
+    queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+    jobName: JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS,
+    kind: "assignment-question-generation",
+    assignmentId: 42,
+    attemptId: undefined,
+    userId: "author-1",
+    status: "Pending",
+    progress: "Job created",
+    percentage: 0,
+    createdAt: "2026-03-04T00:00:00.000Z",
+    updatedAt: "2026-03-04T00:00:00.000Z",
+  };
 
   beforeEach(async () => {
-    prismaService = createMockPrismaService();
+    jobStateService = {
+      createJob: jest.fn().mockResolvedValue(mockJob),
+      getJobStatusStream: jest.fn().mockReturnValue("stream"),
+      getJob: jest.fn().mockResolvedValue(mockJob),
+      cleanupJobStream: jest.fn().mockResolvedValue(undefined),
+      updateJobStatus: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JobStatusServiceV2,
         {
-          provide: PrismaService,
-          useValue: prismaService,
+          provide: JobStateService,
+          useValue: jobStateService,
         },
       ],
     }).compile();
 
-    jobStatusService = module.get<JobStatusServiceV2>(JobStatusServiceV2);
+    service = module.get<JobStatusServiceV2>(JobStatusServiceV2);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it("creates assignment question-generation jobs with the expected queue metadata", async () => {
+    await expect(service.createJob(42, "author-1")).resolves.toEqual(mockJob);
 
-    for (const [jobId, subject] of (
-      jobStatusService as any
-    ).jobStatusStreams.entries()) {
-      subject.complete();
-      (jobStatusService as any).jobStatusStreams.delete(jobId);
-    }
-
-    if (global.setTimeout !== setTimeout) {
-      global.setTimeout = setTimeout;
-    }
-
-    jest.useRealTimers();
-  });
-
-  describe("createJob", () => {
-    it("should create a new job", async () => {
-      const assignmentId = 1;
-      const userId = "author-123";
-      const mockJob = createMockJob({ assignmentId, userId }, "Pending");
-      prismaService.job.create.mockResolvedValue(mockJob);
-
-      const result = await jobStatusService.createJob(assignmentId, userId);
-
-      expect(prismaService.job.create).toHaveBeenCalledWith({
-        data: {
-          assignmentId,
-          userId,
-          status: "Pending",
-          progress: "Job created",
-        },
-      });
-      expect(result).toEqual(mockJob);
+    expect(jobStateService.createJob).toHaveBeenCalledWith({
+      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+      jobName: JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS,
+      kind: "assignment-question-generation",
+      assignmentId: 42,
+      userId: "author-1",
+      status: "Pending",
+      progress: "Job created",
     });
   });
 
-  describe("createPublishJob", () => {
-    it("should create a new publish job", async () => {
-      const assignmentId = 1;
-      const userId = "author-123";
-      const mockJob = createMockJob({ assignmentId, userId }, "In Progress");
-      prismaService.publishJob.create.mockResolvedValue(mockJob);
+  it("creates publish jobs and merges explicit overrides", async () => {
+    await service.createPublishJob(42, "author-1", {
+      status: "Pending",
+      activeKey: "assignment:42:user:author-1",
+    });
 
-      const result = await jobStatusService.createPublishJob(
-        assignmentId,
-        userId,
-      );
-
-      expect(prismaService.publishJob.create).toHaveBeenCalledWith({
-        data: {
-          assignmentId,
-          userId,
-          status: "In Progress",
-          progress: "Initializing assignment publishing...",
-        },
-      });
-      expect(result).toEqual(mockJob);
+    expect(jobStateService.createJob).toHaveBeenCalledWith({
+      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+      jobName: JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
+      kind: "assignment-publish",
+      assignmentId: 42,
+      userId: "author-1",
+      status: "Pending",
+      progress: "Initializing assignment publishing...",
+      activeKey: "assignment:42:user:author-1",
     });
   });
 
-  describe("getJobStatus", () => {
-    it("should get job status by ID", async () => {
-      const jobId = 1;
-      const mockJob = createMockJob({ id: jobId });
-      prismaService.job.findUnique.mockResolvedValue(mockJob);
+  it("delegates reads, streaming, cleanup, and updates to the Redis-backed state service", async () => {
+    await expect(service.getJobStatus("job-123")).resolves.toEqual(mockJob);
+    expect(service.getPublishJobStatusStream("job-123")).toBe("stream");
 
-      const result = await jobStatusService.getJobStatus(jobId);
-
-      expect(prismaService.job.findUnique).toHaveBeenCalledWith({
-        where: { id: jobId },
-      });
-      expect(result).toEqual(mockJob);
+    await service.cleanupJobStream("job-123");
+    await service.updateJobStatus("job-123", {
+      status: "Completed",
+      progress: "Done",
+      percentage: 100,
     });
 
-    it("should return null if job not found", async () => {
-      const jobId = 999;
-      prismaService.job.findUnique.mockResolvedValue(null);
-
-      const result = await jobStatusService.getJobStatus(jobId);
-
-      expect(prismaService.job.findUnique).toHaveBeenCalledWith({
-        where: { id: jobId },
-      });
-      expect(result).toBeNull();
-    });
-  });
-
-  describe("getPublishJobStatusStream", () => {
-    it("should create and return an observable with initial connection message", async () => {
-      const jobId = 1;
-
-      const stream = jobStatusService.getPublishJobStatusStream(jobId);
-      const result = await firstValueFrom(stream);
-
-      expect(result).toEqual({
-        type: "update",
-        data: { message: "Connecting to job status stream..." },
-      });
-    });
-
-    it("should throw an error if job status stream not found after creation", () => {
-      const jobId = 1;
-
-      const originalMapGet = Map.prototype.get;
-      Map.prototype.get = jest.fn().mockReturnValue(undefined);
-
-      expect(() => {
-        jobStatusService.getPublishJobStatusStream(jobId);
-      }).toThrow(`Job status stream for jobId ${jobId} not found.`);
-
-      Map.prototype.get = originalMapGet;
-    });
-
-    it("should handle errors in the observable stream", async () => {
-      const jobId = 1;
-      const errorMessage = "Test error";
-
-      jobStatusService.getPublishJobStatusStream(jobId);
-      const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
-
-      jest.spyOn(subject, "next").mockImplementation(() => {
-        throw new Error(errorMessage);
-      });
-
-      const stream = jobStatusService.getPublishJobStatusStream(jobId);
-
-      const firstEvent = await firstValueFrom(stream);
-      expect(firstEvent).toEqual({
-        type: "update",
-        data: { message: "Connecting to job status stream..." },
-      });
-
-      try {
-        subject.next({} as MessageEvent);
-        fail("Should have thrown an error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe(errorMessage);
-      }
-    });
-    describe("cleanupJobStream", () => {
-      it("should complete and remove a job stream", async () => {
-        const jobId = 1;
-
-        jobStatusService.getPublishJobStatusStream(jobId);
-
-        const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
-        jest.spyOn(subject, "complete");
-
-        await jobStatusService.cleanupJobStream(jobId);
-
-        expect(subject.complete).toHaveBeenCalled();
-        expect((jobStatusService as any).jobStatusStreams.has(jobId)).toBe(
-          false,
-        );
-      });
-
-      it("should do nothing if job stream does not exist", async () => {
-        const jobId = 999;
-
-        (jobStatusService as any).jobStatusStreams.clear();
-
-        await jobStatusService.cleanupJobStream(jobId);
-
-        expect((jobStatusService as any).jobStatusStreams.size).toBe(0);
-      });
-    });
-    describe("emitJobStatusUpdate (private method)", () => {
-      it("should emit update message to subject", async () => {
-        const jobId = 1;
-        const statusUpdate = {
-          status: "In Progress",
-          progress: "Processing data",
-          percentage: 50,
-        };
-
-        jobStatusService.getPublishJobStatusStream(jobId);
-
-        const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
-        jest.spyOn(subject, "next");
-
-        (jobStatusService as any).emitJobStatusUpdate(jobId, statusUpdate);
-
-        expect(subject.next).toHaveBeenCalledWith(
-          expect.objectContaining({
-            type: "update",
-            data: expect.objectContaining({
-              status: statusUpdate.status,
-              progress: statusUpdate.progress,
-              percentage: statusUpdate.percentage,
-            }),
-          }),
-        );
-      });
-
-      it("should emit completion messages when job is completed", async () => {
-        const jobId = 1;
-        const statusUpdate = {
-          status: "Completed",
-          progress: "Job completed successfully",
-          percentage: 100,
-          result: { data: "some result" },
-        };
-
-        jobStatusService.getPublishJobStatusStream(jobId);
-
-        const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
-        jest.spyOn(subject, "next");
-
-        jest.useFakeTimers();
-
-        jest.spyOn(jobStatusService, "cleanupJobStream");
-
-        (jobStatusService as any).emitJobStatusUpdate(jobId, statusUpdate);
-
-        expect(subject.next).toHaveBeenCalledTimes(3);
-        expect(subject.next).toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            type: "finalize",
-            data: expect.objectContaining({
-              status: "Completed",
-              done: true,
-            }),
-          }),
-        );
-        expect(subject.next).toHaveBeenNthCalledWith(
-          2,
-          expect.objectContaining({
-            type: "summary",
-            data: expect.objectContaining({
-              finalStatus: "Completed",
-            }),
-          }),
-        );
-        expect(subject.next).toHaveBeenNthCalledWith(
-          3,
-          expect.objectContaining({
-            type: "close",
-            data: expect.objectContaining({
-              message: "Stream completed",
-            }),
-          }),
-        );
-
-        jest.advanceTimersByTime(1000);
-
-        expect(jobStatusService.cleanupJobStream).toHaveBeenCalledWith(jobId);
-
-        jest.useRealTimers();
-      });
-
-      it("should emit error messages when job fails", async () => {
-        const jobId = 1;
-        const statusUpdate = {
-          status: "Failed",
-          progress: "Job failed due to error",
-          percentage: 50,
-        };
-
-        jobStatusService.getPublishJobStatusStream(jobId);
-
-        const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
-        jest.spyOn(subject, "next");
-
-        jest.useFakeTimers();
-
-        (jobStatusService as any).emitJobStatusUpdate(jobId, statusUpdate);
-
-        expect(subject.next).toHaveBeenCalledWith(
-          expect.objectContaining({
-            type: "error",
-            data: expect.objectContaining({
-              status: "Failed",
-              done: true,
-            }),
-          }),
-        );
-
-        jest.useRealTimers();
-      });
-
-      it("should handle errors when emitting status updates", async () => {
-        const jobId = 1;
-        const statusUpdate = {
-          status: "In Progress",
-          progress: "Processing data",
-          percentage: 50,
-        };
-
-        jobStatusService.getPublishJobStatusStream(jobId);
-
-        const subject = (jobStatusService as any).jobStatusStreams.get(jobId);
-
-        jest.spyOn(subject, "next").mockImplementation(() => {
-          throw new Error("Emission error");
-        });
-
-        jest.spyOn(jobStatusService["logger"], "error");
-
-        (jobStatusService as any).emitJobStatusUpdate(jobId, statusUpdate);
-
-        expect(jobStatusService["logger"].error).toHaveBeenCalledWith(
-          expect.stringContaining(
-            `Error emitting status update for job #${jobId}`,
-          ),
-        );
-      });
-
-      it("should do nothing if job stream does not exist", async () => {
-        const jobId = 999;
-        const statusUpdate = {
-          status: "In Progress",
-          progress: "Processing data",
-          percentage: 50,
-        };
-
-        (jobStatusService as any).jobStatusStreams.clear();
-
-        jest.spyOn(jobStatusService["logger"], "error");
-
-        (jobStatusService as any).emitJobStatusUpdate(jobId, statusUpdate);
-
-        expect(jobStatusService["logger"].error).not.toHaveBeenCalled();
-      });
+    expect(jobStateService.getJob).toHaveBeenCalledWith("job-123");
+    expect(jobStateService.getJobStatusStream).toHaveBeenCalledWith("job-123");
+    expect(jobStateService.cleanupJobStream).toHaveBeenCalledWith("job-123");
+    expect(jobStateService.updateJobStatus).toHaveBeenCalledWith("job-123", {
+      status: "Completed",
+      progress: "Done",
+      percentage: 100,
     });
   });
 });

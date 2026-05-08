@@ -292,18 +292,21 @@ export function deleteQuestion(questionId) {
  * @param {string} learningObjectives - Learning objectives text
  * @param {array} questionTypes - Types of questions to generate
  * @param {number} count - Number of questions to generate
+ * @param {object} multipleChoiceSubtypes - Optional Mark MC subtype counts
  * @returns {Promise} - Promise that resolves with the result
  */
 export function generateQuestionsFromObjectives(
   learningObjectives,
   questionTypes,
   count,
+  multipleChoiceSubtypes,
 ) {
   return executeAuthorStoreOperation(
     "generateQuestionsFromObjectives",
     learningObjectives,
     questionTypes,
     count,
+    multipleChoiceSubtypes,
     authorStoreOperationOptions({ timeoutMs: 300000 }),
   );
 }
@@ -387,6 +390,7 @@ export function runAuthorOperation(operation, params) {
         params.learningObjectives,
         params.questionTypes,
         params.count,
+        params.multipleChoiceSubtypes,
       );
     case "updateLearningObjectives":
       return updateLearningObjectives(params.learningObjectives);

@@ -1,5 +1,4 @@
 import { Global, Module } from "@nestjs/common";
-import { PrismaService } from "src/database/prisma.service";
 import { S3Service } from "../files/services/s3.service";
 import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
@@ -80,8 +79,6 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
 @Global()
 @Module({
   providers: [
-    PrismaService,
-
     OpenAiLlmService,
     OpenAiLlmMiniService,
     Gpt4VisionPreviewLlmService,

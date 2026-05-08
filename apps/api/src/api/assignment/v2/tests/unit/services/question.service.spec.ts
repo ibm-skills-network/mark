@@ -14,8 +14,10 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   createMockJob,
+  createMockJobQueueService,
   createMockJobStatusService,
   createMockLlmFacadeService,
   createMockPrismaService,
@@ -40,6 +42,7 @@ describe("QuestionService", () => {
   let translationService: ReturnType<typeof createMockTranslationService>;
   let llmFacadeService: ReturnType<typeof createMockLlmFacadeService>;
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
+  let jobQueueService: ReturnType<typeof createMockJobQueueService>;
 
   beforeEach(async () => {
     prismaService = createMockPrismaService();
@@ -48,6 +51,7 @@ describe("QuestionService", () => {
     translationService = createMockTranslationService();
     llmFacadeService = createMockLlmFacadeService();
     jobStatusService = createMockJobStatusService();
+    jobQueueService = createMockJobQueueService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,6 +79,10 @@ describe("QuestionService", () => {
         {
           provide: JobStatusServiceV2,
           useValue: jobStatusService,
+        },
+        {
+          provide: JobQueueService,
+          useValue: jobQueueService,
         },
       ],
     }).compile();
@@ -311,10 +319,6 @@ describe("QuestionService", () => {
 
         jobStatusService.createJob.mockResolvedValue(mockJob);
 
-        jest
-          .spyOn(questionService as any, "startQuestionGenerationProcess")
-          .mockResolvedValue(undefined);
-
         const result = await questionService.generateQuestions(
           assignmentId,
           payload,
@@ -324,6 +328,21 @@ describe("QuestionService", () => {
         expect(jobStatusService.createJob).toHaveBeenCalledWith(
           assignmentId,
           userId,
+        );
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          "mark.assignment.v2",
+          "assignment-v2.generate-questions",
+          {
+            assignmentId,
+            assignmentType: payload.assignmentType,
+            fileContents: payload.fileContents,
+            jobId: mockJob.id,
+            learningObjectives: payload.learningObjectives,
+            questionsToGenerate: payload.questionsToGenerate,
+          },
+          {
+            jobId: mockJob.id,
+          },
         );
         expect(result).toEqual({
           message: "Question generation started",
@@ -375,6 +394,182 @@ describe("QuestionService", () => {
             userId,
           ),
         ).rejects.toThrow(BadRequestException);
+      });
+
+      it("should reject subtype mode when all multiple-choice subtype counts are zero", async () => {
+        const assignmentId = 1;
+        const userId = "author-123";
+        const invalidPayload = createMockQuestionGenerationPayload({
+          questionsToGenerate: {
+            multipleChoice: 0,
+            multipleSelect: 0,
+            textResponse: 0,
+            trueFalse: 0,
+            url: 0,
+            upload: 0,
+            linkFile: 0,
+            multipleChoiceSubtypes: {
+              short: 0,
+              quantitative: 0,
+              long: 0,
+              scenario: 0,
+            },
+            responseTypes: {
+              TEXT: [ResponseType.ESSAY],
+            },
+          },
+        });
+
+        await expect(
+          questionService.generateQuestions(
+            assignmentId,
+            invalidPayload,
+            userId,
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it("should accept subtype mode when at least one multiple-choice subtype count is requested", async () => {
+        const assignmentId = 1;
+        const userId = "author-123";
+        const mockJob = createMockJob({ id: 7 });
+        const payload = createMockQuestionGenerationPayload({
+          questionsToGenerate: {
+            multipleChoice: 0,
+            multipleSelect: 0,
+            textResponse: 0,
+            trueFalse: 0,
+            url: 0,
+            upload: 0,
+            linkFile: 0,
+            multipleChoiceSubtypes: {
+              short: 2,
+              quantitative: 0,
+              long: 0,
+              scenario: 0,
+            },
+            responseTypes: {
+              TEXT: [ResponseType.ESSAY],
+            },
+          },
+        });
+
+        jobStatusService.createJob.mockResolvedValue(mockJob);
+
+        await expect(
+          questionService.generateQuestions(assignmentId, payload, userId),
+        ).resolves.toEqual({
+          message: "Question generation started",
+          jobId: mockJob.id,
+        });
+
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          "mark.assignment.v2",
+          "assignment-v2.generate-questions",
+          {
+            assignmentId,
+            assignmentType: payload.assignmentType,
+            fileContents: payload.fileContents,
+            jobId: mockJob.id,
+            learningObjectives: payload.learningObjectives,
+            questionsToGenerate: payload.questionsToGenerate,
+          },
+          {
+            jobId: mockJob.id,
+          },
+        );
+      });
+
+      describe("contentSource routing", () => {
+        const userId = "author-123";
+        const assignmentId = 1;
+        const mockJob = { id: 42 };
+        const storedFile = {
+          filename: "stored.txt",
+          extractedText: "stored content",
+        };
+
+        beforeEach(() => {
+          jobStatusService.createJob.mockResolvedValue(mockJob);
+        });
+
+        it('contentSource="payload" uses caller-supplied fileContents, never queries DB', async () => {
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "payload",
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          expect(prismaService.assignmentFile.findMany).not.toHaveBeenCalled();
+        });
+
+        it('contentSource="stored" queries DB and filters to READY rows with non-null extractedText', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([storedFile]);
+
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "stored",
+            fileContents: undefined,
+            learningObjectives: "some objective",
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          expect(prismaService.assignmentFile.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+              where: expect.objectContaining({
+                assignmentId,
+                extractedText: { not: null },
+              }),
+            }),
+          );
+        });
+
+        it('contentSource="stored" throws BadRequestException when no READY files exist', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([]);
+
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "stored",
+            fileContents: undefined,
+            learningObjectives: "some objective",
+          });
+
+          await expect(
+            questionService.generateQuestions(assignmentId, payload, userId),
+          ).rejects.toThrow(BadRequestException);
+        });
+
+        it('contentSource="both" concatenates caller fileContents and stored files', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([storedFile]);
+
+          const callerFile = { filename: "caller.txt", content: "caller data" };
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "both",
+            fileContents: [callerFile],
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          const filesArg = jobQueueService.enqueue.mock.calls[0][2]
+            .fileContents as Array<{
+            filename: string;
+            content: string;
+          }>;
+          const filenames = filesArg.map((f) => f.filename);
+          expect(filenames).toContain("caller.txt");
+          expect(filenames).toContain("stored.txt");
+        });
       });
     });
 
