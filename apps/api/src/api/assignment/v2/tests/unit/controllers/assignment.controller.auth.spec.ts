@@ -164,6 +164,35 @@ describe("AssignmentControllerV2 — publish job status auth", () => {
         ),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it("404s when the caller's session has no groupId — must not let Prisma's undefined-drops-key behavior collapse the where clause", async () => {
+      jobStatusService.getJobStatus.mockResolvedValue(buildJob());
+
+      const noGroupSession = {
+        userSession: { userId: "ghost@example.com", groupId: undefined },
+        on: jest.fn(),
+      };
+
+      await expect(
+        controller.getJobStatus(
+          "publish:v2:100",
+          noGroupSession as never,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("404s when the caller's session has empty-string groupId", async () => {
+      jobStatusService.getJobStatus.mockResolvedValue(buildJob());
+
+      await expect(
+        controller.getJobStatus(
+          "publish:v2:100",
+          buildSessionRequest("ghost@example.com", "") as never,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
+    });
   });
 
   describe("sendPublishJobStatus", () => {

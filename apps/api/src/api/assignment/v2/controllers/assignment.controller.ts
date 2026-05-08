@@ -151,6 +151,17 @@ export class AssignmentControllerV2 {
       return false;
     }
 
+    // Refuse when the session has no groupId — Prisma silently drops undefined
+    // keys from `where`, and without this guard the query collapses to
+    // `{ assignmentId }` and returns the first AssignmentGroup row for the
+    // assignment, granting cross-tenant read of any deterministic publish job.
+    if (
+      typeof userSession.groupId !== "string" ||
+      userSession.groupId.length === 0
+    ) {
+      return false;
+    }
+
     const link = await this.prisma.assignmentGroup.findFirst({
       where: {
         assignmentId: job.assignmentId,
