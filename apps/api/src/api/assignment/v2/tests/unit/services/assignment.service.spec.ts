@@ -12,6 +12,7 @@ import {
   VariantType as VariantTypeDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
+import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
@@ -54,6 +55,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
   let jobQueueService: ReturnType<typeof createMockJobQueueService>;
   let prismaService: ReturnType<typeof createMockPrismaService>;
+  let attemptAccessCache: { invalidateForAssignment: jest.Mock };
   let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
@@ -64,6 +66,9 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     jobStatusService = createMockJobStatusService();
     jobQueueService = createMockJobQueueService();
     prismaService = createMockPrismaService();
+    attemptAccessCache = {
+      invalidateForAssignment: jest.fn().mockResolvedValue(undefined),
+    };
     const llmService = createMockLlmFacadeService();
     logger = createMockLogger();
 
@@ -81,6 +86,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         { provide: JobQueueService, useValue: jobQueueService },
         { provide: LlmFacadeService, useValue: llmService },
         { provide: PrismaService, useValue: prismaService },
+        { provide: AttemptAccessCacheService, useValue: attemptAccessCache },
         { provide: WINSTON_MODULE_PROVIDER, useValue: { child: () => logger } },
       ],
     }).compile();
@@ -310,6 +316,43 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         jobId,
         expect.objectContaining({ status: "Completed" }),
       );
+    });
+
+    it("invalidates the attempt-access cache for the assignment after a successful publish", async () => {
+      const assignmentId = 42;
+      const jobId = 7;
+      const dto = createMockUpdateAssignmentQuestionsDto();
+
+      jest
+        .spyOn<
+          any,
+          any
+        >(service as any, "haveTranslatableAssignmentFieldsChanged")
+        .mockReturnValue(true);
+      jest
+        .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
+        .mockReturnValue(true);
+
+      await service.runPublishJob(jobId, assignmentId, dto, "author-123");
+
+      expect(attemptAccessCache.invalidateForAssignment).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(attemptAccessCache.invalidateForAssignment).toHaveBeenCalledWith(
+        assignmentId,
+      );
+
+      const completedCallIndex = jobStatusService.updateJobStatus.mock.calls.findIndex(
+        ([, payload]: [unknown, { status?: string }]) =>
+          payload?.status === "Completed",
+      );
+      const invalidateCallOrder =
+        attemptAccessCache.invalidateForAssignment.mock.invocationCallOrder[0];
+      const completedCallOrder =
+        jobStatusService.updateJobStatus.mock.invocationCallOrder[
+          completedCallIndex
+        ];
+      expect(invalidateCallOrder).toBeLessThan(completedCallOrder);
     });
   });
 

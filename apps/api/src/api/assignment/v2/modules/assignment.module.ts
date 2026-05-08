@@ -1,6 +1,7 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { AdminService } from "src/api/admin/admin.service";
+import { AttemptAccessCacheModule } from "src/api/attempt/services/attempt-access-cache.module";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { PdfStructureExtractorService } from "src/api/attempt/services/pdf-structure-extractor.service";
 import { FilesModule } from "src/api/files/files.module";
@@ -44,7 +45,13 @@ import { VersionManagementService } from "../services/version-management.service
     AdminVerificationService,
     AdminService,
   ],
-  imports: [HttpModule, LlmModule, JobQueueModule, FilesModule],
+  imports: [
+    HttpModule,
+    LlmModule,
+    JobQueueModule,
+    FilesModule,
+    AttemptAccessCacheModule,
+  ],
   exports: [
     AssignmentServiceV2,
     VersionManagementService,

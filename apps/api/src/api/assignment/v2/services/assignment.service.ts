@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
@@ -43,6 +44,7 @@ export class AssignmentServiceV2 {
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly jobQueueService: JobQueueService,
     private readonly prisma: PrismaService,
+    private readonly attemptAccessCache: AttemptAccessCacheService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
@@ -669,6 +671,16 @@ export class AssignmentServiceV2 {
             userId,
             questionsFound: orderedUpdatedQuestions.length,
           },
+        );
+      }
+
+      try {
+        await this.attemptAccessCache.invalidateForAssignment(assignmentId);
+      } catch (cacheError) {
+        this.logger.warn(
+          `Failed to invalidate attempt-access cache after publish for assignment ${assignmentId}: ${
+            cacheError instanceof Error ? cacheError.message : "Unknown error"
+          }`,
         );
       }
 

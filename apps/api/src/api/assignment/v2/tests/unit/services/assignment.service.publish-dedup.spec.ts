@@ -2,6 +2,7 @@
 
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
@@ -63,6 +64,12 @@ describe("AssignmentServiceV2 – publishAssignment dedup", () => {
         { provide: JobQueueService, useValue: jobQueueService },
         { provide: LlmFacadeService, useValue: llmService },
         { provide: PrismaService, useValue: prismaService },
+        {
+          provide: AttemptAccessCacheService,
+          useValue: {
+            invalidateForAssignment: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         { provide: WINSTON_MODULE_PROVIDER, useValue: { child: () => logger } },
       ],
     }).compile();
