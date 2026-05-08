@@ -327,6 +327,91 @@ describe("QuestionService", () => {
           true,
         );
       });
+
+      it("clears stale JSON columns when the dto sends null (e.g. type switched from MCQ to TEXT)", async () => {
+        const { Prisma } = await import("@prisma/client");
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existing = createMockQuestionDto(
+          { id: 1 },
+          QuestionType.MULTIPLE_CORRECT,
+        );
+
+        const switchedToText = createMockQuestionDto({
+          id: 1,
+          type: QuestionType.TEXT,
+          alreadyInBackend: true,
+          choices: null as never,
+          scoring: null as never,
+          videoPresentationConfig: null as never,
+          liveRecordingConfig: null as never,
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([existing])
+          .mockResolvedValueOnce([switchedToText]);
+
+        const updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        questionRepository.updateOwnedById = updateOwnedById;
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [switchedToText],
+          jobId,
+        );
+
+        expect(updateOwnedById).toHaveBeenCalledTimes(1);
+        const updateData = updateOwnedById.mock.calls[0][2] as Record<
+          string,
+          unknown
+        >;
+        expect(updateData.choices).toBe(Prisma.DbNull);
+        expect(updateData.scoring).toBe(Prisma.DbNull);
+        expect(updateData.videoPresentationConfig).toBe(Prisma.DbNull);
+        expect(updateData.liveRecordingConfig).toBe(Prisma.DbNull);
+      });
+
+      it("leaves columns untouched when the dto omits them (undefined, not null)", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existing = createMockQuestionDto({ id: 1 });
+        const dtoWithUndefinedJson = createMockQuestionDto({
+          id: 1,
+          alreadyInBackend: true,
+          choices: undefined,
+          scoring: undefined,
+          videoPresentationConfig: undefined,
+          liveRecordingConfig: undefined,
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([existing])
+          .mockResolvedValueOnce([dtoWithUndefinedJson]);
+
+        const updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        questionRepository.updateOwnedById = updateOwnedById;
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [dtoWithUndefinedJson],
+          jobId,
+        );
+
+        const updateData = updateOwnedById.mock.calls[0][2] as Record<
+          string,
+          unknown
+        >;
+        expect(updateData.choices).toBeUndefined();
+        expect(updateData.scoring).toBeUndefined();
+        expect(updateData.videoPresentationConfig).toBeUndefined();
+        expect(updateData.liveRecordingConfig).toBeUndefined();
+      });
     });
 
     describe("generateQuestions", () => {

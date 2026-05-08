@@ -1018,9 +1018,18 @@ export class QuestionService {
   private buildQuestionUpdateData(
     questionDto: QuestionDto,
   ): Prisma.QuestionUpdateInput {
-    const toJsonInput = (value: unknown): Prisma.InputJsonValue | undefined => {
-      if (value === undefined || value === null) {
+    // Distinguish "not in payload" (skip — leave column untouched) from
+    // "explicitly null" (clear the column). Collapsing both to undefined
+    // would leave stale MCQ choices/scoring on a question whose author just
+    // switched it to TEXT.
+    const toJsonInput = (
+      value: unknown,
+    ): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined => {
+      if (value === undefined) {
         return undefined;
+      }
+      if (value === null) {
+        return Prisma.DbNull;
       }
       return value as Prisma.InputJsonValue;
     };
@@ -1038,7 +1047,7 @@ export class QuestionService {
       choices: toJsonInput(questionDto.choices),
       scoring: toJsonInput(questionDto.scoring),
       videoPresentationConfig: toJsonInput(questionDto.videoPresentationConfig),
-      liveRecordingConfig: questionDto.liveRecordingConfig,
+      liveRecordingConfig: toJsonInput(questionDto.liveRecordingConfig),
       gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
       isDeleted: false,
     };
