@@ -127,6 +127,24 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     disableRightClick?: boolean;
     disablePrint?: boolean;
   };
+
+  @ApiPropertyOptional({
+    description:
+      "Sum of totalPoints across all questions, computed before any visibility filtering. Frontend uses this to render the score line when showQuestions=false strips the questions array.",
+    type: Number,
+    required: false,
+  })
+  @Optional()
+  totalPossiblePoints?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Sum of points earned across all question responses, computed before any visibility filtering. Omitted when showAssignmentScore=false.",
+    type: Number,
+    required: false,
+  })
+  @Optional()
+  totalPointsEarned?: number;
 }
 
 export class AssignmentAttemptQuestions {

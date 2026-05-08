@@ -180,12 +180,21 @@ function SuccessPage() {
             setTotalPointsEarned(0);
           } else {
             const rawGrade = submissionDetails.grade;
-            const possible = submissionDetails.questions.reduce(
-              (acc, question) => acc + (question.totalPoints ?? 0),
-              0,
-            );
+            // Prefer the server-computed totals: when showQuestions=false the
+            // questions array is stripped, and reducing it yields 0 / 0.
+            const possible =
+              typeof submissionDetails.totalPossiblePoints === "number"
+                ? submissionDetails.totalPossiblePoints
+                : submissionDetails.questions.reduce(
+                    (acc, question) => acc + (question.totalPoints ?? 0),
+                    0,
+                  );
             const earned =
-              typeof rawGrade === "number" ? possible * rawGrade : 0;
+              typeof submissionDetails.totalPointsEarned === "number"
+                ? submissionDetails.totalPointsEarned
+                : typeof rawGrade === "number"
+                  ? possible * rawGrade
+                  : 0;
 
             setGrade(
               typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
