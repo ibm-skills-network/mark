@@ -226,9 +226,14 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
       const response = await service.publishAssignment(1, dto, "author-123");
 
+      expect(jobQueueService.findActiveJob).toHaveBeenCalledWith(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        "publish:v2:1",
+      );
       expect(jobStatusService.createPublishJob).toHaveBeenCalledWith(
         1,
         "author-123",
+        { reservedId: "publish:v2:1" },
       );
       expect(jobQueueService.enqueue).toHaveBeenCalledWith(
         JOB_QUEUE_NAMES.ASSIGNMENT_V2,
@@ -241,6 +246,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         },
         {
           jobId: 1,
+          removeOnComplete: true,
+          removeOnFail: true,
         },
       );
       expect(response).toEqual({ jobId: 1, message: "Publishing started" });

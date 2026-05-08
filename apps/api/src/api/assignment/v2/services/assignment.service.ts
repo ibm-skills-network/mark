@@ -170,9 +170,33 @@ export class AssignmentServiceV2 {
     this.logger.info(
       `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
     );
+
+    // Deterministic per-assignment publish job id. BullMQ silently no-ops a
+    // duplicate `add` when {jobId} matches an in-flight job, so this gives us
+    // queue-layer dedup without a separate lock. Combined with
+    // removeOnComplete/removeOnFail below, the dedup window ends as soon as
+    // the previous publish terminates.
+    const deterministicJobId = `publish:v2:${assignmentId}`;
+
+    const existing = await this.jobQueueService.findActiveJob(
+      JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+      deterministicJobId,
+    );
+    if (existing) {
+      this.logger.warn(
+        `Publish dedup hit: assignment ${assignmentId} already has an active publish job (${existing.state})`,
+        { assignmentId, jobId: existing.id, state: existing.state },
+      );
+      return {
+        jobId: existing.id,
+        message: "Publishing already in progress",
+      };
+    }
+
     const job = await this.jobStatusService.createPublishJob(
       assignmentId,
       userId,
+      { reservedId: deterministicJobId },
     );
 
     try {
@@ -187,6 +211,13 @@ export class AssignmentServiceV2 {
         },
         {
           jobId: job.id,
+          // End the dedup window as soon as the job terminates (success or
+          // failure). Without this, completed/failed jobs linger in BullMQ
+          // history and a deterministic id would pin to the stale record.
+          // findActiveJob filters out terminal states, but removing the
+          // history entries also prevents them from lingering as overhead.
+          removeOnComplete: true,
+          removeOnFail: true,
         },
       );
     } catch (error: unknown) {

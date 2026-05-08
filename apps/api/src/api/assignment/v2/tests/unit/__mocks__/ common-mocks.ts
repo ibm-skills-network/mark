@@ -1881,6 +1881,7 @@ export const createMockJobStatusService = () => ({
  */
 export const createMockJobQueueService = () => ({
   enqueue: jest.fn().mockResolvedValue(undefined),
+  findActiveJob: jest.fn().mockResolvedValue(null),
 });
 
 /**
