@@ -342,10 +342,11 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         assignmentId,
       );
 
-      const completedCallIndex = jobStatusService.updateJobStatus.mock.calls.findIndex(
-        ([, payload]: [unknown, { status?: string }]) =>
-          payload?.status === "Completed",
-      );
+      const completedCallIndex =
+        jobStatusService.updateJobStatus.mock.calls.findIndex(
+          ([, payload]: [unknown, { status?: string }]) =>
+            payload?.status === "Completed",
+        );
       const invalidateCallOrder =
         attemptAccessCache.invalidateForAssignment.mock.invocationCallOrder[0];
       const completedCallOrder =

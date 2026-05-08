@@ -44,7 +44,9 @@ class FakeRedis {
     }
     const allKeys = [...this.values.keys()];
     const regex = new RegExp(
-      "^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$",
+      "^" +
+        pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") +
+        "$",
     );
     const matched = allKeys.filter((k) => regex.test(k));
     const start = parseInt(cursor, 10);
@@ -184,18 +186,9 @@ describe("AttemptAccessCacheService", () => {
 
   describe("invalidateForAssignment", () => {
     it("scans and deletes only assignment-scoped keys for the target id", async () => {
-      fakeRedis.values.set(
-        "mark:attempt-access:assignment:44:1000",
-        "[]",
-      );
-      fakeRedis.values.set(
-        "mark:attempt-access:assignment:44:2000",
-        "[]",
-      );
-      fakeRedis.values.set(
-        "mark:attempt-access:assignment:99:3000",
-        "[]",
-      );
+      fakeRedis.values.set("mark:attempt-access:assignment:44:1000", "[]");
+      fakeRedis.values.set("mark:attempt-access:assignment:44:2000", "[]");
+      fakeRedis.values.set("mark:attempt-access:assignment:99:3000", "[]");
       (mockPrisma.assignmentVersion.findMany as jest.Mock).mockResolvedValue(
         [],
       );
@@ -245,7 +238,9 @@ describe("AttemptAccessCacheService", () => {
         [],
       );
 
-      await expect(service.invalidateForAssignment(44)).resolves.toBeUndefined();
+      await expect(
+        service.invalidateForAssignment(44),
+      ).resolves.toBeUndefined();
       expect(childLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining("attempt-access-cache.invalidate.failed"),
       );
