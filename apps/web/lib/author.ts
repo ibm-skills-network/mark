@@ -232,10 +232,13 @@ export function subscribeToJobStatus(
         (event: MessageEvent<string>) => {},
       );
 
-      // SSE drop is non-fatal: the publish job runs server-side via BullMQ and
-      // is fully decoupled from the browser tab's lifetime. On EventSource
-      // error, fall back to a one-shot job-status fetch and surface whatever
-      // the server says — never re-enqueue a publish from this code path.
+      // SSE drop is non-fatal: the publish job runs server-side via BullMQ
+      // and is fully decoupled from the browser tab's lifetime. On
+      // EventSource error, poll the status endpoint until the server reports
+      // a terminal state. Never resolve as success while the server still
+      // says "In Progress" — the caller treats success as "publish landed",
+      // and an optimistic success while the job is mid-flight (and could
+      // still fail) is misinformation.
       const recoverViaJobStatus = async (): Promise<void> => {
         if (isResolved) return;
         clearTimeout(timeoutId);
@@ -288,25 +291,24 @@ export function subscribeToJobStatus(
           return false;
         };
 
-        const firstJob = await fetchOnce();
-        if (applyJobState(firstJob)) return;
+        // Poll every 10s for up to 30 minutes — covers the longest realistic
+        // publish (translation across ~23 languages on a large assignment)
+        // without holding the promise open forever if the worker dies.
+        const POLL_INTERVAL_MS = 10_000;
+        const MAX_POLL_DURATION_MS = 30 * 60 * 1000;
+        const deadline = Date.now() + MAX_POLL_DURATION_MS;
 
-        // Server says still running. Wait 10s and try once more.
-        await new Promise((r) => setTimeout(r, 10_000));
-        if (isResolved) return;
+        while (!isResolved && Date.now() < deadline) {
+          const job = await fetchOnce();
+          if (applyJobState(job)) return;
+          if (isResolved) return;
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        }
 
-        const secondJob = await fetchOnce();
-        if (applyJobState(secondJob)) return;
-
-        // Still running — resolve optimistically; the caller's page reload
-        // will pick up the final state from the database.
         if (!isResolved) {
-          console.warn(
-            "Publish job is still running server-side; the page will reload to fetch the final state",
+          handleError(
+            "Publishing is taking longer than expected. Refresh the page to check the latest status.",
           );
-          isResolved = true;
-          cleanUp();
-          resolve([true, receivedQuestions]);
         }
       };
 
