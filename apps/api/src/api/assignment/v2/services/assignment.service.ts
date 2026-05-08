@@ -211,6 +211,12 @@ export class AssignmentServiceV2 {
         },
         {
           jobId: job.id,
+          // Single attempt only. Stall recovery is disabled at the worker
+          // (maxStalledCount=0) and a deterministic jobId already dedups
+          // re-enqueues, so the default attempts:3 from the queue service
+          // would only re-introduce the concurrent-execution race we
+          // already eliminated. If publish fails, the user retries by hand.
+          attempts: 1,
           // End the dedup window as soon as the job terminates (success or
           // failure). Without this, completed/failed jobs linger in BullMQ
           // history and a deterministic id would pin to the stale record.

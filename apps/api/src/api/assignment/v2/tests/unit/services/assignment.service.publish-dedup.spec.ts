@@ -113,6 +113,7 @@ describe("AssignmentServiceV2 – publishAssignment dedup", () => {
       JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
       expect.objectContaining({ assignmentId: 42, userId: "author-123" }),
       expect.objectContaining({
+        attempts: 1,
         removeOnComplete: true,
         removeOnFail: true,
       }),

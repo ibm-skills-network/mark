@@ -551,6 +551,11 @@ export class AssignmentServiceV1 {
         },
         {
           jobId: job.id,
+          // Single attempt only. The worker disables stall-recovery for the
+          // assignment publish queues, so the default attempts:3 would only
+          // re-introduce a concurrent-execution race against an already-
+          // running publish. If publish fails, the user retries by hand.
+          attempts: 1,
         },
       );
     } catch (error: unknown) {
