@@ -149,13 +149,13 @@ export class QuestionResponseService {
       const questionResponse = requestMap.get(questionId);
       if (!questionResponse) continue;
 
+      // Announce the question is starting without advancing progress — keeps
+      // the wheel honest: it only moves when work actually completes.
       if (this.progressService) {
-        await this.progressService.updateQuestionProgress(
-          assignmentAttemptId,
-          questionNumber,
-          totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
-        );
+        await this.progressService.updateProgress(assignmentAttemptId, {
+          currentQuestion: questionNumber,
+          currentStage: `Grading question ${questionNumber} of ${totalQuestions}...`,
+        });
       }
 
       const question = questionMap.get(questionId);
@@ -185,6 +185,16 @@ export class QuestionResponseService {
         questionId,
         JSON.stringify(learnerResponse ?? ""),
       );
+
+      // Advance progress only after this question is fully graded.
+      if (this.progressService) {
+        await this.progressService.updateQuestionProgress(
+          assignmentAttemptId,
+          questionNumber,
+          totalQuestions,
+          `Graded question ${questionNumber} of ${totalQuestions}`,
+        );
+      }
 
       responseDto.questionId = questionId;
       responseDto.question = question.question;

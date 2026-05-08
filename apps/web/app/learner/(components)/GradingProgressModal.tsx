@@ -1,5 +1,11 @@
-import React, { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useState, useMemo } from "react";
+import {
+  motion,
+  AnimatePresence,
+  useMotionValue,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
 import { toast } from "sonner";
 import { getApiRoutes } from "@/config/constants";
@@ -33,7 +39,6 @@ export default function GradingProgressModal({
   });
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [emailNotified, setEmailNotified] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     if (!isOpen || !attemptId || !gradingJobId) return;
@@ -43,8 +48,6 @@ export default function GradingProgressModal({
     const eventSource = new EventSource(sseUrl, {
       withCredentials: true,
     });
-
-    eventSourceRef.current = eventSource;
 
     const updateProgress = (data: any) => {
       const terminalStatus = data?.finalStatus ?? data?.status;
@@ -136,7 +139,6 @@ export default function GradingProgressModal({
 
     return () => {
       eventSource.close();
-      eventSourceRef.current = null;
     };
   }, [isOpen, assignmentId, attemptId, gradingJobId]);
 
@@ -161,6 +163,34 @@ export default function GradingProgressModal({
   };
 
   const { status, progress, currentStage: message } = progressData;
+
+  const confettiParticles = useMemo(
+    () =>
+      Array.from({ length: 20 }, () => ({
+        x: (Math.random() - 0.5) * 300,
+        y: (Math.random() - 0.5) * 300,
+      })),
+    [],
+  );
+
+  const rawProgress = useMotionValue(0);
+  const springProgress = useSpring(rawProgress, { stiffness: 100, damping: 25 });
+  const strokeDasharrayMotion = useTransform(
+    springProgress,
+    (v) => `${v * 2.64} 264`,
+  );
+  const [displayProgress, setDisplayProgress] = useState(0);
+
+  useEffect(() => {
+    rawProgress.set(progress);
+  }, [progress, rawProgress]);
+
+  useEffect(() => {
+    const unsubscribe = springProgress.on("change", (v) =>
+      setDisplayProgress(Math.round(v)),
+    );
+    return unsubscribe;
+  }, [springProgress]);
   const getStatusColor = () => {
     switch (status) {
       case "completed":
@@ -347,14 +377,9 @@ export default function GradingProgressModal({
                             fill="none"
                             stroke="url(#progressGradient)"
                             strokeWidth="6"
-                            strokeDasharray={`${progress * 2.64} 264`}
                             strokeLinecap="round"
                             transform="rotate(-90 50 50)"
-                            initial={{ strokeDasharray: "0 264" }}
-                            animate={{
-                              strokeDasharray: `${progress * 2.64} 264`,
-                            }}
-                            transition={{ duration: 0.5, ease: "easeOut" }}
+                            style={{ strokeDasharray: strokeDasharrayMotion }}
                           />
                         </svg>
                       </motion.div>
@@ -362,19 +387,9 @@ export default function GradingProgressModal({
                       {/* Center content with glassmorphism */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-white/80 backdrop-blur-md rounded-full w-24 h-24 shadow-xl flex flex-col items-center justify-center border border-white/50">
-                          <motion.span
-                            key={progress}
-                            initial={{ scale: 1.3, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{
-                              type: "spring",
-                              damping: 20,
-                              stiffness: 300,
-                            }}
-                            className="text-3xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent"
-                          >
-                            {progress}%
-                          </motion.span>
+                          <span className="text-3xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                            {displayProgress}%
+                          </span>
                           {progressData.currentQuestion &&
                             progressData.totalQuestions && (
                               <motion.span
@@ -437,7 +452,7 @@ export default function GradingProgressModal({
                       {/* Confetti effect for success */}
                       {status === "completed" && (
                         <>
-                          {[...Array(20)].map((_, i) => (
+                          {confettiParticles.map((p, i) => (
                             <motion.div
                               key={i}
                               className="absolute w-2 h-2 rounded-full"
@@ -455,8 +470,8 @@ export default function GradingProgressModal({
                               initial={{ scale: 0, x: 0, y: 0 }}
                               animate={{
                                 scale: [0, 1, 0.5],
-                                x: (Math.random() - 0.5) * 300,
-                                y: (Math.random() - 0.5) * 300,
+                                x: p.x,
+                                y: p.y,
                                 opacity: [1, 1, 0],
                               }}
                               transition={{
@@ -518,13 +533,8 @@ export default function GradingProgressModal({
                     >
                       <div className="relative bg-gray-100 rounded-full h-3 overflow-hidden shadow-inner">
                         <motion.div
-                          initial={{ width: "0%" }}
-                          animate={{ width: `${progress}%` }}
-                          transition={{ duration: 0.5, ease: "easeOut" }}
                           className="h-full rounded-full bg-gradient-to-r from-purple-500 via-blue-500 to-purple-500 relative shadow-lg"
-                          style={{
-                            backgroundSize: "200% 100%",
-                          }}
+                          style={{ width: `${displayProgress}%`, backgroundSize: "200% 100%" }}
                         >
                           <motion.div
                             animate={{
