@@ -21,6 +21,8 @@ interface SendMessageOptions {
   userText?: string;
   // Optional metadata for local chat UI (e.g. file chips).
   toolCalls?: any;
+  // Lets callers provide the exact conversation snapshot to send.
+  conversation?: ChatMessage[];
 }
 
 interface MarkChatUsage {
@@ -244,6 +246,7 @@ export const useMarkChatStore = create<MarkChatState>()(
       async sendMessage(useStreaming = true, options?: SendMessageOptions) {
         const { userInput, messages, userRole, usage } = get();
         const effectiveUserText = options?.userText ?? userInput;
+        const conversation = options?.conversation ?? messages;
         const trimmed = effectiveUserText.trim();
 
         if (!trimmed) return false;
@@ -257,7 +260,7 @@ export const useMarkChatStore = create<MarkChatState>()(
         };
 
         set({
-          messages: [...messages, userMsg],
+          messages: [...conversation, userMsg],
           userInput: "",
           usage: { ...usage, totalMessagesSent: usage.totalMessagesSent + 1 },
           isTyping: true,
@@ -271,7 +274,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: messages,
+                conversation,
               }),
             });
 
@@ -376,7 +379,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: messages,
+                conversation,
               }),
             });
 

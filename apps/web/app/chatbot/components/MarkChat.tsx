@@ -962,6 +962,7 @@ export const MarkChat = () => {
     userInput,
     setUserInput,
     sendMessage,
+    addMessage,
     isTyping,
     userRole,
     resetChat,
@@ -1310,15 +1311,23 @@ export const MarkChat = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [reportSearchQuery, setReportSearchQuery] = useState("");
   const [reportPreviewModal, setReportPreviewModal] = useState({
     isOpen: false,
     type: "report" as "report" | "feedback" | "suggestion" | "inquiry",
     data: null as any,
   });
+  const openReportsPanel = useCallback(
+    (initialSearchQuery = "", closeChat = false) => {
+      setReportSearchQuery(initialSearchQuery);
+      if (closeChat) toggleChatbot();
+      setShowReports(true);
+    },
+    [toggleChatbot],
+  );
   const handleCheckReports = useCallback(() => {
-    toggleChatbot();
-    setShowReports(true);
-  }, []);
+    openReportsPanel("", true);
+  }, [openReportsPanel]);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -1702,6 +1711,72 @@ export const MarkChat = () => {
   ]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
+  const checkForIssueStatusQuery = useCallback(
+    (message: string): boolean | number => {
+      const lowerMessage = message.toLowerCase();
+
+      const generalIssuePatterns = [
+        "my issues",
+        "my reports",
+        "reported issues",
+        "issue status",
+        "report status",
+        "check my issues",
+        "check my reports",
+        "view my issues",
+        "view my reports",
+      ];
+
+      const specificIssueMatch =
+        lowerMessage.match(/issue #?(\d+)/i) ||
+        lowerMessage.match(/report #?(\d+)/i) ||
+        lowerMessage.match(/ticket #?(\d+)/i);
+
+      if (specificIssueMatch?.[1]) {
+        return parseInt(specificIssueMatch[1], 10);
+      }
+
+      return generalIssuePatterns.some((pattern) =>
+        lowerMessage.includes(pattern),
+      );
+    },
+    [],
+  );
+  const handleIssueStatusQuery = useCallback(
+    (message: string, issueQuery: boolean | number) => {
+      const now = Date.now();
+      const searchQuery =
+        typeof issueQuery === "number" ? issueQuery.toString() : "";
+
+      setHistory((prev) => [...prev, message]);
+      setHistoryIndex(-1);
+      addMessage({
+        id: `user-${now}`,
+        role: "user",
+        content: message,
+        timestamp: new Date(now).toISOString(),
+      });
+      addMessage({
+        id: `assistant-${now}`,
+        role: "assistant",
+        content:
+          typeof issueQuery === "number"
+            ? `Opened your reports panel and filtered it for report #${issueQuery}.`
+            : "Opened your reports panel so you can review your reported issues.",
+        timestamp: new Date(now).toISOString(),
+      });
+      setUserInput("");
+      setShowSuggestions(false);
+      setSpecialActions({ show: false, type: null, data: null });
+      openReportsPanel(searchQuery);
+
+      if (isRecording) {
+        recognitionRef.current?.stop();
+        setIsRecording(false);
+      }
+    },
+    [addMessage, isRecording, openReportsPanel, setUserInput],
+  );
   useEffect(() => {
     let cancelled = false;
     const fetchUser = async () => {
@@ -2161,10 +2236,18 @@ export const MarkChat = () => {
         (f) => f.uploadStatus === "uploaded",
       );
       const selectedFileCount = selectedFiles.length;
+      const issueStatusQuery =
+        selectedFileCount === 0 ? checkForIssueStatusQuery(trimmedInput) : false;
       const selectedFileIds = new Set(selectedFiles.map((file) => file.id));
       const sessionOnlyFiles = sessionContextFiles.filter(
         (file) => !selectedFileIds.has(file.id),
       );
+
+      if (issueStatusQuery !== false) {
+        handleIssueStatusQuery(trimmedInput, issueStatusQuery);
+        isSendingRef.current = false;
+        return;
+      }
 
       if (hasPendingParses) {
         toast.error("Please wait for files to finish parsing.");
@@ -2285,8 +2368,6 @@ export const MarkChat = () => {
           checkForAuthorSpecialActions(userInput);
         }
 
-        // Add temp context so `sendMessage` includes it for this turn.
-        useMarkChatStore.setState({ messages: messagesWithContext });
         const browserCookies =
           typeof window !== "undefined" ? document.cookie : "";
         if (currentChatId && user?.userId) {
@@ -2310,6 +2391,7 @@ export const MarkChat = () => {
         didSendSucceed = await sendMessage(stream, {
           userText: messageContent,
           toolCalls: fileToolCalls,
+          conversation: messagesWithContext,
         });
 
         // Poll and timeout can both try to save but only save once due to flags.
@@ -2451,8 +2533,11 @@ export const MarkChat = () => {
       userRole,
       isRecording,
       sendMessage,
+      addMessage,
       checkForLearnerSpecialActions,
       checkForAuthorSpecialActions,
+      checkForIssueStatusQuery,
+      handleIssueStatusQuery,
       currentChatId,
       user?.userId,
       addSessionContextFiles,
@@ -3423,6 +3508,7 @@ Please help me with this.`;
           >
             <UserReportsPanel
               userId={user?.userId || ""}
+              initialSearchQuery={reportSearchQuery}
               onClose={() => setShowReports(false)}
             />
           </div>
