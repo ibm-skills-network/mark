@@ -354,6 +354,15 @@ jobs:
     name: Build & Deploy - ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: [security-scan, lint-and-test]
+    # Run when security-scan passed AND lint-and-test either passed or was
+    # deliberately skipped (lint-and-test is skipped on tag pushes by design,
+    # so a release tag must not be blocked by that skip cascading here).
+    # always() is required so this `if:` actually evaluates when a dependency
+    # was skipped — without it, GitHub Actions cascades the skip.
+    if: |
+      always() &&
+      needs.security-scan.result == 'success' &&
+      (needs.lint-and-test.result == 'success' || needs.lint-and-test.result == 'skipped')
     permissions:
       contents: read
       packages: write
