@@ -246,6 +246,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         },
         {
           jobId: 1,
+          attempts: 1,
           removeOnComplete: true,
           removeOnFail: true,
         },

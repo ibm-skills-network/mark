@@ -224,6 +224,10 @@ jobs:
   lint-and-test:
     name: Lint & Test - ${{ matrix.service }}
     runs-on: ubuntu-latest
+    # Skip lint/test on tagged releases — tags are produced from already-merged
+    # code that passed CI on its PR. Lint/test still runs on every PR and every
+    # branch push so nothing merges without a clean signal.
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
     strategy:
