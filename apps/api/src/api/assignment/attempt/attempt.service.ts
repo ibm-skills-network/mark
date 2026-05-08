@@ -34,6 +34,7 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { applyQuestionOrder } from "../utils/question-order.util";
 import { PrismaService } from "../../../database/prisma.service";
+import { sanitizeUnicodeForJson } from "../../../helpers/sanitize-unicode";
 import { sanitizeForLog } from "../../../logger/sanitize";
 import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
@@ -1492,14 +1493,31 @@ export class AttemptServiceV1 {
       assignmentId,
       language,
     );
+    const learnerResponseJson = sanitizeUnicodeForJson(
+      JSON.stringify(learnerResponse ?? ""),
+    );
+    const feedbackClean = sanitizeUnicodeForJson(
+      JSON.parse(JSON.stringify(responseDto.feedback)) as object,
+    );
+    const totalReplaced = learnerResponseJson.replaced + feedbackClean.replaced;
+    if (totalReplaced > 0) {
+      this.logger.warn(
+        "Replaced lone UTF-16 surrogates before questionResponse.create",
+        {
+          questionId,
+          assignmentAttemptId,
+          replacements: totalReplaced,
+        },
+      );
+    }
     const result = await this.prisma.questionResponse.create({
       data: {
         assignmentAttemptId:
           role === UserRole.LEARNER ? assignmentAttemptId : 1,
         questionId: questionId,
-        learnerResponse: JSON.stringify(learnerResponse ?? ""),
+        learnerResponse: learnerResponseJson.value,
         points: responseDto.totalPoints,
-        feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
+        feedback: feedbackClean.value,
       },
     });
     responseDto.id = result.id;

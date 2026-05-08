@@ -50,7 +50,7 @@ export class AdminAuthController {
   constructor(
     private readonly adminVerificationService: AdminVerificationService,
     private readonly adminEmailService: AdminEmailService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: AdminAuthController.name });
   }
@@ -70,7 +70,7 @@ export class AdminAuthController {
   })
   async getCurrentAdmin(@Body() body: { sessionToken: string }) {
     const userInfo = await this.adminVerificationService.verifyAdminSession(
-      body.sessionToken
+      body.sessionToken,
     );
 
     if (!userInfo) {
@@ -105,7 +105,7 @@ export class AdminAuthController {
     description: "Invalid email format",
   })
   async sendVerificationCode(
-    @Body() request: SendCodeRequest
+    @Body() request: SendCodeRequest,
   ): Promise<SendCodeResponse> {
     const { email } = request;
 
@@ -132,13 +132,12 @@ export class AdminAuthController {
         return genericResponse;
       }
 
-      const code = await this.adminVerificationService.generateAndStoreCode(
-        email
-      );
+      const code =
+        await this.adminVerificationService.generateAndStoreCode(email);
 
       const emailSent = await this.adminEmailService.sendVerificationCode(
         email,
-        code
+        code,
       );
 
       if (!emailSent) {
@@ -181,7 +180,7 @@ export class AdminAuthController {
       "Invalid or expired code, or the email is not authorized (response does not distinguish)",
   })
   async verifyCode(
-    @Body() request: VerifyCodeRequest
+    @Body() request: VerifyCodeRequest,
   ): Promise<VerifyCodeResponse> {
     const { email, code } = request;
 
@@ -195,7 +194,7 @@ export class AdminAuthController {
     }
 
     const genericInvalid = new BadRequestException(
-      "Invalid or expired verification code"
+      "Invalid or expired verification code",
     );
 
     try {
@@ -224,7 +223,7 @@ export class AdminAuthController {
       const sessionToken =
         await this.adminVerificationService.generateAdminSession(email);
       const expiresAt = new Date(
-        Date.now() + AdminVerificationService.ADMIN_SESSION_TTL_MS
+        Date.now() + AdminVerificationService.ADMIN_SESSION_TTL_MS,
       ).toISOString();
 
       return {
@@ -255,7 +254,7 @@ export class AdminAuthController {
     description: "Logged out successfully",
   })
   async logout(
-    @Body() request: { sessionToken: string }
+    @Body() request: { sessionToken: string },
   ): Promise<{ message: string }> {
     const { sessionToken } = request;
 
@@ -283,7 +282,7 @@ export class AdminAuthController {
   @ApiResponse({ status: 200, description: "All sessions revoked" })
   @ApiResponse({ status: 403, description: "Invalid or expired admin session" })
   async logoutAll(
-    @Body() request: { sessionToken: string }
+    @Body() request: { sessionToken: string },
   ): Promise<{ message: string; revokedCount: number }> {
     const { sessionToken } = request;
 
@@ -291,16 +290,15 @@ export class AdminAuthController {
       throw new BadRequestException("Session token is required");
     }
 
-    const userInfo = await this.adminVerificationService.verifyAdminSession(
-      sessionToken
-    );
+    const userInfo =
+      await this.adminVerificationService.verifyAdminSession(sessionToken);
     if (!userInfo) {
       throw new ForbiddenException("Invalid or expired admin session");
     }
 
     const revokedCount =
       await this.adminVerificationService.revokeAllSessionsForEmail(
-        userInfo.email
+        userInfo.email,
       );
 
     return {
@@ -324,7 +322,7 @@ export class AdminAuthController {
     description: "Failed to send test email",
   })
   async testEmail(
-    @Body() request: { email: string }
+    @Body() request: { email: string },
   ): Promise<{ message: string; success: boolean }> {
     const { email } = request;
 
