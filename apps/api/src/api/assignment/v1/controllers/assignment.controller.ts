@@ -32,9 +32,12 @@ import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
   UserRole,
+  UserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { PrismaService } from "src/database/prisma.service";
+import { JobStateRecord } from "src/job-queue/job-state.types";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
@@ -72,8 +75,50 @@ export class AssignmentControllerV1 {
     private readonly assignmentService: AssignmentServiceV1,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV1,
+    private readonly prisma: PrismaService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV1.name });
+  }
+
+  // Returns true when the caller may read this publish job's status. Allows
+  // the job's creator OR any author whose group is linked to the job's
+  // assignment. Mirrors the v2 helper (canReadPublishJob in the v2
+  // controller): publishAssignment dedups by assignmentId and returns the
+  // in-flight job's id to a co-author hitting publish on the same
+  // assignment, so co-author read access is required to avoid a 30-minute
+  // 404 loop on the SSE-drop polling fallback.
+  private async canReadPublishJob(
+    job: JobStateRecord,
+    userSession: UserSession,
+  ): Promise<boolean> {
+    if (job.userId === userSession.userId) {
+      return true;
+    }
+
+    if (typeof job.assignmentId !== "number") {
+      return false;
+    }
+
+    // Refuse when the session has no groupId. Prisma silently drops
+    // undefined keys from `where`, and without this guard the query
+    // collapses to `{ assignmentId }` and matches the first AssignmentGroup
+    // row for the assignment, granting cross-tenant read.
+    if (
+      typeof userSession.groupId !== "string" ||
+      userSession.groupId.length === 0
+    ) {
+      return false;
+    }
+
+    const link = await this.prisma.assignmentGroup.findFirst({
+      where: {
+        assignmentId: job.assignmentId,
+        groupId: userSession.groupId,
+      },
+      select: { assignmentId: true },
+    });
+
+    return link !== null;
   }
 
   @Get(":id")
@@ -152,7 +197,12 @@ export class AssignmentControllerV1 {
     @Req() request: UserSessionRequest,
   ): Promise<Observable<MessageEvent>> {
     const job = await this.assignmentService.getJobStatus(jobId);
-    if (!job || job.userId !== request.userSession.userId) {
+    if (!job) {
+      throw new NotFoundException("Job not found");
+    }
+
+    const allowed = await this.canReadPublishJob(job, request.userSession);
+    if (!allowed) {
       throw new NotFoundException("Job not found");
     }
 
@@ -286,9 +336,15 @@ export class AssignmentControllerV1 {
     questions?: LLMResponseQuestion[];
   }> {
     const job = await this.assignmentService.getJobStatus(jobId);
-    if (!job || job.userId !== request.userSession.userId) {
+    if (!job) {
       throw new NotFoundException("Job not found");
     }
+
+    const allowed = await this.canReadPublishJob(job, request.userSession);
+    if (!allowed) {
+      throw new NotFoundException("Job not found");
+    }
+
     return job.status === "Completed"
       ? {
           status: job.status,
