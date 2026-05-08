@@ -43,15 +43,19 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     this.connection = createRedisConnection();
 
-    // Assignment publish jobs run inline translation that can take >5 minutes.
-    // BullMQ's default lockDuration of 30s would let the worker miss heartbeat
-    // extensions during long publishes, causing the broker to mark the job
-    // stalled and spawn a recovery execution that races the original (both
-    // workers running the same jobId, fighting over markAsDeleted on the same
-    // question set). A 10-minute lock window comfortably exceeds the longest
-    // observed publish, and maxStalledCount=0 means a genuinely-stalled worker
-    // fails the job permanently rather than spawning a concurrent retry.
-    const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 600_000;
+    // Assignment publish jobs run inline translation that can take >5 minutes,
+    // sometimes longer for large imports. BullMQ's default lockDuration of 30s
+    // would let the worker miss heartbeat extensions during long publishes,
+    // causing the broker to mark the job stalled and spawn a recovery execution
+    // that races the original (both workers running the same jobId, fighting
+    // over markAsDeleted on the same question set). The lock auto-renews every
+    // lockDuration / 2 ms via an internal Worker timer, so this value is the
+    // failure-detection threshold (how long renewal can fail before the job is
+    // considered stalled), not the max publish duration. 30 minutes gives a
+    // comfortable safety margin over observed worst-case publishes.
+    // maxStalledCount=0 means a genuinely-stalled worker fails the job
+    // permanently rather than spawning a concurrent retry.
+    const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 1_800_000;
     const ASSIGNMENT_NO_STALL_RECOVERY = 0;
 
     this.workers.push(
