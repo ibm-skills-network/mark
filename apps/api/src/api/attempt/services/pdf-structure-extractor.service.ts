@@ -66,10 +66,7 @@ export class PdfStructureExtractorService {
     // the first 8 bytes of the file used to discriminate PDF/XLSX/junk).
     // Declared before the try so the catch branch can include them too.
     const byteSize = buffer.byteLength;
-    const sha256Full = crypto
-      .createHash("sha256")
-      .update(buffer)
-      .digest("hex");
+    const sha256Full = crypto.createHash("sha256").update(buffer).digest("hex");
     const sha256Short = sha256Full.slice(0, 16);
     const magicBytesHex = buffer.subarray(0, 8).toString("hex");
 
@@ -86,6 +83,15 @@ export class PdfStructureExtractorService {
         standardFontDataUrl: null,
       });
 
+      // Attach a tail .catch BEFORE awaiting so any late rejection from
+      // the loading task's background work (worker init, font preloads)
+      // cannot escape as a process-level unhandled rejection.
+      loadingTask.promise.catch((lateError: unknown) => {
+        this.logger.warn(
+          `Late getDocument rejection: submissionId=${submissionId} ` +
+            `${lateError instanceof Error ? lateError.message : String(lateError)}`,
+        );
+      });
       const pdfDocument: PDFDocumentProxy = await loadingTask.promise;
       const numberPages = pdfDocument.numPages ?? 0;
 
@@ -184,37 +190,65 @@ export class PdfStructureExtractorService {
     pageNumber: number,
     warnings: string[],
   ): Promise<StructuredPage> {
-    const page = await pdfDocument.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 1 });
+    const pageTask = pdfDocument.getPage(pageNumber);
+    pageTask.catch((lateError: unknown) => {
+      this.logger.warn(
+        `Late getPage rejection on page ${pageNumber}: ` +
+          `${lateError instanceof Error ? lateError.message : String(lateError)}`,
+      );
+    });
+    const page = await pageTask;
+    try {
+      const viewport = page.getViewport({ scale: 1 });
 
-    const textContent = await page.getTextContent();
-    const textItems = this.normalizeTextItems(textContent.items);
+      const textContentTask = page.getTextContent();
+      textContentTask.catch((lateError: unknown) => {
+        this.logger.warn(
+          `Late getTextContent rejection on page ${pageNumber}: ` +
+            `${lateError instanceof Error ? lateError.message : String(lateError)}`,
+        );
+      });
+      const textContent = await textContentTask;
+      const textItems = this.normalizeTextItems(textContent.items);
 
-    const blocks = this.groupTextItemsIntoBlocks(
-      textItems,
-      pageNumber,
-      viewport,
-    );
+      const blocks = this.groupTextItemsIntoBlocks(
+        textItems,
+        pageNumber,
+        viewport,
+      );
 
-    const typedBlocks = this.detectBlockTypes(blocks);
+      const typedBlocks = this.detectBlockTypes(blocks);
 
-    const imageBlocks = await this.extractImagesFromPage(
-      page,
-      pageNumber,
-      warnings,
-    );
+      const imageBlocks = await this.extractImagesFromPage(
+        page,
+        pageNumber,
+        warnings,
+      );
 
-    const allBlocks = [...typedBlocks, ...imageBlocks];
+      const allBlocks = [...typedBlocks, ...imageBlocks];
 
-    return {
-      pageNumber: pageNumber,
-      blocks: allBlocks,
-      metadata: {
-        width: viewport.width,
-        height: viewport.height,
-        rotation: viewport.rotation,
-      },
-    };
+      return {
+        pageNumber: pageNumber,
+        blocks: allBlocks,
+        metadata: {
+          width: viewport.width,
+          height: viewport.height,
+          rotation: viewport.rotation,
+        },
+      };
+    } finally {
+      // Best-effort release of worker-side resources for this page. cleanup()
+      // is synchronous in pdfjs-dist; wrap in try/catch so a cleanup failure
+      // cannot mask the real return value or throw out of finally.
+      try {
+        page.cleanup();
+      } catch (cleanupError) {
+        this.logger.debug(
+          `page.cleanup() failed for page ${pageNumber}: ` +
+            `${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+    }
   }
 
   private normalizeTextItems(
@@ -461,7 +495,18 @@ export class PdfStructureExtractorService {
             canvas: null,
           };
 
-          await page.render(renderContext).promise;
+          const renderTask = page.render(renderContext);
+          // Attach a tail catch BEFORE awaiting so any late rejection
+          // (e.g., font load or image decode resolving after the worker
+          // already moved on) is captured here and cannot escape as an
+          // unhandled promise rejection at the process level.
+          renderTask.promise.catch((lateError: unknown) => {
+            this.logger.warn(
+              `Late render rejection on page ${pageNumber}: ` +
+                `${lateError instanceof Error ? lateError.message : String(lateError)}`,
+            );
+          });
+          await renderTask.promise;
         }
       } catch (renderError) {
         this.logger.debug(
@@ -469,7 +514,16 @@ export class PdfStructureExtractorService {
         );
       }
 
-      const operatorList: PDFOperatorList = await page.getOperatorList();
+      const operatorListTask = page.getOperatorList();
+      // Same late-rejection guard for getOperatorList — it returns a Promise
+      // directly, so attach .catch to the Promise itself.
+      operatorListTask.catch((lateError: unknown) => {
+        this.logger.warn(
+          `Late getOperatorList rejection on page ${pageNumber}: ` +
+            `${lateError instanceof Error ? lateError.message : String(lateError)}`,
+        );
+      });
+      const operatorList: PDFOperatorList = await operatorListTask;
 
       let imageIndex = 0;
       const imageNames: string[] = [];
