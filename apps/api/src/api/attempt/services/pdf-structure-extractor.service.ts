@@ -61,6 +61,23 @@ export class PdfStructureExtractorService {
     const startTime = Date.now();
     const warnings: string[] = [];
 
+    // Forensic identifiers — computed once from the raw buffer (no PII risk;
+    // submissionId is opaque, hash + size are non-sensitive, magic bytes are
+    // the first 8 bytes of the file used to discriminate PDF/XLSX/junk).
+    // Declared before the try so the catch branch can include them too.
+    const byteSize = buffer.byteLength;
+    const sha256Full = crypto
+      .createHash("sha256")
+      .update(buffer)
+      .digest("hex");
+    const sha256Short = sha256Full.slice(0, 16);
+    const magicBytesHex = buffer.subarray(0, 8).toString("hex");
+
+    this.logger.log(
+      `extractStructuredContent entry: submissionId=${submissionId} ` +
+        `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex}`,
+    );
+
     try {
       const uint8Array = new Uint8Array(buffer);
       const loadingTask = pdfjs.getDocument({
@@ -107,11 +124,7 @@ export class PdfStructureExtractorService {
 
       const allBlocks = pages.flatMap((p) => p.blocks);
       const wordCount = this.calculateWordCount(allBlocks);
-      const checksum = crypto
-        .createHash("sha256")
-        .update(buffer)
-        .digest("hex")
-        .slice(0, 16);
+      const checksum = sha256Short;
 
       const sections = this.detectSections(pages);
 
@@ -142,12 +155,21 @@ export class PdfStructureExtractorService {
       };
 
       this.logger.log(
-        `Structured extraction completed: ${pages.length} pages, ${allBlocks.length} blocks, ${wordCount} words in ${duration}ms`,
+        `Structured extraction completed: submissionId=${submissionId} ` +
+          `pages=${pages.length} blocks=${allBlocks.length} ` +
+          `words=${wordCount} durationMs=${duration} ` +
+          `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex} ` +
+          `warnings=${warnings.length}`,
       );
 
       return { submission, metadata };
     } catch (error) {
-      this.logger.error("PDF structure extraction failed", error);
+      this.logger.error(
+        `PDF structure extraction failed: submissionId=${submissionId} ` +
+          `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex} ` +
+          `error=${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new Error(
         `Failed to extract PDF structure: ${error instanceof Error ? error.message : String(error)}`,
       );
