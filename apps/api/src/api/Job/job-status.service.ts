@@ -1,10 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobStateService } from "src/job-queue/job-state.service";
-import {
-  CreateJobStateOptions,
-  JobStateRecord,
-} from "src/job-queue/job-state.types";
+import { JobStateRecord } from "src/job-queue/job-state.types";
 
 @Injectable()
 export class JobStatusServiceV1 {
@@ -22,23 +19,6 @@ export class JobStatusServiceV1 {
       userId,
       status: "Pending",
       progress: "Job created",
-    });
-  }
-
-  async createPublishJob(
-    assignmentId: number,
-    userId: string,
-    overrides: Partial<CreateJobStateOptions> = {},
-  ): Promise<JobStateRecord> {
-    return this.jobStateService.createJob({
-      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
-      jobName: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
-      kind: "assignment-publish",
-      assignmentId,
-      userId,
-      status: "In Progress",
-      progress: "Initializing assignment publishing...",
-      ...overrides,
     });
   }
 

@@ -200,8 +200,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleAssignmentV1Job(job: Job): Promise<void> {
     switch (job.name) {
-      case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS:
-      case JOB_NAMES.ASSIGNMENT_V1_PUBLISH: {
+      case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS: {
         await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V1, job);
         return;
       }

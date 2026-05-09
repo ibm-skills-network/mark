@@ -7,7 +7,6 @@ export const JOB_QUEUE_NAMES = {
 
 export const JOB_NAMES = {
   ASSIGNMENT_V1_GENERATE_QUESTIONS: "assignment-v1.generate-questions",
-  ASSIGNMENT_V1_PUBLISH: "assignment-v1.publish",
   ASSIGNMENT_V2_GENERATE_QUESTIONS: "assignment-v2.generate-questions",
   ASSIGNMENT_V2_PUBLISH: "assignment-v2.publish",
   ATTEMPT_GRADE: "attempt.grade",

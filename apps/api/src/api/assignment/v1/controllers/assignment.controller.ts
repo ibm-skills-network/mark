@@ -5,14 +5,12 @@ import {
   Get,
   Inject,
   Injectable,
-  NotFoundException,
   Param,
   Patch,
   Post,
   Put,
   Query,
   Req,
-  Sse,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -27,17 +25,12 @@ import {
 } from "@nestjs/swagger";
 import { ReportType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Observable } from "rxjs";
-import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
   UserRole,
-  UserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
-import { PrismaService } from "src/database/prisma.service";
-import { JobStateRecord } from "src/job-queue/job-state.types";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
@@ -54,10 +47,8 @@ import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.
 import {
   GenerateQuestionVariantDto,
   QuestionDto,
-  UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
-import { LLMResponseQuestion } from "../../question/dto/create.update.question.request.dto";
 import { AssignmentServiceV1 } from "../services/assignment.service";
 
 @ApiTags(
@@ -74,51 +65,8 @@ export class AssignmentControllerV1 {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly assignmentService: AssignmentServiceV1,
     private readonly llmFacadeService: LlmFacadeService,
-    private readonly jobStatusService: JobStatusServiceV1,
-    private readonly prisma: PrismaService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV1.name });
-  }
-
-  // Returns true when the caller may read this publish job's status. Allows
-  // the job's creator OR any author whose group is linked to the job's
-  // assignment. Mirrors the v2 helper (canReadPublishJob in the v2
-  // controller): publishAssignment dedups by assignmentId and returns the
-  // in-flight job's id to a co-author hitting publish on the same
-  // assignment, so co-author read access is required to avoid a 30-minute
-  // 404 loop on the SSE-drop polling fallback.
-  private async canReadPublishJob(
-    job: JobStateRecord,
-    userSession: UserSession,
-  ): Promise<boolean> {
-    if (job.userId === userSession.userId) {
-      return true;
-    }
-
-    if (typeof job.assignmentId !== "number") {
-      return false;
-    }
-
-    // Refuse when the session has no groupId. Prisma silently drops
-    // undefined keys from `where`, and without this guard the query
-    // collapses to `{ assignmentId }` and matches the first AssignmentGroup
-    // row for the assignment, granting cross-tenant read.
-    if (
-      typeof userSession.groupId !== "string" ||
-      userSession.groupId.length === 0
-    ) {
-      return false;
-    }
-
-    const link = await this.prisma.assignmentGroup.findFirst({
-      where: {
-        assignmentId: job.assignmentId,
-        groupId: userSession.groupId,
-      },
-      select: { assignmentId: true },
-    });
-
-    return link !== null;
   }
 
   @Get(":id")
@@ -184,57 +132,6 @@ export class AssignmentControllerV1 {
     return this.assignmentService.update(
       Number(id),
       updateAssignmentRequestDto,
-    );
-  }
-
-  @Get("jobs/:jobId/status-stream")
-  @Roles(UserRole.AUTHOR)
-  @ApiOperation({ summary: "Stream publish job status" })
-  @ApiParam({ name: "jobId", required: true, description: "Job ID" })
-  @Sse("jobs/:jobId/status-stream")
-  async sendPublishJobStatus(
-    @Param("jobId") jobId: string,
-    @Req() request: UserSessionRequest,
-  ): Promise<Observable<MessageEvent>> {
-    const job = await this.assignmentService.getJobStatus(jobId);
-    if (!job) {
-      throw new NotFoundException("Job not found");
-    }
-
-    const allowed = await this.canReadPublishJob(job, request.userSession);
-    if (!allowed) {
-      throw new NotFoundException("Job not found");
-    }
-
-    return this.jobStatusService.getJobStatusStream(jobId);
-  }
-  @Put(":id/publish")
-  @Roles(UserRole.AUTHOR)
-  @UseGuards(AssignmentAccessControlGuard)
-  @ApiOperation({ summary: "Update all questions for an assignment" })
-  @ApiParam({ name: "id", required: true })
-  @ApiBody({
-    type: UpdateAssignmentRequestDto,
-    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
-  })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
-  @ApiResponse({ status: 403 })
-  async updateAssignmentQuestions(
-    @Param("id") id: number,
-    @Body() updatedAssignment: UpdateAssignmentQuestionsDto,
-    @Req() request: UserSessionRequest,
-  ): Promise<{ jobId: string; message: string }> {
-    if (
-      updatedAssignment === undefined ||
-      updatedAssignment.questions === undefined ||
-      updatedAssignment.questions?.length === 0
-    ) {
-      throw new BadRequestException("No data was provided");
-    }
-    return await this.assignmentService.publishAssignment(
-      Number(id),
-      updatedAssignment,
-      request.userSession.userId,
     );
   }
 
@@ -323,35 +220,6 @@ export class AssignmentControllerV1 {
       Number(id),
       replaceAssignmentRequestDto,
     );
-  }
-
-  @Get("jobs/:jobId/status")
-  @Roles(UserRole.AUTHOR)
-  async getJobStatus(
-    @Param("jobId") jobId: string,
-    @Req() request: UserSessionRequest,
-  ): Promise<{
-    status: string;
-    progress: string;
-    questions?: LLMResponseQuestion[];
-  }> {
-    const job = await this.assignmentService.getJobStatus(jobId);
-    if (!job) {
-      throw new NotFoundException("Job not found");
-    }
-
-    const allowed = await this.canReadPublishJob(job, request.userSession);
-    if (!allowed) {
-      throw new NotFoundException("Job not found");
-    }
-
-    return job.status === "Completed"
-      ? {
-          status: job.status,
-          progress: job.progress,
-          questions: job.result as LLMResponseQuestion[],
-        }
-      : { status: job.status, progress: job.progress };
   }
 
   @Post(":assignmentId/report")
