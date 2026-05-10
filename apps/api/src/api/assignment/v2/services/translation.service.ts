@@ -105,8 +105,7 @@ export class TranslationService implements OnModuleDestroy {
     private readonly llmResolver: LLMResolverService,
   ) {
     this.languageTranslation =
-      process.env.ENABLE_TRANSLATION.toString().toLowerCase() === "true" ||
-      false;
+      process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";
 
     this.limiter = this.createDefaultLimiter();
     this.watsonxLimiter = this.createWatsonxLimiter();
