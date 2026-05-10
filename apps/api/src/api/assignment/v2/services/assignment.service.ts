@@ -1,11 +1,16 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
+import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { buildInflightKey } from "src/api/assignment/attempt/translation-state-redis";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
+import { TranslateMetaJobPayload } from "src/job-queue/job-queue.types";
+import { createRedisConnection } from "src/job-queue/redis.connection";
 import { Logger } from "winston";
+import { getAllLanguageCodes } from "../../attempt/helper/languages";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   AssignmentResponseDto,
@@ -23,6 +28,10 @@ import {
 import { applyQuestionOrder } from "../../utils/question-order.util";
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
+import type {
+  PerJobTranslationEntry,
+  PublishJobResult,
+} from "./publish-job-result.types";
 import { QuestionService } from "./question.service";
 import { TranslationService } from "./translation.service";
 import {
@@ -30,12 +39,38 @@ import {
   VersionSummary,
 } from "./version-management.service";
 
+// Per-assignment in-flight SET TTL fallback. If the publish job dies before
+// it can SREM each language, the SET still expires after 30 minutes — the
+// learner-side loop then resolves any missing Translation row as
+// "unavailable" rather than "pending" forever.
+const TRANSLATION_INFLIGHT_TTL_SECONDS = 1800;
+
+// Publish-job translation-progress poll loop constants. After the
+// DB-writes-done boundary, runPublishJob stays alive on mark-jobs and polls
+// the per-publish status hash every second — each tick aggregates the
+// per-job entries the translation workers HSET and surfaces them on the
+// SSE stream via JobStatusUpdate.result. The hard timeout caps loop
+// runtime; on timeout the publish job marks itself Completed anyway and
+// outstanding translations fall through to the existing admin recovery
+// endpoint.
+const PUBLISH_TRANSLATION_POLL_INTERVAL_MS = 1000;
+const PUBLISH_TRANSLATION_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+const buildPublishHashKey = (parentJobId: string): string =>
+  `mark:publish:${parentJobId}:translations`;
+
 /**
  * Service for managing assignment operations
  */
 @Injectable()
-export class AssignmentServiceV2 {
+export class AssignmentServiceV2 implements OnModuleDestroy {
   private logger: Logger;
+  // Dedicated IORedis connection for the per-assignment in-flight language
+  // SET. The publish flow SADDs all supported language codes into this set
+  // before fanning out translation jobs; the worker SREMs each language as
+  // it terminates. Keeping a single instance per service mirrors the
+  // existing JobQueueService Redis pattern and avoids reconnect storms.
+  private readonly translationStateRedis: IORedis;
+
   constructor(
     private readonly assignmentRepository: AssignmentRepository,
     private readonly questionService: QuestionService,
@@ -48,6 +83,11 @@ export class AssignmentServiceV2 {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
+    this.translationStateRedis = createRedisConnection();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.translationStateRedis.quit().catch(() => undefined);
   }
 
   /**
@@ -114,7 +154,47 @@ export class AssignmentServiceV2 {
     const result = await this.assignmentRepository.update(id, updateDto);
 
     if (shouldTranslate) {
-      await this.translationService.translateAssignment(id);
+      // Translation work moved off the synchronous PATCH path. Seed the
+      // per-assignment in-flight SET first so a learner hitting the GET
+      // attempt endpoint during the brief enqueue-to-worker window sees
+      // translationStatus "pending" instead of "unavailable". The worker
+      // SREMs each language as it terminates; the TTL fallback covers the
+      // case where the worker dies before cleanup.
+      const supportedLanguageCodes = getAllLanguageCodes();
+      const inflightKey = buildInflightKey(id);
+      if (supportedLanguageCodes.length > 0) {
+        await this.translationStateRedis.sadd(
+          inflightKey,
+          ...supportedLanguageCodes,
+        );
+        await this.translationStateRedis.expire(
+          inflightKey,
+          TRANSLATION_INFLIGHT_TTL_SECONDS,
+        );
+      }
+
+      // Assignment-meta translation (name / introduction / instructions /
+      // grading-criteria) runs as its own retryable BullMQ job on the
+      // dedicated translations queue. The PATCH response no longer blocks
+      // on LLM work. No parentJobId is passed — this code path has no
+      // parent publish job, and the worker tolerates the absent
+      // per-publish hash key.
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        JOB_NAMES.TRANSLATE_META,
+        {
+          assignmentId: id,
+        } satisfies TranslateMetaJobPayload,
+        {
+          attempts: 3,
+          backoff: { type: "exponential", delay: 5000 },
+        },
+      );
+      this.logger.info("publish.translation.job.enqueued", {
+        assignmentId: id,
+        kind: "meta",
+        id,
+      });
     }
 
     if (updateDto.published) {
@@ -254,6 +334,11 @@ export class AssignmentServiceV2 {
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
   ): Promise<void> {
+    // Wall-clock anchor for the publish-complete telemetry below. Captures
+    // DB-writes-done latency — the user-visible metric the publish hot path
+    // is budgeted against (target: 30 s p95 for a 50-question publish).
+    const publishStartedAt = Date.now();
+
     try {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
@@ -374,119 +459,80 @@ export class AssignmentServiceV2 {
         questionContentChanged ||
         existingTranslationCount === 0;
 
+      // Translation work has moved off the publish hot path onto the
+      // dedicated translations queue. Before fanning out, seed the
+      // per-assignment in-flight language SET so the learner-side loop can
+      // distinguish "translation still running" (pending) from "translation
+      // never produced a row" (unavailable) when no Translation row exists
+      // for a requested language. The worker SREMs each language as it
+      // terminates; a 30-minute TTL fallback eventually clears the SET if
+      // the publish job dies mid-flight.
+      const supportedLanguageCodes = getAllLanguageCodes();
+      const inflightKey = buildInflightKey(assignmentId);
+      let metaEnqueued = false;
+      if (supportedLanguageCodes.length > 0) {
+        await this.translationStateRedis.sadd(
+          inflightKey,
+          ...supportedLanguageCodes,
+        );
+        await this.translationStateRedis.expire(
+          inflightKey,
+          TRANSLATION_INFLIGHT_TTL_SECONDS,
+        );
+      }
+
       if (shouldTranslateAssignment) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress: "Content changes detected, translating assignment",
+          progress:
+            "Content changes detected, dispatching assignment translation",
           percentage: 80,
         });
 
-        await this.translationService.translateAssignment(assignmentId, jobId, {
-          start: 80,
-          end: 90,
+        // Assignment-meta translation (name / introduction / instructions /
+        // grading-criteria) runs as its own retryable BullMQ job alongside
+        // the per-question and per-variant jobs the question service
+        // enqueued upstream. The publish job no longer awaits LLM calls.
+        await this.jobQueueService.enqueue(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_META,
+          {
+            parentJobId: jobId,
+            assignmentId,
+          } satisfies TranslateMetaJobPayload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+          },
+        );
+        metaEnqueued = true;
+        this.logger.info("publish.translation.job.enqueued", {
+          assignmentId,
+          kind: "meta",
+          id: assignmentId,
+          parentJobId: jobId,
         });
       } else {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress: "Checking for language consistency issues",
-          percentage: 78,
+          progress:
+            "No translatable content changes detected; skipping assignment-meta translation",
+          percentage: 85,
         });
-
-        if (existingTranslationCount > 0) {
-          const isValid = true;
-          if (isValid) {
-            await this.jobStatusService.updateJobStatus(jobId, {
-              status: "In Progress",
-              progress:
-                "Translation validation passed, skipping consistency check",
-              percentage: 85,
-            });
-          } else {
-            this.logger.warn(
-              `Quick validation failed for assignment ${assignmentId}, running full validation`,
-            );
-
-            const languageValidation =
-              await this.translationService.validateAssignmentLanguageConsistency(
-                assignmentId,
-              );
-
-            if (languageValidation.isConsistent) {
-              await this.jobStatusService.updateJobStatus(jobId, {
-                status: "In Progress",
-                progress: "Language consistency validated, no issues found",
-                percentage: 85,
-              });
-            } else {
-              this.logger.warn(
-                `Language consistency issues detected for assignment ${assignmentId}: ${languageValidation.mismatchedLanguages.join(
-                  ", ",
-                )}`,
-              );
-
-              await this.jobStatusService.updateJobStatus(jobId, {
-                status: "In Progress",
-                progress: `Language mismatch detected for ${languageValidation.mismatchedLanguages.length} languages, refreshing translations`,
-                percentage: 80,
-              });
-
-              await this.translationService.retranslateAssignmentForLanguages(
-                assignmentId,
-                languageValidation.mismatchedLanguages,
-                jobId,
-              );
-
-              await this.jobStatusService.updateJobStatus(jobId, {
-                status: "In Progress",
-                progress: "Translation refresh completed",
-                percentage: 90,
-              });
-            }
-          }
-        } else {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress:
-              "No existing translations to validate, skipping consistency check",
-            percentage: 85,
-          });
-        }
       }
 
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Validating translation completeness",
-        percentage: 88,
+      // DB-writes-done boundary. From this point on, the publish job no
+      // longer touches the database for translation work — per-question,
+      // per-variant, and (when needed) per-assignment-meta translation jobs
+      // run asynchronously on mark.assignment.v2.translations. A follow-up
+      // poll loop will aggregate per-job progress for the SSE channel.
+      this.logger.info("publish.complete", {
+        assignmentId,
+        jobId,
+        dbWriteMs: Date.now() - publishStartedAt,
+        jobsEnqueued: metaEnqueued ? 1 : 0,
+        percentage: 100,
       });
-
-      const translationCompleteness =
-        await this.translationService.ensureTranslationCompleteness(
-          assignmentId,
-        );
-
-      if (!translationCompleteness.isComplete) {
-        this.logger.warn(
-          `Missing translations detected for assignment ${assignmentId}. Attempting to fix...`,
-          { missingTranslations: translationCompleteness.missingTranslations },
-        );
-
-        for (const missing of translationCompleteness.missingTranslations) {
-          try {
-            this.logger.warn(
-              `Missing translations for ${
-                missing.variantId
-                  ? `variant ${missing.variantId}`
-                  : `question ${missing.questionId}`
-              }: ${missing.missingLanguages.join(", ")}`,
-            );
-          } catch (error) {
-            this.logger.error(
-              `Failed to fix missing translation for question ${missing.questionId}`,
-              error,
-            );
-          }
-        }
-      }
 
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
@@ -689,15 +735,112 @@ export class AssignmentServiceV2 {
         );
       }
 
+      // Stage 1: DB writes are complete and translation jobs have been
+      // enqueued. Surface this once on the SSE stream BEFORE entering the
+      // poll loop so consumers can transition UI state from "publishing" to
+      // "translating" immediately — without waiting for the first poll
+      // tick (which may be empty if no worker has HSET yet).
       await this.jobStatusService.updateJobStatus(jobId, {
-        status: "Completed",
-        progress:
-          assignmentTranslatableFieldsChanged || questionContentChanged
-            ? "Publishing completed successfully with content updates!"
-            : "Publishing completed successfully (configuration updates only)",
+        status: "In Progress",
+        progress: "DB writes complete; translation jobs queued",
         percentage: 100,
-        result: updatedQuestions,
+        result: { stage: "db_writes_done" } satisfies PublishJobResult,
       });
+
+      // Stage 2 + 3: 1-second poll loop. Each tick reads the per-publish
+      // status hash, aggregates per-job entries, and emits the rolled-up
+      // PublishJobResult on the existing JobStatusUpdate.result field.
+      // Loop exits when every spawned translation job has reached a
+      // terminal status (completed | failed), or after the hard timeout.
+      const pollHashKey = buildPublishHashKey(jobId);
+      const pollStartedAt = Date.now();
+      while (true) {
+        const entries = await this.translationStateRedis.hgetall(pollHashKey);
+        const perJob: PerJobTranslationEntry[] = Object.values(entries).map(
+          (raw) => JSON.parse(raw) as PerJobTranslationEntry,
+        );
+        const completed = perJob.filter(
+          (entry) => entry.status === "completed",
+        ).length;
+        const failed = perJob.filter(
+          (entry) => entry.status === "failed",
+        ).length;
+        const total = perJob.length;
+        // Guard against premature exit on the first tick when no worker
+        // has HSET yet (total === 0). The loop keeps polling until at
+        // least one entry exists AND all entries are terminal.
+        const allTerminal =
+          total > 0 &&
+          perJob.every(
+            (entry) =>
+              entry.status === "completed" || entry.status === "failed",
+          );
+
+        const tickResult: PublishJobResult = {
+          stage: allTerminal
+            ? "translations_complete"
+            : "translations_in_progress",
+          translations: {
+            aggregate: { completed, total, failed },
+            perJob,
+          },
+        };
+
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: allTerminal ? "Completed" : "In Progress",
+          progress: allTerminal
+            ? "Publishing complete (translations finished)"
+            : `Translating: ${completed}/${total} questions complete`,
+          percentage: 100,
+          result: tickResult,
+        });
+
+        if (allTerminal) {
+          break;
+        }
+
+        if (Date.now() - pollStartedAt > PUBLISH_TRANSLATION_POLL_TIMEOUT_MS) {
+          this.logger.warn("publish.translations.poll.timeout", {
+            assignmentId,
+            jobId,
+            completed,
+            total,
+            failed,
+            elapsedMs: Date.now() - pollStartedAt,
+          });
+          await this.jobStatusService.updateJobStatus(jobId, {
+            status: "Completed",
+            progress: "Publishing complete (translation poll timed out)",
+            percentage: 100,
+            result: {
+              stage: "translations_complete",
+              translations: {
+                aggregate: { completed, total, failed },
+                perJob,
+              },
+            } satisfies PublishJobResult,
+          });
+          break;
+        }
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, PUBLISH_TRANSLATION_POLL_INTERVAL_MS),
+        );
+      }
+
+      // Best-effort cleanup of the per-publish status hash. The 1-hour
+      // TTL on first HSET covers a failed DEL, so a Redis blip here only
+      // delays cleanup — it never blocks the publish from completing.
+      try {
+        await this.translationStateRedis.del(pollHashKey);
+      } catch (delError) {
+        this.logger.warn("publish.translations.cleanup.failed", {
+          assignmentId,
+          jobId,
+          error:
+            delError instanceof Error ? delError.message : String(delError),
+        });
+      }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";

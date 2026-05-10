@@ -16,6 +16,10 @@ import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JobQueueService } from "src/job-queue/job-queue.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import {
+  TranslateQuestionJobPayload,
+  TranslateVariantJobPayload,
+} from "src/job-queue/job-queue.types";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   EnhancedQuestionsToGenerate,
@@ -336,12 +340,26 @@ export class QuestionService {
           `Translating question ${index + 1}`,
         );
 
-        await this.translationService.translateQuestion(
-          assignmentId,
-          persistedId,
-          questionDto,
-          jobId,
-          true,
+        // Translation work moved off the publish hot path. Each question's
+        // 23-language fan-out runs as its own retryable BullMQ job on a
+        // dedicated translations queue so the publish job can reach the
+        // DB-writes-done boundary without waiting on synchronous LLM calls.
+        await this.jobQueueService.enqueue(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          {
+            parentJobId: jobId,
+            assignmentId,
+            questionId: persistedId,
+            question: questionDto,
+          } satisfies TranslateQuestionJobPayload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+          },
+        );
+        this.logger.log(
+          `publish.translation.job.enqueued { assignmentId: ${assignmentId}, kind: "question", id: ${persistedId}, parentJobId: ${String(jobId)} }`,
         );
 
         const variantCount = questionDto.variants?.length || 0;
@@ -904,13 +922,26 @@ export class QuestionService {
               }));
         }
 
-        await this.translationService.translateVariant(
-          assignmentId,
-          questionId,
-          updatedVariant.id,
-          updatedVariant as unknown as VariantDto,
-          jobId,
-          true,
+        // Per-variant translation now fans out across 23 languages inside a
+        // retryable BullMQ job on the dedicated translations queue rather
+        // than blocking the publish hot path on synchronous LLM calls.
+        await this.jobQueueService.enqueue(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_VARIANT,
+          {
+            parentJobId: jobId,
+            assignmentId,
+            questionId,
+            variantId: updatedVariant.id,
+            variant: updatedVariant as unknown as VariantDto,
+          } satisfies TranslateVariantJobPayload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+          },
+        );
+        this.logger.log(
+          `publish.translation.job.enqueued { assignmentId: ${assignmentId}, kind: "variant", id: ${updatedVariant.id}, parentJobId: ${String(jobId)} }`,
         );
       } else {
         const newVariant = await this.variantRepository.create(variantData);
@@ -924,13 +955,26 @@ export class QuestionService {
           });
         }
 
-        await this.translationService.translateVariant(
-          assignmentId,
-          questionId,
-          newVariant.id,
-          newVariant as unknown as VariantDto,
-          jobId,
-          true,
+        // Per-variant translation now fans out across 23 languages inside a
+        // retryable BullMQ job on the dedicated translations queue rather
+        // than blocking the publish hot path on synchronous LLM calls.
+        await this.jobQueueService.enqueue(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_VARIANT,
+          {
+            parentJobId: jobId,
+            assignmentId,
+            questionId,
+            variantId: newVariant.id,
+            variant: newVariant as unknown as VariantDto,
+          } satisfies TranslateVariantJobPayload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+          },
+        );
+        this.logger.log(
+          `publish.translation.job.enqueued { assignmentId: ${assignmentId}, kind: "variant", id: ${newVariant.id}, parentJobId: ${String(jobId)} }`,
         );
       }
     }

@@ -1,4 +1,6 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
 import {
   TRANSLATION_MAINTENANCE_JOB_RUNNER,
   TranslationMaintenanceJobRunner,
@@ -6,6 +8,7 @@ import {
 import { AssignmentServiceV1 } from "../api/assignment/v1/services/assignment.service";
 import { AssignmentServiceV2 } from "../api/assignment/v2/services/assignment.service";
 import { QuestionService as AssignmentQuestionServiceV2 } from "../api/assignment/v2/services/question.service";
+import { TranslationService } from "../api/assignment/v2/services/translation.service";
 import { AttemptServiceV2 } from "../api/attempt/services/attempt.service";
 import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import {
@@ -22,6 +25,9 @@ import {
   AssignmentV2PublishJobPayload,
   AttemptAuthorPreviewJobPayload,
   AttemptGradeJobPayload,
+  TranslateMetaJobPayload,
+  TranslateQuestionJobPayload,
+  TranslateVariantJobPayload,
 } from "./job-queue.types";
 
 export interface JobExecutionRequest {
@@ -33,6 +39,8 @@ export interface JobExecutionRequest {
 
 @Injectable()
 export class JobExecutorService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly assignmentServiceV1: AssignmentServiceV1,
     private readonly assignmentServiceV2: AssignmentServiceV2,
@@ -40,7 +48,11 @@ export class JobExecutorService {
     private readonly attemptService: AttemptServiceV2,
     @Inject(TRANSLATION_MAINTENANCE_JOB_RUNNER)
     private readonly translationRunner: TranslationMaintenanceJobRunner,
-  ) {}
+    private readonly translationService: TranslationService,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: JobExecutorService.name });
+  }
 
   async executeJob(request: JobExecutionRequest): Promise<void> {
     switch (request.queueName) {
@@ -58,6 +70,9 @@ export class JobExecutorService {
           request.jobName,
           request.payload,
         );
+      }
+      case JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS: {
+        return this.executeTranslationJob(request.jobName, request.payload);
       }
       default: {
         throw new BadRequestException(
@@ -186,6 +201,81 @@ export class JobExecutorService {
       default: {
         throw new BadRequestException(
           `Unsupported admin translation job: ${jobName}`,
+        );
+      }
+    }
+  }
+
+  private async executeTranslationJob(
+    jobName: JobName,
+    payload: unknown,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    switch (jobName) {
+      case JOB_NAMES.TRANSLATE_QUESTION: {
+        const jobPayload = payload as TranslateQuestionJobPayload;
+        const { success, failure } =
+          await this.translationService.translateQuestion(
+            jobPayload.assignmentId,
+            jobPayload.questionId,
+            jobPayload.question,
+            jobPayload.parentJobId,
+            true,
+          );
+        this.logger.info("publish.translation.job.executor.complete", {
+          assignmentId: jobPayload.assignmentId,
+          kind: "question",
+          id: jobPayload.questionId,
+          jobId: jobPayload.parentJobId,
+          success,
+          failure,
+          durationMs: Date.now() - startTime,
+        });
+        return;
+      }
+      case JOB_NAMES.TRANSLATE_VARIANT: {
+        const jobPayload = payload as TranslateVariantJobPayload;
+        const { success, failure } =
+          await this.translationService.translateVariant(
+            jobPayload.assignmentId,
+            jobPayload.questionId,
+            jobPayload.variantId,
+            jobPayload.variant,
+            jobPayload.parentJobId,
+            true,
+          );
+        this.logger.info("publish.translation.job.executor.complete", {
+          assignmentId: jobPayload.assignmentId,
+          kind: "variant",
+          id: jobPayload.variantId,
+          jobId: jobPayload.parentJobId,
+          success,
+          failure,
+          durationMs: Date.now() - startTime,
+        });
+        return;
+      }
+      case JOB_NAMES.TRANSLATE_META: {
+        const jobPayload = payload as TranslateMetaJobPayload;
+        const { success, failure } =
+          await this.translationService.translateAssignment(
+            jobPayload.assignmentId,
+          );
+        this.logger.info("publish.translation.job.executor.complete", {
+          assignmentId: jobPayload.assignmentId,
+          kind: "meta",
+          id: jobPayload.assignmentId,
+          jobId: jobPayload.parentJobId,
+          success,
+          failure,
+          durationMs: Date.now() - startTime,
+        });
+        return;
+      }
+      default: {
+        throw new BadRequestException(
+          `Unsupported translation job: ${jobName}`,
         );
       }
     }
