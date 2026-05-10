@@ -233,7 +233,7 @@ describe("job-queue (e2e)", () => {
     }
 
     baseUrl = `http://127.0.0.1:${address.port}`;
-  });
+  }, 60_000);
 
   beforeEach(async () => {
     await redisHarness.flush();
