@@ -123,8 +123,6 @@ describe("QuestionResponseService", () => {
   });
 });
 
-// ─── Change 2+3+5: gradeQuestionsForLearner + commitAttemptWithResponses ──────
-
 describe("QuestionResponseService — gradeQuestionsForLearner", () => {
   let service: QuestionResponseService;
 
@@ -183,6 +181,10 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
     mockPrisma.$transaction.mockImplementation(
       async (cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx),
     );
+
+    // Phase 0 hoist runs unconditionally; mocks must return iterable defaults.
+    mockPrisma.question.findMany.mockResolvedValue([]);
+    mockPrisma.assignment.findUnique.mockResolvedValue(null);
   });
 
   function spyPrivate<K extends string>(
