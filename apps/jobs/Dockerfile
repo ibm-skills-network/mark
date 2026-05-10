@@ -56,4 +56,4 @@ COPY --chown=node:node --from=build ${DIR}/apps/jobs/package.json ./package.json
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/jobs/src/main.js"]
