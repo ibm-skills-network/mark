@@ -1,4 +1,8 @@
-import { UpdateAssignmentQuestionsDto } from "../api/assignment/dto/update.questions.request.dto";
+import {
+  QuestionDto,
+  UpdateAssignmentQuestionsDto,
+  VariantDto,
+} from "../api/assignment/dto/update.questions.request.dto";
 import {
   EnhancedQuestionsToGenerate,
   QuestionsToGenerate,
@@ -49,6 +53,30 @@ export interface AttemptGradeJobPayload {
   updateDto: LearnerUpdateAssignmentAttemptRequestDto;
   authCookie?: string;
   userSession: AttemptWorkerUserSession;
+}
+
+export interface TranslateQuestionJobPayload {
+  parentJobId: string;
+  assignmentId: number;
+  questionId: number;
+  question: QuestionDto;
+}
+
+export interface TranslateVariantJobPayload {
+  parentJobId: string;
+  assignmentId: number;
+  questionId: number;
+  variantId: number;
+  variant: VariantDto;
+}
+
+export interface TranslateMetaJobPayload {
+  // parentJobId is optional: the publish-driven enqueue passes the publish jobId so
+  // the worker can HSET into the per-publish translation-status hash. The
+  // updateAssignment standalone enqueue (no SSE consumer) omits it; the worker
+  // skips the per-publish HSET when absent.
+  parentJobId?: string;
+  assignmentId: number;
 }
 
 export interface AttemptAuthorPreviewJobPayload {
