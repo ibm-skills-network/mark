@@ -88,12 +88,10 @@ jobs:
         if: steps.changes.outputs.needs_scan == 'true'
         run: |
           yarn config set network-timeout 600000
-          yarn config set network-concurrency 1
-          yarn config set child-concurrency 1
 
       - name: Install dependencies
         if: steps.changes.outputs.needs_scan == 'true'
-        run: yarn install --frozen-lockfile --verbose
+        run: yarn install --frozen-lockfile
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
@@ -266,12 +264,10 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         run: |
           yarn config set network-timeout 600000
-          yarn config set network-concurrency 1
-          yarn config set child-concurrency 1
 
       - name: Install dependencies
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn install --frozen-lockfile --verbose
+        run: yarn install --frozen-lockfile
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
@@ -323,12 +319,10 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         run: |
           yarn config set network-timeout 600000
-          yarn config set network-concurrency 1
-          yarn config set child-concurrency 1
 
       - name: Install dependencies
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn install --frozen-lockfile --verbose
+        run: yarn install --frozen-lockfile
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
@@ -485,7 +479,7 @@ jobs:
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
           cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=min,scope=${{ matrix.service }},ignore-error=true
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }},ignore-error=true
           platforms: linux/amd64
 
       - name: Run container security scan
