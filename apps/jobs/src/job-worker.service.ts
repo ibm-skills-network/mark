@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
@@ -6,8 +7,10 @@ import {
 } from "@nestjs/common";
 import { Job, Worker } from "bullmq";
 import IORedis from "ioredis";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { Logger as WinstonLogger } from "winston";
 import {
   JOB_NAMES,
   JOB_QUEUE_NAMES,
@@ -23,6 +26,17 @@ import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 
+// Allowed-fields-only shape carried in translation-job payloads. Restricted
+// to identifiers; the LLM-produced translatedText/translatedChoices that
+// the executor side handles never appear in the worker's view of the
+// payload, and never appear in the structured logs below.
+interface TranslationJobPayload {
+  assignmentId: number;
+  questionId?: number;
+  variantId?: number;
+  parentJobId?: string;
+}
+
 const JOB_EXECUTOR_PATH = "/api/internal/jobs/execute";
 
 interface MarkApiJobExecutionRequest {
@@ -35,13 +49,26 @@ interface MarkApiJobExecutionRequest {
 @Injectable()
 export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobWorkerService.name);
+  // Winston logger sits alongside the Nest Logger because the structured
+  // job-lifecycle log lines below take an object payload as the second
+  // argument; Nest's Logger.log() does not. The Nest Logger keeps emitting
+  // the existing string-style lifecycle lines through the same Winston
+  // bootstrap configured in main.ts, so transports/format stay consistent.
+  private readonly structuredLogger: WinstonLogger;
   private connection?: IORedis;
   private readonly workers: Worker[] = [];
   private heartbeatInterval?: NodeJS.Timeout;
   private readonly workerInstanceId = randomUUID();
   private readonly startedAt = new Date().toISOString();
 
-  constructor(private readonly jobExecutorService: JobExecutorService) {}
+  constructor(
+    private readonly jobExecutorService: JobExecutorService,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: WinstonLogger,
+  ) {
+    this.structuredLogger = parentLogger.child({
+      context: JobWorkerService.name,
+    });
+  }
 
   // Single source of truth for the JOBS_EXECUTE_LOCALLY flag check.
   // Strict equality preserves default-OFF for undefined, "", "false", "True".
@@ -67,6 +94,16 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 1_800_000;
     const ASSIGNMENT_NO_STALL_RECOVERY = 0;
 
+    // 5-minute lockDuration + maxStalledCount=0 prevents BullMQ stall-recovery
+    // from racing the original execution on long-running translation jobs.
+    // Per-question worst-case wall-clock can hit ~90s when the LLM provider
+    // throttles; 5 min is the comfortable safety margin. maxStalledCount=0
+    // means a genuinely-stalled worker fails permanently rather than
+    // spawning a recovery execution that would race writes to the same
+    // Translation rows.
+    const TRANSLATION_LOCK_DURATION_MS = 300_000;
+    const TRANSLATION_NO_STALL_RECOVERY = 0;
+
     this.workers.push(
       this.createWorker(
         JOB_QUEUE_NAMES.ASSIGNMENT_V1,
@@ -84,6 +121,15 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         {
           lockDuration: ASSIGNMENT_PUBLISH_LOCK_DURATION_MS,
           maxStalledCount: ASSIGNMENT_NO_STALL_RECOVERY,
+        },
+      ),
+      this.createWorker(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        async (job) => this.handleTranslationJob(job),
+        Number.parseInt(process.env.TRANSLATION_CONCURRENCY ?? "8", 10),
+        {
+          lockDuration: TRANSLATION_LOCK_DURATION_MS,
+          maxStalledCount: TRANSLATION_NO_STALL_RECOVERY,
         },
       ),
       this.createWorker(
@@ -288,6 +334,93 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         throw new Error(`Unsupported attempt job: ${job.name}`);
       }
     }
+  }
+
+  // Routes translation jobs (question / variant / assignment-meta) through the
+  // same local/forward branch all other handlers use. All three job names
+  // share identical routing semantics so they collapse into one switch case.
+  // Structured Winston log lines emit at start/complete/failed boundaries
+  // with IDs and counts only -- translatedText/translatedChoices/raw error
+  // objects are intentionally absent from the JSON payloads.
+  private async handleTranslationJob(job: Job): Promise<void> {
+    const startTime = Date.now();
+    const payload = this.getDecryptedJobData<TranslationJobPayload>(job);
+    const id = payload.questionId ?? payload.variantId ?? payload.assignmentId;
+
+    this.structuredLogger.info("publish.translation.job.start", {
+      assignmentId: payload.assignmentId,
+      kind: this.kindFromJobName(job.name),
+      id,
+      jobId: job.id,
+      jobName: job.name,
+      languageCount: 23,
+    });
+
+    try {
+      switch (job.name) {
+        case JOB_NAMES.TRANSLATE_QUESTION:
+        case JOB_NAMES.TRANSLATE_VARIANT:
+        case JOB_NAMES.TRANSLATE_META: {
+          if (this.shouldExecuteLocally()) {
+            this.logger.debug(
+              `Routing locally: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS} jobName=${job.name} jobId=${job.id}`,
+            );
+            await this.jobExecutorService.executeJob({
+              queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              jobName: job.name as JobName,
+              payload,
+              bullJobId: job.id,
+            });
+          } else {
+            this.logger.debug(
+              `Forwarding to API: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS} jobName=${job.name} jobId=${job.id}`,
+            );
+            await this.forwardJobToApi(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              job,
+            );
+          }
+          break;
+        }
+        default: {
+          throw new Error(`Unsupported translation job: ${job.name}`);
+        }
+      }
+
+      // Worker-side complete log carries durationMs only. Per-language
+      // success/failure counts come from the executor side, which emits its
+      // own complete log line with the per-language counters captured from
+      // TranslationService's internal allSettled fan-out.
+      this.structuredLogger.info("publish.translation.job.complete", {
+        assignmentId: payload.assignmentId,
+        kind: this.kindFromJobName(job.name),
+        id,
+        jobId: job.id,
+        durationMs: Date.now() - startTime,
+      });
+    } catch (error: unknown) {
+      // error.message only -- never the raw error object or error.stack in
+      // the JSON payload. The Nest Logger's "failed" lifecycle hook on the
+      // Worker captures the stack to its separate winston debug transport.
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.structuredLogger.error("publish.translation.job.failed", {
+        assignmentId: payload.assignmentId,
+        kind: this.kindFromJobName(job.name),
+        id,
+        jobId: job.id,
+        error: errorMessage,
+      });
+      // Rethrow so BullMQ's retry policy (set by the producer with attempts
+      // and exponential backoff) sees the failure and schedules a retry.
+      throw error;
+    }
+  }
+
+  private kindFromJobName(jobName: string): "question" | "variant" | "meta" {
+    if (jobName === JOB_NAMES.TRANSLATE_QUESTION) return "question";
+    if (jobName === JOB_NAMES.TRANSLATE_VARIANT) return "variant";
+    return "meta";
   }
 
   private async handleAdminTranslationJob(job: Job): Promise<void> {

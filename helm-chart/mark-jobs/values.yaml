@@ -33,5 +33,6 @@ env:
   JOBS_EXECUTE_LOCALLY: ""
   ENABLE_LTI_SCHEDULER: "false"      # gate the LTI cron in mark-jobs
   ENABLE_TRANSLATION: "true"         # required by SharedModule TranslationService ctor
+  TRANSLATION_CONCURRENCY: "8"       # BullMQ worker concurrency for mark.assignment.v2.translations queue
 
 secretEnv: {}

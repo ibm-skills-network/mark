@@ -20,6 +20,7 @@ type JobWorkerServiceTestAccessor = JobWorkerService & {
   handleAssignmentV2Job: (job: Job) => Promise<void>;
   handleAttemptJob: (job: Job) => Promise<void>;
   handleAdminTranslationJob: (job: Job) => Promise<void>;
+  handleTranslationJob: (job: Job) => Promise<void>;
   getConnection: () => IORedis;
   heartbeatInterval?: NodeJS.Timeout;
 };
@@ -96,6 +97,21 @@ const mockJobExecutorService = {
   executeJob: jest.fn(),
 };
 
+// Mock Winston parent logger. `.child()` returns an object exposing the same
+// info/warn/error/debug methods so the service's child-context idiom resolves
+// to a working logger surface in tests. Jest fns let individual tests assert
+// the structured-payload contract (publish.translation.job.start / .complete
+// / .failed) without coupling to a real winston transport.
+const mockStructuredLogger = {
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  debug: jest.fn(),
+};
+const mockParentWinstonLogger = {
+  child: jest.fn(() => mockStructuredLogger),
+} as unknown as import("winston").Logger;
+
 describe("JobWorkerService", () => {
   const jobQueueSecretEnv = "JOB_QUEUE_SECRET"; // pragma: allowlist secret
   const originalQueueKeyValue = process.env[jobQueueSecretEnv];
@@ -144,9 +160,14 @@ describe("JobWorkerService", () => {
     });
     global.fetch = fetchMock as unknown as typeof fetch;
     mockJobExecutorService.executeJob = jest.fn();
+    mockStructuredLogger.info.mockClear();
+    mockStructuredLogger.warn.mockClear();
+    mockStructuredLogger.error.mockClear();
+    mockStructuredLogger.debug.mockClear();
 
     service = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockParentWinstonLogger,
     );
   });
 
@@ -241,21 +262,32 @@ describe("JobWorkerService", () => {
     );
     expect(Worker).toHaveBeenNthCalledWith(
       3,
+      JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+      expect.any(Function),
+      {
+        connection: mockConnection,
+        concurrency: 8,
+        lockDuration: 300_000,
+        maxStalledCount: 0,
+      },
+    );
+    expect(Worker).toHaveBeenNthCalledWith(
+      4,
       JOB_QUEUE_NAMES.ATTEMPT,
       expect.any(Function),
       { connection: mockConnection, concurrency: 4 },
     );
     expect(Worker).toHaveBeenNthCalledWith(
-      4,
+      5,
       JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
       expect.any(Function),
       { connection: mockConnection, concurrency: 1 },
     );
-    expect(workerInstances).toHaveLength(4);
+    expect(workerInstances).toHaveLength(5);
     expect(
       workerInstances.every((worker) => worker.on.mock.calls.length === 2),
     ).toBe(true);
-    expect(workerWaitUntilReady).toHaveBeenCalledTimes(4);
+    expect(workerWaitUntilReady).toHaveBeenCalledTimes(5);
   });
 
   // ─── Change 9: configurable GRADING_CONCURRENCY ──────────────────────────
@@ -266,6 +298,7 @@ describe("JobWorkerService", () => {
     // Re-create service so the new env var is picked up
     const customService = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockParentWinstonLogger,
     );
     await customService.onModuleInit();
 
@@ -284,6 +317,7 @@ describe("JobWorkerService", () => {
     delete process.env.GRADING_CONCURRENCY;
     const defaultService = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockParentWinstonLogger,
     );
     await defaultService.onModuleInit();
 
@@ -300,6 +334,7 @@ describe("JobWorkerService", () => {
     process.env.GRADING_CONCURRENCY = "8";
     const s = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockParentWinstonLogger,
     );
     await s.onModuleInit();
 
@@ -319,7 +354,7 @@ describe("JobWorkerService", () => {
 
     await service.onModuleDestroy();
 
-    expect(workerClose).toHaveBeenCalledTimes(4);
+    expect(workerClose).toHaveBeenCalledTimes(5);
     expect(mockConnection.del).toHaveBeenCalledWith(
       expect.stringMatching(/^mark\.jobs\.worker\.heartbeat:/),
     );
@@ -643,6 +678,196 @@ describe("JobWorkerService", () => {
       ).rejects.toThrow(errorMessage);
     },
   );
+
+  describe("handleTranslationJob", () => {
+    const originalFlag = process.env.JOBS_EXECUTE_LOCALLY;
+
+    afterAll(() => {
+      if (originalFlag === undefined) {
+        delete process.env.JOBS_EXECUTE_LOCALLY;
+      } else {
+        process.env.JOBS_EXECUTE_LOCALLY = originalFlag;
+      }
+    });
+
+    beforeEach(() => {
+      delete process.env.JOBS_EXECUTE_LOCALLY;
+    });
+
+    it("forwards translation jobs and emits start + complete structured logs", async () => {
+      const payload = {
+        assignmentId: 42,
+        questionId: 7,
+        parentJobId: "publish-100",
+      };
+
+      await asTestAccessor(service).handleTranslationJob({
+        id: "bull-tx-1",
+        name: JOB_NAMES.TRANSLATE_QUESTION,
+        data: encryptJobPayload(payload),
+      } as unknown as Job);
+
+      expectLastForwardedJob({
+        bullJobId: "bull-tx-1",
+        jobName: JOB_NAMES.TRANSLATE_QUESTION,
+        payload,
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+      });
+
+      expect(mockStructuredLogger.info).toHaveBeenCalledWith(
+        "publish.translation.job.start",
+        expect.objectContaining({
+          assignmentId: 42,
+          kind: "question",
+          id: 7,
+          jobId: "bull-tx-1",
+          jobName: JOB_NAMES.TRANSLATE_QUESTION,
+          languageCount: 23,
+        }),
+      );
+      expect(mockStructuredLogger.info).toHaveBeenCalledWith(
+        "publish.translation.job.complete",
+        expect.objectContaining({
+          assignmentId: 42,
+          kind: "question",
+          id: 7,
+          jobId: "bull-tx-1",
+          durationMs: expect.any(Number),
+        }),
+      );
+      expect(mockStructuredLogger.error).not.toHaveBeenCalled();
+    });
+
+    it("routes locally when JOBS_EXECUTE_LOCALLY=true for variant jobs", async () => {
+      process.env.JOBS_EXECUTE_LOCALLY = "true";
+      const payload = { assignmentId: 11, variantId: 3 };
+
+      await asTestAccessor(service).handleTranslationJob({
+        id: "bull-tx-2",
+        name: JOB_NAMES.TRANSLATE_VARIANT,
+        data: encryptJobPayload(payload),
+      } as unknown as Job);
+
+      expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        jobName: JOB_NAMES.TRANSLATE_VARIANT,
+        payload,
+        bullJobId: "bull-tx-2",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(mockStructuredLogger.info).toHaveBeenCalledWith(
+        "publish.translation.job.start",
+        expect.objectContaining({ kind: "variant", id: 3 }),
+      );
+    });
+
+    it("treats translate-meta as the meta kind keyed by assignmentId", async () => {
+      const payload = { assignmentId: 99 };
+
+      await asTestAccessor(service).handleTranslationJob({
+        id: "bull-tx-3",
+        name: JOB_NAMES.TRANSLATE_META,
+        data: encryptJobPayload(payload),
+      } as unknown as Job);
+
+      expect(mockStructuredLogger.info).toHaveBeenCalledWith(
+        "publish.translation.job.start",
+        expect.objectContaining({
+          assignmentId: 99,
+          kind: "meta",
+          id: 99,
+          jobName: JOB_NAMES.TRANSLATE_META,
+        }),
+      );
+    });
+
+    it("emits a failed log line and rethrows on downstream forward failure", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: "Bad Gateway",
+        text: jest.fn().mockResolvedValue("upstream down"),
+      });
+
+      await expect(
+        asTestAccessor(service).handleTranslationJob({
+          id: "bull-tx-fail",
+          name: JOB_NAMES.TRANSLATE_QUESTION,
+          data: encryptJobPayload({ assignmentId: 5, questionId: 2 }),
+        } as unknown as Job),
+      ).rejects.toThrow(/Mark API job execution failed/);
+
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "publish.translation.job.failed",
+        expect.objectContaining({
+          assignmentId: 5,
+          kind: "question",
+          id: 2,
+          jobId: "bull-tx-fail",
+          error: expect.stringContaining("Mark API job execution failed"),
+        }),
+      );
+      // Complete log line must NOT fire when the worker throws.
+      const completeCalls = mockStructuredLogger.info.mock.calls.filter(
+        (call) => call[0] === "publish.translation.job.complete",
+      );
+      expect(completeCalls).toHaveLength(0);
+    });
+
+    it("rejects unsupported translation job names with a failed log line", async () => {
+      await expect(
+        asTestAccessor(service).handleTranslationJob({
+          id: "bull-tx-bad",
+          name: "unsupported.translation",
+          data: encryptJobPayload({ assignmentId: 1 }),
+        } as unknown as Job),
+      ).rejects.toThrow("Unsupported translation job: unsupported.translation");
+
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "publish.translation.job.failed",
+        expect.objectContaining({
+          error: "Unsupported translation job: unsupported.translation",
+        }),
+      );
+    });
+
+    it("never includes translatedText/translatedChoices/error.stack in structured payloads", async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: jest.fn().mockResolvedValue("oops"),
+      });
+
+      await asTestAccessor(service)
+        .handleTranslationJob({
+          id: "bull-tx-safety",
+          name: JOB_NAMES.TRANSLATE_QUESTION,
+          data: encryptJobPayload({ assignmentId: 1, questionId: 2 }),
+        } as unknown as Job)
+        .catch(() => undefined);
+
+      const allStructuredCalls = [
+        ...mockStructuredLogger.info.mock.calls,
+        ...mockStructuredLogger.warn.mock.calls,
+        ...mockStructuredLogger.error.mock.calls,
+      ];
+      for (const call of allStructuredCalls) {
+        const payload = call[1] as Record<string, unknown> | undefined;
+        if (!payload) continue;
+        const keys = Object.keys(payload);
+        expect(keys).not.toContain("translatedText");
+        expect(keys).not.toContain("translatedChoices");
+        expect(keys).not.toContain("stack");
+        // The "error" field may exist (it carries error.message as a string)
+        // but its VALUE must be a string, never an Error object whose
+        // toString would surface stack frames if serialized by transports.
+        if ("error" in payload) {
+          expect(typeof payload.error).toBe("string");
+        }
+      }
+    });
+  });
 
   describe("JOBS_EXECUTE_LOCALLY routing (per-handler)", () => {
     const originalFlag = process.env.JOBS_EXECUTE_LOCALLY;
