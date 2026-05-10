@@ -492,7 +492,6 @@ export class AssignmentServiceV1 {
     };
   }
 
-
   private async handleAssignmentTranslations(
     assignmentId: number,
     languages: string[],
