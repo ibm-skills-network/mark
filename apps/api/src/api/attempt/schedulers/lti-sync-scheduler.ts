@@ -10,11 +10,25 @@ import { LtiGradeSyncService } from "../services/lti-grade-sync.service";
 export class LtiSyncScheduler {
   private readonly logger = new Logger(LtiSyncScheduler.name);
   private isProcessing = false;
+  private hasLoggedLtiDisabled = false;
 
   constructor(private readonly ltiGradeSyncService: LtiGradeSyncService) {}
 
   private areSchedulersEnabled(): boolean {
     return process.env.ENABLE_JOB_SCHEDULERS === "true";
+  }
+
+  private isLtiSchedulerDisabled(): boolean {
+    if (process.env.ENABLE_LTI_SCHEDULER === "false") {
+      if (!this.hasLoggedLtiDisabled) {
+        this.logger.warn(
+          "LTI scheduler disabled via ENABLE_LTI_SCHEDULER=false; cron methods will skip until restarted",
+        );
+        this.hasLoggedLtiDisabled = true;
+      }
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -23,6 +37,7 @@ export class LtiSyncScheduler {
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduledRetries() {
+    if (this.isLtiSchedulerDisabled()) return;
     if (!this.areSchedulersEnabled()) {
       return;
     }
@@ -67,6 +82,7 @@ export class LtiSyncScheduler {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async reportSyncHealth() {
+    if (this.isLtiSchedulerDisabled()) return;
     if (!this.areSchedulersEnabled()) {
       return;
     }
