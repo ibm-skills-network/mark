@@ -5,6 +5,9 @@
     "types": ["node"],
     "outDir": "./dist",
     "baseUrl": "./",
+    "paths": {
+      "src/*": ["../api/src/*"]
+    },
     "target": "es2022",
     "useDefineForClassFields": false,
     "resolveJsonModule": true
