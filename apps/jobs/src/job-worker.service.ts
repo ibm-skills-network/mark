@@ -21,6 +21,7 @@ import {
 } from "./job-worker-heartbeat.constants";
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
+import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 
 const JOB_EXECUTOR_PATH = "/api/internal/jobs/execute";
 
@@ -39,6 +40,14 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private heartbeatInterval?: NodeJS.Timeout;
   private readonly workerInstanceId = randomUUID();
   private readonly startedAt = new Date().toISOString();
+
+  constructor(private readonly jobExecutorService: JobExecutorService) {}
+
+  // Single source of truth for the JOBS_EXECUTE_LOCALLY flag check.
+  // Strict equality preserves default-OFF for undefined, "", "false", "True".
+  private shouldExecuteLocally(): boolean {
+    return process.env.JOBS_EXECUTE_LOCALLY === "true";
+  }
 
   async onModuleInit(): Promise<void> {
     this.connection = createRedisConnection();
@@ -201,7 +210,22 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private async handleAssignmentV1Job(job: Job): Promise<void> {
     switch (job.name) {
       case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS: {
-        await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V1, job);
+        if (this.shouldExecuteLocally()) {
+          this.logger.debug(
+            `Routing locally: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V1} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.jobExecutorService.executeJob({
+            queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
+            jobName: job.name as JobName,
+            payload: this.getDecryptedJobData(job),
+            bullJobId: job.id,
+          });
+        } else {
+          this.logger.debug(
+            `Forwarding to API: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V1} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V1, job);
+        }
         return;
       }
       default: {
@@ -214,7 +238,22 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     switch (job.name) {
       case JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS:
       case JOB_NAMES.ASSIGNMENT_V2_PUBLISH: {
-        await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V2, job);
+        if (this.shouldExecuteLocally()) {
+          this.logger.debug(
+            `Routing locally: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V2} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.jobExecutorService.executeJob({
+            queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+            jobName: job.name as JobName,
+            payload: this.getDecryptedJobData(job),
+            bullJobId: job.id,
+          });
+        } else {
+          this.logger.debug(
+            `Forwarding to API: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V2} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V2, job);
+        }
         return;
       }
       default: {
@@ -227,7 +266,22 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     switch (job.name) {
       case JOB_NAMES.ATTEMPT_GRADE:
       case JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW: {
-        await this.forwardJobToApi(JOB_QUEUE_NAMES.ATTEMPT, job);
+        if (this.shouldExecuteLocally()) {
+          this.logger.debug(
+            `Routing locally: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.jobExecutorService.executeJob({
+            queueName: JOB_QUEUE_NAMES.ATTEMPT,
+            jobName: job.name as JobName,
+            payload: this.getDecryptedJobData(job),
+            bullJobId: job.id,
+          });
+        } else {
+          this.logger.debug(
+            `Forwarding to API: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.forwardJobToApi(JOB_QUEUE_NAMES.ATTEMPT, job);
+        }
         return;
       }
       default: {
@@ -240,7 +294,22 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     switch (job.name) {
       case JOB_NAMES.ADMIN_FIX_MISSING_TRANSLATIONS:
       case JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS: {
-        await this.forwardJobToApi(JOB_QUEUE_NAMES.ADMIN_TRANSLATION, job);
+        if (this.shouldExecuteLocally()) {
+          this.logger.debug(
+            `Routing locally: queue=${JOB_QUEUE_NAMES.ADMIN_TRANSLATION} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.jobExecutorService.executeJob({
+            queueName: JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+            jobName: job.name as JobName,
+            payload: this.getDecryptedJobData(job),
+            bullJobId: job.id,
+          });
+        } else {
+          this.logger.debug(
+            `Forwarding to API: queue=${JOB_QUEUE_NAMES.ADMIN_TRANSLATION} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.forwardJobToApi(JOB_QUEUE_NAMES.ADMIN_TRANSLATION, job);
+        }
         return;
       }
       default: {
@@ -282,14 +351,26 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private getJobExecutorUrl(): string {
-    if (process.env.MARK_API_JOB_EXECUTOR_URL) {
-      return process.env.MARK_API_JOB_EXECUTOR_URL;
-    }
+    const raw =
+      process.env.MARK_API_JOB_EXECUTOR_URL ||
+      `${(
+        process.env.MARK_API_ENDPOINT ??
+        process.env.MARK_API_URL ??
+        `http://localhost:${process.env.API_PORT ?? "4222"}`
+      ).replace(/\/+$/, "")}${JOB_EXECUTOR_PATH}`;
 
-    const baseUrl =
-      process.env.MARK_API_ENDPOINT ??
-      process.env.MARK_API_URL ??
-      `http://localhost:${process.env.API_PORT ?? "4222"}`;
-    return `${baseUrl.replace(/\/+$/, "")}${JOB_EXECUTOR_PATH}`;
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid job executor URL "${raw}": ${message}`);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(
+        `Invalid job executor URL "${raw}": unsupported scheme "${parsed.protocol}"`,
+      );
+    }
+    return raw;
   }
 }

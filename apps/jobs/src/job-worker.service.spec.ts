@@ -1,9 +1,31 @@
 import { Logger } from "@nestjs/common";
-import { Worker } from "bullmq";
+import { Job, Worker } from "bullmq";
+import IORedis from "ioredis";
+import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import { JobWorkerService } from "./job-worker.service";
 import { createRedisConnection } from "./redis.connection";
+
+// Typed test-only accessor that exposes the four per-queue handlers and the
+// shared internals these tests exercise. Defined locally so production code
+// stays unchanged; exists strictly so the suite can call private methods
+// without sprinkling `as any` (which silently type-checks even if the method
+// is renamed). If a private member referenced here is renamed in the
+// service, the cast site below fails to compile — surfacing the rename
+// through CI rather than letting tests silently pass against an undefined
+// property lookup.
+type JobWorkerServiceTestAccessor = JobWorkerService & {
+  handleAssignmentV1Job: (job: Job) => Promise<void>;
+  handleAssignmentV2Job: (job: Job) => Promise<void>;
+  handleAttemptJob: (job: Job) => Promise<void>;
+  handleAdminTranslationJob: (job: Job) => Promise<void>;
+  getConnection: () => IORedis;
+  heartbeatInterval?: NodeJS.Timeout;
+};
+
+const asTestAccessor = (s: JobWorkerService): JobWorkerServiceTestAccessor =>
+  s as JobWorkerServiceTestAccessor;
 
 const workerClose = jest.fn();
 const workerWaitUntilReady = jest.fn();
@@ -57,6 +79,23 @@ jest.mock("./redis.connection", () => ({
   createRedisConnection: jest.fn(),
 }));
 
+// Mock the cross-package JobExecutorService module at the boundary. apps/api
+// uses absolute "src/..." imports throughout; those resolve at type-check time
+// via apps/jobs/tsconfig.json paths but NOT at jest runtime. Stubbing the
+// module here keeps the test runner from following the transitive graph into
+// api source while the structural mock below stands in for the real instance.
+jest.mock(
+  "../../api/src/job-queue/job-executor.service",
+  () => ({
+    JobExecutorService: class {},
+  }),
+  { virtual: false },
+);
+
+const mockJobExecutorService = {
+  executeJob: jest.fn(),
+};
+
 describe("JobWorkerService", () => {
   const jobQueueSecretEnv = "JOB_QUEUE_SECRET"; // pragma: allowlist secret
   const originalQueueKeyValue = process.env[jobQueueSecretEnv];
@@ -104,14 +143,15 @@ describe("JobWorkerService", () => {
       text: jest.fn().mockResolvedValue(""),
     });
     global.fetch = fetchMock as unknown as typeof fetch;
+    mockJobExecutorService.executeJob = jest.fn();
 
-    service = new JobWorkerService();
+    service = new JobWorkerService(
+      mockJobExecutorService as unknown as JobExecutorService,
+    );
   });
 
   afterEach(() => {
-    const heartbeatInterval = (service as any).heartbeatInterval as
-      | NodeJS.Timeout
-      | undefined;
+    const heartbeatInterval = asTestAccessor(service).heartbeatInterval;
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
     }
@@ -224,7 +264,9 @@ describe("JobWorkerService", () => {
     process.env.GRADING_CONCURRENCY = "2";
 
     // Re-create service so the new env var is picked up
-    const customService = new JobWorkerService();
+    const customService = new JobWorkerService(
+      mockJobExecutorService as unknown as JobExecutorService,
+    );
     await customService.onModuleInit();
 
     const MockWorker = Worker as unknown as jest.Mock;
@@ -240,7 +282,9 @@ describe("JobWorkerService", () => {
 
   it("falls back to concurrency 4 when GRADING_CONCURRENCY is not set", async () => {
     delete process.env.GRADING_CONCURRENCY;
-    const defaultService = new JobWorkerService();
+    const defaultService = new JobWorkerService(
+      mockJobExecutorService as unknown as JobExecutorService,
+    );
     await defaultService.onModuleInit();
 
     const MockWorker = Worker as unknown as jest.Mock;
@@ -254,7 +298,9 @@ describe("JobWorkerService", () => {
 
   it("parses GRADING_CONCURRENCY as a base-10 integer", async () => {
     process.env.GRADING_CONCURRENCY = "8";
-    const s = new JobWorkerService();
+    const s = new JobWorkerService(
+      mockJobExecutorService as unknown as JobExecutorService,
+    );
     await s.onModuleInit();
 
     const MockWorker = Worker as unknown as jest.Mock;
@@ -288,8 +334,8 @@ describe("JobWorkerService", () => {
   });
 
   it("reuses the same Redis connection across repeated getConnection calls", () => {
-    const firstConnection = (service as any).getConnection();
-    const secondConnection = (service as any).getConnection();
+    const firstConnection = asTestAccessor(service).getConnection();
+    const secondConnection = asTestAccessor(service).getConnection();
 
     expect(firstConnection).toBe(mockConnection);
     expect(secondConnection).toBe(mockConnection);
@@ -336,7 +382,7 @@ describe("JobWorkerService", () => {
       learningObjectives: "Learn quickly",
     };
 
-    await (service as any).handleAssignmentV1Job({
+    await asTestAccessor(service).handleAssignmentV1Job({
       id: "bull-1",
       name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
       data: encryptJobPayload(payload),
@@ -360,7 +406,7 @@ describe("JobWorkerService", () => {
       learningObjectives: "Explain concepts",
     };
 
-    await (service as any).handleAssignmentV2Job({
+    await asTestAccessor(service).handleAssignmentV2Job({
       id: "bull-3",
       name: JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS,
       data: encryptJobPayload(payload),
@@ -382,7 +428,7 @@ describe("JobWorkerService", () => {
       userId: "author-2",
     };
 
-    await (service as any).handleAssignmentV2Job({
+    await asTestAccessor(service).handleAssignmentV2Job({
       id: "bull-4",
       name: JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
       data: encryptJobPayload(payload),
@@ -410,7 +456,7 @@ describe("JobWorkerService", () => {
       },
     };
 
-    await (service as any).handleAttemptJob({
+    await asTestAccessor(service).handleAttemptJob({
       id: "bull-5",
       name: JOB_NAMES.ATTEMPT_GRADE,
       data: encryptJobPayload(payload),
@@ -447,12 +493,12 @@ describe("JobWorkerService", () => {
       },
     };
 
-    await (service as any).handleAttemptJob({
+    await asTestAccessor(service).handleAttemptJob({
       id: "bull-6",
       name: JOB_NAMES.ATTEMPT_GRADE,
       data: encryptJobPayload(gradingPayload),
     });
-    await (service as any).handleAttemptJob({
+    await asTestAccessor(service).handleAttemptJob({
       id: "bull-7",
       name: JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW,
       data: encryptJobPayload(previewPayload),
@@ -486,12 +532,12 @@ describe("JobWorkerService", () => {
       body: { batchSize: 10, dryRun: false },
     };
 
-    await (service as any).handleAdminTranslationJob({
+    await asTestAccessor(service).handleAdminTranslationJob({
       id: "bull-8",
       name: JOB_NAMES.ADMIN_FIX_MISSING_TRANSLATIONS,
       data: encryptJobPayload(fixPayload),
     });
-    await (service as any).handleAdminTranslationJob({
+    await asTestAccessor(service).handleAdminTranslationJob({
       id: "bull-9",
       name: JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS,
       data: encryptJobPayload(sweepPayload),
@@ -518,7 +564,7 @@ describe("JobWorkerService", () => {
     process.env.MARK_API_JOB_EXECUTOR_URL =
       "http://mark-api:3000/api/internal/jobs/execute";
 
-    await (service as any).handleAssignmentV1Job({
+    await asTestAccessor(service).handleAssignmentV1Job({
       id: "bull-explicit",
       name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
       data: encryptJobPayload({
@@ -544,7 +590,7 @@ describe("JobWorkerService", () => {
     });
 
     await expect(
-      (service as any).handleAssignmentV1Job({
+      asTestAccessor(service).handleAssignmentV1Job({
         id: "bull-failed",
         name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
         data: encryptJobPayload({
@@ -559,7 +605,12 @@ describe("JobWorkerService", () => {
     );
   });
 
-  it.each([
+  type HandlerName =
+    | "handleAssignmentV1Job"
+    | "handleAssignmentV2Job"
+    | "handleAttemptJob"
+    | "handleAdminTranslationJob";
+  it.each<[HandlerName, string, string]>([
     [
       "handleAssignmentV1Job",
       "unsupported.v1",
@@ -583,12 +634,148 @@ describe("JobWorkerService", () => {
   ])(
     "rejects unsupported jobs in %s",
     async (methodName, jobName, errorMessage) => {
+      const handler = asTestAccessor(service)[methodName];
       await expect(
-        (service as any)[methodName]({
+        handler.call(service, {
           name: jobName,
           data: encryptJobPayload({}),
-        }),
+        } as unknown as Job),
       ).rejects.toThrow(errorMessage);
     },
   );
+
+  describe("JOBS_EXECUTE_LOCALLY routing (per-handler)", () => {
+    const originalFlag = process.env.JOBS_EXECUTE_LOCALLY;
+
+    afterAll(() => {
+      if (originalFlag === undefined) {
+        delete process.env.JOBS_EXECUTE_LOCALLY;
+      } else {
+        process.env.JOBS_EXECUTE_LOCALLY = originalFlag;
+      }
+    });
+
+    describe.each([
+      { flag: undefined as string | undefined, expected: "forward" as const },
+      { flag: "" as string | undefined, expected: "forward" as const },
+      { flag: "false" as string | undefined, expected: "forward" as const },
+      { flag: "true" as string | undefined, expected: "local" as const },
+      { flag: "True" as string | undefined, expected: "forward" as const },
+    ])("flag=$flag -> $expected", ({ flag, expected }) => {
+      beforeEach(() => {
+        if (flag === undefined) {
+          delete process.env.JOBS_EXECUTE_LOCALLY;
+        } else {
+          process.env.JOBS_EXECUTE_LOCALLY = flag;
+        }
+      });
+
+      it("routes assignment-v1 generation correctly", async () => {
+        const payload = {
+          jobId: "gen-1",
+          assignmentId: 1,
+          assignmentType: "QUIZ",
+          questionsToGenerate: { multipleChoice: 1 },
+        };
+        await asTestAccessor(service).handleAssignmentV1Job({
+          id: "bull-route-1",
+          name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
+          data: encryptJobPayload(payload),
+        });
+        if (expected === "local") {
+          expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
+            queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
+            jobName: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
+            payload,
+            bullJobId: "bull-route-1",
+          });
+          expect(fetchMock).not.toHaveBeenCalled();
+        } else {
+          expect(fetchMock).toHaveBeenCalled();
+          expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+        }
+      });
+
+      it("routes assignment-v2 publish correctly", async () => {
+        const payload = {
+          jobId: "publish-route",
+          assignmentId: 1,
+          updateDto: { title: "x" },
+          userId: "u",
+        };
+        await asTestAccessor(service).handleAssignmentV2Job({
+          id: "bull-route-2",
+          name: JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
+          data: encryptJobPayload(payload),
+        });
+        if (expected === "local") {
+          expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
+            queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+            jobName: JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
+            payload,
+            bullJobId: "bull-route-2",
+          });
+          expect(fetchMock).not.toHaveBeenCalled();
+        } else {
+          expect(fetchMock).toHaveBeenCalled();
+          expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+        }
+      });
+
+      it("routes attempt grade correctly", async () => {
+        const payload = {
+          gradingJobId: "grade-route",
+          attemptId: 1,
+          assignmentId: 1,
+          updateDto: { submitted: true },
+          userSession: {
+            userId: "learner-route",
+            role: "Learner",
+            gradingCallbackRequired: false,
+          },
+        };
+        await asTestAccessor(service).handleAttemptJob({
+          id: "bull-route-3",
+          name: JOB_NAMES.ATTEMPT_GRADE,
+          data: encryptJobPayload(payload),
+        });
+        if (expected === "local") {
+          expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
+            queueName: JOB_QUEUE_NAMES.ATTEMPT,
+            jobName: JOB_NAMES.ATTEMPT_GRADE,
+            payload,
+            bullJobId: "bull-route-3",
+          });
+          expect(fetchMock).not.toHaveBeenCalled();
+        } else {
+          expect(fetchMock).toHaveBeenCalled();
+          expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+        }
+      });
+
+      it("routes admin-translation sweep correctly", async () => {
+        const payload = {
+          jobId: "sweep-route",
+          body: { batchSize: 10, dryRun: false },
+        };
+        await asTestAccessor(service).handleAdminTranslationJob({
+          id: "bull-route-4",
+          name: JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS,
+          data: encryptJobPayload(payload),
+        });
+        if (expected === "local") {
+          expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
+            queueName: JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+            jobName: JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS,
+            payload,
+            bullJobId: "bull-route-4",
+          });
+          expect(fetchMock).not.toHaveBeenCalled();
+        } else {
+          expect(fetchMock).toHaveBeenCalled();
+          expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+        }
+      });
+    });
+  });
 });
