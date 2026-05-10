@@ -24,7 +24,12 @@ import {
   CreateQuestionResponseAttemptResponseDto,
   GeneralFeedbackDto,
 } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import {
+  Choice,
+  QuestionDto,
+  ScoringDto,
+  VideoPresentationConfig,
+} from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { Logger } from "winston";
@@ -34,6 +39,10 @@ import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
+import {
+  newJobScopedCache,
+  type JobScopedCache,
+} from "../grading/job-scoped-cache";
 import { GradingProgressService } from "../grading-progress.service";
 
 type PrismaTransactionalClient = Omit<
@@ -90,7 +99,41 @@ export class QuestionResponseService {
     assignmentId: number,
     language: string,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    cache?: JobScopedCache,
   ): Promise<GradedItem[]> {
+    // Defense-in-depth: allocate a cache if the caller did not supply one.
+    // The submission entrypoint (updateLearnerAttempt) now hoists this same
+    // allocation up so pre-translate and grading share a cache, but this
+    // fallback keeps the hoist below correct when the method is called
+    // directly (tests, future callers) without an outer cache. The Phase-0
+    // hoist must run unconditionally — without it, the parallel Promise.all
+    // in Phase 1 fans out N concurrent assignment.findUnique +
+    // question.findUnique calls.
+    const effectiveCache: JobScopedCache = cache ?? newJobScopedCache();
+
+    // ── Phase 0: Up-front question + assignment hoist (populates per-job cache before Phase 1 reads) ──
+    // Both hoists must run BEFORE Phase 1's $transaction so the parallel `Promise.all`
+    // inside Phase 1 sees a populated cache. Without the assignment hoist, the N concurrent
+    // `getAssignmentContext` calls inside Phase 1 each see `cache?.assignment` as undefined
+    // at the time of their cache check (the populate-on-resolve happens after the first
+    // `await prisma.assignment.findUnique` returns), causing N races against the same row.
+    if (effectiveCache.questions.size === 0) {
+      const ids = responsesForQuestions.map((r) => r.id);
+      if (ids.length > 0) {
+        const rows = await this.prisma.question.findMany({
+          where: { id: { in: ids } },
+        });
+        for (const row of rows) effectiveCache.questions.set(row.id, row);
+      }
+    }
+    if (!effectiveCache.assignment) {
+      const fetched = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { instructions: true },
+      });
+      if (fetched) effectiveCache.assignment = fetched;
+    }
+
     // ── Phase 1: Read (short transaction) ────────────────────────────────────
     const { questionDtos, sorted, adj, inDegree } =
       await this.prisma.$transaction(
@@ -103,6 +146,7 @@ export class QuestionResponseService {
                 assignmentId,
                 preTranslatedQuestions,
                 tx as PrismaTransactionalClient,
+                effectiveCache,
               );
               return question;
             }),
@@ -169,6 +213,7 @@ export class QuestionResponseService {
         assignmentAttemptId,
         undefined,
         inMemoryContextResponses,
+        effectiveCache,
       );
 
       const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
@@ -408,7 +453,8 @@ export class QuestionResponseService {
         questionAnswerContext: QuestionAnswerContext[];
       } =
         role === UserRole.LEARNER
-          ? await this.getAssignmentContext(
+          ? // legacy submit path: cache not threaded
+            await this.getAssignmentContext(
               assignmentId,
               questionId,
               assignmentAttemptId,
@@ -919,6 +965,7 @@ export class QuestionResponseService {
     assignmentId: number,
     preTranslatedQuestions?: Map<number, QuestionDto>,
     tx?: PrismaTransactionalClient,
+    cache?: JobScopedCache,
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -934,6 +981,8 @@ export class QuestionResponseService {
         questionId,
         assignmentAttemptId,
         tx,
+        undefined,
+        cache,
       );
       return { question, assignmentContext };
     }
@@ -973,23 +1022,23 @@ export class QuestionResponseService {
         assignmentId: baseQuestion.assignmentId,
         maxWords: variant.maxWords ?? baseQuestion.maxWords,
         maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
-        scoring:
-          this.parseJsonField(variant.scoring) ??
-          this.parseJsonField(baseQuestion.scoring),
-        choices:
-          this.parseJsonField(variant.choices) ??
-          this.parseJsonField(baseQuestion.choices),
+        scoring: (this.parseJsonField(variant.scoring) ??
+          this.parseJsonField(baseQuestion.scoring)) as ScoringDto,
+        choices: (this.parseJsonField(variant.choices) ??
+          this.parseJsonField(baseQuestion.choices)) as Choice[],
         answer: baseQuestion.answer ?? variant.answer,
         alreadyInBackend: true,
         totalPoints: baseQuestion.totalPoints,
         responseType: baseQuestion.responseType,
         gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
         videoPresentationConfig: baseQuestion.videoPresentationConfig
-          ? this.parseJsonField(baseQuestion.videoPresentationConfig)
+          ? (this.parseJsonField(
+              baseQuestion.videoPresentationConfig,
+            ) as VideoPresentationConfig)
           : null,
       };
     } else {
-      question = await this.questionService.findOne(questionId, tx);
+      question = await this.questionService.findOne(questionId, tx, cache);
     }
 
     const assignmentContext = await this.getAssignmentContext(
@@ -997,6 +1046,8 @@ export class QuestionResponseService {
       questionId,
       assignmentAttemptId,
       tx,
+      undefined,
+      cache,
     );
 
     return { question, assignmentContext };
@@ -1045,35 +1096,46 @@ export class QuestionResponseService {
     assignmentAttemptId: number,
     tx?: PrismaTransactionalClient,
     inMemoryResponses?: Map<number, string>,
+    cache?: JobScopedCache,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
   }> {
     const prisma = tx ?? this.prisma;
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: { instructions: true },
-    });
 
+    let assignment = cache?.assignment;
     if (!assignment) {
-      throw new NotFoundException(
-        `Assignment with ID ${assignmentId} not found.`,
-      );
+      const fetched = await prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { instructions: true },
+      });
+      if (!fetched) {
+        throw new NotFoundException(
+          `Assignment with ID ${assignmentId} not found.`,
+        );
+      }
+      assignment = fetched;
+      if (cache) cache.assignment = fetched;
     }
 
-    const question = await prisma.question.findUnique({
-      where: { id: questionId },
-      select: { gradingContextQuestionIds: true },
-    });
-
-    if (!question) {
-      throw new NotFoundException(`Question with ID ${questionId} not found.`);
+    let gradingContextQuestionIds: number[];
+    const cachedQuestion = cache?.questions.get(questionId);
+    if (cachedQuestion) {
+      gradingContextQuestionIds = cachedQuestion.gradingContextQuestionIds;
+    } else {
+      const fetched = await prisma.question.findUnique({
+        where: { id: questionId },
+        select: { gradingContextQuestionIds: true },
+      });
+      if (!fetched) {
+        throw new NotFoundException(
+          `Question with ID ${questionId} not found.`,
+        );
+      }
+      gradingContextQuestionIds = fetched.gradingContextQuestionIds;
     }
 
-    if (
-      !question.gradingContextQuestionIds ||
-      question.gradingContextQuestionIds.length === 0
-    ) {
+    if (!gradingContextQuestionIds || gradingContextQuestionIds.length === 0) {
       return {
         assignmentInstructions: assignment.instructions || "",
         questionAnswerContext: [],
@@ -1083,7 +1145,7 @@ export class QuestionResponseService {
     const contextQuestions = await prisma.question.findMany({
       where: {
         id: {
-          in: question.gradingContextQuestionIds,
+          in: gradingContextQuestionIds,
         },
       },
       select: { id: true, question: true, type: true },
@@ -1225,9 +1287,11 @@ export class QuestionResponseService {
   }
 
   /**
-   * Parse a JSON field from a database record
+   * Parse a JSON field from a database record. Prisma stores Json columns as
+   * the deserialized object/array, but legacy rows occasionally hold a
+   * stringified payload — handle both shapes.
    */
-  private parseJsonField(field: any): any {
+  private parseJsonField(field: unknown): unknown {
     if (!field) return null;
 
     if (typeof field === "string") {

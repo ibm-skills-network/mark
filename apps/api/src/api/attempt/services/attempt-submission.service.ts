@@ -58,6 +58,10 @@ import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import {
+  newJobScopedCache,
+  type JobScopedCache,
+} from "./grading/job-scoped-cache";
+import {
   GradedItem,
   QuestionResponseService,
 } from "./question-response/question-response.service";
@@ -368,6 +372,7 @@ export class AttemptSubmissionService {
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role } = request.userSession;
     if (role === UserRole.LEARNER) {
@@ -379,6 +384,7 @@ export class AttemptSubmissionService {
         gradingCallbackRequired,
         request,
         progressCallback,
+        cache,
       );
     } else if (role === UserRole.AUTHOR) {
       return this.updateAuthorAttempt(
@@ -699,7 +705,7 @@ export class AttemptSubmissionService {
   /**
    * Updates an attempt for a learner.
    *
-   * Uses a 3-phase grading flow (Changes 2+3):
+   * Uses a 3-phase grading flow:
    *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
    *   Grade computation + validation (in-memory)
    *   LTI callback (external, before DB commit)
@@ -714,7 +720,16 @@ export class AttemptSubmissionService {
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
     progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
+    // Allocate the per-invocation cache once and share it across both
+    // pre-translate and grading phases. Without this hoist, callers that
+    // omit `cache` (notably the SSE submission path,
+    // updateAssignmentAttemptWithSSE) cause preTranslateQuestions to issue
+    // its own findUnique calls per variant before gradeQuestionsForLearner
+    // allocates its own fresh cache and re-issues the same lookups during
+    // its Phase-0 hoist.
+    const effectiveCache: JobScopedCache = cache ?? newJobScopedCache();
     try {
       if (progressCallback) {
         await progressCallback("Validating submission...", 5);
@@ -754,6 +769,7 @@ export class AttemptSubmissionService {
           updateDto.responsesForQuestions,
           assignmentAttempt,
           updateDto.language,
+          effectiveCache,
         );
 
       updateDto.preTranslatedQuestions = preTranslatedQuestions;
@@ -817,6 +833,7 @@ export class AttemptSubmissionService {
           assignmentId,
           updateDto.language,
           updateDto.preTranslatedQuestions,
+          effectiveCache,
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
@@ -1188,6 +1205,17 @@ export class AttemptSubmissionService {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      // Best-effort post-commit cleanup: the submission has already committed,
+      // so we surface the failure in logs rather than failing the request.
+      this.logger.error(
+        "pruneAutoSavedResponses: failed to delete stale auto-saved responses",
+        {
+          attemptId,
+          response_count: responseIds.length,
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
     }
   }
 
