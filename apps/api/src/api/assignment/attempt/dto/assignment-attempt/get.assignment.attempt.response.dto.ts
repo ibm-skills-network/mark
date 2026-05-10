@@ -239,6 +239,18 @@ export class AssignmentAttemptQuestions {
   @Optional()
   learnerChoices?: string[];
 
+  @ApiPropertyOptional({
+    description:
+      "Translation availability marker. Set to 'pending' when a translation is in-flight " +
+      "but not yet written, 'unavailable' when no in-flight job exists and the row is absent. " +
+      "Field is omitted entirely when the Translation row is present.",
+    type: String,
+    enum: ["pending", "unavailable"],
+  })
+  @IsOptional()
+  @IsString()
+  translationStatus?: "pending" | "unavailable";
+
   @Optional()
   _permutation?: boolean;
 }
