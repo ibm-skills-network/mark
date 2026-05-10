@@ -3,6 +3,7 @@ export const JOB_QUEUE_NAMES = {
   ASSIGNMENT_V2: "mark.assignment.v2",
   ATTEMPT: "mark.attempt",
   ADMIN_TRANSLATION: "mark.admin.translation",
+  ASSIGNMENT_V2_TRANSLATIONS: "mark.assignment.v2.translations",
 } as const;
 
 export const JOB_NAMES = {
@@ -13,6 +14,9 @@ export const JOB_NAMES = {
   ATTEMPT_AUTHOR_PREVIEW: "attempt.author-preview",
   ADMIN_FIX_MISSING_TRANSLATIONS: "admin.fix-missing-translations",
   ADMIN_SWEEP_MISSING_TRANSLATIONS: "admin.sweep-missing-translations",
+  TRANSLATE_QUESTION: "assignment-v2.translate-question",
+  TRANSLATE_VARIANT: "assignment-v2.translate-variant",
+  TRANSLATE_META: "assignment-v2.translate-meta",
 } as const;
 
 export type JobQueueName =
