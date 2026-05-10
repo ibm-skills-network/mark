@@ -39,6 +39,7 @@ import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
+import { newJobScopedCache } from "./grading/job-scoped-cache";
 import { GradingProgressService } from "./grading-progress.service";
 
 @Injectable()
@@ -260,6 +261,8 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
+      const cache = newJobScopedCache();
+
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
         progress: "Starting author preview grading...",
@@ -280,6 +283,7 @@ export class AttemptServiceV2 {
             percentage: percentage || 0,
           });
         },
+        cache,
       );
 
       await this.updateGradingJobStatus(gradingJobId, {
@@ -312,6 +316,8 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
+      const cache = newJobScopedCache();
+
       if (this.gradingProgressService) {
         this.gradingProgressService.setProgressCallback(
           attemptId,
@@ -345,6 +351,7 @@ export class AttemptServiceV2 {
             percentage,
           });
         },
+        cache,
       );
 
       await this.updateGradingJobStatus(gradingJobId, {
