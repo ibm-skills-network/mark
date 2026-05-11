@@ -49,20 +49,6 @@ describe("JobStatusServiceV1", () => {
     });
   });
 
-  it("creates tracked v1 publish jobs", async () => {
-    await service.createPublishJob(22, "author-2");
-
-    expect(jobStateService.createJob).toHaveBeenCalledWith({
-      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
-      jobName: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
-      kind: "assignment-publish",
-      assignmentId: 22,
-      userId: "author-2",
-      status: "In Progress",
-      progress: "Initializing assignment publishing...",
-    });
-  });
-
   it("delegates reads, cleanup, streams, and updates", async () => {
     await service.getJobStatus("job-v1");
     expect(service.getJobStatusStream("job-v1")).toBe("stream");

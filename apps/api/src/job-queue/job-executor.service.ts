@@ -18,7 +18,6 @@ import {
   AdminFixMissingTranslationsJobPayload,
   AdminSweepMissingTranslationsJobPayload,
   AssignmentV1GenerateQuestionsJobPayload,
-  AssignmentV1PublishJobPayload,
   AssignmentV2GenerateQuestionsJobPayload,
   AssignmentV2PublishJobPayload,
   AttemptAuthorPreviewJobPayload,
@@ -82,16 +81,6 @@ export class JobExecutorService {
           jobPayload.questionsToGenerate,
           jobPayload.files,
           jobPayload.learningObjectives,
-        );
-        return;
-      }
-      case JOB_NAMES.ASSIGNMENT_V1_PUBLISH: {
-        const jobPayload = payload as AssignmentV1PublishJobPayload;
-        await this.assignmentServiceV1.runPublishJob(
-          jobPayload.jobId,
-          jobPayload.assignmentId,
-          jobPayload.updateDto,
-          jobPayload.userId,
         );
         return;
       }

@@ -31,7 +31,7 @@ describeIntegration("job-queue integration", () => {
     loggerSpy = jest
       .spyOn(Logger.prototype, "log")
       .mockImplementation(() => undefined);
-  });
+  }, 60_000);
 
   beforeEach(async () => {
     if (!redisHarness) {

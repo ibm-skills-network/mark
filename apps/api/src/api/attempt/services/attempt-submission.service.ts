@@ -507,11 +507,27 @@ export class AttemptSubmissionService {
         assignmentAttempt.preferredLanguage || undefined,
       );
 
+    // Compute score totals BEFORE applyVisibilitySettings so they survive
+    // even when showQuestions=false strips the questions array. Without this
+    // the success page shows "0 / 0" because it can't sum the (empty) array.
+    const totalPossiblePoints = finalQuestions.reduce(
+      (sum, q) => sum + (q.totalPoints ?? 0),
+      0,
+    );
+    const totalPointsEarned = (
+      assignmentAttempt.questionResponses ?? []
+    ).reduce((sum, response) => sum + (response.points ?? 0), 0);
+
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
+      totalPossiblePoints,
+      totalPointsEarned:
+        assignment.showAssignmentScore === false
+          ? undefined
+          : totalPointsEarned,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,

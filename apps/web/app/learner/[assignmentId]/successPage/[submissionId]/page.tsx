@@ -173,19 +173,34 @@ function SuccessPage() {
           );
           setShowQuestions(submissionDetails.showQuestions);
           setUserPreferredLanguage(submissionDetails.preferredLanguage);
-          setGrade(submissionDetails.grade * 100);
-          if (submissionDetails.totalPointsEarned) {
-            setTotalPoints(submissionDetails.totalPointsEarned);
+
+          if (submissionDetails.showAssignmentScore === false) {
+            setGrade(Number.NaN);
+            setTotalPoints(0);
+            setTotalPointsEarned(0);
           } else {
-            const totalPoints = submissionDetails.questions.reduce(
-              (acc, question) => acc + question.totalPoints,
-              0,
+            const rawGrade = submissionDetails.grade;
+            // Prefer the server-computed totals: when showQuestions=false the
+            // questions array is stripped, and reducing it yields 0 / 0.
+            const possible =
+              typeof submissionDetails.totalPossiblePoints === "number"
+                ? submissionDetails.totalPossiblePoints
+                : submissionDetails.questions.reduce(
+                    (acc, question) => acc + (question.totalPoints ?? 0),
+                    0,
+                  );
+            const earned =
+              typeof submissionDetails.totalPointsEarned === "number"
+                ? submissionDetails.totalPointsEarned
+                : typeof rawGrade === "number"
+                  ? possible * rawGrade
+                  : 0;
+
+            setGrade(
+              typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
             );
-            const totalPointsEarned = totalPoints * submissionDetails.grade;
-            setTotalPoints(
-              totalPoints || submissionDetails.totalPossiblePoints,
-            );
-            setTotalPointsEarned(totalPointsEarned);
+            setTotalPoints(possible);
+            setTotalPointsEarned(earned);
           }
           setAssignmentDetails({
             passingGrade: submissionDetails.passingGrade,
