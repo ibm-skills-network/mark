@@ -69,7 +69,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
   // before fanning out translation jobs; the worker SREMs each language as
   // it terminates. Keeping a single instance per service mirrors the
   // existing JobQueueService Redis pattern and avoids reconnect storms.
-  private readonly translationStateRedis: IORedis;
+  private readonly translationStateRedis: IORedis | undefined;
 
   constructor(
     private readonly assignmentRepository: AssignmentRepository,
@@ -83,11 +83,31 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
-    this.translationStateRedis = createRedisConnection();
+    this.translationStateRedis = this.tryCreateTranslationStateRedis();
+  }
+
+  // Wrap createRedisConnection() so missing REDIS_URL (or boot-time Redis
+  // failure) degrades gracefully instead of bringing down DI. Status sites
+  // become no-ops; the publish poll loop falls back to the hard timeout.
+  private tryCreateTranslationStateRedis(): IORedis | undefined {
+    try {
+      const client = createRedisConnection();
+      client.on("error", (error) => {
+        this.logger.warn(
+          `Translation status Redis error (status tracking disabled): ${error.message}`,
+        );
+      });
+      return client;
+    } catch (error) {
+      this.logger.warn(
+        `Translation status Redis unavailable — status tracking disabled: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.translationStateRedis.quit().catch(() => null);
+    await this.translationStateRedis?.quit().catch(() => null);
   }
 
   /**
@@ -163,11 +183,11 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       const supportedLanguageCodes = getAllLanguageCodes();
       const inflightKey = buildInflightKey(id);
       if (supportedLanguageCodes.length > 0) {
-        await this.translationStateRedis.sadd(
+        await this.translationStateRedis?.sadd(
           inflightKey,
           ...supportedLanguageCodes,
         );
-        await this.translationStateRedis.expire(
+        await this.translationStateRedis?.expire(
           inflightKey,
           TRANSLATION_INFLIGHT_TTL_SECONDS,
         );
@@ -471,11 +491,11 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       const inflightKey = buildInflightKey(assignmentId);
       let metaEnqueued = false;
       if (supportedLanguageCodes.length > 0) {
-        await this.translationStateRedis.sadd(
+        await this.translationStateRedis?.sadd(
           inflightKey,
           ...supportedLanguageCodes,
         );
-        await this.translationStateRedis.expire(
+        await this.translationStateRedis?.expire(
           inflightKey,
           TRANSLATION_INFLIGHT_TTL_SECONDS,
         );
@@ -752,10 +772,36 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // PublishJobResult on the existing JobStatusUpdate.result field.
       // Loop exits when every spawned translation job has reached a
       // terminal status (completed | failed), or after the hard timeout.
+      //
+      // If Redis is unavailable (test envs without REDIS_URL, or a transient
+      // outage), the status hash can't be populated and polling has nothing
+      // to read. Skip the loop entirely and treat the publish as complete
+      // at db_writes_done — workers will still run if Redis comes back,
+      // they just won't surface SSE progress updates for this publish.
+      if (!this.translationStateRedis) {
+        this.logger.warn(
+          "publish.translations.poll.skipped { reason: translation-status-redis-unavailable }",
+        );
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress:
+            "Publishing complete (translation status tracking unavailable)",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
       const pollHashKey = buildPublishHashKey(jobId);
       const pollStartedAt = Date.now();
       for (;;) {
-        const entries = await this.translationStateRedis.hgetall(pollHashKey);
+        const entries =
+          (await this.translationStateRedis?.hgetall(pollHashKey)) ?? {};
         const perJob: PerJobTranslationEntry[] = Object.values(entries).map(
           (raw) => JSON.parse(raw) as PerJobTranslationEntry,
         );
@@ -832,7 +878,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // TTL on first HSET covers a failed DEL, so a Redis blip here only
       // delays cleanup — it never blocks the publish from completing.
       try {
-        await this.translationStateRedis.del(pollHashKey);
+        await this.translationStateRedis?.del(pollHashKey);
       } catch (delError) {
         this.logger.warn("publish.translations.cleanup.failed", {
           assignmentId,
