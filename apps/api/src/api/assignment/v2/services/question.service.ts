@@ -358,6 +358,13 @@ export class QuestionService {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        if (jobId) {
+          await this.translationService.markPending(
+            jobId,
+            "question",
+            persistedId,
+          );
+        }
         this.logger.log(
           `publish.translation.job.enqueued { assignmentId: ${assignmentId}, kind: "question", id: ${persistedId}, parentJobId: ${String(jobId)} }`,
         );
@@ -940,6 +947,13 @@ export class QuestionService {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        if (jobId) {
+          await this.translationService.markPending(
+            jobId,
+            "variant",
+            updatedVariant.id,
+          );
+        }
         this.logger.log(
           `publish.translation.job.enqueued { assignmentId: ${assignmentId}, kind: "variant", id: ${updatedVariant.id}, parentJobId: ${String(jobId)} }`,
         );
@@ -973,6 +987,13 @@ export class QuestionService {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        if (jobId) {
+          await this.translationService.markPending(
+            jobId,
+            "variant",
+            newVariant.id,
+          );
+        }
         this.logger.log(
           `publish.translation.job.enqueued { assignmentId: ${assignmentId}, kind: "variant", id: ${newVariant.id}, parentJobId: ${String(jobId)} }`,
         );

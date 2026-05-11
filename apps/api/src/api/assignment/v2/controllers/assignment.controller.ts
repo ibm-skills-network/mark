@@ -308,6 +308,34 @@ export class AssignmentControllerV2 {
     );
   }
 
+  /**
+   * Look up the in-flight publish job for an assignment, if any.
+   * Returns null when no publish is active so the client can reattach
+   * to the SSE stream after a page refresh without having to start a
+   * new publish.
+   */
+  @Get(":id/active-publish-job")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Find the in-flight publish job for an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      nullable: true,
+      properties: {
+        jobId: { type: "string" },
+      },
+    },
+  })
+  async getActivePublishJob(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<{ jobId: string } | null> {
+    const job = await this.assignmentService.findActivePublishJob(id);
+    return job ? { jobId: job.id } : null;
+  }
+
   @Get(":id/files")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)

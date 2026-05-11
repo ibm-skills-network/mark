@@ -264,6 +264,22 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
    * @param userId - The ID of the user making the request
    * @returns Job tracking information
    */
+  /**
+   * Reconnect helper. Returns the in-flight publish job for an
+   * assignment so a refreshed client can re-subscribe to the SSE
+   * stream without starting a new publish. Reuses the deterministic
+   * jobId scheme already used by publishAssignment for dedup.
+   */
+  async findActivePublishJob(
+    assignmentId: number,
+  ): Promise<{ id: string; state: string } | null> {
+    const deterministicJobId = `publish:v2:${assignmentId}`;
+    return this.jobQueueService.findActiveJob(
+      JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+      deterministicJobId,
+    );
+  }
+
   async publishAssignment(
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
@@ -358,6 +374,22 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     // DB-writes-done latency — the user-visible metric the publish hot path
     // is budgeted against (target: 30 s p95 for a 50-question publish).
     const publishStartedAt = Date.now();
+
+    // Wipe any per-question entries left over from a previous publish
+    // under the same deterministic jobId. Normally the poll loop DELs
+    // this hash on exit, but if the previous publish crashed or its
+    // cleanup didn't fire, markPending's HSETNX would no-op on the
+    // stale fields and the new publish would inherit Done/Failed rows
+    // for questions that don't even exist in this run.
+    try {
+      await this.translationStateRedis?.del(buildPublishHashKey(jobId));
+    } catch (delError) {
+      this.logger.warn("publish.translations.reset.failed", {
+        assignmentId,
+        jobId,
+        error: delError instanceof Error ? delError.message : String(delError),
+      });
+    }
 
     try {
       await this.jobStatusService.updateJobStatus(jobId, {
@@ -525,6 +557,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        await this.translationService.markPending(jobId, "meta", assignmentId);
         metaEnqueued = true;
         this.logger.info("publish.translation.job.enqueued", {
           assignmentId,

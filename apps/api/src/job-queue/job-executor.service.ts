@@ -215,7 +215,7 @@ export class JobExecutorService {
     switch (jobName) {
       case JOB_NAMES.TRANSLATE_QUESTION: {
         const jobPayload = payload as TranslateQuestionJobPayload;
-        const { success, failure } =
+        const { inserted, skipped, failed } =
           await this.translationService.translateQuestion(
             jobPayload.assignmentId,
             jobPayload.questionId,
@@ -228,15 +228,16 @@ export class JobExecutorService {
           kind: "question",
           id: jobPayload.questionId,
           jobId: jobPayload.parentJobId,
-          success,
-          failure,
+          inserted,
+          skipped,
+          failed,
           durationMs: Date.now() - startTime,
         });
         return;
       }
       case JOB_NAMES.TRANSLATE_VARIANT: {
         const jobPayload = payload as TranslateVariantJobPayload;
-        const { success, failure } =
+        const { inserted, skipped, failed } =
           await this.translationService.translateVariant(
             jobPayload.assignmentId,
             jobPayload.questionId,
@@ -250,25 +251,28 @@ export class JobExecutorService {
           kind: "variant",
           id: jobPayload.variantId,
           jobId: jobPayload.parentJobId,
-          success,
-          failure,
+          inserted,
+          skipped,
+          failed,
           durationMs: Date.now() - startTime,
         });
         return;
       }
       case JOB_NAMES.TRANSLATE_META: {
         const jobPayload = payload as TranslateMetaJobPayload;
-        const { success, failure } =
+        const { inserted, skipped, failed } =
           await this.translationService.translateAssignment(
             jobPayload.assignmentId,
+            jobPayload.parentJobId,
           );
         this.logger.info("publish.translation.job.executor.complete", {
           assignmentId: jobPayload.assignmentId,
           kind: "meta",
           id: jobPayload.assignmentId,
           jobId: jobPayload.parentJobId,
-          success,
-          failure,
+          inserted,
+          skipped,
+          failed,
           durationMs: Date.now() - startTime,
         });
         return;

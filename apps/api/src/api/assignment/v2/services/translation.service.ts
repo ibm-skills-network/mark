@@ -89,6 +89,33 @@ interface BatchProcessResult {
   dropped: number;
 }
 
+// Per-language row payload produced by generateTranslation. Caller
+// collects these from a parallel fan-out, then issues one bulk INSERT
+// per question/variant/meta job — replaces the previous 23-round-trip
+// per-language INSERT loop.
+interface TranslationInsertRow {
+  questionId: number;
+  variantId: number | null;
+  languageCode: string;
+  translatedText: string;
+  untranslatedText: string | null;
+  translatedChoices: Choice[] | null;
+  untranslatedChoices: Choice[] | null;
+}
+
+// Three-bucket per-language outcome counters returned by the public
+// translate methods. `inserted` = rows actually written by the bulk
+// INSERT; `skipped` = rows offered to the INSERT that hit ON CONFLICT
+// DO NOTHING (the row was already present); `failed` = languages whose
+// LLM call returned no row. This split is what makes a re-publish of
+// already-translated content distinguishable in logs from a real
+// failure — the prior {success, failure} pair conflated the two.
+export interface TranslationOutcome {
+  inserted: number;
+  skipped: number;
+  failed: number;
+}
+
 /**
  * Service for handling translations of assignments, questions, and variants
  * Optimized for performance with parallel processing
@@ -204,6 +231,56 @@ export class TranslationService implements OnModuleDestroy {
    * translation failure. The 30-minute TTL fallback on the SET eventually
    * clears stuck entries regardless.
    */
+  /**
+   * Seed a "pending" entry on the per-publish translation status hash
+   * for an enqueued translation job. Called by producers (publish flow)
+   * AT enqueue time so the publish poll loop's first SSE tick already
+   * carries every entry the user will eventually see.
+   *
+   * Uses HSETNX (set-if-not-exists) rather than HSET because Bull may
+   * dispatch a worker fast enough that the worker's initial-enter HSET
+   * lands BEFORE this call. With HSET we'd overwrite the worker's
+   * `in_progress` value back to `pending`, and the user would see the
+   * row's text bounce between "Translating · N/23 languages" and
+   * "Queued". HSETNX makes "first writer wins on creation": the worker
+   * is never reverted, and the pending entry is only the visible state
+   * if markPending got there first.
+   */
+  async markPending(
+    parentJobId: string,
+    kind: "question" | "variant" | "meta",
+    id: number,
+  ): Promise<void> {
+    if (!this.translationStateRedis) return;
+    const entry: PerJobTranslationEntry = {
+      kind,
+      id,
+      status: "pending",
+      languagesCompleted: 0,
+      languagesTotal: getSupportedLanguageCount(),
+    };
+    try {
+      await this.translationStateRedis.hsetnx(
+        buildPublishHashKey(parentJobId),
+        `${kind}:${id}`,
+        JSON.stringify(entry),
+      );
+      await this.translationStateRedis.expire(
+        buildPublishHashKey(parentJobId),
+        PUBLISH_HASH_TTL_SECONDS,
+      );
+    } catch (hsetError) {
+      const errorMessage =
+        hsetError instanceof Error ? hsetError.message : String(hsetError);
+      this.logger.warn("publish.translation.job.pending.hset.failed", {
+        parentJobId,
+        kind,
+        id,
+        error: errorMessage,
+      });
+    }
+  }
+
   private async releaseInflightLanguage(
     assignmentId: number,
     languageCode: string,
@@ -952,7 +1029,7 @@ export class TranslationService implements OnModuleDestroy {
     assignmentId: number,
     jobId?: string,
     progressRange?: { start: number; end: number },
-  ): Promise<{ success: number; failure: number }> {
+  ): Promise<TranslationOutcome> {
     if (!this.languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
       if (jobId && progressRange) {
@@ -962,7 +1039,7 @@ export class TranslationService implements OnModuleDestroy {
           percentage: progressRange.end - 5,
         });
       }
-      return { success: 0, failure: 0 };
+      return { inserted: 0, skipped: 0, failed: 0 };
     }
 
     if (jobId) {
@@ -1062,6 +1139,10 @@ export class TranslationService implements OnModuleDestroy {
 
     await this.syncLimiterForTranslationModel();
     let completedLangCounter = 0;
+    // Bottleneck `expiration` rejects its own promise but does NOT
+    // cancel the underlying operation. See translateQuestion for the
+    // full story; same race + same guard.
+    let parallelDone = false;
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
@@ -1105,6 +1186,7 @@ export class TranslationService implements OnModuleDestroy {
           const c = ++completedLangCounter;
           if (
             parentJobId &&
+            !parallelDone &&
             (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
@@ -1143,6 +1225,7 @@ export class TranslationService implements OnModuleDestroy {
       this.MAX_BATCH_SIZE,
       this.CONCURRENCY_LIMIT,
     );
+    parallelDone = true;
 
     if (jobId) {
       await this.jobStatusService.updateJobStatus(jobId, {
@@ -1153,8 +1236,21 @@ export class TranslationService implements OnModuleDestroy {
     }
 
     this.logger.log(
-      `Assignment #${assignmentId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
+      `Assignment #${assignmentId} translation results: ${results.success} inserted, 0 skipped, ${results.failure} failed`,
     );
+
+    // translateAssignment writes to AssignmentTranslation (not Translation),
+    // and translateAssignmentToLanguage handles the upsert internally — so
+    // there is no separate "row landed" vs "row already existed" signal at
+    // this layer. Map results.success → inserted (languages where the
+    // per-language closure returned true), skipped → 0 (no separable bucket
+    // here), failed → results.failure. Same shape as translateQuestion /
+    // translateVariant so the executor's destructuring is uniform.
+    const outcome: TranslationOutcome = {
+      inserted: results.success,
+      skipped: 0,
+      failed: results.failure,
+    };
 
     if (parentJobId) {
       try {
@@ -1164,8 +1260,8 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "meta",
             id: assignmentId,
-            status: results.failure > 0 ? "failed" : "completed",
-            languagesCompleted: results.success,
+            status: outcome.failed > 0 ? "failed" : "completed",
+            languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
@@ -1185,7 +1281,7 @@ export class TranslationService implements OnModuleDestroy {
       this.cleanupCancelledJob(jobId);
     }
 
-    return { success: results.success, failure: results.failure };
+    return outcome;
   }
 
   /**
@@ -1203,7 +1299,7 @@ export class TranslationService implements OnModuleDestroy {
     question: QuestionDto,
     jobId?: string,
     forceRetranslation = false,
-  ): Promise<{ success: number; failure: number }> {
+  ): Promise<TranslationOutcome> {
     const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
     if (!this.languageTranslation) {
@@ -1214,7 +1310,7 @@ export class TranslationService implements OnModuleDestroy {
           percentage: 100,
         });
       }
-      return { success: 0, failure: 0 };
+      return { inserted: 0, skipped: 0, failed: 0 };
     }
 
     if (hasValidJobId) {
@@ -1289,7 +1385,7 @@ export class TranslationService implements OnModuleDestroy {
         if (hasValidJobId) {
           this.cleanupCancelledJob(jobId);
         }
-        return { success: 0, failure: 0 };
+        return { inserted: 0, skipped: 0, failed: 0 };
       }
     }
 
@@ -1330,6 +1426,19 @@ export class TranslationService implements OnModuleDestroy {
 
     await this.syncLimiterForTranslationModel();
     let completedLangCounter = 0;
+    // Collect per-language rows from the parallel fan-out into this
+    // closure array, then issue ONE bulk INSERT per question after the
+    // parallel section completes. Replaces the per-language single-row
+    // INSERT loop (was 23 round-trips per question; now 1).
+    const collectedRows: TranslationInsertRow[] = [];
+    // Bottleneck's `expiration` rejects its own promise but does NOT
+    // cancel the underlying operation. A slow LLM callback whose
+    // Bottleneck promise rejected is orphaned and keeps running — its
+    // tail-end mid-loop HSET would land after the terminal HSET and
+    // leave the entry stuck at in_progress=N. Flip this after the
+    // parallel section returns and gate every observable side effect
+    // (mid-loop HSET, collectedRows push) on it.
+    let parallelDone = false;
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
@@ -1345,7 +1454,7 @@ export class TranslationService implements OnModuleDestroy {
             );
           }
 
-          await this.generateAndStoreTranslation(
+          const row = await this.generateTranslation(
             assignmentId,
             questionId,
             null,
@@ -1354,6 +1463,9 @@ export class TranslationService implements OnModuleDestroy {
             questionLang,
             lang,
           );
+          if (row !== null && !parallelDone) {
+            collectedRows.push(row);
+          }
 
           if (progressTracker) {
             this.incrementLanguageCompleted(progressTracker);
@@ -1373,6 +1485,7 @@ export class TranslationService implements OnModuleDestroy {
           const c = ++completedLangCounter;
           if (
             parentJobId &&
+            !parallelDone &&
             (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
@@ -1393,7 +1506,7 @@ export class TranslationService implements OnModuleDestroy {
             }
           }
 
-          return true;
+          return row !== null;
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
@@ -1411,6 +1524,19 @@ export class TranslationService implements OnModuleDestroy {
       this.MAX_BATCH_SIZE,
       this.CONCURRENCY_LIMIT,
     );
+    parallelDone = true;
+
+    // Single bulk INSERT for all collected rows. The rowcount returned by
+    // $executeRaw is the number actually written; the difference vs.
+    // collectedRows.length is the number that hit ON CONFLICT DO NOTHING
+    // because the row already existed (re-publish of unchanged content).
+    const insertedCount =
+      await this.insertTranslationsOnConflictDoNothing(collectedRows);
+    const outcome: TranslationOutcome = {
+      inserted: insertedCount,
+      skipped: collectedRows.length - insertedCount,
+      failed: results.failure,
+    };
 
     if (parentJobId) {
       try {
@@ -1420,8 +1546,8 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "question",
             id: questionId,
-            status: results.failure > 0 ? "failed" : "completed",
-            languagesCompleted: results.success,
+            status: outcome.failed > 0 ? "failed" : "completed",
+            languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
@@ -1442,10 +1568,10 @@ export class TranslationService implements OnModuleDestroy {
     }
 
     this.logger.log(
-      `Question #${questionId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
+      `Question #${questionId} translation results: ${outcome.inserted} inserted, ${outcome.skipped} skipped, ${outcome.failed} failed`,
     );
 
-    return { success: results.success, failure: results.failure };
+    return outcome;
   }
 
   /**
@@ -1465,7 +1591,7 @@ export class TranslationService implements OnModuleDestroy {
     variant: VariantDto,
     jobId?: string,
     forceRetranslation = false,
-  ): Promise<{ success: number; failure: number }> {
+  ): Promise<TranslationOutcome> {
     const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
     if (!this.languageTranslation) {
@@ -1476,7 +1602,7 @@ export class TranslationService implements OnModuleDestroy {
           percentage: 100,
         });
       }
-      return { success: 0, failure: 0 };
+      return { inserted: 0, skipped: 0, failed: 0 };
     }
 
     if (hasValidJobId) {
@@ -1506,7 +1632,7 @@ export class TranslationService implements OnModuleDestroy {
         if (hasValidJobId) {
           this.cleanupCancelledJob(jobId);
         }
-        return { success: 0, failure: 0 };
+        return { inserted: 0, skipped: 0, failed: 0 };
       }
     }
 
@@ -1584,6 +1710,13 @@ export class TranslationService implements OnModuleDestroy {
 
     await this.syncLimiterForTranslationModel();
     let completedLangCounter = 0;
+    // Collect per-language rows from the parallel fan-out; ONE bulk
+    // INSERT after the parallel section completes (was 23 round-trips).
+    const collectedRows: TranslationInsertRow[] = [];
+    // Bottleneck `expiration` rejects its own promise but does NOT
+    // cancel the underlying operation. See translateQuestion for the
+    // full story; same race + same guard.
+    let parallelDone = false;
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
@@ -1599,7 +1732,7 @@ export class TranslationService implements OnModuleDestroy {
             );
           }
 
-          await this.generateAndStoreTranslation(
+          const row = await this.generateTranslation(
             assignmentId,
             questionId,
             variantId,
@@ -1608,6 +1741,9 @@ export class TranslationService implements OnModuleDestroy {
             variantLang,
             lang,
           );
+          if (row !== null && !parallelDone) {
+            collectedRows.push(row);
+          }
 
           if (progressTracker) {
             this.incrementLanguageCompleted(progressTracker);
@@ -1627,6 +1763,7 @@ export class TranslationService implements OnModuleDestroy {
           const c = ++completedLangCounter;
           if (
             parentJobId &&
+            !parallelDone &&
             (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
@@ -1647,7 +1784,7 @@ export class TranslationService implements OnModuleDestroy {
             }
           }
 
-          return true;
+          return row !== null;
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
@@ -1665,6 +1802,15 @@ export class TranslationService implements OnModuleDestroy {
       this.MAX_BATCH_SIZE,
       this.CONCURRENCY_LIMIT,
     );
+    parallelDone = true;
+
+    const insertedCount =
+      await this.insertTranslationsOnConflictDoNothing(collectedRows);
+    const outcome: TranslationOutcome = {
+      inserted: insertedCount,
+      skipped: collectedRows.length - insertedCount,
+      failed: results.failure,
+    };
 
     if (parentJobId) {
       try {
@@ -1674,8 +1820,8 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "variant",
             id: variantId,
-            status: results.failure > 0 ? "failed" : "completed",
-            languagesCompleted: results.success,
+            status: outcome.failed > 0 ? "failed" : "completed",
+            languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
@@ -1696,10 +1842,10 @@ export class TranslationService implements OnModuleDestroy {
     }
 
     this.logger.log(
-      `Variant #${variantId} translation results: ${results.success} successful, ${results.failure} failed, ${results.dropped} dropped/retried`,
+      `Variant #${variantId} translation results: ${outcome.inserted} inserted, ${outcome.skipped} skipped, ${outcome.failed} failed`,
     );
 
-    return { success: results.success, failure: results.failure };
+    return outcome;
   }
 
   /**
@@ -2183,7 +2329,7 @@ export class TranslationService implements OnModuleDestroy {
    * Generate and store translation (creates new record each time)
    * Enhanced with better source language handling and context awareness
    */
-  private async generateAndStoreTranslation(
+  private async generateTranslation(
     assignmentId: number,
     questionId: number,
     variantId: number | null,
@@ -2191,7 +2337,11 @@ export class TranslationService implements OnModuleDestroy {
     originalChoices: Choice[] | null | string | any,
     sourceLanguage: string,
     targetLanguage: string,
-  ): Promise<void> {
+  ): Promise<TranslationInsertRow | null> {
+    // Returns a row payload on success; returns null when the LLM call
+    // failed for this language. The caller distinguishes "row landed or
+    // was a no-op" (counted in inserted/skipped) from "no row produced"
+    // (counted in failed) without needing the LLM error to throw.
     let parsedChoices: Choice[] | null = null;
     if (originalChoices) {
       if (typeof originalChoices === "string") {
@@ -2211,23 +2361,15 @@ export class TranslationService implements OnModuleDestroy {
       }
     }
     if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
-      // First-writer-wins. The partial unique indexes on Translation
-      // (one keyed on (questionId, languageCode) where variantId IS NULL,
-      // the other on (questionId, variantId, languageCode) where
-      // variantId IS NOT NULL) make ON CONFLICT DO NOTHING a structural
-      // close on the SELECT-then-INSERT race window. A concurrent fan-out
-      // for the same tuple becomes a silent no-op rather than a duplicate
-      // row or a failed transaction.
-      await this.insertTranslationOnConflictDoNothing(
+      return {
         questionId,
         variantId,
-        targetLanguage,
-        originalText,
-        originalText,
-        parsedChoices,
-        parsedChoices,
-      );
-      return;
+        languageCode: targetLanguage,
+        translatedText: originalText,
+        untranslatedText: originalText,
+        translatedChoices: parsedChoices,
+        untranslatedChoices: parsedChoices,
+      };
     }
 
     const translationPromises: Array<Promise<any>> = [];
@@ -2295,23 +2437,18 @@ export class TranslationService implements OnModuleDestroy {
         this.logger.warn(
           `Skipping translation row for question ${questionId} in ${targetLanguage}: text translation failed`,
         );
-        return;
+        return null;
       }
 
-      // First-writer-wins: the partial unique indexes on Translation make
-      // ON CONFLICT DO NOTHING a structural close on the
-      // SELECT-then-INSERT race window. A concurrent fan-out writing the
-      // same (questionId, variantId, languageCode) tuple becomes a silent
-      // no-op rather than a duplicate row or a failed transaction.
-      await this.insertTranslationOnConflictDoNothing(
+      return {
         questionId,
         variantId,
-        targetLanguage,
+        languageCode: targetLanguage,
         translatedText,
-        originalText,
+        untranslatedText: originalText,
         translatedChoices,
-        parsedChoices,
-      );
+        untranslatedChoices: parsedChoices,
+      };
     } catch (translationError) {
       this.logger.warn(
         `Skipping translation record creation for ${targetLanguage} due to translation failure for question ${questionId}${
@@ -2336,32 +2473,42 @@ export class TranslationService implements OnModuleDestroy {
    * required for translatedChoices / untranslatedChoices because raw
    * SQL parameters default to text.
    */
-  private async insertTranslationOnConflictDoNothing(
-    questionId: number,
-    variantId: number | null,
-    languageCode: string,
-    translatedText: string,
-    untranslatedText: string | null,
-    translatedChoices: Choice[] | null,
-    untranslatedChoices: Choice[] | null,
-  ): Promise<void> {
-    const translatedChoicesJson =
-      translatedChoices == null ? null : JSON.stringify(translatedChoices);
-    const untranslatedChoicesJson =
-      untranslatedChoices == null ? null : JSON.stringify(untranslatedChoices);
+  private async insertTranslationsOnConflictDoNothing(
+    rows: TranslationInsertRow[],
+  ): Promise<number> {
+    // Empty-array guard: Prisma.join on an empty list produces invalid
+    // SQL ("VALUES " with nothing after it), so short-circuit before
+    // touching the database. Returning 0 reflects the truth — no rows
+    // landed because no rows were offered.
+    if (rows.length === 0) {
+      return 0;
+    }
 
-    await this.prisma.$executeRaw`
+    const values = rows.map(
+      (r) => Prisma.sql`(
+        ${r.questionId}, ${r.variantId}, ${r.languageCode},
+        ${r.translatedText}, ${r.untranslatedText},
+        ${
+          r.translatedChoices == null
+            ? null
+            : JSON.stringify(r.translatedChoices)
+        }::jsonb,
+        ${
+          r.untranslatedChoices == null
+            ? null
+            : JSON.stringify(r.untranslatedChoices)
+        }::jsonb,
+        NOW()
+      )`,
+    );
+
+    return this.prisma.$executeRaw`
       INSERT INTO "Translation"
         ("questionId", "variantId", "languageCode",
          "translatedText", "untranslatedText",
          "translatedChoices", "untranslatedChoices",
          "createdAt")
-      VALUES
-        (${questionId}, ${variantId}, ${languageCode},
-         ${translatedText}, ${untranslatedText},
-         ${translatedChoicesJson}::jsonb,
-         ${untranslatedChoicesJson}::jsonb,
-         NOW())
+      VALUES ${Prisma.join(values, ", ")}
       ON CONFLICT DO NOTHING
     `;
   }
