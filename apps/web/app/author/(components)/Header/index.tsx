@@ -46,6 +46,8 @@ import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestio
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import SaveAndPublishButton from "./SaveAndPublishButton";
+import PublishProgress from "./PublishProgress";
+import type { PublishJobResult } from "@/types/publish-job-result";
 
 function normalizeAssignment(assignment: Assignment): Assignment {
   if (!assignment || !assignment.questions) return assignment;
@@ -214,6 +216,9 @@ function AuthorHeader() {
   );
   const [progressStatus, setProgressStatus] =
     useState<JobStatus>("In Progress");
+  const [publishResult, setPublishResult] = useState<
+    PublishJobResult | undefined
+  >(undefined);
 
   const SyncAssignment = async () => {
     try {
@@ -489,6 +494,7 @@ function AuthorHeader() {
       publishImmediately ? "Initializing publishing..." : "Creating version...",
     );
     setProgressStatus("In Progress");
+    setPublishResult(undefined);
 
     const role = await getUserRole();
     if (role !== "author") {
@@ -592,6 +598,7 @@ function AuthorHeader() {
             setQuestions(clonedCurrentQuestions);
           },
           setQuestions,
+          (result) => setPublishResult(result),
         );
         if (publishSucceeded) {
           if (publishImmediately) {
@@ -828,6 +835,8 @@ function AuthorHeader() {
               />
             </div>
           )}
+
+          <PublishProgress publishResult={publishResult} />
         </header>
       </div>
 

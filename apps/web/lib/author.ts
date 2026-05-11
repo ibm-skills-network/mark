@@ -16,8 +16,19 @@ import type {
   REPORT_TYPE,
   Scoring,
 } from "@config/types";
+import type { PublishJobResult } from "@/types/publish-job-result";
 import { apiClient } from "./api-client";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
+
+function isPublishJobResult(value: unknown): value is PublishJobResult {
+  if (typeof value !== "object" || value === null) return false;
+  const stage = (value as { stage?: unknown }).stage;
+  return (
+    stage === "db_writes_done" ||
+    stage === "translations_in_progress" ||
+    stage === "translations_complete"
+  );
+}
 
 interface Notification {
   id: number;
@@ -123,6 +134,7 @@ export function subscribeToJobStatus(
   jobId: string,
   onProgress?: (percentage: number, progressText?: string) => void,
   setQuestions?: (questions: Question[]) => void,
+  onPublishResult?: (result: PublishJobResult) => void,
 ): Promise<[boolean, Question[]]> {
   return new Promise<[boolean, Question[]]>((resolve, reject) => {
     let eventSource: EventSource | null = null;
@@ -186,11 +198,14 @@ export function subscribeToJobStatus(
           }
 
           if (data?.result) {
-            receivedQuestions = JSON.parse(
-              data.result,
-            ) as QuestionAuthorStore[];
-            if (setQuestions) {
-              setQuestions(receivedQuestions);
+            const parsed: unknown = JSON.parse(data.result);
+            if (isPublishJobResult(parsed)) {
+              if (onPublishResult) onPublishResult(parsed);
+            } else if (Array.isArray(parsed)) {
+              receivedQuestions = parsed as QuestionAuthorStore[];
+              if (setQuestions) {
+                setQuestions(receivedQuestions);
+              }
             }
           }
           if (data.done) {
@@ -213,11 +228,14 @@ export function subscribeToJobStatus(
               onProgress(data.percentage, data.progress);
             }
             if (data?.result) {
-              receivedQuestions = JSON.parse(
-                data.result,
-              ) as QuestionAuthorStore[];
-              if (setQuestions) {
-                setQuestions(receivedQuestions);
+              const parsed: unknown = JSON.parse(data.result);
+              if (isPublishJobResult(parsed)) {
+                if (onPublishResult) onPublishResult(parsed);
+              } else if (Array.isArray(parsed)) {
+                receivedQuestions = parsed as QuestionAuthorStore[];
+                if (setQuestions) {
+                  setQuestions(receivedQuestions);
+                }
               }
             }
             handleCompletion(data.status === "Completed");

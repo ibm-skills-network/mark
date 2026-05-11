@@ -439,6 +439,9 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
       translatedChoices: Choice[];
     };
   };
+  // Response-only marker. Omitted entirely when the translation row is present.
+  // Frontend MUST NOT echo this back in any request body.
+  translationStatus?: "pending" | "unavailable";
 }
 
 export interface CreateQuestionRequest extends BaseQuestion {
