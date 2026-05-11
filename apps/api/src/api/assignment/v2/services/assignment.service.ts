@@ -656,6 +656,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
             draftVersionId,
+            { userSession },
           );
         } else if (
           latestVersion &&
@@ -673,6 +674,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
             latestVersion.id,
+            { userSession },
           );
         } else if (!existingDraft && updateDto.published) {
           this.logger.info(
