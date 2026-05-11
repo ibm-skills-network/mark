@@ -32,7 +32,7 @@ import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
 import { LocalizationService } from "./common/utils/localization.service";
 import { LtiSyncModule } from "./lti-sync.module";
 import { AttemptFeedbackService } from "./services/attempt-feedback.service";
-import { AttemptAccessCacheService } from "./services/attempt-access-cache.service";
+import { AttemptAccessCacheModule } from "./services/attempt-access-cache.module";
 import { AttemptGradingService } from "./services/attempt-grading.service";
 import { AttemptRegradingService } from "./services/attempt-regrading.service";
 import { AttemptReportingService } from "./services/attempt-reporting.service";
@@ -56,11 +56,11 @@ import { TranslationService } from "./services/translation/translation.service";
     LtiSyncModule,
     JobQueueModule,
     AdminAuthModule,
+    AttemptAccessCacheModule,
   ],
   controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,
-    AttemptAccessCacheService,
     AttemptSubmissionService,
     AttemptValidationService,
     AttemptGradingService,

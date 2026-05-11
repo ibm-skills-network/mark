@@ -181,13 +181,23 @@ describe("JobWorkerService", () => {
       1,
       JOB_QUEUE_NAMES.ASSIGNMENT_V1,
       expect.any(Function),
-      { connection: mockConnection, concurrency: 2 },
+      {
+        connection: mockConnection,
+        concurrency: 2,
+        lockDuration: 1_800_000,
+        maxStalledCount: 0,
+      },
     );
     expect(Worker).toHaveBeenNthCalledWith(
       2,
       JOB_QUEUE_NAMES.ASSIGNMENT_V2,
       expect.any(Function),
-      { connection: mockConnection, concurrency: 2 },
+      {
+        connection: mockConnection,
+        concurrency: 2,
+        lockDuration: 1_800_000,
+        maxStalledCount: 0,
+      },
     );
     expect(Worker).toHaveBeenNthCalledWith(
       3,
@@ -335,28 +345,6 @@ describe("JobWorkerService", () => {
     expectLastForwardedJob({
       bullJobId: "bull-1",
       jobName: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
-      payload,
-      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
-    });
-  });
-
-  it("forwards assignment v1 publish jobs", async () => {
-    const payload = {
-      jobId: "publish-1",
-      assignmentId: 6,
-      updateDto: { title: "Published" },
-      userId: "author-1",
-    };
-
-    await (service as any).handleAssignmentV1Job({
-      id: "bull-2",
-      name: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
-      data: encryptJobPayload(payload),
-    });
-
-    expectLastForwardedJob({
-      bullJobId: "bull-2",
-      jobName: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
       payload,
       queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
     });
@@ -532,12 +520,12 @@ describe("JobWorkerService", () => {
 
     await (service as any).handleAssignmentV1Job({
       id: "bull-explicit",
-      name: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
+      name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
       data: encryptJobPayload({
-        jobId: "publish-explicit",
+        jobId: "gen-explicit",
         assignmentId: 6,
-        updateDto: { title: "Published" },
-        userId: "author-1",
+        assignmentType: "HOMEWORK",
+        questionsToGenerate: { shortAnswer: 1 },
       }),
     });
 
@@ -558,16 +546,16 @@ describe("JobWorkerService", () => {
     await expect(
       (service as any).handleAssignmentV1Job({
         id: "bull-failed",
-        name: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
+        name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
         data: encryptJobPayload({
-          jobId: "publish-failed",
+          jobId: "gen-failed",
           assignmentId: 6,
-          updateDto: { title: "Published" },
-          userId: "author-1",
+          assignmentType: "HOMEWORK",
+          questionsToGenerate: { shortAnswer: 1 },
         }),
       }),
     ).rejects.toThrow(
-      "Mark API job execution failed for assignment-v1.publish#bull-failed: 500 Internal Server Error - job failed",
+      "Mark API job execution failed for assignment-v1.generate-questions#bull-failed: 500 Internal Server Error - job failed",
     );
   });
 

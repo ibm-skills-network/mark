@@ -21,13 +21,6 @@ export interface AssignmentV1GenerateQuestionsJobPayload {
   learningObjectives?: string;
 }
 
-export interface AssignmentV1PublishJobPayload {
-  jobId: string;
-  assignmentId: number;
-  updateDto: UpdateAssignmentQuestionsDto;
-  userId: string;
-}
-
 export interface AssignmentV2GenerateQuestionsJobPayload {
   jobId: string;
   assignmentId: number;

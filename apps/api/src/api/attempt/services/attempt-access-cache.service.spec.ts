@@ -11,6 +11,7 @@ class FakeRedis {
   public readonly ttls = new Map<string, number>();
   public readonly quit = jest.fn(async () => undefined);
   public readonly on = jest.fn();
+  public scanShouldFail = false;
 
   async get(key: string): Promise<string | null> {
     return this.values.get(key) ?? null;
@@ -28,6 +29,43 @@ class FakeRedis {
     }
     return "OK";
   }
+
+  async scan(
+    cursor: string,
+    matchKeyword: "MATCH",
+    pattern: string,
+    countKeyword: "COUNT",
+    count: number,
+  ): Promise<[string, string[]]> {
+    void matchKeyword;
+    void countKeyword;
+    if (this.scanShouldFail) {
+      throw new Error("redis scan boom");
+    }
+    const allKeys = [...this.values.keys()];
+    const regex = new RegExp(
+      "^" +
+        pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") +
+        "$",
+    );
+    const matched = allKeys.filter((k) => regex.test(k));
+    const start = parseInt(cursor, 10);
+    const slice = matched.slice(start, start + count);
+    const nextCursor =
+      start + count >= matched.length ? "0" : String(start + count);
+    return [nextCursor, slice];
+  }
+
+  async del(...keys: string[]): Promise<number> {
+    let removed = 0;
+    for (const key of keys) {
+      if (this.values.delete(key)) {
+        removed += 1;
+      }
+      this.ttls.delete(key);
+    }
+    return removed;
+  }
 }
 
 describe("AttemptAccessCacheService", () => {
@@ -35,12 +73,20 @@ describe("AttemptAccessCacheService", () => {
     question: {
       findMany: jest.fn(),
     },
+    assignmentVersion: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   } as unknown as PrismaService;
 
+  const childLogger = {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  };
+
   const logger = {
-    child: jest.fn().mockReturnValue({
-      warn: jest.fn(),
-    }),
+    child: jest.fn().mockReturnValue(childLogger),
   };
 
   let fakeRedis: FakeRedis;
@@ -136,5 +182,68 @@ describe("AttemptAccessCacheService", () => {
     expect(
       fakeRedis.values.get("mark:attempt-access:assignment:44:1777165200000"),
     ).toBeTruthy();
+  });
+
+  describe("invalidateForAssignment", () => {
+    it("scans and deletes only assignment-scoped keys for the target id", async () => {
+      fakeRedis.values.set("mark:attempt-access:assignment:44:1000", "[]");
+      fakeRedis.values.set("mark:attempt-access:assignment:44:2000", "[]");
+      fakeRedis.values.set("mark:attempt-access:assignment:99:3000", "[]");
+      (mockPrisma.assignmentVersion.findMany as jest.Mock).mockResolvedValue(
+        [],
+      );
+
+      await service.invalidateForAssignment(44);
+
+      expect(
+        fakeRedis.values.get("mark:attempt-access:assignment:44:1000"),
+      ).toBeUndefined();
+      expect(
+        fakeRedis.values.get("mark:attempt-access:assignment:44:2000"),
+      ).toBeUndefined();
+      expect(
+        fakeRedis.values.get("mark:attempt-access:assignment:99:3000"),
+      ).toBe("[]");
+      expect(mockPrisma.assignmentVersion.findMany).toHaveBeenCalledWith({
+        where: { assignmentId: 44 },
+        select: { id: true },
+      });
+    });
+
+    it("deletes version-scoped keys for every version of the assignment", async () => {
+      fakeRedis.values.set("mark:attempt-access:version:101", "[]");
+      fakeRedis.values.set("mark:attempt-access:version:102", "[]");
+      fakeRedis.values.set("mark:attempt-access:version:999", "[]");
+      (mockPrisma.assignmentVersion.findMany as jest.Mock).mockResolvedValue([
+        { id: 101 },
+        { id: 102 },
+      ]);
+
+      await service.invalidateForAssignment(44);
+
+      expect(
+        fakeRedis.values.get("mark:attempt-access:version:101"),
+      ).toBeUndefined();
+      expect(
+        fakeRedis.values.get("mark:attempt-access:version:102"),
+      ).toBeUndefined();
+      expect(fakeRedis.values.get("mark:attempt-access:version:999")).toBe(
+        "[]",
+      );
+    });
+
+    it("swallows redis failures and logs a warning", async () => {
+      fakeRedis.scanShouldFail = true;
+      (mockPrisma.assignmentVersion.findMany as jest.Mock).mockResolvedValue(
+        [],
+      );
+
+      await expect(
+        service.invalidateForAssignment(44),
+      ).resolves.toBeUndefined();
+      expect(childLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("attempt-access-cache.invalidate.failed"),
+      );
+    });
   });
 });

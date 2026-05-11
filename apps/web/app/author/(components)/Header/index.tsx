@@ -593,10 +593,18 @@ function AuthorHeader() {
           },
           setQuestions,
         );
-        if (publishImmediately) {
-          toast.success("Questions published successfully!");
+        if (publishSucceeded) {
+          if (publishImmediately) {
+            toast.success("Questions published successfully!");
+          } else {
+            toast.success("Version saved successfully!");
+          }
         } else {
-          toast.success("Version saved successfully!");
+          toast.error(
+            publishImmediately
+              ? "Publishing failed. Please try again."
+              : "Saving version failed. Please try again.",
+          );
         }
         setProgressStatus(publishSucceeded ? "Completed" : "Failed");
 
