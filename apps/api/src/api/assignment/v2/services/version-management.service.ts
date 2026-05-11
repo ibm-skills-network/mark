@@ -768,7 +768,10 @@ export class VersionManagementService {
   async publishVersion(
     assignmentId: number,
     versionId: number,
+    options: { shouldActivate?: boolean; userSession?: UserSession } = {},
   ): Promise<VersionSummary> {
+    const { shouldActivate = true, userSession } = options;
+
     const version = await this.prisma.assignmentVersion.findUnique({
       where: { id: versionId, assignmentId },
       include: { _count: { select: { questionVersions: true } } },
@@ -837,25 +840,78 @@ export class VersionManagementService {
     const wasAutoIncremented =
       publishedVersionNumber !== originalVersionNumber.replace(/-rc\d+$/, "");
 
-    const updatedVersion = await this.prisma.assignmentVersion.update({
-      where: { id: versionId },
-      data: {
-        published: true,
-        isDraft: false,
-        versionNumber: publishedVersionNumber,
-        versionDescription: wasAutoIncremented
-          ? `${
-              version.versionDescription || ""
-            } (Auto-incremented from ${originalVersionNumber} due to version conflict)`.trim()
-          : version.versionDescription,
-      },
-      include: { _count: { select: { questionVersions: true } } },
+    // Capture the currently-active version (if any) so the audit trail records
+    // the actual transition. Read outside the transaction — this is purely
+    // informational for VersionHistory.fromVersionId.
+    const previouslyActive = shouldActivate
+      ? await this.prisma.assignmentVersion.findFirst({
+          where: { assignmentId, isActive: true, id: { not: versionId } },
+          select: { id: true },
+        })
+      : null;
+
+    // Publish (and optionally activate) atomically. Without this transaction,
+    // a concurrent activation/restoration could observe a partial state where
+    // two versions are both isActive=true, or the assignment's currentVersionId
+    // points at a version whose other flags haven't been updated yet.
+    const updatedVersion = await this.prisma.$transaction(async (tx) => {
+      const published = await tx.assignmentVersion.update({
+        where: { id: versionId },
+        data: {
+          published: true,
+          isDraft: false,
+          versionNumber: publishedVersionNumber,
+          versionDescription: wasAutoIncremented
+            ? `${
+                version.versionDescription || ""
+              } (Auto-incremented from ${originalVersionNumber} due to version conflict)`.trim()
+            : version.versionDescription,
+        },
+        include: { _count: { select: { questionVersions: true } } },
+      });
+
+      if (!shouldActivate) {
+        return published;
+      }
+
+      // Deactivate every other version for this assignment, then activate
+      // the just-published one. The `id: { not: versionId }` clause guards
+      // against an extra round-trip if the caller ever passes a versionId
+      // that was already active for some reason.
+      await tx.assignmentVersion.updateMany({
+        where: { assignmentId, id: { not: versionId } },
+        data: { isActive: false },
+      });
+      const activated = await tx.assignmentVersion.update({
+        where: { id: versionId },
+        data: { isActive: true },
+        include: { _count: { select: { questionVersions: true } } },
+      });
+      await tx.assignment.update({
+        where: { id: assignmentId },
+        data: { currentVersionId: versionId },
+      });
+      await tx.versionHistory.create({
+        data: {
+          assignmentId,
+          fromVersionId: previouslyActive?.id ?? null,
+          toVersionId: versionId,
+          action: "version_activated",
+          description: `Activated version ${publishedVersionNumber}${
+            wasAutoIncremented
+              ? ` (auto-incremented from ${originalVersionNumber})`
+              : ""
+          }`,
+          userId: userSession?.userId ?? version.createdBy,
+        },
+      });
+      return activated;
     });
 
     this.logger.info(
       `Successfully published version: ${originalVersionNumber} → ${publishedVersionNumber}${
         wasAutoIncremented ? " (auto-incremented)" : ""
-      }`,
+      }${shouldActivate ? " (activated)" : ""}`,
     );
 
     return {
