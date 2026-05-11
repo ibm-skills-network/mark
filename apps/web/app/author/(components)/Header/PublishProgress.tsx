@@ -9,10 +9,54 @@ import { cn } from "@/lib/utils";
 import type {
   PerJobTranslationEntry,
   PublishJobResult,
+  PublishStage,
 } from "@/types/publish-job-result";
 
 interface PublishProgressProps {
   publishResult: PublishJobResult | undefined;
+}
+
+const TERMINAL_STATUSES: ReadonlySet<PerJobTranslationEntry["status"]> = new Set(
+  ["completed", "failed"],
+);
+
+// Lifecycle ranks for entry status. A status can only advance, never
+// regress: pending → in_progress → completed/failed.
+const STATUS_RANK: Record<PerJobTranslationEntry["status"], number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+  failed: 2,
+};
+
+function entryKey(entry: PerJobTranslationEntry): string {
+  return `${entry.kind}:${entry.id}`;
+}
+
+// The SSE channel can deliver out-of-order snapshots when concurrent
+// writers race on the job's `result` field (worker progress updates can
+// preserve and re-write an older snapshot after the poll loop pushed a
+// fresher one). Merge incoming entries into a sticky, monotonic local
+// view so a row never regresses: `languagesCompleted` only grows, status
+// only advances along the lifecycle, and a terminal status is locked.
+function mergeEntry(
+  prev: PerJobTranslationEntry | undefined,
+  next: PerJobTranslationEntry,
+): PerJobTranslationEntry {
+  if (!prev) return next;
+  if (TERMINAL_STATUSES.has(prev.status)) return prev;
+  const winningStatus =
+    STATUS_RANK[next.status] >= STATUS_RANK[prev.status]
+      ? next.status
+      : prev.status;
+  return {
+    ...next,
+    status: winningStatus,
+    languagesCompleted: Math.max(
+      prev.languagesCompleted,
+      next.languagesCompleted,
+    ),
+  };
 }
 
 const dotColorClass: Record<PerJobTranslationEntry["status"], string> = {
@@ -70,11 +114,44 @@ function sortEntries(
 export default function PublishProgress({
   publishResult,
 }: PublishProgressProps) {
+  // Sticky merged view of perJob entries. The parent passes a `key`
+  // that changes per publish, so this component fully remounts at the
+  // start of every publish — the ref is naturally fresh, no manual
+  // reset needed.
+  const mergedMapRef = React.useRef<Map<string, PerJobTranslationEntry>>(
+    new Map(),
+  );
+
   if (!publishResult?.stage) return null;
 
-  const { stage, translations } = publishResult;
-  const aggregate = translations?.aggregate;
-  const perJob = sortEntries(translations?.perJob ?? []);
+  const incomingPerJob = publishResult.translations?.perJob;
+  const map = mergedMapRef.current;
+  for (const entry of incomingPerJob ?? []) {
+    const key = entryKey(entry);
+    map.set(key, mergeEntry(map.get(key), entry));
+  }
+  const perJob = sortEntries(Array.from(map.values()));
+
+  const allTerminal =
+    perJob.length > 0 && perJob.every((e) => TERMINAL_STATUSES.has(e.status));
+  // Derived stage promotes the row to "translations_complete" as soon as
+  // every merged entry is terminal, even if a stale wire snapshot still
+  // says translations_in_progress. Falls back to the wire stage when no
+  // entries have arrived yet (db_writes_done before the first poll tick).
+  const stage: PublishStage = allTerminal
+    ? "translations_complete"
+    : perJob.length === 0
+      ? publishResult.stage
+      : "translations_in_progress";
+
+  const aggregate =
+    perJob.length > 0
+      ? {
+          completed: perJob.filter((e) => e.status === "completed").length,
+          failed: perJob.filter((e) => e.status === "failed").length,
+          total: perJob.length,
+        }
+      : publishResult.translations?.aggregate;
 
   const heading =
     stage === "db_writes_done"
@@ -103,8 +180,14 @@ export default function PublishProgress({
         <CardContent className="p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <h3 className="typography-h5">{heading}</h3>
-              {body && <p className="text-sm text-muted-foreground">{body}</p>}
+              <h3 key={heading} translate="no" className="typography-h5">
+                {heading}
+              </h3>
+              {body && (
+                <p translate="no" className="text-sm text-muted-foreground">
+                  {body}
+                </p>
+              )}
             </div>
           </div>
 
@@ -113,11 +196,19 @@ export default function PublishProgress({
               <Badge className="bg-violet-600 text-white border-transparent hover:bg-violet-600">
                 Translating
               </Badge>
-              <span className="text-sm font-medium">
+              <span
+                key={`agg-text-${aggregate.completed}-${aggregate.total}`}
+                translate="no"
+                className="text-sm font-medium"
+              >
                 {aggregate.completed} of {aggregate.total} translations complete
               </span>
               {aggregate.failed > 0 && (
-                <span className="text-sm font-medium text-red-700">
+                <span
+                  key={`agg-failed-${aggregate.failed}`}
+                  translate="no"
+                  className="text-sm font-medium text-red-700"
+                >
                   · {aggregate.failed} failed
                 </span>
               )}
@@ -126,24 +217,36 @@ export default function PublishProgress({
 
           {perJob.length > 0 && (
             <ul role="list" className="space-y-2 max-h-96 overflow-y-auto">
-              {perJob.map((entry) => (
-                <li
-                  key={`${entry.kind}:${entry.id}`}
-                  className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50 border border-gray-200"
-                >
-                  <StatusDot status={entry.status} />
-                  <span className="typography-body flex-1">
-                    {kindLabel(entry.kind, entry.id)}
-                  </span>
-                  <span className="typography-caption text-muted-foreground">
-                    {statusLabel(
-                      entry.status,
-                      entry.languagesCompleted,
-                      entry.languagesTotal,
-                    )}
-                  </span>
-                </li>
-              ))}
+              {perJob.map((entry) => {
+                const kLabel = kindLabel(entry.kind, entry.id);
+                const sLabel = statusLabel(
+                  entry.status,
+                  entry.languagesCompleted,
+                  entry.languagesTotal,
+                );
+                return (
+                  <li
+                    key={`${entry.kind}:${entry.id}`}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50 border border-gray-200"
+                  >
+                    <StatusDot status={entry.status} />
+                    <span
+                      key={kLabel}
+                      translate="no"
+                      className="typography-body flex-1"
+                    >
+                      {kLabel}
+                    </span>
+                    <span
+                      key={sLabel}
+                      translate="no"
+                      className="typography-caption text-muted-foreground"
+                    >
+                      {sLabel}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
 
