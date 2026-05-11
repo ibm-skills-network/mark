@@ -103,11 +103,22 @@ export class TranslationService implements OnModuleDestroy {
   private isResettingLimiter = false;
 
   private readonly MAX_BATCH_SIZE = 100;
-  private readonly CONCURRENCY_LIMIT = 50;
+  // 200 concurrent ops in the default (OpenAI) limiter so worker-pool fan-out
+  // (8 workers x 23 languages = 184 ops per publish) can run fully concurrent
+  // instead of queueing 134-deep behind a 50-wide cap. The reservoir
+  // (500 ops per 3s = ~166/s) is still in place as a soft safety belt under
+  // OpenAI's per-account rate limit.
+  private readonly CONCURRENCY_LIMIT = 200;
   private readonly MAX_RETRY_ATTEMPTS = 2;
   private readonly RETRY_DELAY_BASE = 100;
   private readonly STATUS_UPDATE_INTERVAL = 20;
-  private readonly OPERATION_TIMEOUT = 30_000;
+  // 90s per-call timeout. Bumped from 30s because choice-translation hits the
+  // back of the Bottleneck queue under worker-pool concurrency: each question
+  // produces ~2 ops per language × 23 languages, and with 8 workers all calling
+  // simultaneously the limiter queue grows past 30s of LLM round-trip latency.
+  // The retry layer wraps this (MAX_RETRY_ATTEMPTS = 2), so a hard failure
+  // still surfaces within ~3 minutes per op rather than blocking indefinitely.
+  private readonly OPERATION_TIMEOUT = 90_000;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
 
