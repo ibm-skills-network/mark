@@ -595,6 +595,30 @@ describe("JobWorkerService", () => {
     });
   });
 
+  it("passes an AbortSignal to fetch so the forward survives past Node's default 5-minute bodyTimeout", async () => {
+    // Long-running parent publish jobs run well past the undici default
+    // bodyTimeout of 300_000ms. Without an explicit signal the forward
+    // would abort at the 5-minute mark while mark-api is still processing,
+    // leaving the parent zombied. The forward must pass a signal that
+    // outlives the longest BullMQ lockDuration.
+    await asTestAccessor(service).handleAssignmentV1Job({
+      id: "bull-timeout-1",
+      name: JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS,
+      data: encryptJobPayload({
+        jobId: "timeout-test",
+        assignmentId: 1,
+        assignmentType: "HOMEWORK",
+        questionsToGenerate: { shortAnswer: 1 },
+      }),
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[
+      fetchMock.mock.calls.length - 1
+    ] as [string, RequestInit];
+    expect(requestInit.signal).toBeInstanceOf(AbortSignal);
+    expect(requestInit.signal?.aborted).toBe(false);
+  });
+
   it("uses the explicit Mark API job executor URL when provided", async () => {
     process.env.MARK_API_JOB_EXECUTOR_URL =
       "http://mark-api:3000/api/internal/jobs/execute";
