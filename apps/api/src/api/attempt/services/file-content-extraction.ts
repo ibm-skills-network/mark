@@ -448,8 +448,25 @@ export class FileContentExtractionService {
     additionalMetadata?: Record<string, number | boolean | string>;
   }> {
     const fileExtension = filename.split(".").pop()?.toLowerCase() || "";
-    this.logger.debug(
-      `Extracting from ${filename} (type: ${mimeType}, ext: ${fileExtension}, size: ${buffer.length})`,
+
+    // Forensic identifiers — computed once from the raw buffer. No PII risk:
+    // filename is opaque, byteSize and sha256 are non-sensitive, magic bytes
+    // are the first 8 bytes used to discriminate file format from junk.
+    // Goal: when an extractor fails (or hangs / kills the pod), the entry
+    // log alone identifies which artifact and which dispatch path was taken.
+    const byteSize = buffer.byteLength;
+    const sha256Short = crypto
+      .createHash("sha256")
+      .update(buffer)
+      .digest("hex")
+      .slice(0, 16);
+    const magicBytesHex = buffer.subarray(0, 8).toString("hex");
+    const startTime = Date.now();
+
+    this.logger.log(
+      `extractTextFromBuffer entry: filename=${filename} ` +
+        `extension=${fileExtension} mimeType=${mimeType} ` +
+        `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex}`,
     );
 
     try {
@@ -458,18 +475,44 @@ export class FileContentExtractionService {
         filename,
         fileExtension,
       );
-      if (result) return result;
+      if (result) {
+        this.logger.log(
+          `extractTextFromBuffer completed: filename=${filename} ` +
+            `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
+            `dispatch=extension durationMs=${Date.now() - startTime}`,
+        );
+        return result;
+      }
 
       const mimeResult = await this.extractByMimeType(
         buffer,
         filename,
         mimeType,
       );
-      if (mimeResult) return mimeResult;
+      if (mimeResult) {
+        this.logger.log(
+          `extractTextFromBuffer completed: filename=${filename} ` +
+            `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
+            `dispatch=mimeType durationMs=${Date.now() - startTime}`,
+        );
+        return mimeResult;
+      }
 
-      return await this.extractWithFallback(buffer, filename);
+      const fallbackResult = await this.extractWithFallback(buffer, filename);
+      this.logger.log(
+        `extractTextFromBuffer completed: filename=${filename} ` +
+          `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
+          `dispatch=fallback durationMs=${Date.now() - startTime}`,
+      );
+      return fallbackResult;
     } catch (error) {
-      this.logger.warn(`Primary extraction failed for ${filename}:`, error);
+      this.logger.warn(
+        `Primary extraction failed: filename=${filename} ` +
+          `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
+          `magicBytes=${magicBytesHex} durationMs=${Date.now() - startTime} ` +
+          `error=${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       return await this.extractWithFallback(buffer, filename);
     }
   }
