@@ -1843,6 +1843,7 @@ export const createMockTranslationService = () => ({
   translateAssignment: jest.fn().mockResolvedValue(undefined),
   translateQuestion: jest.fn().mockResolvedValue(undefined),
   translateVariant: jest.fn().mockResolvedValue(undefined),
+  markPending: jest.fn().mockResolvedValue(undefined),
   applyTranslationsToAttempt: jest
     .fn()
     .mockImplementation((attempt: unknown): unknown => attempt),
