@@ -16,9 +16,8 @@ interface PublishProgressProps {
   publishResult: PublishJobResult | undefined;
 }
 
-const TERMINAL_STATUSES: ReadonlySet<PerJobTranslationEntry["status"]> = new Set(
-  ["completed", "failed"],
-);
+const TERMINAL_STATUSES: ReadonlySet<PerJobTranslationEntry["status"]> =
+  new Set(["completed", "failed"]);
 
 // Lifecycle ranks for entry status. A status can only advance, never
 // regress: pending → in_progress → completed/failed.
