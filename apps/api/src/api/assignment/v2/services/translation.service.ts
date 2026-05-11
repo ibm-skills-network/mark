@@ -120,7 +120,7 @@ export class TranslationService implements OnModuleDestroy {
   // entries from the per-assignment in-flight SET as each translation
   // terminates. The publish flow SADDs the SET upstream; this service
   // is responsible for draining it.
-  private readonly translationStateRedis: IORedis;
+  private readonly translationStateRedis: IORedis | undefined;
   private operationStats = {
     totalOperations: 0,
     successfulOperations: 0,
@@ -150,7 +150,27 @@ export class TranslationService implements OnModuleDestroy {
       () => this.checkJobTimeouts(),
       60_000,
     );
-    this.translationStateRedis = createRedisConnection();
+    this.translationStateRedis = this.tryCreateTranslationStateRedis();
+  }
+
+  // Wrap createRedisConnection() in try/catch so missing REDIS_URL (or any
+  // boot-time Redis failure) degrades gracefully instead of bringing down
+  // DI. Status-tracking sites become no-ops; translation work still runs.
+  private tryCreateTranslationStateRedis(): IORedis | undefined {
+    try {
+      const client = createRedisConnection();
+      client.on("error", (error) => {
+        this.logger.warn(
+          `Translation status Redis error (status tracking disabled): ${error.message}`,
+        );
+      });
+      return client;
+    } catch (error) {
+      this.logger.warn(
+        `Translation status Redis unavailable — status tracking disabled: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -158,7 +178,7 @@ export class TranslationService implements OnModuleDestroy {
     clearInterval(this.jobTimeoutInterval);
     void this.limiter.disconnect().catch(() => null);
     void this.watsonxLimiter.disconnect().catch(() => null);
-    await this.translationStateRedis.quit().catch(() => null);
+    await this.translationStateRedis?.quit().catch(() => null);
   }
 
   /**
@@ -178,7 +198,7 @@ export class TranslationService implements OnModuleDestroy {
     languageCode: string,
   ): Promise<void> {
     try {
-      await this.translationStateRedis.srem(
+      await this.translationStateRedis?.srem(
         buildInflightKey(assignmentId),
         languageCode,
       );
@@ -1002,7 +1022,7 @@ export class TranslationService implements OnModuleDestroy {
     const parentJobId = jobId;
     if (parentJobId) {
       try {
-        await this.translationStateRedis.hset(
+        await this.translationStateRedis?.hset(
           buildPublishHashKey(parentJobId),
           `meta:${assignmentId}`,
           JSON.stringify({
@@ -1013,7 +1033,7 @@ export class TranslationService implements OnModuleDestroy {
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
-        await this.translationStateRedis.expire(
+        await this.translationStateRedis?.expire(
           buildPublishHashKey(parentJobId),
           PUBLISH_HASH_TTL_SECONDS,
         );
@@ -1077,7 +1097,7 @@ export class TranslationService implements OnModuleDestroy {
             (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
-              await this.translationStateRedis.hset(
+              await this.translationStateRedis?.hset(
                 buildPublishHashKey(parentJobId),
                 `meta:${assignmentId}`,
                 JSON.stringify({
@@ -1127,7 +1147,7 @@ export class TranslationService implements OnModuleDestroy {
 
     if (parentJobId) {
       try {
-        await this.translationStateRedis.hset(
+        await this.translationStateRedis?.hset(
           buildPublishHashKey(parentJobId),
           `meta:${assignmentId}`,
           JSON.stringify({
@@ -1270,7 +1290,7 @@ export class TranslationService implements OnModuleDestroy {
     const parentJobId = hasValidJobId ? jobId : undefined;
     if (parentJobId) {
       try {
-        await this.translationStateRedis.hset(
+        await this.translationStateRedis?.hset(
           buildPublishHashKey(parentJobId),
           `question:${questionId}`,
           JSON.stringify({
@@ -1281,7 +1301,7 @@ export class TranslationService implements OnModuleDestroy {
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
-        await this.translationStateRedis.expire(
+        await this.translationStateRedis?.expire(
           buildPublishHashKey(parentJobId),
           PUBLISH_HASH_TTL_SECONDS,
         );
@@ -1345,7 +1365,7 @@ export class TranslationService implements OnModuleDestroy {
             (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
-              await this.translationStateRedis.hset(
+              await this.translationStateRedis?.hset(
                 buildPublishHashKey(parentJobId),
                 `question:${questionId}`,
                 JSON.stringify({
@@ -1383,7 +1403,7 @@ export class TranslationService implements OnModuleDestroy {
 
     if (parentJobId) {
       try {
-        await this.translationStateRedis.hset(
+        await this.translationStateRedis?.hset(
           buildPublishHashKey(parentJobId),
           `question:${questionId}`,
           JSON.stringify({
@@ -1524,7 +1544,7 @@ export class TranslationService implements OnModuleDestroy {
     const parentJobId = hasValidJobId ? jobId : undefined;
     if (parentJobId) {
       try {
-        await this.translationStateRedis.hset(
+        await this.translationStateRedis?.hset(
           buildPublishHashKey(parentJobId),
           `variant:${variantId}`,
           JSON.stringify({
@@ -1535,7 +1555,7 @@ export class TranslationService implements OnModuleDestroy {
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
-        await this.translationStateRedis.expire(
+        await this.translationStateRedis?.expire(
           buildPublishHashKey(parentJobId),
           PUBLISH_HASH_TTL_SECONDS,
         );
@@ -1599,7 +1619,7 @@ export class TranslationService implements OnModuleDestroy {
             (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
-              await this.translationStateRedis.hset(
+              await this.translationStateRedis?.hset(
                 buildPublishHashKey(parentJobId),
                 `variant:${variantId}`,
                 JSON.stringify({
@@ -1637,7 +1657,7 @@ export class TranslationService implements OnModuleDestroy {
 
     if (parentJobId) {
       try {
-        await this.translationStateRedis.hset(
+        await this.translationStateRedis?.hset(
           buildPublishHashKey(parentJobId),
           `variant:${variantId}`,
           JSON.stringify({
