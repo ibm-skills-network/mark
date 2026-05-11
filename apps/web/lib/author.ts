@@ -384,6 +384,25 @@ export async function publishAssignment(
 }
 
 /**
+ * Returns the jobId of an in-flight publish for the given assignment,
+ * or null if none is active. Used by the author UI on mount to
+ * reattach to a publish that's still running after a page refresh.
+ */
+export async function getActivePublishJob(
+  assignmentId: number,
+): Promise<{ jobId: string } | null> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/active-publish-job`;
+  try {
+    const response = (await apiClient.get(endpointURL)) as {
+      jobId?: string;
+    } | null;
+    return response?.jobId ? { jobId: response.jobId } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Updates a question for a given assignment.
  * @param assignmentId The id of the assignment to update the question for.
  * @param questionId The id of the question to update.

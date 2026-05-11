@@ -26,6 +26,7 @@ import {
   setStoredUiLanguage,
 } from "@/lib/ui-language";
 import {
+  getActivePublishJob,
   getAssignment,
   getUser,
   publishAssignment,
@@ -219,6 +220,11 @@ function AuthorHeader() {
   const [publishResult, setPublishResult] = useState<
     PublishJobResult | undefined
   >(undefined);
+  // Bumped at the start of every publish. Passed as `key` to
+  // PublishProgress so React fully remounts the component per publish
+  // — guarantees its sticky merged map is fresh, regardless of how
+  // React batches the surrounding setPublishResult(undefined) call.
+  const [publishSessionId, setPublishSessionId] = useState(0);
 
   const SyncAssignment = async () => {
     try {
@@ -436,6 +442,53 @@ function AuthorHeader() {
     void fetchData();
   }, [assignmentId, router]);
 
+  // Reconnect to an in-flight publish after a page refresh. The job
+  // survives the SSE disconnect (cleanupJobStream is a no-op server-
+  // side and BullMQ is decoupled from the browser tab), and the job id
+  // is deterministic per assignment so the API can look it up here
+  // without the client having stashed it anywhere. If no publish is
+  // active, this is a single cheap GET and otherwise a no-op.
+  useEffect(() => {
+    let cancelled = false;
+    const numericAssignmentId = parseInt(assignmentId, 10);
+    if (!Number.isFinite(numericAssignmentId)) return;
+    void (async () => {
+      const active = await getActivePublishJob(numericAssignmentId);
+      if (cancelled || !active?.jobId) return;
+      setSubmitting(true);
+      setJobProgress(0);
+      setCurrentMessage("Reconnecting to publish in progress...");
+      setProgressStatus("In Progress");
+      setPublishResult(undefined);
+      setPublishSessionId((n) => n + 1);
+      try {
+        const [publishSucceeded] = await subscribeToJobStatus(
+          active.jobId,
+          (percentage, progress) => {
+            if (cancelled) return;
+            setJobProgress(percentage);
+            setCurrentMessage(progress ?? "");
+          },
+          setQuestions,
+          (result) => {
+            if (cancelled) return;
+            setPublishResult(result);
+          },
+        );
+        if (cancelled) return;
+        setProgressStatus(publishSucceeded ? "Completed" : "Failed");
+      } catch {
+        if (cancelled) return;
+        setProgressStatus("Failed");
+      } finally {
+        if (!cancelled) setSubmitting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId]);
+
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
       const { description, publishImmediately, afterPublish } = event.detail;
@@ -495,6 +548,7 @@ function AuthorHeader() {
     );
     setProgressStatus("In Progress");
     setPublishResult(undefined);
+    setPublishSessionId((n) => n + 1);
 
     const role = await getUserRole();
     if (role !== "author") {
@@ -836,7 +890,10 @@ function AuthorHeader() {
             </div>
           )}
 
-          <PublishProgress publishResult={publishResult} />
+          <PublishProgress
+            key={publishSessionId}
+            publishResult={publishResult}
+          />
         </header>
       </div>
 
