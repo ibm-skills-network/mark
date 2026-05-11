@@ -53,6 +53,14 @@ export class JobStateService implements OnModuleDestroy {
     };
 
     const transaction = this.getConnection().multi();
+    // DEL before HSET so a new job with a re-used deterministic id
+    // (e.g. publish:v2:${assignmentId}) starts on a clean hash. Without
+    // this, fields that serializeJob leaves out when undefined — most
+    // importantly `result` — survive from the previous job under the
+    // same key, and the SSE stream's initial emit replays a stale
+    // PublishJobResult to the client as if the new publish had already
+    // finished.
+    transaction.del(this.getJobStateKey(job.id));
     transaction.hset(this.getJobStateKey(job.id), this.serializeJob(job));
     transaction.expire(this.getJobStateKey(job.id), ACTIVE_JOB_TTL_SECONDS);
 
@@ -153,8 +161,18 @@ export class JobStateService implements OnModuleDestroy {
           : statusUpdate.result,
     };
 
+    // Only HSET the fields the caller actually provided. The previous
+    // behavior — read existingJob then HSET the whole serialized record,
+    // preserving fields the caller didn't touch — was a textbook
+    // read-modify-write race: when the publish poll loop wrote a fresh
+    // `result` while a worker was mid-call without one, the worker's
+    // write inherited the pre-poll-loop `result` and clobbered it back
+    // to a stale snapshot. The hash field model means concurrent writers
+    // only fight over the fields they each explicitly set.
+    const partialPayload = this.serializeJobUpdate(updatedJob, statusUpdate);
+
     const transaction = this.getConnection().multi();
-    transaction.hset(this.getJobStateKey(jobId), this.serializeJob(updatedJob));
+    transaction.hset(this.getJobStateKey(jobId), partialPayload);
     transaction.expire(
       this.getJobStateKey(jobId),
       this.isTerminalStatus(updatedJob.status)
@@ -347,6 +365,29 @@ export class JobStateService implements OnModuleDestroy {
       payload.activeKeyHash = job.activeKeyHash;
     }
 
+    return payload;
+  }
+
+  // Partial HSET payload for updateJobStatus: only the fields the caller
+  // touched (always status/progress/updatedAt; percentage and result
+  // only when explicitly set). Concurrent writers that don't pass
+  // `result` simply leave the stored field alone instead of racing on
+  // a stale snapshot.
+  private serializeJobUpdate(
+    updatedJob: StoredJobState,
+    statusUpdate: JobStatusUpdate,
+  ): Record<string, string> {
+    const payload: Record<string, string> = {
+      status: updatedJob.status,
+      progress: updatedJob.progress,
+      updatedAt: updatedJob.updatedAt,
+    };
+    if (statusUpdate.percentage !== undefined) {
+      payload.percentage = String(updatedJob.percentage);
+    }
+    if (statusUpdate.result !== undefined) {
+      payload.result = JSON.stringify(statusUpdate.result);
+    }
     return payload;
   }
 
