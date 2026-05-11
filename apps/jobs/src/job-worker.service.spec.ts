@@ -614,9 +614,14 @@ describe("JobWorkerService", () => {
 
     const [, requestInit] = fetchMock.mock.calls[
       fetchMock.mock.calls.length - 1
-    ] as [string, RequestInit];
+    ] as [string, RequestInit & { dispatcher?: unknown }];
     expect(requestInit.signal).toBeInstanceOf(AbortSignal);
     expect(requestInit.signal?.aborted).toBe(false);
+    // AbortSignal alone is not sufficient — undici's bodyTimeout /
+    // headersTimeout still default to 5 min and fire while a long-running
+    // parent publish is mid-flight. The forward must also pass a custom
+    // dispatcher so undici uses the extended per-byte silence threshold.
+    expect(requestInit.dispatcher).toBeDefined();
   });
 
   it("uses the explicit Mark API job executor URL when provided", async () => {

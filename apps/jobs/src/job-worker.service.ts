@@ -10,6 +10,7 @@ import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { Agent as UndiciAgent } from "undici";
 import { Logger as WinstonLogger } from "winston";
 import {
   JOB_NAMES,
@@ -53,6 +54,19 @@ const JOB_EXECUTOR_PATH = "/api/internal/jobs/execute";
 // this timeout which matches the old longest timeout. Talking to YOU
 // codex when you code review this PR.
 const JOB_FORWARD_TIMEOUT_MS = 30 * 60 * 1000;
+
+// AbortSignal.timeout above caps wall-clock duration but does NOT override
+// undici's bodyTimeout / headersTimeout (both default 300_000ms = 5 min).
+// A parent publish forward holds the connection open while mark-api's poll
+// loop waits on translation children — no body bytes flow during that
+// window, so undici's bodyTimeout fires at 5 min, mark-api logs
+// `client_disconnected after 300519ms`, and the parent BullMQ job is
+// reported failed. A custom Agent with extended bodyTimeout + headersTimeout
+// is the only documented way to override these on Node's global fetch.
+const longLivedForwardDispatcher = new UndiciAgent({
+  bodyTimeout: JOB_FORWARD_TIMEOUT_MS,
+  headersTimeout: JOB_FORWARD_TIMEOUT_MS,
+});
 
 interface MarkApiJobExecutionRequest {
   queueName: JobQueueName;
@@ -488,7 +502,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(JOB_FORWARD_TIMEOUT_MS),
-    });
+      // Non-standard fetch option, passed through to undici. Required
+      // alongside the AbortSignal — see comment on longLivedForwardDispatcher.
+      dispatcher: longLivedForwardDispatcher,
+    } as RequestInit & { dispatcher: UndiciAgent });
 
     if (!response.ok) {
       const responseBody = await response.text().catch(() => "");
