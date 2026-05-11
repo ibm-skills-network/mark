@@ -14,6 +14,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   createMockJob,
@@ -262,10 +263,19 @@ describe("QuestionService", () => {
         );
 
         expect(llmFacadeService.applyGuardRails).toHaveBeenCalled();
-        expect(translationService.translateQuestion).toHaveBeenCalled();
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({
+            parentJobId: 1,
+            assignmentId: 1,
+            questionId: updatedQuestion.id,
+          }),
+          expect.objectContaining({ attempts: 3 }),
+        );
       });
 
-      it("should only translate questions when content changes", async () => {
+      it("enqueues a translation job per question during publishing", async () => {
         const assignmentId = 1;
         const jobId = 1;
 
@@ -284,16 +294,20 @@ describe("QuestionService", () => {
           jobId,
         );
 
-        expect(translationService.translateQuestion).toHaveBeenCalledWith(
-          assignmentId,
-          question.id,
-          question,
-          jobId,
-          true,
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({
+            parentJobId: jobId,
+            assignmentId,
+            questionId: question.id,
+            question,
+          }),
+          expect.objectContaining({ attempts: 3 }),
         );
       });
 
-      it("should force translation when question content changes", async () => {
+      it("enqueues a translation job when question content changes", async () => {
         const assignmentId = 1;
         const jobId = 1;
 
@@ -319,12 +333,16 @@ describe("QuestionService", () => {
           jobId,
         );
 
-        expect(translationService.translateQuestion).toHaveBeenCalledWith(
-          assignmentId,
-          updatedQuestion.id,
-          updatedQuestion,
-          jobId,
-          true,
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({
+            parentJobId: jobId,
+            assignmentId,
+            questionId: updatedQuestion.id,
+            question: updatedQuestion,
+          }),
+          expect.objectContaining({ attempts: 3 }),
         );
       });
 

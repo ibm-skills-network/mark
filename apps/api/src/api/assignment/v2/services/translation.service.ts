@@ -45,11 +45,15 @@ const buildPublishHashKey = (parentJobId: string): string =>
 // impossible across concurrent publishes of the same assignment.
 const PUBLISH_HASH_TTL_SECONDS = 3600;
 
-// Pre-computed list of supported language codes. The throttle math on the
-// mid-loop HSET writes uses `.length` against this constant so a future
-// expansion of the language matrix only changes one number, and the
-// throttle expression stays grep-stable for plan-level acceptance checks.
-const SUPPORTED_LANGUAGE_CODES = getAllLanguageCodes() ?? ["en"];
+// Supported language codes accessor. Lazily resolved on first call to avoid
+// running getAllLanguageCodes() at module-init time — doing so trips a
+// circular-import edge in the v2 services graph and breaks any test that
+// loads translation.service.ts through the NestJS Test module. The
+// throttle math on the mid-loop HSET writes uses `.length` against this
+// accessor so a future expansion of the language matrix only changes the
+// source-of-truth in languages.json.
+const getSupportedLanguageCount = (): number =>
+  (getAllLanguageCodes() ?? ["en"]).length;
 
 interface IExistingTranslation {
   introduction: string;
@@ -154,7 +158,7 @@ export class TranslationService implements OnModuleDestroy {
     clearInterval(this.jobTimeoutInterval);
     void this.limiter.disconnect().catch(() => null);
     void this.watsonxLimiter.disconnect().catch(() => null);
-    await this.translationStateRedis.quit().catch(() => undefined);
+    await this.translationStateRedis.quit().catch(() => null);
   }
 
   /**
@@ -1006,7 +1010,7 @@ export class TranslationService implements OnModuleDestroy {
             id: assignmentId,
             status: "in_progress",
             languagesCompleted: 0,
-            languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+            languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
         await this.translationStateRedis.expire(
@@ -1070,7 +1074,7 @@ export class TranslationService implements OnModuleDestroy {
           const c = ++completedLangCounter;
           if (
             parentJobId &&
-            (c % 5 === 0 || c === SUPPORTED_LANGUAGE_CODES.length)
+            (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
               await this.translationStateRedis.hset(
@@ -1081,7 +1085,7 @@ export class TranslationService implements OnModuleDestroy {
                   id: assignmentId,
                   status: "in_progress",
                   languagesCompleted: c,
-                  languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+                  languagesTotal: getSupportedLanguageCount(),
                 } satisfies PerJobTranslationEntry),
               );
             } catch {
@@ -1131,7 +1135,7 @@ export class TranslationService implements OnModuleDestroy {
             id: assignmentId,
             status: results.failure > 0 ? "failed" : "completed",
             languagesCompleted: results.success,
-            languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+            languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
       } catch (hsetError) {
@@ -1274,7 +1278,7 @@ export class TranslationService implements OnModuleDestroy {
             id: questionId,
             status: "in_progress",
             languagesCompleted: 0,
-            languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+            languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
         await this.translationStateRedis.expire(
@@ -1338,7 +1342,7 @@ export class TranslationService implements OnModuleDestroy {
           const c = ++completedLangCounter;
           if (
             parentJobId &&
-            (c % 5 === 0 || c === SUPPORTED_LANGUAGE_CODES.length)
+            (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
               await this.translationStateRedis.hset(
@@ -1349,7 +1353,7 @@ export class TranslationService implements OnModuleDestroy {
                   id: questionId,
                   status: "in_progress",
                   languagesCompleted: c,
-                  languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+                  languagesTotal: getSupportedLanguageCount(),
                 } satisfies PerJobTranslationEntry),
               );
             } catch {
@@ -1387,7 +1391,7 @@ export class TranslationService implements OnModuleDestroy {
             id: questionId,
             status: results.failure > 0 ? "failed" : "completed",
             languagesCompleted: results.success,
-            languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+            languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
       } catch (hsetError) {
@@ -1528,7 +1532,7 @@ export class TranslationService implements OnModuleDestroy {
             id: variantId,
             status: "in_progress",
             languagesCompleted: 0,
-            languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+            languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
         await this.translationStateRedis.expire(
@@ -1592,7 +1596,7 @@ export class TranslationService implements OnModuleDestroy {
           const c = ++completedLangCounter;
           if (
             parentJobId &&
-            (c % 5 === 0 || c === SUPPORTED_LANGUAGE_CODES.length)
+            (c % 5 === 0 || c === getSupportedLanguageCount())
           ) {
             try {
               await this.translationStateRedis.hset(
@@ -1603,7 +1607,7 @@ export class TranslationService implements OnModuleDestroy {
                   id: variantId,
                   status: "in_progress",
                   languagesCompleted: c,
-                  languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+                  languagesTotal: getSupportedLanguageCount(),
                 } satisfies PerJobTranslationEntry),
               );
             } catch {
@@ -1641,7 +1645,7 @@ export class TranslationService implements OnModuleDestroy {
             id: variantId,
             status: results.failure > 0 ? "failed" : "completed",
             languagesCompleted: results.success,
-            languagesTotal: SUPPORTED_LANGUAGE_CODES.length,
+            languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
         );
       } catch (hsetError) {

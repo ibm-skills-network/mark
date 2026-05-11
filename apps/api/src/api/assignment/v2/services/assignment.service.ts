@@ -87,7 +87,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.translationStateRedis.quit().catch(() => undefined);
+    await this.translationStateRedis.quit().catch(() => null);
   }
 
   /**
@@ -754,7 +754,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // terminal status (completed | failed), or after the hard timeout.
       const pollHashKey = buildPublishHashKey(jobId);
       const pollStartedAt = Date.now();
-      while (true) {
+      for (;;) {
         const entries = await this.translationStateRedis.hgetall(pollHashKey);
         const perJob: PerJobTranslationEntry[] = Object.values(entries).map(
           (raw) => JSON.parse(raw) as PerJobTranslationEntry,
