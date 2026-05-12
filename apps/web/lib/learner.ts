@@ -263,6 +263,16 @@ export async function getLiveRecordingFeedback(
   }
 }
 
+function parseQuestionProgress(progressStr: string): {
+  currentQuestion?: number;
+  totalQuestions?: number;
+} {
+  const match = progressStr?.match(/question\s+(\d+)\s+of\s+(\d+)/i);
+  return match
+    ? { currentQuestion: Number(match[1]), totalQuestions: Number(match[2]) }
+    : {};
+}
+
 /**
  * Submits an assignment with progress tracking
  */
@@ -278,6 +288,7 @@ export async function submitAssignment(
     status: "processing" | "completed" | "failed",
     progress: number,
     message: string,
+    metadata?: { currentQuestion?: number; totalQuestions?: number },
   ) => void,
   onGradingJobCreated?: (gradingJobId: string) => void,
 ): Promise<SubmitAssignmentResponse | undefined> {
@@ -371,11 +382,16 @@ export async function submitAssignment(
               });
 
               eventSource.close();
-              onProgress?.("failed", 0, timeoutError);
 
               if (currentAttempt < maxRetries) {
+                onProgress?.(
+                  "processing",
+                  0,
+                  `Connection timed out. Retrying... (${currentAttempt}/${maxRetries})`,
+                );
                 setTimeout(() => attemptConnection(), 2000 * currentAttempt);
               } else {
+                onProgress?.("failed", 0, timeoutError);
                 handleFinalFailure();
               }
             }
@@ -415,7 +431,12 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.("processing", percentage, progress);
+              onProgress?.(
+                "processing",
+                percentage,
+                progress,
+                parseQuestionProgress(progress),
+              );
             } else if (data.status === "Completed" && !isCompleted) {
               isCompleted = true;
               onProgress?.("completed", 100, "Grading completed successfully!");
@@ -463,7 +484,12 @@ export async function submitAssignment(
               }
 
               if (data.progress && data.percentage !== undefined) {
-                onProgress?.("processing", data.percentage, data.progress);
+                onProgress?.(
+                  "processing",
+                  data.percentage,
+                  data.progress,
+                  parseQuestionProgress(data.progress),
+                );
               }
             } catch (error) {
               console.warn("SSE update event parse failed:", error);
@@ -531,9 +557,9 @@ export async function submitAssignment(
             if (currentAttempt < maxRetries) {
               const retryDelay = 2000 * currentAttempt;
               onProgress?.(
-                "failed",
+                "processing",
                 0,
-                `Connection lost. Retrying in ${retryDelay / 1000} seconds... (attempt ${currentAttempt}/${maxRetries})`,
+                `Connection lost. Retrying in ${retryDelay / 1000} seconds...`,
               );
               setTimeout(() => attemptConnection(), retryDelay);
             } else {
@@ -570,7 +596,7 @@ export async function submitAssignment(
               } else if (data?.error) {
                 const streamErrorMessage =
                   data.error || "Grading stream reported an error";
-                onProgress?.("failed", 0, streamErrorMessage);
+                onProgress?.("processing", 0, streamErrorMessage);
               }
             } catch (error) {
               console.warn("SSE error-event parse failed:", error);

@@ -41,7 +41,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
-import GradingProgressModal from "./GradingProgressModal";
+import GradingProgressModal, { type ProgressState } from "./GradingProgressModal";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -53,9 +53,11 @@ function LearnerHeader() {
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
-  const [currentGradingJobId, setCurrentGradingJobId] = useState<string | null>(
-    null,
-  );
+  const [progressData, setProgressData] = useState<ProgressState>({
+    status: "idle",
+    progress: 0,
+    currentStage: "Preparing to grade your assignment...",
+  });
 
   const [
     questions,
@@ -268,6 +270,11 @@ function LearnerHeader() {
     }
 
     setSubmitting(true);
+    setProgressData({
+      status: "processing",
+      progress: 0,
+      currentStage: "Preparing to grade your assignment...",
+    });
     setShowGradingModal(true);
     setCurrentAttemptId(activeAttemptId);
 
@@ -307,14 +314,16 @@ function LearnerHeader() {
         role === "author" ? authorQuestions : undefined,
         role === "author" ? authorAssignmentDetails : undefined,
         undefined,
-        () => {
-          // Progress callback not used - grading progress shown via modal
+        (status, progress, message, metadata) => {
+          setProgressData({
+            status,
+            progress: status === "completed" ? 100 : progress,
+            currentStage: status === "completed" ? "Grading complete!" : message,
+            currentQuestion: metadata?.currentQuestion,
+            totalQuestions: metadata?.totalQuestions,
+          });
         },
-        (gradingJobId) => {
-          setCurrentGradingJobId(gradingJobId);
-          setCurrentAttemptId(activeAttemptId);
-          setShowGradingModal(true);
-        },
+        undefined,
       );
 
       if (res) {
@@ -641,7 +650,7 @@ function LearnerHeader() {
         isOpen={showGradingModal}
         assignmentId={assignmentId || 0}
         attemptId={currentAttemptId}
-        gradingJobId={currentGradingJobId}
+        progressData={progressData}
       />
     </>
   );

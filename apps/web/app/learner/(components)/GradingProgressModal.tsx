@@ -8,15 +8,7 @@ import {
 } from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
 import { toast } from "sonner";
-import { getApiRoutes } from "@/config/constants";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
-
-interface GradingProgressModalProps {
-  isOpen: boolean;
-  assignmentId: number;
-  attemptId: number | null;
-  gradingJobId: string | null;
-}
 
 type QuestionGradingStatus = "pending" | "in_progress" | "completed" | "failed";
 
@@ -36,7 +28,7 @@ interface GradingProgressDetails {
   hasSlowInFlight: boolean;
 }
 
-interface ProgressState {
+export interface ProgressState {
   status: "processing" | "completed" | "failed" | "idle";
   progress: number;
   currentStage: string;
@@ -108,137 +100,21 @@ function mergeGradingState(
   };
 }
 
+interface GradingProgressModalProps {
+  isOpen: boolean;
+  assignmentId: number;
+  attemptId: number | null;
+  progressData: ProgressState;
+}
+
 export default function GradingProgressModal({
   isOpen,
   assignmentId,
   attemptId,
-  gradingJobId,
+  progressData,
 }: GradingProgressModalProps) {
-  const [progressData, setProgressData] = useState<ProgressState>({
-    status: "idle",
-    progress: 0,
-    currentStage: "Preparing to grade your assignment...",
-  });
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [emailNotified, setEmailNotified] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen || !attemptId || !gradingJobId) return;
-
-    const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
-
-    const eventSource = new EventSource(sseUrl, {
-      withCredentials: true,
-    });
-
-    const updateProgress = (data: any) => {
-      const terminalStatus = data?.finalStatus ?? data?.status;
-
-      if (data?.heartbeat) {
-        return;
-      }
-
-      if (data?.message && data?.connectionId) {
-        setProgressData((prev) => ({
-          ...prev,
-          status: "processing",
-          progress: prev.progress ?? 0,
-          currentStage: data.message,
-        }));
-        return;
-      }
-
-      const rawPercentage = data?.percentage;
-      const parsedPercentage =
-        typeof rawPercentage === "number"
-          ? rawPercentage
-          : Number(rawPercentage);
-      const percentage = Number.isFinite(parsedPercentage)
-        ? Math.max(0, Math.min(100, Math.round(parsedPercentage)))
-        : 0;
-
-      const message =
-        data?.progress ||
-        data?.message ||
-        data?.currentStage ||
-        "Processing...";
-
-      const status: ProgressState["status"] =
-        terminalStatus === "Completed"
-          ? "completed"
-          : terminalStatus === "Failed"
-            ? "failed"
-            : "processing";
-
-      let gradingState: GradingProgressDetails | undefined;
-      if (status === "processing" && typeof data?.result === "string") {
-        try {
-          const parsed = JSON.parse(data.result);
-          if (
-            parsed?.gradingState &&
-            Array.isArray(parsed.gradingState.questions)
-          ) {
-            gradingState = parsed.gradingState as GradingProgressDetails;
-          }
-        } catch {
-          // Ignore — older publishes used to put non-JSON in result.
-        }
-      }
-
-      setProgressData((prev) => ({
-        status,
-        progress: status === "completed" ? 100 : percentage,
-        currentStage: status === "completed" ? "Grading complete!" : message,
-        currentQuestion: data?.currentQuestion,
-        totalQuestions: data?.totalQuestions,
-        gradingState: mergeGradingState(prev.gradingState, gradingState),
-      }));
-
-      if (terminalStatus === "Completed" || terminalStatus === "Failed") {
-        eventSource.close();
-      }
-    };
-
-    const handleSseMessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        updateProgress(data);
-      } catch (error) {
-        // Failed to parse SSE message - ignore invalid data
-      }
-    };
-
-    eventSource.onopen = () => {
-      setProgressData({
-        status: "processing",
-        progress: 0,
-        currentStage: "Connected to grading service...",
-      });
-    };
-
-    eventSource.addEventListener("update", handleSseMessage as any);
-    eventSource.addEventListener("finalize", handleSseMessage as any);
-    eventSource.addEventListener("heartbeat", handleSseMessage as any);
-    eventSource.addEventListener("error", (event: any) => {
-      if (event?.data) {
-        handleSseMessage(event as MessageEvent);
-        return;
-      }
-
-      setProgressData((prev) => ({
-        ...prev,
-        status: "failed",
-        currentStage: "Connection to grading service lost",
-      }));
-      eventSource.close();
-    });
-
-    eventSource.onmessage = handleSseMessage;
-
-    return () => {
-      eventSource.close();
-    };
-  }, [isOpen, assignmentId, attemptId, gradingJobId]);
 
   const handleSubscribeToEmail = async () => {
     if (!attemptId) return;
