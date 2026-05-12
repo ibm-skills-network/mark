@@ -123,7 +123,20 @@ export interface TranslationOutcome {
 @Injectable()
 export class TranslationService implements OnModuleDestroy {
   private readonly logger = new Logger(TranslationService.name);
-  private readonly languageTranslation: boolean;
+  private readonly _languageTranslation: boolean;
+
+  /**
+   * Whether language translation is enabled in this deployment. Producers
+   * (publish + PATCH flows) check this before enqueuing TRANSLATE_QUESTION
+   * / TRANSLATE_VARIANT / TRANSLATE_META jobs and before marking pending
+   * status entries on the per-publish hash. When false, the translate
+   * methods short-circuit early and never write terminal status, so any
+   * pending entry that slipped through would leave the publish poll loop
+   * spinning for the full 30-minute timeout.
+   */
+  public get languageTranslation(): boolean {
+    return this._languageTranslation;
+  }
   private limiter: Bottleneck;
   private watsonxLimiter: Bottleneck;
   private useWatsonxLimiterForTranslation = false;
@@ -175,7 +188,7 @@ export class TranslationService implements OnModuleDestroy {
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly llmResolver: LLMResolverService,
   ) {
-    this.languageTranslation =
+    this._languageTranslation =
       process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";
 
     this.limiter = this.createDefaultLimiter();
@@ -969,7 +982,7 @@ export class TranslationService implements OnModuleDestroy {
       return;
     }
 
-    if (!this.languageTranslation) {
+    if (!this._languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
       return;
     }
@@ -1033,7 +1046,7 @@ export class TranslationService implements OnModuleDestroy {
     jobId?: string,
     progressRange?: { start: number; end: number },
   ): Promise<TranslationOutcome> {
-    if (!this.languageTranslation) {
+    if (!this._languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
       if (jobId && progressRange) {
         await this.jobStatusService.updateJobStatus(jobId, {
@@ -1305,7 +1318,7 @@ export class TranslationService implements OnModuleDestroy {
   ): Promise<TranslationOutcome> {
     const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
-    if (!this.languageTranslation) {
+    if (!this._languageTranslation) {
       if (hasValidJobId) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "Completed",
@@ -1597,7 +1610,7 @@ export class TranslationService implements OnModuleDestroy {
   ): Promise<TranslationOutcome> {
     const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
-    if (!this.languageTranslation) {
+    if (!this._languageTranslation) {
       if (hasValidJobId) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "Completed",

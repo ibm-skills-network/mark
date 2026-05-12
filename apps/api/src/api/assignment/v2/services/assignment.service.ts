@@ -167,7 +167,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
 
     const result = await this.assignmentRepository.update(id, updateDto);
 
-    if (shouldTranslate) {
+    if (shouldTranslate && this.translationService.languageTranslation) {
       // Translation work moved off the synchronous PATCH path. Seed the
       // per-assignment in-flight refcount hash with one worker per
       // language so a learner hitting the GET attempt endpoint during the
@@ -512,9 +512,15 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // already-translated assignment) enqueues zero translation jobs. In
       // that case the in-flight seed and the poll loop downstream are both
       // no-ops — skip them so the publish returns immediately instead of
-      // spinning until the 30-minute poll timeout.
+      // spinning until the 30-minute poll timeout. The meta-enqueue
+      // decision also depends on the ENABLE_TRANSLATION flag being on:
+      // when it's off, the producer skips the meta enqueue entirely and
+      // no worker will ever decrement the in-flight counter.
+      const metaWillEnqueue =
+        shouldTranslateAssignment &&
+        this.translationService.languageTranslation;
       const willEnqueueAnyTranslation =
-        shouldTranslateAssignment || perQuestionTranslationJobsEnqueued > 0;
+        metaWillEnqueue || perQuestionTranslationJobsEnqueued > 0;
 
       // Translation work has moved off the publish hot path onto the
       // dedicated translations queue. Before fanning out, seed the
@@ -529,8 +535,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // job dies mid-flight.
       const supportedLanguageCodes = getAllLanguageCodes();
       const perLanguageWorkerCount =
-        perQuestionTranslationJobsEnqueued +
-        (shouldTranslateAssignment ? 1 : 0);
+        perQuestionTranslationJobsEnqueued + (metaWillEnqueue ? 1 : 0);
       let metaEnqueued = false;
       if (
         willEnqueueAnyTranslation &&
@@ -558,26 +563,35 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         // grading-criteria) runs as its own retryable BullMQ job alongside
         // the per-question and per-variant jobs the question service
         // enqueued upstream. The publish job no longer awaits LLM calls.
-        await this.jobQueueService.enqueue(
-          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-          JOB_NAMES.TRANSLATE_META,
-          {
-            parentJobId: jobId,
+        // Skip enqueue + markPending entirely when translation is disabled
+        // — the worker would short-circuit anyway and never write a
+        // terminal status, leaving the publish poll loop spinning.
+        if (this.translationService.languageTranslation) {
+          await this.jobQueueService.enqueue(
+            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+            JOB_NAMES.TRANSLATE_META,
+            {
+              parentJobId: jobId,
+              assignmentId,
+            } satisfies TranslateMetaJobPayload,
+            {
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5000 },
+            },
+          );
+          await this.translationService.markPending(
+            jobId,
+            "meta",
             assignmentId,
-          } satisfies TranslateMetaJobPayload,
-          {
-            attempts: 3,
-            backoff: { type: "exponential", delay: 5000 },
-          },
-        );
-        await this.translationService.markPending(jobId, "meta", assignmentId);
-        metaEnqueued = true;
-        this.logger.info("publish.translation.job.enqueued", {
-          assignmentId,
-          kind: "meta",
-          id: assignmentId,
-          parentJobId: jobId,
-        });
+          );
+          metaEnqueued = true;
+          this.logger.info("publish.translation.job.enqueued", {
+            assignmentId,
+            kind: "meta",
+            id: assignmentId,
+            parentJobId: jobId,
+          });
+        }
       } else {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
