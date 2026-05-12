@@ -1752,7 +1752,13 @@ FILE LINK WORKFLOW:
     }
 
     const bucket = withoutScheme.slice(0, firstSlashIndex).trim();
-    const key = decodeURIComponent(withoutScheme.slice(firstSlashIndex + 1));
+    const rawKey = withoutScheme.slice(firstSlashIndex + 1);
+    let key: string;
+    try {
+      key = decodeURIComponent(rawKey);
+    } catch {
+      key = rawKey;
+    }
 
     if (!bucket || !key) {
       throw new BadRequestException("Invalid S3 link format.");
@@ -1821,7 +1827,12 @@ FILE LINK WORKFLOW:
 
   private toDisplayFileName(key: string): string {
     const keyTail = key.split("/").pop() || key;
-    const decodedTail = decodeURIComponent(keyTail);
+    let decodedTail: string;
+    try {
+      decodedTail = decodeURIComponent(keyTail);
+    } catch {
+      decodedTail = keyTail;
+    }
     const randomPrefixMatch = decodedTail.match(
       /^[\da-z]{10,}-(.+\.[\da-z]{1,10})$/i,
     );

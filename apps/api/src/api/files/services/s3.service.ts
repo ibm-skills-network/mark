@@ -100,9 +100,15 @@ export class S3Service {
       return true;
     } catch (error: unknown) {
       const typedError = error as {
+        code?: string;
+        name?: string;
         $metadata?: { httpStatusCode?: number };
       };
-      if (typedError?.$metadata?.httpStatusCode === 404) {
+      if (
+        typedError?.$metadata?.httpStatusCode === 404 ||
+        typedError?.code === "NotFound" ||
+        typedError?.name === "NotFound"
+      ) {
         return false;
       }
       throw error;

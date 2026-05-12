@@ -1179,11 +1179,12 @@ export const MarkChat = () => {
         });
 
         toast.success(`${file.name} uploaded successfully`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("File upload error:", error);
         updateFileStatus(fileId, {
           uploadStatus: "error",
-          errorMessage: error.message || "Upload failed",
+          errorMessage:
+            error instanceof Error ? error.message : "Upload failed",
         });
         toast.error(`Failed to upload ${file.name}`);
       }
