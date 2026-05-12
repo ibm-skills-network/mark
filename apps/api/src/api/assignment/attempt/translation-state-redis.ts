@@ -101,6 +101,6 @@ export async function isLanguageInFlight(
   const key = buildInflightKey(assignmentId);
   const raw = await redis.hget(key, language);
   if (raw === null) return false;
-  const count = parseInt(raw, 10);
+  const count = Number.parseInt(raw, 10);
   return Number.isFinite(count) && count > 0;
 }
