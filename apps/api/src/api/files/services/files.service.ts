@@ -134,10 +134,6 @@ export class FilesService {
       }
 
       case UploadType.LEARNER: {
-        if (normalizedPath) {
-          prefix = `${normalizedPath}/`;
-          break;
-        }
         if (typeof context.assignmentId !== "number") {
           throw new BadRequestException(
             "Missing assignmentId in context for learner upload",
@@ -154,10 +150,6 @@ export class FilesService {
       }
 
       case UploadType.LEARNER_PROD: {
-        if (normalizedPath) {
-          prefix = `${normalizedPath}/`;
-          break;
-        }
         if (typeof context.assignmentId !== "number") {
           throw new BadRequestException(
             "Missing assignmentId in context for learner production upload",
@@ -170,6 +162,11 @@ export class FilesService {
         }
 
         prefix = `${context.assignmentId}/${userId}/${context.questionId}/`;
+        break;
+      }
+
+      case UploadType.CHATBOT: {
+        prefix = `chatbot/${userId}/`;
         break;
       }
 
@@ -212,6 +209,7 @@ export class FilesService {
       [UploadType.LEARNER]: process.env.LEARNER_UPLOAD_MAX_BYTES,
       [UploadType.LEARNER_PROD]: process.env.LEARNER_UPLOAD_MAX_BYTES,
       [UploadType.DEBUG]: process.env.DEBUG_UPLOAD_MAX_BYTES,
+      [UploadType.CHATBOT]: process.env.LEARNER_UPLOAD_MAX_BYTES,
     };
 
     const globalEnvironment = process.env.UPLOAD_MAX_BYTES;

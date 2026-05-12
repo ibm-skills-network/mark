@@ -310,6 +310,11 @@ export class AssignmentFileService {
         `File ${fileId} does not belong to assignment ${assignmentId}`,
       );
     }
+    if (file.status !== AssignmentFileStatus.UPLOADING) {
+      throw new BadRequestException(
+        `File ${fileId} is not in UPLOADING state and cannot be aborted`,
+      );
+    }
 
     if (file.uploadId) {
       try {
@@ -382,6 +387,61 @@ export class AssignmentFileService {
           `File ${fileId} deleted from DB but S3 cleanup failed: ${message}`,
         );
       });
+  }
+
+  async cleanupOrphanedUploadingFiles(
+    thresholdMinutes = 60,
+  ): Promise<{ cleaned: number }> {
+    const cutoff = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+
+    const orphaned = await this.prisma.assignmentFile.findMany({
+      where: {
+        status: AssignmentFileStatus.UPLOADING,
+        createdAt: { lt: cutoff },
+      },
+    });
+
+    if (orphaned.length === 0) {
+      return { cleaned: 0 };
+    }
+
+    this.logger.log(
+      `cleanupOrphanedUploadingFiles: found ${orphaned.length} stale UPLOADING rows (threshold=${thresholdMinutes}m)`,
+    );
+
+    await Promise.allSettled(
+      orphaned
+        .filter((f) => f.uploadId)
+        .map((f) =>
+          this.s3Service
+            .abortMultipartUpload({
+              Bucket: f.storageBucket,
+              Key: f.storageKey,
+              UploadId: f.uploadId,
+            })
+            .catch((error: unknown) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              this.logger.warn(
+                `cleanupOrphanedUploadingFiles: S3 abort failed for file ${f.id} (key=${f.storageKey}): ${message}`,
+              );
+            }),
+        ),
+    );
+
+    // Re-check status in the WHERE clause to avoid deleting a row that completed
+    // between the findMany and deleteMany (TOCTOU guard).
+    const { count } = await this.prisma.assignmentFile.deleteMany({
+      where: {
+        id: { in: orphaned.map((f) => f.id) },
+        status: AssignmentFileStatus.UPLOADING,
+      },
+    });
+
+    this.logger.log(
+      `cleanupOrphanedUploadingFiles: deleted ${count} orphaned UPLOADING records`,
+    );
+    return { cleaned: count };
   }
 
   /**

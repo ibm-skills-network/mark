@@ -62,7 +62,7 @@ import { useUserBehaviorMonitor } from "../../../hooks/useUserBehaviorMonitor";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
-import type { User } from "@/config/types";
+import type { UploadType, User } from "@/config/types";
 
 let cachedUser: User | null = null;
 let cachedUserPromise: Promise<User | null> | null = null;
@@ -1155,10 +1155,9 @@ export const MarkChat = () => {
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
-          uploadType: userRole as "author" | "learner",
-          context: {
-            path: `chatbot/${fileId}`,
-          },
+          uploadType: (userRole === "learner"
+            ? "chatbot"
+            : userRole) as UploadType,
         };
 
         const uploadedFile = await uploadFileToStorage(file, uploadRequest, {

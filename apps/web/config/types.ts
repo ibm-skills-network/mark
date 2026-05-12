@@ -62,7 +62,7 @@ export interface ExtendedFileContent {
   questionId?: string;
 }
 
-export type UploadType = "author" | "learner" | "debug";
+export type UploadType = "author" | "learner" | "debug" | "chatbot";
 
 export interface UploadContext {
   path?: string;

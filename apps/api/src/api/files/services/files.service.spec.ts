@@ -115,12 +115,56 @@ describe("FilesService", () => {
         {
           fileName: "x.txt",
           fileType: "text/plain",
+          fileSize: 1024,
           uploadType: UploadType.LEARNER,
           context: { path: "abc\0def", assignmentId: 1, questionId: 1 },
         },
         "user-123",
       ),
     ).rejects.toThrow(/Invalid upload path/);
+  });
+
+  it("rejects learner upload with context.path set but no assignmentId/questionId", async () => {
+    const s3 = mockS3Service as unknown as {
+      getBucketName: jest.Mock;
+    };
+    s3.getBucketName.mockReturnValue("learner-bucket");
+
+    await expect(
+      service.generateUploadUrl(
+        {
+          fileName: "submission.txt",
+          fileType: "text/plain",
+          fileSize: 1024,
+          uploadType: UploadType.LEARNER,
+          context: { path: "chatbot/abc123" },
+        },
+        "user-123",
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("chatbot upload routes to the learner bucket with a server-controlled prefix", async () => {
+    const s3 = mockS3Service as unknown as {
+      getBucketName: jest.Mock;
+      getSignedUrl: jest.Mock;
+    };
+    s3.getBucketName.mockReturnValue("learner-bucket");
+    s3.getSignedUrl.mockResolvedValue("https://signed-upload-url");
+
+    const result = await service.generateUploadUrl(
+      {
+        fileName: "chat-file.pdf",
+        fileType: "application/pdf",
+        fileSize: 2048,
+        uploadType: UploadType.CHATBOT,
+      },
+      "user-456",
+    );
+
+    expect(result.bucket).toBe("learner-bucket");
+    expect(result.key).toMatch(/^chatbot\/user-456\/.+-chat-file\.pdf$/);
+    expect(s3.getBucketName).toHaveBeenCalledWith(UploadType.CHATBOT);
   });
 
   it("generates public read URLs from the public bucket", async () => {

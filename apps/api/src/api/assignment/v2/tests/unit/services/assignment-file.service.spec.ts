@@ -405,15 +405,17 @@ describe("AssignmentFileService", () => {
       expect(prisma.assignmentFile.delete).toHaveBeenCalledTimes(1);
     });
 
-    it("skips S3 abort when uploadId is null but still deletes the DB row", async () => {
+    it("throws BadRequestException when file is not in UPLOADING state", async () => {
       prisma.assignmentFile.findUnique.mockResolvedValue(
         makeDbFile({ uploadId: null, status: AssignmentFileStatus.READY }),
       );
 
-      await service.abortAssignmentFileUpload(1, 1);
+      await expect(service.abortAssignmentFileUpload(1, 1)).rejects.toThrow(
+        BadRequestException,
+      );
 
       expect(s3.abortMultipartUpload).not.toHaveBeenCalled();
-      expect(prisma.assignmentFile.delete).toHaveBeenCalledTimes(1);
+      expect(prisma.assignmentFile.delete).not.toHaveBeenCalled();
     });
   });
 
