@@ -23,6 +23,7 @@ import {
   AssignmentV1GenerateQuestionsJobPayload,
   AssignmentV2GenerateQuestionsJobPayload,
   AssignmentV2PublishJobPayload,
+  AssignmentV2RetryFailedTranslationsJobPayload,
   AttemptAuthorPreviewJobPayload,
   AttemptGradeJobPayload,
   TranslateMetaJobPayload,
@@ -130,6 +131,17 @@ export class JobExecutorService {
           jobPayload.jobId,
           jobPayload.assignmentId,
           jobPayload.updateDto,
+          jobPayload.userId,
+        );
+        return;
+      }
+      case JOB_NAMES.ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS: {
+        const jobPayload =
+          payload as AssignmentV2RetryFailedTranslationsJobPayload;
+        await this.assignmentServiceV2.runRetryFailedTranslations(
+          jobPayload.jobId,
+          jobPayload.assignmentId,
+          jobPayload.sourcePublishJobId,
           jobPayload.userId,
         );
         return;

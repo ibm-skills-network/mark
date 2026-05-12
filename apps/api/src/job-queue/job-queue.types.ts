@@ -41,6 +41,17 @@ export interface AssignmentV2PublishJobPayload {
   userId: string;
 }
 
+export interface AssignmentV2RetryFailedTranslationsJobPayload {
+  jobId: string;
+  assignmentId: number;
+  // The publish job whose status hash holds the failed entries to retry.
+  // Reuses the deterministic publish:v2:${assignmentId} jobId so the server
+  // can always identify the most recent publish without the client passing
+  // it explicitly.
+  sourcePublishJobId: string;
+  userId: string;
+}
+
 export type AttemptWorkerUserSession = Pick<
   UserSession,
   "userId" | "role" | "gradingCallbackRequired"

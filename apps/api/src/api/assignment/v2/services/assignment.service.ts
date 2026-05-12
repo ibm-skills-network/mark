@@ -1,4 +1,9 @@
-import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { seedInflightLanguages } from "src/api/assignment/attempt/translation-state-redis";
@@ -7,7 +12,12 @@ import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
-import { TranslateMetaJobPayload } from "src/job-queue/job-queue.types";
+import {
+  AssignmentV2RetryFailedTranslationsJobPayload,
+  TranslateMetaJobPayload,
+  TranslateQuestionJobPayload,
+  TranslateVariantJobPayload,
+} from "src/job-queue/job-queue.types";
 import { createRedisConnection } from "src/job-queue/redis.connection";
 import { Logger } from "winston";
 import { getAllLanguageCodes } from "../../attempt/helper/languages";
@@ -862,6 +872,308 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "Failed",
         progress: `Error: ${errorMessage}`,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Enqueue a retry job for the failed translations of an assignment's most
+   * recent publish. Called from the controller; returns the new retry jobId.
+   *
+   * Guard: 409 if a publish for the same assignment is currently active —
+   * the BullMQ deterministic-jobId dedup on publish guarantees there is at
+   * most one. Multiple concurrent retries are allowed (ON CONFLICT DO
+   * NOTHING handles double-writes, the in-flight refcount accumulates
+   * safely) but redundant; the UI only ever shows one retry at a time so
+   * this is a moot case in practice.
+   */
+  async enqueueRetryFailedTranslations(
+    assignmentId: number,
+    userId: string,
+  ): Promise<{ jobId: string; message: string }> {
+    const activePublish = await this.findActivePublishJob(assignmentId);
+    if (activePublish) {
+      this.logger.warn("publish.retry.dedup-hit { reason: active-publish }", {
+        assignmentId,
+        publishJobId: activePublish.id,
+      });
+      throw new ConflictException(
+        "A publish is currently in progress for this assignment. Retry once it finishes.",
+      );
+    }
+
+    const sourcePublishJobId = `publish:v2:${assignmentId}`;
+    const retryJobId = `retry:v2:${assignmentId}:${Date.now()}`;
+
+    const job = await this.jobStatusService.createPublishJob(
+      assignmentId,
+      userId,
+      { reservedId: retryJobId },
+    );
+
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS,
+        {
+          jobId: job.id,
+          assignmentId,
+          sourcePublishJobId,
+          userId,
+        } satisfies AssignmentV2RetryFailedTranslationsJobPayload,
+        {
+          jobId: job.id,
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: `Failed to enqueue retry job: ${errorMessage}`,
+      });
+      throw error;
+    }
+
+    return {
+      jobId: job.id,
+      message: "Retry started",
+    };
+  }
+
+  /**
+   * Worker-side handler for ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS. Reads
+   * the source publish's status hash, filters failed entries, re-enqueues
+   * a TRANSLATE_QUESTION / TRANSLATE_VARIANT / TRANSLATE_META job per
+   * failure with parentJobId = the retry's jobId, seeds the in-flight
+   * refcount, then polls the retry's own per-publish status hash to
+   * terminal.
+   *
+   * If the source publish's hash is gone (1-hour TTL expired) or has no
+   * failed entries, the retry completes immediately with an empty
+   * aggregate. The frontend renders that as "Nothing to retry."
+   */
+  async runRetryFailedTranslations(
+    jobId: string,
+    assignmentId: number,
+    sourcePublishJobId: string,
+    userId: string,
+  ): Promise<void> {
+    void userId;
+
+    // Defensive: wipe any leftover entries under the retry's deterministic
+    // jobId. New retry jobIds embed Date.now() so collisions shouldn't
+    // happen in practice, but the cost is one DEL.
+    try {
+      await this.translationStateRedis?.del(buildPublishHashKey(jobId));
+    } catch (delError) {
+      this.logger.warn("publish.retry.reset.failed", {
+        assignmentId,
+        jobId,
+        error: delError instanceof Error ? delError.message : String(delError),
+      });
+    }
+
+    try {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "Reading failed translations from previous publish",
+        percentage: 10,
+      });
+
+      const sourceHashKey = buildPublishHashKey(sourcePublishJobId);
+      const sourceEntries =
+        (await this.translationStateRedis?.hgetall(sourceHashKey)) ?? {};
+      const failedEntries: PerJobTranslationEntry[] = Object.values(
+        sourceEntries,
+      )
+        .map((raw) => JSON.parse(raw) as PerJobTranslationEntry)
+        .filter((entry) => entry.status === "failed");
+
+      if (failedEntries.length === 0) {
+        this.logger.info("publish.retry.empty", {
+          assignmentId,
+          jobId,
+          sourcePublishJobId,
+        });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "No failed translations to retry",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
+
+      // Re-fetch question/variant payloads from the DB. The status hash
+      // only carries ids; the translation worker payload needs the full
+      // DTO (question content, choices, variants).
+      const questions =
+        await this.questionService.getQuestionsForAssignment(assignmentId);
+      const questionsById = new Map(questions.map((q) => [q.id, q]));
+      const variantToQuestion = new Map<
+        number,
+        { variant: VariantDto; questionId: number }
+      >();
+      for (const question of questions) {
+        for (const variant of question.variants ?? []) {
+          variantToQuestion.set(variant.id, {
+            variant: variant as VariantDto,
+            questionId: question.id,
+          });
+        }
+      }
+
+      // Re-enqueue every failed entry with parentJobId = the retry jobId,
+      // so worker HSETs land on this retry's status hash (not the source
+      // publish's). markPending seeds pending entries so the first poll
+      // tick already shows the user what's being retried.
+      let enqueued = 0;
+      for (const entry of failedEntries) {
+        if (entry.kind === "question") {
+          const questionDto = questionsById.get(entry.id);
+          if (!questionDto) {
+            this.logger.warn("publish.retry.question.missing", {
+              assignmentId,
+              jobId,
+              questionId: entry.id,
+            });
+            continue;
+          }
+          await this.jobQueueService.enqueue(
+            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+            JOB_NAMES.TRANSLATE_QUESTION,
+            {
+              parentJobId: jobId,
+              assignmentId,
+              questionId: entry.id,
+              question: questionDto,
+            } satisfies TranslateQuestionJobPayload,
+            {
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5000 },
+            },
+          );
+          await this.translationService.markPending(
+            jobId,
+            "question",
+            entry.id,
+          );
+          enqueued += 1;
+        } else if (entry.kind === "variant") {
+          const variantLookup = variantToQuestion.get(entry.id);
+          if (!variantLookup) {
+            this.logger.warn("publish.retry.variant.missing", {
+              assignmentId,
+              jobId,
+              variantId: entry.id,
+            });
+            continue;
+          }
+          await this.jobQueueService.enqueue(
+            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+            JOB_NAMES.TRANSLATE_VARIANT,
+            {
+              parentJobId: jobId,
+              assignmentId,
+              questionId: variantLookup.questionId,
+              variantId: entry.id,
+              variant: variantLookup.variant,
+            } satisfies TranslateVariantJobPayload,
+            {
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5000 },
+            },
+          );
+          await this.translationService.markPending(jobId, "variant", entry.id);
+          enqueued += 1;
+        } else if (entry.kind === "meta") {
+          await this.jobQueueService.enqueue(
+            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+            JOB_NAMES.TRANSLATE_META,
+            {
+              parentJobId: jobId,
+              assignmentId,
+            } satisfies TranslateMetaJobPayload,
+            {
+              attempts: 3,
+              backoff: { type: "exponential", delay: 5000 },
+            },
+          );
+          await this.translationService.markPending(
+            jobId,
+            "meta",
+            assignmentId,
+          );
+          enqueued += 1;
+        }
+      }
+
+      if (enqueued === 0) {
+        this.logger.warn("publish.retry.empty-after-lookup", {
+          assignmentId,
+          jobId,
+          failedEntriesInSource: failedEntries.length,
+        });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress:
+            "No retryable failed translations found (questions may have been deleted)",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
+
+      // Each re-enqueued translation worker handles all supported
+      // languages, so per-language in-flight refcount increment equals
+      // the total count of retried entries.
+      const supportedLanguageCodes = getAllLanguageCodes();
+      if (supportedLanguageCodes.length > 0 && this.translationStateRedis) {
+        await seedInflightLanguages(
+          this.translationStateRedis,
+          assignmentId,
+          supportedLanguageCodes,
+          enqueued,
+        );
+      }
+
+      this.logger.info("publish.retry.start", {
+        assignmentId,
+        jobId,
+        sourcePublishJobId,
+        retried: enqueued,
+      });
+
+      await this.pollTranslationsToTerminal(jobId, assignmentId);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      this.logger.error("publish.retry.failed", {
+        assignmentId,
+        jobId,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "Failed",
+        progress: `Retry failed: ${errorMessage}`,
       });
       throw error;
     }

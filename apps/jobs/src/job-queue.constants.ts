@@ -10,6 +10,8 @@ export const JOB_NAMES = {
   ASSIGNMENT_V1_GENERATE_QUESTIONS: "assignment-v1.generate-questions",
   ASSIGNMENT_V2_GENERATE_QUESTIONS: "assignment-v2.generate-questions",
   ASSIGNMENT_V2_PUBLISH: "assignment-v2.publish",
+  ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS:
+    "assignment-v2.retry-failed-translations",
   ATTEMPT_GRADE: "attempt.grade",
   ATTEMPT_AUTHOR_PREVIEW: "attempt.author-preview",
   ADMIN_FIX_MISSING_TRANSLATIONS: "admin.fix-missing-translations",

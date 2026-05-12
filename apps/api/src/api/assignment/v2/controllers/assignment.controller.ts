@@ -336,6 +336,46 @@ export class AssignmentControllerV2 {
     return job ? { jobId: job.id } : null;
   }
 
+  /**
+   * Retry the failed translations from the most recent publish for this
+   * assignment. Reads the publish's per-job status hash, re-enqueues a
+   * translation job per failed entry, and returns a new jobId the client
+   * can subscribe to via SSE to track retry progress.
+   *
+   * Returns 409 if a publish is currently active — wait for it to finish,
+   * then click retry.
+   */
+  @Post(":id/translations/retry-failed")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({
+    summary: "Retry failed translations from the most recent publish",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      properties: {
+        jobId: { type: "string", description: "Retry job ID for SSE" },
+        message: { type: "string" },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: "A publish is currently in progress for this assignment",
+  })
+  async retryFailedTranslations(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ jobId: string; message: string }> {
+    return this.assignmentService.enqueueRetryFailedTranslations(
+      id,
+      request.userSession.userId,
+    );
+  }
+
   @Get(":id/files")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)

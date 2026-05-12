@@ -313,7 +313,8 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private async handleAssignmentV2Job(job: Job): Promise<void> {
     switch (job.name) {
       case JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS:
-      case JOB_NAMES.ASSIGNMENT_V2_PUBLISH: {
+      case JOB_NAMES.ASSIGNMENT_V2_PUBLISH:
+      case JOB_NAMES.ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS: {
         if (this.shouldExecuteLocally()) {
           this.logger.debug(
             `Routing locally: queue=${JOB_QUEUE_NAMES.ASSIGNMENT_V2} jobName=${job.name} jobId=${job.id}`,
