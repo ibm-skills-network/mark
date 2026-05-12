@@ -10,6 +10,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import axios from "axios";
@@ -32,6 +33,7 @@ import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
+import { GRADING_PROGRESS_SERVICE } from "../../attempt.constants";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingProgressService } from "../grading-progress.service";
 
@@ -61,7 +63,8 @@ export class QuestionResponseService {
     private readonly localizationService: LocalizationService,
     private readonly gradingFactoryService: GradingFactoryService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
-    @Inject("GradingProgressService")
+    @Optional()
+    @Inject(GRADING_PROGRESS_SERVICE)
     private readonly progressService?: GradingProgressService,
   ) {
     this.logger = parentLogger.child({
@@ -130,12 +133,10 @@ export class QuestionResponseService {
 
     // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
     const totalQuestions = sorted.length;
-    if (this.progressService) {
-      await this.progressService.initializeProgress(
-        assignmentAttemptId,
-        totalQuestions,
-      );
-    }
+    await this.progressService?.initializeProgress(
+      assignmentAttemptId,
+      totalQuestions,
+    );
 
     const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
     const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
@@ -149,14 +150,12 @@ export class QuestionResponseService {
       const questionResponse = requestMap.get(questionId);
       if (!questionResponse) continue;
 
-      if (this.progressService) {
-        await this.progressService.updateQuestionProgress(
-          assignmentAttemptId,
-          questionNumber,
-          totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
-        );
-      }
+      await this.progressService?.updateQuestionProgress(
+        assignmentAttemptId,
+        questionNumber,
+        totalQuestions,
+        `Grading question ${questionNumber} of ${totalQuestions}...`,
+      );
 
       const question = questionMap.get(questionId);
       if (!question) continue;
@@ -191,9 +190,7 @@ export class QuestionResponseService {
       gradedItems.push({ questionId, learnerResponse, responseDto });
     }
 
-    if (this.progressService) {
-      await this.progressService.markComplete(assignmentAttemptId);
-    }
+    await this.progressService?.markComplete(assignmentAttemptId);
 
     return gradedItems;
   }
@@ -372,8 +369,8 @@ export class QuestionResponseService {
 
     // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
     const totalQuestions = sorted.length;
-    if (this.progressService && role === UserRole.LEARNER) {
-      await this.progressService.initializeProgress(
+    if (role === UserRole.LEARNER) {
+      await this.progressService?.initializeProgress(
         assignmentAttemptId,
         totalQuestions,
       );
@@ -389,8 +386,8 @@ export class QuestionResponseService {
       const questionResponse = requestMap.get(questionId);
       if (!questionResponse) continue;
 
-      if (this.progressService && role === UserRole.LEARNER) {
-        await this.progressService.updateQuestionProgress(
+      if (role === UserRole.LEARNER) {
+        await this.progressService?.updateQuestionProgress(
           assignmentAttemptId,
           questionNumber,
           totalQuestions,
@@ -438,8 +435,8 @@ export class QuestionResponseService {
       gradedItems.push({ questionId, learnerResponse, responseDto });
     }
 
-    if (this.progressService && role === UserRole.LEARNER) {
-      await this.progressService.markComplete(assignmentAttemptId);
+    if (role === UserRole.LEARNER) {
+      await this.progressService?.markComplete(assignmentAttemptId);
     }
 
     // ── Phase 3: Write (short transaction) — LEARNER only ────────────────────

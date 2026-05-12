@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { Observable } from "rxjs";
@@ -35,6 +35,7 @@ import {
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
+import { GRADING_PROGRESS_SERVICE } from "../attempt.constants";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -51,7 +52,8 @@ export class AttemptServiceV2 {
     private readonly reportingService: AttemptReportingService,
     private readonly jobStateService: JobStateService,
     private readonly jobQueueService: JobQueueService,
-    @Inject("GradingProgressService")
+    @Optional()
+    @Inject(GRADING_PROGRESS_SERVICE)
     private readonly gradingProgressService?: GradingProgressService,
   ) {}
 
@@ -312,18 +314,16 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
-      if (this.gradingProgressService) {
-        this.gradingProgressService.setProgressCallback(
-          attemptId,
-          async (status: string, progress: string, percentage?: number) => {
-            await this.updateGradingJobStatus(gradingJobId, {
-              status,
-              progress,
-              percentage,
-            });
-          },
-        );
-      }
+      this.gradingProgressService?.setProgressCallback(
+        attemptId,
+        async (status: string, progress: string, percentage?: number) => {
+          await this.updateGradingJobStatus(gradingJobId, {
+            status,
+            progress,
+            percentage,
+          });
+        },
+      );
 
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
@@ -354,9 +354,7 @@ export class AttemptServiceV2 {
         result,
       });
 
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(attemptId);
-      }
+      this.gradingProgressService?.removeProgressCallback(attemptId);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -367,12 +365,10 @@ export class AttemptServiceV2 {
         percentage: 0,
       });
 
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(attemptId);
-        // Guard against author preview jobs which use attemptId = -1
-        if (attemptId > 0) {
-          await this.gradingProgressService.markFailed(attemptId, errorMessage);
-        }
+      this.gradingProgressService?.removeProgressCallback(attemptId);
+      // Guard against author preview jobs which use attemptId = -1
+      if (attemptId > 0) {
+        await this.gradingProgressService?.markFailed(attemptId, errorMessage);
       }
       throw error;
     }

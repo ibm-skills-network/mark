@@ -1,13 +1,15 @@
 import { HttpService } from "@nestjs/axios";
 import { InternalServerErrorException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { Question, QuestionType } from "@prisma/client";
+import { GradingStatus, Question, QuestionType } from "@prisma/client";
 import {
   UserRole,
   UserSession,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { PROMPT_PROCESSOR } from "../../llm/llm.constants";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { GRADING_PROGRESS_SERVICE } from "../attempt.constants";
 import { AttemptQuestionsMapper } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
@@ -35,6 +37,14 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     question: {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
+    },
+    questionResponse: {
+      deleteMany: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
+    gradingProgress: {
+      findUnique: jest.fn(),
     },
   };
 
@@ -95,6 +105,17 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     createAndSync: jest.fn(),
   };
 
+  const mockPromptProcessor = {
+    processPromptForFeature: jest.fn(),
+  };
+
+  const mockProgressService = {
+    markComplete: jest.fn(),
+    markCompleteWithAiFeedbackError: jest.fn(),
+    clearAiFeedbackError: jest.fn(),
+    markFailed: jest.fn(),
+  };
+
   type TestResponse = CreateQuestionResponseAttemptResponseDto & {
     metadata?: Record<string, unknown> | null;
     learnerResponse?: unknown;
@@ -149,7 +170,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         },
         { provide: LtiGradeSyncService, useValue: mockLtiGradeSyncService },
         { provide: HttpService, useValue: mockHttpService },
-        { provide: "GradingProgressService", useValue: null },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: mockProgressService },
+        { provide: PROMPT_PROCESSOR, useValue: mockPromptProcessor },
       ],
     }).compile();
 
@@ -157,6 +179,20 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     // Reset all mocks before each test
     jest.clearAllMocks();
+    mockPrisma.question.findMany.mockResolvedValue([]);
+    mockPrisma.questionResponse.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.questionResponse.update.mockResolvedValue({});
+    mockProgressService.markComplete.mockResolvedValue(undefined);
+    mockProgressService.markCompleteWithAiFeedbackError.mockResolvedValue(
+      undefined,
+    );
+    mockProgressService.clearAiFeedbackError.mockResolvedValue(undefined);
+    mockProgressService.markFailed.mockResolvedValue(undefined);
+    mockPromptProcessor.processPromptForFeature.mockResolvedValue(
+      JSON.stringify({
+        feedback: [{ questionId: 1, feedback: "AI feedback for question 1." }],
+      }),
+    );
   });
 
   describe("calculateTotalPossiblePointsWithValidation", () => {
@@ -1002,6 +1038,195 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         0.8,
         expect.objectContaining({ submitted: true }),
       );
+    });
+
+    it("generates and persists AI feedback after deterministic scoring", async () => {
+      mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
+      mockPrisma.question.findMany.mockResolvedValue([
+        {
+          id: 1,
+          question: "Which option is correct?",
+          type: QuestionType.SINGLE_CORRECT,
+          totalPoints: 10,
+          choices: [],
+          answer: null,
+        },
+      ]);
+      mockPromptProcessor.processPromptForFeature.mockResolvedValue(
+        JSON.stringify({
+          feedback: [
+            {
+              questionId: 1,
+              feedback: "AI explanation based on the deterministic result.",
+            },
+          ],
+        }),
+      );
+      mockQuestionResponseService.gradeQuestionsForLearner.mockResolvedValue([
+        {
+          questionId: 1,
+          learnerResponse: ["A"],
+          responseDto: makeResponse({
+            id: 123,
+            questionId: 1,
+            question: "Which option is correct?",
+            totalPoints: 8,
+            feedback: [{ feedback: "Existing deterministic feedback." }],
+            metadata: { isCorrect: false, maxPossiblePoints: 10 },
+          }),
+        },
+      ]);
+      mockGradingService.constructFeedbacksForQuestions.mockImplementation(
+        (responses) => responses,
+      );
+
+      const result = await service.updateAssignmentAttempt(
+        attemptId,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "auth-cookie",
+        true,
+        learnerRequest as UpdateAttemptRequest,
+      );
+
+      expect(mockPromptProcessor.processPromptForFeature).toHaveBeenCalled();
+      expect(mockPrisma.questionResponse.update).toHaveBeenCalledWith({
+        where: { id: 123 },
+        data: {
+          feedback: [
+            {
+              feedback: "AI explanation based on the deterministic result.",
+            },
+          ],
+        },
+      });
+      expect(result.aiFeedbackError).toBeNull();
+      expect(result.feedbacksForQuestions[0].feedback).toEqual([
+        {
+          feedback: "AI explanation based on the deterministic result.",
+        },
+      ]);
+    });
+
+    it("skips AI feedback when submission feedback is hidden", async () => {
+      mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        requireAllQuestions: false,
+        questions: [
+          {
+            id: 1,
+            type: QuestionType.SINGLE_CORRECT,
+            totalPoints: 10,
+            isDeleted: false,
+          },
+        ],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: false,
+      });
+      mockPromptProcessor.processPromptForFeature.mockRejectedValue(
+        new Error("AI service unavailable"),
+      );
+
+      const result = await service.updateAssignmentAttempt(
+        attemptId,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "auth-cookie",
+        true,
+        learnerRequest as UpdateAttemptRequest,
+      );
+
+      expect(
+        mockPromptProcessor.processPromptForFeature,
+      ).not.toHaveBeenCalled();
+      expect(mockPrisma.questionResponse.update).not.toHaveBeenCalled();
+      expect(result.aiFeedbackError).toBeNull();
+      expect(result.showSubmissionFeedback).toBe(false);
+      expect(mockProgressService.markComplete).toHaveBeenCalledWith(attemptId);
+      expect(
+        mockProgressService.markCompleteWithAiFeedbackError,
+      ).not.toHaveBeenCalled();
+      expect(mockProgressService.markFailed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("rerunAiFeedbackForDeterministicAttempt", () => {
+    const assignmentId = 99;
+    const attemptId = 42;
+
+    beforeEach(() => {
+      mockPrisma.gradingProgress.findUnique.mockResolvedValue({
+        status: GradingStatus.COMPLETED,
+        error: "AI feedback failed",
+      });
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        showSubmissionFeedback: true,
+        questions: [{ type: QuestionType.SINGLE_CORRECT }],
+      });
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        assignmentId,
+        submitted: true,
+        preferredLanguage: "en",
+        questionVariants: [],
+      });
+      mockPrisma.questionResponse.findMany.mockResolvedValue([
+        {
+          id: 456,
+          questionId: 1,
+          learnerResponse: JSON.stringify(["A"]),
+          points: 0,
+          feedback: [{ feedback: "Stored deterministic feedback." }],
+          metadata: { isCorrect: false, maxPossiblePoints: 10 },
+        },
+      ]);
+      mockPrisma.question.findMany.mockResolvedValue([
+        {
+          id: 1,
+          question: "Which option is correct?",
+          type: QuestionType.SINGLE_CORRECT,
+          totalPoints: 10,
+          choices: [],
+          answer: null,
+        },
+      ]);
+      mockPromptProcessor.processPromptForFeature.mockResolvedValue(
+        JSON.stringify({
+          feedback: [
+            {
+              questionId: 1,
+              feedback: "Regenerated AI feedback from persisted response.",
+            },
+          ],
+        }),
+      );
+    });
+
+    it("rebuilds graded items from persisted responses before rerunning feedback", async () => {
+      const result = await service.rerunAiFeedbackForDeterministicAttempt(
+        attemptId,
+        assignmentId,
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(mockPrisma.questionResponse.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { assignmentAttemptId: attemptId },
+        }),
+      );
+      expect(mockPromptProcessor.processPromptForFeature).toHaveBeenCalled();
+      expect(mockPrisma.questionResponse.update).toHaveBeenCalledWith({
+        where: { id: 456 },
+        data: {
+          feedback: [
+            {
+              feedback: "Regenerated AI feedback from persisted response.",
+            },
+          ],
+        },
+      });
     });
   });
 

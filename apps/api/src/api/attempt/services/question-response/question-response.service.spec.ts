@@ -5,6 +5,7 @@ import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
+import { GRADING_PROGRESS_SERVICE } from "../../attempt.constants";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import {
@@ -46,7 +47,7 @@ describe("QuestionResponseService", () => {
         { provide: LocalizationService, useValue: mockLocalizationService },
         { provide: GradingFactoryService, useValue: mockGradingFactoryService },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: undefined },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: undefined },
       ],
     }).compile();
 
@@ -172,7 +173,7 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
         { provide: LocalizationService, useValue: {} },
         { provide: GradingFactoryService, useValue: {} },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: mockProgressService },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: mockProgressService },
       ],
     }).compile();
 
@@ -412,7 +413,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
         { provide: LocalizationService, useValue: {} },
         { provide: GradingFactoryService, useValue: {} },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: undefined },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: undefined },
       ],
     }).compile();
 
@@ -542,7 +543,7 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
         { provide: LocalizationService, useValue: {} },
         { provide: GradingFactoryService, useValue: {} },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: undefined },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: undefined },
       ],
     }).compile();
 

@@ -20,6 +20,7 @@ import {
   FILE_CONTENT_EXTRACTION_SERVICE,
   GRADING_AUDIT_SERVICE,
   GRADING_CONSISTENCY_SERVICE,
+  GRADING_PROGRESS_SERVICE,
 } from "./attempt.constants";
 import { AttemptControllerV2 } from "./attempt.controller";
 import { ChoiceGradingStrategy } from "./common/strategies/choice-grading.strategy";
@@ -77,7 +78,7 @@ import { TranslationService } from "./services/translation/translation.service";
     ChoiceGradingStrategy,
     TrueFalseGradingStrategy,
     {
-      provide: "GradingProgressService",
+      provide: GRADING_PROGRESS_SERVICE,
       useClass: GradingProgressService,
     },
     {

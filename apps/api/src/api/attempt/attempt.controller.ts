@@ -54,7 +54,10 @@ import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/p
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { CreateQuestionResponseAttemptRequestDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { GRADING_AUDIT_SERVICE } from "./attempt.constants";
+import {
+  GRADING_AUDIT_SERVICE,
+  GRADING_PROGRESS_SERVICE,
+} from "./attempt.constants";
 import { AttemptServiceV2 } from "./services/attempt.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -73,7 +76,7 @@ export class AttemptControllerV2 {
     private readonly attemptService: AttemptServiceV2,
     @Inject(GRADING_AUDIT_SERVICE)
     private readonly gradingAuditService: GradingAuditService,
-    @Inject("GradingProgressService")
+    @Inject(GRADING_PROGRESS_SERVICE)
     private readonly gradingProgressService: GradingProgressService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {
