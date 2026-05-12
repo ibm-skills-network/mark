@@ -1774,15 +1774,45 @@ FILE LINK WORKFLOW:
     const { bucket, key } = this.parseS3Link(link);
     const filename = this.toDisplayFileName(key);
 
-    const metadata = await this.s3Service.headObject({
+    const response = await this.s3Service.getObject({
       Bucket: bucket,
       Key: key,
     });
-    const fileSize = Number(metadata.ContentLength ?? 0);
+
+    const fileSize = Number(response.ContentLength ?? 0);
     if (fileSize > MAX_FILE_BYTES) {
+      if (
+        response.Body &&
+        typeof (response.Body as { destroy?: () => void }).destroy ===
+          "function"
+      ) {
+        (response.Body as { destroy: () => void }).destroy();
+      }
       throw new BadRequestException(
         `File is too large to extract (${fileSize} bytes). Max allowed is ${MAX_FILE_BYTES} bytes.`,
       );
+    }
+
+    const contentType =
+      typeof response.ContentType === "string"
+        ? response.ContentType
+        : undefined;
+
+    let fileBuffer: Buffer;
+    if (response.Body instanceof Buffer) {
+      fileBuffer = response.Body;
+    } else if (response.Body) {
+      const chunks: Uint8Array[] = [];
+      const stream = response.Body as NodeJS.ReadableStream;
+      fileBuffer = await new Promise<Buffer>((resolve, reject) => {
+        stream.on("data", (chunk) =>
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+        );
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", reject);
+      });
+    } else {
+      throw new BadRequestException(`Could not retrieve file: ${key}`);
     }
 
     const [extractedFile] =
@@ -1791,12 +1821,10 @@ FILE LINK WORKFLOW:
           {
             filename,
             content: "",
-            fileType:
-              typeof metadata.ContentType === "string"
-                ? metadata.ContentType
-                : undefined,
+            fileType: contentType,
             bucket,
             key,
+            buffer: fileBuffer,
           },
         ],
         {
