@@ -177,23 +177,65 @@ export class AssignmentFileService {
       },
     });
 
-    const object = await this.s3Service.getObject({
-      Bucket: file.storageBucket,
-      Key: file.storageKey,
-    });
-    const buffer = await this.collectBodyToBuffer(object.Body);
+    // S3 object now exists. If anything below throws we must mark the row FAILED
+    // (not leave it UPLOADING) and delete the orphaned S3 object.
+    let object: Awaited<ReturnType<typeof this.s3Service.getObject>>;
+    let buffer: Buffer;
+    let extractedFile: Awaited<
+      ReturnType<
+        typeof this.fileContentExtractionService.extractContentFromFiles
+      >
+    >[number];
 
-    const [extractedFile] =
-      await this.fileContentExtractionService.extractContentFromFiles([
-        {
-          filename: file.filename,
-          content: "InCos",
-          fileType: file.mimeType || "application/octet-stream",
-          bucket: file.storageBucket,
-          key: file.storageKey,
-          buffer,
-        },
-      ]);
+    try {
+      object = await this.s3Service.getObject({
+        Bucket: file.storageBucket,
+        Key: file.storageKey,
+      });
+      buffer = await this.collectBodyToBuffer(object.Body);
+      [extractedFile] =
+        await this.fileContentExtractionService.extractContentFromFiles([
+          {
+            filename: file.filename,
+            content: "InCos",
+            fileType: file.mimeType || "application/octet-stream",
+            bucket: file.storageBucket,
+            key: file.storageKey,
+            buffer,
+          },
+        ]);
+    } catch (extractionError) {
+      const message =
+        extractionError instanceof Error
+          ? extractionError.message
+          : String(extractionError);
+      this.logger.error(
+        `completeAssignmentFileUpload: post-complete step failed for fileId=${fileId}: ${message}`,
+      );
+      await this.prisma.assignmentFile
+        .update({
+          where: { id: fileId },
+          data: {
+            status: AssignmentFileStatus.FAILED,
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+            extractionError: this.sanitizeForTextColumn(message),
+            uploadId: null,
+          },
+        })
+        .catch((databaseError: unknown) => {
+          this.logger.error(
+            `completeAssignmentFileUpload: failed to mark fileId=${fileId} as FAILED: ${databaseError instanceof Error ? databaseError.message : String(databaseError)}`,
+          );
+        });
+      await this.s3Service
+        .deleteObject({ Bucket: file.storageBucket, Key: file.storageKey })
+        .catch((s3Error: unknown) => {
+          this.logger.warn(
+            `completeAssignmentFileUpload: S3 cleanup after failure also failed for fileId=${fileId}: ${s3Error instanceof Error ? s3Error.message : String(s3Error)}`,
+          );
+        });
+      throw extractionError;
+    }
 
     const extractionFailed = extractedFile.error !== undefined;
     const safeExtractedText = extractionFailed
