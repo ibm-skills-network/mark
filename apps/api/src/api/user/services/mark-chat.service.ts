@@ -5,6 +5,7 @@ import { openai } from "@ai-sdk/openai";
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
 } from "@nestjs/common";
 import {
@@ -97,6 +98,9 @@ function withErrorHandling<TArguments extends any[], TResult>(
       }
       return result;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : STANDARD_ERROR_MESSAGE;
       return `Error in ${function_.name || "function"}: ${message}`;
