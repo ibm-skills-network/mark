@@ -39,7 +39,6 @@ interface VerifyCodeResponse {
 
 @ApiTags("Admin Authentication")
 @Injectable()
-// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
 @UseGuards(ThrottlerGuard)
 @Controller({
   path: "auth/admin",
@@ -89,7 +88,6 @@ export class AdminAuthController {
   // 5 requests / 60s / IP. send-code mails a verification code (SMTP cost +
   // user-inbox impact) and is the only entry point for the admin auth flow,
   // so it gets the strict tier.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   @Post("send-code")
   @ApiOperation({
@@ -164,7 +162,6 @@ export class AdminAuthController {
   // 10-minute validity window — at 10 attempts/min/IP a single attacker
   // exhausts ~6_000 codes per window vs. ~10^6 needed, so brute force at
   // any practical scale becomes infeasible without distributed sources.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("verify-code")
   @ApiOperation({
@@ -275,7 +272,6 @@ export class AdminAuthController {
 
   // 5 requests / 60s / IP. logout-all is session-mutating and a denial
   // primitive against a legitimate admin if abused.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   @Post("logout-all")
   @ApiOperation({

@@ -6,14 +6,12 @@ import { AdminEmailService } from "./services/admin-email.service";
 import { AdminVerificationService } from "./services/admin-verification.service";
 
 @Module({
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   imports: [
     // Per-IP rate limits applied to the admin auth flow. The `strict` tier
     // is opted into via @Throttle on send-code, verify-code, and logout-all
     // — the mutating / cost-bearing endpoints called out in CLAUDE.md. The
     // ThrottlerGuard itself is registered with @UseGuards on the controller
     // (not as APP_GUARD) so it stays scoped to admin auth, not global.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
     ThrottlerModule.forRoot([
       { name: "default", ttl: 60_000, limit: 10 },
       { name: "strict", ttl: 60_000, limit: 5 },

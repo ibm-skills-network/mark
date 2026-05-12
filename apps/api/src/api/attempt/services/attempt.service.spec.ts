@@ -275,7 +275,6 @@ describe("AttemptServiceV2", () => {
     });
 
     it("works without GradingProgressService (optional dependency)", async () => {
-      // Create service without the optional GradingProgressService
       const serviceWithoutProgress = new AttemptServiceV2(
         {} as any,
         mockSubmissionService as any,
@@ -302,7 +301,6 @@ describe("AttemptServiceV2", () => {
         ),
       ).rejects.toThrow("No progress service");
 
-      // Should not crash when progressService is absent
       expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
     });
   });
