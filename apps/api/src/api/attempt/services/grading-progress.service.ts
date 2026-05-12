@@ -137,9 +137,7 @@ export class GradingProgressService {
     try {
       const gradingProgress = await this.prisma.gradingProgress.findUnique({
         where: { attemptId },
-        include: {
-          attempt: true,
-        },
+        include: { attempt: true },
       });
 
       await this.prisma.gradingProgress.update({
@@ -153,38 +151,7 @@ export class GradingProgressService {
       });
 
       this.removeProgressCallback(attemptId);
-
-      if (
-        gradingProgress?.notifyOnComplete &&
-        gradingProgress.notificationEmail
-      ) {
-        this.logger.log(
-          `Sending grading completion email for attempt ${attemptId} to ${gradingProgress.notificationEmail}`,
-        );
-
-        try {
-          const assignmentId = gradingProgress.attempt.assignmentId;
-          const grade = gradingProgress.attempt.grade
-            ? gradingProgress.attempt.grade * 100
-            : undefined;
-
-          await this.emailService.sendGradingCompletionEmail(
-            gradingProgress.notificationEmail,
-            assignmentId,
-            attemptId,
-            grade,
-          );
-
-          this.logger.log(
-            `Successfully sent grading completion email for attempt ${attemptId}`,
-          );
-        } catch (emailError) {
-          this.logger.error(
-            `Failed to send grading completion email for attempt ${attemptId}`,
-            emailError,
-          );
-        }
-      }
+      await this.maybeSendCompletionEmail(attemptId, gradingProgress);
     } catch (error) {
       this.logger.error(
         `Failed to mark grading complete for attempt ${attemptId}`,
@@ -204,6 +171,11 @@ export class GradingProgressService {
     aiFeedbackError: string,
   ): Promise<void> {
     try {
+      const gradingProgress = await this.prisma.gradingProgress.findUnique({
+        where: { attemptId },
+        include: { attempt: true },
+      });
+
       await this.prisma.gradingProgress.update({
         where: { attemptId },
         data: {
@@ -215,6 +187,7 @@ export class GradingProgressService {
         },
       });
       this.removeProgressCallback(attemptId);
+      await this.maybeSendCompletionEmail(attemptId, gradingProgress);
     } catch (updateError) {
       this.logger.error(
         `Failed to persist AI feedback error for attempt ${attemptId}`,
@@ -225,12 +198,14 @@ export class GradingProgressService {
 
   /**
    * Clear a previously recorded AI feedback error after a successful rerun.
+   * Also restores status to COMPLETED because the rerun guard set it to
+   * IN_PROGRESS to prevent concurrent reruns.
    */
   async clearAiFeedbackError(attemptId: number): Promise<void> {
     try {
       await this.prisma.gradingProgress.update({
         where: { attemptId },
-        data: { error: null },
+        data: { status: GradingStatus.COMPLETED, error: null },
       });
     } catch (updateError) {
       this.logger.error(
@@ -257,6 +232,48 @@ export class GradingProgressService {
       this.logger.error(
         `Failed to mark grading as failed for attempt ${attemptId}`,
         error_,
+      );
+    }
+  }
+
+  private async maybeSendCompletionEmail(
+    attemptId: number,
+    gradingProgress: {
+      notifyOnComplete: boolean;
+      notificationEmail: string | null;
+      attempt: { assignmentId: number; grade: number | null };
+    } | null,
+  ): Promise<void> {
+    if (
+      !gradingProgress?.notifyOnComplete ||
+      !gradingProgress.notificationEmail
+    ) {
+      return;
+    }
+
+    this.logger.log(
+      `Sending grading completion email for attempt ${attemptId} to ${gradingProgress.notificationEmail}`,
+    );
+
+    try {
+      const grade = gradingProgress.attempt.grade
+        ? gradingProgress.attempt.grade * 100
+        : undefined;
+
+      await this.emailService.sendGradingCompletionEmail(
+        gradingProgress.notificationEmail,
+        gradingProgress.attempt.assignmentId,
+        attemptId,
+        grade,
+      );
+
+      this.logger.log(
+        `Successfully sent grading completion email for attempt ${attemptId}`,
+      );
+    } catch (emailError) {
+      this.logger.error(
+        `Failed to send grading completion email for attempt ${attemptId}`,
+        emailError,
       );
     }
   }

@@ -136,7 +136,8 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     type: String,
     nullable: true,
   })
-  @Optional()
+  @IsOptional()
+  @IsString()
   aiFeedbackError?: string | null;
 }
 
