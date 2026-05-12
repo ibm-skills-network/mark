@@ -184,6 +184,85 @@ describe("QuestionGenerationService", () => {
     expect(reviewSpy).not.toHaveBeenCalled();
   });
 
+  it("accepts maxWords:0 and maxCharacters:0 from the model and substitutes defaults", async () => {
+    // The model frequently emits 0 for maxWords/maxCharacters on non-TEXT questions
+    // instead of omitting the fields. Schema must accept these without failing
+    // generation; downstream mapping should then substitute the difficulty default.
+    const responseWithZeroLimits = JSON.stringify({
+      questions: [
+        {
+          question: "Which practice keeps code reviews focused?",
+          type: QuestionType.SINGLE_CORRECT,
+          totalPoints: 1,
+          difficultyLevel: DifficultyLevel.MEDIUM,
+          maxWords: 0,
+          maxCharacters: 0,
+          choices: [
+            {
+              id: 1,
+              choice: "Small, scoped pull requests",
+              isCorrect: true,
+              points: 1,
+              feedback: "Correct.",
+            },
+            {
+              id: 2,
+              choice: "Bundling unrelated refactors together",
+              isCorrect: false,
+              points: 0,
+              feedback: "Incorrect.",
+            },
+            {
+              id: 3,
+              choice: "Skipping tests until after approval",
+              isCorrect: false,
+              points: 0,
+              feedback: "Incorrect.",
+            },
+            {
+              id: 4,
+              choice: "Reviewing only after deployment",
+              isCorrect: false,
+              points: 0,
+              feedback: "Incorrect.",
+            },
+          ],
+          scoring: null,
+        },
+      ],
+    });
+
+    promptProcessor.processPromptForFeature.mockResolvedValue(
+      responseWithZeroLimits,
+    );
+
+    const result = await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 1,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+      },
+      "Code review content",
+    );
+
+    expect(promptProcessor.processPromptForFeature).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Batch generation error"),
+    );
+    expect(result).toHaveLength(1);
+    // SINGLE_CORRECT has no word/char limit. The model's 0 must not survive into
+    // the mapped question — downstream code at the call site uses truthiness, so
+    // 0 collapses to the type-default (undefined for non-TEXT).
+    expect(result[0].maxWords).not.toBe(0);
+    expect(result[0].maxCharacters).not.toBe(0);
+  });
+
   it("uses the subtype-specific prompt and review path when multiple-choice subtype counts are requested", async () => {
     promptProcessor.processPromptForFeature
       .mockResolvedValueOnce(multipleChoiceResponse)
