@@ -20,6 +20,7 @@ import {
   UploadResponseDto,
   UploadType,
 } from "../dto/upload.dto";
+import { sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
 
 @Injectable()
@@ -124,7 +125,7 @@ export class FilesService {
     );
 
     let prefix = "";
-    const normalizedPath = (context.path ?? "").replace(/^\//, "");
+    const normalizedPath = sanitizeUploadPath(context.path);
 
     switch (uploadType) {
       case UploadType.AUTHOR: {

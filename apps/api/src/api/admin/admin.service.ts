@@ -1318,7 +1318,10 @@ export class AdminService {
                   : {}),
                 ...(filters?.userId
                   ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
                     }
                   : {}),
               },
@@ -1338,8 +1341,8 @@ export class AdminService {
                   ...(filters?.userId
                     ? {
                         userId: {
-                          contains: filters.userId,
-                          mode: "insensitive",
+                          equals: filters.userId,
+                          mode: "insensitive" as const,
                         },
                       }
                     : {}),
@@ -1363,7 +1366,12 @@ export class AdminService {
                 ? { createdAt: dateFilter }
                 : {}),
               ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
                 : {}),
             },
           })
@@ -1379,7 +1387,10 @@ export class AdminService {
                   : {}),
                 ...(filters?.userId
                   ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
                     }
                   : {}),
               },
@@ -1394,8 +1405,8 @@ export class AdminService {
                   ...(filters?.userId
                     ? {
                         userId: {
-                          contains: filters.userId,
-                          mode: "insensitive",
+                          equals: filters.userId,
+                          mode: "insensitive" as const,
                         },
                       }
                     : {}),
@@ -1416,7 +1427,12 @@ export class AdminService {
                 ? { createdAt: dateFilter }
                 : {}),
               ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
                 : {}),
             },
             take: 10,
@@ -1446,7 +1462,10 @@ export class AdminService {
                   : {}),
                 ...(filters?.userId
                   ? {
-                      userId: { contains: filters.userId, mode: "insensitive" },
+                      userId: {
+                        equals: filters.userId,
+                        mode: "insensitive" as const,
+                      },
                     }
                   : {}),
               },
@@ -1494,7 +1513,12 @@ export class AdminService {
                 ? { createdAt: dateFilter }
                 : {}),
               ...(filters?.userId
-                ? { userId: { contains: filters.userId, mode: "insensitive" } }
+                ? {
+                    userId: {
+                      equals: filters.userId,
+                      mode: "insensitive" as const,
+                    },
+                  }
                 : {}),
             },
             _avg: { assignmentRating: true },
@@ -2167,7 +2191,7 @@ export class AdminService {
         });
 
         const fetchedQuestions = await tx.question.findMany({
-          where: { assignmentId: id },
+          where: { assignmentId: id, isDeleted: false },
           orderBy: { id: "asc" },
         });
         createdQuestions.push(...fetchedQuestions);
@@ -2295,6 +2319,9 @@ export class AdminService {
     return {
       id: question.id,
       assignmentId: question.assignmentId,
+      // Every row reaches this helper via an assignment-scoped read, so signal
+      // the publish path to update in place rather than create + delete.
+      alreadyInBackend: true,
       question: question.question,
       type: question.type,
       responseType: question.responseType ?? undefined,

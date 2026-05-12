@@ -33,7 +33,7 @@ describeStress("job-queue stress", () => {
     loggerSpy = jest
       .spyOn(Logger.prototype, "log")
       .mockImplementation(() => undefined);
-  });
+  }, 60_000);
 
   beforeEach(async () => {
     if (!redisHarness) {

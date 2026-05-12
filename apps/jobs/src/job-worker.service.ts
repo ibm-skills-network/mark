@@ -43,16 +43,39 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     this.connection = createRedisConnection();
 
+    // Assignment publish jobs run inline translation that can take >5 minutes,
+    // sometimes longer for large imports. BullMQ's default lockDuration of 30s
+    // would let the worker miss heartbeat extensions during long publishes,
+    // causing the broker to mark the job stalled and spawn a recovery execution
+    // that races the original (both workers running the same jobId, fighting
+    // over markAsDeleted on the same question set). The lock auto-renews every
+    // lockDuration / 2 ms via an internal Worker timer, so this value is the
+    // failure-detection threshold (how long renewal can fail before the job is
+    // considered stalled), not the max publish duration. 30 minutes gives a
+    // comfortable safety margin over observed worst-case publishes.
+    // maxStalledCount=0 means a genuinely-stalled worker fails the job
+    // permanently rather than spawning a concurrent retry.
+    const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 1_800_000;
+    const ASSIGNMENT_NO_STALL_RECOVERY = 0;
+
     this.workers.push(
       this.createWorker(
         JOB_QUEUE_NAMES.ASSIGNMENT_V1,
         async (job) => this.handleAssignmentV1Job(job),
         2,
+        {
+          lockDuration: ASSIGNMENT_PUBLISH_LOCK_DURATION_MS,
+          maxStalledCount: ASSIGNMENT_NO_STALL_RECOVERY,
+        },
       ),
       this.createWorker(
         JOB_QUEUE_NAMES.ASSIGNMENT_V2,
         async (job) => this.handleAssignmentV2Job(job),
         2,
+        {
+          lockDuration: ASSIGNMENT_PUBLISH_LOCK_DURATION_MS,
+          maxStalledCount: ASSIGNMENT_NO_STALL_RECOVERY,
+        },
       ),
       this.createWorker(
         JOB_QUEUE_NAMES.ATTEMPT,
@@ -89,10 +112,17 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     queueName: string,
     processor: (job: Job) => Promise<void>,
     concurrency: number,
+    options: { lockDuration?: number; maxStalledCount?: number } = {},
   ): Worker {
     const worker = new Worker(queueName, processor, {
       connection: this.getConnection(),
       concurrency,
+      ...(options.lockDuration !== undefined && {
+        lockDuration: options.lockDuration,
+      }),
+      ...(options.maxStalledCount !== undefined && {
+        maxStalledCount: options.maxStalledCount,
+      }),
     });
 
     worker.on("completed", (job) => {
@@ -170,8 +200,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleAssignmentV1Job(job: Job): Promise<void> {
     switch (job.name) {
-      case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS:
-      case JOB_NAMES.ASSIGNMENT_V1_PUBLISH: {
+      case JOB_NAMES.ASSIGNMENT_V1_GENERATE_QUESTIONS: {
         await this.forwardJobToApi(JOB_QUEUE_NAMES.ASSIGNMENT_V1, job);
         return;
       }

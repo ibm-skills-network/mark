@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -13,6 +14,19 @@ import {
   UserSessionRequest,
 } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
+import { sanitizeForLog } from "../../../../logger/sanitize";
+
+// Strict positive-integer parser. Rejects NaN, decimals (`"1.5"`),
+// exponent form (`"1e3"`), hex (`"0x1"`), whitespace, leading `+`, and
+// leading zeros — anything that `Number()` would coerce but that is
+// not a clean canonical positive integer string.
+const parsePositiveIntId = (raw: string | undefined): number | undefined => {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return undefined;
+  if (String(n) !== raw) return undefined;
+  return n;
+};
 
 @Injectable()
 export class AssignmentAttemptAccessControlGuard implements CanActivate {
@@ -36,7 +50,52 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       attemptId: attemptIdString,
       questionId: questionIdString,
     } = params;
-    const assignmentId = Number(assignmentIdString);
+
+    const assignmentId = parsePositiveIntId(assignmentIdString);
+    if (assignmentId === undefined) {
+      this.logger.warn("attempt_access_denied: invalid assignment id", {
+        denial_reason: "invalid_assignment_id",
+        param_assignmentId: sanitizeForLog(assignmentIdString),
+        param_attemptId: sanitizeForLog(attemptIdString),
+        param_questionId: sanitizeForLog(questionIdString),
+        user_id: sanitizeForLog(userSession?.userId),
+        method,
+        url: sanitizeForLog(originalUrl),
+      });
+      throw new ForbiddenException("Invalid assignment ID");
+    }
+
+    let attemptId: number | undefined;
+    if (attemptIdString !== undefined) {
+      attemptId = parsePositiveIntId(attemptIdString);
+      if (attemptId === undefined) {
+        this.logger.warn("attempt_access_denied: invalid attempt id", {
+          denial_reason: "invalid_attempt_id",
+          param_assignmentId: sanitizeForLog(assignmentIdString),
+          param_attemptId: sanitizeForLog(attemptIdString),
+          user_id: sanitizeForLog(userSession?.userId),
+          method,
+          url: sanitizeForLog(originalUrl),
+        });
+        throw new ForbiddenException("Invalid attempt ID");
+      }
+    }
+
+    let questionId: number | undefined;
+    if (questionIdString !== undefined) {
+      questionId = parsePositiveIntId(questionIdString);
+      if (questionId === undefined) {
+        this.logger.warn("attempt_access_denied: invalid question id", {
+          denial_reason: "invalid_question_id",
+          param_assignmentId: sanitizeForLog(assignmentIdString),
+          param_questionId: sanitizeForLog(questionIdString),
+          user_id: sanitizeForLog(userSession?.userId),
+          method,
+          url: sanitizeForLog(originalUrl),
+        });
+        throw new ForbiddenException("Invalid question ID");
+      }
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
@@ -50,8 +109,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       }),
     ];
 
-    if (attemptIdString) {
-      const attemptId = Number(attemptIdString);
+    if (attemptId !== undefined) {
       const whereClause: {
         id: number;
         assignmentId: number;
@@ -70,9 +128,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       );
     }
 
-    if (questionIdString) {
-      const questionId = Number(questionIdString);
-
+    if (questionId !== undefined) {
       queries.push(
         this.prisma.question.findFirst({
           where: {
@@ -91,9 +147,9 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       this.logger.warn("attempt_access_denied: assignment not found", {
         denial_reason: "assignment_not_found",
         assignment_id: assignmentId,
-        user_id: userSession?.userId,
+        user_id: sanitizeForLog(userSession?.userId),
         method,
-        url: originalUrl,
+        url: sanitizeForLog(originalUrl),
       });
       throw new NotFoundException("Assignment not found");
     }
@@ -102,38 +158,42 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       this.logger.warn("attempt_access_denied: no group link", {
         denial_reason: "no_group_link",
         assignment_id: assignmentId,
-        user_id: userSession?.userId,
-        group_id: userSession?.groupId,
+        user_id: sanitizeForLog(userSession?.userId),
+        group_id: sanitizeForLog(userSession?.groupId),
         method,
-        url: originalUrl,
+        url: sanitizeForLog(originalUrl),
       });
       return false;
     }
 
-    if (attemptIdString && !attempt && userSession.role === UserRole.LEARNER) {
+    if (
+      attemptId !== undefined &&
+      !attempt &&
+      userSession.role === UserRole.LEARNER
+    ) {
       this.logger.warn(
         "attempt_access_denied: attempt not found or not owned",
         {
           denial_reason: "attempt_not_found_or_unowned",
           assignment_id: assignmentId,
-          attempt_id: Number(attemptIdString),
-          user_id: userSession?.userId,
+          attempt_id: attemptId,
+          user_id: sanitizeForLog(userSession?.userId),
           role: userSession.role,
           method,
-          url: originalUrl,
+          url: sanitizeForLog(originalUrl),
         },
       );
       throw new NotFoundException("Attempt not found or not owned by the user");
     }
 
-    if (questionIdString && !questionInAssignment) {
+    if (questionId !== undefined && !questionInAssignment) {
       this.logger.warn("attempt_access_denied: question not in assignment", {
         denial_reason: "question_not_in_assignment",
         assignment_id: assignmentId,
-        question_id: Number(questionIdString),
-        user_id: userSession?.userId,
+        question_id: questionId,
+        user_id: sanitizeForLog(userSession?.userId),
         method,
-        url: originalUrl,
+        url: sanitizeForLog(originalUrl),
       });
       throw new NotFoundException(
         "Question not found within the specified assignment",

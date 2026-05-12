@@ -31,7 +31,7 @@ describeIntegration("job-queue integration", () => {
     loggerSpy = jest
       .spyOn(Logger.prototype, "log")
       .mockImplementation(() => undefined);
-  }, 30_000);
+  }, 60_000);
 
   beforeEach(async () => {
     if (!redisHarness) {
@@ -57,7 +57,7 @@ describeIntegration("job-queue integration", () => {
 
     await redisHarness?.stop();
     loggerSpy?.mockRestore();
-  }, 30_000);
+  }, 60_000);
 
   it("encrypts queued payloads and processes them end to end through BullMQ and Redis job state", async () => {
     const queueName = "mark.job-queue.integration";

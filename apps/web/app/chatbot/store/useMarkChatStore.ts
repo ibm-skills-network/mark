@@ -21,6 +21,8 @@ interface SendMessageOptions {
   userText?: string;
   // Optional metadata for local chat UI (e.g. file chips).
   toolCalls?: any;
+  // Lets callers provide the exact conversation snapshot to send.
+  conversation?: ChatMessage[];
 }
 
 interface MarkChatUsage {
@@ -35,6 +37,10 @@ export interface AttachedFile {
   fileSize: number;
   fileType: string;
   extension: string;
+  /** Text extracted locally; not saved to localStorage. */
+  extractedContent?: string;
+  /** Leading snippet from extracted content (not semantic summary). */
+  contentPrefix?: string;
   uploadStatus: "uploading" | "uploaded" | "error";
   uploadProgress: number;
   s3Link?: string;
@@ -243,6 +249,7 @@ export const useMarkChatStore = create<MarkChatState>()(
       async sendMessage(useStreaming = true, options?: SendMessageOptions) {
         const { userInput, messages, userRole, usage } = get();
         const effectiveUserText = options?.userText ?? userInput;
+        const conversation = options?.conversation ?? messages;
         const trimmed = effectiveUserText.trim();
 
         if (!trimmed) return false;
@@ -256,7 +263,7 @@ export const useMarkChatStore = create<MarkChatState>()(
         };
 
         set({
-          messages: [...messages, userMsg],
+          messages: [...conversation, userMsg],
           userInput: "",
           usage: { ...usage, totalMessagesSent: usage.totalMessagesSent + 1 },
           isTyping: true,
@@ -264,7 +271,7 @@ export const useMarkChatStore = create<MarkChatState>()(
 
         try {
           // Strip the UI-only `toolCalls` metadata from user messages — file chips are local only and should not reach the API.
-          const conversationMessages = messages
+          const conversationMessages = conversation
             .filter(
               (msg) => msg.role !== "system" || !msg.id.includes("context"),
             )

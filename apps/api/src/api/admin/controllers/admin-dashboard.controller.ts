@@ -25,6 +25,7 @@ import {
 import { Roles } from "src/auth/role/roles.global.guard";
 import { ScheduledTasksService } from "../../scheduled-tasks/services/scheduled-tasks.service";
 import { AdminService } from "../admin.service";
+import { DashboardStatsQueryDto } from "./dto/dashboard-stats-query.dto";
 
 interface AdminSessionRequest extends Request {
   adminSession: {
@@ -117,20 +118,14 @@ export class AdminDashboardController {
   @ApiResponse({ status: 403 })
   async getDashboardStats(
     @Req() request: UserSessionRequest,
-    @Query("startDate") startDate?: string,
-    @Query("endDate") endDate?: string,
-    @Query("assignmentId") assignmentId?: string,
-    @Query("assignmentName") assignmentName?: string,
-    @Query("userId") userId?: string,
+    @Query() query: DashboardStatsQueryDto,
   ): Promise<any> {
     return this.adminService.getDashboardStats(request.userSession, {
-      startDate,
-      endDate,
-      assignmentId: assignmentId
-        ? Number.parseInt(assignmentId, 10)
-        : undefined,
-      assignmentName,
-      userId,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      assignmentId: query.assignmentId ? Number(query.assignmentId) : undefined,
+      assignmentName: query.assignmentName,
+      userId: query.userId,
     });
   }
   @Get("quick-actions/:action")

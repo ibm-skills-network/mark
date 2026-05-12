@@ -21,9 +21,13 @@ import {
   PaperAirplaneIcon,
 } from "@heroicons/react/24/outline";
 import { TagIcon } from "@heroicons/react/24/solid";
+import { useSearchParams } from "next/navigation";
 import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";
+
+const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
+  "Translations are only available after publishing this assignment. Publish to preview translated content.";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
@@ -98,6 +102,9 @@ function Component(props: Props) {
     questionTypeText = question.type;
   }
 
+  const searchParams = useSearchParams();
+  const isAuthorPreview = searchParams.get("authorMode") === "true";
+
   const handleFlaggingQuestion = () => {
     if (questionStatus === "flagged") {
       setQuestionStatus(questionId, "unflagged");
@@ -142,7 +149,9 @@ function Component(props: Props) {
   ];
 
   const setTranslationOn = useLearnerStore((state) => state.setTranslationOn);
+  const effectiveTranslationOn = translationOn && !isAuthorPreview;
   const toggleTranslation = () => {
+    if (isAuthorPreview) return;
     setTranslationOn(questionId, !translationOn);
 
     if (
@@ -172,6 +181,9 @@ function Component(props: Props) {
     return () => clearInterval(interval);
   }, [loadingTranslation]);
   const fetchTranslation = async () => {
+    if (assignmentId == null || questionId == null) {
+      return;
+    }
     try {
       setLoadingTranslation(true);
       const translation = await translateQuestion(
@@ -200,7 +212,7 @@ function Component(props: Props) {
   };
   useEffect(() => {
     if (
-      translationOn &&
+      effectiveTranslationOn &&
       question.selectedLanguage !== userPreferedLanguageName
     ) {
       void fetchTranslation();
@@ -301,7 +313,7 @@ function Component(props: Props) {
             </MarkdownViewer>
           </div>
 
-          {translationOn && loadingTranslation && (
+          {effectiveTranslationOn && loadingTranslation && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-500">
@@ -318,7 +330,7 @@ function Component(props: Props) {
           <div className="flex items-center gap-2">
             <LanguageIcon
               className={`h-5 w-5 sm:h-6 sm:w-6 ${
-                translationOn ? "text-violet-600" : "text-gray-600"
+                effectiveTranslationOn ? "text-violet-600" : "text-gray-600"
               }`}
             />
 
@@ -327,18 +339,23 @@ function Component(props: Props) {
           <button
             type="button"
             onClick={toggleTranslation}
+            disabled={isAuthorPreview}
+            title={
+              isAuthorPreview ? TRANSLATION_PREVIEW_DISABLED_TOOLTIP : undefined
+            }
             className={cn(
               "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-              translationOn ? "bg-violet-600" : "bg-gray-200",
+              effectiveTranslationOn ? "bg-violet-600" : "bg-gray-200",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
             )}
             role="switch"
-            aria-checked={translationOn}
+            aria-checked={effectiveTranslationOn}
           >
             <span
               aria-hidden="true"
               className={cn(
                 "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                translationOn ? "translate-x-5" : "translate-x-0",
+                effectiveTranslationOn ? "translate-x-5" : "translate-x-0",
               )}
             />
           </button>
@@ -368,12 +385,12 @@ function Component(props: Props) {
         />
       )}
 
-      {translationOn ? (
+      {effectiveTranslationOn ? (
         <>
           {question.type === "SINGLE_CORRECT" ||
           question.type === "MULTIPLE_CORRECT" ? (
             <>
-              {translationOn &&
+              {effectiveTranslationOn &&
                 question.translatedQuestion &&
                 question.translatedQuestion !== question.question && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
@@ -425,9 +442,15 @@ function Component(props: Props) {
                 <div className="space-y-3 border-t lg:border-t-0 pt-4 lg:pt-0">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200 pb-2">
                     <select
-                      className="text-sm font-medium border border-gray-300 rounded px-2 py-1 bg-white"
+                      className="text-sm font-medium border border-gray-300 rounded px-2 py-1 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                       value={question.selectedLanguage}
                       onChange={(e) => handleLanguageChange(e.target.value)}
+                      disabled={isAuthorPreview}
+                      title={
+                        isAuthorPreview
+                          ? TRANSLATION_PREVIEW_DISABLED_TOOLTIP
+                          : undefined
+                      }
                     >
                       {languages.map((lang) => (
                         <option key={lang.code} value={lang.name}>
@@ -476,9 +499,15 @@ function Component(props: Props) {
             <div className="space-y-4">
               <div className="flex items-center justify-between border-t border-gray-200 pt-4">
                 <select
-                  className="text-sm font-medium border border-gray-300 rounded px-2 py-1"
+                  className="text-sm font-medium border border-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   value={question.selectedLanguage}
                   onChange={(e) => handleLanguageChange(e.target.value)}
+                  disabled={isAuthorPreview}
+                  title={
+                    isAuthorPreview
+                      ? TRANSLATION_PREVIEW_DISABLED_TOOLTIP
+                      : undefined
+                  }
                 >
                   {languages.map((lang) => (
                     <option key={lang.code} value={lang.name}>

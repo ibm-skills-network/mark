@@ -1816,19 +1816,38 @@ A new related issue has been created: #${issue.number}
     const githubRepo = process.env.GITHUB_REPO;
     const token = await this.getInstallationToken();
 
-    if (!githubOwner || !githubRepo || !token || !report.issueNumber) {
-      this.logger.error(
-        "addCommentToGithubIssue: GitHub config, token, or issueNumber missing",
-        {
-          report_id: report?.id,
-          issue_number: report?.issueNumber,
-          owner_set: !!githubOwner,
-          repo_set: !!githubRepo,
-          token_set: !!token,
-        },
-      );
+    if (!githubOwner || !githubRepo || !token) {
+      this.logger.error("addReportComment: GitHub config or token missing", {
+        report_id: report.id,
+        issue_number: report.issueNumber,
+        owner_set: !!githubOwner,
+        repo_set: !!githubRepo,
+        token_set: !!token,
+      });
       throw new InternalServerErrorException(
         "GitHub repository configuration or token missing",
+      );
+    }
+
+    // Orphan reports (issueNumber === null) exist when GitHub issue creation
+    // failed during report submission. Backfill the issue here so commenting
+    // recovers them instead of 500ing forever.
+    if (!report.issueNumber) {
+      const labels = ["chat-report", report.issueType.toLowerCase()];
+
+      const issue = await this.createGithubIssue(
+        `Report #${report.id}`,
+        report.description ?? "(no description)",
+        labels,
+      );
+      report.issueNumber = issue.number;
+      await this.prisma.report.update({
+        where: { id: report.id },
+        data: { issueNumber: issue.number },
+      });
+      this.logger.log(
+        "addReportComment: backfilled GitHub issue for orphan report",
+        { report_id: report.id, issue_number: issue.number },
       );
     }
 
