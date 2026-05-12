@@ -77,12 +77,14 @@ export class ChatController {
   async addMessage(
     @Param("chatId") chatId: string,
     @Body() body: { role: ChatRole; content: string; toolCalls?: JsonValue },
+    @Req() request: UserSessionRequest,
   ) {
     return await this.chatService.addMessage(
       chatId,
       body.role,
       body.content,
       body.toolCalls,
+      request.userSession,
     );
   }
 

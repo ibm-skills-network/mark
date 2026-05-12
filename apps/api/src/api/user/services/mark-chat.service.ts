@@ -21,6 +21,7 @@ import { FileContentExtractionService } from "src/api/attempt/services/file-cont
 import { S3Service } from "src/api/files/services/s3.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { z } from "zod";
+import { ChatService } from "./chat.service";
 
 type MarkChatRole = "system" | "user" | "assistant";
 
@@ -113,6 +114,7 @@ export class MarkChatService {
   constructor(
     private readonly s3Service: S3Service,
     private readonly fileContentExtractionService: FileContentExtractionService,
+    private readonly chatService: ChatService,
   ) {}
 
   private readIntFromEnv(
@@ -283,7 +285,7 @@ export class MarkChatService {
   }
 
   async respond(
-    _chatId: string,
+    chatId: string,
     request: MarkChatRequest,
     userSession: UserSession,
   ): Promise<{
@@ -317,7 +319,10 @@ export class MarkChatService {
     const formattedMessages = formattedConversation.messages;
     const chatModel = this.getChatModel();
     const maxOutputTokens = this.getResponseTokenLimit();
-    const allowedLinks = this.extractAllowedS3Links(conversation);
+    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
+      chatId,
+      userSession,
+    );
     const roleTools =
       userRole === "author"
         ? this.authorTools()
@@ -363,7 +368,7 @@ export class MarkChatService {
   }
 
   async respondStream(
-    _chatId: string,
+    chatId: string,
     request: MarkChatRequest,
     userSession: UserSession,
     response: Response,
@@ -390,7 +395,10 @@ export class MarkChatService {
     const formattedMessages = formattedConversation.messages;
     const chatModel = this.getChatModel();
     const maxOutputTokens = this.getResponseTokenLimit();
-    const allowedLinks = this.extractAllowedS3Links(conversation);
+    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
+      chatId,
+      userSession,
+    );
     const roleTools =
       userRole === "author"
         ? this.authorTools()
@@ -1625,22 +1633,6 @@ FILE LINK WORKFLOW:
         ),
       },
     });
-  }
-
-  private extractAllowedS3Links(conversation: MarkChatMessage[]): Set<string> {
-    const allowed = new Set<string>();
-    for (const message of conversation) {
-      if (
-        message.role === "system" &&
-        message.id?.startsWith("system-files-")
-      ) {
-        const matches = message.content.matchAll(/^S3 Link: (s3:\/\/.+)$/gm);
-        for (const match of matches) {
-          allowed.add(match[1].trim());
-        }
-      }
-    }
-    return allowed;
   }
 
   private fileTools(allowedLinks: Set<string>): ToolSet {

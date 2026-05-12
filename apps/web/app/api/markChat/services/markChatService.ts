@@ -45,7 +45,7 @@ export async function getOrCreateTodayChat(
  */
 export async function addMessageToChat(
   chatId: string,
-  role: "USER" | "ASSISTANT" | "SYSTEM",
+  role: "USER" | "ASSISTANT",
   content: string,
   toolCalls?: any,
 ): Promise<any> {

@@ -4,11 +4,26 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsNumber,
   IsPositive,
   IsString,
   ValidateNested,
 } from "class-validator";
+
+export const ALLOWED_ASSIGNMENT_FILE_MIME_TYPES = [
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/x-ipynb+json",
+] as const;
 
 export class InitiateAssignmentFileItemDto {
   @ApiProperty({ description: "Original file name" })
@@ -17,6 +32,9 @@ export class InitiateAssignmentFileItemDto {
 
   @ApiProperty({ description: "MIME type of the file" })
   @IsString()
+  @IsIn(ALLOWED_ASSIGNMENT_FILE_MIME_TYPES, {
+    message: "Unsupported mimeType for assignment file upload",
+  })
   mimeType: string;
 
   @ApiProperty({ description: "File size in bytes" })

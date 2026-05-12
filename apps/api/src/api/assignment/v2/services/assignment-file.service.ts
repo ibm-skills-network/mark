@@ -165,22 +165,71 @@ export class AssignmentFileService {
       throw new BadRequestException(`uploadId mismatch for file ${fileId}`);
     }
 
-    await this.s3Service.completeMultipartUpload({
-      Bucket: file.storageBucket,
-      Key: file.storageKey,
-      UploadId: dto.uploadId,
-      MultipartUpload: {
-        Parts: dto.parts.map((part) => ({
-          PartNumber: part.partNumber,
-          ETag: part.etag,
-        })),
-      },
-    });
+    try {
+      await this.s3Service.completeMultipartUpload({
+        Bucket: file.storageBucket,
+        Key: file.storageKey,
+        UploadId: dto.uploadId,
+        MultipartUpload: {
+          Parts: dto.parts.map((part) => ({
+            PartNumber: part.partNumber,
+            ETag: part.etag,
+          })),
+        },
+      });
+    } catch (completeError) {
+      const message =
+        completeError instanceof Error
+          ? completeError.message
+          : String(completeError);
+      this.logger.error(
+        `completeAssignmentFileUpload: S3 complete failed for fileId=${fileId}: ${message}`,
+      );
 
-    // S3 object now exists. If anything below throws we must mark the row FAILED
-    // (not leave it UPLOADING) and delete the orphaned S3 object.
-    let object: Awaited<ReturnType<typeof this.s3Service.getObject>>;
-    let buffer: Buffer;
+      let objectExists = false;
+      try {
+        objectExists = await this.s3Service.objectExists(
+          file.storageBucket,
+          file.storageKey,
+        );
+      } catch (existsError) {
+        const existsMessage =
+          existsError instanceof Error
+            ? existsError.message
+            : String(existsError);
+        this.logger.warn(
+          `completeAssignmentFileUpload: object existence check failed for fileId=${fileId}: ${existsMessage}`,
+        );
+      }
+
+      if (!objectExists) {
+        await this.s3Service
+          .abortMultipartUpload({
+            Bucket: file.storageBucket,
+            Key: file.storageKey,
+            UploadId: dto.uploadId,
+          })
+          .catch((abortError: unknown) => {
+            const abortMessage =
+              abortError instanceof Error
+                ? abortError.message
+                : String(abortError);
+            this.logger.warn(
+              `completeAssignmentFileUpload: S3 abort after complete failure also failed for fileId=${fileId}: ${abortMessage}`,
+            );
+          });
+        await this.markAssignmentFileFailed(
+          fileId,
+          `Multipart upload completion failed: ${message}`,
+        );
+        throw completeError;
+      }
+
+      this.logger.warn(
+        `completeAssignmentFileUpload: completeMultipartUpload threw for fileId=${fileId}, but object exists so continuing`,
+      );
+    }
+
     let extractedFile: Awaited<
       ReturnType<
         typeof this.fileContentExtractionService.extractContentFromFiles
@@ -188,11 +237,11 @@ export class AssignmentFileService {
     >[number];
 
     try {
-      object = await this.s3Service.getObject({
+      const object = await this.s3Service.getObject({
         Bucket: file.storageBucket,
         Key: file.storageKey,
       });
-      buffer = await this.collectBodyToBuffer(object.Body);
+      const buffer = await this.collectBodyToBuffer(object.Body);
       [extractedFile] =
         await this.fileContentExtractionService.extractContentFromFiles([
           {
@@ -212,29 +261,23 @@ export class AssignmentFileService {
       this.logger.error(
         `completeAssignmentFileUpload: post-complete step failed for fileId=${fileId}: ${message}`,
       );
-      await this.prisma.assignmentFile
-        .update({
-          where: { id: fileId },
-          data: {
-            status: AssignmentFileStatus.FAILED,
-            extractionStatus: AssignmentFileExtractionStatus.FAILED,
-            extractionError: this.sanitizeForTextColumn(message),
-            uploadId: null,
-          },
-        })
-        .catch((databaseError: unknown) => {
-          this.logger.error(
-            `completeAssignmentFileUpload: failed to mark fileId=${fileId} as FAILED: ${databaseError instanceof Error ? databaseError.message : String(databaseError)}`,
-          );
-        });
-      await this.s3Service
-        .deleteObject({ Bucket: file.storageBucket, Key: file.storageKey })
-        .catch((s3Error: unknown) => {
-          this.logger.warn(
-            `completeAssignmentFileUpload: S3 cleanup after failure also failed for fileId=${fileId}: ${s3Error instanceof Error ? s3Error.message : String(s3Error)}`,
-          );
-        });
-      throw extractionError;
+      extractedFile = {
+        filename: file.filename,
+        content: "",
+        error: `Post-upload extraction failed: ${message}`,
+        fileType: file.mimeType || "application/octet-stream",
+        metadata: { size: file.size },
+      };
+    }
+
+    if (!extractedFile) {
+      extractedFile = {
+        filename: file.filename,
+        content: "",
+        error: "File content extraction returned no result",
+        fileType: file.mimeType || "application/octet-stream",
+        metadata: { size: file.size },
+      };
     }
 
     const extractionFailed = extractedFile.error !== undefined;
@@ -334,6 +377,33 @@ export class AssignmentFileService {
     const utf8Safe = Buffer.from(noNul, "utf8").toString("utf8");
     const MAX_LEN = 2_000_000;
     return utf8Safe.length > MAX_LEN ? utf8Safe.slice(0, MAX_LEN) : utf8Safe;
+  }
+
+  private async markAssignmentFileFailed(
+    fileId: number,
+    errorMessage: string,
+  ): Promise<void> {
+    await this.prisma.assignmentFile
+      .update({
+        where: { id: fileId },
+        data: {
+          status: AssignmentFileStatus.FAILED,
+          extractedText: null,
+          extractionStatus: AssignmentFileExtractionStatus.FAILED,
+          extractionError: this.sanitizeForTextColumn(errorMessage),
+          extractedAt: null,
+          uploadId: null,
+        },
+      })
+      .catch((databaseError: unknown) => {
+        const message =
+          databaseError instanceof Error
+            ? databaseError.message
+            : String(databaseError);
+        this.logger.error(
+          `markAssignmentFileFailed: failed to update fileId=${fileId}: ${message}`,
+        );
+      });
   }
 
   async abortAssignmentFileUpload(

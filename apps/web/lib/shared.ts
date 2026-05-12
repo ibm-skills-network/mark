@@ -953,7 +953,7 @@ export async function getUserChats(
  */
 export async function addMessageToChat(
   chatId: string,
-  role: "USER" | "ASSISTANT" | "SYSTEM",
+  role: "USER" | "ASSISTANT",
   content: string,
   toolCalls?: JSONValue,
   cookies?: string,

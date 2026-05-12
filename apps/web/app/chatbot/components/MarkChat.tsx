@@ -1287,15 +1287,23 @@ export const MarkChat = () => {
   const [isEndingChat, setIsEndingChat] = useState(false);
   const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [reportsSearchQuery, setReportsSearchQuery] = useState("");
   const [reportPreviewModal, setReportPreviewModal] = useState({
     isOpen: false,
     type: "report" as "report" | "feedback" | "suggestion" | "inquiry",
     data: null as any,
   });
+  const openReportsPanel = useCallback(
+    (searchQuery = "") => {
+      toggleChatbot();
+      setReportsSearchQuery(searchQuery);
+      setShowReports(true);
+    },
+    [toggleChatbot],
+  );
   const handleCheckReports = useCallback(() => {
-    toggleChatbot();
-    setShowReports(true);
-  }, []);
+    openReportsPanel("");
+  }, [openReportsPanel]);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -1665,6 +1673,72 @@ export const MarkChat = () => {
   ]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
+  const checkForIssueStatusQuery = useCallback(
+    (message: string): boolean | number => {
+      const lowerMessage = message.toLowerCase();
+
+      const generalIssuePatterns = [
+        "my issues",
+        "my reports",
+        "reported issues",
+        "issue status",
+        "report status",
+        "check my issues",
+        "check my reports",
+        "view my issues",
+        "view my reports",
+      ];
+
+      const specificIssueMatch =
+        lowerMessage.match(/issue #?(\d+)/i) ||
+        lowerMessage.match(/report #?(\d+)/i) ||
+        lowerMessage.match(/ticket #?(\d+)/i);
+
+      if (specificIssueMatch?.[1]) {
+        return parseInt(specificIssueMatch[1], 10);
+      }
+
+      return generalIssuePatterns.some((pattern) =>
+        lowerMessage.includes(pattern),
+      );
+    },
+    [],
+  );
+  const handleIssueStatusQuery = useCallback(
+    (message: string, issueQuery: boolean | number) => {
+      const now = Date.now();
+      const searchQuery =
+        typeof issueQuery === "number" ? issueQuery.toString() : "";
+
+      setHistory((prev) => [...prev, message]);
+      setHistoryIndex(-1);
+      useMarkChatStore.getState().addMessage({
+        id: `user-${now}`,
+        role: "user",
+        content: message,
+        timestamp: new Date(now).toISOString(),
+      });
+      useMarkChatStore.getState().addMessage({
+        id: `assistant-${now}`,
+        role: "assistant",
+        content:
+          typeof issueQuery === "number"
+            ? `Opened your reports panel and filtered it for report #${issueQuery}.`
+            : "Opened your reports panel so you can review your reported issues.",
+        timestamp: new Date(now).toISOString(),
+      });
+      setUserInput("");
+      setShowSuggestions(false);
+      setSpecialActions({ show: false, type: null, data: null });
+      openReportsPanel(searchQuery);
+
+      if (isRecording) {
+        recognitionRef.current?.stop();
+        setIsRecording(false);
+      }
+    },
+    [isRecording, openReportsPanel, setUserInput],
+  );
   useEffect(() => {
     let cancelled = false;
     const fetchUser = async () => {
@@ -2133,6 +2207,10 @@ export const MarkChat = () => {
         (file) => file.uploadStatus === "uploaded",
       );
       const uploadedFileCount = uploadedFiles.length;
+      const issueStatusQuery =
+        uploadedFileCount === 0
+          ? checkForIssueStatusQuery(trimmedInput)
+          : false;
 
       if (hasPendingUploads) {
         toast.error("Please wait for files to finish uploading.");
@@ -2140,6 +2218,11 @@ export const MarkChat = () => {
       }
 
       if (!trimmedInput && uploadedFileCount === 0) return;
+
+      if (issueStatusQuery !== false) {
+        handleIssueStatusQuery(trimmedInput, issueStatusQuery);
+        return;
+      }
 
       isSendingRef.current = true;
       const fileToolCalls =
@@ -2430,6 +2513,8 @@ export const MarkChat = () => {
       userRole,
       isRecording,
       sendMessage,
+      checkForIssueStatusQuery,
+      handleIssueStatusQuery,
       checkForLearnerSpecialActions,
       checkForAuthorSpecialActions,
       currentChatId,
@@ -3407,6 +3492,7 @@ Please help me with this.`;
             <UserReportsPanel
               userId={user?.userId || ""}
               onClose={() => setShowReports(false)}
+              initialSearchQuery={reportsSearchQuery}
             />
           </div>
         </div>

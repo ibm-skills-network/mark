@@ -88,6 +88,16 @@ describe("InitiateAssignmentFilesDto", () => {
     const errors = await validate(dto);
     expect(errors.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("rejects unsupported mimeType values", async () => {
+    const dto = plainToInstance(InitiateAssignmentFilesDto, {
+      files: [makeItem({ mimeType: "application/x-msdownload" })],
+    });
+    const errors = await validate(dto);
+    const nested = errors[0].children?.[0]?.children ?? [];
+    const mimeTypeError = nested.find((e) => e.property === "mimeType");
+    expect(mimeTypeError?.constraints?.isIn).toBeDefined();
+  });
 });
 
 describe("CompleteAssignmentFileDto", () => {

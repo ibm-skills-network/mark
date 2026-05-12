@@ -58,6 +58,7 @@ describe("AssignmentFileService", () => {
         .fn()
         .mockResolvedValue({ UploadId: "upload-abc" }),
       completeMultipartUpload: jest.fn().mockResolvedValue({}),
+      objectExists: jest.fn().mockResolvedValue(false),
       abortMultipartUpload: jest.fn().mockResolvedValue(undefined),
       getSignedUrl: jest
         .fn()
@@ -257,6 +258,68 @@ describe("AssignmentFileService", () => {
       expect(result.status).toBe(AssignmentFileStatus.READY);
     });
 
+    it("marks the row FAILED and aborts S3 when multipart completion fails and no object exists", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      s3.completeMultipartUpload.mockRejectedValue(
+        new Error("complete failed"),
+      );
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.FAILED,
+          extractionStatus: AssignmentFileExtractionStatus.FAILED,
+          extractionError:
+            "Multipart upload completion failed: complete failed",
+          uploadId: null,
+        }),
+      );
+
+      await expect(
+        service.completeAssignmentFileUpload(1, 1, validDto as any),
+      ).rejects.toThrow("complete failed");
+
+      expect(s3.objectExists).toHaveBeenCalledWith(
+        "test-bucket",
+        "assignments/1/files/uuid-test.txt",
+      );
+      expect(s3.abortMultipartUpload).toHaveBeenCalledWith(
+        expect.objectContaining({ UploadId: "upload-abc" }),
+      );
+      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({
+            status: AssignmentFileStatus.FAILED,
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+            uploadId: null,
+          }),
+        }),
+      );
+    });
+
+    it("continues when multipart completion throws but the assembled object already exists", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      s3.completeMultipartUpload.mockRejectedValue(new Error("timeout"));
+      s3.objectExists.mockResolvedValue(true);
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.READY,
+          extractedText: "extracted content",
+          extractedAt: new Date(),
+          uploadId: null,
+        }),
+      );
+
+      const result = await service.completeAssignmentFileUpload(
+        1,
+        1,
+        validDto as any,
+      );
+
+      expect(s3.abortMultipartUpload).not.toHaveBeenCalled();
+      expect(result.status).toBe(AssignmentFileStatus.READY);
+    });
+
     it("persists extraction error and FAILED extractionStatus when extractor returns error", async () => {
       prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
       extractor.extractContentFromFiles.mockResolvedValue([
@@ -295,6 +358,45 @@ describe("AssignmentFileService", () => {
           }),
         }),
       );
+      expect(result.extractionStatus).toBe(
+        AssignmentFileExtractionStatus.FAILED,
+      );
+    });
+
+    it("keeps the uploaded file READY when post-complete extraction throws", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      extractor.extractContentFromFiles.mockRejectedValue(
+        new Error("parser boom"),
+      );
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.FAILED,
+          extractionError: "Post-upload extraction failed: parser boom",
+          extractedText: null,
+          extractedAt: null,
+          uploadId: null,
+        }),
+      );
+
+      const result = await service.completeAssignmentFileUpload(
+        1,
+        1,
+        validDto as any,
+      );
+
+      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: AssignmentFileStatus.READY,
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+            extractionError: "Post-upload extraction failed: parser boom",
+            uploadId: null,
+          }),
+        }),
+      );
+      expect(s3.deleteObject).not.toHaveBeenCalled();
+      expect(result.status).toBe(AssignmentFileStatus.READY);
       expect(result.extractionStatus).toBe(
         AssignmentFileExtractionStatus.FAILED,
       );
