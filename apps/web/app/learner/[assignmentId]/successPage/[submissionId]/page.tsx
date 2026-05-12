@@ -420,11 +420,45 @@ function SuccessPage() {
     return "Keep Pushing Forward!";
   };
 
+  const refreshAttemptData = async () => {
+    const submissionDetails: AssignmentAttemptWithQuestions =
+      await getCompletedAttempt(assignmentId, attemptId);
+    if (!submissionDetails) return;
+    setQuestions(submissionDetails.questions);
+    setBackendComments(submissionDetails.comments || "");
+    setShowSubmissionFeedback(
+      submissionDetails.showSubmissionFeedback || false,
+    );
+    setCorrectAnswerVisibility(
+      submissionDetails.correctAnswerVisibility ?? "ALWAYS",
+    );
+    setShowQuestions(submissionDetails.showQuestions);
+    setUserPreferredLanguage(submissionDetails.preferredLanguage);
+    setAiFeedbackError(submissionDetails.aiFeedbackError ?? null);
+    setGrade(submissionDetails.grade * 100);
+    const possiblePoints =
+      submissionDetails.totalPossiblePoints ??
+      submissionDetails.questions.reduce(
+        (acc, question) => acc + question.totalPoints,
+        0,
+      );
+    setTotalPoints(possiblePoints);
+    setTotalPointsEarned(
+      submissionDetails.totalPointsEarned ??
+        possiblePoints * submissionDetails.grade,
+    );
+    setAssignmentDetails({
+      passingGrade: submissionDetails.passingGrade,
+      id: submissionDetails.id,
+      name: submissionDetails.name,
+    });
+  };
+
   const handleRerunAiFeedback = async () => {
     setIsRerunningAiFeedback(true);
     try {
       await rerunAiFeedback(assignmentId, attemptId);
-      setAiFeedbackError(null);
+      await refreshAttemptData();
       toast.success("AI feedback regenerated successfully.");
     } catch {
       toast.error("AI feedback rerun failed. Please try again.");
