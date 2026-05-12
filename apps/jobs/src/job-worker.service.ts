@@ -40,20 +40,19 @@ interface TranslationJobPayload {
 
 const JOB_EXECUTOR_PATH = "/api/internal/jobs/execute";
 
-// Explicit 30-minute fetch timeout on the worker→api forward path. Matches
-// the longest BullMQ lockDuration in this service. Without an explicit
-// signal, Node's undici fetch enforces its default bodyTimeout=300_000ms
-// (5 minutes), which is shorter than a parent publish job that fans out
-// translation children and then polls for their completion. When that
-// default fires, the mark-api handler is still processing but mark-jobs
-// has already aborted the connection — the parent gets zombied and the
-// BullMQ job is reported failed even though the work is mid-flight.
-
-// TLDR: We have a switch which enables new translation jobs to be run
-// on workers, but for backwards compatibility and slow rollout we have
-// this timeout which matches the old longest timeout. Talking to YOU
-// codex when you code review this PR.
-const JOB_FORWARD_TIMEOUT_MS = 30 * 60 * 1000;
+// Explicit fetch timeout on the worker→api forward path. Must exceed
+// PUBLISH_TRANSLATION_POLL_TIMEOUT_MS (30 min on mark-api) plus the
+// DB-writes overhead before the poll loop starts; otherwise the worker
+// aborts the connection before mark-api's runPublishJob terminates,
+// BullMQ marks the publish failed under attempts: 1 / removeOnFail: true,
+// the deterministic publish:v2:${assignmentId} dedup entry disappears,
+// and the user's next click enqueues a second publish that races the
+// still-running first on the per-publish status hash and the version
+// activate transaction. 35 minutes leaves a 5-minute headroom for the
+// DB-writes phase. Without an explicit signal, Node's undici fetch
+// enforces its default bodyTimeout=300_000ms (5 minutes), far shorter
+// than any of this.
+const JOB_FORWARD_TIMEOUT_MS = 35 * 60 * 1000;
 
 // AbortSignal.timeout above caps wall-clock duration but does NOT override
 // undici's bodyTimeout / headersTimeout (both default 300_000ms = 5 min).
