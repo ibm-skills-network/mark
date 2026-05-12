@@ -1,7 +1,7 @@
 import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { buildInflightKey } from "src/api/assignment/attempt/translation-state-redis";
+import { seedInflightLanguages } from "src/api/assignment/attempt/translation-state-redis";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
@@ -38,12 +38,6 @@ import {
   VersionManagementService,
   VersionSummary,
 } from "./version-management.service";
-
-// Per-assignment in-flight SET TTL fallback. If the publish job dies before
-// it can SREM each language, the SET still expires after 30 minutes — the
-// learner-side loop then resolves any missing Translation row as
-// "unavailable" rather than "pending" forever.
-const TRANSLATION_INFLIGHT_TTL_SECONDS = 1800;
 
 // Publish-job translation-progress poll loop constants. After the
 // DB-writes-done boundary, runPublishJob stays alive on mark-jobs and polls
@@ -175,21 +169,19 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
 
     if (shouldTranslate) {
       // Translation work moved off the synchronous PATCH path. Seed the
-      // per-assignment in-flight SET first so a learner hitting the GET
-      // attempt endpoint during the brief enqueue-to-worker window sees
-      // translationStatus "pending" instead of "unavailable". The worker
-      // SREMs each language as it terminates; the TTL fallback covers the
+      // per-assignment in-flight refcount hash with one worker per
+      // language so a learner hitting the GET attempt endpoint during the
+      // brief enqueue-to-worker window sees translationStatus "pending"
+      // instead of "unavailable". The single meta worker decrements each
+      // language counter as it terminates; the TTL fallback covers the
       // case where the worker dies before cleanup.
       const supportedLanguageCodes = getAllLanguageCodes();
-      const inflightKey = buildInflightKey(id);
-      if (supportedLanguageCodes.length > 0) {
-        await this.translationStateRedis?.sadd(
-          inflightKey,
-          ...supportedLanguageCodes,
-        );
-        await this.translationStateRedis?.expire(
-          inflightKey,
-          TRANSLATION_INFLIGHT_TTL_SECONDS,
+      if (supportedLanguageCodes.length > 0 && this.translationStateRedis) {
+        await seedInflightLanguages(
+          this.translationStateRedis,
+          id,
+          supportedLanguageCodes,
+          1,
         );
       }
 
@@ -526,23 +518,31 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
 
       // Translation work has moved off the publish hot path onto the
       // dedicated translations queue. Before fanning out, seed the
-      // per-assignment in-flight language SET so the learner-side loop can
-      // distinguish "translation still running" (pending) from "translation
-      // never produced a row" (unavailable) when no Translation row exists
-      // for a requested language. The worker SREMs each language as it
-      // terminates; a 30-minute TTL fallback eventually clears the SET if
-      // the publish job dies mid-flight.
+      // per-assignment in-flight refcount hash with the number of workers
+      // that will translate each language across this publish (one
+      // worker per question + per variant + per meta job, uniform across
+      // languages). The learner-side loop reads the counter to
+      // distinguish "translation still running" (count > 0) from
+      // "translation never produced a row" (count == 0 or absent). Each
+      // worker decrements its language counter as it terminates; a
+      // 30-minute TTL fallback eventually clears the hash if the publish
+      // job dies mid-flight.
       const supportedLanguageCodes = getAllLanguageCodes();
-      const inflightKey = buildInflightKey(assignmentId);
+      const perLanguageWorkerCount =
+        perQuestionTranslationJobsEnqueued +
+        (shouldTranslateAssignment ? 1 : 0);
       let metaEnqueued = false;
-      if (willEnqueueAnyTranslation && supportedLanguageCodes.length > 0) {
-        await this.translationStateRedis?.sadd(
-          inflightKey,
-          ...supportedLanguageCodes,
-        );
-        await this.translationStateRedis?.expire(
-          inflightKey,
-          TRANSLATION_INFLIGHT_TTL_SECONDS,
+      if (
+        willEnqueueAnyTranslation &&
+        supportedLanguageCodes.length > 0 &&
+        perLanguageWorkerCount > 0 &&
+        this.translationStateRedis
+      ) {
+        await seedInflightLanguages(
+          this.translationStateRedis,
+          assignmentId,
+          supportedLanguageCodes,
+          perLanguageWorkerCount,
         );
       }
 

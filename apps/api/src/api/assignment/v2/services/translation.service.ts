@@ -14,7 +14,7 @@ import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
 import { PrismaService } from "src/database/prisma.service";
 import { createRedisConnection } from "src/job-queue/redis.connection";
-import { buildInflightKey } from "../../attempt/translation-state-redis";
+import { decrementInflightLanguage } from "../../attempt/translation-state-redis";
 import {
   getAllLanguageCodes,
   getLanguageNameFromCode,
@@ -220,16 +220,17 @@ export class TranslationService implements OnModuleDestroy {
   }
 
   /**
-   * SREM a single language code from the per-assignment in-flight SET.
+   * Decrement a single language's in-flight refcount for the assignment.
    *
    * Called by every per-language terminal path (success or failure) inside
    * the fan-out loops so the learner-side resolver can transition a
    * pending marker either to a real translation row (if one landed) or
-   * to "unavailable" (when the SET empties without a corresponding row).
+   * to "unavailable" (when every worker for the language has finished
+   * without a corresponding row).
    *
    * A Redis blip is logged and swallowed — it does not constitute a
-   * translation failure. The 30-minute TTL fallback on the SET eventually
-   * clears stuck entries regardless.
+   * translation failure. The 30-minute TTL fallback on the hash eventually
+   * clears stuck counters regardless.
    */
   /**
    * Seed a "pending" entry on the per-publish translation status hash
@@ -285,16 +286,18 @@ export class TranslationService implements OnModuleDestroy {
     assignmentId: number,
     languageCode: string,
   ): Promise<void> {
+    if (!this.translationStateRedis) return;
     try {
-      await this.translationStateRedis?.srem(
-        buildInflightKey(assignmentId),
+      await decrementInflightLanguage(
+        this.translationStateRedis,
+        assignmentId,
         languageCode,
       );
-    } catch (sremError) {
+    } catch (decrError) {
       const errorMessage =
-        sremError instanceof Error ? sremError.message : String(sremError);
+        decrError instanceof Error ? decrError.message : String(decrError);
       this.logger.warn(
-        `publish.translation.inflight.srem.failed { assignmentId: ${assignmentId}, languageCode: ${languageCode}, error: ${errorMessage} }`,
+        `publish.translation.inflight.decrement.failed { assignmentId: ${assignmentId}, languageCode: ${languageCode}, error: ${errorMessage} }`,
       );
     }
   }
