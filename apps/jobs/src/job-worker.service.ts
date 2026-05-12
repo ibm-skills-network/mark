@@ -122,14 +122,16 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 1_800_000;
     const ASSIGNMENT_NO_STALL_RECOVERY = 0;
 
-    // 5-minute lockDuration + maxStalledCount=0 prevents BullMQ stall-recovery
-    // from racing the original execution on long-running translation jobs.
-    // Per-question worst-case wall-clock can hit ~90s when the LLM provider
-    // throttles; 5 min is the comfortable safety margin. maxStalledCount=0
-    // means a genuinely-stalled worker fails permanently rather than
-    // spawning a recovery execution that would race writes to the same
-    // Translation rows.
-    const TRANSLATION_LOCK_DURATION_MS = 300_000;
+    // 120-second lockDuration + maxStalledCount=0 prevents BullMQ stall-recovery
+    // from racing the original execution. A single translation job fans out 23
+    // languages across TRANSLATION_CONCURRENCY=8 in-process slots, so realistic
+    // wall-clock is 5-10s typical, ~30-60s pathological under provider throttling
+    // or Bottleneck saturation. 120s leaves ~2x headroom over the worst observed
+    // and surfaces a dead worker quickly (the lock controls failure-detection
+    // latency, not max execution time). maxStalledCount=0 means a genuinely-
+    // stalled worker fails permanently rather than spawning a recovery execution
+    // that would race writes to the same Translation rows.
+    const TRANSLATION_LOCK_DURATION_MS = 120_000;
     const TRANSLATION_NO_STALL_RECOVERY = 0;
 
     this.workers.push(
