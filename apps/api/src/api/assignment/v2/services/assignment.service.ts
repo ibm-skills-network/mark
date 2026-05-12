@@ -850,126 +850,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         return;
       }
 
-      // Stage 2 + 3: 1-second poll loop. Each tick reads the per-publish
-      // status hash, aggregates per-job entries, and emits the rolled-up
-      // PublishJobResult on the existing JobStatusUpdate.result field.
-      // Loop exits when every spawned translation job has reached a
-      // terminal status (completed | failed), or after the hard timeout.
-      //
-      // If Redis is unavailable (test envs without REDIS_URL, or a transient
-      // outage), the status hash can't be populated and polling has nothing
-      // to read. Skip the loop entirely and treat the publish as complete
-      // at db_writes_done — workers will still run if Redis comes back,
-      // they just won't surface SSE progress updates for this publish.
-      if (!this.translationStateRedis) {
-        this.logger.warn(
-          "publish.translations.poll.skipped { reason: translation-status-redis-unavailable }",
-        );
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "Completed",
-          progress:
-            "Publishing complete (translation status tracking unavailable)",
-          percentage: 100,
-          result: {
-            stage: "translations_complete",
-            translations: {
-              aggregate: { completed: 0, total: 0, failed: 0 },
-              perJob: [],
-            },
-          } satisfies PublishJobResult,
-        });
-        return;
-      }
-      const pollHashKey = buildPublishHashKey(jobId);
-      const pollStartedAt = Date.now();
-      for (;;) {
-        const entries =
-          (await this.translationStateRedis?.hgetall(pollHashKey)) ?? {};
-        const perJob: PerJobTranslationEntry[] = Object.values(entries).map(
-          (raw) => JSON.parse(raw) as PerJobTranslationEntry,
-        );
-        const completed = perJob.filter(
-          (entry) => entry.status === "completed",
-        ).length;
-        const failed = perJob.filter(
-          (entry) => entry.status === "failed",
-        ).length;
-        const total = perJob.length;
-        // Guard against premature exit on the first tick when no worker
-        // has HSET yet (total === 0). The loop keeps polling until at
-        // least one entry exists AND all entries are terminal.
-        const allTerminal =
-          total > 0 &&
-          perJob.every(
-            (entry) =>
-              entry.status === "completed" || entry.status === "failed",
-          );
-
-        const tickResult: PublishJobResult = {
-          stage: allTerminal
-            ? "translations_complete"
-            : "translations_in_progress",
-          translations: {
-            aggregate: { completed, total, failed },
-            perJob,
-          },
-        };
-
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: allTerminal ? "Completed" : "In Progress",
-          progress: allTerminal
-            ? "Publishing complete (translations finished)"
-            : `Translating: ${completed}/${total} questions complete`,
-          percentage: 100,
-          result: tickResult,
-        });
-
-        if (allTerminal) {
-          break;
-        }
-
-        if (Date.now() - pollStartedAt > PUBLISH_TRANSLATION_POLL_TIMEOUT_MS) {
-          this.logger.warn("publish.translations.poll.timeout", {
-            assignmentId,
-            jobId,
-            completed,
-            total,
-            failed,
-            elapsedMs: Date.now() - pollStartedAt,
-          });
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "Completed",
-            progress: "Publishing complete (translation poll timed out)",
-            percentage: 100,
-            result: {
-              stage: "translations_complete",
-              translations: {
-                aggregate: { completed, total, failed },
-                perJob,
-              },
-            } satisfies PublishJobResult,
-          });
-          break;
-        }
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, PUBLISH_TRANSLATION_POLL_INTERVAL_MS),
-        );
-      }
-
-      // Best-effort cleanup of the per-publish status hash. The 1-hour
-      // TTL on first HSET covers a failed DEL, so a Redis blip here only
-      // delays cleanup — it never blocks the publish from completing.
-      try {
-        await this.translationStateRedis?.del(pollHashKey);
-      } catch (delError) {
-        this.logger.warn("publish.translations.cleanup.failed", {
-          assignmentId,
-          jobId,
-          error:
-            delError instanceof Error ? delError.message : String(delError),
-        });
-      }
+      await this.pollTranslationsToTerminal(jobId, assignmentId);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -983,6 +864,124 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         progress: `Error: ${errorMessage}`,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Polls the per-job translation status hash until every entry reaches a
+   * terminal status (completed | failed), or the hard timeout fires. Emits
+   * a rolled-up PublishJobResult on each tick over the SSE channel via
+   * JobStatusUpdate.result. Shared by runPublishJob and the failed-
+   * translation retry flow; both write to the same hash schema.
+   *
+   * Caller is responsible for seeding the hash with markPending entries
+   * before invoking this — otherwise total === 0 on every tick and the
+   * loop runs to its full timeout. (runPublishJob's no-work short-circuit
+   * already handles the empty-payload case before calling.)
+   *
+   * The hash key is NOT DEL'd on exit. The 1-hour TTL handles eventual
+   * cleanup, and leaving the hash alive lets the retry flow read the
+   * failed entries within the retry window.
+   */
+  private async pollTranslationsToTerminal(
+    jobId: string,
+    assignmentId: number,
+  ): Promise<void> {
+    // If Redis is unavailable (test envs without REDIS_URL, or a transient
+    // outage), the status hash can't be populated and polling has nothing
+    // to read. Skip the loop and treat the job as complete.
+    if (!this.translationStateRedis) {
+      this.logger.warn(
+        "publish.translations.poll.skipped { reason: translation-status-redis-unavailable }",
+      );
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "Completed",
+        progress:
+          "Publishing complete (translation status tracking unavailable)",
+        percentage: 100,
+        result: {
+          stage: "translations_complete",
+          translations: {
+            aggregate: { completed: 0, total: 0, failed: 0 },
+            perJob: [],
+          },
+        } satisfies PublishJobResult,
+      });
+      return;
+    }
+
+    const pollHashKey = buildPublishHashKey(jobId);
+    const pollStartedAt = Date.now();
+    for (;;) {
+      const entries =
+        (await this.translationStateRedis?.hgetall(pollHashKey)) ?? {};
+      const perJob: PerJobTranslationEntry[] = Object.values(entries).map(
+        (raw) => JSON.parse(raw) as PerJobTranslationEntry,
+      );
+      const completed = perJob.filter(
+        (entry) => entry.status === "completed",
+      ).length;
+      const failed = perJob.filter((entry) => entry.status === "failed").length;
+      const total = perJob.length;
+      // Guard against premature exit on the first tick when no worker
+      // has HSET yet (total === 0). The loop keeps polling until at
+      // least one entry exists AND all entries are terminal.
+      const allTerminal =
+        total > 0 &&
+        perJob.every(
+          (entry) => entry.status === "completed" || entry.status === "failed",
+        );
+
+      const tickResult: PublishJobResult = {
+        stage: allTerminal
+          ? "translations_complete"
+          : "translations_in_progress",
+        translations: {
+          aggregate: { completed, total, failed },
+          perJob,
+        },
+      };
+
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: allTerminal ? "Completed" : "In Progress",
+        progress: allTerminal
+          ? "Publishing complete (translations finished)"
+          : `Translating: ${completed}/${total} questions complete`,
+        percentage: 100,
+        result: tickResult,
+      });
+
+      if (allTerminal) {
+        break;
+      }
+
+      if (Date.now() - pollStartedAt > PUBLISH_TRANSLATION_POLL_TIMEOUT_MS) {
+        this.logger.warn("publish.translations.poll.timeout", {
+          assignmentId,
+          jobId,
+          completed,
+          total,
+          failed,
+          elapsedMs: Date.now() - pollStartedAt,
+        });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "Publishing complete (translation poll timed out)",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed, total, failed },
+              perJob,
+            },
+          } satisfies PublishJobResult,
+        });
+        break;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, PUBLISH_TRANSLATION_POLL_INTERVAL_MS),
+      );
     }
   }
 
