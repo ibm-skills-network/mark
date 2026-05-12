@@ -14,6 +14,14 @@ import type {
 
 interface PublishProgressProps {
   publishResult: PublishJobResult | undefined;
+  // Called when the author clicks "Retry failed translations" in the
+  // terminal-with-failures state. Owner runs the retry via the new
+  // endpoint and re-subscribes the SSE stream to the retry job; this
+  // component only fires the callback.
+  onRetryFailedTranslations?: () => void;
+  // Disables the retry button while a publish or retry is in flight,
+  // so the author can't fire it twice mid-stream.
+  retryInFlight?: boolean;
 }
 
 const TERMINAL_STATUSES: ReadonlySet<PerJobTranslationEntry["status"]> =
@@ -112,6 +120,8 @@ function sortEntries(
 
 export default function PublishProgress({
   publishResult,
+  onRetryFailedTranslations,
+  retryInFlight,
 }: PublishProgressProps) {
   // Sticky merged view of perJob entries. The parent passes a `key`
   // that changes per publish, so this component fully remounts at the
@@ -256,10 +266,23 @@ export default function PublishProgress({
                 <AlertTitle>
                   Translations finished with {aggregate.failed} failure(s)
                 </AlertTitle>
-                <AlertDescription>
-                  {aggregate.failed === 1
-                    ? `One question could not be translated. Learners attempting that question in an affected language will see a "translation unavailable" notice and the original English text. An admin can re-run missing translations from the admin tools.`
-                    : `${aggregate.failed} questions could not be translated. Learners attempting those questions in affected languages will see a "translation unavailable" notice and the original English text. An admin can re-run missing translations from the admin tools.`}
+                <AlertDescription className="space-y-3">
+                  <p translate="no">
+                    {aggregate.failed === 1
+                      ? `One question could not be translated. Learners attempting that question in an affected language will see a "translation unavailable" notice and the original English text.`
+                      : `${aggregate.failed} questions could not be translated. Learners attempting those questions in affected languages will see a "translation unavailable" notice and the original English text.`}
+                  </p>
+                  {onRetryFailedTranslations && (
+                    <button
+                      type="button"
+                      onClick={onRetryFailedTranslations}
+                      disabled={retryInFlight}
+                      translate="no"
+                      className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Retry failed translations
+                    </button>
+                  )}
                 </AlertDescription>
               </Alert>
             )}

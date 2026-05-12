@@ -1028,7 +1028,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       for (const question of questions) {
         for (const variant of question.variants ?? []) {
           variantToQuestion.set(variant.id, {
-            variant: variant as VariantDto,
+            variant: variant,
             questionId: question.id,
           });
         }
@@ -1040,82 +1040,94 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // tick already shows the user what's being retried.
       let enqueued = 0;
       for (const entry of failedEntries) {
-        if (entry.kind === "question") {
-          const questionDto = questionsById.get(entry.id);
-          if (!questionDto) {
-            this.logger.warn("publish.retry.question.missing", {
-              assignmentId,
+        switch (entry.kind) {
+          case "question": {
+            const questionDto = questionsById.get(entry.id);
+            if (!questionDto) {
+              this.logger.warn("publish.retry.question.missing", {
+                assignmentId,
+                jobId,
+                questionId: entry.id,
+              });
+              continue;
+            }
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_QUESTION,
+              {
+                parentJobId: jobId,
+                assignmentId,
+                questionId: entry.id,
+                question: questionDto,
+              } satisfies TranslateQuestionJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+            await this.translationService.markPending(
               jobId,
-              questionId: entry.id,
-            });
-            continue;
+              "question",
+              entry.id,
+            );
+            enqueued += 1;
+            break;
           }
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_QUESTION,
-            {
-              parentJobId: jobId,
-              assignmentId,
-              questionId: entry.id,
-              question: questionDto,
-            } satisfies TranslateQuestionJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
-          await this.translationService.markPending(
-            jobId,
-            "question",
-            entry.id,
-          );
-          enqueued += 1;
-        } else if (entry.kind === "variant") {
-          const variantLookup = variantToQuestion.get(entry.id);
-          if (!variantLookup) {
-            this.logger.warn("publish.retry.variant.missing", {
-              assignmentId,
+          case "variant": {
+            const variantLookup = variantToQuestion.get(entry.id);
+            if (!variantLookup) {
+              this.logger.warn("publish.retry.variant.missing", {
+                assignmentId,
+                jobId,
+                variantId: entry.id,
+              });
+              continue;
+            }
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_VARIANT,
+              {
+                parentJobId: jobId,
+                assignmentId,
+                questionId: variantLookup.questionId,
+                variantId: entry.id,
+                variant: variantLookup.variant,
+              } satisfies TranslateVariantJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+            await this.translationService.markPending(
               jobId,
-              variantId: entry.id,
-            });
-            continue;
+              "variant",
+              entry.id,
+            );
+            enqueued += 1;
+            break;
           }
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_VARIANT,
-            {
-              parentJobId: jobId,
+          case "meta": {
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_META,
+              {
+                parentJobId: jobId,
+                assignmentId,
+              } satisfies TranslateMetaJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+            await this.translationService.markPending(
+              jobId,
+              "meta",
               assignmentId,
-              questionId: variantLookup.questionId,
-              variantId: entry.id,
-              variant: variantLookup.variant,
-            } satisfies TranslateVariantJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
-          await this.translationService.markPending(jobId, "variant", entry.id);
-          enqueued += 1;
-        } else if (entry.kind === "meta") {
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_META,
-            {
-              parentJobId: jobId,
-              assignmentId,
-            } satisfies TranslateMetaJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
-          await this.translationService.markPending(
-            jobId,
-            "meta",
-            assignmentId,
-          );
-          enqueued += 1;
+            );
+            enqueued += 1;
+            break;
+          }
+          // No default
         }
       }
 

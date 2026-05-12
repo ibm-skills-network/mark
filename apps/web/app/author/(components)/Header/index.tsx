@@ -30,6 +30,7 @@ import {
   getAssignment,
   getUser,
   publishAssignment,
+  retryFailedTranslations,
   subscribeToJobStatus,
 } from "@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
@@ -723,6 +724,53 @@ function AuthorHeader() {
     }
   }
 
+  const handleRetryFailedTranslations = async () => {
+    if (!activeAssignmentId) return;
+    setSubmitting(true);
+    setJobProgress(0);
+    setCurrentMessage("Retrying failed translations...");
+    setProgressStatus("In Progress");
+    setPublishResult(undefined);
+    setPublishSessionId((n) => n + 1);
+    try {
+      const response = await retryFailedTranslations(activeAssignmentId);
+      if (!response?.jobId) {
+        toast.error("Failed to start translation retry. Please try again.");
+        setProgressStatus("Failed");
+        setSubmitting(false);
+        return;
+      }
+      const [retrySucceeded] = await subscribeToJobStatus(
+        response.jobId,
+        (percentage, progress) => {
+          setJobProgress(percentage);
+          setCurrentMessage(progress ?? "");
+        },
+        setQuestions,
+        (result) => setPublishResult(result),
+      );
+      setProgressStatus(retrySucceeded ? "Completed" : "Failed");
+      if (retrySucceeded) {
+        toast.success("Translation retry complete.");
+      } else {
+        toast.error("Translation retry failed. Please try again.");
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      // 409 from the server when a publish is currently in flight.
+      if (message.toLowerCase().includes("in progress")) {
+        toast.error(
+          "A publish is currently in progress. Wait for it to finish, then retry.",
+        );
+      } else {
+        toast.error(`Translation retry failed: ${message}`);
+      }
+      setProgressStatus("Failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleConfirmSync = async () => {
     deleteAuthorStore();
     deleteAssignmentConfigStore();
@@ -893,6 +941,8 @@ function AuthorHeader() {
           <PublishProgress
             key={publishSessionId}
             publishResult={publishResult}
+            onRetryFailedTranslations={handleRetryFailedTranslations}
+            retryInFlight={submitting}
           />
         </header>
       </div>

@@ -403,6 +403,23 @@ export async function getActivePublishJob(
 }
 
 /**
+ * Trigger a retry of the failed translations from the most recent publish
+ * for the assignment. Returns the new retry jobId so the client can
+ * subscribe to SSE progress the same way it does for a publish.
+ *
+ * Throws on 409 (a publish is currently in progress) or any other error.
+ */
+export async function retryFailedTranslations(
+  assignmentId: number,
+): Promise<{ jobId: string; message: string }> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/translations/retry-failed`;
+  return (await apiClient.post(endpointURL, {})) as {
+    jobId: string;
+    message: string;
+  };
+}
+
+/**
  * Updates a question for a given assignment.
  * @param assignmentId The id of the assignment to update the question for.
  * @param questionId The id of the question to update.
