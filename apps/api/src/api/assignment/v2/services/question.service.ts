@@ -134,8 +134,12 @@ export class QuestionService {
     jobId?: string,
     progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
-  ): Promise<Map<number, number>> {
+  ): Promise<{
+    idMap: Map<number, number>;
+    translationJobsEnqueued: number;
+  }> {
     void forceTranslation;
+    let translationJobsEnqueued = 0;
     const INITIAL_SETUP_RANGE = { start: 0, end: 10 };
     const QUESTION_PROCESSING_RANGE = { start: 10, end: 90 };
     const FINAL_CLEANUP_RANGE = { start: 90, end: 100 };
@@ -358,6 +362,7 @@ export class QuestionService {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        translationJobsEnqueued += 1;
         if (jobId) {
           await this.translationService.markPending(
             jobId,
@@ -376,7 +381,7 @@ export class QuestionService {
             `Processing ${variantCount} variants for question ${index + 1}`,
           );
 
-          await this.processVariantsForQuestion(
+          translationJobsEnqueued += await this.processVariantsForQuestion(
             assignmentId,
             persistedId,
             questionDto.variants || [],
@@ -421,7 +426,7 @@ export class QuestionService {
         "Question processing completed successfully",
       );
 
-      return frontendToBackendIdMap;
+      return { idMap: frontendToBackendIdMap, translationJobsEnqueued };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -844,7 +849,8 @@ export class QuestionService {
     existingVariants: VariantDto[],
     jobId?: string,
     forceTranslation = false,
-  ): Promise<void> {
+  ): Promise<number> {
+    let variantTranslationsEnqueued = 0;
     const existingVariantsMap = new Map<string, VariantDto>();
     const existingVariantsIdMap = new Map<number, VariantDto>();
 
@@ -947,6 +953,7 @@ export class QuestionService {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        variantTranslationsEnqueued += 1;
         if (jobId) {
           await this.translationService.markPending(
             jobId,
@@ -987,6 +994,7 @@ export class QuestionService {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
+        variantTranslationsEnqueued += 1;
         if (jobId) {
           await this.translationService.markPending(
             jobId,
@@ -999,6 +1007,8 @@ export class QuestionService {
         );
       }
     }
+
+    return variantTranslationsEnqueued;
   }
 
   private async generateVariantsFromQuestion(

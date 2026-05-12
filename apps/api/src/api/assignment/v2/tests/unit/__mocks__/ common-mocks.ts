@@ -1818,7 +1818,9 @@ export const createMockQuestionService = () => ({
       { ...createMockQuestionDto(), variants: [createMockVariantDto()] },
     ],
   }),
-  processQuestionsForPublishing: jest.fn().mockResolvedValue(new Map()),
+  processQuestionsForPublishing: jest
+    .fn()
+    .mockResolvedValue({ idMap: new Map(), translationJobsEnqueued: 0 }),
   generateQuestions: jest
     .fn()
     .mockResolvedValue({ message: "Question generation started", jobId: 1 }),

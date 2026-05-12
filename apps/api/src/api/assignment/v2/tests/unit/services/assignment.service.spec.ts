@@ -451,9 +451,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       [createMockQuestion({ id: 1 }), createMockQuestion({ id: 2 })],
     );
     assignmentRepository.findById.mockResolvedValue(existingAssignment);
-    questionService.processQuestionsForPublishing.mockResolvedValue(
-      new Map([[tempQuestionId, persistedQuestionId]]),
-    );
+    questionService.processQuestionsForPublishing.mockResolvedValue({
+      idMap: new Map([[tempQuestionId, persistedQuestionId]]),
+      translationJobsEnqueued: 1,
+    });
     questionService.getQuestionsForAssignment.mockResolvedValue([
       createMockQuestionDto({ id: 1 }),
       createMockQuestionDto({ id: 2 }),

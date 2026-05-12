@@ -462,6 +462,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
 
       let questionContentChanged = false;
       let frontendToBackendIdMap = new Map<number, number>();
+      let perQuestionTranslationJobsEnqueued = 0;
 
       if (updateDto.questions && updateDto.questions.length > 0) {
         await this.jobStatusService.updateJobStatus(jobId, {
@@ -486,7 +487,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
           percentage: 20,
         });
 
-        frontendToBackendIdMap =
+        const processResult =
           await this.questionService.processQuestionsForPublishing(
             assignmentId,
             updateDto.questions,
@@ -500,6 +501,9 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               });
             },
           );
+        frontendToBackendIdMap = processResult.idMap;
+        perQuestionTranslationJobsEnqueued =
+          processResult.translationJobsEnqueued;
       }
 
       const existingTranslationCount =
@@ -510,6 +514,15 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         assignmentTranslatableFieldsChanged ||
         questionContentChanged ||
         existingTranslationCount === 0;
+
+      // A republish that touches neither translatable assignment fields nor
+      // any question content (e.g. flipping a visibility flag on an
+      // already-translated assignment) enqueues zero translation jobs. In
+      // that case the in-flight seed and the poll loop downstream are both
+      // no-ops — skip them so the publish returns immediately instead of
+      // spinning until the 30-minute poll timeout.
+      const willEnqueueAnyTranslation =
+        shouldTranslateAssignment || perQuestionTranslationJobsEnqueued > 0;
 
       // Translation work has moved off the publish hot path onto the
       // dedicated translations queue. Before fanning out, seed the
@@ -522,7 +535,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       const supportedLanguageCodes = getAllLanguageCodes();
       const inflightKey = buildInflightKey(assignmentId);
       let metaEnqueued = false;
-      if (supportedLanguageCodes.length > 0) {
+      if (willEnqueueAnyTranslation && supportedLanguageCodes.length > 0) {
         await this.translationStateRedis?.sadd(
           inflightKey,
           ...supportedLanguageCodes,
@@ -801,6 +814,27 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         percentage: 100,
         result: { stage: "db_writes_done" } satisfies PublishJobResult,
       });
+
+      // No translation jobs were enqueued (e.g. metadata-only republish of
+      // an already-translated assignment). Emit a single terminal
+      // translations_complete tick and return — the poll loop below would
+      // otherwise spin for the full 30-minute timeout against an empty
+      // per-publish status hash that no worker will ever populate.
+      if (!willEnqueueAnyTranslation) {
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "Publishing complete (no translation work required)",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
 
       // Stage 2 + 3: 1-second poll loop. Each tick reads the per-publish
       // status hash, aggregates per-job entries, and emits the rolled-up
