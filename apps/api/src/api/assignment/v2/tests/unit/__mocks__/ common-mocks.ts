@@ -1840,6 +1840,7 @@ export const createMockQuestionService = () => ({
  * Create a mock TranslationService with pre-defined implementations
  */
 export const createMockTranslationService = () => ({
+  languageTranslation: true,
   getAvailableLanguages: jest.fn().mockResolvedValue(["en", "fr", "es"]),
   applyTranslationsToAssignment: jest.fn().mockResolvedValue(undefined),
   translateAssignment: jest.fn().mockResolvedValue(undefined),
