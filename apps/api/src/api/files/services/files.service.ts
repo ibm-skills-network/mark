@@ -24,6 +24,53 @@ import {
 import { sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
 
+const CHATBOT_ALLOWED_FILE_TYPES: Record<string, string[]> = {
+  "text/plain": [
+    ".txt",
+    ".md",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".css",
+    ".html",
+    ".sql",
+    ".sh",
+  ],
+  "application/pdf": [".pdf"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+    ".docx",
+  ],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+    ".pptx",
+  ],
+  "text/csv": [".csv"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+    ".xlsx",
+  ],
+  "application/vnd.ms-excel": [".xls"],
+  "application/x-ipynb+json": [".ipynb"],
+  "text/javascript": [".js"],
+  "application/javascript": [".js"],
+  "application/typescript": [".ts", ".tsx"],
+  "text/typescript": [".ts", ".tsx"],
+  "video/mp2t": [".ts"],
+  "text/x-python": [".py"],
+  "application/x-python": [".py"],
+  "text/x-python-script": [".py"],
+  "text/html": [".html"],
+  "text/css": [".css"],
+  "application/sql": [".sql"],
+  "text/x-sql": [".sql"],
+  "application/x-sh": [".sh"],
+  "text/x-sh": [".sh"],
+  "application/x-shellscript": [".sh"],
+};
+
+const CHATBOT_ALLOWED_EXTENSIONS = new Set(
+  Object.values(CHATBOT_ALLOWED_FILE_TYPES).flat(),
+);
+
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
@@ -124,6 +171,7 @@ export class FilesService {
       uploadType,
       fileName,
     );
+    this.validateUploadType(uploadType, fileType, fileName);
 
     let prefix = "";
     const normalizedPath = sanitizeUploadPath(context.path);
@@ -244,6 +292,44 @@ export class FilesService {
     }
 
     return maxAllowedBytes;
+  }
+
+  private validateChatbotUploadType(fileType: string, fileName: string): void {
+    const normalizedFileType = fileType.trim().toLowerCase();
+    const extension = fileName.includes(".")
+      ? `.${fileName.split(".").pop()?.toLowerCase() || ""}`
+      : "";
+
+    if (!extension || !CHATBOT_ALLOWED_EXTENSIONS.has(extension)) {
+      throw new BadRequestException(
+        "Unsupported file extension for chatbot upload.",
+      );
+    }
+
+    if (!normalizedFileType) {
+      return;
+    }
+
+    const allowedExtensions = CHATBOT_ALLOWED_FILE_TYPES[normalizedFileType];
+    if (!allowedExtensions) {
+      throw new BadRequestException("Unsupported mimeType for chatbot upload.");
+    }
+
+    if (!allowedExtensions.includes(extension)) {
+      throw new BadRequestException(
+        "File extension does not match the provided MIME type for chatbot upload.",
+      );
+    }
+  }
+
+  private validateUploadType(
+    uploadType: UploadType,
+    fileType: string,
+    fileName: string,
+  ): void {
+    if (uploadType === UploadType.CHATBOT) {
+      this.validateChatbotUploadType(fileType, fileName);
+    }
   }
 
   private monitorUploadRequest(parameters: {

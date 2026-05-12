@@ -167,6 +167,46 @@ describe("FilesService", () => {
     expect(s3.getBucketName).toHaveBeenCalledWith(UploadType.CHATBOT);
   });
 
+  it("rejects chatbot uploads with unsupported MIME types", async () => {
+    const s3 = mockS3Service as unknown as {
+      getBucketName: jest.Mock;
+    };
+    s3.getBucketName.mockReturnValue("learner-bucket");
+
+    await expect(
+      service.generateUploadUrl(
+        {
+          fileName: "payload.exe",
+          fileType: "application/x-msdownload",
+          fileSize: 2048,
+          uploadType: UploadType.CHATBOT,
+        },
+        "user-456",
+      ),
+    ).rejects.toThrow("Unsupported file extension for chatbot upload.");
+  });
+
+  it("rejects chatbot uploads when MIME type and extension do not match", async () => {
+    const s3 = mockS3Service as unknown as {
+      getBucketName: jest.Mock;
+    };
+    s3.getBucketName.mockReturnValue("learner-bucket");
+
+    await expect(
+      service.generateUploadUrl(
+        {
+          fileName: "notes.pdf",
+          fileType: "text/plain",
+          fileSize: 2048,
+          uploadType: UploadType.CHATBOT,
+        },
+        "user-456",
+      ),
+    ).rejects.toThrow(
+      "File extension does not match the provided MIME type for chatbot upload.",
+    );
+  });
+
   it("generates public read URLs from the public bucket", async () => {
     process.env.S3_PUBLIC_BUCKET = "public-bucket";
     const s3 = mockS3Service as unknown as {

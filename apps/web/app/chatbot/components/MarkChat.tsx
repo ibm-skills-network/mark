@@ -2224,6 +2224,13 @@ export const MarkChat = () => {
         return;
       }
 
+      if (uploadedFileCount > 0 && (!currentChatId || !user?.userId)) {
+        toast.error(
+          "Chat session is not ready yet. Please wait a moment and try sending your files again.",
+        );
+        return;
+      }
+
       isSendingRef.current = true;
       const fileToolCalls =
         uploadedFileCount > 0
@@ -2369,6 +2376,12 @@ export const MarkChat = () => {
               "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
               error,
             );
+            if (fileToolCalls) {
+              toast.error(
+                "Could not send this message because the attached files could not be saved to the chat. Please try again.",
+              );
+              return;
+            }
           }
         }
 
