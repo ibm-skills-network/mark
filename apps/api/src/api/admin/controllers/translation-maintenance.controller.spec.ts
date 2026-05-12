@@ -7,19 +7,16 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
 import { TranslationService } from "src/api/assignment/v2/services/translation.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import { TranslationMaintenanceController } from "./translation-maintenance.controller";
-
-/** Drain the microtask queue repeatedly to let background async work complete */
-const flushPromises = () =>
-  new Promise<void>((resolve) => setImmediate(resolve));
-const drainAsync = async (rounds = 15) => {
-  for (let i = 0; i < rounds; i++) {
-    await flushPromises();
-  }
-};
 
 describe("TranslationMaintenanceController", () => {
   let controller: TranslationMaintenanceController;
+  const request = {
+    userSession: {
+      userId: "admin-1",
+    },
+  } as any;
   let prisma: {
     assignment: { findUnique: jest.Mock; findMany: jest.Mock };
     assignmentTranslation: { findMany: jest.Mock; groupBy: jest.Mock };
@@ -37,6 +34,19 @@ describe("TranslationMaintenanceController", () => {
     createPublishJob: jest.Mock;
     updateJobStatus: jest.Mock;
   };
+  let jobQueueService: {
+    enqueue: jest.Mock;
+  };
+
+  const runFixJob = async (
+    body: Record<string, unknown>,
+    assignmentIds = [1],
+  ) =>
+    controller.runFixMissingTranslationsJob(
+      "job-42",
+      assignmentIds,
+      body as any,
+    );
 
   beforeEach(async () => {
     prisma = {
@@ -76,8 +86,12 @@ describe("TranslationMaintenanceController", () => {
     };
 
     jobStatusService = {
-      createPublishJob: jest.fn().mockResolvedValue({ id: 42 }),
+      createPublishJob: jest.fn().mockResolvedValue({ id: "job-42" }),
       updateJobStatus: jest.fn().mockResolvedValue(undefined),
+    };
+
+    jobQueueService = {
+      enqueue: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -86,6 +100,7 @@ describe("TranslationMaintenanceController", () => {
         { provide: PrismaService, useValue: prisma },
         { provide: TranslationService, useValue: translationService },
         { provide: JobStatusServiceV2, useValue: jobStatusService },
+        { provide: JobQueueService, useValue: jobQueueService },
       ],
     }).compile();
 
@@ -101,38 +116,60 @@ describe("TranslationMaintenanceController", () => {
     });
     prisma.question.findMany.mockResolvedValue([]);
 
-    const result = await controller.fixMissingTranslations({
-      assignmentId: 1,
-      dryRun: false,
-    });
+    const result = await controller.fixMissingTranslations(
+      {
+        assignmentId: 1,
+        dryRun: false,
+      },
+      request,
+    );
 
     expect(result.success).toBe(true);
-    expect(result.jobId).toBe(42);
+    expect(result.jobId).toBe("job-42");
     expect(typeof result.message).toBe("string");
     expect(result.assignmentIds).toEqual([1]);
-  });
-
-  it("marks the job as Completed after all translations finish", async () => {
-    prisma.assignment.findUnique.mockResolvedValue({
-      id: 1,
-      currentVersion: null,
-    });
-    prisma.question.findMany.mockResolvedValue([]);
-
-    await controller.fixMissingTranslations({
-      assignmentId: 1,
-      dryRun: false,
-    });
-
-    await drainAsync();
-
-    const completedCall = jobStatusService.updateJobStatus.mock.calls.find(
-      ([, update]) => update.status === "Completed",
+    expect(jobStatusService.createPublishJob).toHaveBeenCalledWith(
+      1,
+      "admin-1",
+      expect.objectContaining({
+        jobName: "admin.fix-missing-translations",
+        queueName: "mark.admin.translation",
+      }),
     );
-    expect(completedCall).toBeDefined();
-    expect(completedCall[0]).toBe(42);
+    expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+      "mark.admin.translation",
+      "admin.fix-missing-translations",
+      {
+        assignmentIds: [1],
+        body: { assignmentId: 1, dryRun: false },
+        jobId: "job-42",
+      },
+      {
+        jobId: "job-42",
+      },
+    );
   });
 
+  it("marks the job as Failed when queue enqueueing fails", async () => {
+    jobQueueService.enqueue.mockRejectedValueOnce(
+      new Error("Redis unavailable"),
+    );
+
+    await expect(
+      controller.fixMissingTranslations(
+        {
+          assignmentId: 1,
+          dryRun: false,
+        },
+        request,
+      ),
+    ).rejects.toThrow("Redis unavailable");
+
+    expect(jobStatusService.updateJobStatus).toHaveBeenCalledWith("job-42", {
+      status: "Failed",
+      progress: "Failed to enqueue translation fix job: Redis unavailable",
+    });
+  });
   it("uses the active (current) version questions, not the most recently created version", async () => {
     prisma.assignment.findUnique.mockResolvedValue({
       id: 1,
@@ -153,12 +190,10 @@ describe("TranslationMaintenanceController", () => {
 
     prisma.question.findMany.mockResolvedValue([{ id: 20, variants: [] }]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     expect(translationService.detectLanguage).toHaveBeenCalledWith(
       "Active version question",
@@ -181,12 +216,10 @@ describe("TranslationMaintenanceController", () => {
       },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     expect(translationService.detectLanguage).toHaveBeenCalledWith(
       "Base question text",
@@ -208,13 +241,11 @@ describe("TranslationMaintenanceController", () => {
       },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       languageCodes: ["es"],
       dryRun: false,
     });
-
-    await drainAsync();
 
     const [, , , , , , targetLanguages] =
       translationService.translateContentToLanguages.mock.calls[0];
@@ -236,12 +267,10 @@ describe("TranslationMaintenanceController", () => {
       },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     const [, , , , , , targetLanguages] =
       translationService.translateContentToLanguages.mock.calls[0];
@@ -270,12 +299,10 @@ describe("TranslationMaintenanceController", () => {
     });
     prisma.question.findMany.mockResolvedValue([{ id: 7, variants: [] }]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     const [, , , , passedChoices] =
       translationService.translateContentToLanguages.mock.calls[0];
@@ -313,12 +340,10 @@ describe("TranslationMaintenanceController", () => {
       },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     expect(
       translationService.translateContentToLanguages,
@@ -342,12 +367,10 @@ describe("TranslationMaintenanceController", () => {
       { id: 3, question: "Some question", choices: null, variants: [] },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     expect(prisma.translation.deleteMany).not.toHaveBeenCalled();
   });
@@ -361,12 +384,10 @@ describe("TranslationMaintenanceController", () => {
       { id: 4, question: "Question", choices: null, variants: [] },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: true,
     });
-
-    await drainAsync();
 
     expect(
       translationService.translateContentToLanguages,
@@ -386,13 +407,11 @@ describe("TranslationMaintenanceController", () => {
       { id: 3, question: "Q3", choices: null, variants: [] },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
       maxMissing: 2,
     });
-
-    await drainAsync();
 
     expect(
       translationService.translateContentToLanguages,
@@ -410,12 +429,10 @@ describe("TranslationMaintenanceController", () => {
     });
     prisma.question.findMany.mockResolvedValue([]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
     });
-
-    await drainAsync();
 
     expect(translationService.translateAssignment).toHaveBeenCalledWith(1);
     expect(
@@ -430,13 +447,11 @@ describe("TranslationMaintenanceController", () => {
     });
     prisma.question.findMany.mockResolvedValue([]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
       languageCodes: ["es"],
     });
-
-    await drainAsync();
 
     expect(
       translationService.translateAssignmentForLanguages,
@@ -765,13 +780,11 @@ describe("TranslationMaintenanceController", () => {
       },
     ]);
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
       languageCodes: ["es"],
     });
-
-    await drainAsync();
 
     expect(translationService.translateContentToLanguages).toHaveBeenCalled();
     const call = translationService.translateContentToLanguages.mock.calls[0];
@@ -834,13 +847,11 @@ describe("TranslationMaintenanceController", () => {
       },
     );
 
-    await controller.fixMissingTranslations({
+    await runFixJob({
       assignmentId: 1,
       dryRun: false,
       languageCodes: ["es"],
     });
-
-    await drainAsync();
 
     expect(
       translationService.translateContentToLanguages,

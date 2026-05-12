@@ -1,11 +1,25 @@
 import * as crypto from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { isAdminEmail } from "src/config/admin-emails";
 import { PrismaService } from "src/database/prisma.service";
+import { Logger } from "winston";
+
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_ACTIVE_SESSIONS_PER_EMAIL = 5;
 
 @Injectable()
 export class AdminVerificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger: Logger;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({
+      context: AdminVerificationService.name,
+    });
+  }
 
   /**
    * Generate a 6-digit verification code
@@ -66,23 +80,41 @@ export class AdminVerificationService {
   }
 
   /**
-   * Generate an admin session token
+   * Generate an admin session token. Concurrent sessions per email are allowed
+   * up to MAX_ACTIVE_SESSIONS_PER_EMAIL; oldest are evicted when the cap is
+   * exceeded. The new token is created first so an in-flight request from the
+   * same admin on another device cannot race with the eviction sweep.
    */
   async generateAdminSession(email: string): Promise<string> {
+    const normalizedEmail = email.toLowerCase();
     const sessionToken = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await this.prisma.adminSession.deleteMany({
-      where: { email: email.toLowerCase() },
-    });
+    const expiresAt = new Date(Date.now() + ADMIN_SESSION_TTL_MS);
 
     await this.prisma.adminSession.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         sessionToken,
         expiresAt,
       },
     });
+
+    const surplus = await this.prisma.adminSession.findMany({
+      where: { email: normalizedEmail },
+      orderBy: { createdAt: "desc" },
+      skip: MAX_ACTIVE_SESSIONS_PER_EMAIL,
+      select: { id: true },
+    });
+
+    if (surplus.length > 0) {
+      await this.prisma.adminSession.deleteMany({
+        where: { id: { in: surplus.map((s) => s.id) } },
+      });
+      this.logger.info("admin_session_evicted_over_cap", {
+        email: normalizedEmail,
+        evicted_count: surplus.length,
+        cap: MAX_ACTIVE_SESSIONS_PER_EMAIL,
+      });
+    }
 
     return sessionToken;
   }
@@ -163,4 +195,21 @@ export class AdminVerificationService {
       where: { sessionToken },
     });
   }
+
+  /**
+   * Revoke every active admin session for an email — used by "log out
+   * everywhere" flows after a credential change or to reclaim a lost device.
+   */
+  async revokeAllSessionsForEmail(email: string): Promise<number> {
+    const result = await this.prisma.adminSession.deleteMany({
+      where: { email: email.toLowerCase() },
+    });
+    return result.count;
+  }
+
+  /**
+   * TTL of admin sessions in milliseconds. Exposed so the controller can
+   * return the same expiry the DB row uses.
+   */
+  static readonly ADMIN_SESSION_TTL_MS = ADMIN_SESSION_TTL_MS;
 }

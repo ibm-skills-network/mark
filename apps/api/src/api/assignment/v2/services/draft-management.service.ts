@@ -86,6 +86,22 @@ export class DraftManagementService {
     return undefined;
   }
 
+  private parseBoolean(value: unknown): boolean | undefined {
+    return typeof value === "boolean" ? value : undefined;
+  }
+
+  private parseNumberArray(value: unknown): number[] | undefined {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const numbers = value.filter(
+      (item): item is number => typeof item === "number" && !Number.isNaN(item),
+    );
+
+    return numbers.length === value.length ? numbers : undefined;
+  }
+
   async saveDraft(
     assignmentId: number,
     saveDraftDto: SaveDraftDto,
@@ -107,6 +123,15 @@ export class DraftManagementService {
 
     const draftName =
       saveDraftDto.draftName || `Draft - ${new Date().toLocaleString()}`;
+    const assignmentRecord = assignment as Record<string, unknown>;
+    const requireAllQuestions =
+      saveDraftDto.assignmentData?.requireAllQuestions ??
+      this.parseBoolean(assignmentRecord.requireAllQuestions) ??
+      false;
+    const optionalQuestionIds =
+      saveDraftDto.assignmentData?.optionalQuestionIds ??
+      this.parseNumberArray(assignmentRecord.optionalQuestionIds) ??
+      [];
 
     return await this.prisma.$transaction(async (tx) => {
       const assignmentDraft = await tx.assignmentDraft.create({
@@ -175,12 +200,8 @@ export class DraftManagementService {
           showQuestions:
             saveDraftDto.assignmentData?.showQuestions ??
             assignment.showQuestions,
-          requireAllQuestions:
-            saveDraftDto.assignmentData?.requireAllQuestions ??
-            assignment.requireAllQuestions,
-          optionalQuestionIds:
-            saveDraftDto.assignmentData?.optionalQuestionIds ??
-            assignment.optionalQuestionIds,
+          requireAllQuestions,
+          optionalQuestionIds,
           languageCode:
             saveDraftDto.assignmentData?.languageCode ??
             assignment.languageCode,
@@ -414,6 +435,12 @@ export class DraftManagementService {
       throw new BadRequestException("You can only access your own drafts");
     }
 
+    const draftRecord = draft as Record<string, unknown>;
+    const requireAllQuestions =
+      this.parseBoolean(draftRecord.requireAllQuestions) ?? false;
+    const optionalQuestionIds =
+      this.parseNumberArray(draftRecord.optionalQuestionIds) ?? [];
+
     return {
       id: draft.assignmentId,
       name: draft.name,
@@ -439,8 +466,8 @@ export class DraftManagementService {
       showQuestionScore: draft.showQuestionScore,
       showSubmissionFeedback: draft.showSubmissionFeedback,
       showQuestions: draft.showQuestions,
-      requireAllQuestions: draft.requireAllQuestions,
-      optionalQuestionIds: draft.optionalQuestionIds,
+      requireAllQuestions,
+      optionalQuestionIds,
       languageCode: draft.languageCode,
       questions:
         (JSON.parse(draft.questionsData as string) as unknown as JsonValue[]) ??

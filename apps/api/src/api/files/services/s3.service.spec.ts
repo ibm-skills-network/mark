@@ -1,4 +1,8 @@
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl as getS3SignedUrl } from "@aws-sdk/s3-request-presigner";
 import { S3Service } from "./s3.service";
 
@@ -65,11 +69,28 @@ describe("S3Service", () => {
 
   it("throws on unsupported signed URL operation", async () => {
     await expect(
+      // @ts-expect-error intentional invalid operation to verify runtime guard
       service.getSignedUrl("deleteObject", {
         Bucket: "author-bucket",
         Key: "file.txt",
       }),
-    ).rejects.toThrow("Unsupported signed URL operation: deleteObject");
+    ).rejects.toThrow("Unsupported signed URL operation");
+  });
+
+  it("builds uploadPart signed URLs for multipart uploads", async () => {
+    mockGetSignedUrl.mockResolvedValue("signed-upload-part-url");
+
+    await service.getSignedUrl("uploadPart", {
+      Bucket: "author-bucket",
+      Key: "upload/file.txt",
+      UploadId: "upload-123",
+      PartNumber: 1,
+      Expires: 456,
+    });
+
+    const [, command, options] = mockGetSignedUrl.mock.calls[0];
+    expect(command).toBeInstanceOf(UploadPartCommand);
+    expect(options).toEqual({ expiresIn: 456 });
   });
 
   it("returns false when objectExists receives a 404-style error", async () => {
@@ -99,5 +120,66 @@ describe("S3Service", () => {
     await expect(
       service.objectExists("author-bucket", "file.txt"),
     ).rejects.toThrow("COS unavailable");
+  });
+
+  describe("getBucketName", () => {
+    const envBackup = {
+      author: process.env.IBM_COS_AUTHOR_BUCKET,
+      learner: process.env.IBM_COS_LEARNER_BUCKET,
+      learnerProd: process.env.IBM_COS_LEARNER_BUCKET_PROD,
+      debug: process.env.IBM_COS_DEBUG_BUCKET,
+    };
+
+    afterEach(() => {
+      process.env.IBM_COS_AUTHOR_BUCKET = envBackup.author;
+      process.env.IBM_COS_LEARNER_BUCKET = envBackup.learner;
+      process.env.IBM_COS_LEARNER_BUCKET_PROD = envBackup.learnerProd;
+      process.env.IBM_COS_DEBUG_BUCKET = envBackup.debug;
+    });
+
+    it("returns the bucket for each known upload type", () => {
+      process.env.IBM_COS_AUTHOR_BUCKET = "author-bkt";
+      process.env.IBM_COS_LEARNER_BUCKET = "learner-bkt";
+      process.env.IBM_COS_LEARNER_BUCKET_PROD = "learner-prod-bkt";
+      process.env.IBM_COS_DEBUG_BUCKET = "debug-bkt";
+
+      expect(service.getBucketName("author")).toBe("author-bkt");
+      expect(service.getBucketName("learner")).toBe("learner-bkt");
+      expect(service.getBucketName("learner-prod")).toBe("learner-prod-bkt");
+      expect(service.getBucketName("debug")).toBe("debug-bkt");
+    });
+
+    it("throws BadRequestException with valid-types list for unknown upload type", () => {
+      let caught: unknown;
+      try {
+        service.getBucketName("admin");
+      } catch (error) {
+        caught = error;
+      }
+      const error = caught as Error & { getStatus?: () => number };
+      expect(error).toBeDefined();
+      expect(error.message).toContain("Unknown upload type 'admin'");
+      expect(error.message).toContain("author");
+      expect(error.message).toContain("learner-prod");
+      // BadRequestException maps to 400
+      expect(error.getStatus?.()).toBe(400);
+    });
+
+    it("throws a server-error (not BadRequestException) naming the env var when bucket is unset", () => {
+      delete process.env.IBM_COS_AUTHOR_BUCKET;
+
+      let caught: unknown;
+      try {
+        service.getBucketName("author");
+      } catch (error) {
+        caught = error;
+      }
+      const error = caught as Error & { getStatus?: () => number };
+      expect(error).toBeDefined();
+      expect(error.message).toContain("IBM_COS_AUTHOR_BUCKET");
+      expect(error.message).toContain("author");
+      // Plain Error, not BadRequestException — this is a 5xx (server misconfig)
+      expect(error.getStatus).toBeUndefined();
+    });
   });
 });

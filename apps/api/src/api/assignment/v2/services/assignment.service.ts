@@ -1,7 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import { Logger } from "winston";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
@@ -39,7 +42,9 @@ export class AssignmentServiceV2 {
     private readonly translationService: TranslationService,
     private readonly versionManagementService: VersionManagementService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobQueueService: JobQueueService,
     private readonly prisma: PrismaService,
+    private readonly attemptAccessCache: AttemptAccessCacheService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
@@ -163,35 +168,88 @@ export class AssignmentServiceV2 {
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
-  ): Promise<{ jobId: number; message: string }> {
+  ): Promise<{ jobId: string; message: string }> {
     this.logger.info(
       `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
     );
+
+    // Deterministic per-assignment publish job id. BullMQ silently no-ops a
+    // duplicate `add` when {jobId} matches an in-flight job, so this gives us
+    // queue-layer dedup without a separate lock. Combined with
+    // removeOnComplete/removeOnFail below, the dedup window ends as soon as
+    // the previous publish terminates.
+    const deterministicJobId = `publish:v2:${assignmentId}`;
+
+    const existing = await this.jobQueueService.findActiveJob(
+      JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+      deterministicJobId,
+    );
+    if (existing) {
+      this.logger.warn(
+        `Publish dedup hit: assignment ${assignmentId} already has an active publish job (${existing.state})`,
+        {
+          assignmentId,
+          jobId: existing.id,
+          state: existing.state,
+          requestedByUserId: userId,
+        },
+      );
+      return {
+        jobId: existing.id,
+        message: "Publishing already in progress",
+      };
+    }
+
     const job = await this.jobStatusService.createPublishJob(
       assignmentId,
       userId,
+      { reservedId: deterministicJobId },
     );
 
-    this.startPublishingProcess(job.id, assignmentId, updateDto, userId).catch(
-      (error: unknown) => {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        this.logger.error(`Publishing failed: ${errorMessage}`, errorStack);
-        void this.jobStatusService.updateJobStatus(job.id, {
-          status: "Failed",
-          progress: `Error: ${errorMessage}`,
-        });
-      },
-    );
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_PUBLISH,
+        {
+          assignmentId,
+          jobId: job.id,
+          updateDto,
+          userId,
+        },
+        {
+          jobId: job.id,
+          // Single attempt only. Stall recovery is disabled at the worker
+          // (maxStalledCount=0) and a deterministic jobId already dedups
+          // re-enqueues, so the default attempts:3 from the queue service
+          // would only re-introduce the concurrent-execution race we
+          // already eliminated. If publish fails, the user retries by hand.
+          attempts: 1,
+          // End the dedup window as soon as the job terminates (success or
+          // failure). Without this, completed/failed jobs linger in BullMQ
+          // history and a deterministic id would pin to the stale record.
+          // findActiveJob filters out terminal states, but removing the
+          // history entries also prevents them from lingering as overhead.
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: `Failed to enqueue publish job: ${errorMessage}`,
+      });
+      throw error;
+    }
 
     return {
       jobId: job.id,
       message: "Publishing started",
     };
   }
-  private async startPublishingProcess(
-    jobId: number,
+  async runPublishJob(
+    jobId: string,
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
@@ -618,6 +676,16 @@ export class AssignmentServiceV2 {
             userId,
             questionsFound: orderedUpdatedQuestions.length,
           },
+        );
+      }
+
+      try {
+        await this.attemptAccessCache.invalidateForAssignment(assignmentId);
+      } catch (cacheError) {
+        this.logger.warn(
+          `Failed to invalidate attempt-access cache after publish for assignment ${assignmentId}: ${
+            cacheError instanceof Error ? cacheError.message : "Unknown error"
+          }`,
         );
       }
 

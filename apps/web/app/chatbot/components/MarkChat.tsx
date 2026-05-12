@@ -1284,6 +1284,7 @@ export const MarkChat = () => {
     noKeyboard: true,
   });
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isEndingChat, setIsEndingChat] = useState(false);
   const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [reportPreviewModal, setReportPreviewModal] = useState({
@@ -1672,7 +1673,9 @@ export const MarkChat = () => {
         if (!cancelled) {
           setUser(userData);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error("MarkChat: fetchUser failed:", error);
+      }
     };
     void fetchUser();
     return () => {
@@ -1680,32 +1683,34 @@ export const MarkChat = () => {
     };
   }, []);
 
+  const getCurrentAssignmentId = useCallback(() => {
+    const assignmentId =
+      userRole === "learner"
+        ? learnerContext.assignmentId
+        : userRole === "author"
+          ? authorContext.activeAssignmentId
+          : undefined;
+
+    return assignmentId != null && Number.isFinite(Number(assignmentId))
+      ? Number(assignmentId)
+      : undefined;
+  }, [userRole, learnerContext.assignmentId, authorContext.activeAssignmentId]);
+
   useEffect(() => {
+    if (!user?.userId) {
+      setIsInitializing(false);
+      return;
+    }
+
+    let cancelled = false;
+    const assignmentId = getCurrentAssignmentId();
+    setIsInitializing(true);
+
     const initializeChat = async () => {
-      if (!user?.userId) {
-        setIsInitializing(false);
-        return;
-      }
-
-      if (currentChatId) {
-        setIsInitializing(false);
-        return;
-      }
-
-      setIsInitializing(true);
-
       try {
-        const assignmentId =
-          userRole === "learner"
-            ? learnerContext.assignmentId
-            : userRole === "author"
-              ? authorContext.activeAssignmentId
-              : undefined;
+        const todayChat = await getOrCreateTodayChat(user.userId, assignmentId);
 
-        const todayChat = await getOrCreateTodayChat(
-          user.userId,
-          Number(assignmentId),
-        );
+        if (cancelled) return;
 
         setCurrentChatId(todayChat.id);
         clearAttachedFiles();
@@ -1719,26 +1724,32 @@ export const MarkChat = () => {
             timestamp: new Date(msg.timestamp).toISOString(),
             toolCalls: msg.toolCalls,
           }));
-
-          if (storeMessages.length > 0) {
-            useMarkChatStore.setState({ messages: storeMessages });
-          }
+          useMarkChatStore.setState({ messages: storeMessages });
+        } else {
+          resetChat();
         }
       } catch (error) {
+        if (cancelled) return;
+        console.error("initializeChat failed:", error);
+        toast.error("Could not load chat session");
       } finally {
-        setIsInitializing(false);
+        if (!cancelled) setIsInitializing(false);
       }
     };
 
     initializeChat();
+    return () => {
+      cancelled = true;
+    };
   }, [
     user?.userId,
     userRole,
     learnerContext.assignmentId,
     authorContext.activeAssignmentId,
-    currentChatId,
     clearAttachedFiles,
     clearSessionContextFiles,
+    getCurrentAssignmentId,
+    resetChat,
   ]);
 
   useEffect(() => {
@@ -2270,7 +2281,12 @@ export const MarkChat = () => {
               fileToolCalls,
               browserCookies,
             );
-          } catch (error) {}
+          } catch (error) {
+            console.error(
+              "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
+              error,
+            );
+          }
         }
 
         didSendSucceed = await sendMessage(stream, {
@@ -2324,7 +2340,12 @@ export const MarkChat = () => {
                   if (markerMatch) {
                     try {
                       toolCallsData = JSON.parse(markerMatch[1]);
-                    } catch (error) {}
+                    } catch (e) {
+                      console.warn(
+                        "MarkChat: failed to JSON.parse CLIENT_EXECUTION_MARKER payload:",
+                        e,
+                      );
+                    }
                   }
                 }
 
@@ -2335,8 +2356,15 @@ export const MarkChat = () => {
                   toolCallsData,
                 );
                 hasPersistedAssistant = true;
-              } catch (error) {}
+              } catch (error) {
+                console.error(
+                  "MarkChat: addMessageToChat(ASSISTANT) failed — assistant reply may not be persisted:",
+                  error,
+                );
+              }
             }
+          } catch (saveError) {
+            console.error("MarkChat: saveAssistantMessage failed:", saveError);
           } finally {
             isPersistingAssistant = false;
           }
@@ -2716,41 +2744,40 @@ Please help me with this.`;
   );
 
   const handleEndChat = useCallback(async () => {
-    if (currentChatId) {
-      try {
-        await endChat(currentChatId);
-        if (user?.userId) {
-          const assignmentId =
-            userRole === "learner"
-              ? learnerContext.assignmentId
-              : userRole === "author"
-                ? authorContext.activeAssignmentId
-                : undefined;
+    if (!user?.userId || isInitializing || isEndingChat) return;
+    const assignmentId = getCurrentAssignmentId();
+    setIsEndingChat(true);
+    try {
+      const chatToEnd =
+        currentChatId ??
+        (await getOrCreateTodayChat(user.userId, assignmentId)).id;
 
-          const newChat = await getOrCreateTodayChat(
-            user.userId,
-            Number(assignmentId),
-          );
-          setCurrentChatId(newChat.id);
-          resetChat();
-          clearSessionContextFiles();
+      await endChat(chatToEnd);
 
-          const updatedChats = await getUserChats(user.userId);
-          setUserChats(updatedChats);
+      const newChat = await getOrCreateTodayChat(user.userId, assignmentId);
+      setCurrentChatId(newChat.id);
+      resetChat();
+      clearAttachedFiles();
+      clearSessionContextFiles();
 
-          toast.success("Started a new chat session");
-        }
-      } catch (error) {
-        toast.error("Could not end chat session");
-      }
+      const updatedChats = await getUserChats(user.userId);
+      setUserChats(updatedChats);
+
+      toast.success("Started a new chat session");
+    } catch (error) {
+      console.error("handleEndChat failed:", error);
+      toast.error("Could not end chat session");
+    } finally {
+      setIsEndingChat(false);
     }
   }, [
+    isInitializing,
+    isEndingChat,
     currentChatId,
     user?.userId,
-    userRole,
-    learnerContext.assignmentId,
-    authorContext.activeAssignmentId,
+    getCurrentAssignmentId,
     resetChat,
+    clearAttachedFiles,
     clearSessionContextFiles,
   ]);
 
@@ -3122,7 +3149,7 @@ Please help me with this.`;
                   onClick={handleEndChat}
                   className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
                   title="Start New Chat"
-                  disabled={!currentChatId || isInitializing}
+                  disabled={isInitializing || isEndingChat || !user?.userId}
                 >
                   <ArrowPathIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 </button>

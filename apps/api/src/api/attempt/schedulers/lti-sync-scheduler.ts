@@ -13,14 +13,26 @@ export class LtiSyncScheduler {
 
   constructor(private readonly ltiGradeSyncService: LtiGradeSyncService) {}
 
+  private areSchedulersEnabled(): boolean {
+    return process.env.ENABLE_JOB_SCHEDULERS === "true";
+  }
+
   /**
    * Process scheduled LTI grade sync retries every 5 minutes.
    * This balances timely retry processing with minimal server load.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleScheduledRetries() {
+    if (!this.areSchedulersEnabled()) {
+      return;
+    }
+    const tickStart = Date.now();
+    this.logger.debug("cron_tick handleScheduledRetries");
+
     if (this.isProcessing) {
-      this.logger.debug("Skipping scheduled retries - already processing");
+      this.logger.warn(
+        "Skipping scheduled retries - previous run still in progress",
+      );
       return;
     }
 
@@ -32,11 +44,18 @@ export class LtiSyncScheduler {
 
       if (processed > 0) {
         this.logger.log(
-          `✅ Processed ${processed} scheduled grade sync retries`,
+          `✅ Processed ${processed} scheduled grade sync retries (took ${Date.now() - tickStart}ms)`,
+        );
+      } else {
+        this.logger.debug(
+          `cron_tick handleScheduledRetries: no work (took ${Date.now() - tickStart}ms)`,
         );
       }
     } catch (error) {
-      this.logger.error("Error processing scheduled retries", error);
+      this.logger.error(
+        `Error processing scheduled retries (took ${Date.now() - tickStart}ms)`,
+        error,
+      );
     } finally {
       this.isProcessing = false;
     }
@@ -48,8 +67,18 @@ export class LtiSyncScheduler {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async reportSyncHealth() {
+    if (!this.areSchedulersEnabled()) {
+      return;
+    }
+    this.logger.debug("cron_tick reportSyncHealth");
     try {
       const stats = await this.ltiGradeSyncService.getSystemStats();
+
+      this.logger.log("grade_sync_health snapshot", {
+        failed_count: stats.failedCount,
+        scheduled_count: stats.scheduledCount,
+        success_count: stats.successCount,
+      });
 
       if (stats.failedCount > 0 || stats.scheduledCount > 10) {
         this.logger.warn(

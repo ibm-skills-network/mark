@@ -5,15 +5,12 @@ import {
   Get,
   Inject,
   Injectable,
-  NotFoundException,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Put,
   Query,
   Req,
-  Sse,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -28,9 +25,6 @@ import {
 } from "@nestjs/swagger";
 import { ReportType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { concatWith, interval, Observable, of } from "rxjs";
-import { catchError, finalize, map, mergeMap } from "rxjs/operators";
-import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
   UserRole,
@@ -47,15 +41,14 @@ import {
   LearnerGetAssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { QuestionGenerationPayload } from "../../dto/post.assignment.request.dto";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
 import {
   GenerateQuestionVariantDto,
   QuestionDto,
-  UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
-import { LLMResponseQuestion } from "../../question/dto/create.update.question.request.dto";
 import { AssignmentServiceV1 } from "../services/assignment.service";
 
 @ApiTags(
@@ -72,7 +65,6 @@ export class AssignmentControllerV1 {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly assignmentService: AssignmentServiceV1,
     private readonly llmFacadeService: LlmFacadeService,
-    private readonly jobStatusService: JobStatusServiceV1,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV1.name });
   }
@@ -140,69 +132,6 @@ export class AssignmentControllerV1 {
     return this.assignmentService.update(
       Number(id),
       updateAssignmentRequestDto,
-    );
-  }
-
-  @Get("jobs/:jobId/status-stream")
-  @ApiOperation({ summary: "Stream publish job status" })
-  @ApiParam({ name: "jobId", required: true, description: "Job ID" })
-  @Sse("jobs/:jobId/status-stream")
-  sendPublishJobStatus(
-    @Param("jobId", ParseIntPipe) jobId: number,
-  ): Observable<MessageEvent> {
-    return this.jobStatusService.getJobStatusStream(jobId).pipe(
-      map((event) => ({
-        ...event,
-        type: (event.data as { done: boolean }).done ? "finalize" : "update",
-      })),
-      concatWith(
-        of({
-          type: "close",
-          data: { message: "Stream completed" },
-        } as MessageEvent),
-      ),
-      finalize(() => {
-        this.jobStatusService.cleanupJobStream(jobId);
-      }),
-
-      catchError((error: Error) => {
-        return of({
-          type: "error",
-          data: {
-            error: error.message,
-            done: true,
-          },
-        } as MessageEvent);
-      }),
-    );
-  }
-  @Put(":id/publish")
-  @Roles(UserRole.AUTHOR)
-  @UseGuards(AssignmentAccessControlGuard)
-  @ApiOperation({ summary: "Update all questions for an assignment" })
-  @ApiParam({ name: "id", required: true })
-  @ApiBody({
-    type: UpdateAssignmentRequestDto,
-    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
-  })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
-  @ApiResponse({ status: 403 })
-  async updateAssignmentQuestions(
-    @Param("id") id: number,
-    @Body() updatedAssignment: UpdateAssignmentQuestionsDto,
-    @Req() request: UserSessionRequest,
-  ): Promise<{ jobId: number; message: string }> {
-    if (
-      updatedAssignment === undefined ||
-      updatedAssignment.questions === undefined ||
-      updatedAssignment.questions?.length === 0
-    ) {
-      throw new BadRequestException("No data was provided");
-    }
-    return await this.assignmentService.publishAssignment(
-      Number(id),
-      updatedAssignment,
-      request.userSession.userId,
     );
   }
 
@@ -290,44 +219,6 @@ export class AssignmentControllerV1 {
     return this.assignmentService.replace(
       Number(id),
       replaceAssignmentRequestDto,
-    );
-  }
-
-  @Get("jobs/:jobId/status")
-  async getJobStatus(@Param("jobId", ParseIntPipe) jobId: number): Promise<{
-    status: string;
-    progress: string;
-    questions?: LLMResponseQuestion[];
-  }> {
-    const job = await this.assignmentService.getJobStatus(jobId);
-    if (!job) {
-      throw new NotFoundException("Job not found");
-    }
-    return job.status === "Completed"
-      ? {
-          status: job.status,
-          progress: job.progress,
-          questions: job.result as unknown as LLMResponseQuestion[],
-        }
-      : { status: job.status, progress: job.progress };
-  }
-
-  @Sse("jobs/:jobId/status-stream")
-  sendJobStatus(@Param("jobId") jobId: number): Observable<MessageEvent> {
-    return interval(1000).pipe(
-      mergeMap(async () => {
-        const job = await this.assignmentService.getJobStatus(jobId);
-        if (!job) {
-          throw new NotFoundException("Job not found");
-        }
-        return { data: { status: job.status, progress: job.progress } };
-      }),
-      map(
-        (data) =>
-          ({
-            data,
-          }) as MessageEvent,
-      ),
     );
   }
 
@@ -516,7 +407,7 @@ export class AssignmentControllerV1 {
     @Param("assignmentId") assignmentId: number,
     @Body() body: QuestionGenerationPayload,
     @Req() request: UserSessionRequest,
-  ): Promise<{ message: string; jobId: number }> {
+  ): Promise<{ message: string; jobId: string }> {
     const {
       fileContents,
       learningObjectives,
@@ -539,6 +430,24 @@ export class AssignmentControllerV1 {
       throw new BadRequestException("Invalid user ID");
     }
 
+    assertQuestionCountsWithinCaps(questionsToGenerate);
+
+    const subtypeTotal = questionsToGenerate.multipleChoiceSubtypes
+      ? (Number(questionsToGenerate.multipleChoiceSubtypes.short) || 0) +
+        (Number(questionsToGenerate.multipleChoiceSubtypes.quantitative) || 0) +
+        (Number(questionsToGenerate.multipleChoiceSubtypes.long) || 0) +
+        (Number(questionsToGenerate.multipleChoiceSubtypes.scenario) || 0)
+      : 0;
+
+    if (
+      questionsToGenerate.multipleChoiceSubtypes !== undefined &&
+      subtypeTotal === 0
+    ) {
+      throw new BadRequestException(
+        "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+      );
+    }
+
     const totalQuestions =
       (Number(questionsToGenerate.multipleChoice) || 0) +
       (Number(questionsToGenerate.multipleSelect) || 0) +
@@ -546,7 +455,8 @@ export class AssignmentControllerV1 {
       (Number(questionsToGenerate.trueFalse) || 0) +
       (Number(questionsToGenerate.url) || 0) +
       (Number(questionsToGenerate.upload) || 0) +
-      (Number(questionsToGenerate.linkFile) || 0);
+      (Number(questionsToGenerate.linkFile) || 0) +
+      subtypeTotal;
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(
@@ -573,7 +483,7 @@ export class AssignmentControllerV1 {
       userId,
     );
 
-    void this.assignmentService.handleFileContents(
+    await this.assignmentService.handleFileContents(
       assignmentIdNumber,
       job.id,
       assignmentType,

@@ -42,9 +42,6 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
-import { AssignmentRepository } from "src/api/assignment/v2/repositories/assignment.repository";
-import { UserSessionMiddleware } from "src/auth/middleware/user.session.middleware";
-import { Roles } from "src/auth/role/roles.global.guard";
 import {
   UserRole,
   UserSession,
@@ -56,10 +53,14 @@ import {
   AttemptQuestionsMapper,
   EnhancedAttemptQuestionDto,
 } from "../common/utils/attempt-questions-mapper.util";
+import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
-import { QuestionResponseService } from "./question-response/question-response.service";
+import {
+  GradedItem,
+  QuestionResponseService,
+} from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
 
@@ -75,7 +76,7 @@ export class AttemptSubmissionService {
     private readonly prisma: PrismaService,
     private readonly validationService: AttemptValidationService,
     private readonly gradingService: AttemptGradingService,
-    private assignmentRepository: AssignmentRepository,
+    private readonly attemptAccessCacheService: AttemptAccessCacheService,
     private readonly questionResponseService: QuestionResponseService,
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
@@ -150,43 +151,45 @@ export class AttemptSubmissionService {
       };
     }
 
-    const assignment = await this.assignmentRepository.findById(
-      assignmentId,
-      userSession,
-    );
-
-    await this.validationService.validateNewAttempt(assignment, userSession);
-
-    const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
-
-    const assignmentWithActiveVersion = await this.prisma.assignment.findUnique(
-      {
-        where: { id: assignmentId },
-        include: {
-          currentVersion: {
-            include: {
-              questionVersions: true,
-            },
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        currentVersion: {
+          include: {
+            questionVersions: true,
           },
-          questions: {
-            where: { isDeleted: false },
-            include: {
-              variants: {
-                where: { isDeleted: false },
-              },
+        },
+        questions: {
+          where: { isDeleted: false },
+          include: {
+            variants: {
+              where: { isDeleted: false },
             },
           },
         },
       },
-    );
+    });
 
-    if (!assignmentWithActiveVersion) {
+    if (!assignment) {
       throw new NotFoundException(
         `Assignment with Id ${assignmentId} not found.`,
       );
     }
 
-    const activeVersionId = assignmentWithActiveVersion.currentVersionId;
+    const assignmentForAttemptFlow = {
+      ...assignment,
+      success: true,
+    } as GetAssignmentResponseDto;
+
+    await this.validationService.validateNewAttempt(
+      assignmentForAttemptFlow,
+      userSession,
+    );
+
+    const attemptExpiresAt = this.calculateAttemptExpiresAt(
+      assignmentForAttemptFlow,
+    );
+    const activeVersionId = assignment.currentVersionId;
 
     const assignmentAttempt = await this.prisma.assignmentAttempt.create({
       data: {
@@ -203,33 +206,13 @@ export class AttemptSubmissionService {
     const selectionSeed = assignmentAttempt.id ^ assignmentId;
 
     let questions: QuestionDto[] = [];
-    if (
-      assignmentWithActiveVersion?.currentVersion?.questionVersions?.length > 0
-    ) {
-      const questionVersions =
-        assignmentWithActiveVersion.currentVersion.questionVersions;
-      const questionIds = questionVersions
-        .map((qv) => qv.questionId)
-        .filter((id): id is number => typeof id === "number");
-
-      const originalQuestions =
-        questionIds.length > 0
-          ? await this.prisma.question.findMany({
-              where: { id: { in: questionIds } },
-              include: {
-                variants: {
-                  where: { isDeleted: false },
-                },
-              },
-            })
-          : [];
-
+    if (assignment.currentVersion?.questionVersions?.length > 0) {
       const variantsByQuestionId = new Map<number, QuestionVariant[]>();
-      for (const question of originalQuestions) {
+      for (const question of assignment.questions) {
         variantsByQuestionId.set(question.id, question.variants || []);
       }
 
-      questions = questionVersions.map((qv) => {
+      questions = assignment.currentVersion.questionVersions.map((qv) => {
         const variants = qv.questionId
           ? (variantsByQuestionId.get(qv.questionId) ?? [])
           : [];
@@ -268,7 +251,7 @@ export class AttemptSubmissionService {
         };
       });
     } else {
-      questions = (assignmentWithActiveVersion?.questions || []).map((q) => ({
+      questions = (assignment.questions || []).map((q) => ({
         ...q,
         scoring: q.scoring as unknown as ScoringDto,
         choices: q.choices as unknown as Choice[],
@@ -352,7 +335,7 @@ export class AttemptSubmissionService {
 
     const orderedQuestions = this.getOrderedQuestions(
       questionDtos,
-      assignment,
+      assignmentForAttemptFlow,
       selectionSeed,
     );
 
@@ -440,7 +423,6 @@ export class AttemptSubmissionService {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
-        questions: true,
         questionOrder: true,
         displayOrder: true,
         passingGrade: true,
@@ -448,6 +430,7 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        updatedAt: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -462,89 +445,25 @@ export class AttemptSubmissionService {
       );
     }
 
-    if (userSession.role === UserRole.LEARNER) {
-      assignment.questions.map((question) => {
-        question.authorComment = null;
-      });
-    }
-
     const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
       assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
     );
 
-    const questions: unknown[] =
-      assignmentAttempt.assignmentVersionId &&
-      assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
-        ? assignmentAttempt.assignmentVersion.questionVersions.map((qv) => ({
-            id: qv.questionId || qv.id,
-            question: qv.question,
-            type: qv.type,
-            assignmentId: assignmentAttempt.assignmentId,
-            totalPoints: qv.totalPoints,
-            maxWords: qv.maxWords,
-            maxCharacters: qv.maxCharacters,
-            choices: qv.choices,
-            scoring: qv.scoring,
-            answer: shouldShowCorrectAnswers ? qv.answer : undefined,
-            gradingContextQuestionIds: qv.gradingContextQuestionIds,
-            responseType: qv.responseType,
-            isDeleted: false,
-            randomizedChoices: qv.randomizedChoices,
-            videoPresentationConfig: qv.videoPresentationConfig,
-            liveRecordingConfig: qv.liveRecordingConfig,
-          }))
-        : await this.prisma.question.findMany({
-            where: { assignmentId: assignmentAttempt.assignmentId },
-          });
+    const cachedQuestions =
+      await this.attemptAccessCacheService.getQuestionDtosForAttemptAccess({
+        assignmentId: assignmentAttempt.assignmentId,
+        assignmentUpdatedAt: assignment.updatedAt,
+        assignmentVersionId: assignmentAttempt.assignmentVersionId,
+        questionVersions:
+          assignmentAttempt.assignmentVersion?.questionVersions ?? [],
+      });
 
-    const questionDtos: EnhancedAttemptQuestionDto[] = questions.map((q) => {
-      const question = q as Record<string, unknown>;
-
-      const answerValue =
-        typeof question.answer === "boolean"
-          ? String(question.answer)
-          : question.answer !== null && question.answer !== undefined
-            ? String(question.answer)
-            : undefined;
-
-      const randomizedChoicesValue: string =
-        typeof question.randomizedChoices === "string"
-          ? question.randomizedChoices
-          : JSON.stringify(question.randomizedChoices ?? false);
-
-      return {
-        id: question.id as number,
-        question: question.question as string,
-        type: question.type as QuestionType,
-        assignmentId: question.assignmentId as number,
-        totalPoints: question.totalPoints as number,
-        maxWords: (question.maxWords as number) || undefined,
-        maxCharacters: (question.maxCharacters as number) || undefined,
-        choices: this.parseJsonValue<Choice[]>(question.choices, []),
-        scoring: this.parseJsonValue<ScoringDto>(question.scoring, {
-          type: ScoringType.CRITERIA_BASED,
-          showRubricsToLearner: false,
-          rubrics: [],
-        }),
-        answer: shouldShowCorrectAnswers ? answerValue : undefined,
-        gradingContextQuestionIds:
-          (question.gradingContextQuestionIds as number[]) || [],
-        responseType: (question.responseType as ResponseType) || undefined,
-        isDeleted: question.isDeleted as boolean,
-        randomizedChoices: randomizedChoicesValue,
-        videoPresentationConfig:
-          this.parseJsonValue<VideoPresentationConfig | null>(
-            question.videoPresentationConfig,
-            null,
-          ),
-        liveRecordingConfig: this.parseJsonValue<Record<
-          string,
-          unknown
-        > | null>(question.liveRecordingConfig, null),
-      };
-    });
+    const questionsToShow = this.applyAnswerVisibilityToQuestionDtos(
+      cachedQuestions,
+      shouldShowCorrectAnswers,
+    );
 
     const formattedAttempt: AssignmentAttemptWithRelations = {
       ...assignmentAttempt,
@@ -575,88 +494,6 @@ export class AttemptSubmissionService {
       })),
     };
 
-    let questionsToShow = questionDtos;
-    {
-      const allQuestions: unknown[] =
-        assignmentAttempt.assignmentVersionId &&
-        assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
-          ? assignmentAttempt.assignmentVersion.questionVersions.map((qv) => ({
-              id: qv.questionId || qv.id,
-              question: qv.question,
-              type: qv.type,
-              assignmentId: assignmentAttempt.assignmentId,
-              totalPoints: qv.totalPoints,
-              maxWords: qv.maxWords,
-              maxCharacters: qv.maxCharacters,
-              choices: qv.choices,
-              scoring: qv.scoring,
-              answer: shouldShowCorrectAnswers ? qv.answer : undefined,
-              gradingContextQuestionIds: qv.gradingContextQuestionIds,
-              responseType: qv.responseType,
-              isDeleted: false,
-              randomizedChoices: qv.randomizedChoices,
-              videoPresentationConfig: qv.videoPresentationConfig,
-              liveRecordingConfig: qv.liveRecordingConfig,
-            }))
-          : await this.prisma.question.findMany({
-              where: {
-                assignmentId: assignmentAttempt.assignmentId,
-                isDeleted: false,
-              },
-            });
-
-      const allQuestionDtos: EnhancedAttemptQuestionDto[] = allQuestions.map(
-        (q) => {
-          const question = q as Record<string, unknown>;
-
-          const answerValue =
-            typeof question.answer === "boolean"
-              ? String(question.answer)
-              : question.answer !== null && question.answer !== undefined
-                ? String(question.answer)
-                : undefined;
-
-          const randomizedChoicesValue: string =
-            typeof question.randomizedChoices === "string"
-              ? question.randomizedChoices
-              : JSON.stringify(question.randomizedChoices ?? false);
-
-          return {
-            id: question.id as number,
-            question: question.question as string,
-            type: question.type as QuestionType,
-            assignmentId: question.assignmentId as number,
-            totalPoints: question.totalPoints as number,
-            maxWords: (question.maxWords as number) || undefined,
-            maxCharacters: (question.maxCharacters as number) || undefined,
-            choices: this.parseJsonValue<Choice[]>(question.choices, []),
-            scoring: this.parseJsonValue<ScoringDto>(question.scoring, {
-              type: ScoringType.CRITERIA_BASED,
-              showRubricsToLearner: false,
-              rubrics: [],
-            }),
-            answer: shouldShowCorrectAnswers ? answerValue : undefined,
-            gradingContextQuestionIds:
-              (question.gradingContextQuestionIds as number[]) || [],
-            responseType: (question.responseType as ResponseType) || undefined,
-            isDeleted: question.isDeleted as boolean,
-            randomizedChoices: randomizedChoicesValue,
-            videoPresentationConfig:
-              this.parseJsonValue<VideoPresentationConfig | null>(
-                question.videoPresentationConfig,
-                null,
-              ),
-            liveRecordingConfig: this.parseJsonValue<Record<
-              string,
-              unknown
-            > | null>(question.liveRecordingConfig, null),
-          };
-        },
-      );
-
-      questionsToShow = allQuestionDtos;
-    }
-
     const finalQuestions =
       await AttemptQuestionsMapper.buildQuestionsWithResponses(
         formattedAttempt,
@@ -670,11 +507,27 @@ export class AttemptSubmissionService {
         assignmentAttempt.preferredLanguage || undefined,
       );
 
+    // Compute score totals BEFORE applyVisibilitySettings so they survive
+    // even when showQuestions=false strips the questions array. Without this
+    // the success page shows "0 / 0" because it can't sum the (empty) array.
+    const totalPossiblePoints = finalQuestions.reduce(
+      (sum, q) => sum + (q.totalPoints ?? 0),
+      0,
+    );
+    const totalPointsEarned = (
+      assignmentAttempt.questionResponses ?? []
+    ).reduce((sum, response) => sum + (response.points ?? 0), 0);
+
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
+      totalPossiblePoints,
+      totalPointsEarned:
+        assignment.showAssignmentScore === false
+          ? undefined
+          : totalPointsEarned,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
@@ -725,7 +578,6 @@ export class AttemptSubmissionService {
     const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
-        questions: true,
         questionOrder: true,
         displayOrder: true,
         passingGrade: true,
@@ -733,6 +585,7 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestions: true,
         showQuestionScore: true,
+        updatedAt: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -740,7 +593,6 @@ export class AttemptSubmissionService {
         },
       },
     })) as {
-      questions: Question[];
       questionOrder: number[];
       displayOrder: AssignmentQuestionDisplayOrder | null;
       passingGrade: number;
@@ -748,35 +600,23 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: boolean;
       showQuestions: boolean;
       showQuestionScore: boolean;
+      updatedAt: Date;
       currentVersion: {
         correctAnswerVisibility: CorrectAnswerVisibility;
       } | null;
     };
 
-    const questionsForTranslation: QuestionDto[] =
-      assignmentAttempt.assignmentVersionId &&
-      assignmentAttempt.assignmentVersion?.questionVersions?.length > 0
-        ? (assignmentAttempt.assignmentVersion.questionVersions.map((qv) => ({
-            id: qv.questionId || qv.id,
-            question: qv.question,
-            type: qv.type,
-            assignmentId: assignmentAttempt.assignmentId,
-            totalPoints: qv.totalPoints,
-            maxWords: qv.maxWords,
-            maxCharacters: qv.maxCharacters,
-            choices: qv.choices as unknown as Choice[],
-            scoring: qv.scoring as unknown as ScoringDto,
-            answer: qv.answer,
-            variants: [],
-            gradingContextQuestionIds: qv.gradingContextQuestionIds,
-            responseType: qv.responseType,
-            isDeleted: false,
-            randomizedChoices: qv.randomizedChoices,
-            videoPresentationConfig:
-              qv.videoPresentationConfig as unknown as VideoPresentationConfig,
-            liveRecordingConfig: qv.liveRecordingConfig as object,
-          })) as QuestionDto[])
-        : (assignment.questions as unknown as QuestionDto[]);
+    const cachedQuestions =
+      await this.attemptAccessCacheService.getQuestionDtosForAttemptAccess({
+        assignmentId: assignmentAttempt.assignmentId,
+        assignmentUpdatedAt: assignment.updatedAt,
+        assignmentVersionId: assignmentAttempt.assignmentVersionId,
+        questionVersions:
+          assignmentAttempt.assignmentVersion?.questionVersions ?? [],
+      });
+
+    const questionsForTranslation =
+      this.toQuestionDtosForTranslation(cachedQuestions);
 
     const translations =
       await this.translationService.getTranslationsForAttempt(
@@ -857,7 +697,14 @@ export class AttemptSubmissionService {
   }
 
   /**
-   * Updates an attempt for a learner
+   * Updates an attempt for a learner.
+   *
+   * Uses a 3-phase grading flow (Changes 2+3):
+   *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
+   *   Grade computation + validation (in-memory)
+   *   LTI callback (external, before DB commit)
+   *   Phase 3 — commitAttemptWithResponses: write QuestionResponse records and
+   *              AssignmentAttempt.grade atomically in a single short transaction
    */
   private async updateLearnerAttempt(
     attemptId: number,
@@ -926,9 +773,15 @@ export class AttemptSubmissionService {
       });
 
       if (assignment?.requireAllQuestions) {
-        const optionalQuestionIds = new Set(
-          assignment.optionalQuestionIds ?? [],
-        );
+        const optionalQuestionIdsValue: unknown =
+          assignment.optionalQuestionIds;
+        const optionalQuestionIdList = Array.isArray(optionalQuestionIdsValue)
+          ? optionalQuestionIdsValue.filter(
+              (questionId): questionId is number =>
+                typeof questionId === "number" && !Number.isNaN(questionId),
+            )
+          : [];
+        const optionalQuestionIds = new Set<number>(optionalQuestionIdList);
         let questionOrder = assignmentAttempt.questionOrder;
         if (!questionOrder || questionOrder.length === 0) {
           questionOrder =
@@ -956,19 +809,17 @@ export class AttemptSubmissionService {
         }
       }
 
-      // Questions are graded from 0-90% by GradingProgressService
-      // Reserve 91-100% for finalization steps
-      const successfulQuestionResponses =
-        await this.questionResponseService.submitQuestions(
+      // ── Phases 1+2: Load question DTOs (short tx) + grade with LLM (no tx) ──
+      const gradedItems: GradedItem[] =
+        await this.questionResponseService.gradeQuestionsForLearner(
           updateDto.responsesForQuestions,
           attemptId,
-          request.userSession.role,
           assignmentId,
           updateDto.language,
-          updateDto.authorQuestions,
-          updateDto.authorAssignmentDetails,
           updateDto.preTranslatedQuestions,
         );
+
+      const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
 
       if (progressCallback) {
         await progressCallback("Calculating final grade...", 92);
@@ -981,6 +832,14 @@ export class AttemptSubmissionService {
         );
 
       if (totalPossiblePoints <= 0) {
+        this.logger.error("submitLearnerAttempt: invalid totalPossiblePoints", {
+          attemptId,
+          assignmentId,
+          totalPossiblePoints,
+          response_count: successfulQuestionResponses.length,
+          question_count: assignment.questions.length,
+          missing_question_count: missingQuestions.length,
+        });
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) calculated for attemptId ${attemptId}. ` +
             `This indicates a critical grading error. ` +
@@ -996,6 +855,13 @@ export class AttemptSubmissionService {
         );
 
       if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        this.logger.error("submitLearnerAttempt: invalid grade out of [0,1]", {
+          attemptId,
+          assignmentId,
+          grade,
+          totalPointsEarned,
+          totalPossiblePoints,
+        });
         throw new InternalServerErrorException(
           `Invalid grade calculated: ${grade}. ` +
             `totalPointsEarned: ${totalPointsEarned}, ` +
@@ -1020,11 +886,14 @@ export class AttemptSubmissionService {
         await progressCallback("Finalizing results...", 98);
       }
 
-      const result = await this.updateAssignmentAttemptInDb(
-        attemptId,
-        updateDto,
-        grade,
-      );
+      // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
+      const result =
+        await this.questionResponseService.commitAttemptWithResponses(
+          attemptId,
+          gradedItems,
+          grade,
+          updateDto,
+        );
 
       await this.pruneAutoSavedResponses(
         attemptId,
@@ -1118,6 +987,11 @@ export class AttemptSubmissionService {
         );
 
       if (totalPossiblePoints <= 0) {
+        this.logger.error("authorPreview: invalid totalPossiblePoints", {
+          assignmentId,
+          totalPossiblePoints,
+          response_count: successfulQuestionResponses.length,
+        });
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) in author preview for assignmentId ${assignmentId}.`,
         );
@@ -1130,6 +1004,12 @@ export class AttemptSubmissionService {
         );
 
       if (Number.isNaN(grade) || grade < 0 || grade > 1) {
+        this.logger.error("authorPreview: invalid grade out of [0,1]", {
+          assignmentId,
+          grade,
+          totalPointsEarned,
+          totalPossiblePoints,
+        });
         throw new InternalServerErrorException(
           `Invalid grade calculated in author preview: ${grade}. ` +
             `totalPointsEarned: ${totalPointsEarned}, ` +
@@ -1238,37 +1118,6 @@ export class AttemptSubmissionService {
       userId,
     );
   }
-
-  /**
-   * Update the assignment attempt in the database
-   */
-  private async updateAssignmentAttemptInDb(
-    attemptId: number,
-    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    grade: number,
-  ) {
-    const {
-      responsesForQuestions,
-      authorQuestions,
-      authorAssignmentDetails,
-      language,
-      preTranslatedQuestions,
-      expiresAt: _ignoredExpiresAt,
-      ...cleanedUpdateDto
-    } = updateDto;
-
-    return this.prisma.assignmentAttempt.update({
-      data: {
-        ...cleanedUpdateDto,
-        submitted: true,
-        preferredLanguage: language ?? "en",
-        expiresAt: new Date(),
-        grade,
-      },
-      where: { id: attemptId },
-    });
-  }
-
   private hasPresentationResponse(
     response?: {
       transcript?: string | null;
@@ -1313,7 +1162,6 @@ export class AttemptSubmissionService {
       hasPresentation
     );
   }
-
   private async pruneAutoSavedResponses(
     attemptId: number,
     responses: CreateQuestionResponseAttemptResponseDto[],
@@ -1446,6 +1294,13 @@ export class AttemptSubmissionService {
 
     if (missingQuestionIds.length > 0) {
       if (!allowDatabaseFallback) {
+        this.logger.error(
+          "calculateTotalPossiblePoints: missing questions in author preview (no DB fallback)",
+          {
+            missing_question_ids: missingQuestionIds,
+            total_so_far: totalPossiblePoints,
+          },
+        );
         throw new InternalServerErrorException(
           `Cannot calculate totalPossiblePoints: Question ${missingQuestionIds[0]} not found ` +
             `in provided questions. This prevents accurate grading.`,
@@ -1474,6 +1329,14 @@ export class AttemptSubmissionService {
             totalPossiblePoints += points;
             missingQuestions.push(questionId);
           } else {
+            this.logger.error(
+              "calculateTotalPossiblePoints: question not in DB either",
+              {
+                question_id: questionId,
+                missing_question_ids: missingQuestionIds,
+                points_seen: points,
+              },
+            );
             throw new InternalServerErrorException(
               `Cannot calculate totalPossiblePoints: Question ${questionId} not found ` +
                 `in database. This prevents accurate grading.`,
@@ -1484,6 +1347,14 @@ export class AttemptSubmissionService {
         if (error instanceof InternalServerErrorException) {
           throw error;
         }
+        this.logger.error(
+          "calculateTotalPossiblePoints: Prisma query for deleted questions failed",
+          {
+            missing_question_ids: missingQuestionIds,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        );
         throw new InternalServerErrorException(
           `Failed to query deleted questions for grade calculation: ${
             error instanceof Error ? error.message : String(error)
@@ -1671,9 +1542,7 @@ export class AttemptSubmissionService {
         delete question.scoring?.rubrics;
       }
 
-      if (UserRole.LEARNER) {
-        question.authorComment == null;
-      }
+      question.authorComment = null;
       if (question.choices) {
         for (const choice of question.choices) {
           delete choice.points;
@@ -1745,6 +1614,50 @@ export class AttemptSubmissionService {
 
       delete question.answer;
     }
+  }
+
+  private applyAnswerVisibilityToQuestionDtos(
+    questions: EnhancedAttemptQuestionDto[],
+    shouldShowCorrectAnswers: boolean,
+  ): EnhancedAttemptQuestionDto[] {
+    return questions.map((question) => ({
+      ...question,
+      answer: shouldShowCorrectAnswers ? question.answer : undefined,
+    }));
+  }
+
+  private toQuestionDtosForTranslation(
+    questions: EnhancedAttemptQuestionDto[],
+  ): QuestionDto[] {
+    return questions.map((question) => ({
+      id: question.id,
+      question: question.question,
+      type: question.type as QuestionType,
+      assignmentId: question.assignmentId,
+      totalPoints: question.totalPoints,
+      maxWords: question.maxWords,
+      maxCharacters: question.maxCharacters,
+      choices: question.choices,
+      scoring: question.scoring as ScoringDto,
+      answer:
+        question.answer === "true"
+          ? true
+          : question.answer === "false"
+            ? false
+            : undefined,
+      variants: [],
+      gradingContextQuestionIds: question.gradingContextQuestionIds,
+      responseType: question.responseType as ResponseType | undefined,
+      isDeleted: question.isDeleted,
+      randomizedChoices:
+        typeof question.randomizedChoices === "string"
+          ? question.randomizedChoices === "true"
+          : false,
+      videoPresentationConfig:
+        (question.videoPresentationConfig as VideoPresentationConfig | null) ??
+        undefined,
+      liveRecordingConfig: question.liveRecordingConfig ?? undefined,
+    }));
   }
 
   /**

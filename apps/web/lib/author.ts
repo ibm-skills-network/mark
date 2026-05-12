@@ -120,7 +120,7 @@ export async function createQuestion(
  * Subscribes to job status updates.
  */
 export function subscribeToJobStatus(
-  jobId: number,
+  jobId: string,
   onProgress?: (percentage: number, progressText?: string) => void,
   setQuestions?: (questions: Question[]) => void,
 ): Promise<[boolean, Question[]]> {
@@ -232,15 +232,103 @@ export function subscribeToJobStatus(
         (event: MessageEvent<string>) => {},
       );
 
-      eventSource.onerror = (err) => {
-        if (!isResolved) {
-          if (eventSource?.readyState === EventSource.CLOSED) {
-            handleError("Connection closed unexpectedly");
-          } else {
-            setTimeout(() => {
-              if (!isResolved) handleError("Connection error");
-            }, 2000);
+      // SSE drop is non-fatal: the publish job runs server-side via BullMQ
+      // and is fully decoupled from the browser tab's lifetime. On
+      // EventSource error, poll the status endpoint until the server reports
+      // a terminal state. Never resolve as success while the server still
+      // says "In Progress" — the caller treats success as "publish landed",
+      // and an optimistic success while the job is mid-flight (and could
+      // still fail) is misinformation.
+      const recoverViaJobStatus = async (): Promise<void> => {
+        if (isResolved) return;
+        clearTimeout(timeoutId);
+
+        const jobStatusUrl = `${getApiRoutes().assignments}/jobs/${jobId}/status`;
+
+        const fetchOnce = async (): Promise<
+          | {
+              status?: string;
+              progress?: string;
+              questions?: QuestionAuthorStore[];
+            }
+          | undefined
+        > => {
+          try {
+            return (await apiClient.get(jobStatusUrl)) as {
+              status?: string;
+              progress?: string;
+              questions?: QuestionAuthorStore[];
+            };
+          } catch (fetchError) {
+            console.warn(
+              "Publish job-status fallback fetch failed",
+              fetchError,
+            );
+            return undefined;
           }
+        };
+
+        const applyJobState = (
+          job:
+            | {
+                status?: string;
+                progress?: string;
+                questions?: QuestionAuthorStore[];
+              }
+            | undefined,
+        ): boolean => {
+          if (!job) return false;
+          if (job.questions && Array.isArray(job.questions)) {
+            receivedQuestions = job.questions;
+            if (setQuestions) {
+              setQuestions(receivedQuestions);
+            }
+          }
+          // Match the SSE `update` handler's semantics: Completed resolves,
+          // Failed rejects. Resolving on Failed lets the caller's success
+          // branch fire (the caller doesn't always check the boolean), so
+          // route Failed through handleError instead.
+          if (job.status === "Completed") {
+            handleCompletion(true);
+            return true;
+          }
+          if (job.status === "Failed") {
+            handleError(job.progress || "Publish failed");
+            return true;
+          }
+          return false;
+        };
+
+        // Poll every 10s for up to 30 minutes — covers the longest realistic
+        // publish (translation across ~23 languages on a large assignment)
+        // without holding the promise open forever if the worker dies.
+        const POLL_INTERVAL_MS = 10_000;
+        const MAX_POLL_DURATION_MS = 30 * 60 * 1000;
+        const deadline = Date.now() + MAX_POLL_DURATION_MS;
+
+        while (!isResolved && Date.now() < deadline) {
+          const job = await fetchOnce();
+          if (applyJobState(job)) return;
+          if (isResolved) return;
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        }
+
+        if (!isResolved) {
+          handleError(
+            "Publishing is taking longer than expected. Refresh the page to check the latest status.",
+          );
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (isResolved) return;
+
+        if (eventSource?.readyState === EventSource.CLOSED) {
+          void recoverViaJobStatus();
+        } else {
+          setTimeout(() => {
+            if (!isResolved) void recoverViaJobStatus();
+          }, 2000);
         }
       };
     } catch (error) {
@@ -256,7 +344,7 @@ export async function publishAssignment(
   assignmentId: number,
   updatedAssignment: ReplaceAssignmentRequest,
   cookies?: string,
-): Promise<{ jobId: number; message: string } | undefined> {
+): Promise<{ jobId: string; message: string } | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/publish`;
 
   const payload = {
@@ -268,11 +356,13 @@ export async function publishAssignment(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     })) as {
-      jobId: number;
+      jobId: string;
       message: string;
     };
     return { jobId, message };
-  } catch (err) {}
+  } catch (err) {
+    console.error("💥 publishAssignment failed:", err);
+  }
 }
 
 /**
@@ -449,7 +539,7 @@ export async function getAttempts(
 export async function uploadFiles(
   payload: QuestionGenerationPayload,
   cookies?: string,
-): Promise<{ success: boolean; jobId?: number }> {
+): Promise<{ success: boolean; jobId?: string }> {
   const endpointURL = `${getApiRoutes().assignments}/${payload.assignmentId}/generate-questions`;
 
   try {
@@ -465,7 +555,7 @@ export async function uploadFiles(
       },
     )) as {
       success: boolean;
-      jobId?: number;
+      jobId?: string;
     };
 
     if (data.jobId) {
@@ -485,7 +575,7 @@ export async function uploadFiles(
  * Fetches the status of a job by its ID.
  */
 export async function getJobStatus(
-  jobId: number,
+  jobId: string,
   cookies?: string,
   opts: { retries?: number; timeoutMs?: number } = {},
 ): Promise<

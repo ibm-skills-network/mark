@@ -14,8 +14,10 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   createMockJob,
+  createMockJobQueueService,
   createMockJobStatusService,
   createMockLlmFacadeService,
   createMockPrismaService,
@@ -35,11 +37,15 @@ import { TranslationService } from "../../../services/translation.service";
 describe("QuestionService", () => {
   let questionService: QuestionService;
   let prismaService: ReturnType<typeof createMockPrismaService>;
-  let questionRepository: ReturnType<typeof createMockQuestionRepository>;
+  let questionRepository: ReturnType<typeof createMockQuestionRepository> & {
+    createForAssignment?: jest.Mock;
+    updateOwnedById?: jest.Mock;
+  };
   let variantRepository: ReturnType<typeof createMockVariantRepository>;
   let translationService: ReturnType<typeof createMockTranslationService>;
   let llmFacadeService: ReturnType<typeof createMockLlmFacadeService>;
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
+  let jobQueueService: ReturnType<typeof createMockJobQueueService>;
 
   beforeEach(async () => {
     prismaService = createMockPrismaService();
@@ -48,6 +54,7 @@ describe("QuestionService", () => {
     translationService = createMockTranslationService();
     llmFacadeService = createMockLlmFacadeService();
     jobStatusService = createMockJobStatusService();
+    jobQueueService = createMockJobQueueService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,6 +82,10 @@ describe("QuestionService", () => {
         {
           provide: JobStatusServiceV2,
           useValue: jobStatusService,
+        },
+        {
+          provide: JobQueueService,
+          useValue: jobQueueService,
         },
       ],
     }).compile();
@@ -193,11 +204,18 @@ describe("QuestionService", () => {
           createMockQuestionDto({ id: 3 }),
         ];
 
-        questionRepository.findByAssignmentId.mockResolvedValue(
-          existingQuestions,
-        );
+        // First call returns the seeded existing questions; the post-flight
+        // re-query returns the desired final state (count == incoming.length).
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce(existingQuestions)
+          .mockResolvedValueOnce(questions);
 
-        questionRepository.upsert.mockResolvedValue(questions[0]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        questionRepository.createForAssignment = jest
+          .fn()
+          .mockResolvedValue({ id: 2, assignmentId });
 
         await questionService.processQuestionsForPublishing(
           assignmentId,
@@ -211,7 +229,8 @@ describe("QuestionService", () => {
         expect(questionRepository.markAsDeleted).toHaveBeenCalledWith([3]);
 
         expect(jobStatusService.updateJobStatus).toHaveBeenCalled();
-        expect(questionRepository.upsert).toHaveBeenCalledTimes(2);
+        expect(questionRepository.updateOwnedById).toHaveBeenCalledTimes(1);
+        expect(questionRepository.createForAssignment).toHaveBeenCalledTimes(1);
       });
 
       it("should handle translations for changed content", async () => {
@@ -228,10 +247,12 @@ describe("QuestionService", () => {
           question: "Updated question text",
         });
 
-        questionRepository.findByAssignmentId.mockResolvedValue([
-          originalQuestion,
-        ]);
-        questionRepository.upsert.mockResolvedValue(updatedQuestion);
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([originalQuestion])
+          .mockResolvedValueOnce([updatedQuestion]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
         llmFacadeService.applyGuardRails.mockResolvedValue(true);
 
         await questionService.processQuestionsForPublishing(
@@ -250,8 +271,12 @@ describe("QuestionService", () => {
 
         const question = createMockQuestionDto({ id: 1 });
 
-        questionRepository.findByAssignmentId.mockResolvedValue([question]);
-        questionRepository.upsert.mockResolvedValue(question);
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([question])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
 
         await questionService.processQuestionsForPublishing(
           assignmentId,
@@ -281,10 +306,12 @@ describe("QuestionService", () => {
           question: "Updated question text",
         });
 
-        questionRepository.findByAssignmentId.mockResolvedValue([
-          existingQuestion,
-        ]);
-        questionRepository.upsert.mockResolvedValue(updatedQuestion);
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([existingQuestion])
+          .mockResolvedValueOnce([updatedQuestion]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
 
         await questionService.processQuestionsForPublishing(
           assignmentId,
@@ -300,6 +327,91 @@ describe("QuestionService", () => {
           true,
         );
       });
+
+      it("clears stale JSON columns when the dto sends null (e.g. type switched from MCQ to TEXT)", async () => {
+        const { Prisma } = await import("@prisma/client");
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existing = createMockQuestionDto(
+          { id: 1 },
+          QuestionType.MULTIPLE_CORRECT,
+        );
+
+        const switchedToText = createMockQuestionDto({
+          id: 1,
+          type: QuestionType.TEXT,
+          alreadyInBackend: true,
+          choices: null as never,
+          scoring: null as never,
+          videoPresentationConfig: null as never,
+          liveRecordingConfig: null as never,
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([existing])
+          .mockResolvedValueOnce([switchedToText]);
+
+        const updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        questionRepository.updateOwnedById = updateOwnedById;
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [switchedToText],
+          jobId,
+        );
+
+        expect(updateOwnedById).toHaveBeenCalledTimes(1);
+        const updateData = updateOwnedById.mock.calls[0][2] as Record<
+          string,
+          unknown
+        >;
+        expect(updateData.choices).toBe(Prisma.DbNull);
+        expect(updateData.scoring).toBe(Prisma.DbNull);
+        expect(updateData.videoPresentationConfig).toBe(Prisma.DbNull);
+        expect(updateData.liveRecordingConfig).toBe(Prisma.DbNull);
+      });
+
+      it("leaves columns untouched when the dto omits them (undefined, not null)", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existing = createMockQuestionDto({ id: 1 });
+        const dtoWithUndefinedJson = createMockQuestionDto({
+          id: 1,
+          alreadyInBackend: true,
+          choices: undefined,
+          scoring: undefined,
+          videoPresentationConfig: undefined,
+          liveRecordingConfig: undefined,
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([existing])
+          .mockResolvedValueOnce([dtoWithUndefinedJson]);
+
+        const updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        questionRepository.updateOwnedById = updateOwnedById;
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [dtoWithUndefinedJson],
+          jobId,
+        );
+
+        const updateData = updateOwnedById.mock.calls[0][2] as Record<
+          string,
+          unknown
+        >;
+        expect(updateData.choices).toBeUndefined();
+        expect(updateData.scoring).toBeUndefined();
+        expect(updateData.videoPresentationConfig).toBeUndefined();
+        expect(updateData.liveRecordingConfig).toBeUndefined();
+      });
     });
 
     describe("generateQuestions", () => {
@@ -311,10 +423,6 @@ describe("QuestionService", () => {
 
         jobStatusService.createJob.mockResolvedValue(mockJob);
 
-        jest
-          .spyOn(questionService as any, "startQuestionGenerationProcess")
-          .mockResolvedValue(undefined);
-
         const result = await questionService.generateQuestions(
           assignmentId,
           payload,
@@ -324,6 +432,21 @@ describe("QuestionService", () => {
         expect(jobStatusService.createJob).toHaveBeenCalledWith(
           assignmentId,
           userId,
+        );
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          "mark.assignment.v2",
+          "assignment-v2.generate-questions",
+          {
+            assignmentId,
+            assignmentType: payload.assignmentType,
+            fileContents: payload.fileContents,
+            jobId: mockJob.id,
+            learningObjectives: payload.learningObjectives,
+            questionsToGenerate: payload.questionsToGenerate,
+          },
+          {
+            jobId: mockJob.id,
+          },
         );
         expect(result).toEqual({
           message: "Question generation started",
@@ -375,6 +498,182 @@ describe("QuestionService", () => {
             userId,
           ),
         ).rejects.toThrow(BadRequestException);
+      });
+
+      it("should reject subtype mode when all multiple-choice subtype counts are zero", async () => {
+        const assignmentId = 1;
+        const userId = "author-123";
+        const invalidPayload = createMockQuestionGenerationPayload({
+          questionsToGenerate: {
+            multipleChoice: 0,
+            multipleSelect: 0,
+            textResponse: 0,
+            trueFalse: 0,
+            url: 0,
+            upload: 0,
+            linkFile: 0,
+            multipleChoiceSubtypes: {
+              short: 0,
+              quantitative: 0,
+              long: 0,
+              scenario: 0,
+            },
+            responseTypes: {
+              TEXT: [ResponseType.ESSAY],
+            },
+          },
+        });
+
+        await expect(
+          questionService.generateQuestions(
+            assignmentId,
+            invalidPayload,
+            userId,
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it("should accept subtype mode when at least one multiple-choice subtype count is requested", async () => {
+        const assignmentId = 1;
+        const userId = "author-123";
+        const mockJob = createMockJob({ id: 7 });
+        const payload = createMockQuestionGenerationPayload({
+          questionsToGenerate: {
+            multipleChoice: 0,
+            multipleSelect: 0,
+            textResponse: 0,
+            trueFalse: 0,
+            url: 0,
+            upload: 0,
+            linkFile: 0,
+            multipleChoiceSubtypes: {
+              short: 2,
+              quantitative: 0,
+              long: 0,
+              scenario: 0,
+            },
+            responseTypes: {
+              TEXT: [ResponseType.ESSAY],
+            },
+          },
+        });
+
+        jobStatusService.createJob.mockResolvedValue(mockJob);
+
+        await expect(
+          questionService.generateQuestions(assignmentId, payload, userId),
+        ).resolves.toEqual({
+          message: "Question generation started",
+          jobId: mockJob.id,
+        });
+
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          "mark.assignment.v2",
+          "assignment-v2.generate-questions",
+          {
+            assignmentId,
+            assignmentType: payload.assignmentType,
+            fileContents: payload.fileContents,
+            jobId: mockJob.id,
+            learningObjectives: payload.learningObjectives,
+            questionsToGenerate: payload.questionsToGenerate,
+          },
+          {
+            jobId: mockJob.id,
+          },
+        );
+      });
+
+      describe("contentSource routing", () => {
+        const userId = "author-123";
+        const assignmentId = 1;
+        const mockJob = { id: 42 };
+        const storedFile = {
+          filename: "stored.txt",
+          extractedText: "stored content",
+        };
+
+        beforeEach(() => {
+          jobStatusService.createJob.mockResolvedValue(mockJob);
+        });
+
+        it('contentSource="payload" uses caller-supplied fileContents, never queries DB', async () => {
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "payload",
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          expect(prismaService.assignmentFile.findMany).not.toHaveBeenCalled();
+        });
+
+        it('contentSource="stored" queries DB and filters to READY rows with non-null extractedText', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([storedFile]);
+
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "stored",
+            fileContents: undefined,
+            learningObjectives: "some objective",
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          expect(prismaService.assignmentFile.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+              where: expect.objectContaining({
+                assignmentId,
+                extractedText: { not: null },
+              }),
+            }),
+          );
+        });
+
+        it('contentSource="stored" throws BadRequestException when no READY files exist', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([]);
+
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "stored",
+            fileContents: undefined,
+            learningObjectives: "some objective",
+          });
+
+          await expect(
+            questionService.generateQuestions(assignmentId, payload, userId),
+          ).rejects.toThrow(BadRequestException);
+        });
+
+        it('contentSource="both" concatenates caller fileContents and stored files', async () => {
+          prismaService.assignmentFile.findMany.mockResolvedValue([storedFile]);
+
+          const callerFile = { filename: "caller.txt", content: "caller data" };
+          const payload = createMockQuestionGenerationPayload({
+            contentSource: "both",
+            fileContents: [callerFile],
+          });
+
+          await questionService.generateQuestions(
+            assignmentId,
+            payload,
+            userId,
+          );
+
+          const filesArg = jobQueueService.enqueue.mock.calls[0][2]
+            .fileContents as Array<{
+            filename: string;
+            content: string;
+          }>;
+          const filenames = filesArg.map((f) => f.filename);
+          expect(filenames).toContain("caller.txt");
+          expect(filenames).toContain("stored.txt");
+        });
       });
     });
 
@@ -660,6 +959,330 @@ describe("QuestionService", () => {
           ).rejects.toThrow(BadRequestException);
         });
       });
+    });
+  });
+
+  describe("processQuestionsForPublishing — count integrity", () => {
+    interface MockRow {
+      id: number;
+      assignmentId: number;
+      question: string;
+      isDeleted: boolean;
+      type: QuestionType;
+    }
+
+    let store: Map<number, MockRow>;
+    let nextDbId: number;
+
+    const seedRow = (row: MockRow): void => {
+      store.set(row.id, { ...row });
+    };
+
+    const rowsForAssignment = (assignmentId: number): MockRow[] => {
+      return [...store.values()].filter(
+        (r) => r.assignmentId === assignmentId && r.isDeleted === false,
+      );
+    };
+
+    beforeEach(() => {
+      store = new Map<number, MockRow>();
+      nextDbId = 100_000;
+
+      // findByAssignmentId reads the per-assignment slice of the store
+      questionRepository.findByAssignmentId.mockImplementation(
+        async (assignmentId: number) =>
+          rowsForAssignment(assignmentId).map(
+            (r) =>
+              ({
+                id: r.id,
+                assignmentId: r.assignmentId,
+                question: r.question,
+                type: r.type,
+                isDeleted: r.isDeleted,
+                choices: undefined,
+                scoring: undefined,
+                gradingContextQuestionIds: [],
+                variants: [],
+                alreadyInBackend: true,
+              }) as unknown as QuestionDto,
+          ),
+      );
+
+      // markAsDeleted flips isDeleted on whichever row id was passed (matches current production)
+      questionRepository.markAsDeleted.mockImplementation(
+        async (ids: number[]) => {
+          for (const id of ids) {
+            const existing = store.get(id);
+            if (existing) {
+              store.set(id, { ...existing, isDeleted: true });
+            }
+          }
+        },
+      );
+
+      // upsert: GLOBAL by id (mirrors the current production bug). If the id exists
+      // anywhere in the store, update that row's content (keeping its assignmentId).
+      // If not, create a new row with the supplied id under the supplied assignmentId.
+      // This is the behavior we want the new code to AVOID.
+      questionRepository.upsert.mockImplementation(
+        async (input: QuestionDto) => {
+          const existing = store.get(input.id);
+          if (existing) {
+            const next: MockRow = {
+              ...existing,
+              question: input.question,
+              type: input.type,
+              isDeleted: input.isDeleted ?? false,
+            };
+            store.set(input.id, next);
+            return {
+              id: existing.id,
+              assignmentId: existing.assignmentId,
+            } as unknown as Awaited<
+              ReturnType<typeof questionRepository.upsert>
+            >;
+          }
+          const created: MockRow = {
+            id: input.id,
+            assignmentId: input.assignmentId,
+            question: input.question,
+            type: input.type,
+            isDeleted: false,
+          };
+          store.set(input.id, created);
+          return {
+            id: created.id,
+            assignmentId: created.assignmentId,
+          } as unknown as Awaited<ReturnType<typeof questionRepository.upsert>>;
+        },
+      );
+
+      // createForAssignment: server-allocates a fresh id; ignores any client id.
+      questionRepository.createForAssignment = jest
+        .fn()
+        .mockImplementation(
+          async (input: Omit<QuestionDto, "id">, assignmentId: number) => {
+            const id = nextDbId++;
+            const created: MockRow = {
+              id,
+              assignmentId,
+              question: input.question,
+              type: input.type,
+              isDeleted: false,
+            };
+            store.set(id, created);
+            return { id, assignmentId } as unknown as Awaited<
+              ReturnType<
+                NonNullable<typeof questionRepository.createForAssignment>
+              >
+            >;
+          },
+        );
+
+      // updateOwnedById: only updates if the row's assignmentId matches.
+      questionRepository.updateOwnedById = jest
+        .fn()
+        .mockImplementation(
+          async (
+            id: number,
+            assignmentId: number,
+            update: Partial<QuestionDto>,
+          ) => {
+            const existing = store.get(id);
+            if (
+              !existing ||
+              existing.assignmentId !== assignmentId ||
+              existing.isDeleted
+            ) {
+              return null;
+            }
+            const next: MockRow = {
+              ...existing,
+              question:
+                typeof update.question === "string"
+                  ? update.question
+                  : existing.question,
+              type: (update.type ?? existing.type) as QuestionType,
+              isDeleted: update.isDeleted ?? existing.isDeleted,
+            };
+            store.set(id, next);
+            return { id: next.id, assignmentId: next.assignmentId };
+          },
+        );
+    });
+
+    it("publishes 25 imported questions with random client IDs and persists exactly 25 rows for the target assignment", async () => {
+      const targetAssignmentId = 1;
+      const otherAssignmentId = 999;
+
+      // Real-world DB shape: target assignment is fresh (no rows yet), but the
+      // global Question table has rows belonging to other assignments. Imported
+      // questions arrive with random client-side ids whose range collides with
+      // those other-assignment rows.
+      const seed = 0xa5a5;
+      let lcg = seed;
+      const nextRandom = (): number => {
+        lcg = (lcg * 1_103_515_245 + 12_345) & 0x7fff_ffff;
+        return lcg;
+      };
+
+      const incoming: QuestionDto[] = [];
+      const usedIds = new Set<number>();
+      while (incoming.length < 25) {
+        const id = nextRandom();
+        if (usedIds.has(id)) continue;
+        usedIds.add(id);
+        incoming.push(
+          createMockQuestionDto({
+            id,
+            assignmentId: targetAssignmentId,
+            alreadyInBackend: false,
+            question: `IMPORTED_Q_${incoming.length + 1}`,
+          }),
+        );
+      }
+
+      // Pre-seed half of the random ids as foreign-assignment rows. With a global
+      // Question.id space, these collisions cause the buggy upsert path to
+      // mutate foreign rows instead of inserting new ones for the target.
+      const incomingIds = incoming.map((q) => q.id);
+      for (let index = 0; index < incoming.length; index += 2) {
+        seedRow({
+          id: incomingIds[index],
+          assignmentId: otherAssignmentId,
+          question: `FOREIGN_DECOY_${index}`,
+          isDeleted: false,
+          type: QuestionType.SINGLE_CORRECT,
+        });
+      }
+
+      await questionService.processQuestionsForPublishing(
+        targetAssignmentId,
+        incoming,
+      );
+
+      const finalRows = rowsForAssignment(targetAssignmentId);
+      expect(finalRows).toHaveLength(25);
+
+      const finalIds = new Set(finalRows.map((r) => r.id));
+      expect(finalIds.size).toBe(25);
+
+      const finalContents = new Set(finalRows.map((r) => r.question));
+      for (let index = 1; index <= 25; index++) {
+        expect(finalContents.has(`IMPORTED_Q_${index}`)).toBe(true);
+      }
+    });
+
+    it("publishing does not mutate questions belonging to other assignments even when client-supplied IDs collide", async () => {
+      const targetAssignmentId = 1;
+      const otherAssignmentId = 999;
+      const collidingIds = [1001, 1002, 1003, 1004, 1005];
+
+      for (const [index, id] of collidingIds.entries()) {
+        seedRow({
+          id,
+          assignmentId: otherAssignmentId,
+          question: `OTHER_ORIGINAL_${index + 1}`,
+          isDeleted: false,
+          type: QuestionType.SINGLE_CORRECT,
+        });
+      }
+
+      const otherSnapshot = collidingIds.map((id) => {
+        const row = store.get(id);
+        if (!row) {
+          throw new Error("seed row missing");
+        }
+        return { ...row };
+      });
+
+      const payload: QuestionDto[] = collidingIds.map((id, index) =>
+        createMockQuestionDto({
+          id,
+          assignmentId: targetAssignmentId,
+          alreadyInBackend: false,
+          question: `TARGET_NEW_${index + 1}`,
+        }),
+      );
+
+      await questionService.processQuestionsForPublishing(
+        targetAssignmentId,
+        payload,
+      );
+
+      // Other-assignment rows must be byte-identical
+      for (const [index, id] of collidingIds.entries()) {
+        const after = store.get(id);
+        expect(after).toBeDefined();
+        expect(after).toEqual(otherSnapshot[index]);
+      }
+
+      // Target assignment must end with 5 NEW rows whose ids are NOT the colliding ids
+      const targetRows = rowsForAssignment(targetAssignmentId);
+      expect(targetRows).toHaveLength(5);
+      const targetIds = targetRows.map((r) => r.id);
+      for (const id of collidingIds) {
+        expect(targetIds).not.toContain(id);
+      }
+      const targetContents = new Set(targetRows.map((r) => r.question));
+      for (let index = 1; index <= 5; index++) {
+        expect(targetContents.has(`TARGET_NEW_${index}`)).toBe(true);
+      }
+    });
+
+    it("rejects payload with duplicate question IDs that both claim to be already in backend", async () => {
+      const targetAssignmentId = 1;
+      const duplicatedId = 42;
+
+      // Seed the duplicated id as a real row in the target assignment so both entries
+      // genuinely look like updates to the same row.
+      seedRow({
+        id: duplicatedId,
+        assignmentId: targetAssignmentId,
+        question: "EXISTING_Q",
+        isDeleted: false,
+        type: QuestionType.SINGLE_CORRECT,
+      });
+
+      const payload: QuestionDto[] = [
+        createMockQuestionDto({
+          id: duplicatedId,
+          assignmentId: targetAssignmentId,
+          alreadyInBackend: true,
+          question: "DUP_A",
+        }),
+        createMockQuestionDto({
+          id: duplicatedId,
+          assignmentId: targetAssignmentId,
+          alreadyInBackend: true,
+          question: "DUP_B",
+        }),
+        createMockQuestionDto({
+          id: 7,
+          assignmentId: targetAssignmentId,
+          alreadyInBackend: false,
+          question: "FRESH",
+        }),
+      ];
+
+      await expect(
+        questionService.processQuestionsForPublishing(
+          targetAssignmentId,
+          payload,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      // Generic message — must not echo field names
+      try {
+        await questionService.processQuestionsForPublishing(
+          targetAssignmentId,
+          payload,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        expect(message).not.toMatch(/duplicateIds|alreadyInBackend|field/i);
+        expect(message.toLowerCase()).toContain("invalid");
+      }
     });
   });
 });

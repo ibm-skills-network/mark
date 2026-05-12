@@ -7,6 +7,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Put,
@@ -19,14 +20,23 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiQuery, ApiResponse } from "@nestjs/swagger";
 import { memoryStorage } from "multer";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import { Logger } from "winston";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
-import { UploadRequestDto, UploadType } from "./dto/upload.dto";
+import {
+  CompleteMultipartUploadRequestDto,
+  DirectUploadDto,
+  UploadContextDto,
+  UploadRequestDto,
+  UploadType,
+} from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
+import { sanitizeForLog } from "../../logger/sanitize";
 
 export interface FileAccessDto {
   filename: string;
@@ -52,10 +62,15 @@ export interface FileContentDto {
   version: "1",
 })
 export class FilesController {
+  private readonly logger: Logger;
+
   constructor(
     private readonly filesService: FilesService,
     private readonly s3Service: S3Service,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: FilesController.name });
+  }
 
   @Get("public-url")
   async getPublicUrl(@Query("key") key: string) {
@@ -77,13 +92,35 @@ export class FilesController {
     );
   }
 
+  @Post("upload/initiate")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Initiate multipart upload and return part URLs" })
+  async initiateMultipartUpload(
+    @Body() uploadRequest: UploadRequestDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    return this.filesService.initiateMultipartUpload(
+      uploadRequest,
+      request.userSession.userId,
+    );
+  }
+
+  @Post("upload/complete")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Complete multipart upload using uploaded parts" })
+  async completeMultipartUpload(
+    @Body() body: CompleteMultipartUploadRequestDto,
+  ) {
+    return this.filesService.completeMultipartUpload(body);
+  }
+
   @Post("direct-upload")
   @UseGuards(AuthGuard)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),
       limits: {
-        fileSize: 10 * 1024 * 1024,
+        fileSize: 100 * 1024 * 1024,
       },
     }),
   )
@@ -92,92 +129,40 @@ export class FilesController {
   })
   async directUpload(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: any,
+    @Body() body: DirectUploadDto,
     @Req() request: UserSessionRequest,
   ) {
     if (!file) {
       throw new BadRequestException("No file provided");
     }
 
-    const uploadType = body.uploadType;
-    let context: any = {};
-
+    let context: UploadContextDto = {};
     if (body.context) {
       try {
-        context =
-          typeof body.context === "string"
-            ? JSON.parse(body.context)
-            : body.context;
+        context = JSON.parse(body.context);
       } catch (error) {
-        console.error(
-          "[DIRECT UPLOAD] Failed to parse context:",
-          body.context,
-          error,
-        );
+        this.logger.error("[DIRECT UPLOAD] Failed to parse context", {
+          context_raw: sanitizeForLog(body.context),
+          error: sanitizeForLog(
+            error instanceof Error ? error.message : String(error),
+          ),
+        });
         throw new BadRequestException("Invalid context JSON");
       }
     }
 
     const userId = request.userSession.userId;
 
-    const bucket = this.s3Service.getBucketName(uploadType);
-    try {
-    } catch (resolutionError) {
-      console.error(
-        "[DIRECT UPLOAD] Bucket resolution error:",
-        resolutionError,
-      );
-    }
-
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
-
-    let prefix = "";
-    const normalizedPath = context.path?.startsWith("/")
-      ? context.path.slice(1)
-      : (context.path ?? "");
-
-    switch (uploadType) {
-      case "author": {
-        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
-        break;
-      }
-      case "learner": {
-        if (typeof context.assignmentId !== "number") {
-          throw new BadRequestException(
-            "Missing assignmentId in context for learner upload",
-          );
-        }
-        if (typeof context.questionId !== "number") {
-          throw new BadRequestException(
-            "Missing questionId in context for learner upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `${context.assignmentId}/${userId}/${context.questionId}/`;
-        break;
-      }
-      case "debug": {
-        if (typeof context.reportId !== "number") {
-          throw new BadRequestException(
-            "Missing reportId in context for debug upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `debug/${context.reportId}/`;
-        break;
-      }
-      default: {
-        throw new BadRequestException("Invalid upload type");
-      }
-    }
-
-    const uniqueId =
-      Date.now().toString(36) + Math.random().toString(36).slice(2);
-    const key = `${prefix}${uniqueId}-${file.originalname}`;
+    const { bucket, key } = this.filesService.resolveUploadTarget(
+      {
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadType: body.uploadType,
+        context,
+      },
+      userId,
+    );
 
     const result = await this.filesService.directUpload(file, bucket, key);
 
@@ -187,7 +172,7 @@ export class FilesController {
       bucket,
       fileType: file.mimetype,
       fileName: file.originalname,
-      uploadType,
+      uploadType: body.uploadType,
       size: file.size,
       etag: result.etag,
     };
@@ -272,7 +257,10 @@ export class FilesController {
         textContentUrl,
       };
     } catch (error) {
-      console.error("[FILES] File access error:", error);
+      this.logger.error("[FILES] File access error", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       const errorMessage =
         error instanceof Error && error.message
           ? error.message
@@ -366,7 +354,13 @@ export class FilesController {
         size: Buffer.byteLength(content, encoding as BufferEncoding),
       };
     } catch (error) {
-      console.error(`[FILES] Content error for ${key}:`, error);
+      this.logger.error(`[FILES] Content error for ${sanitizeForLog(key)}`, {
+        key: sanitizeForLog(key),
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+        stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
+      });
 
       if (error instanceof HttpException) {
         throw error;

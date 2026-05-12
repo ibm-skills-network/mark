@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
   Param,
-  ParseIntPipe,
   Post,
   UsePipes,
   ValidationPipe,
@@ -175,7 +174,7 @@ export class AssignmentLevelStandardsController {
     @Body() body: ApplyLevelStandardsRequestDto,
   ): Promise<{
     success: true;
-    jobId: number;
+    jobId: string;
     message: string;
     assignmentIds?: number[];
     dryRun: boolean;
@@ -232,11 +231,9 @@ export class AssignmentLevelStandardsController {
 
   @Get("apply/status/:jobId")
   @ApiOperation({ summary: "Check the status of a level-standards apply job" })
-  async getApplyJobStatus(
-    @Param("jobId", ParseIntPipe) jobId: number,
-  ): Promise<{
+  async getApplyJobStatus(@Param("jobId") jobId: string): Promise<{
     success: true;
-    jobId: number;
+    jobId: string;
     status: string;
     progress: string | null;
     percentage: number | null;
@@ -244,9 +241,7 @@ export class AssignmentLevelStandardsController {
     createdAt: Date;
     updatedAt: Date;
   }> {
-    const job = await this.prisma.publishJob.findUnique({
-      where: { id: jobId },
-    });
+    const job = await this.jobStatusService.getJobStatus(jobId);
 
     if (!job) {
       throw new NotFoundException(`Level standards job ${jobId} not found`);
@@ -271,13 +266,13 @@ export class AssignmentLevelStandardsController {
       progress: job.progress ?? null,
       percentage: job.percentage ?? null,
       result,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
+      createdAt: new Date(job.createdAt),
+      updatedAt: new Date(job.updatedAt),
     };
   }
 
   private async runLevelStandardsInBackground(
-    jobId: number,
+    jobId: string,
     options: {
       assignmentIds?: number[];
       dryRun: boolean;

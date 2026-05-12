@@ -5,10 +5,17 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { isDeepStrictEqual } from "node:util";
-import { ResponseType } from "@prisma/client";
+import {
+  AssignmentFileExtractionStatus,
+  AssignmentFileStatus,
+  Prisma,
+  ResponseType,
+} from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JobQueueService } from "src/job-queue/job-queue.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   EnhancedQuestionsToGenerate,
@@ -22,6 +29,7 @@ import {
   VariantType,
 } from "../../dto/update.questions.request.dto";
 import { applyQuestionOrder } from "../../utils/question-order.util";
+import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
@@ -38,6 +46,7 @@ export class QuestionService {
     private readonly translationService: TranslationService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly jobQueueService: JobQueueService,
   ) {}
 
   async getQuestionsForAssignment(
@@ -93,7 +102,23 @@ export class QuestionService {
   }
 
   /**
-   * Process questions for publishing with detailed progress tracking, this is where the main logic for saving and updating assignments is
+   * Process questions for publishing with detailed progress tracking. This is
+   * where the main logic for saving and updating questions on a publish lives.
+   *
+   * Hardening rules in this flow:
+   *  - Caller-supplied ids are NEVER trusted as primary keys for new rows. New
+   *    rows go through `createForAssignment`, which lets the database allocate
+   *    the id.
+   *  - Updates only succeed when the row already belongs to this assignment.
+   *    `updateOwnedById` enforces the ownership check; on miss we fall through
+   *    to a create so a stale/hostile frontend cannot mutate foreign rows.
+   *  - Deletions are computed against the set of payload entries that the
+   *    server actually recognized as existing rows for this assignment, not
+   *    against arbitrary client-supplied ids.
+   *  - Payloads with two entries that both claim to be the SAME existing row
+   *    are rejected with a generic 400.
+   *  - After the loop, the persisted count is asserted against the incoming
+   *    count; a mismatch is loudly logged and thrown so the worker fails.
    *
    * @param assignmentId - The assignment ID
    * @param questions - Array of questions to process
@@ -102,7 +127,7 @@ export class QuestionService {
   async processQuestionsForPublishing(
     assignmentId: number,
     questions: QuestionDto[],
-    jobId?: number,
+    jobId?: string,
     progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
   ): Promise<Map<number, number>> {
@@ -111,6 +136,7 @@ export class QuestionService {
     const QUESTION_PROCESSING_RANGE = { start: 10, end: 90 };
     const FINAL_CLEANUP_RANGE = { start: 90, end: 100 };
 
+    const startedAt = Date.now();
     let currentProgress = INITIAL_SETUP_RANGE.start;
 
     const updateProgress = async (percentage: number, message: string) => {
@@ -128,6 +154,30 @@ export class QuestionService {
     };
 
     try {
+      this.logger.log(
+        `publish.questions.start { assignmentId: ${assignmentId}, incomingCount: ${questions.length}, jobId: ${jobId ?? "none"} }`,
+      );
+
+      // Pre-flight: reject payloads where two entries both claim to be the
+      // same already-in-backend row. Generic 400 — no field-name leak.
+      const seenAlreadyInBackend = new Set<number>();
+      const duplicateIds: number[] = [];
+      for (const q of questions) {
+        if (q.alreadyInBackend === true) {
+          if (seenAlreadyInBackend.has(q.id)) {
+            duplicateIds.push(q.id);
+          } else {
+            seenAlreadyInBackend.add(q.id);
+          }
+        }
+      }
+      if (duplicateIds.length > 0) {
+        this.logger.warn(
+          `publish.questions.duplicate-ids { assignmentId: ${assignmentId}, duplicateIds: [${duplicateIds.join(",")}] }`,
+        );
+        throw new BadRequestException("Invalid question payload");
+      }
+
       await updateProgress(
         INITIAL_SETUP_RANGE.start,
         "Retrieving existing questions",
@@ -135,13 +185,27 @@ export class QuestionService {
 
       const existingQuestions =
         await this.questionRepository.findByAssignmentId(assignmentId);
+      const existingById = new Map<number, QuestionDto>();
+      for (const q of existingQuestions) {
+        existingById.set(q.id, q);
+      }
 
       await updateProgress(5, "Analyzing question changes");
 
       const frontendToBackendIdMap = new Map<number, number>();
-      const newQuestionIds = new Set(questions.map((q) => q.id));
+
+      // Compute deletions from a SAFE basis: an existing row is deleted unless
+      // some payload entry with `alreadyInBackend: true` claims it AND the row
+      // belongs to this assignment. Random client ids cannot mark a real row
+      // for deletion or preservation.
+      const claimedExistingIds = new Set<number>();
+      for (const q of questions) {
+        if (q.alreadyInBackend === true && existingById.has(q.id)) {
+          claimedExistingIds.add(q.id);
+        }
+      }
       const questionsToDelete = existingQuestions.filter(
-        (q) => !newQuestionIds.has(q.id),
+        (q) => !claimedExistingIds.has(q.id),
       );
 
       if (questionsToDelete.length > 0) {
@@ -167,6 +231,8 @@ export class QuestionService {
             totalQuestions
           : 0;
 
+      let ownershipMismatches = 0;
+
       for (const [index, questionDto] of questions.entries()) {
         const questionStartProgress =
           QUESTION_PROCESSING_RANGE.start + index * progressPerQuestion;
@@ -177,11 +243,12 @@ export class QuestionService {
           `Processing question ${index + 1} of ${totalQuestions}`,
         );
 
-        const backendId =
-          frontendToBackendIdMap.get(questionDto.id) || questionDto.id;
-        const existingQuestion = existingQuestions.find(
-          (q) => q.id === backendId,
-        );
+        const wantsUpdate =
+          questionDto.alreadyInBackend === true &&
+          existingById.has(questionDto.id);
+        const existingQuestion = wantsUpdate
+          ? existingById.get(questionDto.id)
+          : undefined;
 
         if (
           existingQuestion &&
@@ -200,8 +267,9 @@ export class QuestionService {
           `Updating question ${index + 1} in database`,
         );
 
-        const upsertedQuestion = await this.questionRepository.upsert({
-          id: existingQuestion ? existingQuestion.id : questionDto.id,
+        const updateData = this.buildQuestionUpdateData(questionDto);
+
+        const createInput: Omit<QuestionDto, "id"> = {
           assignmentId,
           question: questionDto.question,
           type: questionDto.type,
@@ -218,10 +286,49 @@ export class QuestionService {
           videoPresentationConfig: questionDto.videoPresentationConfig,
           gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
           isDeleted: false,
-        });
+        };
 
-        if (!existingQuestion) {
-          frontendToBackendIdMap.set(questionDto.id, upsertedQuestion.id);
+        let persistedId: number;
+        if (wantsUpdate) {
+          const updated = await this.questionRepository.updateOwnedById(
+            questionDto.id,
+            assignmentId,
+            updateData,
+          );
+
+          if (updated) {
+            persistedId = updated.id;
+            this.logger.debug(
+              `publish.questions.route { assignmentId: ${assignmentId}, decision: "update", id: ${persistedId} }`,
+            );
+          } else {
+            // Ownership miss — stale frontend or hostile payload. Fall through
+            // to create. Same outcome the user expects (their content lands
+            // under the target assignment) without ever touching a foreign row.
+            ownershipMismatches += 1;
+            this.logger.warn(
+              `publish.questions.ownership-miss { assignmentId: ${assignmentId}, attemptedId: ${questionDto.id} }`,
+            );
+            const created = await this.questionRepository.createForAssignment(
+              createInput,
+              assignmentId,
+            );
+            persistedId = created.id;
+            frontendToBackendIdMap.set(questionDto.id, persistedId);
+            this.logger.debug(
+              `publish.questions.route { assignmentId: ${assignmentId}, decision: "ownership-miss-fallback-create", id: ${persistedId} }`,
+            );
+          }
+        } else {
+          const created = await this.questionRepository.createForAssignment(
+            createInput,
+            assignmentId,
+          );
+          persistedId = created.id;
+          frontendToBackendIdMap.set(questionDto.id, persistedId);
+          this.logger.debug(
+            `publish.questions.route { assignmentId: ${assignmentId}, decision: "create", id: ${persistedId} }`,
+          );
         }
 
         await updateProgress(
@@ -231,9 +338,9 @@ export class QuestionService {
 
         await this.translationService.translateQuestion(
           assignmentId,
-          upsertedQuestion.id,
+          persistedId,
           questionDto,
-          jobId || 0,
+          jobId,
           true,
         );
 
@@ -246,7 +353,7 @@ export class QuestionService {
 
           await this.processVariantsForQuestion(
             assignmentId,
-            upsertedQuestion.id,
+            persistedId,
             questionDto.variants || [],
             existingQuestion?.variants || [],
             jobId,
@@ -263,6 +370,25 @@ export class QuestionService {
       await updateProgress(
         FINAL_CLEANUP_RANGE.start,
         "Finalizing question processing",
+      );
+
+      // Post-flight invariant: persisted count must equal incoming count.
+      const persistedRows =
+        await this.questionRepository.findByAssignmentId(assignmentId);
+      const persistedCount = persistedRows.length;
+      const durationMs = Date.now() - startedAt;
+
+      if (persistedCount !== questions.length) {
+        this.logger.error(
+          `publish.questions.count-mismatch { assignmentId: ${assignmentId}, expected: ${questions.length}, actual: ${persistedCount}, ownershipMismatches: ${ownershipMismatches} }`,
+        );
+        throw new Error(
+          `Publish count mismatch for assignment ${assignmentId}: expected ${questions.length}, got ${persistedCount}`,
+        );
+      }
+
+      this.logger.log(
+        `publish.questions.done { assignmentId: ${assignmentId}, incomingCount: ${questions.length}, persistedCount: ${persistedCount}, ownershipMismatches: ${ownershipMismatches}, durationMs: ${durationMs} }`,
       );
 
       await updateProgress(
@@ -357,27 +483,43 @@ export class QuestionService {
     assignmentId: number,
     payload: QuestionGenerationPayload,
     userId: string,
-  ): Promise<{ message: string; jobId: number }> {
+  ): Promise<{ message: string; jobId: string }> {
     this.validateQuestionGenerationPayload(payload);
+    const files = await this.resolveQuestionGenerationFiles(
+      assignmentId,
+      payload,
+    );
 
     const job = await this.jobStatusService.createJob(assignmentId, userId);
-
-    this.startQuestionGenerationProcess(
-      assignmentId,
-      job.id,
-      payload.assignmentType,
-      payload.questionsToGenerate,
-      payload.fileContents,
-      payload.learningObjectives,
-    ).catch((error: unknown) => {
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_GENERATE_QUESTIONS,
+        {
+          assignmentId,
+          assignmentType: payload.assignmentType,
+          fileContents: files,
+          jobId: job.id,
+          learningObjectives: payload.learningObjectives,
+          questionsToGenerate: payload.questionsToGenerate,
+        },
+        {
+          jobId: job.id,
+        },
+      );
+    } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
-        `Question generation failed: ${errorMessage}`,
-        errorStack,
+      await this.jobStatusService.updateJobStatus(
+        job.id,
+        {
+          status: "Failed",
+          progress: `Failed to enqueue question generation job: ${errorMessage}`,
+        },
+        false,
       );
-    });
+      throw error;
+    }
 
     return { message: "Question generation started", jobId: job.id };
   }
@@ -424,9 +566,9 @@ export class QuestionService {
 
     await Promise.all(updates);
   }
-  private async startQuestionGenerationProcess(
+  async runQuestionGenerationJob(
     assignmentId: number,
-    jobId: number,
+    jobId: string,
     assignmentType: AssignmentTypeEnum,
     questionsToGenerate: EnhancedQuestionsToGenerate,
     files?: { filename: string; content: string }[],
@@ -463,7 +605,7 @@ export class QuestionService {
         jobId,
         {
           status: "In Progress",
-          progress: "Mark is thinking generating questions.",
+          progress: "Mark is brainstorming some questions.",
         },
         false,
       );
@@ -510,15 +652,34 @@ export class QuestionService {
     payload: QuestionGenerationPayload,
   ): void {
     const {
+      contentSource,
       fileContents,
       learningObjectives,
       questionsToGenerate,
       assignmentId,
     } = payload;
 
-    if (!fileContents && !learningObjectives) {
+    const requiresUploadedContent =
+      contentSource === undefined ||
+      contentSource === "payload" ||
+      contentSource === "both";
+
+    if (
+      requiresUploadedContent &&
+      (!fileContents || fileContents.length === 0) &&
+      !learningObjectives
+    ) {
       throw new BadRequestException(
         "Either file contents or learning objectives are required",
+      );
+    }
+
+    if (
+      contentSource === "both" &&
+      (!fileContents || fileContents.length === 0)
+    ) {
+      throw new BadRequestException(
+        "File contents are required when contentSource is both",
       );
     }
 
@@ -526,14 +687,42 @@ export class QuestionService {
       throw new BadRequestException("Invalid assignment ID");
     }
 
+    assertQuestionCountsWithinCaps(questionsToGenerate);
+
+    const {
+      linkFile,
+      multipleChoice,
+      multipleChoiceSubtypes,
+      multipleSelect,
+      responseTypes,
+      textResponse,
+      trueFalse,
+      upload,
+      url,
+    } = questionsToGenerate;
+
+    const subtypeTotal = multipleChoiceSubtypes
+      ? (multipleChoiceSubtypes.short || 0) +
+        (multipleChoiceSubtypes.quantitative || 0) +
+        (multipleChoiceSubtypes.long || 0) +
+        (multipleChoiceSubtypes.scenario || 0)
+      : 0;
+
+    if (multipleChoiceSubtypes !== undefined && subtypeTotal === 0) {
+      throw new BadRequestException(
+        "When multipleChoiceSubtypes is provided, at least one subtype count must be greater than 0",
+      );
+    }
+
     const totalQuestions =
-      (questionsToGenerate.multipleChoice || 0) +
-      (questionsToGenerate.multipleSelect || 0) +
-      (questionsToGenerate.textResponse || 0) +
-      (questionsToGenerate.trueFalse || 0) +
-      (questionsToGenerate.url || 0) +
-      (questionsToGenerate.upload || 0) +
-      (questionsToGenerate.linkFile || 0);
+      (multipleChoice || 0) +
+      (multipleSelect || 0) +
+      (textResponse || 0) +
+      (trueFalse || 0) +
+      (url || 0) +
+      (upload || 0) +
+      (linkFile || 0) +
+      subtypeTotal;
 
     if (totalQuestions <= 0) {
       throw new BadRequestException(
@@ -541,12 +730,7 @@ export class QuestionService {
       );
     }
 
-    if (
-      (questionsToGenerate.url > 0 ||
-        questionsToGenerate.upload > 0 ||
-        questionsToGenerate.linkFile > 0) &&
-      !questionsToGenerate.responseTypes
-    ) {
+    if ((url > 0 || upload > 0 || linkFile > 0) && !responseTypes) {
       questionsToGenerate.responseTypes = {
         TEXT: [ResponseType.OTHER],
         URL: [ResponseType.OTHER],
@@ -554,6 +738,68 @@ export class QuestionService {
         LINK_FILE: [ResponseType.OTHER],
       };
     }
+  }
+
+  private async resolveQuestionGenerationFiles(
+    assignmentId: number,
+    payload: QuestionGenerationPayload,
+  ): Promise<Array<{ filename: string; content: string }> | undefined> {
+    const contentSource = payload.contentSource ?? "payload";
+    const uploadedFiles = payload.fileContents ?? [];
+
+    if (contentSource === "payload") {
+      return uploadedFiles;
+    }
+
+    const assignmentFiles = await this.prisma.assignmentFile.findMany({
+      where: {
+        assignmentId,
+        status: AssignmentFileStatus.READY,
+        extractionStatus: AssignmentFileExtractionStatus.READY,
+        extractedText: { not: null },
+      },
+      select: {
+        filename: true,
+        extractedText: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    const normalizedAssignmentFiles = assignmentFiles
+      .filter(
+        (
+          file,
+        ): file is {
+          filename: string;
+          extractedText: string;
+        } => Boolean(file.extractedText),
+      )
+      .map((file) => ({
+        filename: file.filename,
+        content: file.extractedText,
+      }));
+
+    if (contentSource === "stored") {
+      if (normalizedAssignmentFiles.length === 0) {
+        throw new BadRequestException(
+          "No extracted assignment files are available for question generation",
+        );
+      }
+
+      return normalizedAssignmentFiles;
+    }
+
+    const combinedFiles = [...uploadedFiles, ...normalizedAssignmentFiles];
+
+    if (combinedFiles.length === 0) {
+      throw new BadRequestException(
+        "No uploaded or assignment file contents are available for question generation",
+      );
+    }
+
+    return combinedFiles;
   }
 
   /**
@@ -571,7 +817,7 @@ export class QuestionService {
     questionId: number,
     variants: VariantDto[],
     existingVariants: VariantDto[],
-    jobId?: number,
+    jobId?: string,
     forceTranslation = false,
   ): Promise<void> {
     const existingVariantsMap = new Map<string, VariantDto>();
@@ -663,7 +909,7 @@ export class QuestionService {
           questionId,
           updatedVariant.id,
           updatedVariant as unknown as VariantDto,
-          jobId || 0,
+          jobId,
           true,
         );
       } else {
@@ -683,7 +929,7 @@ export class QuestionService {
           questionId,
           newVariant.id,
           newVariant as unknown as VariantDto,
-          jobId || 0,
+          jobId,
           true,
         );
       }
@@ -762,6 +1008,49 @@ export class QuestionService {
     return totalQuestions > 1
       ? Math.max(0, targetVariants - currentVariants)
       : targetVariants;
+  }
+
+  /**
+   * Convert a publish-payload entry into the Prisma update shape the repo
+   * expects. Centralizes JSON column handling and keeps the publish loop
+   * focused on routing decisions.
+   */
+  private buildQuestionUpdateData(
+    questionDto: QuestionDto,
+  ): Prisma.QuestionUpdateInput {
+    // Distinguish "not in payload" (skip — leave column untouched) from
+    // "explicitly null" (clear the column). Collapsing both to undefined
+    // would leave stale MCQ choices/scoring on a question whose author just
+    // switched it to TEXT.
+    const toJsonInput = (
+      value: unknown,
+    ): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined => {
+      if (value === undefined) {
+        return undefined;
+      }
+      if (value === null) {
+        return Prisma.DbNull;
+      }
+      return value as Prisma.InputJsonValue;
+    };
+
+    return {
+      totalPoints: questionDto.totalPoints ?? 0,
+      type: questionDto.type,
+      question: questionDto.question,
+      authorComment: questionDto.authorComment ?? null,
+      responseType: questionDto.responseType,
+      maxWords: questionDto.maxWords,
+      maxCharacters: questionDto.maxCharacters,
+      randomizedChoices: questionDto.randomizedChoices,
+      answer: questionDto.answer ?? false,
+      choices: toJsonInput(questionDto.choices),
+      scoring: toJsonInput(questionDto.scoring),
+      videoPresentationConfig: toJsonInput(questionDto.videoPresentationConfig),
+      liveRecordingConfig: toJsonInput(questionDto.liveRecordingConfig),
+      gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
+      isDeleted: false,
+    };
   }
 
   private async applyGuardRails(question: QuestionDto): Promise<void> {

@@ -1607,6 +1607,11 @@ export const createMockPrismaService = () => ({
     update: jest.fn().mockResolvedValue(createMockAssignmentTranslation()),
     count: jest.fn().mockResolvedValue(1),
   },
+  assignmentAuthor: {
+    upsert: jest
+      .fn()
+      .mockResolvedValue({ assignmentId: 1, userId: "author-123" }),
+  },
   assignmentFeedback: {
     findUnique: jest.fn().mockResolvedValue(createMockAssignmentFeedback()),
     findMany: jest.fn().mockResolvedValue([createMockAssignmentFeedback()]),
@@ -1623,6 +1628,12 @@ export const createMockPrismaService = () => ({
     findUnique: jest.fn().mockResolvedValue(createMockReport()),
     findMany: jest.fn().mockResolvedValue([createMockReport()]),
     create: jest.fn().mockResolvedValue(createMockReport()),
+  },
+  assignmentFile: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue(undefined),
   },
   $transaction: jest.fn(<T>(callback: (() => T) | Promise<T>[]) => {
     if (typeof callback === "function") {
@@ -1677,6 +1688,8 @@ export const createMockQuestionRepository = () => ({
       createMockQuestionDto({ id: 2 }, QuestionType.MULTIPLE_CORRECT),
     ]),
   upsert: jest.fn().mockResolvedValue(createMockQuestionDto()),
+  createForAssignment: jest.fn().mockResolvedValue(createMockQuestionDto()),
+  updateOwnedById: jest.fn().mockResolvedValue(createMockQuestionDto()),
   markAsDeleted: jest.fn().mockResolvedValue(undefined),
   createMany: jest
     .fn()
@@ -1861,6 +1874,14 @@ export const createMockJobStatusService = () => ({
   cleanupJobStream: jest.fn().mockResolvedValue(undefined),
   updateJobStatus: jest.fn().mockResolvedValue(undefined),
   emitJobStatusUpdate: jest.fn(),
+});
+
+/**
+ * Create a mock JobQueueService with pre-defined implementations
+ */
+export const createMockJobQueueService = () => ({
+  enqueue: jest.fn().mockResolvedValue(undefined),
+  findActiveJob: jest.fn().mockResolvedValue(null),
 });
 
 /**

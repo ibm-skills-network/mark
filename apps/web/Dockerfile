@@ -38,6 +38,7 @@ COPY --chown=node:node --from=sourcer $DIR/apps/web/.next ./.next
 COPY --chown=node:node --from=sourcer $DIR/apps/web/package.json ./package.json
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
 COPY --chown=node:node --from=sourcer $DIR/apps/web/public ./public
+COPY --chown=node:node --from=sourcer $DIR/apps/web/scripts/prepare-next-start.js ./scripts/prepare-next-start.js
 COPY --chown=node:node --from=sourcer $DIR/apps/web/entrypoint.sh ./entrypoint.sh
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
