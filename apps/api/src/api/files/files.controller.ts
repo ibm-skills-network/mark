@@ -27,6 +27,7 @@ import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
 import {
+  AbortMultipartUploadRequestDto,
   CompleteMultipartUploadRequestDto,
   DirectUploadDto,
   UploadContextDto,
@@ -112,6 +113,15 @@ export class FilesController {
     @Body() body: CompleteMultipartUploadRequestDto,
   ) {
     return this.filesService.completeMultipartUpload(body);
+  }
+
+  @Post("upload/abort")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Abort an in-progress multipart upload" })
+  async abortMultipartUpload(
+    @Body() body: AbortMultipartUploadRequestDto,
+  ): Promise<void> {
+    return this.filesService.abortMultipartUpload(body);
   }
 
   @Post("direct-upload")

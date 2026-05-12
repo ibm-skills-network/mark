@@ -13,6 +13,7 @@ import {
 import { MoveFileDto } from "../dto/move-file.dto";
 import { RenameFileDto } from "../dto/rename-file.dto";
 import {
+  AbortMultipartUploadRequestDto,
   CompleteMultipartUploadRequestDto,
   CompleteMultipartUploadResponseDto,
   MultipartUploadInitiateResponseDto,
@@ -431,6 +432,20 @@ export class FilesService {
       uploadId: request.uploadId,
       etag: typeof result.ETag === "string" ? result.ETag : undefined,
     };
+  }
+
+  async abortMultipartUpload(
+    request: AbortMultipartUploadRequestDto,
+  ): Promise<void> {
+    const bucket = this.s3Service.getBucketName(request.uploadType);
+    if (!bucket) {
+      throw new BadRequestException("Invalid upload type");
+    }
+    await this.s3Service.abortMultipartUpload({
+      Bucket: bucket,
+      Key: request.key,
+      UploadId: request.uploadId,
+    });
   }
 
   async generatePublicUrl(key: string): Promise<{ presignedUrl: string }> {

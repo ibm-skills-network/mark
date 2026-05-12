@@ -1,5 +1,6 @@
 import { getBaseApiPath } from "@/config/constants";
 import type {
+  MultipartUploadAbortRequest,
   MultipartUploadCompleteRequest,
   MultipartUploadCompletedPart,
   MultipartUploadInitiateResponse,
@@ -34,6 +35,14 @@ async function completeMultipartUpload(
 ): Promise<void> {
   const url = `${getBaseApiPath("v1")}/files/upload/complete`;
   await apiClient.post(url, request);
+}
+
+async function abortMultipartUpload(
+  request: MultipartUploadAbortRequest,
+): Promise<void> {
+  const url = `${getBaseApiPath("v1")}/files/upload/abort`;
+  // Best-effort: swallow errors so the original upload error is always what propagates.
+  await apiClient.post(url, request).catch(() => undefined);
 }
 
 async function uploadPartWithRetry(
@@ -119,37 +128,46 @@ export async function reliableUpload(
   const completedParts: MultipartUploadCompletedPart[] = [];
   let loadedBytes = 0;
 
-  for (const part of multipartUpload.urls) {
-    // Compute the byte range for this part
-    const start = (part.partNumber - 1) * multipartUpload.partSizeBytes;
-    const end = Math.min(start + multipartUpload.partSizeBytes, file.size);
-    const chunk = file.slice(start, end);
+  try {
+    for (const part of multipartUpload.urls) {
+      // Compute the byte range for this part
+      const start = (part.partNumber - 1) * multipartUpload.partSizeBytes;
+      const end = Math.min(start + multipartUpload.partSizeBytes, file.size);
+      const chunk = file.slice(start, end);
 
-    // PUT the chunk directly to S3 via its presigned URL; returns the ETag
-    const etag = await uploadPartWithRetry(chunk, part.url, {
-      onUploadedBytes: (chunkBytes) => {
-        loadedBytes += chunkBytes;
-        onProgress?.({
-          loaded: loadedBytes,
-          total: file.size,
-          percentage: Math.round((loadedBytes / file.size) * 100),
-        });
-      },
-    });
+      // PUT the chunk directly to S3 via its presigned URL; returns the ETag
+      const etag = await uploadPartWithRetry(chunk, part.url, {
+        onUploadedBytes: (chunkBytes) => {
+          loadedBytes += chunkBytes;
+          onProgress?.({
+            loaded: loadedBytes,
+            total: file.size,
+            percentage: Math.round((loadedBytes / file.size) * 100),
+          });
+        },
+      });
 
-    // S3 needs each part's ETag to assemble the final object
-    completedParts.push({
-      partNumber: part.partNumber,
-      etag,
+      // S3 needs each part's ETag to assemble the final object
+      completedParts.push({
+        partNumber: part.partNumber,
+        etag,
+      });
+    }
+
+    await completeMultipartUpload({
+      uploadId: multipartUpload.uploadId,
+      key: multipartUpload.key,
+      uploadType: uploadRequest.uploadType,
+      parts: completedParts,
     });
+  } catch (error) {
+    await abortMultipartUpload({
+      uploadId: multipartUpload.uploadId,
+      key: multipartUpload.key,
+      uploadType: uploadRequest.uploadType,
+    });
+    throw error;
   }
-
-  await completeMultipartUpload({
-    uploadId: multipartUpload.uploadId,
-    key: multipartUpload.key,
-    uploadType: uploadRequest.uploadType,
-    parts: completedParts,
-  });
 
   onProgress?.({
     loaded: file.size,

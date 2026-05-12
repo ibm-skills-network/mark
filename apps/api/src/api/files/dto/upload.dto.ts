@@ -155,3 +155,14 @@ export class CompleteMultipartUploadResponseDto {
   uploadId: string;
   etag?: string;
 }
+
+export class AbortMultipartUploadRequestDto {
+  @IsString()
+  uploadId: string;
+
+  @IsString()
+  key: string;
+
+  @IsEnum(UploadType)
+  uploadType: UploadType;
+}

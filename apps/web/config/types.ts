@@ -123,6 +123,12 @@ export interface MultipartUploadCompleteRequest {
   parts: MultipartUploadCompletedPart[];
 }
 
+export interface MultipartUploadAbortRequest {
+  uploadId: string;
+  key: string;
+  uploadType: UploadType;
+}
+
 export interface FileMetadata {
   cosKey: string;
   cosBucket: string;
