@@ -250,6 +250,21 @@ export class S3Service {
   }
 
   /**
+   * Check whether the supplied bucket name matches one of the configured
+   * upload buckets. Used to reject arbitrary bucket names from query params
+   * before any S3 call is made.
+   */
+  isConfiguredUploadBucket(bucket: string): boolean {
+    if (!bucket) return false;
+    const configured = new Set(
+      Object.values(S3Service.BUCKET_ENV_VAR_BY_TYPE)
+        .map((envVariable) => process.env[envVariable])
+        .filter((value): value is string => Boolean(value)),
+    );
+    return configured.has(bucket);
+  }
+
+  /**
    * Get the region for a given bucket
    */
   getBucketRegion(bucket: string): string {

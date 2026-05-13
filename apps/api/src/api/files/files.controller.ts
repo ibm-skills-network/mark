@@ -4,10 +4,12 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpException,
   HttpStatus,
   Inject,
+  NotFoundException,
   Param,
   Post,
   Put,
@@ -21,7 +23,11 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiQuery, ApiResponse } from "@nestjs/swagger";
 import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSession,
+  UserSessionRequest,
+} from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
@@ -192,6 +198,7 @@ export class FilesController {
   }
 
   @Get("access")
+  @UseGuards(AuthGuard)
   @ApiOperation({ summary: "Get direct file access URLs using presigned URLs" })
   @ApiQuery({ name: "key", required: true, description: "File key in storage" })
   @ApiQuery({
@@ -212,14 +219,10 @@ export class FilesController {
     @Query("key") key: string,
     @Query("bucket") bucket: string,
     @Query("expiration") expiration = "3600",
+    @Req() request?: UserSessionRequest,
   ): Promise<FileAccessDto> {
     try {
-      if (!key || !bucket) {
-        throw new HttpException(
-          "Key and bucket are required",
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+      this.assertAccessAllowed(key, bucket, request?.userSession);
 
       const expirationSeconds = Number.parseInt(expiration, 10);
 
@@ -271,17 +274,45 @@ export class FilesController {
       };
     } catch (error) {
       this.logger.error("[FILES] File access error", {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        key: sanitizeForLog(key),
+        bucket: sanitizeForLog(bucket),
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+        stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
       });
-      const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : "An unknown error occurred while accessing the file";
-      throw new HttpException(
-        `Failed to get file access: ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new NotFoundException();
+    }
+  }
+
+  /**
+   * Authorize a file access request:
+   * - require an authenticated user session
+   * - require the bucket to match one of the configured upload buckets
+   * - require the key to be owned by the caller (path segment match) or the
+   *   caller to be an admin
+   * Logs and throws a generic 4xx for the controller to translate into 404.
+   */
+  private assertAccessAllowed(
+    key: string,
+    bucket: string,
+    userSession: UserSession | undefined,
+  ): void {
+    if (!key || !bucket) {
+      throw new BadRequestException();
+    }
+    if (!userSession?.userId) {
+      throw new ForbiddenException();
+    }
+    if (!this.s3Service.isConfiguredUploadBucket(bucket)) {
+      throw new ForbiddenException();
+    }
+    if (userSession.role === UserRole.ADMIN) {
+      return;
+    }
+    const segments = key.split("/").filter(Boolean);
+    if (!segments.includes(userSession.userId)) {
+      throw new ForbiddenException();
     }
   }
 
@@ -306,14 +337,10 @@ export class FilesController {
     @Query("key") key: string,
     @Query("bucket") bucket: string,
     @Query("encoding") encoding = "utf8",
+    @Req() request?: UserSessionRequest,
   ): Promise<FileContentDto> {
     try {
-      if (!key || !bucket) {
-        throw new HttpException(
-          "Key and bucket are required",
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+      this.assertAccessAllowed(key, bucket, request?.userSession);
 
       const filename = key.split("/").pop() || key;
 
@@ -374,18 +401,7 @@ export class FilesController {
         ),
         stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
       });
-
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : "An unknown error occurred while accessing the file";
-      throw new HttpException(
-        `Failed to get file access: ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new NotFoundException();
     }
   }
 
