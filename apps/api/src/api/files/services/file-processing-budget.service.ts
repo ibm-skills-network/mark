@@ -89,6 +89,42 @@ export class FileProcessingBudgetService {
     });
   }
 
+  /**
+   * Non-blocking variant used for upload admission control. Returns true if
+   * the bytes were claimed, false if the budget was full. Callers that get
+   * false should return a 503 + retryAfterMs so the client can retry with
+   * an explicit "Waiting to upload…" UI state rather than the server
+   * silently holding a long-poll connection open.
+   */
+  tryAcquire(bytes: number): boolean {
+    if (!Number.isFinite(bytes) || bytes <= 0) return false;
+    if (bytes > this.budget) return false;
+    if (this.inflight + bytes <= this.budget) {
+      this.inflight += bytes;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Reject a 503 + retryAfterMs body suitable for the upload-admission path.
+   * Picks "request larger than budget" (non-retryable) vs "queue full"
+   * (retryable) based on whether the request could ever fit.
+   */
+  buildBusyException(bytes: number): ServiceUnavailableException {
+    if (bytes > this.budget) {
+      return new ServiceUnavailableException({
+        status: "busy",
+        message: "Processing capacity exceeded for this request.",
+      });
+    }
+    return new ServiceUnavailableException({
+      status: "busy",
+      retryAfterMs: 5000,
+      message: "Processing queue is full. Please wait a moment and try again.",
+    });
+  }
+
   release(bytes: number): void {
     this.inflight = Math.max(0, this.inflight - bytes);
 

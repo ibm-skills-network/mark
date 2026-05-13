@@ -2,6 +2,7 @@ import { BadRequestException } from "@nestjs/common";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { UploadType } from "../dto/upload.dto";
+import { FileProcessingBudgetService } from "./file-processing-budget.service";
 import { FilesService } from "./files.service";
 import { S3Service } from "./s3.service";
 
@@ -30,9 +31,17 @@ describe("FilesService", () => {
     },
   } as unknown as PrismaService;
 
+  const mockBudget = {
+    tryAcquire: jest.fn().mockReturnValue(true),
+    acquire: jest.fn().mockResolvedValue(undefined),
+    release: jest.fn(),
+    buildBusyException: jest.fn(),
+  } as unknown as FileProcessingBudgetService;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new FilesService(mockS3Service, mockPrismaService);
+    (mockBudget.tryAcquire as jest.Mock).mockReturnValue(true);
+    service = new FilesService(mockS3Service, mockPrismaService, mockBudget);
   });
 
   it("generates learner upload URLs with assignment/user/question prefix", async () => {

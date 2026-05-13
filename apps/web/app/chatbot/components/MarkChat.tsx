@@ -801,7 +801,7 @@ const ChatHistoryDrawer = ({
 };
 
 // File upload constants
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB — matches server cap
 const MAX_FILES_PER_MESSAGE = 10;
 
 const ACCEPTED_FILE_TYPES = {

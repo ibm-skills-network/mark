@@ -24,6 +24,7 @@ import {
   UploadResponseDto,
   UploadType,
 } from "../dto/upload.dto";
+import { FileProcessingBudgetService } from "./file-processing-budget.service";
 import { sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
 
@@ -81,7 +82,16 @@ export class FilesService {
   constructor(
     private s3Service: S3Service,
     private prisma: PrismaService,
+    private processingBudget: FileProcessingBudgetService,
   ) {}
+
+  /**
+   * In-process map of uploadId -> bytes claimed against the byte-budget at
+   * /initiate time. Used so /complete and /abort can release the exact same
+   * amount. Pod restart drops the map; orphaned claims drain through the
+   * budget naturally as the inflight counter resets on boot.
+   */
+  private readonly budgetClaims = new Map<string, number>();
 
   /**
    * Get the appropriate bucket name based on environment and upload type
@@ -494,6 +504,35 @@ export class FilesService {
       throw new BadRequestException("Failed to initiate multipart upload");
     }
 
+    // Admission control: reserve fileSize against the pod-wide processing
+    // budget so concurrent oversized uploads queue gracefully on the client
+    // ("Waiting to upload…") rather than racing toward OOM. Failing fast here
+    // lets the client retry explicitly with retryAfterMs.
+    if (!this.processingBudget.tryAcquire(fileSize)) {
+      this.logger.warn(
+        `Upload admission deferred — budget full: user=${userId} ` +
+          `type=${uploadType} size=${fileSize}`,
+      );
+      // Roll back the S3 multipart we just opened so we don't leak partial
+      // sessions while the client backs off.
+      try {
+        await this.s3Service.abortMultipartUpload({
+          Bucket: bucket,
+          Key: key,
+          UploadId: uploadId,
+        });
+      } catch (abortError) {
+        this.logger.warn(
+          `Failed to abort S3 multipart after budget rejection: ` +
+            (abortError instanceof Error
+              ? abortError.message
+              : String(abortError)),
+        );
+      }
+      throw this.processingBudget.buildBusyException(fileSize);
+    }
+    this.budgetClaims.set(uploadId, fileSize);
+
     // Persist an ownership record so /complete and /abort can authorize
     // the caller against the uploadId+key without trusting the request body.
     await this.prisma.fileUpload.create({
@@ -611,6 +650,10 @@ export class FilesService {
               : String(deleteError)),
         );
       }
+      await this.prisma.fileUpload.deleteMany({
+        where: { uploadId: request.uploadId },
+      });
+      this.releaseBudgetClaim(request.uploadId);
       throw new BadRequestException(
         `File is too large. Max allowed is ${maxAllowedBytes} bytes.`,
       );
@@ -619,6 +662,7 @@ export class FilesService {
     await this.prisma.fileUpload.deleteMany({
       where: { uploadId: request.uploadId },
     });
+    this.releaseBudgetClaim(request.uploadId);
 
     return {
       success: true,
@@ -653,6 +697,14 @@ export class FilesService {
     await this.prisma.fileUpload.deleteMany({
       where: { uploadId: request.uploadId },
     });
+    this.releaseBudgetClaim(request.uploadId);
+  }
+
+  private releaseBudgetClaim(uploadId: string): void {
+    const claimed = this.budgetClaims.get(uploadId);
+    if (claimed === undefined) return;
+    this.budgetClaims.delete(uploadId);
+    this.processingBudget.release(claimed);
   }
 
   private async assertUploadOwnership(
