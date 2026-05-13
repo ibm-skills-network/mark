@@ -18,6 +18,7 @@ import {
 } from "ai";
 import { Response } from "express";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { z } from "zod";
@@ -115,6 +116,7 @@ export class MarkChatService {
     private readonly s3Service: S3Service,
     private readonly fileContentExtractionService: FileContentExtractionService,
     private readonly chatService: ChatService,
+    private readonly processingBudget: FileProcessingBudgetService,
   ) {}
 
   private readIntFromEnv(
@@ -1785,64 +1787,70 @@ FILE LINK WORKFLOW:
       );
     }
 
-    const contentType =
-      typeof response.ContentType === "string"
-        ? response.ContentType
-        : undefined;
+    const reservation = Math.max(fileSize, 1);
+    await this.processingBudget.acquire(reservation);
+    try {
+      const contentType =
+        typeof response.ContentType === "string"
+          ? response.ContentType
+          : undefined;
 
-    let fileBuffer: Buffer;
-    if (response.Body instanceof Buffer) {
-      fileBuffer = response.Body;
-    } else if (response.Body) {
-      const chunks: Uint8Array[] = [];
-      const stream = response.Body as NodeJS.ReadableStream;
-      fileBuffer = await new Promise<Buffer>((resolve, reject) => {
-        stream.on("data", (chunk) =>
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
-        );
-        stream.on("end", () => resolve(Buffer.concat(chunks)));
-        stream.on("error", reject);
-      });
-    } else {
-      throw new BadRequestException(`Could not retrieve file: ${key}`);
-    }
+      let fileBuffer: Buffer;
+      if (response.Body instanceof Buffer) {
+        fileBuffer = response.Body;
+      } else if (response.Body) {
+        const chunks: Uint8Array[] = [];
+        const stream = response.Body as NodeJS.ReadableStream;
+        fileBuffer = await new Promise<Buffer>((resolve, reject) => {
+          stream.on("data", (chunk) =>
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+          );
+          stream.on("end", () => resolve(Buffer.concat(chunks)));
+          stream.on("error", reject);
+        });
+      } else {
+        throw new BadRequestException(`Could not retrieve file: ${key}`);
+      }
 
-    const [extractedFile] =
-      await this.fileContentExtractionService.extractContentFromFiles(
-        [
+      const [extractedFile] =
+        await this.fileContentExtractionService.extractContentFromFiles(
+          [
+            {
+              filename,
+              content: "",
+              fileType: contentType,
+              bucket,
+              key,
+              buffer: fileBuffer,
+            },
+          ],
           {
-            filename,
-            content: "",
-            fileType: contentType,
-            bucket,
-            key,
-            buffer: fileBuffer,
+            useStructuredExtraction: false,
+            useVisionForPDFs: false,
           },
-        ],
-        {
-          useStructuredExtraction: false,
-          useVisionForPDFs: false,
-        },
-      );
+        );
 
-    const normalized = (
-      extractedFile?.extractedText ||
-      extractedFile?.content ||
-      ""
-    )
-      .replaceAll("\0", "")
-      .trim();
-    if (!normalized) {
-      return { filename, content: "No readable text content found." };
+      const normalized = (
+        extractedFile?.extractedText ||
+        extractedFile?.content ||
+        ""
+      )
+        .replaceAll("\0", "")
+        .trim();
+      if (!normalized) {
+        return { filename, content: "No readable text content found." };
+      }
+
+      return {
+        filename,
+        content:
+          normalized.length > maxChars
+            ? normalized.slice(0, maxChars) + "\n...[truncated]"
+            : normalized,
+      };
+    } finally {
+      this.processingBudget.release(reservation);
     }
-
-    return {
-      filename,
-      content:
-        normalized.length > maxChars
-          ? normalized.slice(0, maxChars) + "\n...[truncated]"
-          : normalized,
-    };
   }
 
   private toDisplayFileName(key: string): string {
