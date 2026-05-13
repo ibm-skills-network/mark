@@ -136,7 +136,23 @@ export default function GradingProgressModal({
     }
   };
 
-  const { status, progress, currentStage: message } = progressData;
+  const { progress, currentStage: message } = progressData;
+
+  // Decouple render status from real status so the wheel can animate to 100%
+  // before the success/failure icon appears. "failed" surfaces immediately;
+  // "completed" waits for the spring to settle first.
+  const [displayStatus, setDisplayStatus] = useState<ProgressState["status"]>(
+    "processing",
+  );
+  useEffect(() => {
+    if (progressData.status === "completed") {
+      setDisplayStatus("processing");
+      const timer = setTimeout(() => setDisplayStatus("completed"), 700);
+      return () => clearTimeout(timer);
+    }
+    setDisplayStatus(progressData.status);
+  }, [progressData.status]);
+  const status = displayStatus;
 
   const confettiParticles = useMemo(
     () =>

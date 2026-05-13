@@ -369,13 +369,12 @@ function LearnerHeader() {
           clearLearnerAnswers();
         }
         useLearnerStore.getState().setActiveQuestionNumber(null);
-        router.push(`/learner/${assignmentId}/successPage/${res.id}`);
 
         setTimeout(() => {
           setShowGradingModal(false);
           useLearnerStore.getState().setUserPreferedLanguage(null);
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
-        }, 500);
+        }, 1000);
       } else {
         // submitAssignment resolved without a result (e.g. an SSE finalize
         // event carrying no payload). Without this branch submitting/modal stay
