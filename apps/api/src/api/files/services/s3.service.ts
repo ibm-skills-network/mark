@@ -258,8 +258,8 @@ export class S3Service {
     if (!bucket) return false;
     const configured = new Set(
       Object.values(S3Service.BUCKET_ENV_VAR_BY_TYPE)
-        .map((envVariable) => process.env[envVariable])
-        .filter((value): value is string => Boolean(value)),
+        .map((environmentVariable) => process.env[environmentVariable])
+        .filter(Boolean),
     );
     return configured.has(bucket);
   }

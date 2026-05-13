@@ -1007,3 +1007,18 @@ model LLMFeatureAssignment {
   @@index([modelId])
   @@index([isActive])
 }
+
+/// Tracks in-flight presigned multipart uploads so /complete and /abort
+/// can verify the caller owns the uploadId+key before forwarding to S3.
+model FileUpload {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  uploadId   String   @unique
+  storageKey String
+  bucket     String
+  uploadType String
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, storageKey])
+}

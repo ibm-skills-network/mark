@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
+import { PrismaService } from "src/database/prisma.service";
 import { CreateFolderDto } from "../dto/create-folder.dto";
 import {
   FileMetadataDto,
@@ -77,7 +78,10 @@ const CHATBOT_ALLOWED_EXTENSIONS = new Set(
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
 
-  constructor(private s3Service: S3Service) {}
+  constructor(
+    private s3Service: S3Service,
+    private prisma: PrismaService,
+  ) {}
 
   /**
    * Get the appropriate bucket name based on environment and upload type
@@ -485,6 +489,18 @@ export class FilesService {
       throw new BadRequestException("Failed to initiate multipart upload");
     }
 
+    // Persist an ownership record so /complete and /abort can authorize
+    // the caller against the uploadId+key without trusting the request body.
+    await this.prisma.fileUpload.create({
+      data: {
+        userId,
+        uploadId,
+        storageKey: key,
+        bucket,
+        uploadType,
+      },
+    });
+
     // Generate one presigned URL per part so the client can PUT directly to S3
     const urls = await Promise.all(
       Array.from({ length: partCount }, async (_, index) => {
@@ -532,6 +548,7 @@ export class FilesService {
 
   async completeMultipartUpload(
     request: CompleteMultipartUploadRequestDto,
+    userId: string,
   ): Promise<CompleteMultipartUploadResponseDto> {
     const bucket = this.s3Service.getBucketName(request.uploadType);
     if (!bucket) {
@@ -543,6 +560,12 @@ export class FilesService {
         "At least one multipart upload part is required",
       );
     }
+
+    await this.assertUploadOwnership(userId, {
+      uploadId: request.uploadId,
+      storageKey: request.key,
+      bucket,
+    });
 
     // Tell S3 to assemble the parts into the final object using the collected ETags
     const result = await this.s3Service.completeMultipartUpload({
@@ -588,6 +611,10 @@ export class FilesService {
       );
     }
 
+    await this.prisma.fileUpload.deleteMany({
+      where: { uploadId: request.uploadId },
+    });
+
     return {
       success: true,
       key: request.key,
@@ -599,16 +626,48 @@ export class FilesService {
 
   async abortMultipartUpload(
     request: AbortMultipartUploadRequestDto,
+    userId: string,
   ): Promise<void> {
     const bucket = this.s3Service.getBucketName(request.uploadType);
     if (!bucket) {
       throw new BadRequestException("Invalid upload type");
     }
+
+    await this.assertUploadOwnership(userId, {
+      uploadId: request.uploadId,
+      storageKey: request.key,
+      bucket,
+    });
+
     await this.s3Service.abortMultipartUpload({
       Bucket: bucket,
       Key: request.key,
       UploadId: request.uploadId,
     });
+
+    await this.prisma.fileUpload.deleteMany({
+      where: { uploadId: request.uploadId },
+    });
+  }
+
+  private async assertUploadOwnership(
+    userId: string,
+    expected: { uploadId: string; storageKey: string; bucket: string },
+  ): Promise<void> {
+    const row = await this.prisma.fileUpload.findUnique({
+      where: { uploadId: expected.uploadId },
+    });
+    if (
+      !row ||
+      row.userId !== userId ||
+      row.storageKey !== expected.storageKey ||
+      row.bucket !== expected.bucket
+    ) {
+      this.logger.warn(
+        `Upload ownership check failed: uploadId=${expected.uploadId} user=${userId}`,
+      );
+      throw new NotFoundException();
+    }
   }
 
   async generatePublicUrl(key: string): Promise<{ presignedUrl: string }> {

@@ -119,8 +119,12 @@ export class FilesController {
   @ApiOperation({ summary: "Complete multipart upload using uploaded parts" })
   async completeMultipartUpload(
     @Body() body: CompleteMultipartUploadRequestDto,
+    @Req() request: UserSessionRequest,
   ) {
-    return this.filesService.completeMultipartUpload(body);
+    return this.filesService.completeMultipartUpload(
+      body,
+      request.userSession.userId,
+    );
   }
 
   @Post("upload/abort")
@@ -128,8 +132,12 @@ export class FilesController {
   @ApiOperation({ summary: "Abort an in-progress multipart upload" })
   async abortMultipartUpload(
     @Body() body: AbortMultipartUploadRequestDto,
+    @Req() request: UserSessionRequest,
   ): Promise<void> {
-    return this.filesService.abortMultipartUpload(body);
+    return this.filesService.abortMultipartUpload(
+      body,
+      request.userSession.userId,
+    );
   }
 
   @Post("direct-upload")
