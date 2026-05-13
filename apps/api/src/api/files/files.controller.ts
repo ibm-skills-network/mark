@@ -413,57 +413,6 @@ export class FilesController {
     }
   }
 
-  /**
-   * LEGACY SUPPORT: Old proxy endpoint redirects to presigned URL
-   */
-  @Get("proxy")
-  @ApiOperation({
-    summary: "Legacy proxy endpoint - redirects to presigned URL",
-  })
-  @ApiQuery({ name: "key", required: true, description: "File key in storage" })
-  @ApiQuery({
-    name: "bucket",
-    required: true,
-    description: "Storage bucket name",
-  })
-  async legacyProxy(
-    @Query("key") key: string,
-    @Query("bucket") bucket: string,
-    @Query("download") forceDownload?: string,
-  ) {
-    const fileAccess = await this.getFileAccess(key, bucket);
-
-    const redirectUrl =
-      forceDownload === "true" ? fileAccess.downloadUrl : fileAccess.viewUrl;
-
-    return {
-      redirectUrl,
-      message: "Use the redirectUrl for direct access to the file",
-      ...fileAccess,
-    };
-  }
-
-  /**
-   * LEGACY SUPPORT: Old info endpoint
-   */
-  @Get("info")
-  @ApiOperation({ summary: "Legacy info endpoint - use /access instead" })
-  async legacyInfo(@Query("key") key: string, @Query("bucket") bucket: string) {
-    const fileAccess = await this.getFileAccess(key, bucket);
-
-    return {
-      filename: fileAccess.filename,
-      size: fileAccess.size,
-      contentType: fileAccess.contentType,
-      lastModified: fileAccess.lastModified,
-      isImage: fileAccess.isImage,
-      isPdf: fileAccess.isPdf,
-      isText: fileAccess.isText,
-      proxyUrl: fileAccess.viewUrl,
-      contentUrl: fileAccess.textContentUrl,
-    };
-  }
-
   private getContentType(filename: string): string {
     const extension = filename.split(".").pop()?.toLowerCase() || "";
 
