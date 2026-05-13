@@ -283,9 +283,14 @@ export class FilesService {
         return;
       }
       case UploadType.LEARNER:
-      case UploadType.LEARNER_PROD:
-      case UploadType.CHATBOT: {
+      case UploadType.LEARNER_PROD: {
         if (!isLearner && !isAdmin) denied();
+        return;
+      }
+      case UploadType.CHATBOT: {
+        // Chatbot keys are user-scoped (chatbot/<userId>/...). Both authors
+        // (testing the chat) and learners (using it) need to attach files.
+        if (!isAuthor && !isLearner && !isAdmin) denied();
         return;
       }
       case UploadType.DEBUG: {
