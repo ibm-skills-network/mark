@@ -119,13 +119,15 @@ export class FilesService {
   }
 
   private getPresignedUploadTtlSeconds(): number {
+    const defaultTtl = 600;
+    const maxTtl = 900;
     const fromEnvironment = Number(
-      process.env.UPLOAD_PRESIGNED_URL_TTL_SECONDS ?? 120,
+      process.env.UPLOAD_PRESIGNED_URL_TTL_SECONDS ?? defaultTtl,
     );
     if (!Number.isFinite(fromEnvironment) || fromEnvironment <= 0) {
-      return 120;
+      return defaultTtl;
     }
-    return Math.min(fromEnvironment, 300);
+    return Math.min(fromEnvironment, maxTtl);
   }
 
   private getMultipartPartSizeBytes(): number {
