@@ -701,8 +701,9 @@ function SuccessPage() {
             className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
           >
             <p className="text-sm text-amber-800">
-              AI feedback failed during grading. Your result was still saved. Do
-              you want to rerun it?
+              Your answers were marked successfully. AI feedback generation
+              failed — your score is not affected. You can regenerate the
+              feedback below.
             </p>
             <button
               onClick={handleRerunAiFeedback}

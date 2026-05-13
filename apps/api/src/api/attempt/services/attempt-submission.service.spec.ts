@@ -1154,7 +1154,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     });
   });
 
-  describe("rerunAiFeedbackForDeterministicAttempt", () => {
+  describe("rerunAiFeedbackForDeterministicAttempt (rerunAiFeedback)", () => {
     const assignmentId = 99;
     const attemptId = 42;
 
@@ -1162,7 +1162,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       mockPrisma.gradingProgress.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.assignment.findUnique.mockResolvedValue({
         showSubmissionFeedback: true,
-        questions: [{ type: QuestionType.SINGLE_CORRECT }],
       });
       mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
         assignmentId,

@@ -411,8 +411,7 @@ export class AttemptControllerV2 {
   @UseGuards(AssignmentAttemptAccessControlGuard)
   @ApiOperation({
     summary:
-      "Re-run the AI feedback step for a submitted deterministic-only attempt " +
-      "that previously had AI feedback generation fail.",
+      "Re-run the AI feedback step for a submitted attempt that previously had AI feedback generation fail.",
   })
   @ApiResponse({
     status: 201,
@@ -420,8 +419,7 @@ export class AttemptControllerV2 {
   })
   @ApiResponse({
     status: 400,
-    description:
-      "No pending AI feedback error, or assignment is not deterministic-only, or feedback is disabled.",
+    description: "No pending AI feedback error, or feedback is disabled.",
   })
   @ApiResponse({ status: 403 })
   rerunAiFeedback(

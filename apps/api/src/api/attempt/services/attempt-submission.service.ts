@@ -610,20 +610,11 @@ export class AttemptSubmissionService {
     try {
       const assignment = await this.prisma.assignment.findUnique({
         where: { id: assignmentId },
-        select: {
-          showSubmissionFeedback: true,
-          questions: { where: { isDeleted: false }, select: { type: true } },
-        },
+        select: { showSubmissionFeedback: true },
       });
 
       if (!assignment) {
         throw new NotFoundException(`Assignment ${assignmentId} not found.`);
-      }
-
-      if (!this.isAssignmentFullyDeterministic(assignment.questions)) {
-        throw new BadRequestException(
-          `AI feedback rerun is only supported for fully deterministic assignments.`,
-        );
       }
 
       if (!assignment.showSubmissionFeedback) {
@@ -1030,15 +1021,12 @@ export class AttemptSubmissionService {
         successfulQuestionResponses,
       );
 
-      // ── Optional AI feedback for visible deterministic feedback ──────────────
-      // Scoring is already committed. This separate step can fail without
-      // invalidating the saved attempt, but only run it when feedback is visible
-      // so hidden feedback cannot create a post-commit failure with no rerun UI.
+      // ── AI feedback when feedback display is enabled ──────────────────────────
+      // Scoring is already committed. When showSubmissionFeedback is on this step
+      // always runs — it is not optional. Failure sets an error marker so the
+      // learner can rerun without losing their saved grade.
       let aiFeedbackError: string | null = null;
-      if (
-        assignment.showSubmissionFeedback &&
-        this.isAssignmentFullyDeterministic(assignment.questions)
-      ) {
+      if (assignment.showSubmissionFeedback) {
         try {
           await this.generateAiFeedbackForDeterministicAttempt(
             gradedItems,
