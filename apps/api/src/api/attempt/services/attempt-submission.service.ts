@@ -605,48 +605,48 @@ export class AttemptSubmissionService {
       );
     }
 
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: {
-        showSubmissionFeedback: true,
-        questions: { where: { isDeleted: false }, select: { type: true } },
-      },
-    });
-
-    if (!assignment) {
-      throw new NotFoundException(`Assignment ${assignmentId} not found.`);
-    }
-
-    if (!this.isAssignmentFullyDeterministic(assignment.questions)) {
-      throw new BadRequestException(
-        `AI feedback rerun is only supported for fully deterministic assignments.`,
-      );
-    }
-
-    if (!assignment.showSubmissionFeedback) {
-      throw new BadRequestException(
-        `Feedback is not enabled for assignment ${assignmentId}.`,
-      );
-    }
-
-    const persistedAttempt =
-      await this.loadPersistedGradedItemsForDeterministicAttempt(
-        attemptId,
-        assignmentId,
-      );
-
+    // Validate and generate feedback. Any exception after the atomic lock must
+    // restore GradingProgress to COMPLETED+error so the learner can retry.
     try {
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: {
+          showSubmissionFeedback: true,
+          questions: { where: { isDeleted: false }, select: { type: true } },
+        },
+      });
+
+      if (!assignment) {
+        throw new NotFoundException(`Assignment ${assignmentId} not found.`);
+      }
+
+      if (!this.isAssignmentFullyDeterministic(assignment.questions)) {
+        throw new BadRequestException(
+          `AI feedback rerun is only supported for fully deterministic assignments.`,
+        );
+      }
+
+      if (!assignment.showSubmissionFeedback) {
+        throw new BadRequestException(
+          `Feedback is not enabled for assignment ${assignmentId}.`,
+        );
+      }
+
+      const persistedAttempt =
+        await this.loadPersistedGradedItemsForDeterministicAttempt(
+          attemptId,
+          assignmentId,
+        );
+
       await this.generateAiFeedbackForDeterministicAttempt(
         persistedAttempt.gradedItems,
         assignmentId,
         attemptId,
         persistedAttempt.language,
       );
-    } catch (feedbackError) {
+    } catch (rerunError) {
       const internalError =
-        feedbackError instanceof Error
-          ? feedbackError.message
-          : String(feedbackError);
+        rerunError instanceof Error ? rerunError.message : String(rerunError);
       this.logger.warn("AI feedback rerun failed", {
         attemptId,
         assignmentId,
@@ -656,9 +656,13 @@ export class AttemptSubmissionService {
         attemptId,
         AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
       );
-      throw new InternalServerErrorException(
-        AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
-      );
+      throw rerunError instanceof InternalServerErrorException ||
+        rerunError instanceof BadRequestException ||
+        rerunError instanceof NotFoundException
+        ? rerunError
+        : new InternalServerErrorException(
+            AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+          );
     }
 
     await this.progressService?.clearAiFeedbackError(attemptId);

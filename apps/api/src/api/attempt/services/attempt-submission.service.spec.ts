@@ -45,6 +45,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     },
     gradingProgress: {
       findUnique: jest.fn(),
+      updateMany: jest.fn(),
     },
   };
 
@@ -1158,10 +1159,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     const attemptId = 42;
 
     beforeEach(() => {
-      mockPrisma.gradingProgress.findUnique.mockResolvedValue({
-        status: GradingStatus.COMPLETED,
-        error: "AI feedback failed",
-      });
+      mockPrisma.gradingProgress.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.assignment.findUnique.mockResolvedValue({
         showSubmissionFeedback: true,
         questions: [{ type: QuestionType.SINGLE_CORRECT }],
