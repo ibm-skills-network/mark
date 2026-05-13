@@ -1,7 +1,7 @@
 {
   "extends": "tsconfig/nestjs.json",
   "compilerOptions": {
-    "lib": ["es2021", "dom"],
+    "lib": ["es2022", "dom"],
     "types": ["node"],
     "outDir": "./dist",
     "baseUrl": "./",
