@@ -116,6 +116,15 @@ export async function uploadFileToStorage(
       loaded: number;
       total: number;
     }) => void;
+    /**
+     * Called when the server returns a 503-busy on `/initiate`, just before
+     * sleeping for `retryAfterMs`. UI can flip this file to a "waiting" state.
+     */
+    onWaitingForCapacity?: (info: {
+      retryAfterMs: number;
+      attempt: number;
+      maxAttempts: number;
+    }) => void;
   },
 ): Promise<MultipartUploadedStorageFile> {
   const resolvedUploadRequest: UploadRequest = {
@@ -125,7 +134,7 @@ export async function uploadFileToStorage(
     fileSize: uploadRequest.fileSize || file.size,
   };
 
-  const { reliableUpload } = await import("./reliableUpload");
+  const { reliableUpload, UploadError } = await import("./reliableUpload");
 
   let multipartResponse: MultipartUploadInitiateResponse;
   try {
@@ -140,8 +149,12 @@ export async function uploadFileToStorage(
             });
           }
         : undefined,
+      options?.onWaitingForCapacity,
     );
   } catch (error: unknown) {
+    if (error instanceof UploadError) {
+      throw error;
+    }
     if (error instanceof Error) {
       throw new Error(`Upload failed: ${error.message}`);
     }

@@ -41,7 +41,7 @@ export interface AttachedFile {
   extractedContent?: string;
   /** Leading snippet from extracted content (not semantic summary). */
   contentPrefix?: string;
-  uploadStatus: "uploading" | "uploaded" | "error";
+  uploadStatus: "uploading" | "waiting" | "uploaded" | "error";
   uploadProgress: number;
   s3Link?: string;
   s3Key?: string;

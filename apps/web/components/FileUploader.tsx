@@ -203,8 +203,19 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             ...prev,
             [id]: {
               ...prev[id],
+              status: "uploading",
               progress,
               message: `Uploading... ${progress}%`,
+            },
+          }));
+        },
+        onWaitingForCapacity: () => {
+          setUploadStatus((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              status: "waiting",
+              message: "Waiting to upload…",
             },
           }));
         },
@@ -231,25 +242,23 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         onUploadComplete(formattedFile);
       }
     } catch (error: unknown) {
+      const { UploadError } = await import("@/lib/reliableUpload");
+      const userMessage =
+        error instanceof UploadError
+          ? error.userMessage
+          : error instanceof Error
+            ? error.message
+            : "An unknown error occurred.";
+      setUploadStatus((prev) => ({
+        ...prev,
+        [id]: {
+          status: "error",
+          message: userMessage,
+          progress: 0,
+        },
+      }));
       if (error instanceof Error) {
-        setUploadStatus((prev) => ({
-          ...prev,
-          [id]: {
-            status: "error",
-            message: error.message,
-            progress: 0,
-          },
-        }));
         onUploadError?.(error, file);
-      } else {
-        setUploadStatus((prev) => ({
-          ...prev,
-          [id]: {
-            status: "error",
-            message: "An unknown error occurred.",
-            progress: 0,
-          },
-        }));
       }
     }
   };

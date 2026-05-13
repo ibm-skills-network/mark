@@ -890,7 +890,9 @@ const FileAttachmentChips: React.FC<FileAttachmentChipsProps> = ({
               ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
               : file.uploadStatus === "uploading"
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                : file.uploadStatus === "waiting"
+                  ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                  : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
           }`}
         >
           <PaperClipIcon className="w-3 h-3" />
@@ -908,6 +910,10 @@ const FileAttachmentChips: React.FC<FileAttachmentChipsProps> = ({
                 transition={{ duration: 0.3 }}
               />
             </div>
+          )}
+
+          {file.uploadStatus === "waiting" && (
+            <span className="italic">Waiting to upload…</span>
           )}
 
           {file.uploadStatus === "error" && (
@@ -1165,7 +1171,13 @@ export const MarkChat = () => {
             const percent = Math.round(
               (progress.loaded / progress.total) * 100,
             );
-            updateFileStatus(fileId, { uploadProgress: percent });
+            updateFileStatus(fileId, {
+              uploadStatus: "uploading",
+              uploadProgress: percent,
+            });
+          },
+          onWaitingForCapacity: () => {
+            updateFileStatus(fileId, { uploadStatus: "waiting" });
           },
         });
 
@@ -1181,12 +1193,18 @@ export const MarkChat = () => {
         toast.success(`${file.name} uploaded successfully`);
       } catch (error: unknown) {
         console.error("File upload error:", error);
+        const { UploadError } = await import("@/lib/reliableUpload");
+        const userMessage =
+          error instanceof UploadError
+            ? error.userMessage
+            : error instanceof Error
+              ? error.message
+              : "Upload failed";
         updateFileStatus(fileId, {
           uploadStatus: "error",
-          errorMessage:
-            error instanceof Error ? error.message : "Upload failed",
+          errorMessage: userMessage,
         });
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`${file.name}: ${userMessage}`);
       }
     },
     [userRole, addAttachedFile, updateFileStatus],
