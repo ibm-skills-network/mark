@@ -274,19 +274,23 @@ export class FilesService {
     };
 
     switch (uploadType) {
-      case UploadType.AUTHOR:
+      case UploadType.AUTHOR: {
         if (!isAuthor && !isAdmin) denied();
         return;
+      }
       case UploadType.LEARNER:
       case UploadType.LEARNER_PROD:
-      case UploadType.CHATBOT:
+      case UploadType.CHATBOT: {
         if (!isLearner && !isAdmin) denied();
         return;
-      case UploadType.DEBUG:
+      }
+      case UploadType.DEBUG: {
         if (!isAdmin) denied();
         return;
-      default:
+      }
+      default: {
         denied();
+      }
     }
   }
 
@@ -552,6 +556,37 @@ export class FilesService {
         })),
       },
     });
+
+    const maxAllowedBytes = this.getMaxUploadBytes(request.uploadType);
+    const head = await this.s3Service.headObject({
+      Bucket: bucket,
+      Key: request.key,
+    });
+    const actualSize =
+      typeof head.ContentLength === "number" ? head.ContentLength : 0;
+
+    if (actualSize > maxAllowedBytes) {
+      this.logger.warn(
+        `Multipart complete exceeded size cap: uploadType=${request.uploadType} ` +
+          `key=${request.key} actual=${actualSize} max=${maxAllowedBytes}`,
+      );
+      try {
+        await this.s3Service.deleteObject({
+          Bucket: bucket,
+          Key: request.key,
+        });
+      } catch (deleteError) {
+        this.logger.error(
+          `Failed to delete oversized multipart object key=${request.key}: ` +
+            (deleteError instanceof Error
+              ? deleteError.message
+              : String(deleteError)),
+        );
+      }
+      throw new BadRequestException(
+        `File is too large. Max allowed is ${maxAllowedBytes} bytes.`,
+      );
+    }
 
     return {
       success: true,
