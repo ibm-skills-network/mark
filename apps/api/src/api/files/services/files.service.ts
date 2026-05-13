@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { CreateFolderDto } from "../dto/create-folder.dto";
 import {
   FileMetadataDto,
@@ -146,6 +148,7 @@ export class FilesService {
   resolveUploadTarget(
     uploadRequest: UploadRequestDto,
     userId: string,
+    role: UserRole,
   ): {
     bucket: string;
     key: string;
@@ -162,6 +165,8 @@ export class FilesService {
       uploadType,
       context = {},
     } = uploadRequest;
+
+    this.assertRoleAllowedForUploadType(role, uploadType, userId);
 
     const bucket = this.s3Service.getBucketName(uploadType);
     if (!bucket) {
@@ -250,6 +255,39 @@ export class FilesService {
       uploadType,
       maxAllowedBytes,
     };
+  }
+
+  private assertRoleAllowedForUploadType(
+    role: UserRole,
+    uploadType: UploadType,
+    userId: string,
+  ): void {
+    const isAdmin = role === UserRole.ADMIN;
+    const isAuthor = role === UserRole.AUTHOR;
+    const isLearner = role === UserRole.LEARNER;
+
+    const denied = (): never => {
+      this.logger.warn(
+        `Upload type rejected by role guard: uploadType=${uploadType} role=${role} user=${userId}`,
+      );
+      throw new ForbiddenException();
+    };
+
+    switch (uploadType) {
+      case UploadType.AUTHOR:
+        if (!isAuthor && !isAdmin) denied();
+        return;
+      case UploadType.LEARNER:
+      case UploadType.LEARNER_PROD:
+      case UploadType.CHATBOT:
+        if (!isLearner && !isAdmin) denied();
+        return;
+      case UploadType.DEBUG:
+        if (!isAdmin) denied();
+        return;
+      default:
+        denied();
+    }
   }
 
   private getMaxUploadBytes(uploadType: UploadType): number {
@@ -367,6 +405,7 @@ export class FilesService {
   async generateUploadUrl(
     uploadRequest: UploadRequestDto,
     userId: string,
+    role: UserRole,
   ): Promise<UploadResponseDto> {
     const {
       bucket,
@@ -376,7 +415,7 @@ export class FilesService {
       fileSize,
       uploadType,
       maxAllowedBytes,
-    } = this.resolveUploadTarget(uploadRequest, userId);
+    } = this.resolveUploadTarget(uploadRequest, userId, role);
     const expiresInSeconds = this.getPresignedUploadTtlSeconds();
 
     const presignedUrl = await this.s3Service.getSignedUrl("putObject", {
@@ -414,6 +453,7 @@ export class FilesService {
   async initiateMultipartUpload(
     uploadRequest: UploadRequestDto,
     userId: string,
+    role: UserRole,
   ): Promise<MultipartUploadInitiateResponseDto> {
     const {
       bucket,
@@ -423,7 +463,7 @@ export class FilesService {
       fileSize,
       uploadType,
       maxAllowedBytes,
-    } = this.resolveUploadTarget(uploadRequest, userId);
+    } = this.resolveUploadTarget(uploadRequest, userId, role);
     const expiresInSeconds = this.getPresignedUploadTtlSeconds();
     const partSizeBytes = this.getMultipartPartSizeBytes();
     // Number of parts = file size divided by part size, rounded up

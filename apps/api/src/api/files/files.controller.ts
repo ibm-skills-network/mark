@@ -90,6 +90,7 @@ export class FilesController {
     return this.filesService.generateUploadUrl(
       uploadRequest,
       request.userSession.userId,
+      request.userSession.role,
     );
   }
 
@@ -103,6 +104,7 @@ export class FilesController {
     return this.filesService.initiateMultipartUpload(
       uploadRequest,
       request.userSession.userId,
+      request.userSession.role,
     );
   }
 
@@ -172,6 +174,7 @@ export class FilesController {
         context,
       },
       userId,
+      request.userSession.role,
     );
 
     const result = await this.filesService.directUpload(file, bucket, key);
