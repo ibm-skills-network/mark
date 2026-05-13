@@ -1,4 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
+import { PrismaService } from "src/database/prisma.service";
 import { UploadType } from "../dto/upload.dto";
 import { FilesService } from "./files.service";
 import { S3Service } from "./s3.service";
@@ -12,6 +14,7 @@ describe("FilesService", () => {
     getSignedUrl: jest.fn(),
     createMultipartUpload: jest.fn(),
     completeMultipartUpload: jest.fn(),
+    headObject: jest.fn(),
     putObject: jest.fn(),
     deleteObject: jest.fn(),
     listObjectsV2: jest.fn(),
@@ -19,9 +22,17 @@ describe("FilesService", () => {
     copyObject: jest.fn(),
   } as unknown as S3Service;
 
+  const mockPrismaService = {
+    fileUpload: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+  } as unknown as PrismaService;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new FilesService(mockS3Service);
+    service = new FilesService(mockS3Service, mockPrismaService);
   });
 
   it("generates learner upload URLs with assignment/user/question prefix", async () => {
@@ -44,6 +55,7 @@ describe("FilesService", () => {
         },
       },
       "user-123",
+      UserRole.LEARNER,
     );
 
     expect(result.presignedUrl).toBe("https://signed-upload-url");
@@ -56,7 +68,7 @@ describe("FilesService", () => {
         Key: result.key,
         ContentType: "text/plain",
         ContentLength: 1024,
-        Expires: 120,
+        Expires: 600,
       }),
     );
   });
@@ -79,6 +91,7 @@ describe("FilesService", () => {
           },
         },
         "user-123",
+        UserRole.LEARNER,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -100,6 +113,7 @@ describe("FilesService", () => {
           context: { path: "../../../etc", assignmentId: 1, questionId: 1 },
         },
         "user-123",
+        UserRole.LEARNER,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -120,6 +134,7 @@ describe("FilesService", () => {
           context: { path: "abc\0def", assignmentId: 1, questionId: 1 },
         },
         "user-123",
+        UserRole.LEARNER,
       ),
     ).rejects.toThrow(/Invalid upload path/);
   });
@@ -140,6 +155,7 @@ describe("FilesService", () => {
           context: { path: "chatbot/abc123" },
         },
         "user-123",
+        UserRole.LEARNER,
       ),
     ).rejects.toThrow(BadRequestException);
   });
@@ -160,6 +176,7 @@ describe("FilesService", () => {
         uploadType: UploadType.CHATBOT,
       },
       "user-456",
+      UserRole.LEARNER,
     );
 
     expect(result.bucket).toBe("learner-bucket");
@@ -182,6 +199,7 @@ describe("FilesService", () => {
           uploadType: UploadType.CHATBOT,
         },
         "user-456",
+        UserRole.LEARNER,
       ),
     ).rejects.toThrow("Unsupported file extension for chatbot upload.");
   });
@@ -201,6 +219,7 @@ describe("FilesService", () => {
           uploadType: UploadType.CHATBOT,
         },
         "user-456",
+        UserRole.LEARNER,
       ),
     ).rejects.toThrow(
       "File extension does not match the provided MIME type for chatbot upload.",
@@ -264,6 +283,7 @@ describe("FilesService", () => {
         },
       },
       "user-123",
+      UserRole.LEARNER,
     );
 
     expect(result.uploadId).toBe("upload-123");
@@ -294,16 +314,35 @@ describe("FilesService", () => {
     const s3 = mockS3Service as unknown as {
       getBucketName: jest.Mock;
       completeMultipartUpload: jest.Mock;
+      headObject: jest.Mock;
+    };
+    const prisma = mockPrismaService as unknown as {
+      fileUpload: {
+        findUnique: jest.Mock;
+        deleteMany: jest.Mock;
+      };
     };
     s3.getBucketName.mockReturnValue("author-bucket");
     s3.completeMultipartUpload.mockResolvedValue({ ETag: '"etag-final"' });
-
-    const result = await service.completeMultipartUpload({
+    s3.headObject.mockResolvedValue({ ContentLength: 1024 });
+    prisma.fileUpload.findUnique.mockResolvedValue({
       uploadId: "upload-123",
-      key: "authors/user-123/file.txt",
+      userId: "user-123",
+      storageKey: "authors/user-123/file.txt",
+      bucket: "author-bucket",
       uploadType: UploadType.AUTHOR,
-      parts: [{ partNumber: 1, etag: '"etag-1"' }],
     });
+    prisma.fileUpload.deleteMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.completeMultipartUpload(
+      {
+        uploadId: "upload-123",
+        key: "authors/user-123/file.txt",
+        uploadType: UploadType.AUTHOR,
+        parts: [{ partNumber: 1, etag: '"etag-1"' }],
+      },
+      "user-123",
+    );
 
     expect(s3.completeMultipartUpload).toHaveBeenCalledWith({
       Bucket: "author-bucket",
