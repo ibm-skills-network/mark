@@ -237,8 +237,44 @@ async function bootstrap() {
       void shutdown("UNCAUGHT_EXCEPTION");
     });
 
-    process.on("unhandledRejection", (reason, promise) => {
-      logger.error("Unhandled Rejection at:", promise, "reason:", reason);
+    process.on("unhandledRejection", (reason) => {
+      // An unhandled rejection means a promise rejected with no handler
+      // attached. We cannot prove the application is in a sound state to
+      // keep serving requests (db/cache may be mid-operation, middleware
+      // may be partway through writing headers, BullMQ jobs may be in
+      // half-acknowledged state), so the safe default is to terminate
+      // and let K8s respawn. Prevent recurring crashes by catching
+      // expected async failures at the source — see e.g.
+      // PdfStructureExtractorService attaching `.catch` to PDF.js
+      // background tasks before awaiting.
+      let stack: string | undefined;
+      let name: string | undefined;
+      let serialized: string;
+      try {
+        if (reason instanceof Error) {
+          stack = reason.stack;
+          name = reason.name;
+          serialized = reason.message;
+        } else {
+          name = (reason as { constructor?: { name?: string } })?.constructor
+            ?.name;
+          stack = (reason as { stack?: string })?.stack;
+          try {
+            serialized = JSON.stringify(reason);
+          } catch {
+            serialized = String(reason);
+          }
+        }
+      } catch {
+        serialized = "<unserializable rejection reason>";
+      }
+
+      logger.error(
+        `Unhandled promise rejection: ` +
+          `name=${name ?? "<unknown>"} message=${String(reason)} ` +
+          `serialized=${serialized}`,
+        stack,
+      );
       void shutdown("UNHANDLED_REJECTION");
     });
 

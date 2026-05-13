@@ -30,6 +30,7 @@ import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
+import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
@@ -855,17 +856,39 @@ export class QuestionResponseService {
         );
       }
 
+      const learnerResponseJson = sanitizeUnicodeForJson(
+        JSON.stringify(learnerResponse ?? ""),
+      );
+      const feedbackClean = sanitizeUnicodeForJson(
+        JSON.parse(JSON.stringify(responseDto.feedback)) as object,
+      );
+      const metadataJson = responseDto.metadata
+        ? sanitizeUnicodeForJson(JSON.stringify(responseDto.metadata))
+        : null;
+      const totalReplaced =
+        learnerResponseJson.replaced +
+        feedbackClean.replaced +
+        (metadataJson?.replaced ?? 0);
+      if (totalReplaced > 0) {
+        this.logger.warn(
+          "[saveResponseToDatabase] Replaced lone UTF-16 surrogates before write",
+          {
+            questionId,
+            attemptId: assignmentAttemptId,
+            replacements: totalReplaced,
+          },
+        );
+      }
+
       const result = await prisma.questionResponse.create({
         data: {
           assignmentAttemptId:
             role === UserRole.LEARNER ? assignmentAttemptId : 1,
           questionId: questionId,
-          learnerResponse: JSON.stringify(learnerResponse ?? ""),
+          learnerResponse: learnerResponseJson.value,
           points: responseDto.totalPoints ?? 0,
-          feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
-          metadata: responseDto.metadata
-            ? JSON.stringify(responseDto.metadata)
-            : null,
+          feedback: feedbackClean.value,
+          metadata: metadataJson?.value ?? null,
           gradedAt: new Date(),
         },
       });

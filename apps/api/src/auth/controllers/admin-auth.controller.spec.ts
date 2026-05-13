@@ -97,7 +97,7 @@ describe("AdminAuthController — enumeration guards", () => {
 
     it("rejects malformed email format with BadRequestException", async () => {
       await expect(
-        controller.sendVerificationCode({ email: "not-an-email" })
+        controller.sendVerificationCode({ email: "not-an-email" }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(verification.isAuthorizedEmail).not.toHaveBeenCalled();
     });
@@ -120,7 +120,7 @@ describe("AdminAuthController — enumeration guards", () => {
       expect(unauthorizedError).toBeInstanceOf(BadRequestException);
       expect(wrongCodeError).toBeInstanceOf(BadRequestException);
       expect((unauthorizedError as BadRequestException).getResponse()).toEqual(
-        (wrongCodeError as BadRequestException).getResponse()
+        (wrongCodeError as BadRequestException).getResponse(),
       );
     });
 
@@ -132,7 +132,7 @@ describe("AdminAuthController — enumeration guards", () => {
         controller.verifyCode({
           email: "stranger@example.com",
           code: "123456",
-        })
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(verification.generateAdminSession).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe("AdminAuthController — enumeration guards", () => {
       expect(result.success).toBe(true);
       expect(result.sessionToken).toBe("session-token-deadbeef");
       expect(verification.generateAdminSession).toHaveBeenCalledWith(
-        "admin@example.com"
+        "admin@example.com",
       );
     });
 
@@ -159,7 +159,7 @@ describe("AdminAuthController — enumeration guards", () => {
         controller.verifyCode({
           email: "admin@example.com",
           code: "12345",
-        })
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(verification.verifyCode).not.toHaveBeenCalled();
       expect(verification.isAuthorizedEmail).not.toHaveBeenCalled();

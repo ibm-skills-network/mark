@@ -10,11 +10,13 @@ jest.mock("./job-payload.crypto", () => ({
 
 const queueAdd = jest.fn();
 const queueClose = jest.fn();
+const queueGetJob = jest.fn();
 
 jest.mock("bullmq", () => ({
   Queue: jest.fn().mockImplementation(() => ({
     add: queueAdd,
     close: queueClose,
+    getJob: queueGetJob,
   })),
 }));
 
@@ -37,6 +39,7 @@ describe("JobQueueService", () => {
       .mockImplementation(() => undefined);
     queueAdd.mockResolvedValue(undefined);
     queueClose.mockResolvedValue(undefined);
+    queueGetJob.mockResolvedValue(undefined);
     mockConnection.quit.mockResolvedValue(undefined);
     (createRedisConnection as jest.Mock).mockReturnValue(mockConnection);
     (encryptJobPayload as jest.Mock).mockImplementation((payload: unknown) => ({
@@ -98,5 +101,54 @@ describe("JobQueueService", () => {
     await service.enqueue("queue-a", "job-1", { id: 1 });
 
     expect(createRedisConnection).toHaveBeenCalledTimes(1);
+  });
+
+  describe("findActiveJob", () => {
+    it("returns null when the queue has no record of the job id", async () => {
+      queueGetJob.mockResolvedValueOnce(undefined);
+
+      const result = await service.findActiveJob("queue-a", "publish:v2:1");
+
+      expect(queueGetJob).toHaveBeenCalledWith("publish:v2:1");
+      expect(result).toBeNull();
+    });
+
+    it("returns the job descriptor when the job is in flight", async () => {
+      queueGetJob.mockResolvedValueOnce({
+        id: "publish:v2:1",
+        getState: jest.fn().mockResolvedValue("active"),
+      });
+
+      const result = await service.findActiveJob("queue-a", "publish:v2:1");
+
+      expect(result).toEqual({ id: "publish:v2:1", state: "active" });
+    });
+
+    it("returns null when the job is in a terminal state (completed/failed/unknown)", async () => {
+      const terminalStates = ["completed", "failed", "unknown"] as const;
+
+      for (const state of terminalStates) {
+        queueGetJob.mockResolvedValueOnce({
+          id: "publish:v2:1",
+          getState: jest.fn().mockResolvedValue(state),
+        });
+
+        // eslint-disable-next-line no-await-in-loop
+        const result = await service.findActiveJob("queue-a", "publish:v2:1");
+
+        expect(result).toBeNull();
+      }
+    });
+
+    it("returns the job descriptor for delayed jobs (BullMQ retry backoff)", async () => {
+      queueGetJob.mockResolvedValueOnce({
+        id: "publish:v2:1",
+        getState: jest.fn().mockResolvedValue("delayed"),
+      });
+
+      const result = await service.findActiveJob("queue-a", "publish:v2:1");
+
+      expect(result).toEqual({ id: "publish:v2:1", state: "delayed" });
+    });
   });
 });

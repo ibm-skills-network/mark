@@ -88,6 +88,56 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
     return built;
   }
 
+  async invalidateForAssignment(assignmentId: number): Promise<void> {
+    if (!this.redis) {
+      this.logger.debug(
+        `attempt-access-cache.invalidate.skip { assignmentId: ${assignmentId}, reason: "no-redis" }`,
+      );
+      return;
+    }
+
+    let assignmentKeysDeleted = 0;
+    let versionKeysDeleted = 0;
+
+    try {
+      const matchPattern = `mark:attempt-access:assignment:${assignmentId}:*`;
+      let cursor = "0";
+      do {
+        const [nextCursor, batch] = await this.redis.scan(
+          cursor,
+          "MATCH",
+          matchPattern,
+          "COUNT",
+          100,
+        );
+        if (batch.length > 0) {
+          assignmentKeysDeleted += await this.redis.del(...batch);
+        }
+        cursor = nextCursor;
+      } while (cursor !== "0");
+
+      const versions = await this.prisma.assignmentVersion.findMany({
+        where: { assignmentId },
+        select: { id: true },
+      });
+      if (versions.length > 0) {
+        const versionKeys = versions.map(
+          (v) => `mark:attempt-access:version:${v.id}`,
+        );
+        versionKeysDeleted = await this.redis.del(...versionKeys);
+      }
+
+      this.logger.info(
+        `attempt-access-cache.invalidate.done { assignmentId: ${assignmentId}, assignmentKeysDeleted: ${assignmentKeysDeleted}, versionKeysDeleted: ${versionKeysDeleted} }`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      this.logger.warn(
+        `attempt-access-cache.invalidate.failed { assignmentId: ${assignmentId}, error: ${JSON.stringify(message)} }`,
+      );
+    }
+  }
+
   private createRedisClient(): IORedis | undefined {
     try {
       const client = createRedisConnection();

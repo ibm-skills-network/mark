@@ -876,23 +876,18 @@ export async function getOrCreateTodayChat(
 ): Promise<Chat> {
   const url = `${getApiRoutes().chats}/today`;
 
-  const res = await apiClient.post(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-    body: JSON.stringify({
+  return await apiClient.post(
+    url,
+    {
       userId,
       assignmentId,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get or create chat");
-  }
-
-  return (await res.json()) as Chat;
+    },
+    {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    },
+  );
 }
 
 /**
@@ -904,18 +899,11 @@ export async function getChatById(
 ): Promise<Chat> {
   const url = `${getApiRoutes().chats}/${chatId}`;
 
-  const res = await apiClient.get(url, {
+  return await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get chat");
-  }
-
-  return (await res.json()) as Chat;
 }
 
 /**
@@ -927,18 +915,11 @@ export async function getUserChats(
 ): Promise<Chat[]> {
   const url = `${getApiRoutes().chats}/user/${userId}`;
 
-  const res = await apiClient.get(url, {
+  return await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to get user chats");
-  }
-
-  return (await res.json()) as Chat[];
 }
 
 /**
@@ -953,24 +934,19 @@ export async function addMessageToChat(
 ): Promise<ChatMessage> {
   const url = `${getApiRoutes().chats}/${chatId}/messages`;
 
-  const res = await apiClient.post(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-    body: JSON.stringify({
+  return await apiClient.post(
+    url,
+    {
       role,
       content,
       toolCalls,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to add message to chat");
-  }
-
-  return (await res.json()) as ChatMessage;
+    },
+    {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    },
+  );
 }
 
 /**
@@ -979,19 +955,11 @@ export async function addMessageToChat(
 export async function endChat(chatId: string, cookies?: string): Promise<Chat> {
   const url = `${getApiRoutes().chats}/${chatId}/end`;
 
-  const res = await fetch(url, {
-    method: "POST",
+  return await apiClient.post(url, undefined, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });
-
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to end chat");
-  }
-
-  return (await res.json()) as Chat;
 }
 
 /**

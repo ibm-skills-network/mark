@@ -64,7 +64,117 @@ export class QuestionRepository {
     }
   }
   /**
-   * Create or update a question
+   * Create a question and connect it to the given assignment. The database
+   * autoincrements the primary key — any caller-supplied id is ignored.
+   *
+   * Use this for any flow where the caller cannot vouch that the supplied id
+   * already belongs to the target assignment (e.g. publish payloads where the
+   * id may have been generated client-side).
+   */
+  async createForAssignment(
+    input: Omit<QuestionDto, "id">,
+    assignmentId: number,
+  ): Promise<Question> {
+    this.logger.log(
+      `createForAssignment entry { assignmentId: ${assignmentId} }`,
+    );
+    try {
+      const createData: Prisma.QuestionCreateInput = {
+        totalPoints: input.totalPoints,
+        type: input.type,
+        question: input.question,
+        authorComment: input.authorComment ?? null,
+        responseType: input.responseType,
+        maxWords: input.maxWords,
+        maxCharacters: input.maxCharacters,
+        randomizedChoices: input.randomizedChoices,
+        answer: input.answer,
+        choices: this.prepareJsonField(input.choices),
+        scoring: this.prepareJsonField(input.scoring),
+        videoPresentationConfig: this.prepareJsonField(
+          input.videoPresentationConfig,
+        ),
+        liveRecordingConfig: input.liveRecordingConfig,
+        gradingContextQuestionIds: input.gradingContextQuestionIds,
+        isDeleted: input.isDeleted ?? false,
+        assignment: { connect: { id: assignmentId } },
+      };
+
+      const created = await this.prisma.question.create({ data: createData });
+      this.logger.log(
+        `createForAssignment outcome { assignmentId: ${assignmentId}, persistedId: ${created.id} }`,
+      );
+      return created;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `createForAssignment failed for assignment ${assignmentId}: ${errorMessage}`,
+        errorStack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update a question only if it is owned by the given assignment.
+   * Returns null when the row does not exist, is soft-deleted, or belongs to
+   * a different assignment — the caller is expected to fall through to a
+   * create in that case.
+   *
+   * The `assignmentId` predicate in the WHERE clause is the ownership check;
+   * Prisma will only update when both id AND assignmentId match.
+   */
+  async updateOwnedById(
+    id: number,
+    assignmentId: number,
+    update: Prisma.QuestionUpdateInput,
+  ): Promise<Question | null> {
+    this.logger.log(
+      `updateOwnedById entry { assignmentId: ${assignmentId}, id: ${id} }`,
+    );
+    try {
+      const result = await this.prisma.question.updateMany({
+        where: { id, assignmentId, isDeleted: false },
+        data: update,
+      });
+
+      if (result.count === 0) {
+        this.logger.warn(
+          `updateOwnedById ownership-miss { assignmentId: ${assignmentId}, id: ${id} }`,
+        );
+        return null;
+      }
+
+      const refreshed = await this.prisma.question.findUnique({
+        where: { id },
+      });
+      this.logger.log(
+        `updateOwnedById outcome { assignmentId: ${assignmentId}, persistedId: ${id} }`,
+      );
+      return refreshed;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `updateOwnedById failed for assignment ${assignmentId}, id ${id}: ${errorMessage}`,
+        errorStack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Create or update a question.
+   *
+   * WARNING: This method is global-by-id. The `where: { id }` clause matches
+   * any Question row across all assignments. Do NOT use this in flows where
+   * the caller cannot vouch that the supplied id is already owned by the
+   * intended assignment — a colliding id will silently mutate a foreign row.
+   * Prefer `createForAssignment` + `updateOwnedById` when handling caller-
+   * supplied question payloads (e.g. publish).
    *
    * @param questionDto - Question data to create or update
    * @returns Created or updated question
