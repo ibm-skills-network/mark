@@ -335,7 +335,7 @@ export class FilesService {
     return parsed;
   }
 
-  private validateUploadSize(
+  validateUploadSize(
     fileSize: number,
     uploadType: UploadType,
     fileName: string,

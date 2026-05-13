@@ -11,6 +11,8 @@ import {
 } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { UploadType } from "src/api/files/dto/upload.dto";
+import { FilesService } from "src/api/files/services/files.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
 import {
@@ -48,6 +50,7 @@ export class AssignmentFileService {
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
     private readonly fileContentExtractionService: FileContentExtractionService,
+    private readonly filesService: FilesService,
   ) {}
 
   async initiateAssignmentFileUploads(
@@ -62,6 +65,15 @@ export class AssignmentFileService {
     const uploads: InitiateAssignmentFileItemResponseDto[] = [];
 
     for (const file of dto.files) {
+      // Cap file size before deriving partCount from it — the DTO only checks
+      // @IsPositive, so without this a client could request hundreds of
+      // thousands of presigned URLs in one call.
+      this.filesService.validateUploadSize(
+        file.fileSize,
+        UploadType.AUTHOR,
+        file.fileName,
+      );
+
       const key = this.generateStorageKey(assignmentId, file.fileName);
 
       const multipartUpload = await this.s3Service.createMultipartUpload({

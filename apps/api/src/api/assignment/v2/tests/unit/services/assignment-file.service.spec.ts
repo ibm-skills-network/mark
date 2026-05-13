@@ -8,6 +8,7 @@ import {
   AssignmentFileStatus,
 } from "@prisma/client";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { FilesService } from "src/api/files/services/files.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
 import { AssignmentFileService } from "../../../services/assignment-file.service";
@@ -36,6 +37,7 @@ describe("AssignmentFileService", () => {
   let prisma: any;
   let s3: any;
   let extractor: any;
+  let filesService: any;
 
   beforeEach(async () => {
     prisma = {
@@ -83,12 +85,17 @@ describe("AssignmentFileService", () => {
       ]),
     };
 
+    filesService = {
+      validateUploadSize: jest.fn().mockReturnValue(100 * 1024 * 1024),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AssignmentFileService,
         { provide: PrismaService, useValue: prisma },
         { provide: S3Service, useValue: s3 },
         { provide: FileContentExtractionService, useValue: extractor },
+        { provide: FilesService, useValue: filesService },
       ],
     }).compile();
 
