@@ -514,7 +514,9 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.service }}/Dockerfile
-          push: true
+          # Verify the Dockerfile builds on PRs but don't publish — same-repo
+          # PRs would otherwise push unmerged images and overwrite :latest.
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
@@ -523,7 +525,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Run container security scan
-        if: steps.changes.outputs.needs_build == 'true'
+        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
@@ -533,7 +535,7 @@ jobs:
         continue-on-error: true
 
       - name: Display container security scan results
-        if: steps.changes.outputs.needs_build == 'true'
+        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         run: |
           echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
           echo "===================================================="
@@ -560,7 +562,7 @@ jobs:
         continue-on-error: true
 
       - name: Check if container SARIF file exists
-        if: always() && steps.changes.outputs.needs_build == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         id: container-sarif-check
         run: |
           if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
@@ -571,14 +573,14 @@ jobs:
           fi
 
       - name: Upload container scan results
-        if: always() && steps.changes.outputs.needs_build == 'true' && steps.container-sarif-check.outputs.sarif_exists == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request' && steps.container-sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: "trivy-container-${{ matrix.service }}.sarif"
           category: trivy-container-${{ matrix.service }}
 
       - name: Upload container security reports as artifacts
-        if: always() && steps.changes.outputs.needs_build == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: container-security-reports-${{ matrix.service }}-${{ github.run_number }}
@@ -587,7 +589,7 @@ jobs:
           retention-days: 30
 
       - name: Trigger external image mirror
-        if: steps.changes.outputs.needs_build == 'true'
+        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         run: |
           curl -X POST \
             -H "Authorization: token ${{ secrets.GH_TOKEN_MIRROR_TO_ICR }}" \
