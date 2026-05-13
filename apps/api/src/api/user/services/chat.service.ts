@@ -73,9 +73,9 @@ export class ChatService {
     toolCalls?: JsonValue,
     userSession?: UserSession,
   ): Promise<ChatMessage> {
-    if (role === ChatRole.SYSTEM) {
+    if (role !== ChatRole.USER) {
       throw new BadRequestException(
-        "System messages cannot be persisted through the chat API.",
+        "Only USER role messages can be persisted through the chat API.",
       );
     }
 
