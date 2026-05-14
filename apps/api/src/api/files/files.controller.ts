@@ -87,6 +87,34 @@ export class FilesController {
     return this.filesService.generatePublicUrl(key);
   }
 
+  @Get("_budget")
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary:
+      "Admin-only snapshot of file-processing budget. pod.* is per-replica, cluster.* aggregates FileUpload rows in PENDING status.",
+  })
+  async getBudgetStatus(@Req() request: UserSessionRequest) {
+    if (request.userSession.role !== UserRole.ADMIN) {
+      throw new ForbiddenException();
+    }
+    const podStatus = this.filesService.getProcessingBudgetStatus();
+    const claims = this.filesService.getBudgetClaimsSnapshot();
+    const cluster = await this.filesService.getPendingUploadAggregate();
+    return {
+      pod: {
+        budget: podStatus.budget,
+        inflight: podStatus.inflight,
+        waiters: podStatus.waiters,
+        claims: claims.count,
+        claimedBytes: claims.totalBytes,
+      },
+      cluster: {
+        pendingUploads: cluster.count,
+        pendingBytes: cluster.totalBytes,
+      },
+    };
+  }
+
   @Post("upload")
   @UseGuards(AuthGuard)
   async generateUploadUrl(
