@@ -267,7 +267,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 8,
-        lockDuration: 300_000,
+        lockDuration: 120_000,
         maxStalledCount: 0,
       },
     );
