@@ -399,10 +399,25 @@ export class AttemptServiceV1 {
       },
     });
 
+    const cap = assignment.numberOfQuestionsPerAttempt;
+    if (cap && cap > 0 && questions.length > cap) {
+      for (let index = questions.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [questions[index], questions[swapIndex]] = [
+          questions[swapIndex],
+          questions[index],
+        ];
+      }
+      questions.splice(cap);
+    }
+
     if (assignment.displayOrder === "RANDOM") {
-      for (let i = questions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [questions[i], questions[j]] = [questions[j], questions[i]];
+      for (let index = questions.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [questions[index], questions[swapIndex]] = [
+          questions[swapIndex],
+          questions[index],
+        ];
       }
     } else if (
       assignment.questionOrder &&
@@ -413,14 +428,6 @@ export class AttemptServiceV1 {
         questions.length,
         ...applyQuestionOrder(questions, assignment.questionOrder),
       );
-    }
-
-    if (
-      assignment.numberOfQuestionsPerAttempt &&
-      assignment.numberOfQuestionsPerAttempt > 0 &&
-      questions.length > assignment.numberOfQuestionsPerAttempt
-    ) {
-      questions.splice(assignment.numberOfQuestionsPerAttempt);
     }
 
     await this.prisma.assignmentAttempt.update({

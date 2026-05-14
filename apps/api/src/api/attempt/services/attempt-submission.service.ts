@@ -204,7 +204,7 @@ export class AttemptSubmissionService {
     });
 
     const selectionSeed = assignmentAttempt.id ^ assignmentId;
-    const orderingSeed = ~selectionSeed >>> 0;
+    const orderingSeed = Math.imul(selectionSeed, 2_654_435_761) >>> 0;
 
     let questions: QuestionDto[] = [];
     if (assignment.currentVersion?.questionVersions?.length > 0) {

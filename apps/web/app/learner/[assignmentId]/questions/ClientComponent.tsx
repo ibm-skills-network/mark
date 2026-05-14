@@ -30,11 +30,11 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   const allQuestions = getStoredData("questions", []) as QuestionStore[];
   const numberOfQuestionsPerAttempt =
     assignmentDetails?.numberOfQuestionsPerAttempt || null;
-  const displayOrder = (
-    assignmentDetails as AssignmentDetails & {
-      displayOrder?: "DEFINED" | "RANDOM";
-    }
-  )?.displayOrder;
+  const displayOrder = assignmentDetails?.displayOrder;
+  // Content-based dep: `allQuestions` is a fresh array each render (re-parsed
+  // from localStorage), so we key the memo on the question id list instead of
+  // the array ref — otherwise the shuffle would re-run on every render.
+  const questionIdsKey = allQuestions.map((q) => q.id).join("|");
   const questions: QuestionStore[] = useMemo(() => {
     const shouldShuffle =
       displayOrder === "RANDOM" ||
@@ -43,15 +43,15 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     if (!shouldShuffle) return allQuestions;
 
     const pool = [...allQuestions];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
+    for (let index = pool.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
     }
 
     return numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
       ? pool.slice(0, numberOfQuestionsPerAttempt)
       : pool;
-  }, []);
+  }, [questionIdsKey, displayOrder, numberOfQuestionsPerAttempt]);
   useEffect(() => {
     setAssignmentDetails({
       ...assignmentDetails,
