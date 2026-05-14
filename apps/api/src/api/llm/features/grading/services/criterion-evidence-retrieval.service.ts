@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "langchain/output_parsers";
+import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import { extractStructuredJSON } from "../../../core/utils/structured-json.util";
