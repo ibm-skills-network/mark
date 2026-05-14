@@ -1170,7 +1170,13 @@ export class TranslationService implements OnModuleDestroy {
             return false;
           }
 
-          if (progressTracker && jobId) {
+          // Gate every parent-job updateJobStatus write on !parallelDone.
+          // Bottleneck's `expiration` rejects its outer promise but does
+          // not cancel the underlying LLM call — a slow callback can fire
+          // after the parallel section returns, and its updateJobProgress
+          // would flip the parent publish back from Completed to
+          // In Progress. Same defense already applied to mid-loop HSETs.
+          if (progressTracker && jobId && !parallelDone) {
             await this.updateJobProgress(
               progressTracker,
               getLanguageNameFromCode(lang),
@@ -1186,7 +1192,7 @@ export class TranslationService implements OnModuleDestroy {
             jobId,
           );
 
-          if (progressTracker) {
+          if (progressTracker && !parallelDone) {
             this.incrementLanguageCompleted(progressTracker);
             await this.updateJobProgress(
               progressTracker,
@@ -1459,7 +1465,7 @@ export class TranslationService implements OnModuleDestroy {
       supportedLanguages,
       async (lang: string) => {
         try {
-          if (progressTracker) {
+          if (progressTracker && !parallelDone) {
             await this.updateJobProgress(
               progressTracker,
               getLanguageNameFromCode(lang),
@@ -1483,7 +1489,7 @@ export class TranslationService implements OnModuleDestroy {
             collectedRows.push(row);
           }
 
-          if (progressTracker) {
+          if (progressTracker && !parallelDone) {
             this.incrementLanguageCompleted(progressTracker);
             await this.updateJobProgress(
               progressTracker,
@@ -1737,7 +1743,7 @@ export class TranslationService implements OnModuleDestroy {
       supportedLanguages,
       async (lang: string) => {
         try {
-          if (progressTracker) {
+          if (progressTracker && !parallelDone) {
             await this.updateJobProgress(
               progressTracker,
               getLanguageNameFromCode(lang),
@@ -1761,7 +1767,7 @@ export class TranslationService implements OnModuleDestroy {
             collectedRows.push(row);
           }
 
-          if (progressTracker) {
+          if (progressTracker && !parallelDone) {
             this.incrementLanguageCompleted(progressTracker);
             await this.updateJobProgress(
               progressTracker,
