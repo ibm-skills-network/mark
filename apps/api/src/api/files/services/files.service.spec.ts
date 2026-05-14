@@ -28,6 +28,11 @@ describe("FilesService", () => {
       create: jest.fn(),
       findUnique: jest.fn(),
       deleteMany: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      aggregate: jest.fn().mockResolvedValue({
+        _count: { _all: 0 },
+        _sum: { sizeBytes: null },
+      }),
     },
   } as unknown as PrismaService;
 
@@ -36,6 +41,9 @@ describe("FilesService", () => {
     acquire: jest.fn().mockResolvedValue(undefined),
     release: jest.fn(),
     buildBusyException: jest.fn(),
+    getStatus: jest
+      .fn()
+      .mockReturnValue({ budget: 1024 * 1024 * 1024, inflight: 0, waiters: 0 }),
   } as unknown as FileProcessingBudgetService;
 
   beforeEach(() => {
