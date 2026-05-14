@@ -174,10 +174,7 @@ describe("AssignmentControllerV2 — publish job status auth", () => {
       };
 
       await expect(
-        controller.getJobStatus(
-          "publish:v2:100",
-          noGroupSession as never,
-        ),
+        controller.getJobStatus("publish:v2:100", noGroupSession as never),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
     });

@@ -31,6 +31,7 @@ enum CorrectAnswerVisibility {
 }
 
 enum AssignmentFileStatus {
+  UPLOADING
   READY
   FAILED
 }
@@ -313,6 +314,7 @@ model AssignmentFile {
   storageKey    String
   storageBucket String
   status        AssignmentFileStatus @default(READY)
+  uploadId      String?
   extractedText String?              @db.Text
   extractionStatus AssignmentFileExtractionStatus @default(PENDING) // Defaulting to pending incase of future async extraction flows
   extractionError String?            @db.Text
@@ -1004,4 +1006,19 @@ model LLMFeatureAssignment {
   @@index([featureId, isActive])
   @@index([modelId])
   @@index([isActive])
+}
+
+/// Tracks in-flight presigned multipart uploads so /complete and /abort
+/// can verify the caller owns the uploadId+key before forwarding to S3.
+model FileUpload {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  uploadId   String   @unique
+  storageKey String
+  bucket     String
+  uploadType String
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, storageKey])
 }

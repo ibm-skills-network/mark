@@ -4,10 +4,12 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpException,
   HttpStatus,
   Inject,
+  NotFoundException,
   Param,
   Post,
   Put,
@@ -21,15 +23,25 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiQuery, ApiResponse } from "@nestjs/swagger";
 import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSession,
+  UserSessionRequest,
+} from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
-import { UploadRequestDto, UploadType } from "./dto/upload.dto";
+import {
+  AbortMultipartUploadRequestDto,
+  CompleteMultipartUploadRequestDto,
+  DirectUploadDto,
+  UploadContextDto,
+  UploadRequestDto,
+  UploadType,
+} from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
 import { FilesService } from "./services/files.service";
-import { sanitizeUploadPath } from "./services/path-sanitizer";
 import { S3Service } from "./services/s3.service";
 import { sanitizeForLog } from "../../logger/sanitize";
 
@@ -84,6 +96,47 @@ export class FilesController {
     return this.filesService.generateUploadUrl(
       uploadRequest,
       request.userSession.userId,
+      request.userSession.role,
+    );
+  }
+
+  @Post("upload/initiate")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Initiate multipart upload and return part URLs" })
+  async initiateMultipartUpload(
+    @Body() uploadRequest: UploadRequestDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    return this.filesService.initiateMultipartUpload(
+      uploadRequest,
+      request.userSession.userId,
+      request.userSession.role,
+    );
+  }
+
+  @Post("upload/complete")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Complete multipart upload using uploaded parts" })
+  async completeMultipartUpload(
+    @Body() body: CompleteMultipartUploadRequestDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    return this.filesService.completeMultipartUpload(
+      body,
+      request.userSession.userId,
+    );
+  }
+
+  @Post("upload/abort")
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: "Abort an in-progress multipart upload" })
+  async abortMultipartUpload(
+    @Body() body: AbortMultipartUploadRequestDto,
+    @Req() request: UserSessionRequest,
+  ): Promise<void> {
+    return this.filesService.abortMultipartUpload(
+      body,
+      request.userSession.userId,
     );
   }
 
@@ -93,7 +146,7 @@ export class FilesController {
     FileInterceptor("file", {
       storage: memoryStorage(),
       limits: {
-        fileSize: 10 * 1024 * 1024,
+        fileSize: 100 * 1024 * 1024,
       },
     }),
   )
@@ -102,22 +155,17 @@ export class FilesController {
   })
   async directUpload(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: any,
+    @Body() body: DirectUploadDto,
     @Req() request: UserSessionRequest,
   ) {
     if (!file) {
       throw new BadRequestException("No file provided");
     }
 
-    const uploadType = body.uploadType;
-    let context: any = {};
-
+    let context: UploadContextDto = {};
     if (body.context) {
       try {
-        context =
-          typeof body.context === "string"
-            ? JSON.parse(body.context)
-            : body.context;
+        context = JSON.parse(body.context);
       } catch (error) {
         this.logger.error("[DIRECT UPLOAD] Failed to parse context", {
           context_raw: sanitizeForLog(body.context),
@@ -131,59 +179,17 @@ export class FilesController {
 
     const userId = request.userSession.userId;
 
-    const bucket = this.s3Service.getBucketName(uploadType);
-
-    if (!bucket) {
-      this.logger.warn("[DIRECT UPLOAD] Invalid upload type", {
-        uploadType: sanitizeForLog(uploadType),
-        userId: sanitizeForLog(userId),
-      });
-      throw new BadRequestException("Invalid upload type");
-    }
-
-    let prefix = "";
-    const normalizedPath = sanitizeUploadPath(context.path);
-
-    switch (uploadType) {
-      case "author": {
-        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
-        break;
-      }
-      case "learner": {
-        if (typeof context.assignmentId !== "number") {
-          throw new BadRequestException(
-            "Missing assignmentId in context for learner upload",
-          );
-        }
-        if (typeof context.questionId !== "number") {
-          throw new BadRequestException(
-            "Missing questionId in context for learner upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `${context.assignmentId}/${userId}/${context.questionId}/`;
-        break;
-      }
-      case "debug": {
-        if (typeof context.reportId !== "number") {
-          throw new BadRequestException(
-            "Missing reportId in context for debug upload",
-          );
-        }
-        prefix = normalizedPath
-          ? `${normalizedPath}/`
-          : `debug/${context.reportId}/`;
-        break;
-      }
-      default: {
-        throw new BadRequestException("Invalid upload type");
-      }
-    }
-
-    const uniqueId =
-      Date.now().toString(36) + Math.random().toString(36).slice(2);
-    const key = `${prefix}${uniqueId}-${file.originalname}`;
+    const { bucket, key } = this.filesService.resolveUploadTarget(
+      {
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadType: body.uploadType,
+        context,
+      },
+      userId,
+      request.userSession.role,
+    );
 
     const result = await this.filesService.directUpload(file, bucket, key);
 
@@ -193,13 +199,14 @@ export class FilesController {
       bucket,
       fileType: file.mimetype,
       fileName: file.originalname,
-      uploadType,
+      uploadType: body.uploadType,
       size: file.size,
       etag: result.etag,
     };
   }
 
   @Get("access")
+  @UseGuards(AuthGuard)
   @ApiOperation({ summary: "Get direct file access URLs using presigned URLs" })
   @ApiQuery({ name: "key", required: true, description: "File key in storage" })
   @ApiQuery({
@@ -220,14 +227,10 @@ export class FilesController {
     @Query("key") key: string,
     @Query("bucket") bucket: string,
     @Query("expiration") expiration = "3600",
+    @Req() request?: UserSessionRequest,
   ): Promise<FileAccessDto> {
     try {
-      if (!key || !bucket) {
-        throw new HttpException(
-          "Key and bucket are required",
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+      this.assertAccessAllowed(key, bucket, request?.userSession);
 
       const expirationSeconds = Number.parseInt(expiration, 10);
 
@@ -279,17 +282,45 @@ export class FilesController {
       };
     } catch (error) {
       this.logger.error("[FILES] File access error", {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        key: sanitizeForLog(key),
+        bucket: sanitizeForLog(bucket),
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+        stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
       });
-      const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : "An unknown error occurred while accessing the file";
-      throw new HttpException(
-        `Failed to get file access: ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new NotFoundException();
+    }
+  }
+
+  /**
+   * Authorize a file access request:
+   * - require an authenticated user session
+   * - require the bucket to match one of the configured upload buckets
+   * - require the key to be owned by the caller (path segment match) or the
+   *   caller to be an admin
+   * Logs and throws a generic 4xx for the controller to translate into 404.
+   */
+  private assertAccessAllowed(
+    key: string,
+    bucket: string,
+    userSession: UserSession | undefined,
+  ): void {
+    if (!key || !bucket) {
+      throw new BadRequestException();
+    }
+    if (!userSession?.userId) {
+      throw new ForbiddenException();
+    }
+    if (!this.s3Service.isConfiguredUploadBucket(bucket)) {
+      throw new ForbiddenException();
+    }
+    if (userSession.role === UserRole.ADMIN) {
+      return;
+    }
+    const segments = key.split("/").filter(Boolean);
+    if (!segments.includes(userSession.userId)) {
+      throw new ForbiddenException();
     }
   }
 
@@ -314,14 +345,10 @@ export class FilesController {
     @Query("key") key: string,
     @Query("bucket") bucket: string,
     @Query("encoding") encoding = "utf8",
+    @Req() request?: UserSessionRequest,
   ): Promise<FileContentDto> {
     try {
-      if (!key || !bucket) {
-        throw new HttpException(
-          "Key and bucket are required",
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+      this.assertAccessAllowed(key, bucket, request?.userSession);
 
       const filename = key.split("/").pop() || key;
 
@@ -382,70 +409,8 @@ export class FilesController {
         ),
         stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
       });
-
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : "An unknown error occurred while accessing the file";
-      throw new HttpException(
-        `Failed to get file access: ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new NotFoundException();
     }
-  }
-
-  /**
-   * LEGACY SUPPORT: Old proxy endpoint redirects to presigned URL
-   */
-  @Get("proxy")
-  @ApiOperation({
-    summary: "Legacy proxy endpoint - redirects to presigned URL",
-  })
-  @ApiQuery({ name: "key", required: true, description: "File key in storage" })
-  @ApiQuery({
-    name: "bucket",
-    required: true,
-    description: "Storage bucket name",
-  })
-  async legacyProxy(
-    @Query("key") key: string,
-    @Query("bucket") bucket: string,
-    @Query("download") forceDownload?: string,
-  ) {
-    const fileAccess = await this.getFileAccess(key, bucket);
-
-    const redirectUrl =
-      forceDownload === "true" ? fileAccess.downloadUrl : fileAccess.viewUrl;
-
-    return {
-      redirectUrl,
-      message: "Use the redirectUrl for direct access to the file",
-      ...fileAccess,
-    };
-  }
-
-  /**
-   * LEGACY SUPPORT: Old info endpoint
-   */
-  @Get("info")
-  @ApiOperation({ summary: "Legacy info endpoint - use /access instead" })
-  async legacyInfo(@Query("key") key: string, @Query("bucket") bucket: string) {
-    const fileAccess = await this.getFileAccess(key, bucket);
-
-    return {
-      filename: fileAccess.filename,
-      size: fileAccess.size,
-      contentType: fileAccess.contentType,
-      lastModified: fileAccess.lastModified,
-      isImage: fileAccess.isImage,
-      isPdf: fileAccess.isPdf,
-      isText: fileAccess.isText,
-      proxyUrl: fileAccess.viewUrl,
-      contentUrl: fileAccess.textContentUrl,
-    };
   }
 
   private getContentType(filename: string): string {
