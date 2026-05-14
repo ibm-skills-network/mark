@@ -86,7 +86,7 @@
     "@types/pdf-parse": "^1.1.4",
     "axios": "^1.15.2",
     "cookie": "^0.7.0",
-    "express": "^4.19.2",
+    "express": "^5.1.0",
     "framer-motion": "^11.8.0",
     "jsondiffpatch": "^0.7.2",
     "lottie-react": "^2.4.0",
@@ -130,8 +130,7 @@
     "yarn": "^1.22.22"
   },
   "resolutions": {
-    "**/express": "^4.19.2",
-    "**/body-parser": "^1.20.3",
+    "**/express": "^5.1.0",
     "**/axios": "1.15.2",
     "**/jws": "3.2.3",
     "**/qs": "6.14.2",

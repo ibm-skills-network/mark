@@ -25,7 +25,7 @@ import { toAiUsageCounterNumber } from "../llm/core/utils/ai-usage-counter.util"
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { AdminAddContentToAssignmentRequestDto } from "./dto/assignment/add.content.to.assignment.request.dto";
-import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
+import { AdminBaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
 import {
   AdminCreateAssignmentRequestDto,
   AdminReplaceAssignmentRequestDto,
@@ -739,7 +739,7 @@ export class AdminService {
   async cloneAssignment(
     id: number,
     groupId: string,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: id },
       include: { questions: true },
@@ -929,7 +929,7 @@ export class AdminService {
 
   async createAssignment(
     createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     const assignment = await this.prisma.assignment.create({
       data: {
         name: createAssignmentRequestDto.name,
@@ -982,7 +982,7 @@ export class AdminService {
   async updateAssignment(
     id: number,
     updateAssignmentDto: AdminUpdateAssignmentRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,
@@ -999,7 +999,7 @@ export class AdminService {
   async replaceAssignment(
     id: number,
     updateAssignmentDto: AdminReplaceAssignmentRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     const result = await this.prisma.assignment.update({
       where: { id },
       data: updateAssignmentDto,
@@ -2021,7 +2021,7 @@ export class AdminService {
     }
   }
 
-  async removeAssignment(id: number): Promise<BaseAssignmentResponseDto> {
+  async removeAssignment(id: number): Promise<AdminBaseAssignmentResponseDto> {
     await this.prisma.questionResponse.deleteMany({
       where: { assignmentAttempt: { assignmentId: id } },
     });
@@ -2128,7 +2128,7 @@ export class AdminService {
     id: number,
     addContentRequestDto: AdminAddContentToAssignmentRequestDto,
     userId = "system",
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     const { assignment, config, gradingCriteria, questions } =
       addContentRequestDto;
     // Strip fields that don't exist in the assignment table (e.g., learningObjectives)
