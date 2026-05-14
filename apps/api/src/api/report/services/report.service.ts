@@ -1371,15 +1371,26 @@ A new related issue has been created: #${issue.number}
 
       const report = await this.prisma.report.create({ data: reportData });
 
-      await this.floService.sendError(issueTitle, description, {
-        severity: issueSeverity,
-        tags: ["mark", "chat", "report", role || "user", issueType],
-        assignmentId,
-        attemptId,
-        github_issue: issue.number,
-        report_id: report.id,
-        is_duplicate: isDuplicate,
-      });
+      // Fire-and-forget: Flo is best-effort telemetry. Never block the
+      // request on its NATS publish — the underlying ts-nats client opens a
+      // fresh connection per call and has no built-in deadline.
+      void this.floService
+        .sendError(issueTitle, description, {
+          severity: issueSeverity,
+          tags: ["mark", "chat", "report", role || "user", issueType],
+          assignmentId,
+          attemptId,
+          github_issue: issue.number,
+          report_id: report.id,
+          is_duplicate: isDuplicate,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Flo sendError dispatch failed for report ${report.id}: ${
+              (error as Error).message
+            }`,
+          );
+        });
 
       let message = `Thank you for your report. Issue #${issue.number} has been created and our team will review it soon. You can check the status of this issue anytime by asking me about your reported issues.`;
 
@@ -1599,86 +1610,25 @@ A new related issue has been created: #${issue.number}
       },
     });
 
-    const updatedReports = await Promise.all(
-      reports.map(async (report) => {
-        if (report.issueNumber) {
-          try {
-            const previousDeveloperComment = report.comments;
-            const { status, statusMessage, developerComment, closureReason } =
-              await this.syncGitHubIssueStatus(report.issueNumber);
-            const newDeveloperComment =
-              developerComment && developerComment !== previousDeveloperComment;
-            if (status !== report.status) {
-              await this.createStatusChangeNotification(
-                report.id,
-                status,
-                statusMessage,
-                closureReason,
-              );
-            }
-            if (
-              status !== report.status ||
-              developerComment ||
-              closureReason !== report.closureReason
-            ) {
-              const updates: {
-                status: ReportStatus;
-                statusMessage: string;
-                updatedAt: Date;
-                comments?: string;
-                resolution?: string;
-                closureReason?: string;
-              } = {
-                status,
-                statusMessage,
-                updatedAt: new Date(),
-              };
+    // Pure read: do not call GitHub or write to the DB on a list endpoint.
+    // GitHub → DB sync is driven by the webhook handler and the detail view;
+    // doing it here per-report fanned out N×M concurrent Prisma queries and
+    // routinely exhausted the connection pool.
+    //
+    // Duplicates still need the parent's resolved/closed status overlaid on
+    // the response. Batch-fetch all parents in a single query.
+    const parentIds = [
+      ...new Set(
+        reports
+          .map((r) => r.duplicateOfReportId)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    ];
 
-              if (developerComment) {
-                updates.comments = developerComment;
-              }
-
-              if (closureReason) {
-                updates.closureReason = closureReason;
-              }
-
-              await this.prisma.report.update({
-                where: { id: report.id },
-                data: updates,
-              });
-
-              report.status = status;
-              report.statusMessage = statusMessage;
-              report.closureReason = closureReason;
-
-              if (developerComment) {
-                report.comments = developerComment;
-              }
-
-              if (newDeveloperComment) {
-                const reporterEmail = report.reporterId;
-                await this.sendReportEmail(
-                  reporterEmail || undefined,
-                  `Update on your report #${report.issueNumber ?? report.id}`,
-                  `New developer comment:\n\n${developerComment}`,
-                );
-              }
-            }
-          } catch (error) {
-            this.logger.error(
-              `Error syncing GitHub issue status for report ID ${report.id}`,
-              {
-                reportId: report.id,
-                error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-              },
-            );
-          }
-        }
-
-        if (report.duplicateOfReportId) {
-          const parentReport = await this.prisma.report.findUnique({
-            where: { id: report.duplicateOfReportId },
+    const parents =
+      parentIds.length > 0
+        ? await this.prisma.report.findMany({
+            where: { id: { in: parentIds } },
             select: {
               id: true,
               issueNumber: true,
@@ -1686,63 +1636,35 @@ A new related issue has been created: #${issue.number}
               statusMessage: true,
               closureReason: true,
             },
-          });
+          })
+        : [];
 
-          if (parentReport) {
-            report.duplicateOfReportId = parentReport.id;
+    const parentById = new Map(parents.map((p) => [p.id, p]));
 
-            if (parentReport.status !== report.status) {
-              let statusMessage = report.statusMessage;
+    return reports.map((report) => {
+      if (!report.duplicateOfReportId) return report;
 
-              if (
-                parentReport.status === ReportStatus.RESOLVED ||
-                parentReport.status === ReportStatus.CLOSED
-              ) {
-                statusMessage = `This issue was marked as a duplicate of issue #${
-                  parentReport.issueNumber
-                } which has been ${
-                  parentReport.status === ReportStatus.RESOLVED
-                    ? "resolved"
-                    : "closed"
-                }.`;
+      const parent = parentById.get(report.duplicateOfReportId);
+      if (!parent) return report;
 
-                if (parentReport.closureReason) {
-                  await this.prisma.report.update({
-                    where: { id: report.id },
-                    data: {
-                      status: parentReport.status,
-                      statusMessage,
-                      closureReason: parentReport.closureReason,
-                      updatedAt: new Date(),
-                    },
-                  });
+      const parentClosed =
+        parent.status === ReportStatus.RESOLVED ||
+        parent.status === ReportStatus.CLOSED;
 
-                  report.status = parentReport.status;
-                  report.statusMessage = statusMessage;
-                  report.closureReason = parentReport.closureReason;
-                } else {
-                  await this.prisma.report.update({
-                    where: { id: report.id },
-                    data: {
-                      status: parentReport.status,
-                      statusMessage,
-                      updatedAt: new Date(),
-                    },
-                  });
-
-                  report.status = parentReport.status;
-                  report.statusMessage = statusMessage;
-                }
-              }
-            }
-          }
+      if (parentClosed && parent.status !== report.status) {
+        report.status = parent.status;
+        report.statusMessage = `This issue was marked as a duplicate of issue #${
+          parent.issueNumber
+        } which has been ${
+          parent.status === ReportStatus.RESOLVED ? "resolved" : "closed"
+        }.`;
+        if (parent.closureReason) {
+          report.closureReason = parent.closureReason;
         }
+      }
 
-        return report;
-      }),
-    );
-
-    return updatedReports;
+      return report;
+    });
   }
 
   async getReportComments(reportId: number, userSession: UserSession) {
@@ -2312,20 +2234,22 @@ A new related issue has been created: #${issue.number}
       },
     });
 
+    if (duplicateReports.length === 0) return;
+
+    const parentReport = await this.prisma.report.findUnique({
+      where: { id: parentReportId },
+      select: { issueNumber: true },
+    });
+
+    const updatedStatusMessage = parentReport?.issueNumber
+      ? `This issue was marked as a duplicate of issue #${
+          parentReport.issueNumber
+        } which has been ${
+          status === ReportStatus.RESOLVED ? "resolved" : "closed"
+        }.`
+      : statusMessage;
+
     for (const report of duplicateReports) {
-      const parentReport = await this.prisma.report.findUnique({
-        where: { id: parentReportId },
-        select: { issueNumber: true },
-      });
-
-      const updatedStatusMessage = parentReport?.issueNumber
-        ? `This issue was marked as a duplicate of issue #${
-            parentReport.issueNumber
-          } which has been ${
-            status === ReportStatus.RESOLVED ? "resolved" : "closed"
-          }.`
-        : statusMessage;
-
       const updateData: {
         status: ReportStatus;
         statusMessage: string;
@@ -2797,11 +2721,18 @@ A new related issue has been created: #${issue.number}
     assignmentId?: number,
   ): Promise<{ message: string; reportId?: number }> {
     try {
-      await this.floService.sendFeedback(title, description, {
-        rating,
-        userEmail,
-        portalName: portalName || "Mark AI Assistant",
-      });
+      // Fire-and-forget: see floService.sendError comment in reportIssue.
+      void this.floService
+        .sendFeedback(title, description, {
+          rating,
+          userEmail,
+          portalName: portalName || "Mark AI Assistant",
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Flo sendFeedback dispatch failed: ${(error as Error).message}`,
+          );
+        });
 
       const issueTitle = `[MARK CHAT] User Feedback: ${title}`;
       const issueBody = `

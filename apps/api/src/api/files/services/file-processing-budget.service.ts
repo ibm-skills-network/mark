@@ -60,11 +60,15 @@ export class FileProcessingBudgetService {
 
     if (this.inflight + bytes <= this.budget) {
       this.inflight += bytes;
+      this.logger.log(
+        `Acquired — inflight=${this.inflight}/${this.budget} ` +
+          `claimed=${bytes} waiters=${this.waiters.length}`,
+      );
       return;
     }
 
     this.logger.log(
-      `Acquire queued — inflight=${this.inflight} budget=${this.budget} ` +
+      `Acquire queued — inflight=${this.inflight}/${this.budget} ` +
         `requested=${bytes} waiters=${this.waiters.length}`,
     );
 
@@ -101,8 +105,16 @@ export class FileProcessingBudgetService {
     if (bytes > this.budget) return false;
     if (this.inflight + bytes <= this.budget) {
       this.inflight += bytes;
+      this.logger.log(
+        `Claimed — inflight=${this.inflight}/${this.budget} ` +
+          `claimed=${bytes} waiters=${this.waiters.length}`,
+      );
       return true;
     }
+    this.logger.log(
+      `Claim rejected — inflight=${this.inflight}/${this.budget} ` +
+        `requested=${bytes} waiters=${this.waiters.length}`,
+    );
     return false;
   }
 
@@ -127,6 +139,10 @@ export class FileProcessingBudgetService {
 
   release(bytes: number): void {
     this.inflight = Math.max(0, this.inflight - bytes);
+    this.logger.log(
+      `Released — inflight=${this.inflight}/${this.budget} ` +
+        `freed=${bytes} waiters=${this.waiters.length}`,
+    );
 
     while (
       this.waiters.length > 0 &&
@@ -138,6 +154,18 @@ export class FileProcessingBudgetService {
       this.inflight += next.bytes;
       next.resolve();
     }
+  }
+
+  /**
+   * Snapshot of pod-local budget state for the admin status endpoint.
+   * Values are per-pod and only reflect this replica.
+   */
+  getStatus(): { budget: number; inflight: number; waiters: number } {
+    return {
+      budget: this.budget,
+      inflight: this.inflight,
+      waiters: this.waiters.length,
+    };
   }
 
   private parseBytesFromEnv(
