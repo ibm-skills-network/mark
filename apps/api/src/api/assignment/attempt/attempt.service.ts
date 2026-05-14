@@ -400,7 +400,10 @@ export class AttemptServiceV1 {
     });
 
     if (assignment.displayOrder === "RANDOM") {
-      questions.sort(() => Math.random() - 0.5);
+      for (let i = questions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questions[i], questions[j]] = [questions[j], questions[i]];
+      }
     } else if (
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
@@ -411,6 +414,15 @@ export class AttemptServiceV1 {
         ...applyQuestionOrder(questions, assignment.questionOrder),
       );
     }
+
+    if (
+      assignment.numberOfQuestionsPerAttempt &&
+      assignment.numberOfQuestionsPerAttempt > 0 &&
+      questions.length > assignment.numberOfQuestionsPerAttempt
+    ) {
+      questions.splice(assignment.numberOfQuestionsPerAttempt);
+    }
+
     await this.prisma.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
       data: {

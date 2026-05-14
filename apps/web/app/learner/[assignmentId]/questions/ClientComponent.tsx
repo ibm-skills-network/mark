@@ -5,7 +5,7 @@ import type { AssignmentDetails, QuestionStore } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 interface ClientLearnerLayoutProps {
   assignmentId: number;
@@ -30,12 +30,28 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   const allQuestions = getStoredData("questions", []) as QuestionStore[];
   const numberOfQuestionsPerAttempt =
     assignmentDetails?.numberOfQuestionsPerAttempt || null;
-  const questions: QuestionStore[] =
-    numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
-      ? allQuestions
-          .sort(() => 0.5 - Math.random())
-          .slice(0, numberOfQuestionsPerAttempt)
-      : allQuestions;
+  const displayOrder = (
+    assignmentDetails as AssignmentDetails & {
+      displayOrder?: "DEFINED" | "RANDOM";
+    }
+  )?.displayOrder;
+  const questions: QuestionStore[] = useMemo(() => {
+    const shouldShuffle =
+      displayOrder === "RANDOM" ||
+      (numberOfQuestionsPerAttempt !== null && numberOfQuestionsPerAttempt > 0);
+
+    if (!shouldShuffle) return allQuestions;
+
+    const pool = [...allQuestions];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    return numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
+      ? pool.slice(0, numberOfQuestionsPerAttempt)
+      : pool;
+  }, []);
   useEffect(() => {
     setAssignmentDetails({
       ...assignmentDetails,
