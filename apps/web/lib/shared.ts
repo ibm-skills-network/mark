@@ -123,7 +123,7 @@ export type MultipartUploadedStorageFile = MultipartUploadInitiateResponse & {
  * regressing it.
  */
 const MULTIPART_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10MB
-const USE_MULTIPART_FROM_BROWSER = false;
+const USE_MULTIPART_FROM_BROWSER = true;
 
 interface UploadCallbacks {
   cookies?: string;
