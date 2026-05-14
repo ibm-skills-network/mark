@@ -105,16 +105,24 @@ export type MultipartUploadedStorageFile = MultipartUploadInitiateResponse & {
 };
 
 /**
- * Browser-driven multipart upload requires the bucket CORS to expose the
- * `ETag` response header, otherwise the client can't collect part ETags
- * to send to `/complete`. Until the upload buckets are reconfigured we
- * route browser uploads through the single-PUT path
- * (`POST /v1/files/upload`), which only needs `response.ok` to know the
- * upload landed — no header parsing required.
+ * Size-based routing so the historically-working <=10MB upload flow stays
+ * on the single-PUT path it's always used. Anything larger only opts into
+ * the new multipart path when `USE_MULTIPART_FROM_BROWSER` is true.
  *
- * Flip this back to `true` once the bucket CORS is updated to include
- * `Access-Control-Expose-Headers: ETag`.
+ * Why the flag exists at all: browser-driven multipart requires the bucket
+ * CORS to expose the `ETag` response header so the client can collect
+ * per-part ETags for `/complete`. Until the upload buckets are
+ * reconfigured (`Access-Control-Expose-Headers: ETag`), multipart from a
+ * browser fails on every part PUT regardless of file size. Single-PUT
+ * doesn't need to read response headers, so it sidesteps the CORS gap.
+ *
+ * When the CORS fix lands, flip USE_MULTIPART_FROM_BROWSER to true and
+ * files above the threshold get resumable multipart + the byte-budget
+ * "Waiting to upload…" UX. Everything <=10MB keeps using single-PUT
+ * because that path is simpler and predates this PR — no reason to risk
+ * regressing it.
  */
+const MULTIPART_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10MB
 const USE_MULTIPART_FROM_BROWSER = false;
 
 interface UploadCallbacks {
@@ -147,7 +155,9 @@ export async function uploadFileToStorage(
     fileSize: uploadRequest.fileSize || file.size,
   };
 
-  if (!USE_MULTIPART_FROM_BROWSER) {
+  const wantsMultipart =
+    USE_MULTIPART_FROM_BROWSER && file.size > MULTIPART_THRESHOLD_BYTES;
+  if (!wantsMultipart) {
     return singlePutFileToStorage(file, resolvedUploadRequest, options);
   }
 
