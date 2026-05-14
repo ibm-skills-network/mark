@@ -105,27 +105,40 @@ export type MultipartUploadedStorageFile = MultipartUploadInitiateResponse & {
 };
 
 /**
+ * Browser-driven multipart upload requires the bucket CORS to expose the
+ * `ETag` response header, otherwise the client can't collect part ETags
+ * to send to `/complete`. Until the upload buckets are reconfigured we
+ * route browser uploads through the single-PUT path
+ * (`POST /v1/files/upload`), which only needs `response.ok` to know the
+ * upload landed — no header parsing required.
+ *
+ * Flip this back to `true` once the bucket CORS is updated to include
+ * `Access-Control-Expose-Headers: ETag`.
+ */
+const USE_MULTIPART_FROM_BROWSER = false;
+
+interface UploadCallbacks {
+  cookies?: string;
+  onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void;
+  /**
+   * Called when the server returns a 503-busy on `/initiate`, just before
+   * sleeping for `retryAfterMs`. UI can flip this file to a "waiting" state.
+   * Only fires on the multipart path today; single-PUT is gated upstream.
+   */
+  onWaitingForCapacity?: (info: {
+    retryAfterMs: number;
+    attempt: number;
+    maxAttempts: number;
+  }) => void;
+}
+
+/**
  * Shared helper for the common presigned-upload flow used across the app.
  */
 export async function uploadFileToStorage(
   file: File,
   uploadRequest: UploadRequest,
-  options?: {
-    cookies?: string;
-    onUploadProgress?: (progressEvent: {
-      loaded: number;
-      total: number;
-    }) => void;
-    /**
-     * Called when the server returns a 503-busy on `/initiate`, just before
-     * sleeping for `retryAfterMs`. UI can flip this file to a "waiting" state.
-     */
-    onWaitingForCapacity?: (info: {
-      retryAfterMs: number;
-      attempt: number;
-      maxAttempts: number;
-    }) => void;
-  },
+  options?: UploadCallbacks,
 ): Promise<MultipartUploadedStorageFile> {
   const resolvedUploadRequest: UploadRequest = {
     ...uploadRequest,
@@ -133,6 +146,10 @@ export async function uploadFileToStorage(
     fileType: uploadRequest.fileType || file.type || getFileType(file.name),
     fileSize: uploadRequest.fileSize || file.size,
   };
+
+  if (!USE_MULTIPART_FROM_BROWSER) {
+    return singlePutFileToStorage(file, resolvedUploadRequest, options);
+  }
 
   const { reliableUpload, UploadError } = await import("./reliableUpload");
 
@@ -165,6 +182,149 @@ export async function uploadFileToStorage(
     ...multipartResponse,
     s3Link: `s3://${multipartResponse.bucket}/${multipartResponse.key}`,
   };
+}
+
+async function singlePutFileToStorage(
+  file: File,
+  uploadRequest: UploadRequest,
+  options?: UploadCallbacks,
+): Promise<MultipartUploadedStorageFile> {
+  const { UploadError } = await import("./reliableUpload");
+  let uploadResponse: UploadResponse;
+  try {
+    uploadResponse = await generateUploadUrl(uploadRequest, options?.cookies);
+  } catch (error) {
+    throw await translateInitiateError(error);
+  }
+
+  options?.onUploadProgress?.({ loaded: 0, total: file.size });
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadResponse.presignedUrl);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        options?.onUploadProgress?.({
+          loaded: event.loaded,
+          total: event.total,
+        });
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        options?.onUploadProgress?.({ loaded: file.size, total: file.size });
+        resolve();
+      } else {
+        reject(
+          new UploadError(
+            `Single-PUT upload failed with status ${xhr.status}`,
+            xhr.status === 403
+              ? "Upload session expired. Please refresh and try again."
+              : "We hit a problem while uploading. Please try again.",
+            xhr.status,
+            false,
+          ),
+        );
+      }
+    };
+    xhr.onerror = () => {
+      reject(
+        new UploadError(
+          "Single-PUT upload failed (network error)",
+          "Network error while uploading. Please check your connection and try again.",
+          undefined,
+          false,
+        ),
+      );
+    };
+    xhr.onabort = () => {
+      reject(
+        new UploadError(
+          "Single-PUT upload aborted",
+          "Upload was cancelled.",
+          undefined,
+          false,
+        ),
+      );
+    };
+    xhr.setRequestHeader(
+      "Content-Type",
+      uploadRequest.fileType || "application/octet-stream",
+    );
+    xhr.send(file);
+  });
+
+  return {
+    uploadId: "",
+    key: uploadResponse.key,
+    bucket: uploadResponse.bucket,
+    fileType: uploadResponse.fileType,
+    fileName: uploadResponse.fileName,
+    uploadType: uploadResponse.uploadType,
+    expiresInSeconds: uploadResponse.expiresInSeconds,
+    expiresAt: uploadResponse.expiresAt,
+    maxAllowedBytes: uploadResponse.maxAllowedBytes,
+    partSizeBytes: 0,
+    urls: [],
+    s3Link: `s3://${uploadResponse.bucket}/${uploadResponse.key}`,
+  };
+}
+
+async function translateInitiateError(error: unknown): Promise<Error> {
+  const { UploadError } = await import("./reliableUpload");
+  if (error instanceof UploadError) return error;
+  if (error instanceof APIError) {
+    const body = error.body as { message?: unknown } | undefined;
+    const serverMessage =
+      typeof body?.message === "string"
+        ? body.message
+        : Array.isArray(body?.message) && typeof body.message[0] === "string"
+          ? body.message[0]
+          : undefined;
+    const isSizeError =
+      !!serverMessage &&
+      /too large|max(?:imum)? (?:allowed|size)/i.test(serverMessage);
+    if (error.status === 400) {
+      return new UploadError(
+        error.message,
+        isSizeError && serverMessage
+          ? serverMessage
+          : "We couldn't start this upload. Please refresh and try again, or pick a different file.",
+        400,
+        false,
+      );
+    }
+    if (error.status === 403) {
+      return new UploadError(
+        error.message,
+        "You don't have permission to upload this file.",
+        403,
+        false,
+      );
+    }
+    if (error.status === 401) {
+      return new UploadError(
+        error.message,
+        "Your session expired. Please refresh and try again.",
+        401,
+        false,
+      );
+    }
+    if (error.status >= 500) {
+      return new UploadError(
+        error.message,
+        "We hit a server issue starting this upload. Please try again.",
+        error.status,
+        false,
+      );
+    }
+  }
+  return new UploadError(
+    error instanceof Error ? error.message : String(error),
+    "We couldn't start this upload. Please check your connection and try again.",
+    undefined,
+    false,
+  );
 }
 
 /**
