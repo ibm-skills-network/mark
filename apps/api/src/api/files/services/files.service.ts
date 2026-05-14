@@ -86,12 +86,19 @@ export class FilesService {
   ) {}
 
   /**
-   * In-process map of uploadId -> bytes claimed against the byte-budget at
-   * /initiate time. Used so /complete and /abort can release the exact same
-   * amount. Pod restart drops the map; orphaned claims drain through the
-   * budget naturally as the inflight counter resets on boot.
+   * In-process map of uploadId -> { bytes, expiry timer } claimed against the
+   * byte-budget at /initiate time. /complete and /abort release the exact same
+   * amount. If the client abandons (refresh, network drop) and never sends
+   * either, the timer auto-releases after BUDGET_CLAIM_TTL_MS so abandoned
+   * uploads don't pin budget for the pod's lifetime. Pod restart still drops
+   * the whole map as a backstop.
    */
-  private readonly budgetClaims = new Map<string, number>();
+  private readonly budgetClaims = new Map<
+    string,
+    { bytes: number; timer: NodeJS.Timeout }
+  >();
+
+  private static readonly BUDGET_CLAIM_TTL_MS = 10 * 60 * 1000;
 
   /**
    * Get the appropriate bucket name based on environment and upload type
@@ -531,7 +538,20 @@ export class FilesService {
       }
       throw this.processingBudget.buildBusyException(fileSize);
     }
-    this.budgetClaims.set(uploadId, fileSize);
+    const expiryTimer = setTimeout(() => {
+      const entry = this.budgetClaims.get(uploadId);
+      if (!entry) return;
+      this.budgetClaims.delete(uploadId);
+      this.processingBudget.release(entry.bytes);
+      this.logger.warn(
+        `Budget claim auto-released after ${FilesService.BUDGET_CLAIM_TTL_MS}ms ` +
+          `with no /complete or /abort: uploadId=${uploadId} bytes=${entry.bytes}`,
+      );
+    }, FilesService.BUDGET_CLAIM_TTL_MS);
+    // Node keeps the event loop alive on pending timers; unref so a quiet
+    // process can still exit instead of waiting out the TTL.
+    expiryTimer.unref?.();
+    this.budgetClaims.set(uploadId, { bytes: fileSize, timer: expiryTimer });
 
     // Persist an ownership record so /complete and /abort can authorize
     // the caller against the uploadId+key without trusting the request body.
@@ -701,10 +721,11 @@ export class FilesService {
   }
 
   private releaseBudgetClaim(uploadId: string): void {
-    const claimed = this.budgetClaims.get(uploadId);
-    if (claimed === undefined) return;
+    const claim = this.budgetClaims.get(uploadId);
+    if (!claim) return;
+    clearTimeout(claim.timer);
     this.budgetClaims.delete(uploadId);
-    this.processingBudget.release(claimed);
+    this.processingBudget.release(claim.bytes);
   }
 
   private async assertUploadOwnership(
