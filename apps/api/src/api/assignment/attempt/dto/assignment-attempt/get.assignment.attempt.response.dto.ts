@@ -117,7 +117,7 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
 
   @ApiPropertyOptional({
     description: "Question-level controls (copy, paste, right-click, print)",
-    type: "object",
+    type: Object,
     required: false,
   })
   @Optional()
@@ -217,7 +217,8 @@ export class AssignmentAttemptQuestions {
 
   @ApiPropertyOptional({
     description: "The response type for the question.",
-    type: ResponseType,
+    enum: ResponseType,
+    enumName: "ResponseType",
     required: false,
   })
   @Optional()
