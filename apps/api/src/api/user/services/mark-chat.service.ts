@@ -21,7 +21,9 @@ import { FileContentExtractionService } from "src/api/attempt/services/file-cont
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
+import { ChatRole, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { ChatRepository } from "../repositories/chat.repository";
 import { ChatService } from "./chat.service";
 
 type MarkChatRole = "system" | "user" | "assistant";
@@ -116,6 +118,7 @@ export class MarkChatService {
     private readonly s3Service: S3Service,
     private readonly fileContentExtractionService: FileContentExtractionService,
     private readonly chatService: ChatService,
+    private readonly chatRepository: ChatRepository,
     private readonly processingBudget: FileProcessingBudgetService,
   ) {}
 
@@ -513,6 +516,30 @@ export class MarkChatService {
       if (trackedClientExecutions.length > 0) {
         const marker = `\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`;
         writeChunk(marker);
+      }
+
+      const hasContent = fullContent.trim().length > 0;
+      const hasToolCalls = trackedClientExecutions.length > 0;
+      if (hasContent || hasToolCalls) {
+        try {
+          const contentForDb = hasToolCalls
+            ? `${fullContent}\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`
+            : fullContent;
+          const toolCallsForDb = hasToolCalls
+            ? (trackedClientExecutions as unknown as Prisma.JsonValue)
+            : undefined;
+          await this.chatRepository.addMessage(
+            chatId,
+            ChatRole.ASSISTANT,
+            contentForDb,
+            toolCallsForDb,
+          );
+        } catch (persistError) {
+          console.error(
+            "MarkChatService.respondStream: failed to persist assistant message",
+            persistError,
+          );
+        }
       }
     } finally {
       response.end();
