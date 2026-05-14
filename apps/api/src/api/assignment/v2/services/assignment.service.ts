@@ -1059,6 +1059,10 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
                 assignmentId,
                 questionId: entry.id,
                 question: questionDto,
+                // Retry: only fill in missing languages. If only one of the
+                // 23 failed last publish, we keep the 22 successful rows
+                // and just retranslate the missing language.
+                forceRetranslation: false,
               } satisfies TranslateQuestionJobPayload,
               {
                 attempts: 3,
@@ -1092,6 +1096,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
                 questionId: variantLookup.questionId,
                 variantId: entry.id,
                 variant: variantLookup.variant,
+                forceRetranslation: false,
               } satisfies TranslateVariantJobPayload,
               {
                 attempts: 3,
@@ -1113,6 +1118,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               {
                 parentJobId: jobId,
                 assignmentId,
+                forceRetranslation: false,
               } satisfies TranslateMetaJobPayload,
               {
                 attempts: 3,

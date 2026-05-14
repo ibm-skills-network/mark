@@ -71,6 +71,13 @@ export interface TranslateQuestionJobPayload {
   assignmentId: number;
   questionId: number;
   question: QuestionDto;
+  // When true, the worker deletes every existing Translation row for the
+  // (questionId, variantId=null) tuple before re-translating all 23
+  // languages. Publish passes true because publish implies content
+  // changed. Retry of failed translations passes false so the worker
+  // only translates languages that are still missing — preserving rows
+  // that landed successfully in the prior publish.
+  forceRetranslation?: boolean;
 }
 
 export interface TranslateVariantJobPayload {
@@ -79,6 +86,7 @@ export interface TranslateVariantJobPayload {
   questionId: number;
   variantId: number;
   variant: VariantDto;
+  forceRetranslation?: boolean;
 }
 
 export interface TranslateMetaJobPayload {
@@ -88,6 +96,7 @@ export interface TranslateMetaJobPayload {
   // skips the per-publish HSET when absent.
   parentJobId?: string;
   assignmentId: number;
+  forceRetranslation?: boolean;
 }
 
 export interface AttemptAuthorPreviewJobPayload {

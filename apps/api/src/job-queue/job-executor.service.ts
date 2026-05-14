@@ -233,7 +233,7 @@ export class JobExecutorService {
             jobPayload.questionId,
             jobPayload.question,
             jobPayload.parentJobId,
-            true,
+            jobPayload.forceRetranslation ?? true,
           );
         this.logger.info("publish.translation.job.executor.complete", {
           assignmentId: jobPayload.assignmentId,
@@ -256,7 +256,7 @@ export class JobExecutorService {
             jobPayload.variantId,
             jobPayload.variant,
             jobPayload.parentJobId,
-            true,
+            jobPayload.forceRetranslation ?? true,
           );
         this.logger.info("publish.translation.job.executor.complete", {
           assignmentId: jobPayload.assignmentId,
