@@ -543,10 +543,18 @@ export class FilesService {
       if (!entry) return;
       this.budgetClaims.delete(uploadId);
       this.processingBudget.release(entry.bytes);
+      const { inflight, budget } = this.processingBudget.getStatus();
       this.logger.warn(
         `Budget claim auto-released after ${FilesService.BUDGET_CLAIM_TTL_MS}ms ` +
-          `with no /complete or /abort: uploadId=${uploadId} bytes=${entry.bytes}`,
+          `with no /complete or /abort: uploadId=${uploadId} bytes=${entry.bytes} ` +
+          `inflight=${inflight}/${budget} claims=${this.budgetClaims.size}`,
       );
+      void this.markUploadStatus(uploadId, "ABORTED").catch((error) => {
+        this.logger.warn(
+          `Failed to mark abandoned upload ABORTED: uploadId=${uploadId} ` +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      });
     }, FilesService.BUDGET_CLAIM_TTL_MS);
     // Node keeps the event loop alive on pending timers; unref so a quiet
     // process can still exit instead of waiting out the TTL.
@@ -562,6 +570,8 @@ export class FilesService {
         storageKey: key,
         bucket,
         uploadType,
+        sizeBytes: BigInt(fileSize),
+        status: "PENDING",
       },
     });
 
@@ -670,18 +680,14 @@ export class FilesService {
               : String(deleteError)),
         );
       }
-      await this.prisma.fileUpload.deleteMany({
-        where: { uploadId: request.uploadId },
-      });
+      await this.markUploadStatus(request.uploadId, "ABORTED");
       this.releaseBudgetClaim(request.uploadId);
       throw new BadRequestException(
         `File is too large. Max allowed is ${maxAllowedBytes} bytes.`,
       );
     }
 
-    await this.prisma.fileUpload.deleteMany({
-      where: { uploadId: request.uploadId },
-    });
+    await this.markUploadStatus(request.uploadId, "COMPLETED");
     this.releaseBudgetClaim(request.uploadId);
 
     return {
@@ -714,9 +720,7 @@ export class FilesService {
       UploadId: request.uploadId,
     });
 
-    await this.prisma.fileUpload.deleteMany({
-      where: { uploadId: request.uploadId },
-    });
+    await this.markUploadStatus(request.uploadId, "ABORTED");
     this.releaseBudgetClaim(request.uploadId);
   }
 
@@ -726,6 +730,59 @@ export class FilesService {
     clearTimeout(claim.timer);
     this.budgetClaims.delete(uploadId);
     this.processingBudget.release(claim.bytes);
+  }
+
+  // COMPLETED and ABORTED rows are retained for audit and for the cluster-wide
+  // pending-bytes aggregate. They are never deleted automatically. For the
+  // current upload volume this is acceptable; add a periodic sweep if row
+  // count becomes a concern.
+  private async markUploadStatus(
+    uploadId: string,
+    status: "COMPLETED" | "ABORTED",
+  ): Promise<void> {
+    await this.prisma.fileUpload.updateMany({
+      where: { uploadId, status: "PENDING" },
+      data: { status, completedAt: new Date() },
+    });
+  }
+
+  getProcessingBudgetStatus(): {
+    budget: number;
+    inflight: number;
+    waiters: number;
+  } {
+    return this.processingBudget.getStatus();
+  }
+
+  /**
+   * Pod-local count of outstanding budget claims. Used by the admin status
+   * endpoint. Note: the total claimed bytes always equals pod.inflight from
+   * getProcessingBudgetStatus() because both counters are updated together
+   * in registerBudgetClaim / releaseBudgetClaim.
+   */
+  getBudgetClaimsSnapshot(): { count: number } {
+    return { count: this.budgetClaims.size };
+  }
+
+  /**
+   * Cluster-wide pending-upload aggregation. Sums sizeBytes for FileUpload
+   * rows still marked PENDING — accurate across all pods, unlike the
+   * in-memory budget counters which are per-replica.
+   */
+  async getPendingUploadAggregate(): Promise<{
+    count: number;
+    totalBytes: number;
+  }> {
+    const result = await this.prisma.fileUpload.aggregate({
+      where: { status: "PENDING" },
+      _count: { _all: true },
+      _sum: { sizeBytes: true },
+    });
+    const sum = result._sum.sizeBytes;
+    return {
+      count: result._count._all,
+      totalBytes: sum == null ? 0 : Number(sum),
+    };
   }
 
   private async assertUploadOwnership(
