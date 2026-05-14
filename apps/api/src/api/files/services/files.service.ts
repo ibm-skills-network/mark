@@ -732,6 +732,10 @@ export class FilesService {
     this.processingBudget.release(claim.bytes);
   }
 
+  // COMPLETED and ABORTED rows are retained for audit and for the cluster-wide
+  // pending-bytes aggregate. They are never deleted automatically. For the
+  // current upload volume this is acceptable; add a periodic sweep if row
+  // count becomes a concern.
   private async markUploadStatus(
     uploadId: string,
     status: "COMPLETED" | "ABORTED",
@@ -751,14 +755,13 @@ export class FilesService {
   }
 
   /**
-   * Pod-local view of outstanding budget claims. Used by the admin status
-   * endpoint to expose how many uploadIds this pod is currently holding
-   * bytes for. Returns a snapshot to avoid leaking the live Map reference.
+   * Pod-local count of outstanding budget claims. Used by the admin status
+   * endpoint. Note: the total claimed bytes always equals pod.inflight from
+   * getProcessingBudgetStatus() because both counters are updated together
+   * in registerBudgetClaim / releaseBudgetClaim.
    */
-  getBudgetClaimsSnapshot(): { count: number; totalBytes: number } {
-    let totalBytes = 0;
-    for (const { bytes } of this.budgetClaims.values()) totalBytes += bytes;
-    return { count: this.budgetClaims.size, totalBytes };
+  getBudgetClaimsSnapshot(): { count: number } {
+    return { count: this.budgetClaims.size };
   }
 
   /**

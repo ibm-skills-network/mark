@@ -93,6 +93,46 @@ export class FilesController {
     summary:
       "Admin-only snapshot of file-processing budget. pod.* is per-replica, cluster.* aggregates FileUpload rows in PENDING status.",
   })
+  @ApiResponse({
+    status: 200,
+    description: "Budget snapshot",
+    schema: {
+      type: "object",
+      properties: {
+        pod: {
+          type: "object",
+          properties: {
+            budget: { type: "number", description: "Total budget in bytes" },
+            inflight: {
+              type: "number",
+              description: "Bytes currently held by active claims on this pod",
+            },
+            waiters: {
+              type: "number",
+              description: "Requests queued waiting for budget",
+            },
+            claims: {
+              type: "number",
+              description: "Number of active upload IDs on this pod",
+            },
+          },
+        },
+        cluster: {
+          type: "object",
+          properties: {
+            pendingUploads: {
+              type: "number",
+              description: "FileUpload rows still in PENDING status",
+            },
+            pendingBytes: {
+              type: "number",
+              description: "Sum of sizeBytes for PENDING rows across all pods",
+            },
+          },
+        },
+      },
+    },
+  })
   async getBudgetStatus(@Req() request: UserSessionRequest) {
     if (request.userSession.role !== UserRole.ADMIN) {
       throw new ForbiddenException();
@@ -106,7 +146,6 @@ export class FilesController {
         inflight: podStatus.inflight,
         waiters: podStatus.waiters,
         claims: claims.count,
-        claimedBytes: claims.totalBytes,
       },
       cluster: {
         pendingUploads: cluster.count,
