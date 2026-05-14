@@ -16,15 +16,11 @@ import {
   Query,
   Req,
   Sse,
-  UploadedFiles,
   UseGuards,
-  UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
-import { FilesInterceptor } from "@nestjs/platform-express";
 import {
   ApiBody,
-  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiParam,
@@ -34,7 +30,6 @@ import {
   refs,
 } from "@nestjs/swagger";
 import { Request } from "express";
-import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
 import { AdminService } from "src/api/admin/admin.service";
@@ -65,6 +60,11 @@ import {
   UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
+import {
+  CompleteAssignmentFileDto,
+  InitiateAssignmentFilesDto,
+  InitiateAssignmentFilesResponseDto,
+} from "../dtos/assignment-file-upload.dto";
 import { AssignmentFileService } from "../services/assignment-file.service";
 import { AssignmentServiceV2 } from "../services/assignment.service";
 import { JobStatusServiceV2 } from "../services/job-status.service";
@@ -321,42 +321,78 @@ export class AssignmentControllerV2 {
     return this.assignmentFileService.getAssignmentFiles(id);
   }
 
-  @Post(":id/files")
+  @Post(":id/files/initiate")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
-  @UseInterceptors(
-    FilesInterceptor("files", 20, {
-      storage: memoryStorage(),
-      limits: { fileSize: 100 * 1024 * 1024 },
-    }),
-  )
-  @ApiOperation({ summary: "Upload files for an assignment" })
-  @ApiConsumes("multipart/form-data")
-  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
-  @ApiBody({
-    schema: {
-      type: "object",
-      properties: {
-        files: {
-          type: "array",
-          items: {
-            type: "string",
-            format: "binary",
-          },
-        },
-      },
-      required: ["files"],
-    },
+  @ApiOperation({
+    summary:
+      "Initiate multipart uploads for assignment files (returns presigned part URLs)",
   })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiBody({ type: InitiateAssignmentFilesDto })
   @ApiResponse({
     status: 201,
-    description: "Files uploaded successfully",
+    type: InitiateAssignmentFilesResponseDto,
+    description:
+      "Per-file uploadId, key, bucket, part size and presigned part URLs",
   })
-  async uploadAssignmentFiles(
+  async initiateAssignmentFileUploads(
     @Param("id", ParseIntPipe) id: number,
-    @UploadedFiles() files: Express.Multer.File[],
+    @Body(new ValidationPipe({ transform: true }))
+    dto: InitiateAssignmentFilesDto,
+    @Req() request: UserSessionRequest,
+  ): Promise<InitiateAssignmentFilesResponseDto> {
+    return this.assignmentFileService.initiateAssignmentFileUploads(
+      id,
+      dto,
+      request.userSession.userId,
+    );
+  }
+
+  @Post(":id/files/:fileId/complete")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Complete a multipart upload for an assignment file and extract content",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiParam({ name: "fileId", required: true, description: "File ID" })
+  @ApiBody({ type: CompleteAssignmentFileDto })
+  @ApiResponse({
+    status: 201,
+    description:
+      "File record updated to READY (or FAILED extraction) and extracted content persisted",
+  })
+  async completeAssignmentFileUpload(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("fileId", ParseIntPipe) fileId: number,
+    @Body(new ValidationPipe({ transform: true }))
+    dto: CompleteAssignmentFileDto,
   ) {
-    return this.assignmentFileService.uploadAssignmentFiles(id, files);
+    return this.assignmentFileService.completeAssignmentFileUpload(
+      id,
+      fileId,
+      dto,
+    );
+  }
+
+  @Post(":id/files/:fileId/abort")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @HttpCode(204)
+  @ApiOperation({
+    summary:
+      "Abort an in-progress multipart upload and remove the placeholder row",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiParam({ name: "fileId", required: true, description: "File ID" })
+  @ApiResponse({ status: 204, description: "Upload aborted" })
+  async abortAssignmentFileUpload(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("fileId", ParseIntPipe) fileId: number,
+  ): Promise<void> {
+    return this.assignmentFileService.abortAssignmentFileUpload(id, fileId);
   }
 
   @Delete(":id/files/:fileId")

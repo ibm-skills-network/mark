@@ -41,8 +41,11 @@ export interface AttachedFile {
   extractedContent?: string;
   /** Leading snippet from extracted content (not semantic summary). */
   contentPrefix?: string;
-  uploadStatus: "uploading" | "uploaded" | "error";
+  uploadStatus: "uploading" | "waiting" | "uploaded" | "error";
   uploadProgress: number;
+  s3Link?: string;
+  s3Key?: string;
+  s3Bucket?: string;
   errorMessage?: string;
   uploadedAt: string;
 }
@@ -267,6 +270,46 @@ export const useMarkChatStore = create<MarkChatState>()(
         });
 
         try {
+          // Strip the UI-only `toolCalls` metadata from user messages — file chips are
+          // local only and should not reach the API. However, file s3Links must reach
+          // the backend so it can grant extractFileFromLink tool access. Reconstruct a
+          // system-files-* message for each user message that carried file attachments
+          // so history reloads and post-refresh sessions restore tool access correctly.
+          const conversationMessages: ChatMessage[] = [];
+          for (const msg of conversation) {
+            if (msg.role === "system" && msg.id.includes("context")) continue;
+
+            if (
+              msg.role === "user" &&
+              msg.toolCalls?.type === "file_attachments"
+            ) {
+              const files: Array<{
+                filename?: string;
+                size?: number;
+                contentType?: string;
+                extension?: string;
+                s3Link?: string;
+              }> = msg.toolCalls.files ?? [];
+              if (files.length > 0) {
+                let fileContent = "Files attached in this conversation:\n\n";
+                files.forEach((file, index) => {
+                  fileContent += `${index + 1}. ${file.filename ?? "file"}\n`;
+                  if (file.s3Link) fileContent += `S3 Link: ${file.s3Link}\n`;
+                  fileContent += "\n";
+                });
+                conversationMessages.push({
+                  id: `system-files-restored-${msg.id}`,
+                  role: "system",
+                  content: fileContent,
+                });
+              }
+              const { toolCalls: _tc, ...safeMessage } = msg;
+              conversationMessages.push(safeMessage);
+            } else {
+              conversationMessages.push(msg);
+            }
+          }
+
           if (useStreaming) {
             const response = await fetch("/api/markChat/stream", {
               method: "POST",
@@ -274,7 +317,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation,
+                conversation: conversationMessages,
               }),
             });
 
@@ -379,7 +422,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation,
+                conversation: conversationMessages,
               }),
             });
 
@@ -480,6 +523,21 @@ export const useMarkChatStore = create<MarkChatState>()(
     }),
     {
       name: "mark-chat-store",
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return persistedState;
+        }
+
+        if (version < 2) {
+          const nextState = { ...persistedState };
+          delete nextState.attachedFiles;
+          delete nextState.sessionContextFiles;
+          return nextState;
+        }
+
+        return persistedState;
+      },
       partialize: (state) => ({
         userRole: state.userRole,
         messages: state.messages.filter((msg) => msg.role !== "system"),

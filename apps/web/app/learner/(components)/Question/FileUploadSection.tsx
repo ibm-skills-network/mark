@@ -72,7 +72,7 @@ const FileUploadSection = ({
   const [filename] = useState<string>("");
   const assignmentId =
     useLearnerOverviewStore((state) => state.assignmentId) ||
-    parseInt(usePathname().split("/")[3]);
+    parseInt(usePathname().split("/")[2]);
   const { questionGitHubState } = useGitHubStore();
   const selectedFiles = questionGitHubState[questionId]?.selectedFiles || [];
   const persistStateForQuestion = useGitHubStore(

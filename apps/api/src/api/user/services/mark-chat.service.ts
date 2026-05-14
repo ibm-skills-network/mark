@@ -2,11 +2,29 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { openai } from "@ai-sdk/openai";
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { CoreMessage, generateText, streamText } from "ai";
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  Injectable,
+} from "@nestjs/common";
+import {
+  CoreMessage,
+  generateText,
+  stepCountIs,
+  streamText,
+  tool,
+  ToolSet,
+} from "ai";
 import { Response } from "express";
+import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
+import { S3Service } from "src/api/files/services/s3.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
+import { ChatRole, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { ChatRepository } from "../repositories/chat.repository";
+import { ChatService } from "./chat.service";
 
 type MarkChatRole = "system" | "user" | "assistant";
 
@@ -24,6 +42,54 @@ interface MarkChatRequest {
 
 const STANDARD_ERROR_MESSAGE =
   "Sorry for the inconvenience, I am still new around here and this capability is not there yet, my developers are working on it!";
+const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
+const DEFAULT_MODEL_CONTEXT_TOKENS = 128 * 1000;
+const DEFAULT_RESPONSE_MAX_TOKENS = 15 * 100;
+const DEFAULT_CONTEXT_RESERVE_TOKENS = 8 * 1000;
+const TOOL_AND_SCHEMA_OVERHEAD_TOKENS = 3 * 1000;
+const MESSAGE_TOKEN_OVERHEAD = 12;
+const CHARS_PER_TOKEN_ESTIMATE = 4;
+const CONTEXT_WINDOW_WARNING =
+  "⚠️ Some older chat context was trimmed to fit the model limit. If you need earlier details, start a new chat.";
+const MIN_FILE_EXTRACT_CHARS = 500;
+const DEFAULT_FILE_EXTRACT_CHARS = 20 * 1000;
+const MAX_FILE_EXTRACT_CHARS_HARD_CAP = 500 * 1000;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_TOOL_STEPS = 5;
+const FILE_SECTION_HEADERS = [
+  "files already available in this chat session:",
+  "files available in this chat:",
+  "new files attached for this message:",
+  "full content for selected files:",
+];
+
+function startsFileSection(line: string): boolean {
+  const lower = line.toLowerCase();
+  return FILE_SECTION_HEADERS.some((header) => lower.startsWith(header));
+}
+
+function isFileMetadataLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    /^\d+\.\s+.+\((\d+(\.\d+)?)\s*(b|kb|mb|gb|bytes?)\)$/i.test(line) ||
+    lower.startsWith("type:") ||
+    lower.startsWith("s3 link:") ||
+    lower.startsWith("bucket:") ||
+    lower.startsWith("key:") ||
+    lower.startsWith("summary:") ||
+    lower.startsWith("<file_summary>") ||
+    lower.startsWith("</file_summary>")
+  );
+}
+
+function isFileHintLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    lower.startsWith("when the user asks about these files") ||
+    lower.includes("extractfilefromlink") ||
+    lower.includes("summarizefilefromlink")
+  );
+}
 
 function withErrorHandling<TArguments extends any[], TResult>(
   function_: (...arguments_: TArguments) => Promise<TResult>,
@@ -36,6 +102,9 @@ function withErrorHandling<TArguments extends any[], TResult>(
       }
       return result;
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : STANDARD_ERROR_MESSAGE;
       return `Error in ${function_.name || "function"}: ${message}`;
@@ -45,8 +114,183 @@ function withErrorHandling<TArguments extends any[], TResult>(
 
 @Injectable()
 export class MarkChatService {
+  constructor(
+    private readonly s3Service: S3Service,
+    private readonly fileContentExtractionService: FileContentExtractionService,
+    private readonly chatService: ChatService,
+    private readonly chatRepository: ChatRepository,
+    private readonly processingBudget: FileProcessingBudgetService,
+  ) {}
+
+  private readIntFromEnv(
+    key: string,
+    fallback: number,
+    min = 1,
+    max?: number,
+  ): number {
+    const clamp = (value: number) => {
+      const minApplied = Math.max(Math.floor(value), min);
+      return typeof max === "number" ? Math.min(minApplied, max) : minApplied;
+    };
+
+    const safeFallback = clamp(fallback);
+    const parsed = Number(process.env[key]);
+    if (!Number.isFinite(parsed)) {
+      return safeFallback;
+    }
+
+    return clamp(parsed);
+  }
+
+  private getChatModel(): string {
+    return process.env.MARK_CHAT_MODEL || DEFAULT_CHAT_MODEL;
+  }
+
+  private getModelContextTokenLimit(): number {
+    return this.readIntFromEnv(
+      "MARK_CHAT_MODEL_CONTEXT_TOKENS",
+      DEFAULT_MODEL_CONTEXT_TOKENS,
+      8 * 1000,
+      2000 * 1000,
+    );
+  }
+
+  private getResponseTokenLimit(): number {
+    return this.readIntFromEnv(
+      "MARK_CHAT_MAX_OUTPUT_TOKENS",
+      DEFAULT_RESPONSE_MAX_TOKENS,
+      256,
+      32 * 1000,
+    );
+  }
+
+  private getReservedContextTokens(): number {
+    return this.readIntFromEnv(
+      "MARK_CHAT_CONTEXT_RESERVE_TOKENS",
+      DEFAULT_CONTEXT_RESERVE_TOKENS,
+      1 * 1000,
+      64 * 1000,
+    );
+  }
+
+  private estimateTokens(content: string): number {
+    if (!content) return 0;
+    return Math.ceil(content.length / CHARS_PER_TOKEN_ESTIMATE);
+  }
+
+  private getConversationHistoryBudgetTokens(parameters: {
+    systemPrompt: string;
+    systemContextMessages: MarkChatMessage[];
+    userText: string;
+  }): number {
+    const systemContextText = parameters.systemContextMessages
+      .map((message) => message.content)
+      .join("\n");
+
+    const reservedForNonHistory =
+      this.estimateTokens(parameters.systemPrompt) +
+      this.estimateTokens(systemContextText) +
+      this.estimateTokens(parameters.userText) +
+      TOOL_AND_SCHEMA_OVERHEAD_TOKENS;
+
+    const budget =
+      this.getModelContextTokenLimit() -
+      this.getResponseTokenLimit() -
+      this.getReservedContextTokens() -
+      reservedForNonHistory;
+
+    return Math.max(0, budget);
+  }
+
+  private truncateTextByTokenBudget(
+    content: string,
+    tokenBudget: number,
+  ): string {
+    if (!content) return "";
+    const maxChars = Math.max(
+      MIN_FILE_EXTRACT_CHARS,
+      tokenBudget * CHARS_PER_TOKEN_ESTIMATE,
+    );
+    if (content.length <= maxChars) {
+      return content;
+    }
+    const tailContent = content.slice(content.length - maxChars);
+    return `[...truncated to fit model context...]\n${tailContent}`;
+  }
+
+  private selectRecentMessagesWithinBudget(
+    messages: MarkChatMessage[],
+    tokenBudget: number,
+  ): { messages: MarkChatMessage[]; contextTrimmed: boolean } {
+    const safeBudget = Math.max(0, tokenBudget);
+    if (safeBudget === 0) {
+      return { messages: [], contextTrimmed: messages.length > 0 };
+    }
+
+    const selected: MarkChatMessage[] = [];
+    let usedTokens = 0;
+    let contextTrimmed = false;
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      const messageTokens =
+        this.estimateTokens(message.content) + MESSAGE_TOKEN_OVERHEAD;
+
+      if (usedTokens + messageTokens <= safeBudget) {
+        selected.push(message);
+        usedTokens += messageTokens;
+        continue;
+      }
+
+      contextTrimmed = true;
+      if (selected.length === 0) {
+        const remainingTokens = Math.max(
+          1,
+          safeBudget - MESSAGE_TOKEN_OVERHEAD,
+        );
+        selected.push({
+          ...message,
+          content: this.truncateTextByTokenBudget(
+            message.content,
+            remainingTokens,
+          ),
+        });
+      }
+      break;
+    }
+
+    return { messages: selected.reverse(), contextTrimmed };
+  }
+
+  private getMaxFileExtractChars(): number {
+    const modelBasedFallback = Math.max(
+      DEFAULT_FILE_EXTRACT_CHARS,
+      Math.floor(
+        (this.getModelContextTokenLimit() - this.getResponseTokenLimit()) *
+          CHARS_PER_TOKEN_ESTIMATE *
+          0.75,
+      ),
+    );
+
+    return this.readIntFromEnv(
+      "MARK_CHAT_MAX_FILE_EXTRACT_CHARS",
+      modelBasedFallback,
+      MIN_FILE_EXTRACT_CHARS,
+      MAX_FILE_EXTRACT_CHARS_HARD_CAP,
+    );
+  }
+
+  private getDefaultFileExtractChars(maxAllowedChars: number): number {
+    return this.readIntFromEnv(
+      "MARK_CHAT_DEFAULT_FILE_EXTRACT_CHARS",
+      Math.min(DEFAULT_FILE_EXTRACT_CHARS, maxAllowedChars),
+      MIN_FILE_EXTRACT_CHARS,
+      maxAllowedChars,
+    );
+  }
+
   async respond(
-    _chatId: string,
+    chatId: string,
     request: MarkChatRequest,
     userSession: UserSession,
   ): Promise<{
@@ -67,14 +311,34 @@ export class MarkChatService {
     const { systemPrompt, systemContextMessages, assignmentInfo } =
       this.getSystemPromptParts(userRole, conversation);
 
-    const formattedMessages = this.formatMessages(conversation, userText);
-    const tools =
+    const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
+      systemPrompt,
+      systemContextMessages,
+      userText,
+    });
+    const formattedConversation = this.formatMessages(
+      conversation,
+      userText,
+      conversationHistoryBudget,
+    );
+    const formattedMessages = formattedConversation.messages;
+    const chatModel = this.getChatModel();
+    const maxOutputTokens = this.getResponseTokenLimit();
+    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
+      chatId,
+      userSession,
+    );
+    const roleTools =
       userRole === "author"
         ? this.authorTools()
         : this.learnerTools(userSession, assignmentInfo);
+    const tools: ToolSet = {
+      ...roleTools,
+      ...this.fileTools(allowedLinks),
+    };
 
     const result = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: openai(chatModel),
       system:
         systemPrompt +
         (systemContextMessages.length > 0
@@ -85,7 +349,8 @@ export class MarkChatService {
       temperature: 0.7,
       tools,
       toolChoice: "auto",
-      maxOutputTokens: 1500,
+      stopWhen: stepCountIs(MAX_TOOL_STEPS),
+      maxOutputTokens,
     });
 
     const functionResults =
@@ -95,15 +360,20 @@ export class MarkChatService {
         result: toolResult.output,
       })) || [];
 
+    const replyText = result.text || "I'm not sure how to respond to that.";
+    const reply = formattedConversation.contextTrimmed
+      ? `${CONTEXT_WINDOW_WARNING}\n\n${replyText}`
+      : replyText;
+
     return {
-      reply: result.text || "I'm not sure how to respond to that.",
+      reply,
       functionResults: functionResults.length > 0 ? functionResults : undefined,
       functionCalled: functionResults.length > 0,
     };
   }
 
   async respondStream(
-    _chatId: string,
+    chatId: string,
     request: MarkChatRequest,
     userSession: UserSession,
     response: Response,
@@ -117,14 +387,34 @@ export class MarkChatService {
     const { systemPrompt, systemContextMessages, assignmentInfo } =
       this.getSystemPromptParts(userRole, conversation);
 
-    const formattedMessages = this.formatMessages(conversation, userText);
-    const tools =
+    const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
+      systemPrompt,
+      systemContextMessages,
+      userText,
+    });
+    const formattedConversation = this.formatMessages(
+      conversation,
+      userText,
+      conversationHistoryBudget,
+    );
+    const formattedMessages = formattedConversation.messages;
+    const chatModel = this.getChatModel();
+    const maxOutputTokens = this.getResponseTokenLimit();
+    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
+      chatId,
+      userSession,
+    );
+    const roleTools =
       userRole === "author"
         ? this.authorTools()
         : this.learnerTools(userSession, assignmentInfo);
+    const tools: ToolSet = {
+      ...roleTools,
+      ...this.fileTools(allowedLinks),
+    };
 
     const result = streamText({
-      model: openai("gpt-4o-mini"),
+      model: openai(chatModel),
       system:
         systemPrompt +
         (systemContextMessages.length > 0
@@ -135,7 +425,8 @@ export class MarkChatService {
       temperature: 0.7,
       tools,
       toolChoice: "auto",
-      maxOutputTokens: 1500,
+      stopWhen: stepCountIs(MAX_TOOL_STEPS),
+      maxOutputTokens,
       onStepFinish: undefined,
     });
 
@@ -157,6 +448,12 @@ export class MarkChatService {
     };
 
     try {
+      if (formattedConversation.contextTrimmed) {
+        const warningChunk = `${CONTEXT_WINDOW_WARNING}\n\n`;
+        fullContent += warningChunk;
+        writeChunk(warningChunk);
+      }
+
       let done = false;
       while (!done) {
         const readResult = await reader.read();
@@ -169,6 +466,10 @@ export class MarkChatService {
       }
 
       const trackedClientExecutions: { function: string; params: any }[] = [];
+      const nonClientToolOutputs: Array<{
+        toolName?: string;
+        rawResult: string;
+      }> = [];
       const toolResults = await result.toolResults;
       const resolvedToolResults = Array.isArray(toolResults) ? toolResults : [];
       for (const toolResult of resolvedToolResults) {
@@ -179,10 +480,14 @@ export class MarkChatService {
             ? toolResult.output
             : JSON.stringify(toolResult.output);
 
-        if (!rawResult) continue;
+        if (typeof rawResult !== "string" || rawResult.length === 0) continue;
 
         try {
-          const parsedResult = JSON.parse(rawResult);
+          const parsedResult = JSON.parse(rawResult) as {
+            clientExecution?: boolean;
+            function?: string;
+            params?: unknown;
+          };
           if (parsedResult?.clientExecution && parsedResult.function) {
             trackedClientExecutions.push({
               function: parsedResult.function,
@@ -191,39 +496,136 @@ export class MarkChatService {
             continue;
           }
         } catch {
-          // Not JSON, proceed to append if missing
+          // Non-JSON tool output is expected for content tools.
         }
 
-        if (!fullContent.includes(rawResult)) {
-          const toolResponse = `\n\n${rawResult}`;
-          fullContent += toolResponse;
-          writeChunk(toolResponse);
-        }
+        // Do not stream raw tool output to users.
+        // The model should synthesize tool results into natural language.
+        nonClientToolOutputs.push({
+          toolName: toolResult.toolName,
+          rawResult,
+        });
+      }
+
+      if (!fullContent.trim() && nonClientToolOutputs.length > 0) {
+        const fallback = this.buildToolOnlyFallback(nonClientToolOutputs);
+        fullContent += fallback;
+        writeChunk(fallback);
       }
 
       if (trackedClientExecutions.length > 0) {
         const marker = `\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`;
         writeChunk(marker);
       }
+
+      const hasContent = fullContent.trim().length > 0;
+      const hasToolCalls = trackedClientExecutions.length > 0;
+      if (hasContent || hasToolCalls) {
+        try {
+          const contentForDatabase = hasToolCalls
+            ? `${fullContent}\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`
+            : fullContent;
+          const toolCallsForDatabase = hasToolCalls
+            ? (trackedClientExecutions as unknown as Prisma.JsonValue)
+            : undefined;
+          await this.chatRepository.addMessage(
+            chatId,
+            ChatRole.ASSISTANT,
+            contentForDatabase,
+            toolCallsForDatabase,
+          );
+        } catch (persistError) {
+          console.error(
+            "MarkChatService.respondStream: failed to persist assistant message",
+            persistError,
+          );
+        }
+      }
     } finally {
       response.end();
     }
   }
 
+  private buildToolOnlyFallback(
+    toolOutputs: Array<{ toolName?: string; rawResult: string }>,
+  ): string {
+    const rows: string[] = [];
+
+    for (const output of toolOutputs) {
+      if (output.toolName === "summarizeFileFromLink") {
+        const withoutLinks = output.rawResult
+          .split("\n")
+          .filter((line) => !line.trim().toLowerCase().startsWith("link:"))
+          .join("\n")
+          .trim();
+
+        const fileMatch = withoutLinks.match(/file summary:\s*(.+)/i);
+        const fileName = fileMatch?.[1]?.trim();
+        const shortBody = withoutLinks
+          .replace(/file summary:\s*.+/i, "")
+          .replace(/summary:\s*/i, "")
+          .trim()
+          .slice(0, 260)
+          .trim();
+
+        if (fileName && shortBody) {
+          rows.push(
+            `- ${fileName}: ${shortBody}${shortBody.endsWith("...") ? "" : "..."}`,
+          );
+          continue;
+        }
+      }
+
+      if (output.toolName === "extractFileFromLink") {
+        const fileMatch = output.rawResult.match(/file:\s*(.+)/i);
+        const fileName = fileMatch?.[1]?.trim() || "file";
+        const contentMatch = output.rawResult.match(
+          /<file_content>\s*([\S\s]*?)\s*<\/file_content>/i,
+        );
+        const content = contentMatch?.[1]
+          ?.replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 220);
+
+        if (content) {
+          rows.push(
+            `- ${fileName}: ${content}${content.endsWith("...") ? "" : "..."}`,
+          );
+          continue;
+        }
+      }
+    }
+
+    if (rows.length > 0) {
+      return `Here’s what I found:\n${rows.join("\n")}`;
+    }
+
+    return "I checked the attached files. Ask me for a summary, comparison, or specific file details.";
+  }
+
   private formatMessages(
     conversation: MarkChatMessage[],
     userText: string,
-  ): CoreMessage[] {
+    historyTokenBudget: number,
+  ): { messages: CoreMessage[]; contextTrimmed: boolean } {
     const regularMessages = conversation.filter(
       (message) =>
         message.role !== "system" || !message.id?.includes("context"),
     );
+    const budgetSelection = this.selectRecentMessagesWithinBudget(
+      regularMessages,
+      historyTokenBudget,
+    );
+    const budgetedMessages = budgetSelection.messages;
 
-    const mapped: CoreMessage[] = regularMessages.map((message) =>
+    const mapped: CoreMessage[] = budgetedMessages.map((message) =>
       this.toCoreMessage(message),
     );
 
-    return [...mapped, { role: "user", content: userText }];
+    return {
+      messages: [...mapped, { role: "user", content: userText }],
+      contextTrimmed: budgetSelection.contextTrimmed,
+    };
   }
 
   private toCoreMessage(message: MarkChatMessage): CoreMessage {
@@ -452,11 +854,89 @@ RESPONSE STYLE:
 - Always end with a question or next step to keep engagement`,
     };
 
-    return systemPrompts[userRole] || "";
+    const fileToolGuidance = `
+
+FILE LINK WORKFLOW:
+- When chat context includes S3 links (format: s3://bucket/key), use tools to inspect files.
+- Use \`extractFileFromLink\` when you need exact file content before answering.
+- Use \`summarizeFileFromLink\` when the user asks for a quick overview.
+- Never claim file details unless they came from a tool result in this chat.
+- Keep file answers concise and user-friendly (no raw dumps).
+- Do not expose S3 links, bucket names, or keys.
+- For multi-file summaries, use this format: \`- <file name>: <one short sentence>\`.
+- Prefer the user-facing file names from chat context and avoid internal storage names.
+- For report/feedback/suggestion/inquiry form prefills, use only the user’s latest request. Do not include unrelated file lists.`;
+
+    return (systemPrompts[userRole] || "") + fileToolGuidance;
   }
 
-  private authorTools() {
-    return {
+  private sanitizePrefillDescription(description: string): string {
+    const normalized = (description || "").trim();
+    if (!normalized) return "";
+
+    const lines = normalized.split(/\r?\n/);
+    const cleanedLines: string[] = [];
+    let skippingFileSection = false;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (startsFileSection(line)) {
+        skippingFileSection = true;
+        continue;
+      }
+
+      if (skippingFileSection) {
+        if (!line || isFileMetadataLine(line) || isFileHintLine(line)) {
+          continue;
+        }
+        if (/^\d+\.\s+/.test(line)) {
+          continue;
+        }
+        skippingFileSection = false;
+      }
+
+      if (
+        cleanedLines.length === 0 &&
+        (isFileMetadataLine(line) || isFileHintLine(line))
+      ) {
+        continue;
+      }
+
+      const lastLine = cleanedLines.at(-1);
+      if (line || (cleanedLines.length > 0 && lastLine !== "")) {
+        cleanedLines.push(line);
+      }
+    }
+
+    const cleaned = cleanedLines.join("\n").trim();
+    return cleaned || normalized;
+  }
+
+  private toToolSet(
+    definitions: Record<
+      string,
+      {
+        description: string;
+        inputSchema: z.ZodTypeAny;
+        execute: (input: any) => Promise<unknown> | unknown;
+      }
+    >,
+  ): ToolSet {
+    return Object.fromEntries(
+      Object.entries(definitions).map(([name, definition]) => [
+        name,
+        tool({
+          description: definition.description,
+          inputSchema: definition.inputSchema,
+          execute: definition.execute,
+        }),
+      ]),
+    ) as ToolSet;
+  }
+
+  private authorTools(): ToolSet {
+    return this.toToolSet({
       createQuestion: {
         description:
           "Generate exactly one AI question for the assignment from the provided prompt and question type",
@@ -734,19 +1214,22 @@ RESPONSE STYLE:
           description: string;
           assignmentId?: number;
           severity?: string;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               issueType,
-              description,
+              description: sanitizedDescription,
               assignmentId,
               severity: severity || "info",
               userRole: "author",
               category: "Author Issue",
             },
-          }),
+          });
+        },
       },
       provideFeedback: {
         description:
@@ -781,20 +1264,23 @@ RESPONSE STYLE:
           description: string;
           assignmentId?: number;
           rating?: number;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "feedback",
               issueType: "FEEDBACK",
-              description,
+              description: sanitizedDescription,
               assignmentId,
               rating,
               userRole: "author",
               category: "Author Feedback",
             },
-          }),
+          });
+        },
       },
       submitSuggestion: {
         description:
@@ -821,19 +1307,22 @@ RESPONSE STYLE:
         }: {
           description: string;
           assignmentId?: number;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "suggestion",
               issueType: "SUGGESTION",
-              description,
+              description: sanitizedDescription,
               assignmentId,
               userRole: "author",
               category: "Author Suggestion",
             },
-          }),
+          });
+        },
       },
       submitInquiry: {
         description:
@@ -860,32 +1349,35 @@ RESPONSE STYLE:
         }: {
           description: string;
           assignmentId?: number;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "inquiry",
               issueType: "OTHER",
-              description,
+              description: sanitizedDescription,
               assignmentId,
               userRole: "author",
               category: "Author Inquiry",
             },
-          }),
+          });
+        },
       },
-    };
+    });
   }
 
   private learnerTools(
     userSession: UserSession,
     assignmentInfo?: MarkChatMessage,
-  ) {
+  ): ToolSet {
     const assignmentIdFromContext = this.extractAssignmentIdFromContext(
       assignmentInfo?.content,
     );
 
-    return {
+    return this.toToolSet({
       searchKnowledgeBase: {
         description:
           "Search the knowledge base for information about the platform or features",
@@ -931,20 +1423,23 @@ RESPONSE STYLE:
           description: string;
           assignmentId?: number;
           severity?: string;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "report",
               issueType,
-              description,
+              description: sanitizedDescription,
               assignmentId,
               severity: severity || "info",
               userRole: "learner",
               category: "Learner Issue",
             },
-          }),
+          });
+        },
       },
       provideFeedback: {
         description:
@@ -979,20 +1474,23 @@ RESPONSE STYLE:
           description: string;
           assignmentId?: number;
           rating?: number;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "feedback",
               issueType: "FEEDBACK",
-              description,
+              description: sanitizedDescription,
               assignmentId,
               rating,
               userRole: "learner",
               category: "Learner Feedback",
             },
-          }),
+          });
+        },
       },
       submitSuggestion: {
         description:
@@ -1019,19 +1517,22 @@ RESPONSE STYLE:
         }: {
           description: string;
           assignmentId?: number;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "suggestion",
               issueType: "SUGGESTION",
-              description,
+              description: sanitizedDescription,
               assignmentId,
               userRole: "learner",
               category: "Learner Suggestion",
             },
-          }),
+          });
+        },
       },
       submitInquiry: {
         description:
@@ -1058,19 +1559,22 @@ RESPONSE STYLE:
         }: {
           description: string;
           assignmentId?: number;
-        }) =>
-          JSON.stringify({
+        }) => {
+          const sanitizedDescription =
+            this.sanitizePrefillDescription(description);
+          return JSON.stringify({
             clientExecution: true,
             function: "showReportPreview",
             params: {
               type: "inquiry",
               issueType: "OTHER",
-              description,
+              description: sanitizedDescription,
               assignmentId,
               userRole: "learner",
               category: "Learner Inquiry",
             },
-          }),
+          });
+        },
       },
       getQuestionDetails: {
         description:
@@ -1157,7 +1661,270 @@ RESPONSE STYLE:
           },
         ),
       },
-    };
+    });
+  }
+
+  private fileTools(allowedLinks: Set<string>): ToolSet {
+    const maxFileExtractChars = this.getMaxFileExtractChars();
+
+    return this.toToolSet({
+      extractFileFromLink: {
+        description:
+          "Extract readable text from an S3 link in the format s3://bucket/key. Use this when the user asks about file details.",
+        inputSchema: z.object({
+          link: z
+            .string()
+            .describe("S3 link from chat context, e.g. s3://bucket/key"),
+          maxChars: z
+            .number()
+            .min(MIN_FILE_EXTRACT_CHARS)
+            .max(maxFileExtractChars)
+            .optional()
+            .describe("Maximum characters to return"),
+        }),
+        execute: withErrorHandling(
+          async ({ link, maxChars }: { link: string; maxChars?: number }) => {
+            if (!allowedLinks.has(link)) {
+              throw new ForbiddenException("File not attached to this chat.");
+            }
+            const safeMaxChars = this.normalizeMaxChars(
+              maxChars,
+              maxFileExtractChars,
+            );
+            const extracted = await this.extractFileTextFromLink(
+              link,
+              safeMaxChars,
+            );
+            return [
+              `File: ${extracted.filename}`,
+              `Link: ${link}`,
+              `Characters returned: ${extracted.content.length}`,
+              "",
+              "<file_content>",
+              extracted.content,
+              "</file_content>",
+            ].join("\n");
+          },
+        ),
+      },
+      summarizeFileFromLink: {
+        description:
+          "Summarize a file from an S3 link in the format s3://bucket/key.",
+        inputSchema: z.object({
+          link: z
+            .string()
+            .describe("S3 link from chat context, e.g. s3://bucket/key"),
+          maxChars: z
+            .number()
+            .min(MIN_FILE_EXTRACT_CHARS)
+            .max(maxFileExtractChars)
+            .optional()
+            .describe("Maximum characters to read before summarizing"),
+        }),
+        execute: withErrorHandling(
+          async ({ link, maxChars }: { link: string; maxChars?: number }) => {
+            if (!allowedLinks.has(link)) {
+              throw new ForbiddenException("File not attached to this chat.");
+            }
+            const safeMaxChars = this.normalizeMaxChars(
+              maxChars,
+              maxFileExtractChars,
+            );
+            const extracted = await this.extractFileTextFromLink(
+              link,
+              safeMaxChars,
+            );
+            const summary = this.buildContentSummary(extracted.content);
+            return [
+              `File summary: ${extracted.filename}`,
+              `Link: ${link}`,
+              summary,
+            ].join("\n");
+          },
+        ),
+      },
+    });
+  }
+
+  private normalizeMaxChars(
+    maxChars: number | undefined,
+    maxAllowedChars: number,
+  ): number {
+    const defaultChars = this.getDefaultFileExtractChars(maxAllowedChars);
+
+    if (!maxChars || !Number.isFinite(maxChars)) {
+      return defaultChars;
+    }
+    return Math.min(
+      maxAllowedChars,
+      Math.max(MIN_FILE_EXTRACT_CHARS, Math.floor(maxChars)),
+    );
+  }
+
+  private parseS3Link(link: string): { bucket: string; key: string } {
+    if (!link || !link.startsWith("s3://")) {
+      throw new BadRequestException("Only s3:// links are supported.");
+    }
+
+    const withoutScheme = link.slice("s3://".length);
+    const firstSlashIndex = withoutScheme.indexOf("/");
+    if (firstSlashIndex <= 0 || firstSlashIndex === withoutScheme.length - 1) {
+      throw new BadRequestException("Invalid S3 link format.");
+    }
+
+    const bucket = withoutScheme.slice(0, firstSlashIndex).trim();
+    const rawKey = withoutScheme.slice(firstSlashIndex + 1);
+    let key: string;
+    try {
+      key = decodeURIComponent(rawKey);
+    } catch {
+      key = rawKey;
+    }
+
+    if (!bucket || !key) {
+      throw new BadRequestException("Invalid S3 link format.");
+    }
+
+    return { bucket, key };
+  }
+
+  private async extractFileTextFromLink(
+    link: string,
+    maxChars: number,
+  ): Promise<{ filename: string; content: string }> {
+    const { bucket, key } = this.parseS3Link(link);
+    const filename = this.toDisplayFileName(key);
+
+    const response = await this.s3Service.getObject({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    const fileSize = Number(response.ContentLength ?? 0);
+    if (fileSize > MAX_FILE_BYTES) {
+      if (
+        response.Body &&
+        typeof (response.Body as { destroy?: () => void }).destroy ===
+          "function"
+      ) {
+        (response.Body as { destroy: () => void }).destroy();
+      }
+      throw new BadRequestException(
+        `File is too large to extract (${fileSize} bytes). Max allowed is ${MAX_FILE_BYTES} bytes.`,
+      );
+    }
+
+    const reservation = Math.max(fileSize, 1);
+    await this.processingBudget.acquire(reservation);
+    try {
+      const contentType =
+        typeof response.ContentType === "string"
+          ? response.ContentType
+          : undefined;
+
+      let fileBuffer: Buffer;
+      if (response.Body instanceof Buffer) {
+        fileBuffer = response.Body;
+      } else if (response.Body) {
+        const chunks: Uint8Array[] = [];
+        const stream = response.Body as NodeJS.ReadableStream;
+        fileBuffer = await new Promise<Buffer>((resolve, reject) => {
+          stream.on("data", (chunk) =>
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+          );
+          stream.on("end", () => resolve(Buffer.concat(chunks)));
+          stream.on("error", reject);
+        });
+      } else {
+        throw new BadRequestException(`Could not retrieve file: ${key}`);
+      }
+
+      const [extractedFile] =
+        await this.fileContentExtractionService.extractContentFromFiles(
+          [
+            {
+              filename,
+              content: "",
+              fileType: contentType,
+              bucket,
+              key,
+              buffer: fileBuffer,
+            },
+          ],
+          {
+            useStructuredExtraction: false,
+            useVisionForPDFs: false,
+          },
+        );
+
+      const normalized = (
+        extractedFile?.extractedText ||
+        extractedFile?.content ||
+        ""
+      )
+        .replaceAll("\0", "")
+        .trim();
+      if (!normalized) {
+        return { filename, content: "No readable text content found." };
+      }
+
+      return {
+        filename,
+        content:
+          normalized.length > maxChars
+            ? normalized.slice(0, maxChars) + "\n...[truncated]"
+            : normalized,
+      };
+    } finally {
+      this.processingBudget.release(reservation);
+    }
+  }
+
+  private toDisplayFileName(key: string): string {
+    const keyTail = key.split("/").pop() || key;
+    let decodedTail: string;
+    try {
+      decodedTail = decodeURIComponent(keyTail);
+    } catch {
+      decodedTail = keyTail;
+    }
+    const randomPrefixMatch = decodedTail.match(
+      /^[\da-z]{10,}-(.+\.[\da-z]{1,10})$/i,
+    );
+
+    if (randomPrefixMatch?.[1]) {
+      return randomPrefixMatch[1];
+    }
+
+    return decodedTail;
+  }
+
+  private buildContentSummary(content: string): string {
+    const normalized = content.split(/\s+/).join(" ").trim();
+    if (!normalized) return "Summary: No readable text found.";
+
+    const words = normalized.split(" ").filter(Boolean);
+    const sentenceCandidates = content
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .slice(0, 8);
+    const highlights = sentenceCandidates
+      .map((line, index) => `${index + 1}. ${line}`)
+      .join("\n");
+
+    const shortSummary =
+      normalized.length > 1000 ? normalized.slice(0, 1000) + "..." : normalized;
+
+    return [
+      `Summary:`,
+      `- Approx words: ${words.length}`,
+      `- Key excerpts:`,
+      highlights || "1. (No clear excerpts found)",
+      "",
+      `Short overview:`,
+      shortSummary,
+    ].join("\n");
   }
 
   private searchKnowledgeBase(query: string): string {

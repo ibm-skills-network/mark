@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { Toaster } from "sonner";
 import { MarkChat } from "../app/chatbot/components/MarkChat";
 import AuthorStoreBridge from "../app/chatbot/store/AuthorStoreBridge";
@@ -13,6 +14,8 @@ import {
 
 export default function LayoutContent({ children }: { children: ReactNode }) {
   const { isOpen } = useChatbot();
+  const pathname = usePathname();
+  const hideMarkChat = pathname?.startsWith("/admin") ?? false;
   const [apiError, setApiError] = useState<ApiServerErrorDetail | null>(null);
 
   useEffect(() => {
@@ -45,7 +48,7 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
       ) : null}
       <div
         className={`flex-1 transition-all duration-300 ease-in-out overflow-auto ${
-          isOpen ? "w-[75vw]" : "w-full"
+          isOpen && !hideMarkChat ? "w-[75vw]" : "w-full"
         }`}
       >
         <AuthorStoreBridge />
@@ -59,7 +62,7 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
         {children}
       </div>
 
-      <MarkChat />
+      {hideMarkChat ? null : <MarkChat />}
     </div>
   );
 }

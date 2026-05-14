@@ -19,6 +19,12 @@ interface RequestOptions {
   transformResponse?: boolean;
   transformConfig?: TransformConfig;
   signal?: AbortSignal;
+  /**
+   * When true, error responses do not trigger the default toast. The caller
+   * is responsible for surfacing the failure (e.g. retry logic, per-file UI).
+   * APIError.body is still populated so the caller can read the server payload.
+   */
+  quiet?: boolean;
 }
 
 export function getDefaultApiBaseURL(
@@ -112,6 +118,7 @@ export class APIClient {
       transformResponse = this.autoTransform,
       transformConfig,
       signal,
+      quiet = false,
     } = options;
 
     const finalTransformConfig = {
@@ -149,24 +156,34 @@ export class APIClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        if (response.status >= 500) {
-          toast.error(
-            `Server Error: ${response.status} ${response.statusText}`,
-          );
-        } else if (response.status === 403) {
-          toast.error(
-            `Forbidden: You don't have permission to access this Assessment.`,
-          );
-        } else {
-          toast.error(
-            `Client Error: ${response.status} ${response.statusText}`,
-          );
+        let errorBody: unknown;
+        try {
+          errorBody = await response.json();
+        } catch {
+          errorBody = undefined;
+        }
+
+        if (!quiet) {
+          if (response.status >= 500) {
+            toast.error(
+              `Server Error: ${response.status} ${response.statusText}`,
+            );
+          } else if (response.status === 403) {
+            toast.error(
+              `Forbidden: You don't have permission to access this Assessment.`,
+            );
+          } else {
+            toast.error(
+              `Client Error: ${response.status} ${response.statusText}`,
+            );
+          }
         }
 
         throw new APIError(
           response.statusText,
           response.status,
           response.statusText,
+          errorBody,
         );
       }
 
@@ -239,6 +256,7 @@ export class APIError extends Error {
     message: string,
     public status: number,
     public statusText: string,
+    public body?: unknown,
   ) {
     super(message);
     this.name = "APIError";

@@ -10,10 +10,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import { ChatRole } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { Response } from "express";
+import { AddChatMessageDto } from "../dto/add-chat-message.dto";
 import { ChatAccessControlGuard } from "../guards/chat.access.control.guard";
 import { MarkChatService } from "../services/mark-chat.service";
 import { ChatService } from "../services/chat.service";
@@ -76,13 +76,15 @@ export class ChatController {
   @UseGuards(ChatAccessControlGuard)
   async addMessage(
     @Param("chatId") chatId: string,
-    @Body() body: { role: ChatRole; content: string; toolCalls?: JsonValue },
+    @Body() body: AddChatMessageDto,
+    @Req() request: UserSessionRequest,
   ) {
     return await this.chatService.addMessage(
       chatId,
       body.role,
       body.content,
-      body.toolCalls,
+      body.toolCalls as JsonValue | undefined,
+      request.userSession,
     );
   }
 
