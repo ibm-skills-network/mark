@@ -11,6 +11,7 @@ import { SharedModule } from "../../api/src/shared.module";
 import { AssignmentModuleV1 } from "../../api/src/api/assignment/v1/modules/assignment.module";
 import { AssignmentModuleV2 } from "../../api/src/api/assignment/v2/modules/assignment.module";
 import { AttemptModule } from "../../api/src/api/attempt/attempt.module";
+import { FileProcessingBudgetModule } from "../../api/src/api/files/file-processing-budget.module";
 
 // TranslationMaintenanceController acts as the TRANSLATION_MAINTENANCE_JOB_RUNNER implementation.
 // Registered via useClass so we do not need to import the admin module (which pulls cron + HTTP-only deps).
@@ -34,6 +35,12 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
     AssignmentModuleV1,
     AssignmentModuleV2,
     AttemptModule,
+    // FileProcessingBudgetModule is @Global in mark-api's app.module.ts but
+    // not inherited into JobsAppModule's DI scope. FilesService (transitive
+    // dep of multiple modules above) requires FileProcessingBudgetService;
+    // without this import the DI smoke test fails with "Nest can't resolve
+    // dependencies of the FilesService".
+    FileProcessingBudgetModule,
   ],
   providers: [
     JobWorkerService,
