@@ -102,10 +102,18 @@ async function initiateMultipartUpload(
 
   if (lastError instanceof APIError) {
     if (lastError.status === 400) {
+      // Distinguish user-actionable 400s (file too large — carries the byte
+      // limit) from developer-language 400s (missing assignmentId etc. —
+      // the user can't fix those). Show the server message only for the
+      // size case so we never leak developer copy into the UI.
+      const serverMessage = extractServerMessage(lastError);
+      const isSizeError =
+        !!serverMessage && /too large|max(?:imum)? (?:allowed|size)/i.test(serverMessage);
       throw new UploadError(
         lastError.message,
-        extractServerMessage(lastError) ??
-          "This file can't be uploaded. Please try a smaller file.",
+        isSizeError && serverMessage
+          ? serverMessage
+          : "We couldn't start this upload. Please refresh and try again, or pick a different file.",
         400,
         false,
       );
@@ -126,8 +134,29 @@ async function initiateMultipartUpload(
         false,
       );
     }
+    if (lastError.status === 401) {
+      throw new UploadError(
+        lastError.message,
+        "Your session expired. Please refresh and try again.",
+        401,
+        false,
+      );
+    }
+    if (lastError.status >= 500) {
+      throw new UploadError(
+        lastError.message,
+        "We hit a server issue starting this upload. Please try again.",
+        lastError.status,
+        false,
+      );
+    }
   }
-  throw lastError ?? new Error("Failed to initiate upload");
+  throw new UploadError(
+    lastError instanceof Error ? lastError.message : String(lastError),
+    "We couldn't start this upload. Please check your connection and try again.",
+    undefined,
+    false,
+  );
 }
 
 async function completeMultipartUpload(
@@ -196,10 +225,18 @@ async function uploadPartWithRetry(
         );
       }
 
-      // S3 returns an ETag per part; collected and sent in the complete call
+      // S3 returns an ETag per part; collected and sent in the complete call.
+      // If the browser can't read it the bucket CORS is missing
+      // Access-Control-Expose-Headers: ETag — that's a bucket config fix, not
+      // a client retry. Raise a user-friendly error and stop retrying.
       const etag = response.headers.get("etag");
       if (!etag) {
-        throw new Error("Multipart upload response missing ETag header");
+        throw new UploadError(
+          "Multipart upload response missing ETag header (CORS expose-headers misconfigured)",
+          "Upload couldn't complete due to a server configuration issue. Please contact support.",
+          undefined,
+          false,
+        );
       }
 
       onUploadedBytes?.(chunk.size);
@@ -209,6 +246,10 @@ async function uploadPartWithRetry(
 
       // Timeout aborts are not retryable
       if (lastError.name === "AbortError") {
+        break;
+      }
+      // Server-config errors (CORS) won't get better on retry
+      if (lastError instanceof UploadError && !lastError.retryable) {
         break;
       }
 
