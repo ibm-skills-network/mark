@@ -586,6 +586,11 @@ export class AssignmentControllerV2 {
     status: string;
     progress: string;
     questions?: QuestionDto[];
+    // Raw job.result is returned alongside questions so the SSE-fallback
+    // poller can render publish/retry progress (PublishJobResult shape)
+    // when the EventSource drops mid-publish — without this the UI never
+    // sees failed translations or the retry-button trigger.
+    result?: unknown;
   }> {
     const job = await this.jobStatusService.getJobStatus(jobId);
     if (!job) {
@@ -597,13 +602,20 @@ export class AssignmentControllerV2 {
       throw new NotFoundException("Job not found");
     }
 
-    return job.status === "Completed"
-      ? {
-          status: job.status,
-          progress: job.progress,
-          questions: job.result as QuestionDto[] | undefined,
-        }
-      : { status: job.status, progress: job.progress };
+    // Question-generation jobs store QuestionDto[] on result; publish /
+    // retry jobs store a PublishJobResult object. Surface both shapes:
+    // questions[] for the existing question-gen path, result for everything
+    // else. Client type-guards the result field.
+    const isQuestionsArray = Array.isArray(job.result);
+    return {
+      status: job.status,
+      progress: job.progress,
+      questions:
+        job.status === "Completed" && isQuestionsArray
+          ? (job.result as QuestionDto[])
+          : undefined,
+      result: job.result,
+    };
   }
 
   /**

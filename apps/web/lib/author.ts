@@ -263,20 +263,16 @@ export function subscribeToJobStatus(
 
         const jobStatusUrl = `${getApiRoutes().assignments}/jobs/${jobId}/status`;
 
-        const fetchOnce = async (): Promise<
-          | {
-              status?: string;
-              progress?: string;
-              questions?: QuestionAuthorStore[];
-            }
-          | undefined
-        > => {
+        type FallbackJobStatus = {
+          status?: string;
+          progress?: string;
+          questions?: QuestionAuthorStore[];
+          result?: unknown;
+        };
+
+        const fetchOnce = async (): Promise<FallbackJobStatus | undefined> => {
           try {
-            return (await apiClient.get(jobStatusUrl)) as {
-              status?: string;
-              progress?: string;
-              questions?: QuestionAuthorStore[];
-            };
+            return (await apiClient.get(jobStatusUrl)) as FallbackJobStatus;
           } catch (fetchError) {
             console.warn(
               "Publish job-status fallback fetch failed",
@@ -286,21 +282,25 @@ export function subscribeToJobStatus(
           }
         };
 
-        const applyJobState = (
-          job:
-            | {
-                status?: string;
-                progress?: string;
-                questions?: QuestionAuthorStore[];
-              }
-            | undefined,
-        ): boolean => {
+        // PublishJobResult ducks-types as { stage: string, translations?: ... }.
+        // Forward any result that matches that shape to onPublishResult on
+        // every poll tick so the UI can render the failure summary + retry
+        // button after an SSE drop.
+        const looksLikePublishResult = (r: unknown): r is PublishJobResult =>
+          typeof r === "object" &&
+          r !== null &&
+          typeof (r as { stage?: unknown }).stage === "string";
+
+        const applyJobState = (job: FallbackJobStatus | undefined): boolean => {
           if (!job) return false;
           if (job.questions && Array.isArray(job.questions)) {
             receivedQuestions = job.questions;
             if (setQuestions) {
               setQuestions(receivedQuestions);
             }
+          }
+          if (onPublishResult && looksLikePublishResult(job.result)) {
+            onPublishResult(job.result);
           }
           // Match the SSE `update` handler's semantics: Completed resolves,
           // Failed rejects. Resolving on Failed lets the caller's success
