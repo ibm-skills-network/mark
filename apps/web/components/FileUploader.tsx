@@ -53,7 +53,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   onUploadError,
   onDeleteComplete,
   onUploadStateChange,
-  maxFileSize = 10 * 1024 * 1024,
+  maxFileSize = 100 * 1024 * 1024,
   acceptedFileTypes = {},
   multiple = false,
   currentPath,
