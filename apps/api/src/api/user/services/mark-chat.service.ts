@@ -522,17 +522,17 @@ export class MarkChatService {
       const hasToolCalls = trackedClientExecutions.length > 0;
       if (hasContent || hasToolCalls) {
         try {
-          const contentForDb = hasToolCalls
+          const contentForDatabase = hasToolCalls
             ? `${fullContent}\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`
             : fullContent;
-          const toolCallsForDb = hasToolCalls
+          const toolCallsForDatabase = hasToolCalls
             ? (trackedClientExecutions as unknown as Prisma.JsonValue)
             : undefined;
           await this.chatRepository.addMessage(
             chatId,
             ChatRole.ASSISTANT,
-            contentForDb,
-            toolCallsForDb,
+            contentForDatabase,
+            toolCallsForDatabase,
           );
         } catch (persistError) {
           console.error(

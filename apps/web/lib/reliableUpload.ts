@@ -69,7 +69,8 @@ function extractServerMessage(error: unknown): string | undefined {
   if (!body || typeof body !== "object") return undefined;
   const message = (body as { message?: unknown }).message;
   if (typeof message === "string" && message.trim().length > 0) return message;
-  if (Array.isArray(message) && typeof message[0] === "string") return message[0];
+  if (Array.isArray(message) && typeof message[0] === "string")
+    return message[0];
   return undefined;
 }
 
@@ -108,7 +109,8 @@ async function initiateMultipartUpload(
       // size case so we never leak developer copy into the UI.
       const serverMessage = extractServerMessage(lastError);
       const isSizeError =
-        !!serverMessage && /too large|max(?:imum)? (?:allowed|size)/i.test(serverMessage);
+        !!serverMessage &&
+        /too large|max(?:imum)? (?:allowed|size)/i.test(serverMessage);
       throw new UploadError(
         lastError.message,
         isSizeError && serverMessage
@@ -274,7 +276,10 @@ export async function reliableUpload(
     throw new Error("Cannot upload empty file");
   }
 
-  const multipartUpload = await initiateMultipartUpload(uploadRequest, onWaiting);
+  const multipartUpload = await initiateMultipartUpload(
+    uploadRequest,
+    onWaiting,
+  );
 
   if (!multipartUpload.uploadId || !multipartUpload.urls?.length) {
     throw new Error("Failed to initialize multipart upload");
