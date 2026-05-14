@@ -59,7 +59,6 @@ import UserReportsPanel from "./UserReportsPanel";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
 import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
-import { useUserBehaviorMonitor } from "../../../hooks/useUserBehaviorMonitor";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
@@ -981,9 +980,6 @@ export const MarkChat = () => {
     dismiss: dismissBubble,
     sayMotionSick,
     sayExcited,
-    sayProactiveHelp,
-    sayIdleHelp,
-    sayStuckHelp,
   } = useMarkSpeech();
 
   const learnerContext = useLearnerContext();
@@ -994,77 +990,6 @@ export const MarkChat = () => {
     questions: state.questions,
     activeAssignmentId: state.activeAssignmentId,
   }));
-
-  const contextData = React.useMemo(() => {
-    if (userRole === "author") {
-      return {
-        assignmentName: authorStore.name,
-        questions: authorStore.questions,
-        focusedQuestionId: authorContext.focusedQuestionId,
-        activeAssignmentId: authorStore.activeAssignmentId,
-      };
-    } else if (userRole === "learner") {
-      return {
-        currentQuestion: learnerContext.currentQuestion,
-        assignmentMeta: learnerContext.assignmentMeta,
-        currentQuestionIndex:
-          learnerContext.questions?.findIndex(
-            (q) => q.id === learnerContext.currentQuestion?.id,
-          ) + 1 || undefined,
-        totalQuestions: learnerContext.questions?.length,
-        isGradedAssignment: learnerContext.isGradedAssignment,
-        isFeedbackMode: learnerContext.isFeedbackMode,
-      };
-    }
-    return {};
-  }, [
-    userRole,
-    authorStore.name,
-    authorStore.questions,
-    authorContext.focusedQuestionId,
-    authorStore.activeAssignmentId,
-    learnerContext.currentQuestion,
-    learnerContext.assignmentMeta,
-    learnerContext.questions,
-    learnerContext.isGradedAssignment,
-    learnerContext.isFeedbackMode,
-  ]);
-
-  const { behaviorData, resetHelpOffer, getChatMessage } =
-    useUserBehaviorMonitor(userRole, contextData);
-
-  useEffect(() => {
-    if (behaviorData.shouldOfferHelp && !isChatbotOpen) {
-      const { helpReason, currentContext } = behaviorData;
-      const subject = currentContext.detectedSubject || "general";
-
-      switch (helpReason) {
-        case "idle_too_long":
-          sayIdleHelp(userRole);
-          break;
-        case "stuck_on_question":
-          sayStuckHelp(currentContext.currentQuestionIndex, userRole);
-          break;
-        case "long_time_on_page":
-          sayProactiveHelp(subject, userRole);
-          break;
-        default:
-          sayProactiveHelp(subject, userRole);
-      }
-
-      setTimeout(() => resetHelpOffer(), 1000);
-    }
-  }, [
-    behaviorData.shouldOfferHelp,
-    behaviorData.helpReason,
-    behaviorData.currentContext,
-    isChatbotOpen,
-    userRole,
-    sayIdleHelp,
-    sayStuckHelp,
-    sayProactiveHelp,
-    resetHelpOffer,
-  ]);
 
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -1621,13 +1546,6 @@ export const MarkChat = () => {
       if (isQuickTap && !isDragging && !hasMoved) {
         e.preventDefault();
         e.stopPropagation();
-
-        if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
-          const helpMessage = getChatMessage();
-          setUserInput(helpMessage);
-          dismissBubble();
-          resetHelpOffer();
-        }
         toggleChatbot();
       }
 
@@ -1639,12 +1557,6 @@ export const MarkChat = () => {
       touchStartTime,
       isDragging,
       hasMoved,
-      behaviorData.shouldOfferHelp,
-      behaviorData.helpReason,
-      getChatMessage,
-      setUserInput,
-      dismissBubble,
-      resetHelpOffer,
       toggleChatbot,
     ],
   );
@@ -1689,26 +1601,9 @@ export const MarkChat = () => {
     }
 
     if (shouldToggle) {
-      if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
-        const helpMessage = getChatMessage();
-        setUserInput(helpMessage);
-        dismissBubble();
-        resetHelpOffer();
-      }
       toggleChatbot();
     }
-  }, [
-    isDragging,
-    isMobileDevice,
-    dragStartTime,
-    toggleChatbot,
-    behaviorData.shouldOfferHelp,
-    behaviorData.helpReason,
-    getChatMessage,
-    setUserInput,
-    dismissBubble,
-    resetHelpOffer,
-  ]);
+  }, [isDragging, isMobileDevice, dragStartTime, toggleChatbot]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
   const checkForIssueStatusQuery = useCallback(
@@ -3139,65 +3034,6 @@ Please help me with this.`;
 
   return (
     <>
-      <SpeechBubble
-        bubble={activeBubble}
-        onDismiss={dismissBubble}
-        position={currentPosition}
-      />
-
-      <AnimatePresence>
-        {!isChatbotOpen && (
-          <Draggable
-            nodeRef={draggableNodeRef}
-            position={dragPosition}
-            onStart={handleDragStart}
-            onDrag={handleDrag}
-            onStop={handleDragStop}
-            bounds={{
-              left: 10,
-              top: 10,
-              right:
-                typeof window !== "undefined" ? window.innerWidth - 76 : 800,
-              bottom:
-                typeof window !== "undefined" ? window.innerHeight - 76 : 600,
-            }}
-          >
-            <div ref={draggableNodeRef} className="fixed z-50">
-              <OrbitingActionDock
-                isVisible={!isChatbotOpen}
-                onActionClick={handleActionClick}
-              />
-
-              <motion.button
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={handleChatToggle}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                className={`p-3 z-99999 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? "cursor-pointer" : "cursor-move"} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
-              >
-                {MarkFace ? (
-                  <Image
-                    src={MarkFace}
-                    alt="Mark AI Assistant"
-                    width={50}
-                    height={50}
-                    draggable={false}
-                    className="pointer-events-none select-none"
-                  />
-                ) : (
-                  <ChatBubbleLeftRightIcon className="w-7 h-7 pointer-events-none" />
-                )}
-              </motion.button>
-            </div>
-          </Draggable>
-        )}
-      </AnimatePresence>
-
       <AnimatePresence>
         {isChatbotOpen && (
           <motion.div

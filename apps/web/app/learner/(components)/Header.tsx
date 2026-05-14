@@ -1,6 +1,7 @@
 "use client";
 
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
+import { MarkChatToggleButton } from "@/components/MarkChatToggleButton";
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import Dropdown from "@/components/Dropdown";
@@ -466,6 +467,7 @@ function LearnerHeader() {
                       />
                     </div>
                   ) : null}
+                  <MarkChatToggleButton role="learner" />
                 </>
               )}
               {isAttemptPage || isInQuestionPage ? (
@@ -544,6 +546,7 @@ function LearnerHeader() {
                     }
                   />
                 ) : null}
+                <MarkChatToggleButton role="learner" />
               </>
             )}
             {isAttemptPage || isInQuestionPage ? (
