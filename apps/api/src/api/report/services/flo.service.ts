@@ -7,6 +7,8 @@ import {
   SkillsNetworkNatsServer,
 } from "../types/report.types";
 
+const FLO_PUBLISH_TIMEOUT_MS = 3000;
+
 @Injectable()
 export class FloService {
   private readonly logger = new Logger(FloService.name);
@@ -69,6 +71,44 @@ export class FloService {
   }
 
   /**
+   * Race a publish against a hard timeout so the underlying NATS connect
+   * (which has no built-in deadline in `sn-messaging-ts-client`) can never
+   * block a request handler indefinitely. Errors and timeouts both resolve
+   * to `false` — the caller treats this as best-effort telemetry.
+   */
+  private async publishWithTimeout(
+    label: string,
+    publish: () => Promise<unknown>,
+  ): Promise<boolean> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), FLO_PUBLISH_TIMEOUT_MS);
+    });
+
+    try {
+      const result = await Promise.race([
+        publish().then(() => "ok" as const),
+        timeout,
+      ]);
+      if (result === "timeout") {
+        this.logger.warn(
+          `Flo publish (${label}) timed out after ${FLO_PUBLISH_TIMEOUT_MS}ms — NATS unreachable, skipping`,
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Flo publish (${label}) failed: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+      return false;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /**
    * Send an error message to Flo
    */
   async sendError(
@@ -87,29 +127,24 @@ export class FloService {
       return false;
     }
 
-    try {
-      const messageData = {
-        title,
-        description,
-        category: "Mark Issue",
-        severity: options.severity || "info",
-        tool_name: "Mark AI Assistant",
-        type: "service",
-        tags: options.tags || ["mark", "chat"],
-        ...options,
-      };
+    const messageData = {
+      title,
+      description,
+      category: "Mark Issue",
+      severity: options.severity || "info",
+      tool_name: "Mark AI Assistant",
+      type: "service",
+      tags: options.tags || ["mark", "chat"],
+      ...options,
+    };
 
-      await client.publishUser(userEmail, "support.create", messageData);
-
+    const sent = await this.publishWithTimeout("sendError", () =>
+      client.publishUser(userEmail, "support.create", messageData),
+    );
+    if (sent) {
       this.logger.log(`Error report sent to Flo: ${title}`);
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Error sending to Flo: ${(error as Error).message}`,
-        (error as Error).stack,
-      );
-      return false;
     }
+    return sent;
   }
 
   /**
@@ -134,36 +169,31 @@ export class FloService {
       return false;
     }
 
-    try {
-      const messageData = {
-        organization: this.natsConfig.organization,
-        program: this.natsConfig.program,
-        project: this.natsConfig.project,
-        action: "feedback",
-        date: new Date().toISOString(),
-        subject: `${this.natsConfig.organization}.${this.natsConfig.program}.${this.natsConfig.project}.service.feedback`,
-        type: "service",
-        title,
-        description,
-        category: "feedback",
-        portal_name: options.portalName || "Mark AI Assistant",
-        portal_url: options.portalUrl,
-        user_email: options.userEmail,
-        rating: options.rating || "3",
-        ...options,
-      };
+    const messageData = {
+      organization: this.natsConfig.organization,
+      program: this.natsConfig.program,
+      project: this.natsConfig.project,
+      action: "feedback",
+      date: new Date().toISOString(),
+      subject: `${this.natsConfig.organization}.${this.natsConfig.program}.${this.natsConfig.project}.service.feedback`,
+      type: "service",
+      title,
+      description,
+      category: "feedback",
+      portal_name: options.portalName || "Mark AI Assistant",
+      portal_url: options.portalUrl,
+      user_email: options.userEmail,
+      rating: options.rating || "3",
+      ...options,
+    };
 
-      await client.publishService("feedback", messageData);
-
+    const sent = await this.publishWithTimeout("sendFeedback", () =>
+      client.publishService("feedback", messageData),
+    );
+    if (sent) {
       this.logger.log(`Feedback sent to Flo: ${title}`);
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Error sending feedback to Flo: ${(error as Error).message}`,
-        (error as Error).stack,
-      );
-      return false;
     }
+    return sent;
   }
 
   /**
@@ -188,34 +218,29 @@ export class FloService {
       return false;
     }
 
-    try {
-      const messageData = {
-        organization: this.natsConfig.organization,
-        program: this.natsConfig.program,
-        project: this.natsConfig.project,
-        action: "support",
-        date: new Date().toISOString(),
-        subject: `${this.natsConfig.organization}.${this.natsConfig.program}.${this.natsConfig.project}.service.support`,
-        type: "service",
-        title,
-        description,
-        portal_name: options.portalName || "Mark AI Assistant",
-        category: options.category || "Support Request",
-        userEmail: options.userEmail,
-        chatroomId: options.chatroomId,
-        ...options,
-      };
+    const messageData = {
+      organization: this.natsConfig.organization,
+      program: this.natsConfig.program,
+      project: this.natsConfig.project,
+      action: "support",
+      date: new Date().toISOString(),
+      subject: `${this.natsConfig.organization}.${this.natsConfig.program}.${this.natsConfig.project}.service.support`,
+      type: "service",
+      title,
+      description,
+      portal_name: options.portalName || "Mark AI Assistant",
+      category: options.category || "Support Request",
+      userEmail: options.userEmail,
+      chatroomId: options.chatroomId,
+      ...options,
+    };
 
-      await client.publishService("support", messageData);
-
+    const sent = await this.publishWithTimeout("sendSupportRequest", () =>
+      client.publishService("support", messageData),
+    );
+    if (sent) {
       this.logger.log(`Support request sent to Flo: ${title}`);
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Error sending support request to Flo: ${(error as Error).message}`,
-        (error as Error).stack,
-      );
-      return false;
     }
+    return sent;
   }
 }
