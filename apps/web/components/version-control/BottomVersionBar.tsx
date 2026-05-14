@@ -7,6 +7,7 @@ import { useAuthorStore } from "@/stores/author";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { VersionSelectionModal } from "./VersionSelectionModal";
 import { useChatbot } from "@/hooks/useChatbot";
+import { MarkChatToggleButton } from "@/components/MarkChatToggleButton";
 import { VersionComparison } from "@/types/version-types";
 import {
   ChevronUp,
@@ -585,6 +586,7 @@ export function BottomVersionBar() {
           </div>
 
           <div className="flex items-center space-x-3">
+            <MarkChatToggleButton role="author" />
             <button
               onClick={() =>
                 router.push(`/author/${activeAssignmentId}/version-tree`)

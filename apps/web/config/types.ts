@@ -62,7 +62,7 @@ export interface ExtendedFileContent {
   questionId?: string;
 }
 
-export type UploadType = "author" | "learner" | "debug";
+export type UploadType = "author" | "learner" | "debug" | "chatbot";
 
 export interface UploadContext {
   path?: string;
@@ -75,6 +75,7 @@ export interface UploadContext {
 export interface UploadRequest {
   fileName: string;
   fileType: string;
+  fileSize: number;
   uploadType: UploadType;
   context?: UploadContext;
 }
@@ -86,6 +87,46 @@ export interface UploadResponse {
   fileType: string;
   fileName: string;
   uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
+}
+
+export interface MultipartUploadPartUrl {
+  partNumber: number;
+  url: string;
+}
+
+export interface MultipartUploadInitiateResponse {
+  uploadId: string;
+  key: string;
+  bucket: string;
+  fileType: string;
+  fileName: string;
+  uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
+  partSizeBytes: number;
+  urls: MultipartUploadPartUrl[];
+}
+
+export interface MultipartUploadCompletedPart {
+  partNumber: number;
+  etag: string;
+}
+
+export interface MultipartUploadCompleteRequest {
+  uploadId: string;
+  key: string;
+  uploadType: UploadType;
+  parts: MultipartUploadCompletedPart[];
+}
+
+export interface MultipartUploadAbortRequest {
+  uploadId: string;
+  key: string;
+  uploadType: UploadType;
 }
 
 export interface FileMetadata {

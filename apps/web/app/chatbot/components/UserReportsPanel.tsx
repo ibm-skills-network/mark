@@ -33,13 +33,18 @@ interface Report {
 interface UserReportsProps {
   userId: string;
   onClose: () => void;
+  initialSearchQuery?: string;
 }
 
 type SortField = "createdAt" | "updatedAt" | "status" | "issueType";
 
 const ITEMS_PER_CHUNK = 20;
 
-const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
+const UserReportsPanel: React.FC<UserReportsProps> = ({
+  userId,
+  onClose,
+  initialSearchQuery = "",
+}) => {
   const [reports, setReports] = useState<Report[]>([]);
   const [filteredReports, setFilteredReports] = useState<Report[]>([]);
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_CHUNK);
@@ -50,7 +55,7 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
   const [commentDraft, setCommentDraft] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [threadRefreshing, setThreadRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [sortField, setSortField] = useState<SortField>("updatedAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -73,6 +78,13 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
   }, [userId]);
 
   useEffect(() => {
+    setSelectedReport(null);
+    setStatusFilter("ALL");
+    setSearchQuery(initialSearchQuery);
+    setVisibleCount(ITEMS_PER_CHUNK);
+  }, [initialSearchQuery]);
+
+  useEffect(() => {
     let result = [...reports];
 
     if (statusFilter !== "ALL") {
@@ -83,6 +95,8 @@ const UserReportsPanel: React.FC<UserReportsProps> = ({ userId, onClose }) => {
       result = result.filter(
         (r) =>
           r.description.toLowerCase().includes(q) ||
+          r.id.toLowerCase().includes(q) ||
+          r.issueNumber?.toLowerCase().includes(q) ||
           r.issueType.toLowerCase().includes(q) ||
           r.statusMessage?.toLowerCase().includes(q) ||
           r.resolution?.toLowerCase().includes(q) ||

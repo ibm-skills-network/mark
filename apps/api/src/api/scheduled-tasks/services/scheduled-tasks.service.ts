@@ -20,6 +20,7 @@ import {
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../../../database/prisma.service";
 import { AdminService } from "../../admin/admin.service";
+import { AssignmentFileService } from "../../assignment/v2/services/assignment-file.service";
 import { LLMPricingService } from "../../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 
@@ -31,6 +32,7 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
     private prismaService: PrismaService,
     @Inject(LLM_PRICING_SERVICE) private llmPricingService: LLMPricingService,
     private adminService: AdminService,
+    private assignmentFileService: AssignmentFileService,
   ) {}
 
   private areSchedulersEnabled(): boolean {
@@ -529,5 +531,28 @@ export class ScheduledTasksService implements OnApplicationBootstrap {
   async manualPrecomputeInsights(): Promise<void> {
     this.logger.log("Manual precomputation of insights requested");
     await this.precomputeInsights(true);
+  }
+
+  @Cron(CronExpression.EVERY_6_HOURS)
+  async cleanupOrphanedUploadingFiles(
+    allowWhenDisabled = false,
+  ): Promise<void> {
+    if (!allowWhenDisabled && !this.areSchedulersEnabled()) {
+      return;
+    }
+
+    this.logger.log(
+      "Starting scheduled task: Clean up orphaned UPLOADING assignment files",
+    );
+
+    try {
+      const { cleaned } =
+        await this.assignmentFileService.cleanupOrphanedUploadingFiles();
+      this.logger.log(
+        `Completed scheduled task: Cleaned up ${cleaned} orphaned UPLOADING file(s)`,
+      );
+    } catch (error) {
+      this.logger.error("Error in cleanupOrphanedUploadingFiles:", error);
+    }
   }
 }
