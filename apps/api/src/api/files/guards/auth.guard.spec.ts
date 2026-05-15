@@ -134,6 +134,20 @@ describe("FilesAuthGuard", () => {
       );
     });
 
+    it("rejects an author session missing userId without hitting Prisma", async () => {
+      prisma.assignment.findUnique.mockResolvedValue({ id: ASSIGNMENT_ID });
+      const ctx = makeContext({
+        userSession: {
+          role: UserRole.AUTHOR,
+          assignmentId: ASSIGNMENT_ID,
+        },
+      });
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.assignmentAuthor.findUnique).not.toHaveBeenCalled();
+    });
+
     it("allows an author with no groupId (preview mode launched outside a group context)", async () => {
       prisma.assignment.findUnique.mockResolvedValue({ id: ASSIGNMENT_ID });
       prisma.assignmentAuthor.findUnique.mockResolvedValue({

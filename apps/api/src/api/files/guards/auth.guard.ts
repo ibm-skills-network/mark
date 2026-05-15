@@ -51,33 +51,56 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException("User session is missing");
     }
 
-    const assignment = await this.prisma.assignment.findUnique({
+    const assignmentPromise = this.prisma.assignment.findUnique({
       where: { id: assignmentId },
     });
-    if (!assignment) {
-      this.logger.warn("files_auth_denied: assignment not found", {
-        denial_reason: "assignment_not_found",
-        assignment_id: assignmentId,
-        user_id: userSession?.userId,
-        method,
-        url: originalUrl,
-      });
-      throw new NotFoundException("Assignment not found");
-    }
 
     if (userSession.role === UserRole.ADMIN) {
+      const assignment = await assignmentPromise;
+      if (!assignment) {
+        this.logger.warn("files_auth_denied: assignment not found", {
+          denial_reason: "assignment_not_found",
+          assignment_id: assignmentId,
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new NotFoundException("Assignment not found");
+      }
       return true;
     }
 
     if (userSession.role === UserRole.AUTHOR) {
-      const author = await this.prisma.assignmentAuthor.findUnique({
-        where: {
-          assignmentId_userId: {
-            assignmentId,
-            userId: userSession.userId,
+      if (!userSession.userId) {
+        this.logger.warn("files_auth_denied: author session missing userId", {
+          denial_reason: "missing_author_user_id",
+          assignment_id: assignmentId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("Access denied to this assignment");
+      }
+      const [assignment, author] = await Promise.all([
+        assignmentPromise,
+        this.prisma.assignmentAuthor.findUnique({
+          where: {
+            assignmentId_userId: {
+              assignmentId,
+              userId: userSession.userId,
+            },
           },
-        },
-      });
+        }),
+      ]);
+      if (!assignment) {
+        this.logger.warn("files_auth_denied: assignment not found", {
+          denial_reason: "assignment_not_found",
+          assignment_id: assignmentId,
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new NotFoundException("Assignment not found");
+      }
       if (!author) {
         this.logger.warn("files_auth_denied: author not linked to assignment", {
           denial_reason: "author_not_linked",
@@ -111,12 +134,25 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException("Assignment ID is missing in user session");
     }
 
-    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
-      where: {
-        assignmentId: assignmentId,
-        groupId: userSession.groupId,
-      },
-    });
+    const [assignment, assignmentGroup] = await Promise.all([
+      assignmentPromise,
+      this.prisma.assignmentGroup.findFirst({
+        where: {
+          assignmentId: assignmentId,
+          groupId: userSession.groupId,
+        },
+      }),
+    ]);
+    if (!assignment) {
+      this.logger.warn("files_auth_denied: assignment not found", {
+        denial_reason: "assignment_not_found",
+        assignment_id: assignmentId,
+        user_id: userSession?.userId,
+        method,
+        url: originalUrl,
+      });
+      throw new NotFoundException("Assignment not found");
+    }
     if (!assignmentGroup) {
       this.logger.warn("files_auth_denied: no group link", {
         denial_reason: "no_group_link",
