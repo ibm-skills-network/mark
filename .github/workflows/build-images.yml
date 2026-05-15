@@ -403,9 +403,71 @@ jobs:
             --bail \
             --requestTimeout 10000
 
+  build-pr-verify:
+    name: Build (PR) - ${{ matrix.service }}
+    # PR-only Dockerfile smoke test. Runs in parallel with security-scan,
+    # test, and lint instead of waiting for them — saves ~3.5 min wall
+    # time vs. the gated build-and-deploy below. No image is published
+    # (push: false), so a failing test/scan can't leak a bad image to
+    # GHCR; the only downside is wasted CI minutes on a PR that was
+    # going to fail anyway. Branch/tag pushes still go through the
+    # gated build-and-deploy path so :latest can only land after green
+    # test + security-scan.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        service: [api-gateway, api, jobs, web]
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if service needs building
+        id: changes
+        run: |
+          # On PRs github.event.pull_request.base.sha is always populated.
+          # Use a merge-base diff so unrelated commits the base picked up
+          # after this branch forked don't register as "changes here".
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$BASE_SHA"...${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "needs_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} image (verify only)
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: docker/build-push-action@v6
+        timeout-minutes: 45
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: false
+          # cache-from reads master's GHA cache (populated by branch /
+          # tag pushes via build-and-deploy below). cache-to is omitted
+          # — PR cache writes are the cost we removed in #358 and they
+          # would just churn here.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          platforms: linux/amd64
+
   build-and-deploy:
     name: Build & Deploy - ${{ matrix.service }}
     runs-on: ubuntu-latest
+    # Non-PR-only: branch/tag pushes that actually publish images. PRs
+    # use the parallel build-pr-verify job above. We keep the
+    # needs: [security-scan, test] gate here so publishing to GHCR
+    # (push: true, :latest tag on master/tag) only happens on green
+    # test + security-scan.
+    if: github.event_name != 'pull_request'
     # Depend on test for correctness; lint is intentionally NOT a dep so a tag
     # push (where the lint job is skipped) doesn't cascade-skip the deploy.
     # Branch protection should still require both Lint and Test on PRs.
