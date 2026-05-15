@@ -525,7 +525,15 @@ jobs:
           # READ master's cache via cache-from but skip the export — uploading
           # mode=max layers to GHA cache was 3-5 min per service per push and
           # the resulting cache was overwritten on the next push anyway.
-          cache-to: ${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.service) || '' }}
+          #
+          # `web` is additionally excluded: its sourcer stage produces the
+          # full Next.js node_modules + .next bundle as one giant layer,
+          # which makes the mode=max cache export ~4-5 min and rarely
+          # produces a usable hit (the installer COPY layer invalidates on
+          # every source change anyway). The other three services keep
+          # cache-to because their intermediate stages are smaller and the
+          # cache actually pays off.
+          cache-to: ${{ matrix.service != 'web' && ((github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.service) || '' }}
           platforms: linux/amd64
 
       - name: Run container security scan
