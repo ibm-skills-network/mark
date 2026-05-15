@@ -17,13 +17,21 @@ ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn install --ignore-scripts --frozen-lockfile && yarn cache clean
+# Use a BuildKit cache mount for yarn's package cache so it persists across
+# RUN steps in the same build (the production install in sourcer below reuses
+# the tarballs downloaded here). On a single GHA runner the mount starts empty,
+# but it dedupes the two installs within one build. `yarn cache clean` is
+# unnecessary now — cache-mount contents don't enter the image layer.
+RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
+    yarn install --ignore-scripts --frozen-lockfile --cache-folder /yarn-cache
 
 # Running build using turbo for the Next.js app
 FROM installer AS sourcer
 WORKDIR $DIR
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn build --filter=web && yarn install --production --ignore-scripts --frozen-lockfile && yarn cache clean
+RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
+    yarn build --filter=web \
+ && yarn install --production --ignore-scripts --frozen-lockfile --cache-folder /yarn-cache
 
 # Production stage
 FROM ${BASE_IMAGE} AS production
