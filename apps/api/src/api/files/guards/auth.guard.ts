@@ -7,7 +7,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSessionRequest,
+} from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 
@@ -39,11 +42,59 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException("Invalid assignment ID");
     }
 
-    if (!userSession || !userSession.groupId) {
-      this.logger.warn("files_auth_denied: user session or group missing", {
-        denial_reason: "missing_session_or_group",
-        has_session: !!userSession,
-        has_group: !!userSession?.groupId,
+    if (!userSession) {
+      this.logger.warn("files_auth_denied: user session missing", {
+        denial_reason: "missing_session",
+        method,
+        url: originalUrl,
+      });
+      throw new ForbiddenException("User session is missing");
+    }
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+    if (!assignment) {
+      this.logger.warn("files_auth_denied: assignment not found", {
+        denial_reason: "assignment_not_found",
+        assignment_id: assignmentId,
+        user_id: userSession?.userId,
+        method,
+        url: originalUrl,
+      });
+      throw new NotFoundException("Assignment not found");
+    }
+
+    if (userSession.role === UserRole.ADMIN) {
+      return true;
+    }
+
+    if (userSession.role === UserRole.AUTHOR) {
+      const author = await this.prisma.assignmentAuthor.findUnique({
+        where: {
+          assignmentId_userId: {
+            assignmentId,
+            userId: userSession.userId,
+          },
+        },
+      });
+      if (!author) {
+        this.logger.warn("files_auth_denied: author not linked to assignment", {
+          denial_reason: "author_not_linked",
+          assignment_id: assignmentId,
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("Access denied to this assignment");
+      }
+      return true;
+    }
+
+    if (!userSession.groupId) {
+      this.logger.warn("files_auth_denied: learner session missing group", {
+        denial_reason: "missing_group",
+        user_id: userSession?.userId,
         method,
         url: originalUrl,
       });
@@ -60,28 +111,12 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException("Assignment ID is missing in user session");
     }
 
-    const [assignmentGroup, assignment] = await this.prisma.$transaction([
-      this.prisma.assignmentGroup.findFirst({
-        where: {
-          assignmentId: assignmentId,
-          groupId: userSession.groupId,
-        },
-      }),
-      this.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-      }),
-    ]);
-    if (!assignment) {
-      this.logger.warn("files_auth_denied: assignment not found", {
-        denial_reason: "assignment_not_found",
-        assignment_id: assignmentId,
-        user_id: userSession?.userId,
-        method,
-        url: originalUrl,
-      });
-      throw new NotFoundException("Assignment not found");
-    }
-
+    const assignmentGroup = await this.prisma.assignmentGroup.findFirst({
+      where: {
+        assignmentId: assignmentId,
+        groupId: userSession.groupId,
+      },
+    });
     if (!assignmentGroup) {
       this.logger.warn("files_auth_denied: no group link", {
         denial_reason: "no_group_link",
