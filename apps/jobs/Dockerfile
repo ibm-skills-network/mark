@@ -19,10 +19,11 @@ COPY --from=builder ${DIR}/turbo.json ./turbo.json
 COPY --from=builder ${DIR}/packages ./packages
 
 # hadolint ignore=DL3008
-RUN apt-get update -y \
+RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
+    apt-get update -y \
   && apt-get install -y --no-install-recommends \
      python3 make g++ pkg-config openssl \
-  && yarn install --ignore-scripts --frozen-lockfile \
+  && yarn install --ignore-scripts --frozen-lockfile --cache-folder /yarn-cache \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
