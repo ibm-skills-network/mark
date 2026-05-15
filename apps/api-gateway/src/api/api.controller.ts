@@ -63,7 +63,7 @@ export class ApiController {
     return response.status(apiResponse.status).send(apiResponse.data);
   }
 
-  @All("/admin/*splat")
+  @All("/admin{/*splat}")
   @UseGuards(DynamicJwtBearerTokenAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark Admin API" })
   @ApiBadRequestResponse({ description: "Bad request" })
