@@ -21,10 +21,11 @@ COPY --from=builder ${DIR}/apps/api/prisma ./apps/api/prisma
 COPY --from=builder ${DIR}/patches ./patches
 
 # hadolint ignore=DL3008
-RUN apt-get update -y \
+RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
+    apt-get update -y \
   && apt-get install -y --no-install-recommends \
      python3 make g++ pkg-config openssl \
-  && yarn install --frozen-lockfile \
+  && yarn install --frozen-lockfile --cache-folder /yarn-cache \
   && yarn prisma generate \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
