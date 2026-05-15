@@ -403,25 +403,22 @@ jobs:
             --bail \
             --requestTimeout 10000
 
-  build-and-deploy:
-    name: Build & Deploy - ${{ matrix.service }}
+  build-image:
+    name: Build - ${{ matrix.service }}
+    # Builds the image in parallel with security-scan, test, and lint —
+    # no `needs:` so it starts immediately. On non-PR events the resulting
+    # image is saved to disk as a docker tar and uploaded as a workflow
+    # artifact for the deploy-image job below. On PRs the artifact upload
+    # is skipped; the build runs purely as a Dockerfile smoke test.
+    # Nothing is pushed from this job — publishing is gated downstream
+    # in deploy-image.
     runs-on: ubuntu-latest
-    # Depend on test for correctness; lint is intentionally NOT a dep so a tag
-    # push (where the lint job is skipped) doesn't cascade-skip the deploy.
-    # Branch protection should still require both Lint and Test on PRs.
-    needs: [security-scan, test]
     permissions:
       contents: read
-      packages: write
-      security-events: write
-      id-token: write
-      attestations: write
     strategy:
       matrix:
         service: [api-gateway, api, jobs, web]
       fail-fast: false
-    outputs:
-      image-tag: ${{ steps.meta.outputs.image-tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -458,15 +455,7 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        if: steps.changes.outputs.needs_build == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
+      - name: Compute image metadata
         if: steps.changes.outputs.needs_build == 'true'
         id: meta
         run: |
@@ -483,34 +472,147 @@ jobs:
           echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
 
-      - name: Build and push ${{ matrix.service }} image
+      - name: Build ${{ matrix.service }} image
         if: steps.changes.outputs.needs_build == 'true'
         uses: docker/build-push-action@v6
-        id: build-push
+        id: build
         timeout-minutes: 45
         with:
           context: .
           file: apps/${{ matrix.service }}/Dockerfile
-          # Verify the Dockerfile builds on PRs but don't publish — same-repo
-          # PRs would otherwise push unmerged images and overwrite :latest.
-          push: ${{ github.event_name != 'pull_request' }}
-          # Only stamp :latest from master pushes and tag pushes. Feature
-          # branches still get their branch-SHA tag, but must not overwrite
-          # :latest (which downstream pulls treat as production).
+          # Always build to a local tar; deploy-image loads + pushes after
+          # security-scan and test go green. Nothing is pushed from this job.
+          push: false
+          outputs: type=docker,dest=/tmp/mark-${{ matrix.service }}-image.tar
+          # Tags get baked into the saved image, so docker load in
+          # deploy-image picks them up directly. The :latest tag is only
+          # included on master / tag pushes (downstream pulls treat
+          # :latest as production).
           tags: |
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
             ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && format('ghcr.io/{0}/mark-{1}:latest', github.repository, matrix.service) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
           # Only write the GHA cache on push events that survive into a
-          # release path (master / tags / scheduled / manual). PR pushes still
-          # READ master's cache via cache-from but skip the export — uploading
-          # mode=max layers to GHA cache was 3-5 min per service per push and
-          # the resulting cache was overwritten on the next push anyway.
+          # release path (master / tags / scheduled / manual). PR builds
+          # still READ master's cache via cache-from but skip the export.
           cache-to: ${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.service) || '' }}
           platforms: linux/amd64
 
-      - name: Run container security scan
+      - name: Upload image artifact for deploy
         if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.service }}-${{ github.run_number }}
+          path: /tmp/mark-${{ matrix.service }}-image.tar
+          # The tar is only consumed by the deploy-image job in the same
+          # workflow run, so 1-day retention is plenty.
+          retention-days: 1
+          # The contents are docker layers (already gzip-compressed
+          # internally); re-compressing wastes CPU.
+          compression-level: 0
+
+  deploy-image:
+    name: Deploy - ${{ matrix.service }}
+    # Publishes the image built in build-image to GHCR, runs the container
+    # security scan, and triggers the external image mirror. Skipped on
+    # PRs (no GHCR publish on unmerged code) and on any run where the
+    # security-scan or test jobs failed. `always()` lets per-service slots
+    # run independently — if build-image fails for one service the others
+    # still publish, matching the previous build-and-deploy behavior.
+    if: |
+      always()
+      && github.event_name != 'pull_request'
+      && needs.security-scan.result == 'success'
+      && needs.test.result == 'success'
+    needs: [build-image, security-scan, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        service: [api-gateway, api, jobs, web]
+      fail-fast: false
+    outputs:
+      image-tag: ${{ steps.meta.outputs.image-tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if service needs building
+        id: changes
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            if [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="$(git rev-parse origin/master)"
+            else
+              BASE_SHA="${{ github.event.before }}"
+            fi
+            if git diff --name-only "$BASE_SHA"...${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "needs_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Download image artifact
+        if: steps.changes.outputs.needs_build == 'true'
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          name: image-${{ matrix.service }}-${{ github.run_number }}
+          path: /tmp
+        # If build-image failed for this matrix slot (other slots may have
+        # succeeded), the artifact won't exist. Don't fail the whole job —
+        # the subsequent steps gate on download success.
+        continue-on-error: true
+
+      - name: Load image into docker daemon
+        if: steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
+        run: docker load --input /tmp/mark-${{ matrix.service }}-image.tar
+
+      - name: Compute image metadata
+        if: steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
+        id: meta
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            IMAGE_TAG="${GITHUB_REF#refs/tags/}"
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            IMAGE_TAG="${BRANCH_NAME}-${SHORT_SHA}"
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            IMAGE_TAG="sha-${SHORT_SHA}"
+          fi
+          echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+
+      - name: Login to GitHub Container Registry
+        if: steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        if: steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
+        run: |
+          docker push "ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${IMAGE_TAG}"
+          if [[ "${GITHUB_REF}" == "refs/heads/master" ]] || [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            docker push "ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest"
+          fi
+
+      - name: Run container security scan
+        if: steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
@@ -520,7 +622,7 @@ jobs:
         continue-on-error: true
 
       - name: Check if container SARIF file exists
-        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
+        if: always() && steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
         id: container-sarif-check
         run: |
           if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
@@ -531,14 +633,14 @@ jobs:
           fi
 
       - name: Upload container scan results
-        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request' && steps.container-sarif-check.outputs.sarif_exists == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success' && steps.container-sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: "trivy-container-${{ matrix.service }}.sarif"
           category: trivy-container-${{ matrix.service }}
 
       - name: Upload container security reports as artifacts
-        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
+        if: always() && steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: container-security-reports-${{ matrix.service }}-${{ github.run_number }}
@@ -547,7 +649,7 @@ jobs:
           retention-days: 30
 
       - name: Trigger external image mirror
-        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
+        if: steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
         run: |
           curl -X POST \
             -H "Authorization: token ${{ secrets.GH_TOKEN_MIRROR_TO_ICR }}" \
@@ -561,7 +663,7 @@ jobs:
               }'
 
       - name: Generate security summary
-        if: always() && steps.changes.outputs.needs_build == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && steps.download.outcome == 'success'
         run: |
           echo "## Security Scan Summary for ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
