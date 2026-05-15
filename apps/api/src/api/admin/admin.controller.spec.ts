@@ -168,4 +168,69 @@ describe("AdminController", () => {
       "admin-api",
     );
   });
+
+  it("falls back to admin-api when the forwarded user-session header is unparseable", async () => {
+    jest
+      .spyOn(adminService, "generateQuestions")
+      .mockResolvedValue({ message: "started", jobId: "job-3" });
+
+    await controller.generateQuestions(
+      4,
+      {
+        assignmentId: 4,
+        assignmentType: 0,
+        questionsToGenerate: {
+          multipleChoice: 1,
+          multipleSelect: 0,
+          textResponse: 0,
+          trueFalse: 0,
+        },
+      },
+      {
+        method: "POST",
+        originalUrl: "/v1/admin/assignments/4/generate-questions",
+        get: () => undefined,
+        headers: {
+          "user-session": "{not-json",
+        },
+      } as any,
+    );
+
+    expect(adminService.generateQuestions).toHaveBeenCalledWith(
+      4,
+      expect.any(Object),
+      "admin-api",
+    );
+  });
+
+  it("falls back to admin-api when the forwarded user-session payload is not an object", async () => {
+    jest
+      .spyOn(adminService, "generateQuestions")
+      .mockResolvedValue({ message: "started", jobId: "job-4" });
+
+    await controller.generateQuestions(
+      5,
+      {
+        assignmentId: 5,
+        assignmentType: 0,
+        questionsToGenerate: {
+          multipleChoice: 1,
+          multipleSelect: 0,
+          textResponse: 0,
+          trueFalse: 0,
+        },
+      },
+      {
+        headers: {
+          "user-session": "null",
+        },
+      } as any,
+    );
+
+    expect(adminService.generateQuestions).toHaveBeenCalledWith(
+      5,
+      expect.any(Object),
+      "admin-api",
+    );
+  });
 });

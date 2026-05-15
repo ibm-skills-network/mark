@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Inject,
   Injectable,
   Param,
   Patch,
@@ -23,6 +24,8 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { Assignment } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
 import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 import { QuestionGenerationPayload } from "../assignment/dto/post.assignment.request.dto";
@@ -60,10 +63,15 @@ import {
   version: "1",
 })
 export class AdminController {
+  private readonly logger: Logger;
+
   constructor(
     private adminService: AdminService,
     private adminRepository: AdminRepository,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: AdminController.name });
+  }
 
   @Post("assignments/clone/:id")
   @ApiOperation({
@@ -390,10 +398,29 @@ export class AdminController {
       return undefined;
     }
 
+    let parsed: unknown;
     try {
-      return JSON.parse(headerValue) as Partial<UserSession>;
-    } catch {
+      parsed = JSON.parse(headerValue);
+    } catch (parseError) {
+      this.logger.warn("forwarded user-session header parse failed", {
+        method: request.method,
+        url: request.originalUrl,
+        request_id:
+          request.get("akamai-grn") ?? request.get("x-request-id") ?? undefined,
+        error:
+          parseError instanceof Error ? parseError.message : String(parseError),
+      });
       return undefined;
     }
+
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      return undefined;
+    }
+
+    return parsed as Partial<UserSession>;
   }
 }
