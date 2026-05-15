@@ -4,6 +4,8 @@ import { AdminVerificationService } from "../../auth/services/admin-verification
 import { PrismaService } from "../../database/prisma.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
+import { JobStatusServiceV2 } from "../assignment/v2/services/job-status.service";
+import { QuestionService } from "../assignment/v2/services/question.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
@@ -20,6 +22,7 @@ const mockLogger = {
 
 describe("AdminController", () => {
   let controller: AdminController;
+  let adminService: AdminService;
   const originalDatabaseUrl = process.env.DATABASE_URL;
 
   beforeAll(() => {
@@ -67,7 +70,24 @@ describe("AdminController", () => {
         {
           provide: AssignmentFileService,
           useValue: {
+            abortAssignmentFileUpload: jest.fn(),
             cleanupAssignmentFileObjects: jest.fn(),
+            completeAssignmentFileUpload: jest.fn(),
+            deleteAssignmentFile: jest.fn(),
+            getAssignmentFiles: jest.fn(),
+            initiateAssignmentFileUploads: jest.fn(),
+          },
+        },
+        {
+          provide: QuestionService,
+          useValue: {
+            generateQuestions: jest.fn(),
+          },
+        },
+        {
+          provide: JobStatusServiceV2,
+          useValue: {
+            getJobStatus: jest.fn(),
           },
         },
         { provide: LLM_PRICING_SERVICE, useValue: mockLlmPricingService },
@@ -80,9 +100,72 @@ describe("AdminController", () => {
     }).compile();
 
     controller = module.get<AdminController>(AdminController);
+    adminService = module.get<AdminService>(AdminService);
   });
 
   it("should be defined", () => {
     expect(controller).toBeDefined();
+  });
+
+  it("uses the forwarded user-session header as the actor identity", async () => {
+    jest
+      .spyOn(adminService, "generateQuestions")
+      .mockResolvedValue({ message: "started", jobId: "job-1" });
+
+    await controller.generateQuestions(
+      12,
+      {
+        assignmentId: 12,
+        assignmentType: 0,
+        questionsToGenerate: {
+          multipleChoice: 1,
+          multipleSelect: 0,
+          textResponse: 0,
+          trueFalse: 0,
+        },
+      },
+      {
+        headers: {
+          "user-session": JSON.stringify({
+            userId: "context-manager@skills.network",
+          }),
+        },
+      } as any,
+    );
+
+    expect(adminService.generateQuestions).toHaveBeenCalledWith(
+      12,
+      expect.any(Object),
+      "context-manager@skills.network",
+    );
+  });
+
+  it("falls back to admin-api when no forwarded session identity is present", async () => {
+    jest
+      .spyOn(adminService, "generateQuestions")
+      .mockResolvedValue({ message: "started", jobId: "job-2" });
+
+    await controller.generateQuestions(
+      9,
+      {
+        assignmentId: 9,
+        assignmentType: 0,
+        questionsToGenerate: {
+          multipleChoice: 1,
+          multipleSelect: 0,
+          textResponse: 0,
+          trueFalse: 0,
+        },
+      },
+      {
+        headers: {},
+      } as any,
+    );
+
+    expect(adminService.generateQuestions).toHaveBeenCalledWith(
+      9,
+      expect.any(Object),
+      "admin-api",
+    );
   });
 });

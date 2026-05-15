@@ -12,6 +12,8 @@ import {
 import { PrismaService } from "../../../database/prisma.service";
 import { AssignmentServiceV2 } from "../../assignment/v2/services/assignment.service";
 import { AssignmentFileService } from "../../assignment/v2/services/assignment-file.service";
+import { JobStatusServiceV2 } from "../../assignment/v2/services/job-status.service";
+import { QuestionService } from "../../assignment/v2/services/question.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 import { AdminService } from "../admin.service";
 import { AdminAddContentToAssignmentRequestDto } from "../dto/assignment/add.content.to.assignment.request.dto";
@@ -165,6 +167,18 @@ describe("AdminService - addContentToAssignment", () => {
           provide: AssignmentFileService,
           useValue: {
             cleanupAssignmentFileObjects: jest.fn(),
+          },
+        },
+        {
+          provide: QuestionService,
+          useValue: {
+            generateQuestions: jest.fn(),
+          },
+        },
+        {
+          provide: JobStatusServiceV2,
+          useValue: {
+            getJobStatus: jest.fn(),
           },
         },
         {
