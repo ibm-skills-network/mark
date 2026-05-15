@@ -399,8 +399,26 @@ export class AttemptServiceV1 {
       },
     });
 
+    const cap = assignment.numberOfQuestionsPerAttempt;
+    if (cap && cap > 0 && questions.length > cap) {
+      for (let index = questions.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [questions[index], questions[swapIndex]] = [
+          questions[swapIndex],
+          questions[index],
+        ];
+      }
+      questions.splice(cap);
+    }
+
     if (assignment.displayOrder === "RANDOM") {
-      questions.sort(() => Math.random() - 0.5);
+      for (let index = questions.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [questions[index], questions[swapIndex]] = [
+          questions[swapIndex],
+          questions[index],
+        ];
+      }
     } else if (
       assignment.questionOrder &&
       assignment.questionOrder.length > 0
@@ -411,6 +429,7 @@ export class AttemptServiceV1 {
         ...applyQuestionOrder(questions, assignment.questionOrder),
       );
     }
+
     await this.prisma.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
       data: {

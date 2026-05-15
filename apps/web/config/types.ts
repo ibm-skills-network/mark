@@ -733,6 +733,7 @@ export interface AssignmentDetails {
   passingGrade?: number;
   name: string;
   questionDisplay?: QuestionDisplayType;
+  displayOrder?: "DEFINED" | "RANDOM";
   id: number;
   strictTimeLimit?: boolean;
   introduction?: string;
