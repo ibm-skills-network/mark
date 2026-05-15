@@ -35,6 +35,17 @@ jobs:
   security-scan:
     name: Security Scan - ${{ matrix.service }}
     runs-on: ubuntu-latest
+    # Run on PRs (so findings surface when code is reviewed), on the
+    # nightly schedule + manual dispatch (so newly-disclosed CVEs against
+    # already-merged master code still get caught), and on
+    # repository_dispatch. Skipped on plain branch / tag pushes —
+    # whatever those would have flagged already surfaced on the PR that
+    # produced the commit.
+    if: |
+      github.event_name == 'pull_request'
+      || github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || github.event_name == 'repository_dispatch'
     permissions:
       contents: read
       security-events: write
@@ -522,8 +533,8 @@ jobs:
     if: |
       always()
       && github.event_name != 'pull_request'
-      && needs.security-scan.result == 'success'
       && needs.test.result == 'success'
+      && (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped')
     needs: [build-image, security-scan, test]
     runs-on: ubuntu-latest
     permissions:
