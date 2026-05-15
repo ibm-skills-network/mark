@@ -35,6 +35,17 @@ jobs:
   security-scan:
     name: Security Scan - ${{ matrix.service }}
     runs-on: ubuntu-latest
+    # Run on PRs (so findings surface when code is reviewed), on the
+    # nightly schedule + manual dispatch (so newly-disclosed CVEs against
+    # already-merged master code still get caught), and on
+    # repository_dispatch. Skipped on plain branch / tag pushes —
+    # whatever those would have flagged already surfaced on the PR that
+    # produced the commit.
+    if: |
+      github.event_name == 'pull_request'
+      || github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || github.event_name == 'repository_dispatch'
     permissions:
       contents: read
       security-events: write
@@ -410,6 +421,14 @@ jobs:
     # push (where the lint job is skipped) doesn't cascade-skip the deploy.
     # Branch protection should still require both Lint and Test on PRs.
     needs: [security-scan, test]
+    # `always()` runs this even when security-scan was skipped (which is
+    # the normal case for branch / tag pushes — see security-scan's
+    # job-level `if:`). Test failures still block, and an actual
+    # security-scan failure (as opposed to "skipped") still blocks.
+    if: |
+      always()
+      && needs.test.result == 'success'
+      && (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped')
     permissions:
       contents: read
       packages: write
