@@ -49,7 +49,11 @@ jobs:
           fetch-depth: 0
 
       - name: Check if service needs scanning
-        id: scan-changes
+        # `id` is `changes` (not `scan-changes`) so every downstream
+        # `if: steps.changes.outputs.needs_scan == 'true'` actually resolves.
+        # The previous `scan-changes` id made every gated step in this job
+        # silently skip (the property was undefined → `'' == 'true'` = false).
+        id: changes
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_scan=true" >> $GITHUB_OUTPUT
@@ -69,7 +73,7 @@ jobs:
           fi
 
       - name: Free disk space
-        if: steps.scan-changes.outputs.needs_scan == 'true'
+        if: steps.changes.outputs.needs_scan == 'true'
         run: |
           echo "Disk usage before cleanup:"
           df -h
