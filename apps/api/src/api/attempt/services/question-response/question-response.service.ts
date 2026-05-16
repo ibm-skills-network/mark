@@ -43,7 +43,11 @@ import {
   newJobScopedCache,
   type JobScopedCache,
 } from "../grading/job-scoped-cache";
-import { GradingProgressService } from "../grading-progress.service";
+import {
+  GradingProgressService,
+  type SlowGradingType,
+} from "../grading-progress.service";
+import { GradingRateLimiterService } from "../grading-rate-limiter.service";
 
 type PrismaTransactionalClient = Omit<
   PrismaService,
@@ -70,6 +74,7 @@ export class QuestionResponseService {
     private readonly questionService: QuestionService,
     private readonly localizationService: LocalizationService,
     private readonly gradingFactoryService: GradingFactoryService,
+    private readonly rateLimiter: GradingRateLimiterService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     @Inject("GradingProgressService")
     private readonly progressService?: GradingProgressService,
@@ -77,6 +82,162 @@ export class QuestionResponseService {
     this.logger = parentLogger.child({
       context: QuestionResponseService.name,
     });
+  }
+
+  /**
+   * Compute dependency levels from a topologically sorted question list.
+   *
+   * Level 0 = no gradingContextQuestionIds. Level N = max(level of incoming
+   * deps) + 1. Questions in the same level have no inter-dependencies and
+   * can be graded in parallel.
+   */
+  private computeGradingLevels(
+    sorted: number[],
+    questionMap: Map<number, QuestionDto>,
+  ): number[][] {
+    const level = new Map<number, number>();
+    for (const qId of sorted) {
+      const q = questionMap.get(qId);
+      const depIds = (q?.gradingContextQuestionIds ?? []).filter((dep) =>
+        questionMap.has(dep),
+      );
+      const depLevel =
+        depIds.length > 0
+          ? Math.max(...depIds.map((d) => level.get(d) ?? 0))
+          : -1;
+      level.set(qId, depLevel + 1);
+    }
+
+    const grouped = new Map<number, number[]>();
+    for (const [qId, lvl] of level.entries()) {
+      const existing = grouped.get(lvl) ?? [];
+      existing.push(qId);
+      grouped.set(lvl, existing);
+    }
+    return [...grouped.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, ids]) => ids);
+  }
+
+  /**
+   * Slow-grading classifier — questions whose grading typically waits on file
+   * ingest, transcript generation, or vision. The frontend uses this flag to
+   * render a "this may take a bit longer" hint while the question is in flight.
+   */
+  private detectSlowType(question: QuestionDto): SlowGradingType | undefined {
+    if (question.type === QuestionType.UPLOAD) return "UPLOAD";
+    if (question.type === QuestionType.LINK_FILE) return "LINK_FILE";
+    if (question.type === QuestionType.URL) return "URL";
+    const responseType = question.responseType as string | undefined;
+    if (responseType === "PRESENTATION") return "PRESENTATION";
+    if (responseType === "VIDEO" || responseType === "LIVE_RECORDING") {
+      return "VIDEO_PRESENTATION";
+    }
+    return undefined;
+  }
+
+  /**
+   * DAG-aware wave scheduler — runs each topological level in parallel under
+   * the dedicated grading Bottleneck. Questions in the same level have no
+   * inter-dependencies; questions in a later level can read earlier levels'
+   * responses from {@link inMemoryContext}.
+   *
+   * Caller supplies {@link gradeOne}, which encapsulates the per-question
+   * context lookup + LLM call for either the learner or author path.
+   */
+  private async runGradingWaves(options: {
+    attemptId: number;
+    sorted: number[];
+    questionMap: Map<number, QuestionDto>;
+    requestMap: Map<number, CreateQuestionResponseAttemptRequestDto>;
+    inMemoryContext: Map<number, string>;
+    reportProgress: boolean;
+    gradeOne: (
+      question: QuestionDto,
+      request: CreateQuestionResponseAttemptRequestDto,
+    ) => Promise<{
+      learnerResponse: unknown;
+      responseDto: CreateQuestionResponseAttemptResponseDto;
+    }>;
+  }): Promise<GradedItem[]> {
+    const {
+      attemptId,
+      sorted,
+      questionMap,
+      requestMap,
+      inMemoryContext,
+      reportProgress,
+      gradeOne,
+    } = options;
+
+    const levels = this.computeGradingLevels(sorted, questionMap);
+    const gradedItems: GradedItem[] = [];
+    const gradedItemsLock: { current: GradedItem[] } = { current: gradedItems };
+
+    for (const [waveIndex, wave] of levels.entries()) {
+      this.logger.info(
+        `grading.wave.start attempt=${attemptId} wave=${waveIndex} size=${wave.length}`,
+      );
+
+      await Promise.all(
+        wave.map(async (questionId) => {
+          const question = questionMap.get(questionId);
+          const request = requestMap.get(questionId);
+          if (!question || !request) return;
+
+          if (reportProgress && this.progressService) {
+            await this.progressService.setQuestionStatus(
+              attemptId,
+              questionId,
+              "in_progress",
+            );
+          }
+
+          try {
+            const result = await this.rateLimiter.schedule(
+              `grade:q=${questionId}:a=${attemptId}`,
+              () => gradeOne(question, request),
+            );
+
+            result.responseDto.questionId = questionId;
+            result.responseDto.question = question.question;
+            gradedItemsLock.current.push({
+              questionId,
+              learnerResponse: result.learnerResponse,
+              responseDto: result.responseDto,
+            });
+            inMemoryContext.set(
+              questionId,
+              JSON.stringify(result.learnerResponse ?? ""),
+            );
+
+            if (reportProgress && this.progressService) {
+              await this.progressService.setQuestionStatus(
+                attemptId,
+                questionId,
+                "completed",
+              );
+            }
+          } catch (error) {
+            this.logger.error(
+              `grading.wave.question.failed attempt=${attemptId} question=${questionId} error=${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            if (reportProgress && this.progressService) {
+              await this.progressService.setQuestionStatus(
+                attemptId,
+                questionId,
+                "failed",
+              );
+            }
+            throw error;
+          }
+        }),
+      );
+    }
+
+    return gradedItems;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -173,69 +334,60 @@ export class QuestionResponseService {
       );
     }
 
-    // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
+    // ── Phase 2: Grade (no transaction, parallel by wave) ────────────────────
     const totalQuestions = sorted.length;
+    const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
+    const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
+    // In-memory responses for context questions graded in earlier waves.
+    // Key = questionId, value = JSON-stringified learnerResponse (matches DB format).
+    const inMemoryContextResponses = new Map<number, string>();
+
     if (this.progressService) {
       await this.progressService.initializeProgress(
         assignmentAttemptId,
         totalQuestions,
       );
+      this.progressService.initializeQuestions(
+        assignmentAttemptId,
+        questionDtos.map((q, index) => ({
+          id: q.id,
+          displayOrder: index,
+          slowType: this.detectSlowType(q),
+        })),
+      );
     }
 
-    const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
-    const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
-    // In-memory responses for context questions graded earlier in this batch.
-    // Key = questionId, value = JSON-stringified learnerResponse (matches DB format).
-    const inMemoryContextResponses = new Map<number, string>();
-    const gradedItems: GradedItem[] = [];
+    for (const request of responsesForQuestions) {
+      request.language = language;
+    }
 
-    for (const [index, questionId] of sorted.entries()) {
-      const questionNumber = index + 1;
-      const questionResponse = requestMap.get(questionId);
-      if (!questionResponse) continue;
-
-      if (this.progressService) {
-        await this.progressService.updateQuestionProgress(
+    const gradedItems = await this.runGradingWaves({
+      attemptId: assignmentAttemptId,
+      sorted,
+      questionMap,
+      requestMap,
+      inMemoryContext: inMemoryContextResponses,
+      reportProgress: true,
+      gradeOne: async (question, request) => {
+        const assignmentContext = await this.getAssignmentContext(
+          assignmentId,
+          question.id,
           assignmentAttemptId,
-          questionNumber,
-          totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
+          undefined,
+          inMemoryContextResponses,
+          effectiveCache,
         );
-      }
-
-      const question = questionMap.get(questionId);
-      if (!question) continue;
-      questionResponse.language = language;
-
-      const assignmentContext = await this.getAssignmentContext(
-        assignmentId,
-        questionId,
-        assignmentAttemptId,
-        undefined,
-        inMemoryContextResponses,
-        effectiveCache,
-      );
-
-      const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
-        question,
-        questionResponse,
-        assignmentContext,
-        assignmentId,
-        language,
-        UserRole.LEARNER,
-        assignmentAttemptId,
-      );
-
-      // Make this response available as context for subsequent questions
-      inMemoryContextResponses.set(
-        questionId,
-        JSON.stringify(learnerResponse ?? ""),
-      );
-
-      responseDto.questionId = questionId;
-      responseDto.question = question.question;
-      gradedItems.push({ questionId, learnerResponse, responseDto });
-    }
+        return this.gradeQuestionNoSave(
+          question,
+          request,
+          assignmentContext,
+          assignmentId,
+          language,
+          UserRole.LEARNER,
+          assignmentAttemptId,
+        );
+      },
+    });
 
     if (this.progressService) {
       await this.progressService.markComplete(assignmentAttemptId);
@@ -416,76 +568,70 @@ export class QuestionResponseService {
       );
     }
 
-    // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
+    // ── Phase 2: Grade (no transaction, parallel by wave) ────────────────────
     const totalQuestions = sorted.length;
-    if (this.progressService && role === UserRole.LEARNER) {
+    const reportProgress = Boolean(this.progressService);
+
+    if (reportProgress && this.progressService) {
       await this.progressService.initializeProgress(
         assignmentAttemptId,
         totalQuestions,
+      );
+      this.progressService.initializeQuestions(
+        assignmentAttemptId,
+        questionDtos.map((q, index) => ({
+          id: q.id,
+          displayOrder: index,
+          slowType: this.detectSlowType(q),
+        })),
       );
     }
 
     const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
     const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
     const inMemoryContextResponses = new Map<number, string>();
-    const gradedItems: GradedItem[] = [];
 
-    for (const [index, questionId] of sorted.entries()) {
-      const questionNumber = index + 1;
-      const questionResponse = requestMap.get(questionId);
-      if (!questionResponse) continue;
-
-      if (this.progressService && role === UserRole.LEARNER) {
-        await this.progressService.updateQuestionProgress(
-          assignmentAttemptId,
-          questionNumber,
-          totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
-        );
-      }
-
-      const question = questionMap.get(questionId);
-      if (!question) continue;
-      questionResponse.language = language;
-
-      const assignmentContext: {
-        assignmentInstructions: string;
-        questionAnswerContext: QuestionAnswerContext[];
-      } =
-        role === UserRole.LEARNER
-          ? // legacy submit path: cache not threaded
-            await this.getAssignmentContext(
-              assignmentId,
-              questionId,
-              assignmentAttemptId,
-              undefined,
-              inMemoryContextResponses,
-            )
-          : {
-              assignmentInstructions: assignmentDetails?.instructions ?? "",
-              questionAnswerContext: [],
-            };
-
-      const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
-        question,
-        questionResponse,
-        assignmentContext,
-        assignmentId,
-        language,
-        role,
-        assignmentAttemptId,
-      );
-
-      inMemoryContextResponses.set(
-        questionId,
-        JSON.stringify(learnerResponse ?? ""),
-      );
-      responseDto.questionId = questionId;
-      responseDto.question = question.question;
-      gradedItems.push({ questionId, learnerResponse, responseDto });
+    for (const request of responsesForQuestions) {
+      request.language = language;
     }
 
-    if (this.progressService && role === UserRole.LEARNER) {
+    const gradedItems = await this.runGradingWaves({
+      attemptId: assignmentAttemptId,
+      sorted,
+      questionMap,
+      requestMap,
+      inMemoryContext: inMemoryContextResponses,
+      reportProgress,
+      gradeOne: async (question, request) => {
+        const assignmentContext: {
+          assignmentInstructions: string;
+          questionAnswerContext: QuestionAnswerContext[];
+        } =
+          role === UserRole.LEARNER
+            ? await this.getAssignmentContext(
+                assignmentId,
+                question.id,
+                assignmentAttemptId,
+                undefined,
+                inMemoryContextResponses,
+              )
+            : {
+                assignmentInstructions: assignmentDetails?.instructions ?? "",
+                questionAnswerContext: [],
+              };
+        return this.gradeQuestionNoSave(
+          question,
+          request,
+          assignmentContext,
+          assignmentId,
+          language,
+          role,
+          assignmentAttemptId,
+        );
+      },
+    });
+
+    if (reportProgress && this.progressService) {
       await this.progressService.markComplete(assignmentAttemptId);
     }
 

@@ -42,6 +42,7 @@ import { AttemptServiceV2 } from "./services/attempt.service";
 import { FileContentExtractionService } from "./services/file-content-extraction";
 import { GradingFactoryService } from "./services/grading-factory.service";
 import { GradingProgressService } from "./services/grading-progress.service";
+import { GradingRateLimiterService } from "./services/grading-rate-limiter.service";
 import { PdfAnnotationService } from "./services/pdf-annotation.service";
 import { PdfStructureExtractorService } from "./services/pdf-structure-extractor.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -80,6 +81,7 @@ import { TranslationService } from "./services/translation/translation.service";
       provide: "GradingProgressService",
       useClass: GradingProgressService,
     },
+    GradingRateLimiterService,
     {
       provide: GRADING_CONSISTENCY_SERVICE,
       useClass: GradingConsistencyService,

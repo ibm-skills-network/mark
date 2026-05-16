@@ -57,6 +57,7 @@ import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
+import { type GradingProgressDetails } from "./grading-progress.service";
 import {
   newJobScopedCache,
   type JobScopedCache,
@@ -469,7 +470,11 @@ export class AttemptSubmissionService {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    progressCallback?: (
+      progress: string,
+      percentage?: number,
+      details?: GradingProgressDetails,
+    ) => Promise<void>,
     cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role } = request.userSession;
@@ -826,7 +831,11 @@ export class AttemptSubmissionService {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    progressCallback?: (
+      progress: string,
+      percentage?: number,
+      details?: GradingProgressDetails,
+    ) => Promise<void>,
     cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     // Allocate the per-invocation cache once and share it across both
@@ -1061,7 +1070,11 @@ export class AttemptSubmissionService {
   private async updateAuthorAttempt(
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    progressCallback?: (
+      progress: string,
+      percentage?: number,
+      details?: GradingProgressDetails,
+    ) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {

@@ -7,10 +7,15 @@ import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
+import { GradingRateLimiterService } from "../grading-rate-limiter.service";
 import {
   GradedItem,
   QuestionResponseService,
 } from "./question-response.service";
+
+const mockRateLimiter = {
+  schedule: jest.fn(async (_name: string, op: () => Promise<any>) => op()),
+};
 
 describe("QuestionResponseService", () => {
   let service: QuestionResponseService;
@@ -45,6 +50,7 @@ describe("QuestionResponseService", () => {
         { provide: QuestionService, useValue: mockQuestionService },
         { provide: LocalizationService, useValue: mockLocalizationService },
         { provide: GradingFactoryService, useValue: mockGradingFactoryService },
+        { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
         { provide: "GradingProgressService", useValue: undefined },
       ],
@@ -169,6 +175,7 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
         { provide: QuestionService, useValue: { findOne: jest.fn() } },
         { provide: LocalizationService, useValue: {} },
         { provide: GradingFactoryService, useValue: {} },
+        { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
         { provide: "GradingProgressService", useValue: mockProgressService },
       ],
@@ -413,6 +420,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
         { provide: QuestionService, useValue: { findOne: jest.fn() } },
         { provide: LocalizationService, useValue: {} },
         { provide: GradingFactoryService, useValue: {} },
+        { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
         { provide: "GradingProgressService", useValue: undefined },
       ],
@@ -543,6 +551,7 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
         { provide: QuestionService, useValue: { findOne: jest.fn() } },
         { provide: LocalizationService, useValue: {} },
         { provide: GradingFactoryService, useValue: {} },
+        { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
         { provide: "GradingProgressService", useValue: undefined },
       ],
