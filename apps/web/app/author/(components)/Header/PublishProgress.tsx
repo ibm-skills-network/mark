@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
+import { X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -126,12 +127,14 @@ export default function PublishProgress({
   // Sticky merged view of perJob entries. The parent passes a `key`
   // that changes per publish, so this component fully remounts at the
   // start of every publish — the ref is naturally fresh, no manual
-  // reset needed.
+  // reset needed. The same key-remount also resets `dismissed` for
+  // free: a new publish/retry always shows the card again.
   const mergedMapRef = React.useRef<Map<string, PerJobTranslationEntry>>(
     new Map(),
   );
+  const [dismissed, setDismissed] = React.useState(false);
 
-  if (!publishResult?.stage) return null;
+  if (!publishResult?.stage || dismissed) return null;
 
   const incomingPerJob = publishResult.translations?.perJob;
   const map = mergedMapRef.current;
@@ -198,6 +201,16 @@ export default function PublishProgress({
                 </p>
               )}
             </div>
+            {stage === "translations_complete" && (
+              <button
+                type="button"
+                onClick={() => setDismissed(true)}
+                aria-label="Dismiss"
+                className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
           </div>
 
           {stage === "translations_in_progress" && aggregate && (
