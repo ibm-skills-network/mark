@@ -661,7 +661,7 @@ export function VersionTreeView({ assignmentId }: Props) {
 
   return (
     <div
-      className={`fixed top-28 left-0 bottom-0 bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 flex flex-col z-30 transition-all duration-300 ease-in-out ${
+      className={`fixed top-32 left-0 bottom-0 bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 flex flex-col z-30 transition-all duration-300 ease-in-out ${
         isChatbotOpen ? "right-[25vw]" : "right-0"
       }`}
     >
