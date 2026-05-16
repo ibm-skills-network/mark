@@ -649,8 +649,7 @@ function AuthorHeader() {
           response.jobId,
           (percentage, progress) => {
             setJobProgress(percentage);
-            setCurrentMessage(progress);
-            setQuestions(clonedCurrentQuestions);
+            setCurrentMessage(progress ?? "");
           },
           setQuestions,
           (result) => setPublishResult(result),

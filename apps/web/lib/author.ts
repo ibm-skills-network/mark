@@ -190,58 +190,108 @@ export function subscribeToJobStatus(
       };
 
       eventSource.addEventListener("update", (event: MessageEvent<string>) => {
+        // Separate envelope parsing from callback invocation. A callback
+        // (React setState, downstream consumer) throwing is a client-side
+        // rendering bug, not a server protocol violation — it should be
+        // logged and ignored so the SSE subscription keeps tracking the
+        // server-side publish to completion instead of tearing down with
+        // an opaque "Invalid server response" toast.
+        let data: PublishJobResponse;
         try {
-          const data = JSON.parse(event.data) as PublishJobResponse;
+          data = JSON.parse(event.data) as PublishJobResponse;
+        } catch (parseError) {
+          const detail =
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError);
+          handleError(`Invalid server response: ${detail}`);
+          return;
+        }
 
+        let resultPayload: unknown;
+        if (data?.result) {
+          try {
+            resultPayload = JSON.parse(data.result);
+          } catch (resultParseError) {
+            console.warn(
+              "publish.status.result.parse_failed",
+              resultParseError,
+            );
+          }
+        }
+
+        try {
           if (data.percentage !== undefined && onProgress) {
             onProgress(data.percentage, data.progress);
           }
-
-          if (data?.result) {
-            const parsed: unknown = JSON.parse(data.result);
-            if (isPublishJobResult(parsed)) {
-              if (onPublishResult) onPublishResult(parsed);
-            } else if (Array.isArray(parsed)) {
-              receivedQuestions = parsed as QuestionAuthorStore[];
+          if (resultPayload !== undefined) {
+            if (isPublishJobResult(resultPayload)) {
+              if (onPublishResult) onPublishResult(resultPayload);
+            } else if (Array.isArray(resultPayload)) {
+              receivedQuestions = resultPayload as QuestionAuthorStore[];
               if (setQuestions) {
                 setQuestions(receivedQuestions);
               }
             }
           }
-          if (data.done) {
-            clearTimeout(timeoutId);
-            handleCompletion(data.status === "Completed");
-          } else if (data.status === "Failed") {
-            handleError(data.progress || "Job failed");
-          }
-        } catch (parseError) {
-          handleError("Invalid server response");
+        } catch (callbackError) {
+          console.error("publish.status.callback_threw", callbackError);
+        }
+
+        if (data.done) {
+          clearTimeout(timeoutId);
+          handleCompletion(data.status === "Completed");
+        } else if (data.status === "Failed") {
+          handleError(data.progress || "Job failed");
         }
       });
 
       eventSource.addEventListener(
         "finalize",
         (event: MessageEvent<string>) => {
+          let data: PublishJobResponse;
           try {
-            const data = JSON.parse(event.data) as PublishJobResponse;
+            data = JSON.parse(event.data) as PublishJobResponse;
+          } catch (parseError) {
+            const detail =
+              parseError instanceof Error
+                ? parseError.message
+                : String(parseError);
+            handleError(`Invalid finalize event response: ${detail}`);
+            return;
+          }
+
+          let resultPayload: unknown;
+          if (data?.result) {
+            try {
+              resultPayload = JSON.parse(data.result);
+            } catch (resultParseError) {
+              console.warn(
+                "publish.finalize.result.parse_failed",
+                resultParseError,
+              );
+            }
+          }
+
+          try {
             if (data.percentage !== undefined && onProgress) {
               onProgress(data.percentage, data.progress);
             }
-            if (data?.result) {
-              const parsed: unknown = JSON.parse(data.result);
-              if (isPublishJobResult(parsed)) {
-                if (onPublishResult) onPublishResult(parsed);
-              } else if (Array.isArray(parsed)) {
-                receivedQuestions = parsed as QuestionAuthorStore[];
+            if (resultPayload !== undefined) {
+              if (isPublishJobResult(resultPayload)) {
+                if (onPublishResult) onPublishResult(resultPayload);
+              } else if (Array.isArray(resultPayload)) {
+                receivedQuestions = resultPayload as QuestionAuthorStore[];
                 if (setQuestions) {
                   setQuestions(receivedQuestions);
                 }
               }
             }
-            handleCompletion(data.status === "Completed");
-          } catch {
-            handleError("Invalid finalize event response");
+          } catch (callbackError) {
+            console.error("publish.finalize.callback_threw", callbackError);
           }
+
+          handleCompletion(data.status === "Completed");
         },
       );
 
