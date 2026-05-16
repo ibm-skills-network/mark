@@ -985,52 +985,44 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         percentage: 10,
       });
 
-      const sourceHashKey = buildPublishHashKey(sourcePublishJobId);
-      const sourceEntries =
-        (await this.translationStateRedis?.hgetall(sourceHashKey)) ?? {};
-      let failedEntries: PerJobTranslationEntry[] = Object.values(sourceEntries)
-        .map((raw) => JSON.parse(raw) as PerJobTranslationEntry)
-        .filter((entry) => entry.status === "failed");
+      // Discover what's missing directly from the DB rather than reading
+      // the source publish's Redis status hash. The hash is ephemeral and
+      // only reflects the most recent publish — workers do not write retry
+      // progress back to it, so a second retry would re-read the original
+      // publish failures and re-enqueue items that the first retry already
+      // resolved (or that no longer need work), leaving the UI stuck on
+      // "Queued" forever for the no-op entries. The DB is the canonical
+      // answer to "which Translation rows are missing"; let it drive.
+      const failedEntries =
+        await this.discoverFailedTranslationsFromDb(assignmentId);
 
       if (failedEntries.length === 0) {
-        // The source publish's status hash is empty. Most of the time that
-        // means there is genuinely nothing to retry — but the hash is also
-        // empty when Redis was unavailable during the original publish, or
-        // when the hash has been DEL'd / TTL'd. The DB still holds the
-        // canonical answer ("which Translation rows are missing"), so fall
-        // back to a DB scan before declaring victory. Without this fallback,
-        // retry is silently a no-op in exactly the scenarios it exists for.
-        failedEntries =
-          await this.discoverFailedTranslationsFromDb(assignmentId);
-
-        if (failedEntries.length === 0) {
-          this.logger.info("publish.retry.empty", {
-            assignmentId,
-            jobId,
-            sourcePublishJobId,
-          });
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "Completed",
-            progress: "No failed translations to retry",
-            percentage: 100,
-            result: {
-              stage: "translations_complete",
-              translations: {
-                aggregate: { completed: 0, total: 0, failed: 0 },
-                perJob: [],
-              },
-            } satisfies PublishJobResult,
-          });
-          return;
-        }
-
-        this.logger.info("publish.retry.db_fallback", {
+        this.logger.info("publish.retry.empty", {
           assignmentId,
           jobId,
           sourcePublishJobId,
-          discovered: failedEntries.length,
         });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "No failed translations to retry",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
       }
+
+      this.logger.info("publish.retry.discovered", {
+        assignmentId,
+        jobId,
+        sourcePublishJobId,
+        discovered: failedEntries.length,
+      });
 
       // Re-fetch question/variant payloads from the DB. The status hash
       // only carries ids; the translation worker payload needs the full
@@ -1216,9 +1208,9 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
 
   /**
    * Build retry candidate entries by scanning the DB for missing translation
-   * rows. Used as the fallback when the source publish's Redis status hash
-   * is empty — the DB is the canonical source of truth for "what is missing"
-   * while the per-publish hash is ephemeral.
+   * rows. The DB is the canonical source of truth for "what is missing";
+   * the per-publish Redis status hash is ephemeral and can lose retry
+   * progress between attempts.
    *
    * Returns one entry per question / variant / meta that has any non-source
    * target language without a Translation row. Per-language scoping is the
