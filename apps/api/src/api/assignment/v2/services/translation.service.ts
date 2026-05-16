@@ -149,15 +149,24 @@ export class TranslationService implements OnModuleDestroy {
   // (500 ops per 3s = ~166/s) is still in place as a soft safety belt under
   // OpenAI's per-account rate limit.
   private readonly CONCURRENCY_LIMIT = 200;
-  private readonly MAX_RETRY_ATTEMPTS = 2;
-  private readonly RETRY_DELAY_BASE = 100;
+  // 3 attempts (initial + 2 retries) with a constant 5s pause between
+  // failures. Smooths transient LLM/network hiccups so per-language failures
+  // do not surface to authors on the first flake. The pause is constant
+  // (not exponential) to keep the perceived "retrying..." window predictable.
+  private readonly MAX_RETRY_ATTEMPTS = 3;
+  private readonly RETRY_DELAY_BASE = 5_000;
   private readonly STATUS_UPDATE_INTERVAL = 20;
   // 90s per-call timeout. Bumped from 30s because choice-translation hits the
   // back of the Bottleneck queue under worker-pool concurrency: each question
   // produces ~2 ops per language × 23 languages, and with 8 workers all calling
   // simultaneously the limiter queue grows past 30s of LLM round-trip latency.
-  // The retry layer wraps this (MAX_RETRY_ATTEMPTS = 2), so a hard failure
-  // still surfaces within ~3 minutes per op rather than blocking indefinitely.
+  // Worst-case time per language with the retry layer: 3 × 90s + 2 × 5s ≈ 280s.
+  // That exceeds the 120s BullMQ lockDuration on the translations queue; in
+  // the pathological all-timeouts case the worker will lose its lock and the
+  // job will be redelivered. The redelivered worker runs with
+  // forceRetranslation: false, so any languages that DID succeed are skipped
+  // and only the still-missing ones are re-attempted — self-healing, not
+  // destructive.
   private readonly OPERATION_TIMEOUT = 90_000;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
@@ -876,9 +885,7 @@ export class TranslationService implements OnModuleDestroy {
           ? this.RETRY_DELAY_BASE * 2
           : this.RETRY_DELAY_BASE;
         const jitter = Math.random() * 200;
-        await new Promise((resolve) =>
-          setTimeout(resolve, baseDelay * attempts + jitter),
-        );
+        await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
       }
     }
 
