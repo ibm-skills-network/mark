@@ -401,21 +401,35 @@ export class TranslationService implements OnModuleDestroy {
     operationName: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    const scheduleOptions = { expiration: 15_000, priority: 5 } as const;
+    // Per-job expiration must accommodate the 90s LLM call ceiling plus
+    // queue-wait under heavy load. The previous 15s was the proximate
+    // cause of silent translation failures: at 22 langs × multi-op
+    // fan-out × 8 workers the tail of the Bottleneck queue routinely
+    // exceeded 15s, Bottleneck rejected the job with "timed out", the
+    // underlying LLM call was orphaned, and the failure was counted but
+    // never logged.
+    const scheduleOptions = { expiration: 90_000, priority: 5 } as const;
 
     try {
       return await this.getActiveLimiter().schedule(scheduleOptions, operation);
     } catch (error) {
-      if (!this.isLimiterStoppedError(error)) {
-        throw error;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      if (this.isLimiterStoppedError(error)) {
+        this.logger.warn(
+          `Limiter was stopped while scheduling ${operationName}. Recreating limiter and retrying once.`,
+        );
+        this.resetLimiter();
+        return this.getActiveLimiter().schedule(scheduleOptions, operation);
       }
 
-      this.logger.warn(
-        `Limiter was stopped while scheduling ${operationName}. Recreating limiter and retrying once.`,
-      );
-      this.resetLimiter();
-
-      return this.getActiveLimiter().schedule(scheduleOptions, operation);
+      // Bottleneck rejections (expiration timeout, OVERFLOW strategy drop)
+      // were previously swallowed by the .catch in processBatchesInParallel
+      // and only contributed to the failure counter. Surface them so
+      // operators can correlate "X failed" results with the actual cause.
+      this.logger.warn(`Bottleneck rejected ${operationName}: ${errorMessage}`);
+      throw error;
     }
   }
 
@@ -443,30 +457,35 @@ export class TranslationService implements OnModuleDestroy {
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
 
-      const processingPromises = chunk.map((item) =>
-        this.scheduleOnActiveLimiter(
-          `processBatchesInParallel-${String(chunkIndex)}`,
-          () => batchProcessor(item),
-        ).catch((error) => {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes("dropped")) {
-            results.dropped++;
-          } else {
-            results.failure++;
-          }
-          return false;
-        }),
+      // The .catch returns a sentinel so the post-loop filter counts each
+      // outcome exactly once. The previous shape both incremented
+      // results.failure inside the catch AND counted the returned `false`
+      // again via the filter, surfacing a single real failure as "2
+      // failed" on the publish progress UI.
+      const DROPPED = Symbol("dropped");
+      const FAILED = Symbol("failed");
+      type ChunkOutcome = boolean | typeof DROPPED | typeof FAILED;
+
+      const processingPromises = chunk.map(
+        (item): Promise<ChunkOutcome> =>
+          this.scheduleOnActiveLimiter(
+            `processBatchesInParallel-${String(chunkIndex)}`,
+            () => batchProcessor(item),
+          ).catch((error): ChunkOutcome => {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            return errorMessage.includes("dropped") ? DROPPED : FAILED;
+          }),
       );
 
       const chunkResults = await Promise.all(processingPromises);
 
-      results.success += chunkResults.filter(
-        (result) => result === true,
-      ).length;
-      results.failure += chunkResults.filter(
-        (result) => result === false,
-      ).length;
+      for (const r of chunkResults) {
+        if (r === true) results.success++;
+        else if (r === false) results.failure++;
+        else if (r === DROPPED) results.dropped++;
+        else results.failure++;
+      }
 
       if (chunkIndex < chunks.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 100));
