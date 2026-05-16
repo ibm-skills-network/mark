@@ -154,7 +154,7 @@ export class TranslationService implements OnModuleDestroy {
   // do not surface to authors on the first flake. The pause is constant
   // (not exponential) to keep the perceived "retrying..." window predictable.
   private readonly MAX_RETRY_ATTEMPTS = 3;
-  private readonly RETRY_DELAY_BASE = 5_000;
+  private readonly RETRY_DELAY_BASE = 5000;
   private readonly STATUS_UPDATE_INTERVAL = 20;
   // 90s per-call timeout. Bumped from 30s because choice-translation hits the
   // back of the Bottleneck queue under worker-pool concurrency: each question
