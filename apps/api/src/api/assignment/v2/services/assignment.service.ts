@@ -988,31 +988,48 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       const sourceHashKey = buildPublishHashKey(sourcePublishJobId);
       const sourceEntries =
         (await this.translationStateRedis?.hgetall(sourceHashKey)) ?? {};
-      const failedEntries: PerJobTranslationEntry[] = Object.values(
-        sourceEntries,
-      )
+      let failedEntries: PerJobTranslationEntry[] = Object.values(sourceEntries)
         .map((raw) => JSON.parse(raw) as PerJobTranslationEntry)
         .filter((entry) => entry.status === "failed");
 
       if (failedEntries.length === 0) {
-        this.logger.info("publish.retry.empty", {
+        // The source publish's status hash is empty. Most of the time that
+        // means there is genuinely nothing to retry — but the hash is also
+        // empty when Redis was unavailable during the original publish, or
+        // when the hash has been DEL'd / TTL'd. The DB still holds the
+        // canonical answer ("which Translation rows are missing"), so fall
+        // back to a DB scan before declaring victory. Without this fallback,
+        // retry is silently a no-op in exactly the scenarios it exists for.
+        failedEntries =
+          await this.discoverFailedTranslationsFromDb(assignmentId);
+
+        if (failedEntries.length === 0) {
+          this.logger.info("publish.retry.empty", {
+            assignmentId,
+            jobId,
+            sourcePublishJobId,
+          });
+          await this.jobStatusService.updateJobStatus(jobId, {
+            status: "Completed",
+            progress: "No failed translations to retry",
+            percentage: 100,
+            result: {
+              stage: "translations_complete",
+              translations: {
+                aggregate: { completed: 0, total: 0, failed: 0 },
+                perJob: [],
+              },
+            } satisfies PublishJobResult,
+          });
+          return;
+        }
+
+        this.logger.info("publish.retry.db_fallback", {
           assignmentId,
           jobId,
           sourcePublishJobId,
+          discovered: failedEntries.length,
         });
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "Completed",
-          progress: "No failed translations to retry",
-          percentage: 100,
-          result: {
-            stage: "translations_complete",
-            translations: {
-              aggregate: { completed: 0, total: 0, failed: 0 },
-              perJob: [],
-            },
-          } satisfies PublishJobResult,
-        });
-        return;
       }
 
       // Re-fetch question/variant payloads from the DB. The status hash
@@ -1195,6 +1212,100 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       });
       throw error;
     }
+  }
+
+  /**
+   * Build retry candidate entries by scanning the DB for missing translation
+   * rows. Used as the fallback when the source publish's Redis status hash
+   * is empty — the DB is the canonical source of truth for "what is missing"
+   * while the per-publish hash is ephemeral.
+   *
+   * Returns one entry per question / variant / meta that has any non-source
+   * target language without a Translation row. Per-language scoping is the
+   * translation worker's responsibility (forceRetranslation: false skips
+   * languages already present in the DB).
+   */
+  private async discoverFailedTranslationsFromDb(
+    assignmentId: number,
+  ): Promise<PerJobTranslationEntry[]> {
+    const allCodes = getAllLanguageCodes();
+    const targetCodes = allCodes
+      .map((c) => c.toLowerCase())
+      .filter((c) => c !== "en");
+    if (targetCodes.length === 0) return [];
+
+    const entries: PerJobTranslationEntry[] = [];
+
+    const metaRows = await this.prisma.assignmentTranslation.findMany({
+      where: { assignmentId },
+      select: { languageCode: true },
+    });
+    const metaLangs = new Set(
+      metaRows.map((r) => r.languageCode.toLowerCase()),
+    );
+    const metaMissingCount = targetCodes.filter(
+      (c) => !metaLangs.has(c),
+    ).length;
+    if (metaMissingCount > 0) {
+      entries.push({
+        kind: "meta",
+        id: assignmentId,
+        status: "failed",
+        languagesCompleted: targetCodes.length - metaMissingCount,
+        languagesTotal: targetCodes.length,
+      });
+    }
+
+    const questions = await this.prisma.question.findMany({
+      where: { assignmentId, isDeleted: false },
+      select: {
+        id: true,
+        translations: {
+          where: { variantId: null },
+          select: { languageCode: true },
+        },
+        variants: {
+          where: { isDeleted: false },
+          select: {
+            id: true,
+            Translation: { select: { languageCode: true } },
+          },
+        },
+      },
+    });
+
+    for (const q of questions) {
+      const qLangs = new Set(
+        q.translations.map((t) => t.languageCode.toLowerCase()),
+      );
+      const qMissingCount = targetCodes.filter((c) => !qLangs.has(c)).length;
+      if (qMissingCount > 0) {
+        entries.push({
+          kind: "question",
+          id: q.id,
+          status: "failed",
+          languagesCompleted: targetCodes.length - qMissingCount,
+          languagesTotal: targetCodes.length,
+        });
+      }
+      for (const v of q.variants) {
+        const vLangs = new Set(
+          v.Translation.map((t) => t.languageCode.toLowerCase()),
+        );
+        const vMissingCount = targetCodes.filter((c) => !vLangs.has(c)).length;
+        if (vMissingCount > 0) {
+          entries.push({
+            kind: "variant",
+            id: v.id,
+            status: "failed",
+            languagesCompleted: targetCodes.length - vMissingCount,
+            languagesTotal: targetCodes.length,
+          });
+        }
+      }
+    }
+
+    return entries;
   }
 
   /**
