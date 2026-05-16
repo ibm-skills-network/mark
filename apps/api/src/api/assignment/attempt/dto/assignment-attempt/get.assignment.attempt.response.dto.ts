@@ -145,6 +145,35 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   @Optional()
   totalPointsEarned?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "The version of the assignment this attempt was created against. Null for attempts created before versioning was wired in.",
+    type: Number,
+    nullable: true,
+    required: false,
+  })
+  @Optional()
+  assignmentVersionId?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      "The assignment's current active version. Compare against assignmentVersionId to detect drift.",
+    type: Number,
+    nullable: true,
+    required: false,
+  })
+  @Optional()
+  currentVersionId?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      "True when this attempt is pinned to a stale version (the assignment has been republished since the attempt began). Frontend can use this to prompt the learner to start a fresh attempt.",
+    type: Boolean,
+    required: false,
+  })
+  @Optional()
+  versionMismatch?: boolean;
 }
 
 export class AssignmentAttemptQuestions {

@@ -363,6 +363,103 @@ export class AttemptSubmissionService {
   }
 
   /**
+   * Discards a pristine attempt that is pinned to a stale assignment version,
+   * so the learner can immediately create a fresh attempt against the current
+   * one. Hard-deletes the row (and its cascade-linked variant selections); the
+   * gates below ensure no graded data is destroyed.
+   */
+  async abandonAssignmentAttempt(
+    attemptId: number,
+    userSession: UserSession,
+  ): Promise<{ id: number; success: true }> {
+    this.logger.log(
+      `abandonAssignmentAttempt: request attempt=${attemptId} user=${userSession.userId}`,
+    );
+
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: {
+        id: true,
+        userId: true,
+        assignmentId: true,
+        assignmentVersionId: true,
+        submitted: true,
+        _count: {
+          select: { questionResponses: true },
+        },
+      },
+    });
+
+    if (!attempt) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: not found attempt=${attemptId} user=${userSession.userId}`,
+      );
+      throw new NotFoundException(`Attempt ${attemptId} not found.`);
+    }
+
+    if (
+      userSession.role !== UserRole.AUTHOR &&
+      attempt.userId !== userSession.userId
+    ) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: forbidden attempt=${attemptId} owner=${attempt.userId} caller=${userSession.userId}`,
+      );
+      throw new NotFoundException(`Attempt ${attemptId} not found.`);
+    }
+
+    if (attempt.submitted) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: already submitted attempt=${attemptId}`,
+      );
+      throw new UnprocessableEntityException(
+        "This attempt has already been submitted.",
+      );
+    }
+
+    if (attempt._count.questionResponses > 0) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: has responses attempt=${attemptId} count=${attempt._count.questionResponses}`,
+      );
+      throw new UnprocessableEntityException(
+        "Cannot abandon an attempt that already has saved responses.",
+      );
+    }
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: attempt.assignmentId },
+      select: { currentVersionId: true },
+    });
+
+    if (!assignment?.currentVersionId) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: no published version assignment=${attempt.assignmentId}`,
+      );
+      throw new UnprocessableEntityException(
+        "This assignment has no active version.",
+      );
+    }
+
+    if (attempt.assignmentVersionId === assignment.currentVersionId) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: no version drift attempt=${attemptId} version=${attempt.assignmentVersionId}`,
+      );
+      throw new UnprocessableEntityException(
+        "Attempt is already pinned to the current version; no need to abandon.",
+      );
+    }
+
+    await this.prisma.assignmentAttempt.delete({
+      where: { id: attemptId },
+    });
+
+    this.logger.log(
+      `abandonAssignmentAttempt: discarded attempt=${attemptId} stale_version=${attempt.assignmentVersionId} current_version=${assignment.currentVersionId}`,
+    );
+
+    return { id: attemptId, success: true };
+  }
+
+  /**
    * Updates an assignment attempt
    */
   async updateAssignmentAttempt(
@@ -593,6 +690,7 @@ export class AttemptSubmissionService {
         showQuestions: true,
         showQuestionScore: true,
         updatedAt: true,
+        currentVersionId: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -608,6 +706,7 @@ export class AttemptSubmissionService {
       showQuestions: boolean;
       showQuestionScore: boolean;
       updatedAt: Date;
+      currentVersionId: number | null;
       currentVersion: {
         correctAnswerVisibility: CorrectAnswerVisibility;
       } | null;
@@ -690,6 +789,11 @@ export class AttemptSubmissionService {
       assignment.passingGrade,
     );
 
+    const versionMismatch =
+      assignmentAttempt.assignmentVersionId !== null &&
+      assignment.currentVersionId !== null &&
+      assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
@@ -700,6 +804,8 @@ export class AttemptSubmissionService {
       showQuestions: assignment.showQuestions,
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      currentVersionId: assignment.currentVersionId,
+      versionMismatch,
     };
   }
 

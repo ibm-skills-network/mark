@@ -542,6 +542,19 @@ export class AttemptServiceV2 {
     );
   }
 
+  /**
+   * Abandon a stale (no-progress, version-mismatched) attempt
+   */
+  async abandonAssignmentAttempt(
+    attemptId: number,
+    userSession: UserSession,
+  ): Promise<{ id: number; success: true }> {
+    return this.submissionService.abandonAssignmentAttempt(
+      attemptId,
+      userSession,
+    );
+  }
+
   async autoSaveQuestionResponse(
     attemptId: number,
     assignmentId: number,

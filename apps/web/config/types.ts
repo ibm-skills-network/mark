@@ -706,6 +706,9 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
     Record<string, unknown>;
   assignment?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
     Record<string, unknown>;
+  assignmentVersionId?: number | null;
+  currentVersionId?: number | null;
+  versionMismatch?: boolean;
   grade?: number;
   totalPointsEarned?: number;
   totalPossiblePoints?: number;
@@ -718,6 +721,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   correctAnswerVisibility?: CorrectAnswerVisibility;
   comments?: string;
   preferredLanguage?: string;
+  questionResponses?: Array<{ questionId: number }>;
 }
 
 export interface QuestionControls {

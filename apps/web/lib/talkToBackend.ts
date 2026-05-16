@@ -70,6 +70,7 @@ export const getJobStatus = apiAuthor.getJobStatus;
 export const submitReportAuthor = apiAuthor.submitReportAuthor;
 
 export const createAttempt = apiLearner.createAttempt;
+export const abandonAttempt = apiLearner.abandonAttempt;
 export const getAttempt = apiLearner.getAttempt;
 export const getCompletedAttempt = apiLearner.getCompletedAttempt;
 export const getSuccessPageData = apiLearner.getSuccessPageData;
