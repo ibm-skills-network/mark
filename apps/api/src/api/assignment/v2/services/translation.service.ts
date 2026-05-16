@@ -481,10 +481,20 @@ export class TranslationService implements OnModuleDestroy {
       const chunkResults = await Promise.all(processingPromises);
 
       for (const r of chunkResults) {
-        if (r === true) results.success++;
-        else if (r === false) results.failure++;
-        else if (r === DROPPED) results.dropped++;
-        else results.failure++;
+        switch (r) {
+          case true: {
+            results.success++;
+            break;
+          }
+          case DROPPED: {
+            results.dropped++;
+            break;
+          }
+          default: {
+            // `false` and the FAILED sentinel land here.
+            results.failure++;
+          }
+        }
       }
 
       if (chunkIndex < chunks.length - 1) {
