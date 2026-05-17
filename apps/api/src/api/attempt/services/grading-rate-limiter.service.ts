@@ -9,7 +9,12 @@ import Bottleneck from "bottleneck";
  * fan-out.
  *
  * Env tuning:
- *   GRADING_CONCURRENCY       — maxConcurrent ceiling (default 10)
+ *   ENABLE_PARALLEL_GRADING   — master switch (default "true"). When "false",
+ *                               concurrency is forced to 1 so the wave
+ *                               scheduler degenerates to sequential grading,
+ *                               matching the pre-parallelization behavior.
+ *   GRADING_CONCURRENCY       — maxConcurrent ceiling (default 10; ignored
+ *                               when ENABLE_PARALLEL_GRADING=false).
  *   GRADING_OPERATION_TIMEOUT — per-job expiration, ms (default 120_000;
  *                               file-upload grading regularly approaches 90s).
  */
@@ -18,9 +23,18 @@ export class GradingRateLimiterService {
   private readonly logger = new Logger(GradingRateLimiterService.name);
   private readonly limiter: Bottleneck;
   private readonly operationTimeoutMs: number;
+  public readonly parallelEnabled: boolean;
+  public readonly concurrency: number;
 
   constructor() {
-    const concurrency = this.readNumberEnv("GRADING_CONCURRENCY", 10, 1, 200);
+    this.parallelEnabled = this.readBooleanEnv("ENABLE_PARALLEL_GRADING", true);
+    const requestedConcurrency = this.readNumberEnv(
+      "GRADING_CONCURRENCY",
+      10,
+      1,
+      200,
+    );
+    this.concurrency = this.parallelEnabled ? requestedConcurrency : 1;
     this.operationTimeoutMs = this.readNumberEnv(
       "GRADING_OPERATION_TIMEOUT",
       120_000,
@@ -29,7 +43,7 @@ export class GradingRateLimiterService {
     );
 
     this.limiter = new Bottleneck({
-      maxConcurrent: concurrency,
+      maxConcurrent: this.concurrency,
       minTime: 5,
       highWater: 500,
       strategy: Bottleneck.strategy.OVERFLOW,
@@ -37,8 +51,20 @@ export class GradingRateLimiterService {
     });
 
     this.logger.log(
-      `GradingRateLimiterService initialized concurrency=${concurrency} timeout=${this.operationTimeoutMs}ms`,
+      `GradingRateLimiterService initialized parallel=${String(this.parallelEnabled)} concurrency=${this.concurrency} timeout=${this.operationTimeoutMs}ms`,
     );
+  }
+
+  private readBooleanEnv(key: string, fallback: boolean): boolean {
+    const raw = process.env[key];
+    if (raw === undefined || raw === "") return fallback;
+    const normalized = raw.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+    this.logger.warn(
+      `grading.limiter.env.invalid key=${key} raw=${raw} fallback=${String(fallback)}`,
+    );
+    return fallback;
   }
 
   async schedule<T>(

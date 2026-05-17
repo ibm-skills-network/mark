@@ -173,10 +173,13 @@ export class QuestionResponseService {
     const levels = this.computeGradingLevels(sorted, questionMap);
     const gradedItems: GradedItem[] = [];
     const gradedItemsLock: { current: GradedItem[] } = { current: gradedItems };
+    const parallelEnabled = this.rateLimiter.parallelEnabled;
+    const totalQuestions = sorted.length;
+    let gradedCount = 0;
 
     for (const [waveIndex, wave] of levels.entries()) {
       this.logger.info(
-        `grading.wave.start attempt=${attemptId} wave=${waveIndex} size=${wave.length}`,
+        `grading.wave.start attempt=${attemptId} wave=${waveIndex} size=${wave.length} parallel=${parallelEnabled}`,
       );
 
       await Promise.all(
@@ -185,7 +188,7 @@ export class QuestionResponseService {
           const request = requestMap.get(questionId);
           if (!question || !request) return;
 
-          if (reportProgress && this.progressService) {
+          if (reportProgress && this.progressService && parallelEnabled) {
             await this.progressService.setQuestionStatus(
               attemptId,
               questionId,
@@ -210,13 +213,21 @@ export class QuestionResponseService {
               questionId,
               JSON.stringify(result.learnerResponse ?? ""),
             );
+            gradedCount += 1;
 
             if (reportProgress && this.progressService) {
-              await this.progressService.setQuestionStatus(
-                attemptId,
-                questionId,
-                "completed",
-              );
+              await (parallelEnabled
+                ? this.progressService.setQuestionStatus(
+                    attemptId,
+                    questionId,
+                    "completed",
+                  )
+                : this.progressService.updateQuestionProgress(
+                    attemptId,
+                    gradedCount,
+                    totalQuestions,
+                    `Grading question ${gradedCount} of ${totalQuestions}...`,
+                  ));
             }
           } catch (error) {
             this.logger.error(
@@ -224,7 +235,7 @@ export class QuestionResponseService {
                 error instanceof Error ? error.message : String(error)
               }`,
             );
-            if (reportProgress && this.progressService) {
+            if (reportProgress && this.progressService && parallelEnabled) {
               await this.progressService.setQuestionStatus(
                 attemptId,
                 questionId,
@@ -347,14 +358,16 @@ export class QuestionResponseService {
         assignmentAttemptId,
         totalQuestions,
       );
-      this.progressService.initializeQuestions(
-        assignmentAttemptId,
-        questionDtos.map((q, index) => ({
-          id: q.id,
-          displayOrder: index,
-          slowType: this.detectSlowType(q),
-        })),
-      );
+      if (this.rateLimiter.parallelEnabled) {
+        this.progressService.initializeQuestions(
+          assignmentAttemptId,
+          questionDtos.map((q, index) => ({
+            id: q.id,
+            displayOrder: index,
+            slowType: this.detectSlowType(q),
+          })),
+        );
+      }
     }
 
     for (const request of responsesForQuestions) {
@@ -577,14 +590,16 @@ export class QuestionResponseService {
         assignmentAttemptId,
         totalQuestions,
       );
-      this.progressService.initializeQuestions(
-        assignmentAttemptId,
-        questionDtos.map((q, index) => ({
-          id: q.id,
-          displayOrder: index,
-          slowType: this.detectSlowType(q),
-        })),
-      );
+      if (this.rateLimiter.parallelEnabled) {
+        this.progressService.initializeQuestions(
+          assignmentAttemptId,
+          questionDtos.map((q, index) => ({
+            id: q.id,
+            displayOrder: index,
+            slowType: this.detectSlowType(q),
+          })),
+        );
+      }
     }
 
     const questionMap = new Map(questionDtos.map((q) => [q.id, q]));

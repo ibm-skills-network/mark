@@ -123,11 +123,20 @@ const buildService = (mockPrisma: any) => {
   // progressService is optional; pass undefined.
   const progressService = undefined;
 
+  // rateLimiter passes scheduled operations through synchronously. parallelEnabled=true
+  // so the wave scheduler emits per-question states (matching production default).
+  const rateLimiter = {
+    parallelEnabled: true,
+    concurrency: 10,
+    schedule: async <T>(_name: string, op: () => Promise<T>) => op(),
+  } as any;
+
   return new QuestionResponseService(
     mockPrisma,
     questionService,
     localizationService,
     gradingFactoryService,
+    rateLimiter,
     parentLogger,
     progressService,
   );

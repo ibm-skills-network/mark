@@ -32,6 +32,7 @@ const config: Config = {
     "^src/(.*)$": "<rootDir>/src/$1",
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
       "<rootDir>/test/__mocks__/pdfjs-dist.ts",
+    "^canvas$": "<rootDir>/test/__mocks__/canvas.ts",
   },
 };
 
