@@ -4,7 +4,11 @@ process.env.OPENAI_API_KEY = "dummy-key"; // pragma: allowlist secret
 process.env.SENDGRID_API_KEY = "SG.test-key"; // pragma: allowlist secret
 
 const config: Config = {
-  moduleFileExtensions: ["js", "json", "ts", "node"],
+  // ts MUST come before json — both languages.ts and languages.json exist as
+  // siblings; with json first, `import ".../languages"` resolves to the
+  // raw JSON array (no named exports), breaking helpers like
+  // getAllLanguageCodes at test runtime.
+  moduleFileExtensions: ["js", "ts", "json", "node"],
   rootDir: ".",
   testRegex: ".*\\.spec\\.ts$",
   transform: {
@@ -28,6 +32,7 @@ const config: Config = {
     "^src/(.*)$": "<rootDir>/src/$1",
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
       "<rootDir>/test/__mocks__/pdfjs-dist.ts",
+    "^canvas$": "<rootDir>/test/__mocks__/canvas.ts",
   },
 };
 

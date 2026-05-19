@@ -16,8 +16,19 @@ import type {
   REPORT_TYPE,
   Scoring,
 } from "@config/types";
+import type { PublishJobResult } from "@/types/publish-job-result";
 import { apiClient } from "./api-client";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
+
+function isPublishJobResult(value: unknown): value is PublishJobResult {
+  if (typeof value !== "object" || value === null) return false;
+  const stage = (value as { stage?: unknown }).stage;
+  return (
+    stage === "db_writes_done" ||
+    stage === "translations_in_progress" ||
+    stage === "translations_complete"
+  );
+}
 
 interface Notification {
   id: number;
@@ -123,6 +134,7 @@ export function subscribeToJobStatus(
   jobId: string,
   onProgress?: (percentage: number, progressText?: string) => void,
   setQuestions?: (questions: Question[]) => void,
+  onPublishResult?: (result: PublishJobResult) => void,
 ): Promise<[boolean, Question[]]> {
   return new Promise<[boolean, Question[]]>((resolve, reject) => {
     let eventSource: EventSource | null = null;
@@ -178,52 +190,108 @@ export function subscribeToJobStatus(
       };
 
       eventSource.addEventListener("update", (event: MessageEvent<string>) => {
+        // Separate envelope parsing from callback invocation. A callback
+        // (React setState, downstream consumer) throwing is a client-side
+        // rendering bug, not a server protocol violation — it should be
+        // logged and ignored so the SSE subscription keeps tracking the
+        // server-side publish to completion instead of tearing down with
+        // an opaque "Invalid server response" toast.
+        let data: PublishJobResponse;
         try {
-          const data = JSON.parse(event.data) as PublishJobResponse;
+          data = JSON.parse(event.data) as PublishJobResponse;
+        } catch (parseError) {
+          const detail =
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError);
+          handleError(`Invalid server response: ${detail}`);
+          return;
+        }
 
+        let resultPayload: unknown;
+        if (data?.result) {
+          try {
+            resultPayload = JSON.parse(data.result);
+          } catch (resultParseError) {
+            console.warn(
+              "publish.status.result.parse_failed",
+              resultParseError,
+            );
+          }
+        }
+
+        try {
           if (data.percentage !== undefined && onProgress) {
             onProgress(data.percentage, data.progress);
           }
-
-          if (data?.result) {
-            receivedQuestions = JSON.parse(
-              data.result,
-            ) as QuestionAuthorStore[];
-            if (setQuestions) {
-              setQuestions(receivedQuestions);
+          if (resultPayload !== undefined) {
+            if (isPublishJobResult(resultPayload)) {
+              if (onPublishResult) onPublishResult(resultPayload);
+            } else if (Array.isArray(resultPayload)) {
+              receivedQuestions = resultPayload as QuestionAuthorStore[];
+              if (setQuestions) {
+                setQuestions(receivedQuestions);
+              }
             }
           }
-          if (data.done) {
-            clearTimeout(timeoutId);
-            handleCompletion(data.status === "Completed");
-          } else if (data.status === "Failed") {
-            handleError(data.progress || "Job failed");
-          }
-        } catch (parseError) {
-          handleError("Invalid server response");
+        } catch (callbackError) {
+          console.error("publish.status.callback_threw", callbackError);
+        }
+
+        if (data.done) {
+          clearTimeout(timeoutId);
+          handleCompletion(data.status === "Completed");
+        } else if (data.status === "Failed") {
+          handleError(data.progress || "Job failed");
         }
       });
 
       eventSource.addEventListener(
         "finalize",
         (event: MessageEvent<string>) => {
+          let data: PublishJobResponse;
           try {
-            const data = JSON.parse(event.data) as PublishJobResponse;
+            data = JSON.parse(event.data) as PublishJobResponse;
+          } catch (parseError) {
+            const detail =
+              parseError instanceof Error
+                ? parseError.message
+                : String(parseError);
+            handleError(`Invalid finalize event response: ${detail}`);
+            return;
+          }
+
+          let resultPayload: unknown;
+          if (data?.result) {
+            try {
+              resultPayload = JSON.parse(data.result);
+            } catch (resultParseError) {
+              console.warn(
+                "publish.finalize.result.parse_failed",
+                resultParseError,
+              );
+            }
+          }
+
+          try {
             if (data.percentage !== undefined && onProgress) {
               onProgress(data.percentage, data.progress);
             }
-            if (data?.result) {
-              receivedQuestions = JSON.parse(
-                data.result,
-              ) as QuestionAuthorStore[];
-              if (setQuestions) {
-                setQuestions(receivedQuestions);
+            if (resultPayload !== undefined) {
+              if (isPublishJobResult(resultPayload)) {
+                if (onPublishResult) onPublishResult(resultPayload);
+              } else if (Array.isArray(resultPayload)) {
+                receivedQuestions = resultPayload as QuestionAuthorStore[];
+                if (setQuestions) {
+                  setQuestions(receivedQuestions);
+                }
               }
             }
-            handleCompletion(data.status === "Completed");
-          } catch {
-            handleError("Invalid finalize event response");
+          } catch (callbackError) {
+            console.error("publish.finalize.callback_threw", callbackError);
           }
+
+          handleCompletion(data.status === "Completed");
         },
       );
 
@@ -245,20 +313,16 @@ export function subscribeToJobStatus(
 
         const jobStatusUrl = `${getApiRoutes().assignments}/jobs/${jobId}/status`;
 
-        const fetchOnce = async (): Promise<
-          | {
-              status?: string;
-              progress?: string;
-              questions?: QuestionAuthorStore[];
-            }
-          | undefined
-        > => {
+        type FallbackJobStatus = {
+          status?: string;
+          progress?: string;
+          questions?: QuestionAuthorStore[];
+          result?: unknown;
+        };
+
+        const fetchOnce = async (): Promise<FallbackJobStatus | undefined> => {
           try {
-            return (await apiClient.get(jobStatusUrl)) as {
-              status?: string;
-              progress?: string;
-              questions?: QuestionAuthorStore[];
-            };
+            return (await apiClient.get(jobStatusUrl)) as FallbackJobStatus;
           } catch (fetchError) {
             console.warn(
               "Publish job-status fallback fetch failed",
@@ -268,21 +332,25 @@ export function subscribeToJobStatus(
           }
         };
 
-        const applyJobState = (
-          job:
-            | {
-                status?: string;
-                progress?: string;
-                questions?: QuestionAuthorStore[];
-              }
-            | undefined,
-        ): boolean => {
+        // PublishJobResult ducks-types as { stage: string, translations?: ... }.
+        // Forward any result that matches that shape to onPublishResult on
+        // every poll tick so the UI can render the failure summary + retry
+        // button after an SSE drop.
+        const looksLikePublishResult = (r: unknown): r is PublishJobResult =>
+          typeof r === "object" &&
+          r !== null &&
+          typeof (r as { stage?: unknown }).stage === "string";
+
+        const applyJobState = (job: FallbackJobStatus | undefined): boolean => {
           if (!job) return false;
           if (job.questions && Array.isArray(job.questions)) {
             receivedQuestions = job.questions;
             if (setQuestions) {
               setQuestions(receivedQuestions);
             }
+          }
+          if (onPublishResult && looksLikePublishResult(job.result)) {
+            onPublishResult(job.result);
           }
           // Match the SSE `update` handler's semantics: Completed resolves,
           // Failed rejects. Resolving on Failed lets the caller's success
@@ -363,6 +431,42 @@ export async function publishAssignment(
   } catch (err) {
     console.error("💥 publishAssignment failed:", err);
   }
+}
+
+/**
+ * Returns the jobId of an in-flight publish for the given assignment,
+ * or null if none is active. Used by the author UI on mount to
+ * reattach to a publish that's still running after a page refresh.
+ */
+export async function getActivePublishJob(
+  assignmentId: number,
+): Promise<{ jobId: string } | null> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/active-publish-job`;
+  try {
+    const response = (await apiClient.get(endpointURL)) as {
+      jobId?: string;
+    } | null;
+    return response?.jobId ? { jobId: response.jobId } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Trigger a retry of the failed translations from the most recent publish
+ * for the assignment. Returns the new retry jobId so the client can
+ * subscribe to SSE progress the same way it does for a publish.
+ *
+ * Throws on 409 (a publish is currently in progress) or any other error.
+ */
+export async function retryFailedTranslations(
+  assignmentId: number,
+): Promise<{ jobId: string; message: string }> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/translations/retry-failed`;
+  return (await apiClient.post(endpointURL, {})) as {
+    jobId: string;
+    message: string;
+  };
 }
 
 /**

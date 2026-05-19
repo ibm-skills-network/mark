@@ -10,7 +10,11 @@ import {
   LearnerAssignmentState,
 } from "@/config/types";
 import { getSupportedLanguages } from "@/lib/talkToBackend";
-import { DEFAULT_UI_LANGUAGE, setStoredUiLanguage } from "@/lib/ui-language";
+import {
+  DEFAULT_UI_LANGUAGE,
+  pickDefaultAssignmentLanguage,
+  setStoredUiLanguage,
+} from "@/lib/ui-language";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
@@ -167,7 +171,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
           sortedLanguages.includes(userPreferedLanguage)
         )
           return userPreferedLanguage;
-        return sortedLanguages[0] || "en";
+        return pickDefaultAssignmentLanguage(sortedLanguages);
       });
       setIsLoading(false);
     }

@@ -163,6 +163,7 @@ model publishJob {
   updatedAt    DateTime @updatedAt
   result       Json?
 }
+
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
   id           Int             @id @default(autoincrement()) /// Unique identifier for the AI usage log
@@ -296,7 +297,7 @@ model Assignment {
   AssignmentTranslation        AssignmentTranslation[]
   GradingAudit                 GradingAudit[]
 
-  Chat Chat[]
+  Chat             Chat[]
   GradingJob       GradingJob[]
   AssignmentAuthor AssignmentAuthor[]
   versions         AssignmentVersion[] @relation("AssignmentVersions")
@@ -305,22 +306,22 @@ model Assignment {
 }
 
 model AssignmentFile {
-  id            Int                  @id @default(autoincrement())
-  assignmentId  Int
-  assignment    Assignment           @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  filename      String
-  mimeType      String
-  size          Int
-  storageKey    String
-  storageBucket String
-  status        AssignmentFileStatus @default(READY)
-  uploadId      String?
-  extractedText String?              @db.Text
+  id               Int                            @id @default(autoincrement())
+  assignmentId     Int
+  assignment       Assignment                     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  filename         String
+  mimeType         String
+  size             Int
+  storageKey       String
+  storageBucket    String
+  status           AssignmentFileStatus           @default(READY)
+  uploadId         String?
+  extractedText    String?                        @db.Text
   extractionStatus AssignmentFileExtractionStatus @default(PENDING) // Defaulting to pending incase of future async extraction flows
-  extractionError String?            @db.Text
-  extractedAt   DateTime?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  extractionError  String?                        @db.Text
+  extractedAt      DateTime?
+  createdAt        DateTime                       @default(now())
+  updatedAt        DateTime                       @updatedAt
 
   @@index([assignmentId])
   @@index([assignmentId, status])
@@ -478,8 +479,8 @@ model AssignmentAttempt {
   comments            String? /// Additional comments or notes for the assignment attempt from the system
   preferredLanguage   String?
   gradingProgress     GradingProgress?
-  GradingJob   GradingJob[]
-  LtiGradeSync LtiGradeSync[]
+  GradingJob          GradingJob[]
+  LtiGradeSync        LtiGradeSync[]
 
   @@index([assignmentId])
   @@index([userId])
@@ -774,6 +775,14 @@ model Translation {
   translatedChoices   Json?
   untranslatedChoices Json?
   createdAt           DateTime         @default(now())
+
+  // NOTE: Two partial unique indexes are maintained in raw SQL via the
+  // 20260510000001_translation_partial_unique migration:
+  //   - Translation_question_lang_unique_no_variant (questionId, languageCode) WHERE variantId IS NULL
+  //   - Translation_question_lang_variant_unique   (questionId, variantId, languageCode) WHERE variantId IS NOT NULL
+  // Assignment-scope is implied through Question.assignmentId (cascade FK).
+  // Prisma 5.x's schema DSL does not express partial unique indexes; do not
+  // add a conflicting @@unique on these tuples — it will collide.
 
   // Use an index instead of unique constraint to allow nullable variantId
   @@index([questionId, variantId, languageCode])

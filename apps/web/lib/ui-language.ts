@@ -31,3 +31,48 @@ export function setStoredUiLanguage(languageCode: string): void {
     }),
   );
 }
+
+/**
+ * Pick the best default language for an assignment from its list of supported
+ * codes. Tries the browser's preferred languages in order — exact case-
+ * insensitive match first (so "zh-CN" matches "zh-CN"), then the base
+ * language (so "en-US" matches "en") — then falls back to English, then to
+ * the first item in the supplied list as a last resort.
+ *
+ * The fallback ordering reflects the primary userbase: English speakers
+ * should land on English by default, not on whichever language sorts first
+ * alphabetically.
+ */
+export function pickDefaultAssignmentLanguage(
+  supportedCodes: readonly string[],
+): string {
+  if (supportedCodes.length === 0) return DEFAULT_UI_LANGUAGE;
+
+  const lowerToOriginal = new Map<string, string>();
+  for (const code of supportedCodes) {
+    lowerToOriginal.set(code.toLowerCase(), code);
+  }
+
+  const browserCandidates: string[] =
+    typeof navigator !== "undefined"
+      ? Array.isArray(navigator.languages) && navigator.languages.length > 0
+        ? [...navigator.languages]
+        : navigator.language
+          ? [navigator.language]
+          : []
+      : [];
+
+  for (const candidate of browserCandidates) {
+    const lower = candidate.toLowerCase();
+    const exact = lowerToOriginal.get(lower);
+    if (exact) return exact;
+    const base = lower.split("-")[0];
+    const baseMatch = lowerToOriginal.get(base);
+    if (baseMatch) return baseMatch;
+  }
+
+  const englishMatch = lowerToOriginal.get(DEFAULT_UI_LANGUAGE);
+  if (englishMatch) return englishMatch;
+
+  return supportedCodes[0];
+}

@@ -12,12 +12,31 @@ interface GradingProgressModalProps {
   gradingJobId: string | null;
 }
 
+type QuestionGradingStatus = "pending" | "in_progress" | "completed" | "failed";
+
+interface QuestionGradingState {
+  id: number;
+  displayOrder: number;
+  status: QuestionGradingStatus;
+  slowType?: string;
+}
+
+interface GradingProgressDetails {
+  questions: QuestionGradingState[];
+  total: number;
+  completed: number;
+  inFlight: number;
+  failed: number;
+  hasSlowInFlight: boolean;
+}
+
 interface ProgressState {
   status: "processing" | "completed" | "failed" | "idle";
   progress: number;
   currentStage: string;
   currentQuestion?: number;
   totalQuestions?: number;
+  gradingState?: GradingProgressDetails;
 }
 
 export default function GradingProgressModal({
@@ -85,13 +104,29 @@ export default function GradingProgressModal({
             ? "failed"
             : "processing";
 
-      setProgressData({
+      let gradingState: GradingProgressDetails | undefined;
+      if (status === "processing" && typeof data?.result === "string") {
+        try {
+          const parsed = JSON.parse(data.result);
+          if (
+            parsed?.gradingState &&
+            Array.isArray(parsed.gradingState.questions)
+          ) {
+            gradingState = parsed.gradingState as GradingProgressDetails;
+          }
+        } catch {
+          // Ignore — older publishes used to put non-JSON in result.
+        }
+      }
+
+      setProgressData((prev) => ({
         status,
         progress: status === "completed" ? 100 : percentage,
         currentStage: status === "completed" ? "Grading complete!" : message,
         currentQuestion: data?.currentQuestion,
         totalQuestions: data?.totalQuestions,
-      });
+        gradingState: gradingState ?? prev.gradingState,
+      }));
 
       if (terminalStatus === "Completed" || terminalStatus === "Failed") {
         eventSource.close();
@@ -507,6 +542,10 @@ export default function GradingProgressModal({
                   </motion.div>
                 )}
 
+                {status === "processing" && progressData.gradingState && (
+                  <QuestionGradingList state={progressData.gradingState} />
+                )}
+
                 {status === "processing" && (
                   <>
                     {/* Modern linear progress bar */}
@@ -650,3 +689,90 @@ export default function GradingProgressModal({
     </AnimatePresence>
   );
 }
+
+function QuestionGradingList({ state }: { state: GradingProgressDetails }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="mb-6"
+    >
+      {state.hasSlowInFlight && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mb-3 px-4 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900 flex items-start gap-2"
+          role="status"
+        >
+          <span aria-hidden="true">⏳</span>
+          <span>File uploads take a bit longer — hang in there!</span>
+        </motion.div>
+      )}
+      <ul className="space-y-1.5 max-h-48 overflow-y-auto pr-1 text-left">
+        {state.questions.map((q) => (
+          <QuestionGradingRow key={q.id} question={q} />
+        ))}
+      </ul>
+    </motion.div>
+  );
+}
+
+function QuestionGradingRow({ question }: { question: QuestionGradingState }) {
+  const styles = ROW_STYLES[question.status];
+  return (
+    <li
+      className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-md text-sm ${styles.container}`}
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        <span className={`flex-shrink-0 ${styles.icon}`} aria-hidden="true">
+          {styles.glyph}
+        </span>
+        <span className="truncate">Question {question.displayOrder + 1}</span>
+      </span>
+      <span className={`text-xs uppercase tracking-wide ${styles.label}`}>
+        {styles.text}
+      </span>
+    </li>
+  );
+}
+
+const ROW_STYLES: Record<
+  QuestionGradingStatus,
+  {
+    container: string;
+    icon: string;
+    label: string;
+    glyph: string;
+    text: string;
+  }
+> = {
+  pending: {
+    container: "bg-gray-50 text-gray-600",
+    icon: "text-gray-400",
+    label: "text-gray-500",
+    glyph: "○",
+    text: "Queued",
+  },
+  in_progress: {
+    container: "bg-purple-50 text-purple-900",
+    icon: "text-purple-500 animate-pulse",
+    label: "text-purple-600",
+    glyph: "◐",
+    text: "Grading",
+  },
+  completed: {
+    container: "bg-green-50 text-green-900",
+    icon: "text-green-600",
+    label: "text-green-700",
+    glyph: "✓",
+    text: "Done",
+  },
+  failed: {
+    container: "bg-red-50 text-red-900",
+    icon: "text-red-600",
+    label: "text-red-700",
+    glyph: "✕",
+    text: "Failed",
+  },
+};

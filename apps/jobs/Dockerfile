@@ -17,13 +17,16 @@ COPY --from=builder ${DIR}/out/json/ .
 COPY --from=builder ${DIR}/yarn.lock ./yarn.lock
 COPY --from=builder ${DIR}/turbo.json ./turbo.json
 COPY --from=builder ${DIR}/packages ./packages
+COPY --from=builder ${DIR}/apps/api/prisma ./apps/api/prisma
+COPY --from=builder ${DIR}/patches ./patches
 
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
     apt-get update -y \
   && apt-get install -y --no-install-recommends \
      python3 make g++ pkg-config openssl \
-  && yarn install --ignore-scripts --frozen-lockfile --cache-folder /yarn-cache \
+  && yarn install --frozen-lockfile --cache-folder /yarn-cache \
+  && yarn prisma generate \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -54,4 +57,4 @@ COPY --chown=node:node --from=build ${DIR}/apps/jobs/package.json ./package.json
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/jobs/src/main.js"]

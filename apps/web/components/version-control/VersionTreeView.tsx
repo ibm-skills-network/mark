@@ -661,11 +661,11 @@ export function VersionTreeView({ assignmentId }: Props) {
 
   return (
     <div
-      className={`fixed top-16 left-0 bottom-0 bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 flex flex-col z-30 transition-all duration-300 ease-in-out ${
+      className={`fixed top-32 left-0 bottom-0 bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 flex flex-col z-30 transition-all duration-300 ease-in-out ${
         isChatbotOpen ? "right-[25vw]" : "right-0"
       }`}
     >
-      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 px-6 py-4 shadow-sm 2xl:mt-5 xl:mt-16 lg:mt-16 md:mt-32 sm:mt-32 mt-32">
+      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 px-6 py-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4 gap-2">
             <button

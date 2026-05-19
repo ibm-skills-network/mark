@@ -1,10 +1,14 @@
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { WinstonModule } from "nest-winston";
 import { JobsAppModule } from "./app.module";
+import { winstonOptions } from "./logger.config";
 
 async function bootstrap() {
-  const app = await NestFactory.createApplicationContext(JobsAppModule);
+  const app = await NestFactory.createApplicationContext(JobsAppModule, {
+    logger: WinstonModule.createLogger(winstonOptions),
+  });
   const logger = new Logger("JobsBootstrap");
 
   logger.log("Jobs worker application context started");

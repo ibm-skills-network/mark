@@ -323,10 +323,11 @@ export class VersionManagementController {
   async publishVersion(
     @Param("assignmentId", ParseIntPipe) assignmentId: number,
     @Param("versionId", ParseIntPipe) versionId: number,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @Req() request: UserSessionRequest,
   ): Promise<VersionSummary> {
-    return await this.versionService.publishVersion(assignmentId, versionId);
+    return await this.versionService.publishVersion(assignmentId, versionId, {
+      userSession: request.userSession,
+    });
   }
 
   @Post("auto-save")

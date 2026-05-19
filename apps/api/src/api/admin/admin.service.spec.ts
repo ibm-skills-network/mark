@@ -70,12 +70,10 @@ describe("AdminService", () => {
         .mockResolvedValue({ uploads: [{ fileId: 7 }] }),
     };
     mockQuestionService = {
-      generateQuestions: jest
-        .fn()
-        .mockResolvedValue({
-          message: "Question generation started",
-          jobId: "job-1",
-        }),
+      generateQuestions: jest.fn().mockResolvedValue({
+        message: "Question generation started",
+        jobId: "job-1",
+      }),
     };
     mockJobStatusService = {
       getJobStatus: jest.fn(),

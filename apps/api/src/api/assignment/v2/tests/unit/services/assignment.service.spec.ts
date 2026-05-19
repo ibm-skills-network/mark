@@ -171,7 +171,12 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       await service.updateAssignment(1, dto);
 
       expect(assignmentRepository.update).toHaveBeenCalledWith(1, dto);
-      expect(translationService.translateAssignment).toHaveBeenCalledWith(1);
+      expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        JOB_NAMES.TRANSLATE_META,
+        expect.objectContaining({ assignmentId: 1 }),
+        expect.objectContaining({ attempts: 3 }),
+      );
       expect(questionService.updateQuestionGradingContext).toHaveBeenCalledWith(
         1,
       );
@@ -300,11 +305,11 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         expect.anything(),
         expect.anything(),
       );
-      expect(translationService.translateAssignment).toHaveBeenCalledWith(
-        assignmentId,
-        jobId,
-        expect.anything(),
-      );
+      // runPublishJob now fans out per-question translation jobs through
+      // question.service (which enqueues each), and SADD-seeds the in-flight
+      // SET when redis is available. No direct translationService.translateAssignment
+      // call from the publish path anymore.
+      expect(translationService.translateAssignment).not.toHaveBeenCalled();
       expect(questionService.updateQuestionGradingContext).toHaveBeenCalledWith(
         assignmentId,
       );
@@ -446,9 +451,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       [createMockQuestion({ id: 1 }), createMockQuestion({ id: 2 })],
     );
     assignmentRepository.findById.mockResolvedValue(existingAssignment);
-    questionService.processQuestionsForPublishing.mockResolvedValue(
-      new Map([[tempQuestionId, persistedQuestionId]]),
-    );
+    questionService.processQuestionsForPublishing.mockResolvedValue({
+      idMap: new Map([[tempQuestionId, persistedQuestionId]]),
+      translationJobsEnqueued: 1,
+    });
     questionService.getQuestionsForAssignment.mockResolvedValue([
       createMockQuestionDto({ id: 1 }),
       createMockQuestionDto({ id: 2 }),

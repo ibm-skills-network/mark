@@ -108,6 +108,34 @@ export class AttemptControllerV2 {
     );
   }
 
+  @Post(":attemptId/abandon")
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Abandon an in-progress attempt that is pinned to a stale assignment version.",
+    description:
+      "Only valid when the attempt has zero responses AND the assignment has been republished since the attempt began. Hard-deletes the attempt so the learner can create a fresh one against the current version.",
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403 })
+  @ApiResponse({ status: 404 })
+  @ApiResponse({
+    status: 422,
+    type: String,
+    description:
+      "Attempt has responses, has been submitted, or is already pinned to the current version.",
+  })
+  abandonAssignmentAttempt(
+    @Param("attemptId") assignmentAttemptId: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ id: number; success: true }> {
+    return this.attemptService.abandonAssignmentAttempt(
+      Number(assignmentAttemptId),
+      request.userSession,
+    );
+  }
+
   @Get()
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
