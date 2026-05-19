@@ -805,27 +805,20 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         );
       }
 
-      // Stage 1: DB writes are complete and translation jobs have been
-      // enqueued. Surface this once on the SSE stream BEFORE entering the
-      // poll loop so consumers can transition UI state from "publishing" to
-      // "translating" immediately — without waiting for the first poll
-      // tick (which may be empty if no worker has HSET yet).
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "DB writes complete; translation jobs queued",
-        percentage: 100,
-        result: { stage: "db_writes_done" } satisfies PublishJobResult,
-      });
-
       // No translation jobs were enqueued (e.g. metadata-only republish of
-      // an already-translated assignment). Emit a single terminal
-      // translations_complete tick and return — the poll loop below would
-      // otherwise spin for the full 30-minute timeout against an empty
-      // per-publish status hash that no worker will ever populate.
+      // an already-translated assignment, or translation is disabled at the
+      // deployment level). Skip the db_writes_done intermediate tick and
+      // emit a single terminal translations_complete with zeros — the poll
+      // loop below would otherwise spin for the full 30-minute timeout
+      // against an empty per-publish status hash that no worker will ever
+      // populate, and the intermediate tick would briefly flash a
+      // "translating in background" banner that never resolves to real
+      // work. The frontend hides the PublishProgress card when the
+      // aggregate carries total=0, so this becomes a quiet success.
       if (!willEnqueueAnyTranslation) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "Completed",
-          progress: "Publishing complete (no translation work required)",
+          progress: "Publishing complete",
           percentage: 100,
           result: {
             stage: "translations_complete",
@@ -837,6 +830,18 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         });
         return;
       }
+
+      // Stage 1: DB writes are complete and translation jobs have been
+      // enqueued. Surface this once on the SSE stream BEFORE entering the
+      // poll loop so consumers can transition UI state from "publishing" to
+      // "translating" immediately — without waiting for the first poll
+      // tick (which may be empty if no worker has HSET yet).
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "DB writes complete; translation jobs queued",
+        percentage: 100,
+        result: { stage: "db_writes_done" } satisfies PublishJobResult,
+      });
 
       await this.pollTranslationsToTerminal(jobId, assignmentId);
     } catch (error: unknown) {

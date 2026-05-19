@@ -144,6 +144,19 @@ export default function PublishProgress({
   }
   const perJob = sortEntries(Array.from(map.values()));
 
+  // Stay hidden when the publish carries no actual translation work — e.g.
+  // server-side translation is disabled, or this was a metadata-only
+  // republish where no jobs were enqueued. The wire-level aggregate is the
+  // source of truth (server-emitted on the "no work" short-circuit).
+  const wireAggregate = publishResult.translations?.aggregate;
+  if (
+    perJob.length === 0 &&
+    wireAggregate !== undefined &&
+    wireAggregate.total === 0
+  ) {
+    return null;
+  }
+
   const allTerminal =
     perJob.length > 0 && perJob.every((e) => TERMINAL_STATUSES.has(e.status));
   // Derived stage promotes the row to "translations_complete" as soon as
