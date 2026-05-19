@@ -117,11 +117,16 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     // over markAsDeleted on the same question set). The lock auto-renews every
     // lockDuration / 2 ms via an internal Worker timer, so this value is the
     // failure-detection threshold (how long renewal can fail before the job is
-    // considered stalled), not the max publish duration. 30 minutes gives a
-    // comfortable safety margin over observed worst-case publishes.
+    // considered stalled), not the max publish duration.
+    //
+    // The API-side publish poll loop caps execution at 30 minutes
+    // (PUBLISH_TRANSLATION_POLL_TIMEOUT_MS). The lock TTL must outlive that
+    // ceiling so a worker finishing right at the 30-min boundary cannot be
+    // marked stalled by a renewal that hasn't fired yet. 31.5 minutes
+    // (1_890_000) gives a 90s safety margin past the worst-case poll exit.
     // maxStalledCount=0 means a genuinely-stalled worker fails the job
     // permanently rather than spawning a concurrent retry.
-    const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 1_800_000;
+    const ASSIGNMENT_PUBLISH_LOCK_DURATION_MS = 1_890_000;
     const ASSIGNMENT_NO_STALL_RECOVERY = 0;
 
     // 120-second lockDuration + maxStalledCount=0 prevents BullMQ stall-recovery

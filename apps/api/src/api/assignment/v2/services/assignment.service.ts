@@ -376,6 +376,12 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     // cleanup didn't fire, markPending's HSETNX would no-op on the
     // stale fields and the new publish would inherit Done/Failed rows
     // for questions that don't even exist in this run.
+    //
+    // Safety: jobId is the deterministic publish id (`publish:v2:<assignmentId>`)
+    // and BullMQ rejects duplicate active jobs with the same id, so this
+    // DEL cannot race a concurrently-seeded publish for the same
+    // assignment. The queue-level dedup is the only guard — there is no
+    // additional lock here.
     try {
       await this.translationStateRedis?.del(buildPublishHashKey(jobId));
     } catch (delError) {

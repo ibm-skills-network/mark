@@ -247,7 +247,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 2,
-        lockDuration: 1_800_000,
+        lockDuration: 1_890_000,
         maxStalledCount: 0,
       },
     );
@@ -258,7 +258,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 2,
-        lockDuration: 1_800_000,
+        lockDuration: 1_890_000,
         maxStalledCount: 0,
       },
     );
