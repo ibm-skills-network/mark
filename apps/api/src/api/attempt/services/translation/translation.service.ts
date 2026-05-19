@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null */
-import { Injectable } from "@nestjs/common";
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import {
   AssignmentAttempt,
   QuestionVariant,
@@ -14,6 +14,10 @@ import {
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { PrismaService } from "../../../../database/prisma.service";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
+import {
+  buildTranslationCacheKey,
+  type JobScopedCache,
+} from "../grading/job-scoped-cache";
 
 export type VariantMapping = {
   questionId: number;
@@ -39,6 +43,7 @@ export class TranslationService {
       questionVariants: VariantMapping[];
     },
     language?: string,
+    cache?: JobScopedCache,
   ): Promise<Map<number, QuestionDto>> {
     if (!language || language === "en") {
       return new Map<number, QuestionDto>();
@@ -56,13 +61,14 @@ export class TranslationService {
 
       question = await (variantMapping &&
       variantMapping.questionVariant !== null
-        ? this.getQuestionFromVariant(variantMapping)
-        : this.questionService.findOne(questionId));
+        ? this.getQuestionFromVariant(variantMapping, cache)
+        : this.questionService.findOne(questionId, undefined, cache));
 
       question = await this.applyTranslationToQuestion(
         question,
         language,
         variantMapping,
+        cache,
       );
 
       preTranslatedQuestions.set(questionId, question);
@@ -173,27 +179,41 @@ export class TranslationService {
     question: QuestionDto,
     language: string,
     variantMapping?: VariantMapping,
+    cache?: JobScopedCache,
   ): Promise<QuestionDto> {
     if (!language || language === "en") {
       return question;
     }
 
-    let translation: Translation | null = null;
+    const variantId = variantMapping?.questionVariant?.id ?? null;
+    // Cache key encodes (language, questionId, variantId). A variant-keyed
+    // entry and a variant=null entry for the same questionId are distinct
+    // tuples — hits/misses are not shared between them.
+    const cacheKey = buildTranslationCacheKey(language, question.id, variantId);
 
-    if (
-      variantMapping &&
-      variantMapping.questionVariant !== null &&
-      variantMapping.questionVariant
-    ) {
-      translation = await this.prisma.translation.findFirst({
-        where: {
-          questionId: variantMapping.questionId,
-          variantId: variantMapping.questionVariant.id,
-          languageCode: language,
-        },
-      });
+    let translation: Translation | null;
+    if (cache?.translations.has(cacheKey)) {
+      translation = cache.translations.get(cacheKey) ?? null;
+    } else {
+      if (variantMapping && variantMapping.questionVariant !== null) {
+        translation = await this.prisma.translation.findFirst({
+          where: {
+            questionId: variantMapping.questionId,
+            variantId: variantMapping.questionVariant.id,
+            languageCode: language,
+          },
+        });
 
-      if (!translation) {
+        if (!translation) {
+          translation = await this.prisma.translation.findFirst({
+            where: {
+              questionId: question.id,
+              variantId: null,
+              languageCode: language,
+            },
+          });
+        }
+      } else {
         translation = await this.prisma.translation.findFirst({
           where: {
             questionId: question.id,
@@ -202,14 +222,7 @@ export class TranslationService {
           },
         });
       }
-    } else {
-      translation = await this.prisma.translation.findFirst({
-        where: {
-          questionId: question.id,
-          variantId: null,
-          languageCode: language,
-        },
-      });
+      if (cache) cache.translations.set(cacheKey, translation);
     }
 
     if (translation) {
@@ -241,10 +254,20 @@ export class TranslationService {
    */
   private async getQuestionFromVariant(
     variantMapping: VariantMapping,
+    cache?: JobScopedCache,
   ): Promise<QuestionDto> {
     const variant = variantMapping.questionVariant;
+    if (!variant) {
+      throw new InternalServerErrorException(
+        `getQuestionFromVariant called with null questionVariant for questionId ${variantMapping.questionId}`,
+      );
+    }
 
-    const baseQuestion = await this.questionService.findOne(variant.questionId);
+    const baseQuestion = await this.questionService.findOne(
+      variant.questionId,
+      undefined,
+      cache,
+    );
 
     return {
       id: baseQuestion.id,

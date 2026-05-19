@@ -14,6 +14,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   createMockJob,
@@ -262,10 +263,19 @@ describe("QuestionService", () => {
         );
 
         expect(llmFacadeService.applyGuardRails).toHaveBeenCalled();
-        expect(translationService.translateQuestion).toHaveBeenCalled();
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({
+            parentJobId: 1,
+            assignmentId: 1,
+            questionId: updatedQuestion.id,
+          }),
+          expect.objectContaining({ attempts: 3 }),
+        );
       });
 
-      it("should only translate questions when content changes", async () => {
+      it("enqueues a translation job per question during publishing", async () => {
         const assignmentId = 1;
         const jobId = 1;
 
@@ -284,16 +294,20 @@ describe("QuestionService", () => {
           jobId,
         );
 
-        expect(translationService.translateQuestion).toHaveBeenCalledWith(
-          assignmentId,
-          question.id,
-          question,
-          jobId,
-          true,
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({
+            parentJobId: jobId,
+            assignmentId,
+            questionId: question.id,
+            question,
+          }),
+          expect.objectContaining({ attempts: 3 }),
         );
       });
 
-      it("should force translation when question content changes", async () => {
+      it("enqueues a translation job when question content changes", async () => {
         const assignmentId = 1;
         const jobId = 1;
 
@@ -319,13 +333,322 @@ describe("QuestionService", () => {
           jobId,
         );
 
-        expect(translationService.translateQuestion).toHaveBeenCalledWith(
-          assignmentId,
-          updatedQuestion.id,
-          updatedQuestion,
-          jobId,
-          true,
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({
+            parentJobId: jobId,
+            assignmentId,
+            questionId: updatedQuestion.id,
+            question: updatedQuestion,
+          }),
+          expect.objectContaining({ attempts: 3 }),
         );
+      });
+
+      it("enqueues TRANSLATE_QUESTION with forceRetranslation: false when question text and choices are unchanged", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Same question text",
+          alreadyInBackend: true,
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([question])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [question],
+          jobId,
+        );
+
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({ forceRetranslation: false }),
+          expect.anything(),
+        );
+      });
+
+      it("enqueues TRANSLATE_QUESTION with forceRetranslation: true when question text changes", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existingQuestion = createMockQuestionDto({
+          id: 1,
+          question: "Original text",
+          alreadyInBackend: true,
+        });
+        const updatedQuestion = createMockQuestionDto({
+          id: 1,
+          question: "Changed text",
+          alreadyInBackend: true,
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([existingQuestion])
+          .mockResolvedValueOnce([updatedQuestion]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [updatedQuestion],
+          jobId,
+        );
+
+        expect(jobQueueService.enqueue).toHaveBeenCalledWith(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_QUESTION,
+          expect.objectContaining({ forceRetranslation: true }),
+          expect.anything(),
+        );
+      });
+
+      it("enqueues TRANSLATE_VARIANT with forceRetranslation: false when variant content is unchanged", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const variant = createMockVariantDto({
+          id: 10,
+          variantContent: "same content",
+        });
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Same question",
+          alreadyInBackend: true,
+          variants: [variant],
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([{ ...question, variants: [variant] }])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        variantRepository.update = jest
+          .fn()
+          .mockResolvedValue({ ...variant, questionId: 1 });
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [question],
+          jobId,
+        );
+
+        const variantEnqueueCall = (
+          jobQueueService.enqueue as jest.Mock
+        ).mock.calls.find(
+          (call: unknown[]) => call[1] === JOB_NAMES.TRANSLATE_VARIANT,
+        );
+        expect(variantEnqueueCall).toBeDefined();
+        expect(variantEnqueueCall?.[2]).toMatchObject({
+          forceRetranslation: false,
+        });
+      });
+
+      it("enqueues TRANSLATE_VARIANT with forceRetranslation: true when variant content changes", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const existingVariant = createMockVariantDto({
+          id: 10,
+          variantContent: "old content",
+        });
+        const updatedVariant = createMockVariantDto({
+          id: 10,
+          variantContent: "new content",
+        });
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Same question",
+          alreadyInBackend: true,
+          variants: [updatedVariant],
+        });
+
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([{ ...question, variants: [existingVariant] }])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        variantRepository.update = jest
+          .fn()
+          .mockResolvedValue({ ...updatedVariant, questionId: 1 });
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [question],
+          jobId,
+        );
+
+        const variantEnqueueCall = (
+          jobQueueService.enqueue as jest.Mock
+        ).mock.calls.find(
+          (call: unknown[]) => call[1] === JOB_NAMES.TRANSLATE_VARIANT,
+        );
+        expect(variantEnqueueCall).toBeDefined();
+        expect(variantEnqueueCall?.[2]).toMatchObject({
+          forceRetranslation: true,
+        });
+      });
+
+      it("seeds in-flight counter once before each TRANSLATE_QUESTION enqueue", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Q",
+          alreadyInBackend: true,
+        });
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([question])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [question],
+          jobId,
+        );
+
+        // seedOneInflightJob called once, then enqueue called once — ordering guaranteed
+        // by sequential await in the production code
+        expect(translationService.seedOneInflightJob).toHaveBeenCalledWith(
+          assignmentId,
+        );
+        expect(translationService.seedOneInflightJob).toHaveBeenCalledTimes(1);
+        const seedOrder = (translationService.seedOneInflightJob as jest.Mock)
+          .mock.invocationCallOrder[0];
+        const enqueueOrder = (jobQueueService.enqueue as jest.Mock).mock
+          .invocationCallOrder[0];
+        expect(seedOrder).toBeLessThan(enqueueOrder);
+      });
+
+      it("seeds in-flight counter once before each TRANSLATE_VARIANT enqueue", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const variant = createMockVariantDto({ id: 10, variantContent: "v" });
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Q",
+          alreadyInBackend: true,
+          variants: [variant],
+        });
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([{ ...question, variants: [variant] }])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        variantRepository.update = jest
+          .fn()
+          .mockResolvedValue({ ...variant, questionId: 1 });
+
+        await questionService.processQuestionsForPublishing(
+          assignmentId,
+          [question],
+          jobId,
+        );
+
+        // One seed for the question, one for the variant
+        expect(translationService.seedOneInflightJob).toHaveBeenCalledWith(
+          assignmentId,
+        );
+        expect(translationService.seedOneInflightJob).toHaveBeenCalledTimes(2);
+      });
+
+      it("rolls back in-flight seed and rethrows when TRANSLATE_QUESTION enqueue fails", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Q",
+          alreadyInBackend: true,
+        });
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([question])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+
+        const enqueueError = new Error("Redis connection lost");
+        (jobQueueService.enqueue as jest.Mock).mockRejectedValueOnce(
+          enqueueError,
+        );
+
+        await expect(
+          questionService.processQuestionsForPublishing(
+            assignmentId,
+            [question],
+            jobId,
+          ),
+        ).rejects.toThrow("Redis connection lost");
+
+        expect(translationService.seedOneInflightJob).toHaveBeenCalledWith(
+          assignmentId,
+        );
+        expect(translationService.rollbackOneInflightSeed).toHaveBeenCalledWith(
+          assignmentId,
+        );
+      });
+
+      it("rolls back in-flight seed and rethrows when TRANSLATE_VARIANT enqueue fails", async () => {
+        const assignmentId = 1;
+        const jobId = 1;
+
+        const variant = createMockVariantDto({ id: 10, variantContent: "v" });
+        const question = createMockQuestionDto({
+          id: 1,
+          question: "Q",
+          alreadyInBackend: true,
+          variants: [variant],
+        });
+        questionRepository.findByAssignmentId
+          .mockResolvedValueOnce([{ ...question, variants: [variant] }])
+          .mockResolvedValueOnce([question]);
+        questionRepository.updateOwnedById = jest
+          .fn()
+          .mockResolvedValue({ id: 1, assignmentId });
+        variantRepository.update = jest
+          .fn()
+          .mockResolvedValue({ ...variant, questionId: 1 });
+
+        // Let the question enqueue succeed, make the variant enqueue fail
+        const enqueueError = new Error("Queue full");
+        (jobQueueService.enqueue as jest.Mock)
+          .mockResolvedValueOnce(undefined) // TRANSLATE_QUESTION succeeds
+          .mockRejectedValueOnce(enqueueError); // TRANSLATE_VARIANT fails
+
+        await expect(
+          questionService.processQuestionsForPublishing(
+            assignmentId,
+            [question],
+            jobId,
+          ),
+        ).rejects.toThrow("Queue full");
+
+        expect(translationService.rollbackOneInflightSeed).toHaveBeenCalledWith(
+          assignmentId,
+        );
+        // Only one rollback — for the variant; the question seed has a live worker
+        expect(
+          translationService.rollbackOneInflightSeed,
+        ).toHaveBeenCalledTimes(1);
       });
 
       it("clears stale JSON columns when the dto sends null (e.g. type switched from MCQ to TEXT)", async () => {

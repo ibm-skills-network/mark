@@ -20,7 +20,8 @@ COPY --from=builder $DIR/out/json/ .
 COPY --from=builder $DIR/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
-RUN yarn install --ignore-scripts --frozen-lockfile
+RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
+    yarn install --ignore-scripts --frozen-lockfile --cache-folder /yarn-cache
 
 # Running build using turbo
 # hadolint ignore=DL3006
@@ -30,7 +31,9 @@ WORKDIR $DIR
 COPY --from=installer $DIR/ .
 COPY --from=builder $DIR/out/full/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn build --filter=api-gateway && yarn install --production --ignore-scripts --frozen-lockfile
+RUN --mount=type=cache,target=/yarn-cache,sharing=locked \
+    yarn build --filter=api-gateway \
+ && yarn install --production --ignore-scripts --frozen-lockfile --cache-folder /yarn-cache
 
 # Production stage
 # hadolint ignore=DL3006

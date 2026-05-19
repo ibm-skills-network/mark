@@ -1818,7 +1818,9 @@ export const createMockQuestionService = () => ({
       { ...createMockQuestionDto(), variants: [createMockVariantDto()] },
     ],
   }),
-  processQuestionsForPublishing: jest.fn().mockResolvedValue(new Map()),
+  processQuestionsForPublishing: jest
+    .fn()
+    .mockResolvedValue({ idMap: new Map(), translationJobsEnqueued: 0 }),
   generateQuestions: jest
     .fn()
     .mockResolvedValue({ message: "Question generation started", jobId: 1 }),
@@ -1838,15 +1840,16 @@ export const createMockQuestionService = () => ({
  * Create a mock TranslationService with pre-defined implementations
  */
 export const createMockTranslationService = () => ({
+  languageTranslation: true,
   getAvailableLanguages: jest.fn().mockResolvedValue(["en", "fr", "es"]),
   applyTranslationsToAssignment: jest.fn().mockResolvedValue(undefined),
   translateAssignment: jest.fn().mockResolvedValue(undefined),
   translateQuestion: jest.fn().mockResolvedValue(undefined),
   translateVariant: jest.fn().mockResolvedValue(undefined),
-  ensureTranslationCompleteness: jest.fn().mockResolvedValue({
-    missingTranslations: [],
-    allComplete: true,
-  }),
+  markPending: jest.fn().mockResolvedValue(undefined),
+  markPublishTranslationFailed: jest.fn().mockResolvedValue(undefined),
+  seedOneInflightJob: jest.fn().mockResolvedValue(undefined),
+  rollbackOneInflightSeed: jest.fn().mockResolvedValue(undefined),
   applyTranslationsToAttempt: jest
     .fn()
     .mockImplementation((attempt: unknown): unknown => attempt),

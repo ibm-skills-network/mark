@@ -819,6 +819,18 @@ export class AttemptQuestionDto {
   @IsOptional()
   translations?: Record<string, AttemptTranslationDto>;
 
+  @ApiPropertyOptional({
+    description:
+      "Translation availability marker. Set to 'pending' when a translation is in-flight " +
+      "but not yet written, 'unavailable' when no in-flight job exists and the row is absent. " +
+      "Field is omitted entirely when the Translation row is present.",
+    type: String,
+    enum: ["pending", "unavailable"],
+  })
+  @IsOptional()
+  @IsString()
+  translationStatus?: "pending" | "unavailable";
+
   @ApiPropertyOptional({ description: "Max words allowed", type: Number })
   @IsOptional()
   @IsInt()

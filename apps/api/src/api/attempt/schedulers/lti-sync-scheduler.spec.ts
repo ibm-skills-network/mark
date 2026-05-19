@@ -197,5 +197,49 @@ describe("LtiSyncScheduler", () => {
         mockLtiGradeSyncService.processScheduledRetries,
       ).not.toHaveBeenCalled();
     });
+
+    it('should skip both cron methods when ENABLE_LTI_SCHEDULER is "false" even if ENABLE_JOB_SCHEDULERS is "true"', async () => {
+      const originalLti = process.env.ENABLE_LTI_SCHEDULER;
+      const originalJobs = process.env.ENABLE_JOB_SCHEDULERS;
+      try {
+        process.env.ENABLE_LTI_SCHEDULER = "false";
+        process.env.ENABLE_JOB_SCHEDULERS = "true";
+
+        await scheduler.reportSyncHealth();
+        await scheduler.handleScheduledRetries();
+
+        expect(mockLtiGradeSyncService.getSystemStats).not.toHaveBeenCalled();
+        expect(
+          mockLtiGradeSyncService.processScheduledRetries,
+        ).not.toHaveBeenCalled();
+      } finally {
+        if (originalLti === undefined) delete process.env.ENABLE_LTI_SCHEDULER;
+        else process.env.ENABLE_LTI_SCHEDULER = originalLti;
+        if (originalJobs === undefined)
+          delete process.env.ENABLE_JOB_SCHEDULERS;
+        else process.env.ENABLE_JOB_SCHEDULERS = originalJobs;
+      }
+    });
+
+    it('should run scheduled work when ENABLE_LTI_SCHEDULER is unset and ENABLE_JOB_SCHEDULERS is "true"', async () => {
+      const originalLti = process.env.ENABLE_LTI_SCHEDULER;
+      const originalJobs = process.env.ENABLE_JOB_SCHEDULERS;
+      try {
+        delete process.env.ENABLE_LTI_SCHEDULER;
+        process.env.ENABLE_JOB_SCHEDULERS = "true";
+
+        await scheduler.handleScheduledRetries();
+
+        expect(
+          mockLtiGradeSyncService.processScheduledRetries,
+        ).toHaveBeenCalled();
+      } finally {
+        if (originalLti === undefined) delete process.env.ENABLE_LTI_SCHEDULER;
+        else process.env.ENABLE_LTI_SCHEDULER = originalLti;
+        if (originalJobs === undefined)
+          delete process.env.ENABLE_JOB_SCHEDULERS;
+        else process.env.ENABLE_JOB_SCHEDULERS = originalJobs;
+      }
+    });
   });
 });

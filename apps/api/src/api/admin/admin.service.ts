@@ -18,8 +18,19 @@ import {
   UpdateAssignmentQuestionsDto,
   VariantDto,
 } from "../assignment/dto/update.questions.request.dto";
-import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
+import { QuestionGenerationPayload } from "../assignment/dto/post.assignment.request.dto";
+import {
+  CompleteAssignmentFileDto,
+  InitiateAssignmentFilesDto,
+  InitiateAssignmentFilesResponseDto,
+} from "../assignment/v2/dtos/assignment-file-upload.dto";
+import {
+  AssignmentFileResponse,
+  AssignmentFileService,
+} from "../assignment/v2/services/assignment-file.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
+import { JobStatusServiceV2 } from "../assignment/v2/services/job-status.service";
+import { QuestionService } from "../assignment/v2/services/question.service";
 import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
 import { toAiUsageCounterNumber } from "../llm/core/utils/ai-usage-counter.util";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
@@ -54,6 +65,8 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly assignmentService: AssignmentServiceV2,
     private readonly assignmentFileService: AssignmentFileService,
+    private readonly questionService: QuestionService,
+    private readonly jobStatusService: JobStatusServiceV2,
     @Inject(LLM_PRICING_SERVICE)
     private readonly llmPricingService: LLMPricingService,
   ) {}
@@ -977,6 +990,96 @@ export class AdminService {
       type: result.type,
       metadata: result,
     };
+  }
+
+  async getAssignmentFiles(
+    assignmentId: number,
+  ): Promise<{ files: AssignmentFileResponse[] }> {
+    await this.assertAssignmentExists(assignmentId);
+    return this.assignmentFileService.getAssignmentFiles(assignmentId);
+  }
+
+  async initiateAssignmentFileUploads(
+    assignmentId: number,
+    dto: InitiateAssignmentFilesDto,
+    userId = "admin-api",
+  ): Promise<InitiateAssignmentFilesResponseDto> {
+    await this.assertAssignmentExists(assignmentId);
+    return this.assignmentFileService.initiateAssignmentFileUploads(
+      assignmentId,
+      dto,
+      userId,
+    );
+  }
+
+  async completeAssignmentFileUpload(
+    assignmentId: number,
+    fileId: number,
+    dto: CompleteAssignmentFileDto,
+  ) {
+    await this.assertAssignmentExists(assignmentId);
+    return this.assignmentFileService.completeAssignmentFileUpload(
+      assignmentId,
+      fileId,
+      dto,
+    );
+  }
+
+  async abortAssignmentFileUpload(
+    assignmentId: number,
+    fileId: number,
+  ): Promise<void> {
+    await this.assertAssignmentExists(assignmentId);
+    return this.assignmentFileService.abortAssignmentFileUpload(
+      assignmentId,
+      fileId,
+    );
+  }
+
+  async deleteAssignmentFile(
+    assignmentId: number,
+    fileId: number,
+  ): Promise<void> {
+    await this.assertAssignmentExists(assignmentId);
+    return this.assignmentFileService.deleteAssignmentFile(
+      assignmentId,
+      fileId,
+    );
+  }
+
+  async generateQuestions(
+    assignmentId: number,
+    payload: QuestionGenerationPayload,
+    userId = "admin-api",
+  ): Promise<{ message: string; jobId: string }> {
+    await this.assertAssignmentExists(assignmentId);
+    return this.questionService.generateQuestions(
+      assignmentId,
+      {
+        ...payload,
+        assignmentId,
+      },
+      userId,
+    );
+  }
+
+  async getQuestionGenerationJobStatus(jobId: string): Promise<{
+    status: string;
+    progress: string;
+    questions?: QuestionDto[];
+  }> {
+    const job = await this.jobStatusService.getJobStatus(jobId);
+    if (!job) {
+      throw new NotFoundException("Job not found");
+    }
+
+    return job.status === "Completed"
+      ? {
+          status: job.status,
+          progress: job.progress,
+          questions: job.result as QuestionDto[] | undefined,
+        }
+      : { status: job.status, progress: job.progress };
   }
 
   async updateAssignment(
@@ -2926,5 +3029,18 @@ export class AdminService {
         .sort((a, b) => b.completionRate - a.completionRate)
         .slice(0, limit),
     };
+  }
+
+  private async assertAssignmentExists(assignmentId: number): Promise<void> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      select: { id: true },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentId} not found.`,
+      );
+    }
   }
 }

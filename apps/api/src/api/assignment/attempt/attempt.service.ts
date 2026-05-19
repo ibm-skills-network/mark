@@ -7,11 +7,14 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  OnModuleDestroy,
   Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import IORedis from "ioredis";
+import { createRedisConnection } from "src/job-queue/redis.connection";
 import {
   Assignment,
   Question,
@@ -83,6 +86,7 @@ import {
 } from "./dto/question-response/create.question.response.attempt.response.dto";
 import type { GetQuestionResponseAttemptResponseDto } from "./dto/question-response/get.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
+import { isLanguageInFlight } from "./translation-state-redis";
 
 type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
   id: number;
@@ -95,8 +99,9 @@ type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
 type ExtendedQuestion = Question & { variantId?: number };
 
 @Injectable()
-export class AttemptServiceV1 {
+export class AttemptServiceV1 implements OnModuleDestroy {
   private readonly logger: Logger;
+  private redis?: IORedis;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -108,6 +113,33 @@ export class AttemptServiceV1 {
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: AttemptServiceV1.name });
+    this.redis = this.createRedisClient();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redis) {
+      await this.redis.quit().catch(() => {
+        // Ignore teardown failures — the connection is being torn down anyway.
+      });
+    }
+  }
+
+  private createRedisClient(): IORedis | undefined {
+    try {
+      const client = createRedisConnection();
+      client.on("error", (error) => {
+        this.logger.warn(
+          `attempt.redis.error { message: ${JSON.stringify(error.message)} }`,
+        );
+      });
+      return client;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      this.logger.warn(
+        `attempt.redis.unavailable { reason: ${JSON.stringify(message)} }`,
+      );
+      return undefined;
+    }
   }
 
   async submitFeedback(
@@ -852,6 +884,8 @@ export class AttemptServiceV1 {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
+        id: true,
+        languageCode: true,
         questions: true,
         questionOrder: true,
         displayOrder: true,
@@ -963,26 +997,71 @@ export class AttemptServiceV1 {
       }
     }
 
+    // Compare against the assignment's default language, not the literal "en"
+    // string. assignment.languageCode is nullable in the schema; when null we
+    // fall back to "en" (the historical default before that column existed).
+    const assignmentDefaultLanguage = assignment.languageCode ?? "en";
     if (
       assignmentAttempt.preferredLanguage &&
-      assignmentAttempt.preferredLanguage !== "en"
+      assignmentAttempt.preferredLanguage !== assignmentDefaultLanguage
     ) {
+      this.logger.debug(
+        `attempt.translation.lookup { assignmentId: ${assignment.id}, preferredLanguage: ${JSON.stringify(assignmentAttempt.preferredLanguage)}, questionCount: ${finalQuestions.length} }`,
+      );
+
+      // Hoisted findMany — a single round-trip replaces the N findFirst calls
+      // that this loop used to issue per question. Translation has no
+      // assignmentId column; question-scope is sufficient because the
+      // questions in finalQuestions were already loaded from this assignment
+      // (Question.assignmentId is a cascade FK so question-level scope IS
+      // assignment-level scope).
+      const questionIds = finalQuestions.map((q) => q.id);
+      const variantIds = finalQuestions
+        .map((q) => q.variantId)
+        .filter((v): v is number => v != null);
+
+      const translations = await this.prisma.translation.findMany({
+        where: {
+          languageCode: assignmentAttempt.preferredLanguage,
+          OR: [
+            { questionId: { in: questionIds }, variantId: null },
+            ...(variantIds.length > 0
+              ? [{ variantId: { in: variantIds } }]
+              : []),
+          ],
+        },
+        select: {
+          questionId: true,
+          variantId: true,
+          translatedText: true,
+          translatedChoices: true,
+        },
+      });
+
+      const translationMap = new Map(
+        translations.map((t) => [
+          `${t.questionId}:${t.variantId ?? "null"}`,
+          t,
+        ]),
+      );
+
+      // Single SISMEMBER per request covers every question in the loop.
+      // Tolerates the SET being absent (returns false) — any question whose
+      // translation row is also missing then gets marker "unavailable".
+      // If the Redis connection is unavailable on this pod, treat as
+      // not-in-flight (marker = "unavailable") rather than crashing the
+      // learner request.
+      const languageInflight = this.redis
+        ? await isLanguageInFlight(
+            this.redis,
+            assignment.id,
+            assignmentAttempt.preferredLanguage,
+          )
+        : false;
+
       for (const question of finalQuestions) {
-        const translation = await (question.variantId
-          ? this.prisma.translation.findFirst({
-              where: {
-                questionId: question.id,
-                variantId: question.variantId,
-                languageCode: assignmentAttempt.preferredLanguage,
-              },
-            })
-          : this.prisma.translation.findFirst({
-              where: {
-                questionId: question.id,
-                variantId: null,
-                languageCode: assignmentAttempt.preferredLanguage,
-              },
-            }));
+        const key = `${question.id}:${question.variantId ?? "null"}`;
+        const translation = translationMap.get(key);
         if (translation) {
           question.question = translation.translatedText;
           if (
@@ -994,6 +1073,10 @@ export class AttemptServiceV1 {
                 ? (JSON.parse(translation.translatedChoices) as Choice[])
                 : (translation.translatedChoices as unknown as Choice[]);
           }
+        } else {
+          question.translationStatus = languageInflight
+            ? "pending"
+            : "unavailable";
         }
       }
     }

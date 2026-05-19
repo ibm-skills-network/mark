@@ -23,6 +23,7 @@ import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
 import SecurityMonitor from "../SecurityMonitor";
+import VersionMismatchBanner from "../VersionMismatchBanner";
 import { clearAssignmentLocalStorage } from "@/app/learner/utils/localStorage";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -371,38 +372,35 @@ function QuestionPage(props: Props) {
     );
   }
 
-  return (
-    <div
-      className={cn(
-        "bg-gray-50 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
-        tips ? "md:grid-cols-[260px_1fr_265px]" : "md:grid-cols-[260px_1fr]",
-      )}
-    >
-      <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-4 w-full md:w-auto border-b md:border-b-0 bg-white md:bg-transparent">
-        <Overview questions={questionsStore} />
-      </div>
+  const showVersionMismatchBanner =
+    attempt.versionMismatch === true &&
+    (attempt.questionResponses?.length ?? 0) === 0;
 
+  return (
+    <>
+      {showVersionMismatchBanner && (
+        <VersionMismatchBanner
+          assignmentId={assignmentId}
+          attemptId={attempt.id}
+        />
+      )}
       <div
-        className={`flex flex-col gap-y-3 md:gap-y-5 py-3 md:py-6 overflow-y-auto px-3 md:pl-4 h-full ${
-          tips ? "md:pr-4" : "md:pr-14"
-        }`}
+        className={cn(
+          "bg-gray-50 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
+          tips ? "md:grid-cols-[260px_1fr_265px]" : "md:grid-cols-[260px_1fr]",
+        )}
       >
-        {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
-          ? questionsStore.map((question, index) => (
-              <QuestionContainer
-                key={index}
-                questionNumber={index + 1}
-                questionId={question.id}
-                question={question}
-                questionDisplay={
-                  assignmentDetails?.questionDisplay ??
-                  QuestionDisplayType.ALL_PER_PAGE
-                }
-                lastQuestionNumber={questionsStore.length}
-              />
-            ))
-          : questionsStore.map((question, index) =>
-              index + 1 === activeQuestionNumber ? (
+        <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-4 w-full md:w-auto border-b md:border-b-0 bg-white md:bg-transparent">
+          <Overview questions={questionsStore} />
+        </div>
+
+        <div
+          className={`flex flex-col gap-y-3 md:gap-y-5 py-3 md:py-6 overflow-y-auto px-3 md:pl-4 h-full ${
+            tips ? "md:pr-4" : "md:pr-14"
+          }`}
+        >
+          {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
+            ? questionsStore.map((question, index) => (
                 <QuestionContainer
                   key={index}
                   questionNumber={index + 1}
@@ -410,23 +408,40 @@ function QuestionPage(props: Props) {
                   question={question}
                   questionDisplay={
                     assignmentDetails?.questionDisplay ??
-                    QuestionDisplayType.ONE_PER_PAGE
+                    QuestionDisplayType.ALL_PER_PAGE
                   }
                   lastQuestionNumber={questionsStore.length}
                 />
-              ) : null,
-            )}
-      </div>
-      {tips && (
-        <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-0 w-full md:w-auto border-t md:border-t-0 bg-white md:bg-transparent">
-          <TipsView />
+              ))
+            : questionsStore.map((question, index) =>
+                index + 1 === activeQuestionNumber ? (
+                  <QuestionContainer
+                    key={index}
+                    questionNumber={index + 1}
+                    questionId={question.id}
+                    question={question}
+                    questionDisplay={
+                      assignmentDetails?.questionDisplay ??
+                      QuestionDisplayType.ONE_PER_PAGE
+                    }
+                    lastQuestionNumber={questionsStore.length}
+                  />
+                ) : null,
+              )}
         </div>
-      )}
-      {process.env.NODE_ENV === "development" && (
-        <div style={{ display: "none" }}></div>
-      )}
-      <SecurityMonitor questionControls={assignmentDetails?.questionControls} />
-    </div>
+        {tips && (
+          <div className="md:rounded-md h-auto pt-3 md:pt-6 px-3 md:px-0 w-full md:w-auto border-t md:border-t-0 bg-white md:bg-transparent">
+            <TipsView />
+          </div>
+        )}
+        {process.env.NODE_ENV === "development" && (
+          <div style={{ display: "none" }}></div>
+        )}
+        <SecurityMonitor
+          questionControls={assignmentDetails?.questionControls}
+        />
+      </div>
+    </>
   );
 }
 

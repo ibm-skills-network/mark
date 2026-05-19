@@ -24,7 +24,7 @@ export class LLMResolverService {
     string,
     { modelKey: string; cachedAt: number }
   >();
-  private readonly CACHE_TTL = 1;
+  private readonly CACHE_TTL = 300_000;
 
   constructor(
     @Inject(LLM_ASSIGNMENT_SERVICE)

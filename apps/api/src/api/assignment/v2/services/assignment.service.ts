@@ -1,11 +1,25 @@
-import { Inject, Injectable } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  OnModuleDestroy,
+} from "@nestjs/common";
+import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
+import {
+  AssignmentV2RetryFailedTranslationsJobPayload,
+  TranslateMetaJobPayload,
+  TranslateQuestionJobPayload,
+  TranslateVariantJobPayload,
+} from "src/job-queue/job-queue.types";
+import { createRedisConnection } from "src/job-queue/redis.connection";
 import { Logger } from "winston";
+import { getAllLanguageCodes } from "../../attempt/helper/languages";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   AssignmentResponseDto,
@@ -23,6 +37,10 @@ import {
 import { applyQuestionOrder } from "../../utils/question-order.util";
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
+import type {
+  PerJobTranslationEntry,
+  PublishJobResult,
+} from "./publish-job-result.types";
 import { QuestionService } from "./question.service";
 import { TranslationService } from "./translation.service";
 import {
@@ -30,12 +48,31 @@ import {
   VersionSummary,
 } from "./version-management.service";
 
+// Publish-job translation-progress poll loop constants. After the
+// DB-writes-done boundary, runPublishJob stays alive on mark-jobs and polls
+// the per-publish status hash every second — each tick aggregates the
+// per-job entries the translation workers HSET and surfaces them on the
+// SSE stream via JobStatusUpdate.result. The hard timeout caps loop
+// runtime; on timeout the publish job marks itself Completed anyway and
+// outstanding translations fall through to the existing admin recovery
+// endpoint.
+const PUBLISH_TRANSLATION_POLL_INTERVAL_MS = 1000;
+const PUBLISH_TRANSLATION_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+const buildPublishHashKey = (parentJobId: string): string =>
+  `mark:publish:${parentJobId}:translations`;
+
 /**
  * Service for managing assignment operations
  */
 @Injectable()
-export class AssignmentServiceV2 {
+export class AssignmentServiceV2 implements OnModuleDestroy {
   private logger: Logger;
+  // Dedicated IORedis connection for the per-assignment in-flight language
+  // refcount hash and per-publish translation status hash. Keeping a single
+  // instance per service mirrors the
+  // existing JobQueueService Redis pattern and avoids reconnect storms.
+  private readonly translationStateRedis: IORedis | undefined;
+
   constructor(
     private readonly assignmentRepository: AssignmentRepository,
     private readonly questionService: QuestionService,
@@ -48,6 +85,31 @@ export class AssignmentServiceV2 {
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
+    this.translationStateRedis = this.tryCreateTranslationStateRedis();
+  }
+
+  // Wrap createRedisConnection() so missing REDIS_URL (or boot-time Redis
+  // failure) degrades gracefully instead of bringing down DI. Status sites
+  // become no-ops; the publish poll loop falls back to the hard timeout.
+  private tryCreateTranslationStateRedis(): IORedis | undefined {
+    try {
+      const client = createRedisConnection();
+      client.on("error", (error) => {
+        this.logger.warn(
+          `Translation status Redis error (status tracking disabled): ${error.message}`,
+        );
+      });
+      return client;
+    } catch (error) {
+      this.logger.warn(
+        `Translation status Redis unavailable — status tracking disabled: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.translationStateRedis?.quit().catch(() => null);
   }
 
   /**
@@ -113,8 +175,41 @@ export class AssignmentServiceV2 {
 
     const result = await this.assignmentRepository.update(id, updateDto);
 
-    if (shouldTranslate) {
-      await this.translationService.translateAssignment(id);
+    if (shouldTranslate && this.translationService.languageTranslation) {
+      // Translation work moved off the synchronous PATCH path. Seed the
+      // per-assignment in-flight refcount immediately before enqueue so a
+      // learner hitting the GET attempt endpoint during the brief
+      // enqueue-to-worker window sees translationStatus "pending" instead
+      // of "unavailable". Roll back the seed if enqueue fails.
+      await this.translationService.seedOneInflightJob(id);
+
+      // Assignment-meta translation (name / introduction / instructions /
+      // grading-criteria) runs as its own retryable BullMQ job on the
+      // dedicated translations queue. The PATCH response no longer blocks
+      // on LLM work. No parentJobId is passed — this code path has no
+      // parent publish job, and the worker tolerates the absent
+      // per-publish hash key.
+      try {
+        await this.jobQueueService.enqueue(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_META,
+          {
+            assignmentId: id,
+          } satisfies TranslateMetaJobPayload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+          },
+        );
+      } catch (enqueueError) {
+        await this.translationService.rollbackOneInflightSeed(id);
+        throw enqueueError;
+      }
+      this.logger.info("publish.translation.job.enqueued", {
+        assignmentId: id,
+        kind: "meta",
+        id,
+      });
     }
 
     if (updateDto.published) {
@@ -164,6 +259,22 @@ export class AssignmentServiceV2 {
    * @param userId - The ID of the user making the request
    * @returns Job tracking information
    */
+  /**
+   * Reconnect helper. Returns the in-flight publish job for an
+   * assignment so a refreshed client can re-subscribe to the SSE
+   * stream without starting a new publish. Reuses the deterministic
+   * jobId scheme already used by publishAssignment for dedup.
+   */
+  async findActivePublishJob(
+    assignmentId: number,
+  ): Promise<{ id: string; state: string } | null> {
+    const deterministicJobId = `publish:v2:${assignmentId}`;
+    return this.jobQueueService.findActiveJob(
+      JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+      deterministicJobId,
+    );
+  }
+
   async publishAssignment(
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
@@ -254,6 +365,33 @@ export class AssignmentServiceV2 {
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
   ): Promise<void> {
+    // Wall-clock anchor for the publish-complete telemetry below. Captures
+    // DB-writes-done latency — the user-visible metric the publish hot path
+    // is budgeted against (target: 30 s p95 for a 50-question publish).
+    const publishStartedAt = Date.now();
+
+    // Wipe any per-question entries left over from a previous publish
+    // under the same deterministic jobId. Normally the poll loop DELs
+    // this hash on exit, but if the previous publish crashed or its
+    // cleanup didn't fire, markPending's HSETNX would no-op on the
+    // stale fields and the new publish would inherit Done/Failed rows
+    // for questions that don't even exist in this run.
+    //
+    // Safety: jobId is the deterministic publish id (`publish:v2:<assignmentId>`)
+    // and BullMQ rejects duplicate active jobs with the same id, so this
+    // DEL cannot race a concurrently-seeded publish for the same
+    // assignment. The queue-level dedup is the only guard — there is no
+    // additional lock here.
+    try {
+      await this.translationStateRedis?.del(buildPublishHashKey(jobId));
+    } catch (delError) {
+      this.logger.warn("publish.translations.reset.failed", {
+        assignmentId,
+        jobId,
+        error: delError instanceof Error ? delError.message : String(delError),
+      });
+    }
+
     try {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
@@ -325,6 +463,7 @@ export class AssignmentServiceV2 {
 
       let questionContentChanged = false;
       let frontendToBackendIdMap = new Map<number, number>();
+      let perQuestionTranslationJobsEnqueued = 0;
 
       if (updateDto.questions && updateDto.questions.length > 0) {
         await this.jobStatusService.updateJobStatus(jobId, {
@@ -349,7 +488,7 @@ export class AssignmentServiceV2 {
           percentage: 20,
         });
 
-        frontendToBackendIdMap =
+        const processResult =
           await this.questionService.processQuestionsForPublishing(
             assignmentId,
             updateDto.questions,
@@ -363,6 +502,9 @@ export class AssignmentServiceV2 {
               });
             },
           );
+        frontendToBackendIdMap = processResult.idMap;
+        perQuestionTranslationJobsEnqueued =
+          processResult.translationJobsEnqueued;
       }
 
       const existingTranslationCount =
@@ -374,119 +516,97 @@ export class AssignmentServiceV2 {
         questionContentChanged ||
         existingTranslationCount === 0;
 
+      // A republish that touches neither translatable assignment fields nor
+      // any question content (e.g. flipping a visibility flag on an
+      // already-translated assignment) enqueues zero translation jobs. In
+      // that case the in-flight seed and the poll loop downstream are both
+      // no-ops — skip them so the publish returns immediately instead of
+      // spinning until the 30-minute poll timeout. The meta-enqueue
+      // decision also depends on the ENABLE_TRANSLATION flag being on:
+      // when it's off, the producer skips the meta enqueue entirely and
+      // no worker will ever decrement the in-flight counter.
+      const metaWillEnqueue =
+        shouldTranslateAssignment &&
+        this.translationService.languageTranslation;
+      const willEnqueueAnyTranslation =
+        metaWillEnqueue || perQuestionTranslationJobsEnqueued > 0;
+
+      // Translation work has moved off the publish hot path onto the
+      // dedicated translations queue. Each enqueue seeds one per-language
+      // in-flight refcount, and the worker decrements its language counters
+      // as it terminates. The learner-side loop reads the counter to
+      // distinguish "translation still running" (count > 0) from
+      // "translation never produced a row" (count == 0 or absent).
+      let metaEnqueued = false;
+
       if (shouldTranslateAssignment) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress: "Content changes detected, translating assignment",
+          progress:
+            "Content changes detected, dispatching assignment translation",
           percentage: 80,
         });
 
-        await this.translationService.translateAssignment(assignmentId, jobId, {
-          start: 80,
-          end: 90,
-        });
+        // Assignment-meta translation (name / introduction / instructions /
+        // grading-criteria) runs as its own retryable BullMQ job alongside
+        // the per-question and per-variant jobs the question service
+        // enqueued upstream. The publish job no longer awaits LLM calls.
+        // Skip enqueue + markPending entirely when translation is disabled
+        // — the worker would short-circuit anyway and never write a
+        // terminal status, leaving the publish poll loop spinning.
+        if (this.translationService.languageTranslation) {
+          await this.translationService.seedOneInflightJob(assignmentId);
+          try {
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_META,
+              {
+                parentJobId: jobId,
+                assignmentId,
+              } satisfies TranslateMetaJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+          } catch (enqueueError) {
+            await this.translationService.rollbackOneInflightSeed(assignmentId);
+            throw enqueueError;
+          }
+          await this.translationService.markPending(
+            jobId,
+            "meta",
+            assignmentId,
+          );
+          metaEnqueued = true;
+          this.logger.info("publish.translation.job.enqueued", {
+            assignmentId,
+            kind: "meta",
+            id: assignmentId,
+            parentJobId: jobId,
+          });
+        }
       } else {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress: "Checking for language consistency issues",
-          percentage: 78,
+          progress:
+            "No translatable content changes detected; skipping assignment-meta translation",
+          percentage: 85,
         });
-
-        if (existingTranslationCount > 0) {
-          const isValid = true;
-          if (isValid) {
-            await this.jobStatusService.updateJobStatus(jobId, {
-              status: "In Progress",
-              progress:
-                "Translation validation passed, skipping consistency check",
-              percentage: 85,
-            });
-          } else {
-            this.logger.warn(
-              `Quick validation failed for assignment ${assignmentId}, running full validation`,
-            );
-
-            const languageValidation =
-              await this.translationService.validateAssignmentLanguageConsistency(
-                assignmentId,
-              );
-
-            if (languageValidation.isConsistent) {
-              await this.jobStatusService.updateJobStatus(jobId, {
-                status: "In Progress",
-                progress: "Language consistency validated, no issues found",
-                percentage: 85,
-              });
-            } else {
-              this.logger.warn(
-                `Language consistency issues detected for assignment ${assignmentId}: ${languageValidation.mismatchedLanguages.join(
-                  ", ",
-                )}`,
-              );
-
-              await this.jobStatusService.updateJobStatus(jobId, {
-                status: "In Progress",
-                progress: `Language mismatch detected for ${languageValidation.mismatchedLanguages.length} languages, refreshing translations`,
-                percentage: 80,
-              });
-
-              await this.translationService.retranslateAssignmentForLanguages(
-                assignmentId,
-                languageValidation.mismatchedLanguages,
-                jobId,
-              );
-
-              await this.jobStatusService.updateJobStatus(jobId, {
-                status: "In Progress",
-                progress: "Translation refresh completed",
-                percentage: 90,
-              });
-            }
-          }
-        } else {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress:
-              "No existing translations to validate, skipping consistency check",
-            percentage: 85,
-          });
-        }
       }
 
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Validating translation completeness",
-        percentage: 88,
+      // DB-writes-done boundary. From this point on, the publish job no
+      // longer touches the database for translation work — per-question,
+      // per-variant, and (when needed) per-assignment-meta translation jobs
+      // run asynchronously on mark.assignment.v2.translations. A follow-up
+      // poll loop will aggregate per-job progress for the SSE channel.
+      this.logger.info("publish.complete", {
+        assignmentId,
+        jobId,
+        dbWriteMs: Date.now() - publishStartedAt,
+        jobsEnqueued: metaEnqueued ? 1 : 0,
+        percentage: 100,
       });
-
-      const translationCompleteness =
-        await this.translationService.ensureTranslationCompleteness(
-          assignmentId,
-        );
-
-      if (!translationCompleteness.isComplete) {
-        this.logger.warn(
-          `Missing translations detected for assignment ${assignmentId}. Attempting to fix...`,
-          { missingTranslations: translationCompleteness.missingTranslations },
-        );
-
-        for (const missing of translationCompleteness.missingTranslations) {
-          try {
-            this.logger.warn(
-              `Missing translations for ${
-                missing.variantId
-                  ? `variant ${missing.variantId}`
-                  : `question ${missing.questionId}`
-              }: ${missing.missingLanguages.join(", ")}`,
-            );
-          } catch (error) {
-            this.logger.error(
-              `Failed to fix missing translation for question ${missing.questionId}`,
-              error,
-            );
-          }
-        }
-      }
 
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
@@ -590,6 +710,7 @@ export class AssignmentServiceV2 {
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
             draftVersionId,
+            { userSession },
           );
         } else if (
           latestVersion &&
@@ -607,6 +728,7 @@ export class AssignmentServiceV2 {
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
             latestVersion.id,
+            { userSession },
           );
         } else if (!existingDraft && updateDto.published) {
           this.logger.info(
@@ -689,15 +811,45 @@ export class AssignmentServiceV2 {
         );
       }
 
+      // No translation jobs were enqueued (e.g. metadata-only republish of
+      // an already-translated assignment, or translation is disabled at the
+      // deployment level). Skip the db_writes_done intermediate tick and
+      // emit a single terminal translations_complete with zeros — the poll
+      // loop below would otherwise spin for the full 30-minute timeout
+      // against an empty per-publish status hash that no worker will ever
+      // populate, and the intermediate tick would briefly flash a
+      // "translating in background" banner that never resolves to real
+      // work. The frontend hides the PublishProgress card when the
+      // aggregate carries total=0, so this becomes a quiet success.
+      if (!willEnqueueAnyTranslation) {
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "Publishing complete",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
+
+      // Stage 1: DB writes are complete and translation jobs have been
+      // enqueued. Surface this once on the SSE stream BEFORE entering the
+      // poll loop so consumers can transition UI state from "publishing" to
+      // "translating" immediately — without waiting for the first poll
+      // tick (which may be empty if no worker has HSET yet).
       await this.jobStatusService.updateJobStatus(jobId, {
-        status: "Completed",
-        progress:
-          assignmentTranslatableFieldsChanged || questionContentChanged
-            ? "Publishing completed successfully with content updates!"
-            : "Publishing completed successfully (configuration updates only)",
+        status: "In Progress",
+        progress: "DB writes complete; translation jobs queued",
         percentage: 100,
-        result: updatedQuestions,
+        result: { stage: "db_writes_done" } satisfies PublishJobResult,
       });
+
+      await this.pollTranslationsToTerminal(jobId, assignmentId);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -711,6 +863,558 @@ export class AssignmentServiceV2 {
         progress: `Error: ${errorMessage}`,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Enqueue a retry job for the failed translations of an assignment's most
+   * recent publish. Called from the controller; returns the new retry jobId.
+   *
+   * Guard: 409 if a publish for the same assignment is currently active —
+   * the BullMQ deterministic-jobId dedup on publish guarantees there is at
+   * most one. Multiple concurrent retries are allowed (ON CONFLICT DO
+   * NOTHING handles double-writes, the in-flight refcount accumulates
+   * safely) but redundant; the UI only ever shows one retry at a time so
+   * this is a moot case in practice.
+   */
+  async enqueueRetryFailedTranslations(
+    assignmentId: number,
+    userId: string,
+  ): Promise<{ jobId: string; message: string }> {
+    const activePublish = await this.findActivePublishJob(assignmentId);
+    if (activePublish) {
+      this.logger.warn("publish.retry.dedup-hit { reason: active-publish }", {
+        assignmentId,
+        publishJobId: activePublish.id,
+      });
+      throw new ConflictException(
+        "A publish is currently in progress for this assignment. Retry once it finishes.",
+      );
+    }
+
+    const sourcePublishJobId = `publish:v2:${assignmentId}`;
+    const retryJobId = `retry:v2:${assignmentId}:${Date.now()}`;
+
+    const job = await this.jobStatusService.createPublishJob(
+      assignmentId,
+      userId,
+      { reservedId: retryJobId },
+    );
+
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        JOB_NAMES.ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS,
+        {
+          jobId: job.id,
+          assignmentId,
+          sourcePublishJobId,
+          userId,
+        } satisfies AssignmentV2RetryFailedTranslationsJobPayload,
+        {
+          jobId: job.id,
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      await this.jobStatusService.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: `Failed to enqueue retry job: ${errorMessage}`,
+      });
+      throw error;
+    }
+
+    return {
+      jobId: job.id,
+      message: "Retry started",
+    };
+  }
+
+  /**
+   * Worker-side handler for ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS. Reads
+   * the source publish's status hash, filters failed entries, re-enqueues
+   * a TRANSLATE_QUESTION / TRANSLATE_VARIANT / TRANSLATE_META job per
+   * failure with parentJobId = the retry's jobId, seeds the in-flight
+   * refcount, then polls the retry's own per-publish status hash to
+   * terminal.
+   *
+   * If the source publish's hash is gone (1-hour TTL expired) or has no
+   * failed entries, the retry completes immediately with an empty
+   * aggregate. The frontend renders that as "Nothing to retry."
+   */
+  async runRetryFailedTranslations(
+    jobId: string,
+    assignmentId: number,
+    sourcePublishJobId: string,
+    userId: string,
+  ): Promise<void> {
+    void userId;
+
+    // Defensive: wipe any leftover entries under the retry's deterministic
+    // jobId. New retry jobIds embed Date.now() so collisions shouldn't
+    // happen in practice, but the cost is one DEL.
+    try {
+      await this.translationStateRedis?.del(buildPublishHashKey(jobId));
+    } catch (delError) {
+      this.logger.warn("publish.retry.reset.failed", {
+        assignmentId,
+        jobId,
+        error: delError instanceof Error ? delError.message : String(delError),
+      });
+    }
+
+    try {
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "Reading failed translations from previous publish",
+        percentage: 10,
+      });
+
+      // Discover what's missing directly from the DB rather than reading
+      // the source publish's Redis status hash. The hash is ephemeral and
+      // only reflects the most recent publish — workers do not write retry
+      // progress back to it, so a second retry would re-read the original
+      // publish failures and re-enqueue items that the first retry already
+      // resolved (or that no longer need work), leaving the UI stuck on
+      // "Queued" forever for the no-op entries. The DB is the canonical
+      // answer to "which Translation rows are missing"; let it drive.
+      const failedEntries =
+        await this.discoverFailedTranslationsFromDb(assignmentId);
+
+      if (failedEntries.length === 0) {
+        this.logger.info("publish.retry.empty", {
+          assignmentId,
+          jobId,
+          sourcePublishJobId,
+        });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "No failed translations to retry",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
+
+      this.logger.info("publish.retry.discovered", {
+        assignmentId,
+        jobId,
+        sourcePublishJobId,
+        discovered: failedEntries.length,
+      });
+
+      // Re-fetch question/variant payloads from the DB. The status hash
+      // only carries ids; the translation worker payload needs the full
+      // DTO (question content, choices, variants).
+      const questions =
+        await this.questionService.getQuestionsForAssignment(assignmentId);
+      const questionsById = new Map(questions.map((q) => [q.id, q]));
+      const variantToQuestion = new Map<
+        number,
+        { variant: VariantDto; questionId: number }
+      >();
+      for (const question of questions) {
+        for (const variant of question.variants ?? []) {
+          variantToQuestion.set(variant.id, {
+            variant: variant,
+            questionId: question.id,
+          });
+        }
+      }
+
+      // Re-enqueue every failed entry with parentJobId = the retry jobId,
+      // so worker HSETs land on this retry's status hash (not the source
+      // publish's). markPending seeds pending entries so the first poll
+      // tick already shows the user what's being retried.
+      let enqueued = 0;
+      for (const entry of failedEntries) {
+        switch (entry.kind) {
+          case "question": {
+            const questionDto = questionsById.get(entry.id);
+            if (!questionDto) {
+              this.logger.warn("publish.retry.question.missing", {
+                assignmentId,
+                jobId,
+                questionId: entry.id,
+              });
+              continue;
+            }
+            await this.translationService.seedOneInflightJob(assignmentId);
+            try {
+              await this.jobQueueService.enqueue(
+                JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+                JOB_NAMES.TRANSLATE_QUESTION,
+                {
+                  parentJobId: jobId,
+                  assignmentId,
+                  questionId: entry.id,
+                  question: questionDto,
+                  // Retry: only fill in missing languages. If only one of the
+                  // 23 failed last publish, we keep the 22 successful rows
+                  // and just retranslate the missing language.
+                  forceRetranslation: false,
+                } satisfies TranslateQuestionJobPayload,
+                {
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                },
+              );
+            } catch (enqueueError) {
+              await this.translationService.rollbackOneInflightSeed(
+                assignmentId,
+              );
+              throw enqueueError;
+            }
+            await this.translationService.markPending(
+              jobId,
+              "question",
+              entry.id,
+            );
+            enqueued += 1;
+            break;
+          }
+          case "variant": {
+            const variantLookup = variantToQuestion.get(entry.id);
+            if (!variantLookup) {
+              this.logger.warn("publish.retry.variant.missing", {
+                assignmentId,
+                jobId,
+                variantId: entry.id,
+              });
+              continue;
+            }
+            await this.translationService.seedOneInflightJob(assignmentId);
+            try {
+              await this.jobQueueService.enqueue(
+                JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+                JOB_NAMES.TRANSLATE_VARIANT,
+                {
+                  parentJobId: jobId,
+                  assignmentId,
+                  questionId: variantLookup.questionId,
+                  variantId: entry.id,
+                  variant: variantLookup.variant,
+                  forceRetranslation: false,
+                } satisfies TranslateVariantJobPayload,
+                {
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                },
+              );
+            } catch (enqueueError) {
+              await this.translationService.rollbackOneInflightSeed(
+                assignmentId,
+              );
+              throw enqueueError;
+            }
+            await this.translationService.markPending(
+              jobId,
+              "variant",
+              entry.id,
+            );
+            enqueued += 1;
+            break;
+          }
+          case "meta": {
+            await this.translationService.seedOneInflightJob(assignmentId);
+            try {
+              await this.jobQueueService.enqueue(
+                JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+                JOB_NAMES.TRANSLATE_META,
+                {
+                  parentJobId: jobId,
+                  assignmentId,
+                  forceRetranslation: false,
+                } satisfies TranslateMetaJobPayload,
+                {
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                },
+              );
+            } catch (enqueueError) {
+              await this.translationService.rollbackOneInflightSeed(
+                assignmentId,
+              );
+              throw enqueueError;
+            }
+            await this.translationService.markPending(
+              jobId,
+              "meta",
+              assignmentId,
+            );
+            enqueued += 1;
+            break;
+          }
+          // No default
+        }
+      }
+
+      if (enqueued === 0) {
+        this.logger.warn("publish.retry.empty-after-lookup", {
+          assignmentId,
+          jobId,
+          failedEntriesInSource: failedEntries.length,
+        });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress:
+            "No retryable failed translations found (questions may have been deleted)",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed: 0, total: 0, failed: 0 },
+              perJob: [],
+            },
+          } satisfies PublishJobResult,
+        });
+        return;
+      }
+
+      this.logger.info("publish.retry.start", {
+        assignmentId,
+        jobId,
+        sourcePublishJobId,
+        retried: enqueued,
+      });
+
+      await this.pollTranslationsToTerminal(jobId, assignmentId);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      this.logger.error("publish.retry.failed", {
+        assignmentId,
+        jobId,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "Failed",
+        progress: `Retry failed: ${errorMessage}`,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Build retry candidate entries by scanning the DB for missing translation
+   * rows. The DB is the canonical source of truth for "what is missing";
+   * the per-publish Redis status hash is ephemeral and can lose retry
+   * progress between attempts.
+   *
+   * Returns one entry per question / variant / meta that has any non-source
+   * target language without a Translation row. Per-language scoping is the
+   * translation worker's responsibility (forceRetranslation: false skips
+   * languages already present in the DB).
+   */
+  private async discoverFailedTranslationsFromDb(
+    assignmentId: number,
+  ): Promise<PerJobTranslationEntry[]> {
+    const allCodes = getAllLanguageCodes();
+    const targetCodes = allCodes
+      .map((c) => c.toLowerCase())
+      .filter((c) => c !== "en");
+    if (targetCodes.length === 0) return [];
+
+    const entries: PerJobTranslationEntry[] = [];
+
+    const metaRows = await this.prisma.assignmentTranslation.findMany({
+      where: { assignmentId },
+      select: { languageCode: true },
+    });
+    const metaLangs = new Set(
+      metaRows.map((r) => r.languageCode.toLowerCase()),
+    );
+    const metaMissingCount = targetCodes.filter(
+      (c) => !metaLangs.has(c),
+    ).length;
+    if (metaMissingCount > 0) {
+      entries.push({
+        kind: "meta",
+        id: assignmentId,
+        status: "failed",
+        languagesCompleted: targetCodes.length - metaMissingCount,
+        languagesTotal: targetCodes.length,
+      });
+    }
+
+    const questions = await this.prisma.question.findMany({
+      where: { assignmentId, isDeleted: false },
+      select: {
+        id: true,
+        translations: {
+          where: { variantId: null },
+          select: { languageCode: true },
+        },
+        variants: {
+          where: { isDeleted: false },
+          select: {
+            id: true,
+            Translation: { select: { languageCode: true } },
+          },
+        },
+      },
+    });
+
+    for (const q of questions) {
+      const qLangs = new Set(
+        q.translations.map((t) => t.languageCode.toLowerCase()),
+      );
+      const qMissingCount = targetCodes.filter((c) => !qLangs.has(c)).length;
+      if (qMissingCount > 0) {
+        entries.push({
+          kind: "question",
+          id: q.id,
+          status: "failed",
+          languagesCompleted: targetCodes.length - qMissingCount,
+          languagesTotal: targetCodes.length,
+        });
+      }
+      for (const v of q.variants) {
+        const vLangs = new Set(
+          v.Translation.map((t) => t.languageCode.toLowerCase()),
+        );
+        const vMissingCount = targetCodes.filter((c) => !vLangs.has(c)).length;
+        if (vMissingCount > 0) {
+          entries.push({
+            kind: "variant",
+            id: v.id,
+            status: "failed",
+            languagesCompleted: targetCodes.length - vMissingCount,
+            languagesTotal: targetCodes.length,
+          });
+        }
+      }
+    }
+
+    return entries;
+  }
+
+  /**
+   * Polls the per-job translation status hash until every entry reaches a
+   * terminal status (completed | failed), or the hard timeout fires. Emits
+   * a rolled-up PublishJobResult on each tick over the SSE channel via
+   * JobStatusUpdate.result. Shared by runPublishJob and the failed-
+   * translation retry flow; both write to the same hash schema.
+   *
+   * Caller is responsible for seeding the hash with markPending entries
+   * before invoking this — otherwise total === 0 on every tick and the
+   * loop runs to its full timeout. (runPublishJob's no-work short-circuit
+   * already handles the empty-payload case before calling.)
+   *
+   * The hash key is NOT DEL'd on exit. The 1-hour TTL handles eventual
+   * cleanup, and leaving the hash alive lets the retry flow read the
+   * failed entries within the retry window.
+   */
+  private async pollTranslationsToTerminal(
+    jobId: string,
+    assignmentId: number,
+  ): Promise<void> {
+    // If Redis is unavailable (test envs without REDIS_URL, or a transient
+    // outage), the status hash can't be populated and polling has nothing
+    // to read. Skip the loop and treat the job as complete.
+    if (!this.translationStateRedis) {
+      this.logger.warn(
+        "publish.translations.poll.skipped { reason: translation-status-redis-unavailable }",
+      );
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "Completed",
+        progress:
+          "Publishing complete (translation status tracking unavailable)",
+        percentage: 100,
+        result: {
+          stage: "translations_complete",
+          translations: {
+            aggregate: { completed: 0, total: 0, failed: 0 },
+            perJob: [],
+          },
+        } satisfies PublishJobResult,
+      });
+      return;
+    }
+
+    const pollHashKey = buildPublishHashKey(jobId);
+    const pollStartedAt = Date.now();
+    for (;;) {
+      const entries =
+        (await this.translationStateRedis?.hgetall(pollHashKey)) ?? {};
+      const perJob: PerJobTranslationEntry[] = Object.values(entries).map(
+        (raw) => JSON.parse(raw) as PerJobTranslationEntry,
+      );
+      const completed = perJob.filter(
+        (entry) => entry.status === "completed",
+      ).length;
+      const failed = perJob.filter((entry) => entry.status === "failed").length;
+      const total = perJob.length;
+      // Guard against premature exit on the first tick when no worker
+      // has HSET yet (total === 0). The loop keeps polling until at
+      // least one entry exists AND all entries are terminal.
+      const allTerminal =
+        total > 0 &&
+        perJob.every(
+          (entry) => entry.status === "completed" || entry.status === "failed",
+        );
+
+      const tickResult: PublishJobResult = {
+        stage: allTerminal
+          ? "translations_complete"
+          : "translations_in_progress",
+        translations: {
+          aggregate: { completed, total, failed },
+          perJob,
+        },
+      };
+
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: allTerminal ? "Completed" : "In Progress",
+        progress: allTerminal
+          ? "Publishing complete (translations finished)"
+          : `Translating: ${completed}/${total} questions complete`,
+        percentage: 100,
+        result: tickResult,
+      });
+
+      if (allTerminal) {
+        break;
+      }
+
+      if (Date.now() - pollStartedAt > PUBLISH_TRANSLATION_POLL_TIMEOUT_MS) {
+        this.logger.warn("publish.translations.poll.timeout", {
+          assignmentId,
+          jobId,
+          completed,
+          total,
+          failed,
+          elapsedMs: Date.now() - pollStartedAt,
+        });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "Completed",
+          progress: "Publishing complete (translation poll timed out)",
+          percentage: 100,
+          result: {
+            stage: "translations_complete",
+            translations: {
+              aggregate: { completed, total, failed },
+              perJob,
+            },
+          } satisfies PublishJobResult,
+        });
+        break;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, PUBLISH_TRANSLATION_POLL_INTERVAL_MS),
+      );
     }
   }
 

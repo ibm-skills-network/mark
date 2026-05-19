@@ -49,7 +49,11 @@ jobs:
           fetch-depth: 0
 
       - name: Check if service needs scanning
-        id: scan-changes
+        # `id` is `changes` (not `scan-changes`) so every downstream
+        # `if: steps.changes.outputs.needs_scan == 'true'` actually resolves.
+        # The previous `scan-changes` id made every gated step in this job
+        # silently skip (the property was undefined → `'' == 'true'` = false).
+        id: changes
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_scan=true" >> $GITHUB_OUTPUT
@@ -69,7 +73,7 @@ jobs:
           fi
 
       - name: Free disk space
-        if: steps.scan-changes.outputs.needs_scan == 'true'
+        if: steps.changes.outputs.needs_scan == 'true'
         run: |
           echo "Disk usage before cleanup:"
           df -h
@@ -114,33 +118,6 @@ jobs:
           format: "sarif"
           output: "trivy-fs-${{ matrix.service }}.sarif"
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-        continue-on-error: true
-
-      - name: Display filesystem security scan results
-        if: steps.changes.outputs.needs_scan == 'true'
-        run: |
-          echo "🔍 FILESYSTEM SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
-          echo "================================================="
-
-          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
-          echo "📊 DETAILED VULNERABILITY TABLE:"
-          docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
-            --format table \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            /workspace/apps/${{ matrix.service }} || true
-
-          echo ""
-          echo "📋 SUMMARY BY SEVERITY:"
-          docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
-            --format json \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            /workspace/apps/${{ matrix.service }} 2>/dev/null | \
-            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
-
-          echo ""
-          echo "📄 Detailed SARIF report saved as trivy-fs-${{ matrix.service }}.sarif"
         continue-on-error: true
 
       - name: Run dependency security audit
@@ -517,11 +494,19 @@ jobs:
           # Verify the Dockerfile builds on PRs but don't publish — same-repo
           # PRs would otherwise push unmerged images and overwrite :latest.
           push: ${{ github.event_name != 'pull_request' }}
+          # Only stamp :latest from master pushes and tag pushes. Feature
+          # branches still get their branch-SHA tag, but must not overwrite
+          # :latest (which downstream pulls treat as production).
           tags: |
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
+            ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && format('ghcr.io/{0}/mark-{1}:latest', github.repository, matrix.service) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }},ignore-error=true
+          # Only write the GHA cache on push events that survive into a
+          # release path (master / tags / scheduled / manual). PR pushes still
+          # READ master's cache via cache-from but skip the export — uploading
+          # mode=max layers to GHA cache was 3-5 min per service per push and
+          # the resulting cache was overwritten on the next push anyway.
+          cache-to: ${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.service) || '' }}
           platforms: linux/amd64
 
       - name: Run container security scan
@@ -532,33 +517,6 @@ jobs:
           format: "sarif"
           output: "trivy-container-${{ matrix.service }}.sarif"
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-        continue-on-error: true
-
-      - name: Display container security scan results
-        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
-        run: |
-          echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
-          echo "===================================================="
-
-          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
-          echo "📊 DETAILED VULNERABILITY TABLE:"
-          docker run --rm aquasec/trivy:latest image \
-            --format table \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
-
-          echo ""
-          echo "📋 SUMMARY BY SEVERITY:"
-          docker run --rm aquasec/trivy:latest image \
-            --format json \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
-            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
-
-          echo ""
-          echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
         continue-on-error: true
 
       - name: Check if container SARIF file exists

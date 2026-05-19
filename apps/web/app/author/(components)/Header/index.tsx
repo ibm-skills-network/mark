@@ -26,9 +26,11 @@ import {
   setStoredUiLanguage,
 } from "@/lib/ui-language";
 import {
+  getActivePublishJob,
   getAssignment,
   getUser,
   publishAssignment,
+  retryFailedTranslations,
   subscribeToJobStatus,
 } from "@/lib/talkToBackend";
 import { mergeData } from "@/lib/utils";
@@ -46,6 +48,8 @@ import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestio
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import SaveAndPublishButton from "./SaveAndPublishButton";
+import PublishProgress from "./PublishProgress";
+import type { PublishJobResult } from "@/types/publish-job-result";
 
 function normalizeAssignment(assignment: Assignment): Assignment {
   if (!assignment || !assignment.questions) return assignment;
@@ -214,6 +218,14 @@ function AuthorHeader() {
   );
   const [progressStatus, setProgressStatus] =
     useState<JobStatus>("In Progress");
+  const [publishResult, setPublishResult] = useState<
+    PublishJobResult | undefined
+  >(undefined);
+  // Bumped at the start of every publish. Passed as `key` to
+  // PublishProgress so React fully remounts the component per publish
+  // — guarantees its sticky merged map is fresh, regardless of how
+  // React batches the surrounding setPublishResult(undefined) call.
+  const [publishSessionId, setPublishSessionId] = useState(0);
 
   const SyncAssignment = async () => {
     try {
@@ -431,6 +443,53 @@ function AuthorHeader() {
     void fetchData();
   }, [assignmentId, router]);
 
+  // Reconnect to an in-flight publish after a page refresh. The job
+  // survives the SSE disconnect (cleanupJobStream is a no-op server-
+  // side and BullMQ is decoupled from the browser tab), and the job id
+  // is deterministic per assignment so the API can look it up here
+  // without the client having stashed it anywhere. If no publish is
+  // active, this is a single cheap GET and otherwise a no-op.
+  useEffect(() => {
+    let cancelled = false;
+    const numericAssignmentId = parseInt(assignmentId, 10);
+    if (!Number.isFinite(numericAssignmentId)) return;
+    void (async () => {
+      const active = await getActivePublishJob(numericAssignmentId);
+      if (cancelled || !active?.jobId) return;
+      setSubmitting(true);
+      setJobProgress(0);
+      setCurrentMessage("Reconnecting to publish in progress...");
+      setProgressStatus("In Progress");
+      setPublishResult(undefined);
+      setPublishSessionId((n) => n + 1);
+      try {
+        const [publishSucceeded] = await subscribeToJobStatus(
+          active.jobId,
+          (percentage, progress) => {
+            if (cancelled) return;
+            setJobProgress(percentage);
+            setCurrentMessage(progress ?? "");
+          },
+          setQuestions,
+          (result) => {
+            if (cancelled) return;
+            setPublishResult(result);
+          },
+        );
+        if (cancelled) return;
+        setProgressStatus(publishSucceeded ? "Completed" : "Failed");
+      } catch {
+        if (cancelled) return;
+        setProgressStatus("Failed");
+      } finally {
+        if (!cancelled) setSubmitting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId]);
+
   useEffect(() => {
     const handleTriggerHeaderPublish = (event: any) => {
       const { description, publishImmediately, afterPublish } = event.detail;
@@ -489,6 +548,8 @@ function AuthorHeader() {
       publishImmediately ? "Initializing publishing..." : "Creating version...",
     );
     setProgressStatus("In Progress");
+    setPublishResult(undefined);
+    setPublishSessionId((n) => n + 1);
 
     const role = await getUserRole();
     if (role !== "author") {
@@ -588,10 +649,10 @@ function AuthorHeader() {
           response.jobId,
           (percentage, progress) => {
             setJobProgress(percentage);
-            setCurrentMessage(progress);
-            setQuestions(clonedCurrentQuestions);
+            setCurrentMessage(progress ?? "");
           },
           setQuestions,
+          (result) => setPublishResult(result),
         );
         if (publishSucceeded) {
           if (publishImmediately) {
@@ -661,6 +722,53 @@ function AuthorHeader() {
       setSubmitting(false);
     }
   }
+
+  const handleRetryFailedTranslations = async () => {
+    if (!activeAssignmentId) return;
+    setSubmitting(true);
+    setJobProgress(0);
+    setCurrentMessage("Retrying failed translations...");
+    setProgressStatus("In Progress");
+    setPublishResult(undefined);
+    setPublishSessionId((n) => n + 1);
+    try {
+      const response = await retryFailedTranslations(activeAssignmentId);
+      if (!response?.jobId) {
+        toast.error("Failed to start translation retry. Please try again.");
+        setProgressStatus("Failed");
+        setSubmitting(false);
+        return;
+      }
+      const [retrySucceeded] = await subscribeToJobStatus(
+        response.jobId,
+        (percentage, progress) => {
+          setJobProgress(percentage);
+          setCurrentMessage(progress ?? "");
+        },
+        setQuestions,
+        (result) => setPublishResult(result),
+      );
+      setProgressStatus(retrySucceeded ? "Completed" : "Failed");
+      if (retrySucceeded) {
+        toast.success("Translation retry complete.");
+      } else {
+        toast.error("Translation retry failed. Please try again.");
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      // 409 from the server when a publish is currently in flight.
+      if (message.toLowerCase().includes("in progress")) {
+        toast.error(
+          "A publish is currently in progress. Wait for it to finish, then retry.",
+        );
+      } else {
+        toast.error(`Translation retry failed: ${message}`);
+      }
+      setProgressStatus("Failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleConfirmSync = async () => {
     deleteAuthorStore();
@@ -828,6 +936,13 @@ function AuthorHeader() {
               />
             </div>
           )}
+
+          <PublishProgress
+            key={publishSessionId}
+            publishResult={publishResult}
+            onRetryFailedTranslations={handleRetryFailedTranslations}
+            retryInFlight={submitting}
+          />
         </header>
       </div>
 

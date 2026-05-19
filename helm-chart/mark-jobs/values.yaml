@@ -26,5 +26,12 @@ jobQueue:
 
 env:
   ENABLE_JOB_SCHEDULERS: "true"
+  # JOBS_EXECUTE_LOCALLY is the local-execution feature flag. The value MUST be the literal string "true"
+  # to enable; any other value keeps the default-OFF forward-to-API path. The runtime check is strict
+  # equality with "true".
+  JOBS_EXECUTE_LOCALLY: "true"
+  ENABLE_LTI_SCHEDULER: "false"      # gate the LTI cron in mark-jobs
+  ENABLE_TRANSLATION: "true"         # required by SharedModule TranslationService ctor
+  TRANSLATION_CONCURRENCY: "8"       # BullMQ worker concurrency for mark.assignment.v2.translations queue
 
 secretEnv: {}

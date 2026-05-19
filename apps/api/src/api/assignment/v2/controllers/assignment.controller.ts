@@ -308,6 +308,74 @@ export class AssignmentControllerV2 {
     );
   }
 
+  /**
+   * Look up the in-flight publish job for an assignment, if any.
+   * Returns null when no publish is active so the client can reattach
+   * to the SSE stream after a page refresh without having to start a
+   * new publish.
+   */
+  @Get(":id/active-publish-job")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Find the in-flight publish job for an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      nullable: true,
+      properties: {
+        jobId: { type: "string" },
+      },
+    },
+  })
+  async getActivePublishJob(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<{ jobId: string } | null> {
+    const job = await this.assignmentService.findActivePublishJob(id);
+    return job ? { jobId: job.id } : null;
+  }
+
+  /**
+   * Retry the failed translations from the most recent publish for this
+   * assignment. Reads the publish's per-job status hash, re-enqueues a
+   * translation job per failed entry, and returns a new jobId the client
+   * can subscribe to via SSE to track retry progress.
+   *
+   * Returns 409 if a publish is currently active — wait for it to finish,
+   * then click retry.
+   */
+  @Post(":id/translations/retry-failed")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({
+    summary: "Retry failed translations from the most recent publish",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      properties: {
+        jobId: { type: "string", description: "Retry job ID for SSE" },
+        message: { type: "string" },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: "A publish is currently in progress for this assignment",
+  })
+  async retryFailedTranslations(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ jobId: string; message: string }> {
+    return this.assignmentService.enqueueRetryFailedTranslations(
+      id,
+      request.userSession.userId,
+    );
+  }
+
   @Get(":id/files")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
@@ -518,6 +586,11 @@ export class AssignmentControllerV2 {
     status: string;
     progress: string;
     questions?: QuestionDto[];
+    // Raw job.result is returned alongside questions so the SSE-fallback
+    // poller can render publish/retry progress (PublishJobResult shape)
+    // when the EventSource drops mid-publish — without this the UI never
+    // sees failed translations or the retry-button trigger.
+    result?: unknown;
   }> {
     const job = await this.jobStatusService.getJobStatus(jobId);
     if (!job) {
@@ -529,13 +602,20 @@ export class AssignmentControllerV2 {
       throw new NotFoundException("Job not found");
     }
 
-    return job.status === "Completed"
-      ? {
-          status: job.status,
-          progress: job.progress,
-          questions: job.result as QuestionDto[] | undefined,
-        }
-      : { status: job.status, progress: job.progress };
+    // Question-generation jobs store QuestionDto[] on result; publish /
+    // retry jobs store a PublishJobResult object. Surface both shapes:
+    // questions[] for the existing question-gen path, result for everything
+    // else. Client type-guards the result field.
+    const isQuestionsArray = Array.isArray(job.result);
+    return {
+      status: job.status,
+      progress: job.progress,
+      questions:
+        job.status === "Completed" && isQuestionsArray
+          ? (job.result as QuestionDto[])
+          : undefined,
+      result: job.result,
+    };
   }
 
   /**
