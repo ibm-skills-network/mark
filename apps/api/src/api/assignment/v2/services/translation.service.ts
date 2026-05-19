@@ -14,7 +14,10 @@ import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
 import { PrismaService } from "src/database/prisma.service";
 import { createRedisConnection } from "src/job-queue/redis.connection";
-import { decrementInflightLanguage } from "../../attempt/translation-state-redis";
+import {
+  decrementInflightLanguage,
+  seedInflightLanguages,
+} from "../../attempt/translation-state-redis";
 import {
   getAllLanguageCodes,
   getLanguageNameFromCode,
@@ -176,10 +179,8 @@ export class TranslationService implements OnModuleDestroy {
   private jobCancellationFlags = new Map<string, boolean>();
   private readonly limiterHealthInterval: NodeJS.Timeout;
   private readonly jobTimeoutInterval: NodeJS.Timeout;
-  // Dedicated IORedis connection used solely for SREM-ing per-language
-  // entries from the per-assignment in-flight SET as each translation
-  // terminates. The publish flow SADDs the SET upstream; this service
-  // is responsible for draining it.
+  // Dedicated IORedis connection used for per-language refcount decrements
+  // on the per-assignment in-flight hash and for per-publish status HSETs.
   private readonly translationStateRedis: IORedis | undefined;
   private operationStats = {
     totalOperations: 0,
@@ -302,6 +303,104 @@ export class TranslationService implements OnModuleDestroy {
         error: errorMessage,
       });
     }
+  }
+
+  async markPublishTranslationFailed(
+    parentJobId: string,
+    kind: "question" | "variant" | "meta",
+    id: number,
+  ): Promise<void> {
+    if (!this.translationStateRedis) return;
+    const entry: PerJobTranslationEntry = {
+      kind,
+      id,
+      status: "failed",
+      languagesCompleted: 0,
+      languagesTotal: getSupportedLanguageCount(),
+    };
+    try {
+      const key = buildPublishHashKey(parentJobId);
+      await this.translationStateRedis.hset(
+        key,
+        `${kind}:${id}`,
+        JSON.stringify(entry),
+      );
+      await this.translationStateRedis.expire(key, PUBLISH_HASH_TTL_SECONDS);
+    } catch {
+      // Best-effort: caller rethrows the original error regardless.
+    }
+  }
+
+  async seedOneInflightJob(assignmentId: number): Promise<void> {
+    if (!this.translationStateRedis) return;
+    const codes = getAllLanguageCodes();
+    if (codes.length === 0) return;
+    await seedInflightLanguages(
+      this.translationStateRedis,
+      assignmentId,
+      codes,
+      1,
+    );
+  }
+
+  async rollbackOneInflightSeed(assignmentId: number): Promise<void> {
+    if (!this.translationStateRedis) return;
+    const codes = getAllLanguageCodes();
+    if (codes.length === 0) return;
+    await this.releaseInflightLanguages(assignmentId, codes);
+  }
+
+  private async markPublishTranslationCompleted(
+    parentJobId: string | undefined,
+    kind: "question" | "variant" | "meta",
+    id: number,
+    languagesCompleted: number,
+  ): Promise<void> {
+    if (!parentJobId || !this.translationStateRedis) return;
+    const entry: PerJobTranslationEntry = {
+      kind,
+      id,
+      status: "completed",
+      languagesCompleted,
+      languagesTotal: getSupportedLanguageCount(),
+    };
+    try {
+      const key = buildPublishHashKey(parentJobId);
+      await this.translationStateRedis.hset(
+        key,
+        `${kind}:${id}`,
+        JSON.stringify(entry),
+      );
+      await this.translationStateRedis.expire(key, PUBLISH_HASH_TTL_SECONDS);
+    } catch {
+      // Best-effort: caller still drains in-flight counters below.
+    }
+  }
+
+  private async releaseInflightLanguages(
+    assignmentId: number,
+    languages: string[],
+  ): Promise<void> {
+    await Promise.all(
+      languages.map((language) =>
+        this.releaseInflightLanguage(assignmentId, language),
+      ),
+    );
+  }
+
+  private async markPreFanoutTranslationFailed(
+    parentJobId: string | undefined,
+    kind: "question" | "variant" | "meta",
+    id: number,
+    assignmentId: number,
+    languages: string[],
+    markTerminalFailure: boolean,
+  ): Promise<void> {
+    if (!markTerminalFailure) return;
+    if (parentJobId) {
+      await this.markPublishTranslationFailed(parentJobId, kind, id);
+    }
+    await this.releaseInflightLanguages(assignmentId, languages);
   }
 
   private async releaseInflightLanguage(
@@ -1081,6 +1180,7 @@ export class TranslationService implements OnModuleDestroy {
     assignmentId: number,
     jobId?: string,
     progressRange?: { start: number; end: number },
+    markTerminalFailure = false,
   ): Promise<TranslationOutcome> {
     if (!this._languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
@@ -1098,98 +1198,111 @@ export class TranslationService implements OnModuleDestroy {
       this.jobStartTimes.set(jobId, Date.now());
     }
 
-    this.checkLimiterHealth();
-
-    const assignment = (await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: {
-        id: true,
-        name: true,
-        introduction: true,
-        instructions: true,
-        gradingCriteriaOverview: true,
-      },
-    })) as unknown as
-      | GetAssignmentResponseDto
-      | LearnerGetAssignmentResponseDto;
-
-    if (!assignment) {
-      if (jobId) {
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "Failed",
-          progress: `Assignment with id ${assignmentId} not found`,
-          percentage: progressRange?.start || 0,
-        });
-        this.cleanupCancelledJob(jobId);
-      }
-      throw new NotFoundException(
-        `Assignment with id ${assignmentId} not found`,
-      );
-    }
-
+    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+    const parentJobId = jobId;
     const start = progressRange?.start || 0;
     const end = progressRange?.end || 100;
     const range = end - start;
+    let assignment!: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto;
+    let progressTracker: ProgressTracker | undefined;
 
-    if (jobId) {
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Preparing assignment translation",
-        percentage: start + Math.floor(range * 0.1),
-      });
-    }
+    try {
+      this.checkLimiterHealth();
 
-    const supportedLanguages = getAllLanguageCodes() ?? ["en"];
+      assignment = (await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: {
+          id: true,
+          name: true,
+          introduction: true,
+          instructions: true,
+          gradingCriteriaOverview: true,
+        },
+      })) as unknown as
+        | GetAssignmentResponseDto
+        | LearnerGetAssignmentResponseDto;
 
-    const progressTracker = jobId
-      ? this.initializeProgressTracker(
-          jobId,
-          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-          start + Math.floor(range * 0.2),
-          start + Math.floor(range * 0.9),
-          "Translating assignment",
-          supportedLanguages.length,
-        )
-      : undefined;
-
-    // Write the per-job entry on the publish-job's status hash so the
-    // publish poll loop sees this work in flight. The parentJobId IS the
-    // existing jobId parameter — no parallel parameter is introduced.
-    // When jobId is absent (standalone updateAssignment path), the
-    // publish-hash writes are skipped cleanly. A 1-hour TTL fallback is
-    // set on first write so the hash auto-clears even if the publish
-    // poll loop dies before its terminal DEL.
-    const parentJobId = jobId;
-    if (parentJobId) {
-      try {
-        await this.translationStateRedis?.hset(
-          buildPublishHashKey(parentJobId),
-          `meta:${assignmentId}`,
-          JSON.stringify({
-            kind: "meta",
-            id: assignmentId,
-            status: "in_progress",
-            languagesCompleted: 0,
-            languagesTotal: getSupportedLanguageCount(),
-          } satisfies PerJobTranslationEntry),
+      if (!assignment) {
+        if (jobId) {
+          await this.jobStatusService.updateJobStatus(jobId, {
+            status: "Failed",
+            progress: `Assignment with id ${assignmentId} not found`,
+            percentage: progressRange?.start || 0,
+          });
+          this.cleanupCancelledJob(jobId);
+        }
+        throw new NotFoundException(
+          `Assignment with id ${assignmentId} not found`,
         );
-        await this.translationStateRedis?.expire(
-          buildPublishHashKey(parentJobId),
-          PUBLISH_HASH_TTL_SECONDS,
-        );
-      } catch (hsetError) {
-        const errorMessage =
-          hsetError instanceof Error ? hsetError.message : String(hsetError);
-        this.logger.warn("publish.translation.job.hset.failed", {
-          assignmentId,
-          kind: "meta",
-          id: assignmentId,
-          error: errorMessage,
+      }
+
+      if (jobId) {
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "In Progress",
+          progress: "Preparing assignment translation",
+          percentage: start + Math.floor(range * 0.1),
         });
       }
-    }
 
-    await this.syncLimiterForTranslationModel();
+      progressTracker = jobId
+        ? this.initializeProgressTracker(
+            jobId,
+            Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+            start + Math.floor(range * 0.2),
+            start + Math.floor(range * 0.9),
+            "Translating assignment",
+            supportedLanguages.length,
+          )
+        : undefined;
+
+      // Write the per-job entry on the publish-job's status hash so the
+      // publish poll loop sees this work in flight. The parentJobId IS the
+      // existing jobId parameter — no parallel parameter is introduced.
+      // When jobId is absent (standalone updateAssignment path), the
+      // publish-hash writes are skipped cleanly. A 1-hour TTL fallback is
+      // set on first write so the hash auto-clears even if the publish
+      // poll loop dies before its terminal DEL.
+      if (parentJobId) {
+        try {
+          await this.translationStateRedis?.hset(
+            buildPublishHashKey(parentJobId),
+            `meta:${assignmentId}`,
+            JSON.stringify({
+              kind: "meta",
+              id: assignmentId,
+              status: "in_progress",
+              languagesCompleted: 0,
+              languagesTotal: getSupportedLanguageCount(),
+            } satisfies PerJobTranslationEntry),
+          );
+          await this.translationStateRedis?.expire(
+            buildPublishHashKey(parentJobId),
+            PUBLISH_HASH_TTL_SECONDS,
+          );
+        } catch (hsetError) {
+          const errorMessage =
+            hsetError instanceof Error ? hsetError.message : String(hsetError);
+          this.logger.warn("publish.translation.job.hset.failed", {
+            assignmentId,
+            kind: "meta",
+            id: assignmentId,
+            error: errorMessage,
+          });
+        }
+      }
+
+      await this.syncLimiterForTranslationModel();
+    } catch (error) {
+      await this.markPreFanoutTranslationFailed(
+        parentJobId,
+        "meta",
+        assignmentId,
+        assignmentId,
+        supportedLanguages,
+        markTerminalFailure,
+      );
+      throw error;
+    }
     let completedLangCounter = 0;
     // Bottleneck `expiration` rejects its own promise but does NOT
     // cancel the underlying operation. See translateQuestion for the
@@ -1275,7 +1388,7 @@ export class TranslationService implements OnModuleDestroy {
           return false;
         } finally {
           // Per-language terminal exit (success OR failure) drains the
-          // language from the per-assignment in-flight SET so the
+          // language from the per-assignment in-flight refcount hash so the
           // learner-side resolver can flip the pending marker.
           await this.releaseInflightLanguage(assignmentId, lang);
         }
@@ -1357,6 +1470,7 @@ export class TranslationService implements OnModuleDestroy {
     question: QuestionDto,
     jobId?: string,
     forceRetranslation = false,
+    markTerminalFailure = true,
   ): Promise<TranslationOutcome> {
     const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
@@ -1377,113 +1491,140 @@ export class TranslationService implements OnModuleDestroy {
 
     const normalizedText = question.question.trim();
     const normalizedChoices = question.choices ?? null;
-
     let questionLang = "en";
-    try {
-      const detectedLang = await this.llmFacadeService.getLanguageCode(
-        normalizedText,
-        assignmentId,
-      );
-      if (detectedLang && detectedLang !== "unknown") {
-        questionLang = detectedLang;
-      }
-    } catch {
-      this.logger.warn(
-        `Language detection failed for question #${questionId}, using English as fallback`,
-      );
-    }
-
-    if (hasValidJobId) {
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
-          questionLang,
-        )}. Preparing translations...`,
-        percentage: 15,
-      });
-    }
-
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
-
-    const progressTracker = hasValidJobId
-      ? this.initializeProgressTracker(
-          jobId,
-          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-          20,
-          95,
-          `Translating Question #${questionId}`,
-          supportedLanguages.length,
-        )
-      : undefined;
-
-    if (forceRetranslation) {
-      await this.prisma.translation.deleteMany({
-        where: {
-          questionId: questionId,
-          variantId: null,
-        },
-      });
-    } else {
-      const existingTranslations = await this.prisma.translation.findMany({
-        where: {
-          questionId: questionId,
-          variantId: null,
-        },
-        select: { languageCode: true },
-      });
-
-      const existingLanguages = new Set(
-        existingTranslations.map((t) => t.languageCode),
-      );
-      const missingLanguages = supportedLanguages.filter(
-        (lang) => !existingLanguages.has(lang),
-      );
-
-      if (missingLanguages.length === 0) {
-        if (hasValidJobId) {
-          this.cleanupCancelledJob(jobId);
-        }
-        return { inserted: 0, skipped: 0, failed: 0 };
-      }
-    }
-
-    // Write the per-job entry on the publish-job's status hash so the
-    // publish poll loop sees this work in flight. The parentJobId IS the
-    // existing jobId parameter — no parallel parameter is introduced.
-    // A 1-hour TTL fallback is set on first write so the hash auto-clears
-    // even if the publish poll loop dies before its terminal DEL.
     const parentJobId = hasValidJobId ? jobId : undefined;
-    if (parentJobId) {
+    let progressTracker: ProgressTracker | undefined;
+    let targetLanguages = supportedLanguages;
+    let skippedLanguages: string[] = [];
+
+    try {
+      if (forceRetranslation) {
+        await this.prisma.translation.deleteMany({
+          where: {
+            questionId: questionId,
+            variantId: null,
+          },
+        });
+      } else {
+        const existingTranslations = await this.prisma.translation.findMany({
+          where: {
+            questionId: questionId,
+            variantId: null,
+          },
+          select: { languageCode: true },
+        });
+
+        const existingLanguages = new Set(
+          existingTranslations.map((t) => t.languageCode),
+        );
+        const missingLanguages = supportedLanguages.filter(
+          (lang) => !existingLanguages.has(lang),
+        );
+
+        if (missingLanguages.length === 0) {
+          await this.markPublishTranslationCompleted(
+            parentJobId,
+            "question",
+            questionId,
+            supportedLanguages.length,
+          );
+          await this.releaseInflightLanguages(assignmentId, supportedLanguages);
+          if (hasValidJobId) {
+            this.cleanupCancelledJob(jobId);
+          }
+          return { inserted: 0, skipped: supportedLanguages.length, failed: 0 };
+        }
+
+        skippedLanguages = supportedLanguages.filter((lang) =>
+          existingLanguages.has(lang),
+        );
+        targetLanguages = missingLanguages;
+      }
+
       try {
-        await this.translationStateRedis?.hset(
-          buildPublishHashKey(parentJobId),
-          `question:${questionId}`,
-          JSON.stringify({
-            kind: "question",
-            id: questionId,
-            status: "in_progress",
-            languagesCompleted: 0,
-            languagesTotal: getSupportedLanguageCount(),
-          } satisfies PerJobTranslationEntry),
-        );
-        await this.translationStateRedis?.expire(
-          buildPublishHashKey(parentJobId),
-          PUBLISH_HASH_TTL_SECONDS,
-        );
-      } catch (hsetError) {
-        const errorMessage =
-          hsetError instanceof Error ? hsetError.message : String(hsetError);
-        this.logger.warn("publish.translation.job.hset.failed", {
+        const detectedLang = await this.llmFacadeService.getLanguageCode(
+          normalizedText,
           assignmentId,
-          kind: "question",
-          id: questionId,
-          error: errorMessage,
+        );
+        if (detectedLang && detectedLang !== "unknown") {
+          questionLang = detectedLang;
+        }
+      } catch {
+        this.logger.warn(
+          `Language detection failed for question #${questionId}, using English as fallback`,
+        );
+      }
+
+      if (hasValidJobId) {
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "In Progress",
+          progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
+            questionLang,
+          )}. Preparing translations...`,
+          percentage: 15,
         });
       }
-    }
 
-    await this.syncLimiterForTranslationModel();
-    let completedLangCounter = 0;
+      progressTracker = hasValidJobId
+        ? this.initializeProgressTracker(
+            jobId,
+            Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+            20,
+            95,
+            `Translating Question #${questionId}`,
+            supportedLanguages.length,
+          )
+        : undefined;
+
+      // Write the per-job entry on the publish-job's status hash so the
+      // publish poll loop sees this work in flight. The parentJobId IS the
+      // existing jobId parameter — no parallel parameter is introduced.
+      // A 1-hour TTL fallback is set on first write so the hash auto-clears
+      // even if the publish poll loop dies before its terminal DEL.
+      if (parentJobId) {
+        try {
+          await this.translationStateRedis?.hset(
+            buildPublishHashKey(parentJobId),
+            `question:${questionId}`,
+            JSON.stringify({
+              kind: "question",
+              id: questionId,
+              status: "in_progress",
+              languagesCompleted: skippedLanguages.length,
+              languagesTotal: getSupportedLanguageCount(),
+            } satisfies PerJobTranslationEntry),
+          );
+          await this.translationStateRedis?.expire(
+            buildPublishHashKey(parentJobId),
+            PUBLISH_HASH_TTL_SECONDS,
+          );
+        } catch (hsetError) {
+          const errorMessage =
+            hsetError instanceof Error ? hsetError.message : String(hsetError);
+          this.logger.warn("publish.translation.job.hset.failed", {
+            assignmentId,
+            kind: "question",
+            id: questionId,
+            error: errorMessage,
+          });
+        }
+      }
+
+      await this.releaseInflightLanguages(assignmentId, skippedLanguages);
+      await this.syncLimiterForTranslationModel();
+    } catch (error) {
+      await this.markPreFanoutTranslationFailed(
+        parentJobId,
+        "question",
+        questionId,
+        assignmentId,
+        supportedLanguages,
+        markTerminalFailure,
+      );
+      throw error;
+    }
+    let completedLangCounter = skippedLanguages.length;
     // Collect per-language rows from the parallel fan-out into this
     // closure array, then issue ONE bulk INSERT per question after the
     // parallel section completes. Replaces the per-language single-row
@@ -1498,7 +1639,7 @@ export class TranslationService implements OnModuleDestroy {
     // (mid-loop HSET, collectedRows push) on it.
     let parallelDone = false;
     const results = await this.processBatchesInParallel(
-      supportedLanguages,
+      targetLanguages,
       async (lang: string) => {
         try {
           if (progressTracker && !parallelDone) {
@@ -1574,7 +1715,7 @@ export class TranslationService implements OnModuleDestroy {
           return false;
         } finally {
           // Per-language terminal exit (success OR failure) drains the
-          // language from the per-assignment in-flight SET so the
+          // language from the per-assignment in-flight refcount hash so the
           // learner-side resolver can flip the pending marker.
           await this.releaseInflightLanguage(assignmentId, lang);
         }
@@ -1592,7 +1733,7 @@ export class TranslationService implements OnModuleDestroy {
       await this.insertTranslationsOnConflictDoNothing(collectedRows);
     const outcome: TranslationOutcome = {
       inserted: insertedCount,
-      skipped: collectedRows.length - insertedCount,
+      skipped: skippedLanguages.length + collectedRows.length - insertedCount,
       failed: results.failure,
     };
 
@@ -1649,6 +1790,7 @@ export class TranslationService implements OnModuleDestroy {
     variant: VariantDto,
     jobId?: string,
     forceRetranslation = false,
+    markTerminalFailure = true,
   ): Promise<TranslationOutcome> {
     const hasValidJobId = typeof jobId === "string" && jobId.length > 0;
 
@@ -1668,106 +1810,133 @@ export class TranslationService implements OnModuleDestroy {
     }
     const normalizedText = variant.variantContent.trim();
     const normalizedChoices = variant.choices ?? null;
-
-    if (!forceRetranslation) {
-      const existingTranslations = await this.prisma.translation.findMany({
-        where: {
-          questionId: questionId,
-          variantId: variantId,
-        },
-        select: { languageCode: true },
-      });
-
-      const supportedLanguages = getAllLanguageCodes() ?? ["en"];
-      const existingLanguages = new Set(
-        existingTranslations.map((t) => t.languageCode),
-      );
-      const missingLanguages = supportedLanguages.filter(
-        (lang) => !existingLanguages.has(lang),
-      );
-
-      if (missingLanguages.length === 0) {
-        if (hasValidJobId) {
-          this.cleanupCancelledJob(jobId);
-        }
-        return { inserted: 0, skipped: 0, failed: 0 };
-      }
-    }
-
-    let variantLang = "en";
-    try {
-      const detectedLang = await this.llmFacadeService.getLanguageCode(
-        normalizedText,
-        assignmentId,
-      );
-      if (detectedLang && detectedLang !== "unknown") {
-        variantLang = detectedLang;
-      }
-    } catch {
-      this.logger.warn(
-        `Language detection failed for variant #${variantId}, using English as fallback`,
-      );
-    }
-
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
-
-    const progressTracker = hasValidJobId
-      ? this.initializeProgressTracker(
-          jobId,
-          Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-          20,
-          95,
-          `Translating Variant #${variantId}`,
-          supportedLanguages.length,
-        )
-      : undefined;
-
-    if (forceRetranslation) {
-      await this.prisma.translation.deleteMany({
-        where: {
-          questionId: questionId,
-          variantId: variantId,
-        },
-      });
-    }
-
-    // Write the per-job entry on the publish-job's status hash so the
-    // publish poll loop sees this work in flight. The parentJobId IS the
-    // existing jobId parameter — no parallel parameter is introduced.
-    // A 1-hour TTL fallback is set on first write so the hash auto-clears
-    // even if the publish poll loop dies before its terminal DEL.
     const parentJobId = hasValidJobId ? jobId : undefined;
-    if (parentJobId) {
+    let variantLang = "en";
+    let progressTracker: ProgressTracker | undefined;
+    let targetLanguages = supportedLanguages;
+    let skippedLanguages: string[] = [];
+
+    try {
+      if (!forceRetranslation) {
+        const existingTranslations = await this.prisma.translation.findMany({
+          where: {
+            questionId: questionId,
+            variantId: variantId,
+          },
+          select: { languageCode: true },
+        });
+
+        const existingLanguages = new Set(
+          existingTranslations.map((t) => t.languageCode),
+        );
+        const missingLanguages = supportedLanguages.filter(
+          (lang) => !existingLanguages.has(lang),
+        );
+
+        if (missingLanguages.length === 0) {
+          await this.markPublishTranslationCompleted(
+            parentJobId,
+            "variant",
+            variantId,
+            supportedLanguages.length,
+          );
+          await this.releaseInflightLanguages(assignmentId, supportedLanguages);
+          if (hasValidJobId) {
+            this.cleanupCancelledJob(jobId);
+          }
+          return { inserted: 0, skipped: supportedLanguages.length, failed: 0 };
+        }
+
+        skippedLanguages = supportedLanguages.filter((lang) =>
+          existingLanguages.has(lang),
+        );
+        targetLanguages = missingLanguages;
+      }
+
       try {
-        await this.translationStateRedis?.hset(
-          buildPublishHashKey(parentJobId),
-          `variant:${variantId}`,
-          JSON.stringify({
-            kind: "variant",
-            id: variantId,
-            status: "in_progress",
-            languagesCompleted: 0,
-            languagesTotal: getSupportedLanguageCount(),
-          } satisfies PerJobTranslationEntry),
-        );
-        await this.translationStateRedis?.expire(
-          buildPublishHashKey(parentJobId),
-          PUBLISH_HASH_TTL_SECONDS,
-        );
-      } catch (hsetError) {
-        const errorMessage =
-          hsetError instanceof Error ? hsetError.message : String(hsetError);
-        this.logger.warn("publish.translation.job.hset.failed", {
+        const detectedLang = await this.llmFacadeService.getLanguageCode(
+          normalizedText,
           assignmentId,
-          kind: "variant",
-          id: variantId,
-          error: errorMessage,
+        );
+        if (detectedLang && detectedLang !== "unknown") {
+          variantLang = detectedLang;
+        }
+      } catch {
+        this.logger.warn(
+          `Language detection failed for variant #${variantId}, using English as fallback`,
+        );
+      }
+
+      progressTracker = hasValidJobId
+        ? this.initializeProgressTracker(
+            jobId,
+            Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
+            20,
+            95,
+            `Translating Variant #${variantId}`,
+            supportedLanguages.length,
+          )
+        : undefined;
+
+      if (forceRetranslation) {
+        await this.prisma.translation.deleteMany({
+          where: {
+            questionId: questionId,
+            variantId: variantId,
+          },
         });
       }
+
+      // Write the per-job entry on the publish-job's status hash so the
+      // publish poll loop sees this work in flight. The parentJobId IS the
+      // existing jobId parameter — no parallel parameter is introduced.
+      // A 1-hour TTL fallback is set on first write so the hash auto-clears
+      // even if the publish poll loop dies before its terminal DEL.
+      if (parentJobId) {
+        try {
+          await this.translationStateRedis?.hset(
+            buildPublishHashKey(parentJobId),
+            `variant:${variantId}`,
+            JSON.stringify({
+              kind: "variant",
+              id: variantId,
+              status: "in_progress",
+              languagesCompleted: skippedLanguages.length,
+              languagesTotal: getSupportedLanguageCount(),
+            } satisfies PerJobTranslationEntry),
+          );
+          await this.translationStateRedis?.expire(
+            buildPublishHashKey(parentJobId),
+            PUBLISH_HASH_TTL_SECONDS,
+          );
+        } catch (hsetError) {
+          const errorMessage =
+            hsetError instanceof Error ? hsetError.message : String(hsetError);
+          this.logger.warn("publish.translation.job.hset.failed", {
+            assignmentId,
+            kind: "variant",
+            id: variantId,
+            error: errorMessage,
+          });
+        }
+      }
+
+      await this.releaseInflightLanguages(assignmentId, skippedLanguages);
+      await this.syncLimiterForTranslationModel();
+    } catch (error) {
+      await this.markPreFanoutTranslationFailed(
+        parentJobId,
+        "variant",
+        variantId,
+        assignmentId,
+        supportedLanguages,
+        markTerminalFailure,
+      );
+      throw error;
     }
 
-    await this.syncLimiterForTranslationModel();
-    let completedLangCounter = 0;
+    let completedLangCounter = skippedLanguages.length;
     // Collect per-language rows from the parallel fan-out; ONE bulk
     // INSERT after the parallel section completes (was 23 round-trips).
     const collectedRows: TranslationInsertRow[] = [];
@@ -1776,7 +1945,7 @@ export class TranslationService implements OnModuleDestroy {
     // full story; same race + same guard.
     let parallelDone = false;
     const results = await this.processBatchesInParallel(
-      supportedLanguages,
+      targetLanguages,
       async (lang: string) => {
         try {
           if (progressTracker && !parallelDone) {
@@ -1852,7 +2021,7 @@ export class TranslationService implements OnModuleDestroy {
           return false;
         } finally {
           // Per-language terminal exit (success OR failure) drains the
-          // language from the per-assignment in-flight SET so the
+          // language from the per-assignment in-flight refcount hash so the
           // learner-side resolver can flip the pending marker.
           await this.releaseInflightLanguage(assignmentId, lang);
         }
@@ -1866,7 +2035,7 @@ export class TranslationService implements OnModuleDestroy {
       await this.insertTranslationsOnConflictDoNothing(collectedRows);
     const outcome: TranslationOutcome = {
       inserted: insertedCount,
-      skipped: collectedRows.length - insertedCount,
+      skipped: skippedLanguages.length + collectedRows.length - insertedCount,
       failed: results.failure,
     };
 

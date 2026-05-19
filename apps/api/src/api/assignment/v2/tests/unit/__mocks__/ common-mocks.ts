@@ -1847,6 +1847,9 @@ export const createMockTranslationService = () => ({
   translateQuestion: jest.fn().mockResolvedValue(undefined),
   translateVariant: jest.fn().mockResolvedValue(undefined),
   markPending: jest.fn().mockResolvedValue(undefined),
+  markPublishTranslationFailed: jest.fn().mockResolvedValue(undefined),
+  seedOneInflightJob: jest.fn().mockResolvedValue(undefined),
+  rollbackOneInflightSeed: jest.fn().mockResolvedValue(undefined),
   applyTranslationsToAttempt: jest
     .fn()
     .mockImplementation((attempt: unknown): unknown => attempt),

@@ -73,10 +73,10 @@ export interface TranslateQuestionJobPayload {
   question: QuestionDto;
   // When true, the worker deletes every existing Translation row for the
   // (questionId, variantId=null) tuple before re-translating all 23
-  // languages. Publish passes true because publish implies content
-  // changed. Retry of failed translations passes false so the worker
-  // only translates languages that are still missing — preserving rows
-  // that landed successfully in the prior publish.
+  // languages. Publish passes true only when translatable content changed.
+  // Retry of failed translations and metadata-only republishes pass false so
+  // the worker only translates languages that are still missing, preserving
+  // rows that landed successfully in the prior publish.
   forceRetranslation?: boolean;
 }
 

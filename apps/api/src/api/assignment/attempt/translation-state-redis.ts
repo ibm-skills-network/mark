@@ -76,7 +76,19 @@ export async function decrementInflightLanguage(
   assignmentId: number,
   language: string,
 ): Promise<void> {
-  await redis.hincrby(buildInflightKey(assignmentId), language, -1);
+  // Clamp at 0 so BullMQ retries cannot push the counter negative.
+  // A retried worker calls this again against a seed that was only
+  // incremented once at enqueue time; without the floor the counter
+  // goes negative and corrupts the next publish's seed for this
+  // assignment/language pair.
+  await redis.eval(
+    `local v = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
+     if v > 0 then redis.call('HINCRBY', KEYS[1], ARGV[1], -1) end
+     return 0`,
+    1,
+    buildInflightKey(assignmentId),
+    language,
+  );
 }
 
 /**
@@ -99,8 +111,14 @@ export async function isLanguageInFlight(
   language: string,
 ): Promise<boolean> {
   const key = buildInflightKey(assignmentId);
-  const raw = await redis.hget(key, language);
-  if (raw === null) return false;
-  const count = Number.parseInt(raw, 10);
-  return Number.isFinite(count) && count > 0;
+  try {
+    const raw = await redis.hget(key, language);
+    if (raw === null) return false;
+    const count = Number.parseInt(raw, 10);
+    return Number.isFinite(count) && count > 0;
+  } catch {
+    // Redis blip: fail open so callers resolve to "unavailable" rather
+    // than propagating a 500 to the learner request.
+    return false;
+  }
 }

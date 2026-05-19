@@ -36,6 +36,10 @@ export interface JobExecutionRequest {
   jobName: JobName;
   payload: unknown;
   bullJobId?: string;
+  /** 0-indexed attempt counter forwarded from BullMQ job.attemptsMade. */
+  attemptsMade?: number;
+  /** Max attempts forwarded from BullMQ job.opts.attempts. */
+  maxAttempts?: number;
 }
 
 @Injectable()
@@ -73,7 +77,12 @@ export class JobExecutorService {
         );
       }
       case JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS: {
-        return this.executeTranslationJob(request.jobName, request.payload);
+        return this.executeTranslationJob(
+          request.jobName,
+          request.payload,
+          request.attemptsMade ?? 0,
+          request.maxAttempts ?? 1,
+        );
       }
       default: {
         throw new BadRequestException(
@@ -221,72 +230,127 @@ export class JobExecutorService {
   private async executeTranslationJob(
     jobName: JobName,
     payload: unknown,
+    attemptsMade: number,
+    maxAttempts: number,
   ): Promise<void> {
     const startTime = Date.now();
+    const isFinalAttempt = attemptsMade + 1 >= maxAttempts;
 
     switch (jobName) {
       case JOB_NAMES.TRANSLATE_QUESTION: {
         const jobPayload = payload as TranslateQuestionJobPayload;
-        const { inserted, skipped, failed } =
-          await this.translationService.translateQuestion(
-            jobPayload.assignmentId,
-            jobPayload.questionId,
-            jobPayload.question,
-            jobPayload.parentJobId,
-            jobPayload.forceRetranslation ?? true,
-          );
-        this.logger.info("publish.translation.job.executor.complete", {
-          assignmentId: jobPayload.assignmentId,
-          kind: "question",
-          id: jobPayload.questionId,
-          jobId: jobPayload.parentJobId,
-          inserted,
-          skipped,
-          failed,
-          durationMs: Date.now() - startTime,
-        });
+        try {
+          const { inserted, skipped, failed } =
+            await this.translationService.translateQuestion(
+              jobPayload.assignmentId,
+              jobPayload.questionId,
+              jobPayload.question,
+              jobPayload.parentJobId,
+              jobPayload.forceRetranslation ?? true,
+              isFinalAttempt,
+            );
+          this.logger.info("publish.translation.job.executor.complete", {
+            assignmentId: jobPayload.assignmentId,
+            kind: "question",
+            id: jobPayload.questionId,
+            jobId: jobPayload.parentJobId,
+            inserted,
+            skipped,
+            failed,
+            durationMs: Date.now() - startTime,
+          });
+        } catch (error) {
+          if (isFinalAttempt) {
+            if (jobPayload.parentJobId) {
+              await this.translationService.markPublishTranslationFailed(
+                jobPayload.parentJobId,
+                "question",
+                jobPayload.questionId,
+              );
+            }
+            await this.translationService.rollbackOneInflightSeed(
+              jobPayload.assignmentId,
+            );
+          }
+          throw error;
+        }
         return;
       }
       case JOB_NAMES.TRANSLATE_VARIANT: {
         const jobPayload = payload as TranslateVariantJobPayload;
-        const { inserted, skipped, failed } =
-          await this.translationService.translateVariant(
-            jobPayload.assignmentId,
-            jobPayload.questionId,
-            jobPayload.variantId,
-            jobPayload.variant,
-            jobPayload.parentJobId,
-            jobPayload.forceRetranslation ?? true,
-          );
-        this.logger.info("publish.translation.job.executor.complete", {
-          assignmentId: jobPayload.assignmentId,
-          kind: "variant",
-          id: jobPayload.variantId,
-          jobId: jobPayload.parentJobId,
-          inserted,
-          skipped,
-          failed,
-          durationMs: Date.now() - startTime,
-        });
+        try {
+          const { inserted, skipped, failed } =
+            await this.translationService.translateVariant(
+              jobPayload.assignmentId,
+              jobPayload.questionId,
+              jobPayload.variantId,
+              jobPayload.variant,
+              jobPayload.parentJobId,
+              jobPayload.forceRetranslation ?? true,
+              isFinalAttempt,
+            );
+          this.logger.info("publish.translation.job.executor.complete", {
+            assignmentId: jobPayload.assignmentId,
+            kind: "variant",
+            id: jobPayload.variantId,
+            jobId: jobPayload.parentJobId,
+            inserted,
+            skipped,
+            failed,
+            durationMs: Date.now() - startTime,
+          });
+        } catch (error) {
+          if (isFinalAttempt) {
+            if (jobPayload.parentJobId) {
+              await this.translationService.markPublishTranslationFailed(
+                jobPayload.parentJobId,
+                "variant",
+                jobPayload.variantId,
+              );
+            }
+            await this.translationService.rollbackOneInflightSeed(
+              jobPayload.assignmentId,
+            );
+          }
+          throw error;
+        }
         return;
       }
       case JOB_NAMES.TRANSLATE_META: {
         const jobPayload = payload as TranslateMetaJobPayload;
-        const { inserted, skipped, failed } =
-          await this.translationService.translateAssignment(
-            jobPayload.assignmentId,
-            jobPayload.parentJobId,
-          );
-        this.logger.info("publish.translation.job.executor.complete", {
-          assignmentId: jobPayload.assignmentId,
-          kind: "meta",
-          id: jobPayload.assignmentId,
-          jobId: jobPayload.parentJobId,
-          inserted,
-          skipped,
-          failed,
-          durationMs: Date.now() - startTime,
-        });
+        try {
+          const { inserted, skipped, failed } =
+            await this.translationService.translateAssignment(
+              jobPayload.assignmentId,
+              jobPayload.parentJobId,
+              undefined,
+              isFinalAttempt,
+            );
+          this.logger.info("publish.translation.job.executor.complete", {
+            assignmentId: jobPayload.assignmentId,
+            kind: "meta",
+            id: jobPayload.assignmentId,
+            jobId: jobPayload.parentJobId,
+            inserted,
+            skipped,
+            failed,
+            durationMs: Date.now() - startTime,
+          });
+        } catch (error) {
+          if (isFinalAttempt) {
+            if (jobPayload.parentJobId) {
+              await this.translationService.markPublishTranslationFailed(
+                jobPayload.parentJobId,
+                "meta",
+                jobPayload.assignmentId,
+              );
+            }
+            await this.translationService.rollbackOneInflightSeed(
+              jobPayload.assignmentId,
+            );
+          }
+          throw error;
+        }
         return;
       }
       default: {

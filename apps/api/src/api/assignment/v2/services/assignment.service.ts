@@ -6,7 +6,6 @@ import {
 } from "@nestjs/common";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { seedInflightLanguages } from "src/api/assignment/attempt/translation-state-redis";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
@@ -69,9 +68,8 @@ const buildPublishHashKey = (parentJobId: string): string =>
 export class AssignmentServiceV2 implements OnModuleDestroy {
   private logger: Logger;
   // Dedicated IORedis connection for the per-assignment in-flight language
-  // SET. The publish flow SADDs all supported language codes into this set
-  // before fanning out translation jobs; the worker SREMs each language as
-  // it terminates. Keeping a single instance per service mirrors the
+  // refcount hash and per-publish translation status hash. Keeping a single
+  // instance per service mirrors the
   // existing JobQueueService Redis pattern and avoids reconnect storms.
   private readonly translationStateRedis: IORedis | undefined;
 
@@ -179,21 +177,11 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
 
     if (shouldTranslate && this.translationService.languageTranslation) {
       // Translation work moved off the synchronous PATCH path. Seed the
-      // per-assignment in-flight refcount hash with one worker per
-      // language so a learner hitting the GET attempt endpoint during the
-      // brief enqueue-to-worker window sees translationStatus "pending"
-      // instead of "unavailable". The single meta worker decrements each
-      // language counter as it terminates; the TTL fallback covers the
-      // case where the worker dies before cleanup.
-      const supportedLanguageCodes = getAllLanguageCodes();
-      if (supportedLanguageCodes.length > 0 && this.translationStateRedis) {
-        await seedInflightLanguages(
-          this.translationStateRedis,
-          id,
-          supportedLanguageCodes,
-          1,
-        );
-      }
+      // per-assignment in-flight refcount immediately before enqueue so a
+      // learner hitting the GET attempt endpoint during the brief
+      // enqueue-to-worker window sees translationStatus "pending" instead
+      // of "unavailable". Roll back the seed if enqueue fails.
+      await this.translationService.seedOneInflightJob(id);
 
       // Assignment-meta translation (name / introduction / instructions /
       // grading-criteria) runs as its own retryable BullMQ job on the
@@ -201,17 +189,22 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // on LLM work. No parentJobId is passed — this code path has no
       // parent publish job, and the worker tolerates the absent
       // per-publish hash key.
-      await this.jobQueueService.enqueue(
-        JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-        JOB_NAMES.TRANSLATE_META,
-        {
-          assignmentId: id,
-        } satisfies TranslateMetaJobPayload,
-        {
-          attempts: 3,
-          backoff: { type: "exponential", delay: 5000 },
-        },
-      );
+      try {
+        await this.jobQueueService.enqueue(
+          JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+          JOB_NAMES.TRANSLATE_META,
+          {
+            assignmentId: id,
+          } satisfies TranslateMetaJobPayload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 5000 },
+          },
+        );
+      } catch (enqueueError) {
+        await this.translationService.rollbackOneInflightSeed(id);
+        throw enqueueError;
+      }
       this.logger.info("publish.translation.job.enqueued", {
         assignmentId: id,
         kind: "meta",
@@ -533,33 +526,12 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         metaWillEnqueue || perQuestionTranslationJobsEnqueued > 0;
 
       // Translation work has moved off the publish hot path onto the
-      // dedicated translations queue. Before fanning out, seed the
-      // per-assignment in-flight refcount hash with the number of workers
-      // that will translate each language across this publish (one
-      // worker per question + per variant + per meta job, uniform across
-      // languages). The learner-side loop reads the counter to
+      // dedicated translations queue. Each enqueue seeds one per-language
+      // in-flight refcount, and the worker decrements its language counters
+      // as it terminates. The learner-side loop reads the counter to
       // distinguish "translation still running" (count > 0) from
-      // "translation never produced a row" (count == 0 or absent). Each
-      // worker decrements its language counter as it terminates; a
-      // 30-minute TTL fallback eventually clears the hash if the publish
-      // job dies mid-flight.
-      const supportedLanguageCodes = getAllLanguageCodes();
-      const perLanguageWorkerCount =
-        perQuestionTranslationJobsEnqueued + (metaWillEnqueue ? 1 : 0);
+      // "translation never produced a row" (count == 0 or absent).
       let metaEnqueued = false;
-      if (
-        willEnqueueAnyTranslation &&
-        supportedLanguageCodes.length > 0 &&
-        perLanguageWorkerCount > 0 &&
-        this.translationStateRedis
-      ) {
-        await seedInflightLanguages(
-          this.translationStateRedis,
-          assignmentId,
-          supportedLanguageCodes,
-          perLanguageWorkerCount,
-        );
-      }
 
       if (shouldTranslateAssignment) {
         await this.jobStatusService.updateJobStatus(jobId, {
@@ -577,18 +549,24 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         // — the worker would short-circuit anyway and never write a
         // terminal status, leaving the publish poll loop spinning.
         if (this.translationService.languageTranslation) {
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_META,
-            {
-              parentJobId: jobId,
-              assignmentId,
-            } satisfies TranslateMetaJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
+          await this.translationService.seedOneInflightJob(assignmentId);
+          try {
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_META,
+              {
+                parentJobId: jobId,
+                assignmentId,
+              } satisfies TranslateMetaJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+          } catch (enqueueError) {
+            await this.translationService.rollbackOneInflightSeed(assignmentId);
+            throw enqueueError;
+          }
           await this.translationService.markPending(
             jobId,
             "meta",
@@ -1060,24 +1038,32 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               });
               continue;
             }
-            await this.jobQueueService.enqueue(
-              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-              JOB_NAMES.TRANSLATE_QUESTION,
-              {
-                parentJobId: jobId,
+            await this.translationService.seedOneInflightJob(assignmentId);
+            try {
+              await this.jobQueueService.enqueue(
+                JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+                JOB_NAMES.TRANSLATE_QUESTION,
+                {
+                  parentJobId: jobId,
+                  assignmentId,
+                  questionId: entry.id,
+                  question: questionDto,
+                  // Retry: only fill in missing languages. If only one of the
+                  // 23 failed last publish, we keep the 22 successful rows
+                  // and just retranslate the missing language.
+                  forceRetranslation: false,
+                } satisfies TranslateQuestionJobPayload,
+                {
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                },
+              );
+            } catch (enqueueError) {
+              await this.translationService.rollbackOneInflightSeed(
                 assignmentId,
-                questionId: entry.id,
-                question: questionDto,
-                // Retry: only fill in missing languages. If only one of the
-                // 23 failed last publish, we keep the 22 successful rows
-                // and just retranslate the missing language.
-                forceRetranslation: false,
-              } satisfies TranslateQuestionJobPayload,
-              {
-                attempts: 3,
-                backoff: { type: "exponential", delay: 5000 },
-              },
-            );
+              );
+              throw enqueueError;
+            }
             await this.translationService.markPending(
               jobId,
               "question",
@@ -1096,22 +1082,30 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               });
               continue;
             }
-            await this.jobQueueService.enqueue(
-              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-              JOB_NAMES.TRANSLATE_VARIANT,
-              {
-                parentJobId: jobId,
+            await this.translationService.seedOneInflightJob(assignmentId);
+            try {
+              await this.jobQueueService.enqueue(
+                JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+                JOB_NAMES.TRANSLATE_VARIANT,
+                {
+                  parentJobId: jobId,
+                  assignmentId,
+                  questionId: variantLookup.questionId,
+                  variantId: entry.id,
+                  variant: variantLookup.variant,
+                  forceRetranslation: false,
+                } satisfies TranslateVariantJobPayload,
+                {
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                },
+              );
+            } catch (enqueueError) {
+              await this.translationService.rollbackOneInflightSeed(
                 assignmentId,
-                questionId: variantLookup.questionId,
-                variantId: entry.id,
-                variant: variantLookup.variant,
-                forceRetranslation: false,
-              } satisfies TranslateVariantJobPayload,
-              {
-                attempts: 3,
-                backoff: { type: "exponential", delay: 5000 },
-              },
-            );
+              );
+              throw enqueueError;
+            }
             await this.translationService.markPending(
               jobId,
               "variant",
@@ -1121,19 +1115,27 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
             break;
           }
           case "meta": {
-            await this.jobQueueService.enqueue(
-              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-              JOB_NAMES.TRANSLATE_META,
-              {
-                parentJobId: jobId,
+            await this.translationService.seedOneInflightJob(assignmentId);
+            try {
+              await this.jobQueueService.enqueue(
+                JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+                JOB_NAMES.TRANSLATE_META,
+                {
+                  parentJobId: jobId,
+                  assignmentId,
+                  forceRetranslation: false,
+                } satisfies TranslateMetaJobPayload,
+                {
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                },
+              );
+            } catch (enqueueError) {
+              await this.translationService.rollbackOneInflightSeed(
                 assignmentId,
-                forceRetranslation: false,
-              } satisfies TranslateMetaJobPayload,
-              {
-                attempts: 3,
-                backoff: { type: "exponential", delay: 5000 },
-              },
-            );
+              );
+              throw enqueueError;
+            }
             await this.translationService.markPending(
               jobId,
               "meta",
@@ -1166,19 +1168,6 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
           } satisfies PublishJobResult,
         });
         return;
-      }
-
-      // Each re-enqueued translation worker handles all supported
-      // languages, so per-language in-flight refcount increment equals
-      // the total count of retried entries.
-      const supportedLanguageCodes = getAllLanguageCodes();
-      if (supportedLanguageCodes.length > 0 && this.translationStateRedis) {
-        await seedInflightLanguages(
-          this.translationStateRedis,
-          assignmentId,
-          supportedLanguageCodes,
-          enqueued,
-        );
       }
 
       this.logger.info("publish.retry.start", {

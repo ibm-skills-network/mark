@@ -72,6 +72,8 @@ interface MarkApiJobExecutionRequest {
   jobName: JobName;
   payload: unknown;
   bullJobId?: string;
+  attemptsMade?: number;
+  maxAttempts?: number;
 }
 
 @Injectable()
@@ -401,6 +403,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
               jobName: job.name as JobName,
               payload,
               bullJobId: job.id,
+              ...this.getAttemptMetadata(job),
             });
           } else {
             this.logger.debug(
@@ -486,6 +489,18 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     return decryptJobPayload<T>(job.data);
   }
 
+  private getAttemptMetadata(job: Job): {
+    attemptsMade: number;
+    maxAttempts: number;
+  } {
+    const maxAttempts = job.opts?.attempts;
+    return {
+      attemptsMade: Number.isFinite(job.attemptsMade) ? job.attemptsMade : 0,
+      maxAttempts:
+        typeof maxAttempts === "number" && maxAttempts > 0 ? maxAttempts : 1,
+    };
+  }
+
   private async forwardJobToApi(
     queueName: JobQueueName,
     job: Job,
@@ -495,6 +510,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       jobName: job.name as JobName,
       payload: this.getDecryptedJobData<unknown>(job),
       bullJobId: job.id,
+      ...(queueName === JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS
+        ? this.getAttemptMetadata(job)
+        : {}),
     };
     const response = await fetch(this.getJobExecutorUrl(), {
       method: "POST",

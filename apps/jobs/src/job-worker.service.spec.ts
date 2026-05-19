@@ -211,6 +211,8 @@ describe("JobWorkerService", () => {
     jobName: string;
     payload: unknown;
     queueName: string;
+    attemptsMade?: number;
+    maxAttempts?: number;
   }): void {
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:4222/api/internal/jobs/execute",
@@ -734,6 +736,8 @@ describe("JobWorkerService", () => {
         id: "bull-tx-1",
         name: JOB_NAMES.TRANSLATE_QUESTION,
         data: encryptJobPayload(payload),
+        attemptsMade: 1,
+        opts: { attempts: 3 },
       } as unknown as Job);
 
       expectLastForwardedJob({
@@ -741,6 +745,8 @@ describe("JobWorkerService", () => {
         jobName: JOB_NAMES.TRANSLATE_QUESTION,
         payload,
         queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        attemptsMade: 1,
+        maxAttempts: 3,
       });
 
       expect(mockStructuredLogger.info).toHaveBeenCalledWith(
@@ -775,6 +781,8 @@ describe("JobWorkerService", () => {
         id: "bull-tx-2",
         name: JOB_NAMES.TRANSLATE_VARIANT,
         data: encryptJobPayload(payload),
+        attemptsMade: 2,
+        opts: { attempts: 3 },
       } as unknown as Job);
 
       expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
@@ -782,6 +790,8 @@ describe("JobWorkerService", () => {
         jobName: JOB_NAMES.TRANSLATE_VARIANT,
         payload,
         bullJobId: "bull-tx-2",
+        attemptsMade: 2,
+        maxAttempts: 3,
       });
       expect(fetchMock).not.toHaveBeenCalled();
       expect(mockStructuredLogger.info).toHaveBeenCalledWith(

@@ -258,6 +258,11 @@ export class QuestionService {
           ? existingById.get(questionDto.id)
           : undefined;
 
+        const questionTranslationContentChanged =
+          !existingQuestion ||
+          existingQuestion.question !== questionDto.question ||
+          !this.areChoicesEqual(existingQuestion.choices, questionDto.choices);
+
         if (
           existingQuestion &&
           existingQuestion.question !== questionDto.question
@@ -352,20 +357,27 @@ export class QuestionService {
         // worker would short-circuit anyway and never write a terminal
         // status, leaving the publish poll loop spinning for 30 minutes.
         if (this.translationService.languageTranslation) {
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_QUESTION,
-            {
-              parentJobId: jobId,
-              assignmentId,
-              questionId: persistedId,
-              question: questionDto,
-            } satisfies TranslateQuestionJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
+          await this.translationService.seedOneInflightJob(assignmentId);
+          try {
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_QUESTION,
+              {
+                parentJobId: jobId,
+                assignmentId,
+                questionId: persistedId,
+                question: questionDto,
+                forceRetranslation: questionTranslationContentChanged,
+              } satisfies TranslateQuestionJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+          } catch (enqueueError) {
+            await this.translationService.rollbackOneInflightSeed(assignmentId);
+            throw enqueueError;
+          }
           translationJobsEnqueued += 1;
           if (jobId) {
             await this.translationService.markPending(
@@ -392,7 +404,7 @@ export class QuestionService {
             questionDto.variants || [],
             existingQuestion?.variants || [],
             jobId,
-            true,
+            false,
           );
         }
 
@@ -944,21 +956,28 @@ export class QuestionService {
         // retryable BullMQ job on the dedicated translations queue rather
         // than blocking the publish hot path on synchronous LLM calls.
         if (this.translationService.languageTranslation) {
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_VARIANT,
-            {
-              parentJobId: jobId,
-              assignmentId,
-              questionId,
-              variantId: updatedVariant.id,
-              variant: updatedVariant as unknown as VariantDto,
-            } satisfies TranslateVariantJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
+          await this.translationService.seedOneInflightJob(assignmentId);
+          try {
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_VARIANT,
+              {
+                parentJobId: jobId,
+                assignmentId,
+                questionId,
+                variantId: updatedVariant.id,
+                variant: updatedVariant as unknown as VariantDto,
+                forceRetranslation: contentChanged,
+              } satisfies TranslateVariantJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+          } catch (enqueueError) {
+            await this.translationService.rollbackOneInflightSeed(assignmentId);
+            throw enqueueError;
+          }
           variantTranslationsEnqueued += 1;
           if (jobId) {
             await this.translationService.markPending(
@@ -987,21 +1006,28 @@ export class QuestionService {
         // retryable BullMQ job on the dedicated translations queue rather
         // than blocking the publish hot path on synchronous LLM calls.
         if (this.translationService.languageTranslation) {
-          await this.jobQueueService.enqueue(
-            JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-            JOB_NAMES.TRANSLATE_VARIANT,
-            {
-              parentJobId: jobId,
-              assignmentId,
-              questionId,
-              variantId: newVariant.id,
-              variant: newVariant as unknown as VariantDto,
-            } satisfies TranslateVariantJobPayload,
-            {
-              attempts: 3,
-              backoff: { type: "exponential", delay: 5000 },
-            },
-          );
+          await this.translationService.seedOneInflightJob(assignmentId);
+          try {
+            await this.jobQueueService.enqueue(
+              JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+              JOB_NAMES.TRANSLATE_VARIANT,
+              {
+                parentJobId: jobId,
+                assignmentId,
+                questionId,
+                variantId: newVariant.id,
+                variant: newVariant as unknown as VariantDto,
+                forceRetranslation: contentChanged,
+              } satisfies TranslateVariantJobPayload,
+              {
+                attempts: 3,
+                backoff: { type: "exponential", delay: 5000 },
+              },
+            );
+          } catch (enqueueError) {
+            await this.translationService.rollbackOneInflightSeed(assignmentId);
+            throw enqueueError;
+          }
           variantTranslationsEnqueued += 1;
           if (jobId) {
             await this.translationService.markPending(
