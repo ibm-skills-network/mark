@@ -85,7 +85,7 @@
     "minisearch": "^7.1.2",
     "multer": "^2.1.1",
     "natural": "^8.0.1",
-    "nest-winston": "^1.9.2",
+    "nest-winston": "^1.10.2",
     "node-xlsx": "^0.24.0",
     "nodemailer": "^7.0.11",
     "passport": "^0.7.0",
