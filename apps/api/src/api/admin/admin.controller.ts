@@ -35,7 +35,7 @@ import {
   InitiateAssignmentFilesResponseDto,
 } from "../assignment/v2/dtos/assignment-file-upload.dto";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
-import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
+import { AdminBaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
 import { AdminAssignmentCloneRequestDto } from "./dto/assignment/clone.assignment.request.dto";
 import {
   AdminCreateAssignmentRequestDto,
@@ -78,12 +78,12 @@ export class AdminController {
     summary: "Clone an assignment and associates it with the provided groupId",
   })
   @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 200, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   cloneAssignment(
     @Param("id") assignmentId: number,
     @Body() assignmentCloneRequestDto: AdminAssignmentCloneRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     return this.adminService.cloneAssignment(
       Number(assignmentId),
       assignmentCloneRequestDto.groupId,
@@ -106,7 +106,7 @@ export class AdminController {
   }
   @Get("/assignments")
   @ApiOperation({ summary: "Get all assignments" })
-  @ApiResponse({ status: 200, type: [BaseAssignmentResponseDto] })
+  @ApiResponse({ status: 200, type: [AdminBaseAssignmentResponseDto] })
   @ApiResponse({ status: 403 })
   getAssignments(): Promise<Assignment[]> {
     return this.adminRepository.findAllAssignments();
@@ -114,18 +114,18 @@ export class AdminController {
   @Post("/assignments")
   @ApiOperation({ summary: "Create an assignment" })
   @ApiBody({ type: AdminCreateAssignmentRequestDto })
-  @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 201, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   createAssignment(
     @Body() createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     return this.adminService.createAssignment(createAssignmentRequestDto);
   }
 
   @Get("/assignments/:id")
   @ApiOperation({ summary: "Get an assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 201, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 201, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   async getAssignment(
     @Param("id") id: number,
@@ -302,12 +302,12 @@ export class AdminController {
   @ApiOperation({ summary: "Replace an assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({ type: AdminReplaceAssignmentRequestDto })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 200, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   replaceAssignment(
     @Param("id") id: number,
     @Body() replaceAssignmentRequestDto: AdminReplaceAssignmentRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     return this.adminService.replaceAssignment(
       Number(id),
       replaceAssignmentRequestDto,
@@ -318,12 +318,12 @@ export class AdminController {
   @ApiOperation({ summary: "Update an assignment" })
   @ApiParam({ name: "id", required: true })
   @ApiBody({ type: AdminUpdateAssignmentRequestDto })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 200, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   updateAssignment(
     @Param("id") id: number,
     @Body() updateAssignmentRequestDto: AdminUpdateAssignmentRequestDto,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     return this.adminService.updateAssignment(
       Number(id),
       updateAssignmentRequestDto,
@@ -333,11 +333,11 @@ export class AdminController {
   @Delete("assignments/:id")
   @ApiOperation({ summary: "Delete an assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 200, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   deleteAssignment(
     @Param("id") id: number,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     return this.adminService.removeAssignment(Number(id));
   }
 
@@ -353,14 +353,14 @@ export class AdminController {
     description: "The ID of the assignment to add content to",
   })
   @ApiBody({ type: AdminAddContentToAssignmentRequestDto })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
+  @ApiResponse({ status: 200, type: AdminBaseAssignmentResponseDto })
   @ApiResponse({ status: 403 })
   @ApiResponse({ status: 404, description: "Assignment not found" })
   addContentToAssignment(
     @Param("id") id: number,
     @Body() addContentRequestDto: AdminAddContentToAssignmentRequestDto,
     @Req() request: UserSessionRequest,
-  ): Promise<BaseAssignmentResponseDto> {
+  ): Promise<AdminBaseAssignmentResponseDto> {
     return this.adminService.addContentToAssignment(
       Number(id),
       addContentRequestDto,

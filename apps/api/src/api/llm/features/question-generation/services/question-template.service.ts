@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-import { StructuredOutputParser } from "langchain/output_parsers";
+import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { z } from "zod";
 import { AssignmentTypeEnum } from "./question-generation.service";
 

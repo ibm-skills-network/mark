@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { sanitize } from "isomorphic-dompurify";
-import { OpenAIModerationChain } from "langchain/chains";
+import { OpenAIModerationChain } from "@langchain/classic/chains";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { IModerationService } from "../interfaces/moderation.interface";

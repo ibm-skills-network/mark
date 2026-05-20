@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "langchain/output_parsers";
+import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { decodeIfBase64 } from "src/helpers/decoder";
 import { Logger } from "winston";

@@ -217,11 +217,20 @@ export class DataTransformInterceptor implements NestInterceptor {
     }
 
     if (request.query && typeof request.query === "object") {
-      request.query = this.transformData(
+      const transformedQuery = this.transformData(
         request.query,
         options,
         "decode",
       ) as Record<string, unknown>;
+      // Express 5 exposes `req.query` as a getter-only property — direct
+      // assignment throws. Replace the descriptor instead so the rest of
+      // the request pipeline sees the transformed values.
+      Object.defineProperty(request, "query", {
+        value: transformedQuery,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
     }
   }
 
