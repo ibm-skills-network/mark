@@ -193,7 +193,7 @@ jobs:
 
       - name: Upload security reports as artifacts
         if: always() && steps.changes.outputs.needs_scan == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-reports-${{ matrix.service }}-${{ github.run_number }}
           path: |
@@ -539,7 +539,7 @@ jobs:
 
       - name: Upload container security reports as artifacts
         if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: container-security-reports-${{ matrix.service }}-${{ github.run_number }}
           path: |
