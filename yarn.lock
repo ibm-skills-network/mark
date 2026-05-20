@@ -17,12 +17,12 @@
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
-  version "2.0.91"
-  resolved "https://registry.npmjs.org/@ai-sdk/openai/-/openai-2.0.91.tgz#1c615ee29db62355be261c2da324b5a85169798f"
-  integrity sha512-lozfRHfSTHg5/UliQjTDcOtISYGbEpt4FS/6QM5PcLmhdT0HmROllaBmG7+JaK+uqFtDXZGgMIpz3bqB9nzqCQ==
+  version "2.0.106"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.106.tgz#8ce0702c4fe32c55a1d5f6af806bd53fff70ccf8"
+  integrity sha512-EFC0rpo1wfe4HIz5KZCE72edP2J7fOeR7wPXzjCDljaTRB1wectKDIKRLowpU4F0mbcJ+XScAsoYNPK/Z20aVQ==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "2.0.3"
+    "@ai-sdk/provider-utils" "3.0.25"
 
 "@ai-sdk/provider-utils@3.0.21":
   version "3.0.21"
@@ -33,10 +33,26 @@
     "@standard-schema/spec" "^1.0.0"
     eventsource-parser "^3.0.6"
 
+"@ai-sdk/provider-utils@3.0.25":
+  version "3.0.25"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.25.tgz#052165ea2b034f34eb383c51a47e14f55c1a3a23"
+  integrity sha512-CvsRu+32Y8a167s+lrIBtsybvgTHp8j9y+6BeTvLeoW3Q+okw/b4CnNUFOLIXsRaKHQKAH+IHNJPYWywfpw0LA==
+  dependencies:
+    "@ai-sdk/provider" "2.0.3"
+    "@standard-schema/spec" "^1.0.0"
+    eventsource-parser "^3.0.6"
+
 "@ai-sdk/provider@2.0.1":
   version "2.0.1"
   resolved "https://registry.npmjs.org/@ai-sdk/provider/-/provider-2.0.1.tgz#4aba415f1815da33a7a81e5f41a0219af53278c0"
   integrity sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==
+  dependencies:
+    json-schema "^0.4.0"
+
+"@ai-sdk/provider@2.0.3":
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/provider/-/provider-2.0.3.tgz#8a3727d31947c6238e59dcbb72b7e1a871fd570c"
+  integrity sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==
   dependencies:
     json-schema "^0.4.0"
 
