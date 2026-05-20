@@ -1731,12 +1731,10 @@
   dependencies:
     "@fortawesome/fontawesome-common-types" "6.7.2"
 
-"@fortawesome/react-fontawesome@^0.2.6":
-  version "0.2.6"
-  resolved "https://registry.yarnpkg.com/@fortawesome/react-fontawesome/-/react-fontawesome-0.2.6.tgz#b75d0c7710c646c9bb6b9bb61cb5b8548a9ef2f5"
-  integrity sha512-mtBFIi1UsYQo7rYonYFkjgYKGoL8T+fEH6NGUpvuqtY3ytMsAoDaPo5rk25KuMtKDipY4bGYM/CkmCHA1N3FUg==
-  dependencies:
-    prop-types "^15.8.1"
+"@fortawesome/react-fontawesome@^3.3.1":
+  version "3.3.1"
+  resolved "https://registry.yarnpkg.com/@fortawesome/react-fontawesome/-/react-fontawesome-3.3.1.tgz#7fb1d1f4b48a15b9c6c4d88d579dacc478ebf3ef"
+  integrity sha512-wGnAPhfzivDwBWYmEG8MSrEXPruoiMMo48NnsRkj1NZkoaawgOijPNAiSHKMYEoCsqTBSgLTzL6EqTTWGaUR4w==
 
 "@headlessui/react@^2.2.10":
   version "2.2.10"
@@ -2545,11 +2543,11 @@
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
 "@langchain/classic@^1.0.31", "@langchain/classic@~1.0.31":
-  version "1.0.32"
-  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.32.tgz#502ce49ff9ce899a793e6ac429ef9dba19fd9ce6"
-  integrity sha512-Unv3aRVNOwtJKfTyo0kS7u0ytrHtOw38ojBM8pIz7HAdai6vvCAr+rvT8mCkSKv5o78Rhrm+cn9ggTBhNukjgg==
+  version "1.0.33"
+  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.33.tgz#2861c83288ec44e2a2188cebd39348c75ab42296"
+  integrity sha512-EffyMp4GhcRR3a/re+E/SQlBlsToE6kun266tYzKXbc6lEHeerXAkNsZChgP8kCVBhCYhYhdTbn68ZyldrE7JA==
   dependencies:
-    "@langchain/openai" "1.4.5"
+    "@langchain/openai" "1.4.6"
     "@langchain/textsplitters" "1.0.1"
     handlebars "^4.7.9"
     js-yaml "^4.1.1"
@@ -2561,9 +2559,9 @@
     langsmith ">=0.4.0 <1.0.0"
 
 "@langchain/core@^1.1.44", "@langchain/core@^1.1.46", "@langchain/core@~1.1.46":
-  version "1.1.46"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.1.46.tgz#cfb6fb1298d3be91a01d34a3890514378bc85846"
-  integrity sha512-i8rDC83BpItxChCw4Lf+6tAr+k+OUcbirc5ZkrhI9ywYWmvxegUljLGOGYvtJNTbEAIFkhYIODPE5QRqyjF6sA==
+  version "1.1.47"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.1.47.tgz#00695055f129a0d96eae0eae8ab2ed7b915d21fd"
+  integrity sha512-+fiPu6ZFnJMrZyKeM77OIVPoMPAY6OKWacnPlojHtXTbMMzb2cEOKAJV0U07cDl86NHSCIYYa0i4CyKZzXbHQQ==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     "@standard-schema/spec" "^1.1.0"
@@ -2603,13 +2601,13 @@
     "@standard-schema/spec" "1.1.0"
     uuid "^10.0.0"
 
-"@langchain/openai@1.4.5", "@langchain/openai@^1.4.4", "@langchain/openai@~1.4.4":
-  version "1.4.5"
-  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.4.5.tgz#e2d243d7f6ce64db9bc57dc22ac927ff785dc7be"
-  integrity sha512-bQ2WMIZfSh02trJLYSAtiIcD3j6EBCiAm9nw0dZWQsVaUxmWc3JJqs8uUte6AkMazmLHzcUIw+14UkXO5fRJvQ==
+"@langchain/openai@1.4.6", "@langchain/openai@^1.4.4", "@langchain/openai@~1.4.4":
+  version "1.4.6"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.4.6.tgz#27bf92f233aeadf7fc0a98f5b60705820c09fa42"
+  integrity sha512-R92/hW1aFlL9YNWLDEy1ePBnsn83kPOINNsVD+asjTJKB/00Dwf6s0VBpgZLRJiSWOW/RvbLJ/V4Djayh5boyQ==
   dependencies:
     js-tiktoken "^1.0.12"
-    openai "^6.34.0"
+    openai "^6.37.0"
     zod "^3.25.76 || ^4"
 
 "@langchain/protocol@^0.0.15":
@@ -13127,10 +13125,10 @@ openai@^4.91.1:
     formdata-node "^4.3.2"
     node-fetch "^2.6.7"
 
-openai@^6.34.0:
-  version "6.37.0"
-  resolved "https://registry.yarnpkg.com/openai/-/openai-6.37.0.tgz#397331ae5f4375dcae37e396e259df83903a64e5"
-  integrity sha512-0H5dEGFmmLv6KSd0W1w2nyL8WsLkX6yoLeQpU+dZAOuGcany5qkYQMmj35ZrKgb6yiyYqpUzFOpR8mZQkgqeEQ==
+openai@^6.37.0:
+  version "6.38.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-6.38.0.tgz#3fc23a47d2aef84f7cb4338897edecb514b7e146"
+  integrity sha512-AoMplt2UalrpgUDMh3L09QWjNRlgJPipclQvA6sYAaeF6nHNBMgmikAZGmcYLn8on4d9sQY9Q8bOLfrBS7Lc8g==
 
 openapi-types@^12.1.3:
   version "12.1.3"
