@@ -110,7 +110,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "^20.1.0",
-    "@commitlint/config-conventional": "^20.0.0",
+    "@commitlint/config-conventional": "^21.0.1",
     "@ianvs/prettier-plugin-sort-imports": "^4.0.2",
     "@nestjs/cli": "^11.0.21",
     "@nestjs/schematics": "^11.1.0",
