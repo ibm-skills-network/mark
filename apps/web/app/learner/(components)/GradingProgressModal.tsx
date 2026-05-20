@@ -39,6 +39,63 @@ interface ProgressState {
   gradingState?: GradingProgressDetails;
 }
 
+// Per-question status follows a monotonic lifecycle:
+// pending → in_progress → completed/failed. The SSE stream is multi-source
+// (the progress service registers one callback; the submission service
+// passes its own callback into updateAssignmentAttempt), and a stale
+// snapshot from one source can land after a fresher one from the other.
+// Without this ratchet, the UI flashes a question from "Grading" back to
+// "Queued" when the stale snapshot wins the race.
+const STATUS_RANK: Record<QuestionGradingStatus, number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+  failed: 2,
+};
+
+function mergeQuestionStatus(
+  prev: QuestionGradingStatus,
+  next: QuestionGradingStatus,
+): QuestionGradingStatus {
+  return STATUS_RANK[next] >= STATUS_RANK[prev] ? next : prev;
+}
+
+function mergeGradingState(
+  prev: GradingProgressDetails | undefined,
+  next: GradingProgressDetails | undefined,
+): GradingProgressDetails | undefined {
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const prevById = new Map(prev.questions.map((q) => [q.id, q]));
+  const merged = next.questions.map((q) => {
+    const seen = prevById.get(q.id);
+    if (!seen) return q;
+    const status = mergeQuestionStatus(seen.status, q.status);
+    return { ...q, status };
+  });
+
+  let completed = 0;
+  let inFlight = 0;
+  let failed = 0;
+  let hasSlowInFlight = false;
+  for (const q of merged) {
+    if (q.status === "completed") completed += 1;
+    else if (q.status === "in_progress") {
+      inFlight += 1;
+      if (q.slowType) hasSlowInFlight = true;
+    } else if (q.status === "failed") failed += 1;
+  }
+  return {
+    questions: merged,
+    total: merged.length,
+    completed,
+    inFlight,
+    failed,
+    hasSlowInFlight,
+  };
+}
+
 export default function GradingProgressModal({
   isOpen,
   assignmentId,
@@ -125,7 +182,7 @@ export default function GradingProgressModal({
         currentStage: status === "completed" ? "Grading complete!" : message,
         currentQuestion: data?.currentQuestion,
         totalQuestions: data?.totalQuestions,
-        gradingState: gradingState ?? prev.gradingState,
+        gradingState: mergeGradingState(prev.gradingState, gradingState),
       }));
 
       if (terminalStatus === "Completed" || terminalStatus === "Failed") {

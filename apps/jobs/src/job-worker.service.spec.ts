@@ -292,10 +292,10 @@ describe("JobWorkerService", () => {
     expect(workerWaitUntilReady).toHaveBeenCalledTimes(5);
   });
 
-  // ─── Change 9: configurable GRADING_CONCURRENCY ──────────────────────────
+  // ─── Change 9: configurable GRADING_WORKER_CONCURRENCY ──────────────────────────
 
-  it("uses GRADING_CONCURRENCY env var to set attempt worker concurrency", async () => {
-    process.env.GRADING_CONCURRENCY = "2";
+  it("uses GRADING_WORKER_CONCURRENCY env var to set attempt worker concurrency", async () => {
+    process.env.GRADING_WORKER_CONCURRENCY = "2";
 
     // Re-create service so the new env var is picked up
     const customService = new JobWorkerService(
@@ -312,11 +312,11 @@ describe("JobWorkerService", () => {
     expect(attemptWorkerCall[2]).toMatchObject({ concurrency: 2 });
 
     await customService.onModuleDestroy();
-    delete process.env.GRADING_CONCURRENCY;
+    delete process.env.GRADING_WORKER_CONCURRENCY;
   });
 
-  it("falls back to concurrency 4 when GRADING_CONCURRENCY is not set", async () => {
-    delete process.env.GRADING_CONCURRENCY;
+  it("falls back to concurrency 4 when GRADING_WORKER_CONCURRENCY is not set", async () => {
+    delete process.env.GRADING_WORKER_CONCURRENCY;
     const defaultService = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
       mockParentWinstonLogger,
@@ -332,8 +332,8 @@ describe("JobWorkerService", () => {
     await defaultService.onModuleDestroy();
   });
 
-  it("parses GRADING_CONCURRENCY as a base-10 integer", async () => {
-    process.env.GRADING_CONCURRENCY = "8";
+  it("parses GRADING_WORKER_CONCURRENCY as a base-10 integer", async () => {
+    process.env.GRADING_WORKER_CONCURRENCY = "8";
     const s = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
       mockParentWinstonLogger,
@@ -348,7 +348,7 @@ describe("JobWorkerService", () => {
     expect(call![2].concurrency).toBe(8);
 
     await s.onModuleDestroy();
-    delete process.env.GRADING_CONCURRENCY;
+    delete process.env.GRADING_WORKER_CONCURRENCY;
   });
 
   it("closes every worker and the Redis connection on shutdown", async () => {

@@ -172,7 +172,12 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       this.createWorker(
         JOB_QUEUE_NAMES.ATTEMPT,
         async (job) => this.handleAttemptJob(job),
-        Number.parseInt(process.env.GRADING_CONCURRENCY ?? "4", 10),
+        // Number of grading JOBS the worker pulls from BullMQ concurrently.
+        // Distinct from GRADING_CONCURRENCY (apps/api), which caps how many
+        // LLM CALLS run in parallel inside one grading job. The two values
+        // were sharing a name and produced a footgun where setting one
+        // accidentally tuned the other; renamed to make the layer explicit.
+        Number.parseInt(process.env.GRADING_WORKER_CONCURRENCY ?? "4", 10),
       ),
       this.createWorker(
         JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
