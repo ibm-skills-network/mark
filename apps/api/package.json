@@ -117,7 +117,7 @@
     "@nestjs/testing": "^11.1.21",
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^5.0.0",
-    "@types/jest": "^29.5.2",
+    "@types/jest": "^30.0.0",
     "@types/multer": "^1.4.7",
     "@types/node": "^24.0.0",
     "@types/passport-jwt": "^3.0.8",
