@@ -109,7 +109,7 @@
     "form-data": "4.0.4"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.1.0",
+    "@commitlint/cli": "^21.0.1",
     "@commitlint/config-conventional": "^20.0.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.0.2",
     "@nestjs/cli": "^11.0.21",
