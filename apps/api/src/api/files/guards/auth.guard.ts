@@ -51,12 +51,10 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException("User session is missing");
     }
 
-    const assignmentPromise = this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-    });
-
     if (userSession.role === UserRole.ADMIN) {
-      const assignment = await assignmentPromise;
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+      });
       if (!assignment) {
         this.logger.warn("files_auth_denied: assignment not found", {
           denial_reason: "assignment_not_found",
@@ -80,8 +78,10 @@ export class AuthGuard implements CanActivate {
         });
         throw new ForbiddenException("Access denied to this assignment");
       }
-      const [assignment, author] = await Promise.all([
-        assignmentPromise,
+      const [assignment, author] = await this.prisma.$transaction([
+        this.prisma.assignment.findUnique({
+          where: { id: assignmentId },
+        }),
         this.prisma.assignmentAuthor.findUnique({
           where: {
             assignmentId_userId: {
@@ -114,57 +114,71 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    if (!userSession.groupId) {
-      this.logger.warn("files_auth_denied: learner session missing group", {
-        denial_reason: "missing_group",
-        user_id: userSession?.userId,
-        method,
-        url: originalUrl,
-      });
-      throw new ForbiddenException("User session or group ID is missing");
-    }
-    if (!userSession.assignmentId) {
-      this.logger.warn("files_auth_denied: session missing assignmentId", {
-        denial_reason: "missing_session_assignmentId",
-        user_id: userSession?.userId,
-        group_id: userSession?.groupId,
-        method,
-        url: originalUrl,
-      });
-      throw new ForbiddenException("Assignment ID is missing in user session");
+    if (userSession.role === UserRole.LEARNER) {
+      if (!userSession.groupId) {
+        this.logger.warn("files_auth_denied: learner session missing group", {
+          denial_reason: "missing_group",
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("User session or group ID is missing");
+      }
+      if (!userSession.assignmentId) {
+        this.logger.warn("files_auth_denied: session missing assignmentId", {
+          denial_reason: "missing_session_assignmentId",
+          user_id: userSession?.userId,
+          group_id: userSession?.groupId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("Assignment ID is missing in user session");
+      }
+
+      const [assignment, assignmentGroup] = await this.prisma.$transaction([
+        this.prisma.assignment.findUnique({
+          where: { id: assignmentId },
+        }),
+        this.prisma.assignmentGroup.findFirst({
+          where: {
+            assignmentId: assignmentId,
+            groupId: userSession.groupId,
+          },
+        }),
+      ]);
+      if (!assignment) {
+        this.logger.warn("files_auth_denied: assignment not found", {
+          denial_reason: "assignment_not_found",
+          assignment_id: assignmentId,
+          user_id: userSession?.userId,
+          method,
+          url: originalUrl,
+        });
+        throw new NotFoundException("Assignment not found");
+      }
+      if (!assignmentGroup) {
+        this.logger.warn("files_auth_denied: no group link", {
+          denial_reason: "no_group_link",
+          assignment_id: assignmentId,
+          user_id: userSession?.userId,
+          group_id: userSession?.groupId,
+          method,
+          url: originalUrl,
+        });
+        throw new ForbiddenException("Access denied to this assignment");
+      }
+
+      return true;
     }
 
-    const [assignment, assignmentGroup] = await Promise.all([
-      assignmentPromise,
-      this.prisma.assignmentGroup.findFirst({
-        where: {
-          assignmentId: assignmentId,
-          groupId: userSession.groupId,
-        },
-      }),
-    ]);
-    if (!assignment) {
-      this.logger.warn("files_auth_denied: assignment not found", {
-        denial_reason: "assignment_not_found",
-        assignment_id: assignmentId,
-        user_id: userSession?.userId,
-        method,
-        url: originalUrl,
-      });
-      throw new NotFoundException("Assignment not found");
-    }
-    if (!assignmentGroup) {
-      this.logger.warn("files_auth_denied: no group link", {
-        denial_reason: "no_group_link",
-        assignment_id: assignmentId,
-        user_id: userSession?.userId,
-        group_id: userSession?.groupId,
-        method,
-        url: originalUrl,
-      });
-      throw new ForbiddenException("Access denied to this assignment");
-    }
-
-    return true;
+    this.logger.warn("files_auth_denied: unknown role", {
+      denial_reason: "unknown_role",
+      role: userSession.role,
+      assignment_id: assignmentId,
+      user_id: userSession?.userId,
+      method,
+      url: originalUrl,
+    });
+    throw new ForbiddenException("Access denied to this assignment");
   }
 }

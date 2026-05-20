@@ -46,6 +46,7 @@ describe("FilesAuthGuard", () => {
     assignment: { findUnique: jest.Mock };
     assignmentAuthor: { findUnique: jest.Mock };
     assignmentGroup: { findFirst: jest.Mock };
+    $transaction: jest.Mock;
   };
   let guard: AuthGuard;
 
@@ -54,6 +55,9 @@ describe("FilesAuthGuard", () => {
       assignment: { findUnique: jest.fn() },
       assignmentAuthor: { findUnique: jest.fn() },
       assignmentGroup: { findFirst: jest.fn() },
+      $transaction: jest.fn((operations: Promise<unknown>[]) =>
+        Promise.all(operations),
+      ),
     };
     guard = new AuthGuard(
       prisma as unknown as PrismaService,
@@ -210,6 +214,41 @@ describe("FilesAuthGuard", () => {
       await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
+    });
+
+    it("rejects a learner with a valid groupId when the assignment does not exist", async () => {
+      prisma.assignment.findUnique.mockResolvedValue(null);
+      prisma.assignmentGroup.findFirst.mockResolvedValue(null);
+      const ctx = makeContext({
+        userSession: {
+          userId: "learner@example.com",
+          role: UserRole.LEARNER,
+          assignmentId: ASSIGNMENT_ID,
+          groupId: "group-1",
+        },
+      });
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe("unknown role", () => {
+    it("rejects a session whose role is not admin, author, or learner", async () => {
+      const ctx = makeContext({
+        userSession: {
+          userId: "mystery@example.com",
+          role: "unknown" as unknown as UserRole,
+          assignmentId: ASSIGNMENT_ID,
+          groupId: "group-1",
+        },
+      });
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.assignment.findUnique).not.toHaveBeenCalled();
+      expect(prisma.assignmentAuthor.findUnique).not.toHaveBeenCalled();
+      expect(prisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
     });
   });
 
