@@ -33,5 +33,12 @@ env:
   ENABLE_LTI_SCHEDULER: "false"      # gate the LTI cron in mark-jobs
   ENABLE_TRANSLATION: "true"         # required by SharedModule TranslationService ctor
   TRANSLATION_CONCURRENCY: "8"       # BullMQ worker concurrency for mark.assignment.v2.translations queue
+  # Master switch for the dependency-level wave grading scheduler. mark-jobs
+  # is where ATTEMPT_GRADE actually executes (JOBS_EXECUTE_LOCALLY=true), so
+  # this is the tier where the flag is load-bearing. Chart default "false"
+  # keeps the legacy sequential path active; per-environment overlays flip
+  # to "true" when the rollout window is open. Runtime check is strict
+  # equality with "true".
+  ENABLE_PARALLEL_GRADING: "false"
 
 secretEnv: {}
