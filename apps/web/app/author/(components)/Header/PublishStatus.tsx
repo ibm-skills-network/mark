@@ -3,7 +3,11 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
+import {
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  XCircleIcon,
+} from "@heroicons/react/24/solid";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type {
@@ -142,6 +146,15 @@ export default function PublishStatus({
   const mergedMapRef = React.useRef<Map<string, PerJobTranslationEntry>>(
     new Map(),
   );
+  // Monotonic ratchet for the visible bar. Server-side phase 1 progress
+  // ticks aren't strictly monotonic — different SSE-emitting code paths
+  // (publish poller vs question-service intermediate updates) report
+  // their own percentages, so a 27% tick can land after a 14% tick and
+  // make the bar visibly jitter backwards. Holding the max keeps the bar
+  // moving forward only. The parent passes a per-publish `key` that
+  // remounts the component, which naturally resets this ref to 0 on
+  // every new publish — no manual cleanup needed.
+  const maxPercentageRef = React.useRef<number>(0);
   const [dismissed, setDismissed] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
 
@@ -212,19 +225,25 @@ export default function PublishStatus({
   if (!submitting && !publishResult?.stage) return null;
   if (dismissed) return null;
 
-  // Unified percentage across both phases.
-  let unifiedPercentage: number;
+  // Unified percentage across both phases. Computed each render from the
+  // current SSE state, then clamped to a monotonic max via the ratchet
+  // ref below so the visible bar never reverses.
+  let rawPercentage: number;
   if (isTerminal) {
-    unifiedPercentage = isFailureMode ? Math.min(jobProgress, 100) : 100;
+    rawPercentage = isFailureMode ? Math.min(jobProgress, 100) : 100;
   } else if (hasTranslationPhase) {
     const total = aggregate?.total ?? 0;
     const completed = aggregate?.completed ?? 0;
     const fraction = total > 0 ? Math.min(1, completed / total) : 0;
-    unifiedPercentage = PHASE_1_CEILING + fraction * (100 - PHASE_1_CEILING);
+    rawPercentage = PHASE_1_CEILING + fraction * (100 - PHASE_1_CEILING);
   } else {
     // Phase 1 (Publishing): linear with jobProgress, capped at PHASE_1_CEILING.
-    unifiedPercentage = (Math.min(jobProgress, 100) / 100) * PHASE_1_CEILING;
+    rawPercentage = (Math.min(jobProgress, 100) / 100) * PHASE_1_CEILING;
   }
+  if (rawPercentage > maxPercentageRef.current) {
+    maxPercentageRef.current = rawPercentage;
+  }
+  const unifiedPercentage = maxPercentageRef.current;
 
   // Heading trio per design. Failure case is a 4th leaf only because the
   // visual treatment (red bar, X icon) demands matching copy.
@@ -262,11 +281,19 @@ export default function PublishStatus({
             : "Preparing translations..."
         : currentMessage || "Preparing publish...";
 
+  // Terminal-with-partial-failures gets the amber treatment so a green bar
+  // doesn't visually disagree with "Translations finished with N failure(s)".
+  // Full failure (the publish itself blew up) stays red, clean success
+  // stays green, in-flight stays violet.
+  const hasPartialFailure =
+    isTerminal && !isFailureMode && (aggregate?.failed ?? 0) > 0;
   const barColor = isFailureMode
     ? "bg-gradient-to-r from-red-400 to-red-600"
-    : isTerminal
-      ? "bg-gradient-to-r from-green-400 to-green-600"
-      : "bg-gradient-to-r from-violet-400 to-violet-600";
+    : hasPartialFailure
+      ? "bg-gradient-to-r from-amber-400 to-amber-600"
+      : isTerminal
+        ? "bg-gradient-to-r from-green-400 to-green-600"
+        : "bg-gradient-to-r from-violet-400 to-violet-600";
 
   const showRetry =
     isTerminal && !isFailureMode && (aggregate?.failed ?? 0) > 0;
@@ -309,9 +336,15 @@ export default function PublishStatus({
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="text-white font-bold text-xs flex items-center">
                 {Math.round(unifiedPercentage)}%
-                {isTerminal && !isFailureMode && (
+                {isTerminal && !isFailureMode && !hasPartialFailure && (
                   <CheckCircleIcon
                     className="w-4 h-4 ml-1 text-green-700"
+                    aria-hidden="true"
+                  />
+                )}
+                {hasPartialFailure && (
+                  <ExclamationTriangleIcon
+                    className="w-4 h-4 ml-1 text-amber-700"
                     aria-hidden="true"
                   />
                 )}
