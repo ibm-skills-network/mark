@@ -565,6 +565,8 @@ export default function GradingProgressModal({
                 </div>
 
                 <motion.h3
+                  key={status}
+                  translate="no"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
@@ -785,9 +787,22 @@ function QuestionGradingRow({ question }: { question: QuestionGradingState }) {
         <span className={`flex-shrink-0 ${styles.icon}`} aria-hidden="true">
           {styles.glyph}
         </span>
-        <span className="truncate">Question {question.displayOrder + 1}</span>
+        <span translate="no" className="truncate">
+          Question {question.displayOrder + 1}
+        </span>
       </span>
-      <span className={`text-xs uppercase tracking-wide ${styles.label}`}>
+      {/* key={styles.text} forces a full DOM remount when the status text
+          changes. Firefox's built-in page translation latches onto text
+          nodes after first render and stops applying React's text updates
+          (visible as a green/"Done" container with stale "Grading" text);
+          remounting on text change breaks that latch. translate="no" alone
+          is not reliable when the user has translate-from-English forced
+          on at the browser level. */}
+      <span
+        key={styles.text}
+        translate="no"
+        className={`text-xs uppercase tracking-wide ${styles.label}`}
+      >
         {styles.text}
       </span>
     </li>

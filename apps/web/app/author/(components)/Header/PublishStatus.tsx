@@ -308,7 +308,7 @@ export default function PublishStatus({
       <Card className="bg-white border-border">
         <CardContent className="p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">
-            <h3 translate="no" className="typography-h5">
+            <h3 key={heading} translate="no" className="typography-h5">
               {heading}
             </h3>
             {isTerminal && (
@@ -434,7 +434,18 @@ export default function PublishStatus({
                           >
                             {kLabel}
                           </span>
+                          {/* key={sLabel} forces a full DOM remount when the
+                              status text changes. Firefox's built-in page
+                              translation latches onto text nodes after first
+                              render and stops applying React's text updates
+                              (visible as a "100% / All translations complete"
+                              header with stale "Translating · 15/23 languages"
+                              rows); remounting on text change breaks that
+                              latch. translate="no" alone is not reliable when
+                              translate-from-English is forced on at the browser
+                              level. */}
                           <span
+                            key={sLabel}
                             translate="no"
                             className="typography-caption text-muted-foreground"
                           >
