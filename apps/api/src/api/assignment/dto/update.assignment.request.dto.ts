@@ -240,7 +240,7 @@ export class UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "Question-level controls (copy, paste, right-click)",
     required: false,
-    type: "object",
+    type: Object,
   })
   @IsOptional()
   @IsObject()

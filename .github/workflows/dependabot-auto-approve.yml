@@ -1,23 +1,32 @@
-name: Dependabot auto-approve
+name: Dependabot auto-merge
 on: pull_request_target
 
 permissions:
   pull-requests: write
   contents: write
-  issues: write
 
 jobs:
   dependabot:
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
     steps:
-      - name: Enable auto-merge for Dependabot PRs
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Auto-merge patch + minor bumps once CI is green.
+      # Major bumps stay open for manual review and a deliberate migration.
+      #
+      # NOTE: GitHub blocks bot self-approval, so we do not call
+      # `gh pr review --approve` here. For this to actually merge,
+      # branch protection on the default branch must not require an
+      # approving review for PRs authored by dependabot[bot] (or the
+      # required-reviews policy must be relaxed for these PRs).
+      - name: Enable auto-merge for non-major bumps
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --merge "$PR_URL"
         env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      - name: Approve dependabot PRs
-        run: gh pr review --approve "$PR_URL"
-        env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

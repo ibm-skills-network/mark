@@ -34,7 +34,7 @@ export class ApiController {
     return this.apiService.rootV1();
   }
 
-  @All(["oauth_consumers", "oauth_consumers/*"])
+  @All(["oauth_consumers", "oauth_consumers/*splat"])
   @UseGuards(DynamicJwtBearerTokenAuthGuard)
   @ApiOperation({ summary: "Handle CRUD operations for LTI Consumers" })
   @ApiBadRequestResponse({ description: "Bad request" })
@@ -63,7 +63,7 @@ export class ApiController {
     return response.status(apiResponse.status).send(apiResponse.data);
   }
 
-  @All("/admin/*")
+  @All("/admin{/*splat}")
   @UseGuards(DynamicJwtBearerTokenAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark Admin API" })
   @ApiBadRequestResponse({ description: "Bad request" })
@@ -134,7 +134,7 @@ export class ApiController {
     );
   }
 
-  @All("/*")
+  @All("/{*splat}")
   @UseGuards(DynamicJwtCookieAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark API" })
   @ApiBadRequestResponse({ description: "Bad request" })
