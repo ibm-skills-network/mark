@@ -1021,12 +1021,13 @@ export class AttemptSubmissionService {
         successfulQuestionResponses,
       );
 
-      // ── AI feedback when feedback display is enabled ──────────────────────────
-      // Scoring is already committed. When showSubmissionFeedback is on this step
-      // always runs — it is not optional. Failure sets an error marker so the
-      // learner can rerun without losing their saved grade.
+      // ── Optional AI feedback for visible deterministic feedback ──────────────
+      // Scoring is already committed. Only runs when the prompt processor is
+      // configured and feedback is visible. Failure sets an error marker so the
+      // learner can rerun without losing their saved grade. Skipped entirely
+      // when promptProcessor is absent to avoid a permanently broken rerun banner.
       let aiFeedbackError: string | null = null;
-      if (assignment.showSubmissionFeedback) {
+      if (assignment.showSubmissionFeedback && this.promptProcessor) {
         try {
           await this.generateAiFeedbackForDeterministicAttempt(
             gradedItems,
@@ -1851,22 +1852,6 @@ export class AttemptSubmissionService {
       return "en";
     }
     return language.toLowerCase().split("-")[0];
-  }
-
-  /**
-   * Returns true only when every non-deleted question in the assignment is one
-   * of the three deterministic types (no LLM call during scoring).
-   */
-  private isAssignmentFullyDeterministic(
-    questions: { type: QuestionType }[],
-  ): boolean {
-    if (questions.length === 0) return false;
-    const deterministicTypes = new Set<QuestionType>([
-      QuestionType.SINGLE_CORRECT,
-      QuestionType.MULTIPLE_CORRECT,
-      QuestionType.TRUE_FALSE,
-    ]);
-    return questions.every((q) => deterministicTypes.has(q.type));
   }
 
   private async loadPersistedGradedItemsForDeterministicAttempt(

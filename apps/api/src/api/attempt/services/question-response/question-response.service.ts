@@ -190,8 +190,10 @@ export class QuestionResponseService {
       gradedItems.push({ questionId, learnerResponse, responseDto });
     }
 
-    await this.progressService?.markComplete(assignmentAttemptId);
-
+    // markComplete is deliberately NOT called here. The caller
+    // (updateAssignmentAttempt) owns the terminal progress state and calls
+    // markComplete / markCompleteWithAiFeedbackError after the optional AI
+    // feedback step that follows.
     return gradedItems;
   }
 
