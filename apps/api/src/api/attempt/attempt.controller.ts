@@ -83,6 +83,10 @@ export class AttemptControllerV2 {
     this.logger = parentLogger.child({ context: AttemptControllerV2.name });
   }
 
+  private isParallelGradingEnabled(): boolean {
+    return process.env.ENABLE_PARALLEL_GRADING === "true";
+  }
+
   @Post()
   @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)
@@ -267,7 +271,7 @@ export class AttemptControllerV2 {
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
 
-    const needsLongRunningGrading = true;
+    const needsLongRunningGrading = this.isParallelGradingEnabled();
     const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
 
     if (needsLongRunningGrading && !isAuthorMode) {

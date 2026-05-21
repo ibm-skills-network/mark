@@ -9,7 +9,8 @@ import Bottleneck from "bottleneck";
  * fan-out.
  *
  * Env tuning:
- *   ENABLE_PARALLEL_GRADING   — master switch (default "true"). When "false",
+ *   ENABLE_PARALLEL_GRADING   — master switch (default "false"). When not
+ *                               exactly "true",
  *                               concurrency is forced to 1 so the wave
  *                               scheduler degenerates to sequential grading,
  *                               matching the pre-parallelization behavior.
@@ -27,7 +28,7 @@ export class GradingRateLimiterService {
   public readonly concurrency: number;
 
   constructor() {
-    this.parallelEnabled = this.readBooleanEnv("ENABLE_PARALLEL_GRADING", true);
+    this.parallelEnabled = process.env.ENABLE_PARALLEL_GRADING === "true";
     const requestedConcurrency = this.readNumberEnv(
       "GRADING_CONCURRENCY",
       10,
@@ -53,18 +54,6 @@ export class GradingRateLimiterService {
     this.logger.log(
       `GradingRateLimiterService initialized parallel=${String(this.parallelEnabled)} concurrency=${this.concurrency} timeout=${this.operationTimeoutMs}ms`,
     );
-  }
-
-  private readBooleanEnv(key: string, fallback: boolean): boolean {
-    const raw = process.env[key];
-    if (raw === undefined || raw === "") return fallback;
-    const normalized = raw.trim().toLowerCase();
-    if (["true", "1", "yes", "on"].includes(normalized)) return true;
-    if (["false", "0", "no", "off"].includes(normalized)) return false;
-    this.logger.warn(
-      `grading.limiter.env.invalid key=${key} raw=${raw} fallback=${String(fallback)}`,
-    );
-    return fallback;
   }
 
   async schedule<T>(

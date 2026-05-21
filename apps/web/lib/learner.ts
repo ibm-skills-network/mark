@@ -328,7 +328,12 @@ export async function submitAssignment(
     const { gradingJobId, message } = responseData;
 
     if (!gradingJobId) {
-      throw new Error("No grading job ID returned");
+      onProgress?.(
+        "completed",
+        100,
+        message || "Submission graded successfully.",
+      );
+      return responseData;
     }
 
     onGradingJobCreated?.(gradingJobId);
