@@ -62,6 +62,29 @@ export async function createAttempt(
 }
 
 /**
+ * Discards a pristine attempt (no responses) that is pinned to a stale
+ * assignment version. The next createAttempt call will produce a fresh attempt
+ * against the current version.
+ *
+ * Returns true on success; false if the backend rejected the abandon (already
+ * has responses, version isn't actually stale, etc.) so the caller can leave
+ * the existing attempt alone.
+ */
+export async function abandonAttempt(
+  assignmentId: number,
+  attemptId: number,
+): Promise<boolean> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/abandon`;
+  try {
+    await apiClient.post<{ id: number; success: true }>(endpointURL, {});
+    return true;
+  } catch (err) {
+    console.error("abandonAttempt failed", err);
+    return false;
+  }
+}
+
+/**
  * gets the questions for a given uncompleted attempt and assignment
  * @param assignmentId The id of the assignment to get the questions for.
  * @param attemptId The id of the attempt to get the questions for.

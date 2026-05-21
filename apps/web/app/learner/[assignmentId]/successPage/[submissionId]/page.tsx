@@ -122,6 +122,48 @@ function SuccessPage() {
     ]);
   };
 
+  const applyAttemptToState = (data: AssignmentAttemptWithQuestions) => {
+    const questions = data.questions ?? [];
+    setQuestions(questions);
+    setBackendComments(data.comments || "");
+    setShowSubmissionFeedback(data.showSubmissionFeedback || false);
+    setCorrectAnswerVisibility(data.correctAnswerVisibility ?? "ALWAYS");
+    setShowQuestions(data.showQuestions);
+    setUserPreferredLanguage(data.preferredLanguage ?? "en");
+    setAiFeedbackError(data.aiFeedbackError ?? null);
+
+    if (data.showAssignmentScore === false) {
+      setGrade(Number.NaN);
+      setTotalPoints(0);
+      setTotalPointsEarned(0);
+    } else {
+      const rawGrade = data.grade;
+      const possiblePoints =
+        typeof data.totalPossiblePoints === "number"
+          ? data.totalPossiblePoints
+          : questions.reduce(
+              (acc, question) => acc + (question.totalPoints ?? 0),
+              0,
+            );
+      const earnedPoints =
+        typeof data.totalPointsEarned === "number"
+          ? data.totalPointsEarned
+          : typeof rawGrade === "number"
+            ? possiblePoints * rawGrade
+            : 0;
+
+      setGrade(typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN);
+      setTotalPoints(possiblePoints);
+      setTotalPointsEarned(earnedPoints);
+    }
+
+    setAssignmentDetails({
+      passingGrade: data.passingGrade,
+      id: data.id,
+      name: data.name,
+    });
+  };
+
   useEffect(() => {
     logState(
       "Start loading success page",
@@ -389,27 +431,6 @@ function SuccessPage() {
     if (grade >= 60) return "Solid Effort! ";
     if (grade >= 50) return "Steady Improvement! ";
     return "Keep Pushing Forward!";
-  };
-
-  const applyAttemptToState = (data: AssignmentAttemptWithQuestions) => {
-    const possiblePoints =
-      data.totalPossiblePoints ??
-      data.questions.reduce((acc, q) => acc + q.totalPoints, 0);
-    setQuestions(data.questions);
-    setBackendComments(data.comments || "");
-    setShowSubmissionFeedback(data.showSubmissionFeedback || false);
-    setCorrectAnswerVisibility(data.correctAnswerVisibility ?? "ALWAYS");
-    setShowQuestions(data.showQuestions);
-    setUserPreferredLanguage(data.preferredLanguage ?? "en");
-    setAiFeedbackError(data.aiFeedbackError ?? null);
-    setGrade(data.grade * 100);
-    setTotalPoints(possiblePoints);
-    setTotalPointsEarned(data.totalPointsEarned ?? possiblePoints * data.grade);
-    setAssignmentDetails({
-      passingGrade: data.passingGrade,
-      id: data.id,
-      name: data.name,
-    });
   };
 
   const refreshAttemptData = async () => {

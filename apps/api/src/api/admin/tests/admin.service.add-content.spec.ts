@@ -12,6 +12,8 @@ import {
 import { PrismaService } from "../../../database/prisma.service";
 import { AssignmentServiceV2 } from "../../assignment/v2/services/assignment.service";
 import { AssignmentFileService } from "../../assignment/v2/services/assignment-file.service";
+import { JobStatusServiceV2 } from "../../assignment/v2/services/job-status.service";
+import { QuestionService } from "../../assignment/v2/services/question.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 import { AdminService } from "../admin.service";
 import { AdminAddContentToAssignmentRequestDto } from "../dto/assignment/add.content.to.assignment.request.dto";
@@ -165,6 +167,18 @@ describe("AdminService - addContentToAssignment", () => {
           provide: AssignmentFileService,
           useValue: {
             cleanupAssignmentFileObjects: jest.fn(),
+          },
+        },
+        {
+          provide: QuestionService,
+          useValue: {
+            generateQuestions: jest.fn(),
+          },
+        },
+        {
+          provide: JobStatusServiceV2,
+          useValue: {
+            getJobStatus: jest.fn(),
           },
         },
         {
@@ -802,6 +816,189 @@ describe("AdminService - addContentToAssignment", () => {
 
       // Assert
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe("addContentToAssignment - publish payload integrity", () => {
+    it("publish payload sent after createMany has alreadyInBackend: true on every QuestionDto", async () => {
+      // Two persisted rows mirror the createMany'd output for the assignment.
+      const persistedQuestions = [
+        {
+          id: 501,
+          assignmentId: mockAssignmentId,
+          isDeleted: false,
+          type: QuestionType.SINGLE_CORRECT,
+          question: "What is IBM Cloud VCFaaS?",
+          responseType: ResponseType.OTHER,
+          totalPoints: 1,
+          choices: mockContentDto.questions[0].choices,
+          scoring: null,
+          maxWords: null,
+          maxCharacters: null,
+          randomizedChoices: true,
+          answer: null,
+          authorComment: null,
+          gradingContextQuestionIds: [],
+          videoPresentationConfig: null,
+          liveRecordingConfig: null,
+          variants: [],
+        },
+        {
+          id: 502,
+          assignmentId: mockAssignmentId,
+          isDeleted: false,
+          type: QuestionType.TEXT,
+          question: "Describe your career goals",
+          responseType: ResponseType.OTHER,
+          totalPoints: 5,
+          choices: null,
+          scoring: mockContentDto.questions[1].scoring,
+          maxWords: 500,
+          maxCharacters: null,
+          randomizedChoices: null,
+          answer: null,
+          authorComment: null,
+          gradingContextQuestionIds: [],
+          videoPresentationConfig: null,
+          liveRecordingConfig: null,
+          variants: [],
+        },
+      ];
+
+      const mockUpdatedAssignment = {
+        ...mockExistingAssignment,
+        ...mockContentDto.assignment,
+        questionOrder: [501, 502],
+        updatedAt: new Date(),
+      };
+
+      const mockAssignmentForPublish = {
+        ...mockUpdatedAssignment,
+        gradingCriteriaOverview: mockContentDto.gradingCriteria,
+        questionDisplay: mockContentDto.config.questionDisplay,
+        displayOrder: mockContentDto.config.displayOrder,
+        numAttempts: mockContentDto.config.numAttempts,
+        attemptsBeforeCoolDown: mockContentDto.config.attemptsBeforeCoolDown,
+        retakeAttemptCoolDownMinutes:
+          mockContentDto.config.retakeAttemptCoolDownMinutes,
+        passingGrade: mockContentDto.config.passingGrade,
+        graded: mockContentDto.config.graded,
+        showQuestions: mockContentDto.config.showQuestions,
+        showSubmissionFeedback: mockContentDto.config.showSubmissionFeedback,
+        showAssignmentScore: mockContentDto.config.showAssignmentScore,
+        showQuestionScore: mockContentDto.config.showQuestionScore,
+        correctAnswerVisibility: mockContentDto.config.correctAnswerVisibility,
+        numberOfQuestionsPerAttempt:
+          mockContentDto.config.numberOfQuestionsPerAttempt,
+        timeEstimateMinutes: mockContentDto.config.timeEstimateMinutes,
+        allotedTimeMinutes: mockContentDto.config.allotedTimeMinutes,
+        attemptsPerTimeRange: mockContentDto.config.attemptsPerTimeRange,
+        attemptsTimeRangeHours: mockContentDto.config.attemptsTimeRangeHours,
+        questions: persistedQuestions,
+      };
+
+      (prismaService.$transaction as jest.Mock).mockImplementation(
+        async (callback) => {
+          const tx = {
+            assignment: {
+              findUnique: jest.fn().mockResolvedValue({
+                ...mockExistingAssignment,
+                _count: { questions: 0 },
+              }),
+              update: jest
+                .fn()
+                .mockResolvedValueOnce(mockUpdatedAssignment)
+                .mockResolvedValueOnce(mockUpdatedAssignment),
+            },
+            question: {
+              createMany: jest.fn().mockResolvedValue({ count: 2 }),
+              findMany: jest.fn().mockResolvedValue(persistedQuestions),
+            },
+          };
+
+          return callback(tx);
+        },
+      );
+      (prismaService.assignment.findUnique as jest.Mock).mockResolvedValue(
+        mockAssignmentForPublish,
+      );
+
+      // Act
+      await service.addContentToAssignment(
+        mockAssignmentId,
+        mockContentDto,
+        mockUserId,
+      );
+      await flushPromises();
+
+      // Assert
+      expect(assignmentService.publishAssignment).toHaveBeenCalledTimes(1);
+      const [calledAssignmentId, payload, calledUserId] =
+        assignmentService.publishAssignment.mock.calls[0];
+      expect(calledAssignmentId).toBe(mockAssignmentId);
+      expect(calledUserId).toBe(mockUserId);
+      expect(payload.questions).toHaveLength(2);
+      const ids = payload.questions.map((q: { id: number }) => q.id);
+      expect(ids).toEqual([501, 502]);
+      for (const q of payload.questions) {
+        expect(q.alreadyInBackend).toBe(true);
+      }
+      expect(payload.questionOrder).toEqual([501, 502]);
+    });
+
+    it("in-transaction findMany filters isDeleted: false", async () => {
+      let capturedFindManyArgs:
+        | { where?: Record<string, unknown>; orderBy?: unknown }
+        | undefined;
+
+      (prismaService.$transaction as jest.Mock).mockImplementation(
+        async (callback) => {
+          const tx = {
+            assignment: {
+              findUnique: jest.fn().mockResolvedValue({
+                ...mockExistingAssignment,
+                _count: { questions: 0 },
+              }),
+              update: jest
+                .fn()
+                .mockResolvedValueOnce({ ...mockExistingAssignment })
+                .mockResolvedValueOnce({ ...mockExistingAssignment }),
+            },
+            question: {
+              createMany: jest.fn().mockResolvedValue({ count: 2 }),
+              findMany: jest.fn().mockImplementation((args) => {
+                capturedFindManyArgs = args;
+                return Promise.resolve([]);
+              }),
+            },
+          };
+
+          return callback(tx);
+        },
+      );
+      (prismaService.assignment.findUnique as jest.Mock).mockResolvedValue({
+        ...mockExistingAssignment,
+        questions: [],
+        questionOrder: [],
+        updatedAt: new Date(),
+      });
+
+      // Act
+      await service.addContentToAssignment(
+        mockAssignmentId,
+        mockContentDto,
+        mockUserId,
+      );
+
+      // Assert
+      expect(capturedFindManyArgs).toBeDefined();
+      expect(capturedFindManyArgs?.where).toEqual(
+        expect.objectContaining({
+          assignmentId: mockAssignmentId,
+          isDeleted: false,
+        }),
+      );
+      expect(capturedFindManyArgs?.orderBy).toEqual({ id: "asc" });
     });
   });
 });

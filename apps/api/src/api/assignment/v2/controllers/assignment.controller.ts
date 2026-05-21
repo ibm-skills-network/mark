@@ -16,15 +16,11 @@ import {
   Query,
   Req,
   Sse,
-  UploadedFiles,
   UseGuards,
-  UseInterceptors,
   ValidationPipe,
 } from "@nestjs/common";
-import { FilesInterceptor } from "@nestjs/platform-express";
 import {
   ApiBody,
-  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiParam,
@@ -34,16 +30,18 @@ import {
   refs,
 } from "@nestjs/swagger";
 import { Request } from "express";
-import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
 import { AdminService } from "src/api/admin/admin.service";
 import { AdminGuard } from "src/auth/guards/admin.guard";
 import {
   UserRole,
+  UserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { PrismaService } from "src/database/prisma.service";
+import { JobStateRecord } from "src/job-queue/job-state.types";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
@@ -62,6 +60,11 @@ import {
   UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
+import {
+  CompleteAssignmentFileDto,
+  InitiateAssignmentFilesDto,
+  InitiateAssignmentFilesResponseDto,
+} from "../dtos/assignment-file-upload.dto";
 import { AssignmentFileService } from "../services/assignment-file.service";
 import { AssignmentServiceV2 } from "../services/assignment.service";
 import { JobStatusServiceV2 } from "../services/job-status.service";
@@ -126,8 +129,48 @@ export class AssignmentControllerV2 {
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly adminService: AdminService,
+    private readonly prisma: PrismaService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV2.name });
+  }
+
+  // Returns true when the caller may read this publish job's status. Allows the
+  // job's creator OR any author whose group is linked to the job's assignment.
+  // Co-author access is required because publishAssignment dedups by
+  // assignmentId and returns an in-flight job's id to a second author who hits
+  // publish on the same assignment — they need to watch it complete.
+  private async canReadPublishJob(
+    job: JobStateRecord,
+    userSession: UserSession,
+  ): Promise<boolean> {
+    if (job.userId === userSession.userId) {
+      return true;
+    }
+
+    if (typeof job.assignmentId !== "number") {
+      return false;
+    }
+
+    // Refuse when the session has no groupId — Prisma silently drops undefined
+    // keys from `where`, and without this guard the query collapses to
+    // `{ assignmentId }` and returns the first AssignmentGroup row for the
+    // assignment, granting cross-tenant read of any deterministic publish job.
+    if (
+      typeof userSession.groupId !== "string" ||
+      userSession.groupId.length === 0
+    ) {
+      return false;
+    }
+
+    const link = await this.prisma.assignmentGroup.findFirst({
+      where: {
+        assignmentId: job.assignmentId,
+        groupId: userSession.groupId,
+      },
+      select: { assignmentId: true },
+    });
+
+    return link !== null;
   }
 
   /**
@@ -218,7 +261,8 @@ export class AssignmentControllerV2 {
       throw new NotFoundException(`Publish job with ID ${jobId} not found`);
     }
 
-    if (job.userId !== request.userSession.userId) {
+    const allowed = await this.canReadPublishJob(job, request.userSession);
+    if (!allowed) {
       throw new NotFoundException(`Publish job with ID ${jobId} not found`);
     }
 
@@ -264,6 +308,74 @@ export class AssignmentControllerV2 {
     );
   }
 
+  /**
+   * Look up the in-flight publish job for an assignment, if any.
+   * Returns null when no publish is active so the client can reattach
+   * to the SSE stream after a page refresh without having to start a
+   * new publish.
+   */
+  @Get(":id/active-publish-job")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({ summary: "Find the in-flight publish job for an assignment" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      nullable: true,
+      properties: {
+        jobId: { type: "string" },
+      },
+    },
+  })
+  async getActivePublishJob(
+    @Param("id", ParseIntPipe) id: number,
+  ): Promise<{ jobId: string } | null> {
+    const job = await this.assignmentService.findActivePublishJob(id);
+    return job ? { jobId: job.id } : null;
+  }
+
+  /**
+   * Retry the failed translations from the most recent publish for this
+   * assignment. Reads the publish's per-job status hash, re-enqueues a
+   * translation job per failed entry, and returns a new jobId the client
+   * can subscribe to via SSE to track retry progress.
+   *
+   * Returns 409 if a publish is currently active — wait for it to finish,
+   * then click retry.
+   */
+  @Post(":id/translations/retry-failed")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({
+    summary: "Retry failed translations from the most recent publish",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      properties: {
+        jobId: { type: "string", description: "Retry job ID for SSE" },
+        message: { type: "string" },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: "A publish is currently in progress for this assignment",
+  })
+  async retryFailedTranslations(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ jobId: string; message: string }> {
+    return this.assignmentService.enqueueRetryFailedTranslations(
+      id,
+      request.userSession.userId,
+    );
+  }
+
   @Get(":id/files")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
@@ -277,42 +389,78 @@ export class AssignmentControllerV2 {
     return this.assignmentFileService.getAssignmentFiles(id);
   }
 
-  @Post(":id/files")
+  @Post(":id/files/initiate")
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
-  @UseInterceptors(
-    FilesInterceptor("files", 20, {
-      storage: memoryStorage(),
-      limits: { fileSize: 100 * 1024 * 1024 },
-    }),
-  )
-  @ApiOperation({ summary: "Upload files for an assignment" })
-  @ApiConsumes("multipart/form-data")
-  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
-  @ApiBody({
-    schema: {
-      type: "object",
-      properties: {
-        files: {
-          type: "array",
-          items: {
-            type: "string",
-            format: "binary",
-          },
-        },
-      },
-      required: ["files"],
-    },
+  @ApiOperation({
+    summary:
+      "Initiate multipart uploads for assignment files (returns presigned part URLs)",
   })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiBody({ type: InitiateAssignmentFilesDto })
   @ApiResponse({
     status: 201,
-    description: "Files uploaded successfully",
+    type: InitiateAssignmentFilesResponseDto,
+    description:
+      "Per-file uploadId, key, bucket, part size and presigned part URLs",
   })
-  async uploadAssignmentFiles(
+  async initiateAssignmentFileUploads(
     @Param("id", ParseIntPipe) id: number,
-    @UploadedFiles() files: Express.Multer.File[],
+    @Body(new ValidationPipe({ transform: true }))
+    dto: InitiateAssignmentFilesDto,
+    @Req() request: UserSessionRequest,
+  ): Promise<InitiateAssignmentFilesResponseDto> {
+    return this.assignmentFileService.initiateAssignmentFileUploads(
+      id,
+      dto,
+      request.userSession.userId,
+    );
+  }
+
+  @Post(":id/files/:fileId/complete")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Complete a multipart upload for an assignment file and extract content",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiParam({ name: "fileId", required: true, description: "File ID" })
+  @ApiBody({ type: CompleteAssignmentFileDto })
+  @ApiResponse({
+    status: 201,
+    description:
+      "File record updated to READY (or FAILED extraction) and extracted content persisted",
+  })
+  async completeAssignmentFileUpload(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("fileId", ParseIntPipe) fileId: number,
+    @Body(new ValidationPipe({ transform: true }))
+    dto: CompleteAssignmentFileDto,
   ) {
-    return this.assignmentFileService.uploadAssignmentFiles(id, files);
+    return this.assignmentFileService.completeAssignmentFileUpload(
+      id,
+      fileId,
+      dto,
+    );
+  }
+
+  @Post(":id/files/:fileId/abort")
+  @Roles(UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @HttpCode(204)
+  @ApiOperation({
+    summary:
+      "Abort an in-progress multipart upload and remove the placeholder row",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiParam({ name: "fileId", required: true, description: "File ID" })
+  @ApiResponse({ status: 204, description: "Upload aborted" })
+  async abortAssignmentFileUpload(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("fileId", ParseIntPipe) fileId: number,
+  ): Promise<void> {
+    return this.assignmentFileService.abortAssignmentFileUpload(id, fileId);
   }
 
   @Delete(":id/files/:fileId")
@@ -438,23 +586,36 @@ export class AssignmentControllerV2 {
     status: string;
     progress: string;
     questions?: QuestionDto[];
+    // Raw job.result is returned alongside questions so the SSE-fallback
+    // poller can render publish/retry progress (PublishJobResult shape)
+    // when the EventSource drops mid-publish — without this the UI never
+    // sees failed translations or the retry-button trigger.
+    result?: unknown;
   }> {
     const job = await this.jobStatusService.getJobStatus(jobId);
     if (!job) {
       throw new NotFoundException("Job not found");
     }
 
-    if (job.userId !== request.userSession.userId) {
+    const allowed = await this.canReadPublishJob(job, request.userSession);
+    if (!allowed) {
       throw new NotFoundException("Job not found");
     }
 
-    return job.status === "Completed"
-      ? {
-          status: job.status,
-          progress: job.progress,
-          questions: job.result as QuestionDto[] | undefined,
-        }
-      : { status: job.status, progress: job.progress };
+    // Question-generation jobs store QuestionDto[] on result; publish /
+    // retry jobs store a PublishJobResult object. Surface both shapes:
+    // questions[] for the existing question-gen path, result for everything
+    // else. Client type-guards the result field.
+    const isQuestionsArray = Array.isArray(job.result);
+    return {
+      status: job.status,
+      progress: job.progress,
+      questions:
+        job.status === "Completed" && isQuestionsArray
+          ? (job.result as QuestionDto[])
+          : undefined,
+      result: job.result,
+    };
   }
 
   /**

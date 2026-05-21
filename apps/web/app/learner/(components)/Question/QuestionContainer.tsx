@@ -15,6 +15,8 @@ import {
 import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
   LanguageIcon,
   TagIcon as OutlineTagIcon,
   ArrowRightIcon,
@@ -302,6 +304,46 @@ function Component(props: Props) {
 
       <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
         <div className="flex-grow">
+          {question.translationStatus === "pending" && (
+            <div className="mb-3 flex items-start gap-3 px-3 py-2 rounded-md bg-gray-50 border border-gray-200">
+              <ClockIcon className="h-5 w-5 text-gray-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1">
+                <span className="typography-caption text-gray-700">
+                  Translation in progress
+                </span>
+                <p className="text-sm text-gray-600">
+                  A translation into{" "}
+                  {getLanguageName(userPreferedLanguage) ||
+                    "your selected language"}{" "}
+                  is being prepared. You can answer in English now — refresh the
+                  page to see the translation when it&apos;s ready.
+                </p>
+              </div>
+              <span className="sr-only" aria-live="polite">
+                Translation in progress for this question.
+              </span>
+            </div>
+          )}
+          {question.translationStatus === "unavailable" && (
+            <div className="mb-3 flex items-start gap-3 px-3 py-2 rounded-md bg-yellow-100 border border-yellow-500">
+              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-700 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1">
+                <span className="typography-caption text-yellow-700">
+                  Translation unavailable
+                </span>
+                <p className="text-sm text-yellow-900">
+                  A translation into{" "}
+                  {getLanguageName(userPreferedLanguage) ||
+                    "your selected language"}{" "}
+                  could not be prepared. The English version is shown below —
+                  your answer is saved either way.
+                </p>
+              </div>
+              <span className="sr-only" aria-live="polite">
+                Translation unavailable for this question; English shown.
+              </span>
+            </div>
+          )}
           <div className="mb-2">
             <MarkdownViewer
               className="text-gray-800 px-2 border-gray-300 text-sm sm:text-base"

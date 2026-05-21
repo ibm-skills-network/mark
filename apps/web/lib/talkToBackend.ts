@@ -57,6 +57,8 @@ export const updateAssignment = apiAuthor.updateAssignment;
 export const createQuestion = apiAuthor.createQuestion;
 export const subscribeToJobStatus = apiAuthor.subscribeToJobStatus;
 export const publishAssignment = apiAuthor.publishAssignment;
+export const getActivePublishJob = apiAuthor.getActivePublishJob;
+export const retryFailedTranslations = apiAuthor.retryFailedTranslations;
 export const replaceQuestion = apiAuthor.replaceQuestion;
 export const generateQuestionVariant = apiAuthor.generateQuestionVariant;
 export const generateRubric = apiAuthor.generateRubric;
@@ -68,6 +70,7 @@ export const getJobStatus = apiAuthor.getJobStatus;
 export const submitReportAuthor = apiAuthor.submitReportAuthor;
 
 export const createAttempt = apiLearner.createAttempt;
+export const abandonAttempt = apiLearner.abandonAttempt;
 export const getAttempt = apiLearner.getAttempt;
 export const getCompletedAttempt = apiLearner.getCompletedAttempt;
 export const getSuccessPageData = apiLearner.getSuccessPageData;

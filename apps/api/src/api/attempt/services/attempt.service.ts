@@ -40,7 +40,11 @@ import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
 import { AttemptSubmissionService } from "./attempt-submission.service";
-import { GradingProgressService } from "./grading-progress.service";
+import { newJobScopedCache } from "./grading/job-scoped-cache";
+import {
+  GradingProgressService,
+  type GradingProgressDetails,
+} from "./grading-progress.service";
 
 @Injectable()
 export class AttemptServiceV2 {
@@ -262,11 +266,32 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
+      const cache = newJobScopedCache();
+
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
         progress: "Starting author preview grading...",
         percentage: 0,
       });
+
+      if (this.gradingProgressService) {
+        this.gradingProgressService.setProgressCallback(
+          -1,
+          async (
+            status: string,
+            progress: string,
+            percentage?: number,
+            details?: GradingProgressDetails,
+          ) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status,
+              progress,
+              percentage: percentage ?? 0,
+              result: details ? { gradingState: details } : undefined,
+            });
+          },
+        );
+      }
 
       const result = await this.submissionService.updateAssignmentAttempt(
         -1,
@@ -275,14 +300,24 @@ export class AttemptServiceV2 {
         authCookie,
         false,
         request,
-        async (progress: string, percentage?: number) => {
+        async (
+          progress: string,
+          percentage?: number,
+          details?: GradingProgressDetails,
+        ) => {
           await this.updateGradingJobStatus(gradingJobId, {
             status: "Processing",
             progress,
             percentage: percentage || 0,
+            result: details ? { gradingState: details } : undefined,
           });
         },
+        cache,
       );
+
+      if (this.gradingProgressService) {
+        this.gradingProgressService.removeProgressCallback(-1);
+      }
 
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Completed",
@@ -314,16 +349,26 @@ export class AttemptServiceV2 {
     request: UserSessionRequest,
   ): Promise<void> {
     try {
-      this.gradingProgressService?.setProgressCallback(
-        attemptId,
-        async (status: string, progress: string, percentage?: number) => {
-          await this.updateGradingJobStatus(gradingJobId, {
-            status,
-            progress,
-            percentage,
-          });
-        },
-      );
+      const cache = newJobScopedCache();
+
+      if (this.gradingProgressService) {
+        this.gradingProgressService.setProgressCallback(
+          attemptId,
+          async (
+            status: string,
+            progress: string,
+            percentage?: number,
+            details?: GradingProgressDetails,
+          ) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status,
+              progress,
+              percentage,
+              result: details ? { gradingState: details } : undefined,
+            });
+          },
+        );
+      }
 
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Processing",
@@ -338,13 +383,19 @@ export class AttemptServiceV2 {
         authCookie,
         request.userSession.gradingCallbackRequired,
         request,
-        async (progress: string, percentage?: number) => {
+        async (
+          progress: string,
+          percentage?: number,
+          details?: GradingProgressDetails,
+        ) => {
           await this.updateGradingJobStatus(gradingJobId, {
             status: "Processing",
             progress,
             percentage,
+            result: details ? { gradingState: details } : undefined,
           });
         },
+        cache,
       );
 
       await this.updateGradingJobStatus(gradingJobId, {
@@ -528,6 +579,19 @@ export class AttemptServiceV2 {
   ): Promise<BaseAssignmentAttemptResponseDto> {
     return this.submissionService.createAssignmentAttempt(
       assignmentId,
+      userSession,
+    );
+  }
+
+  /**
+   * Abandon a stale (no-progress, version-mismatched) attempt
+   */
+  async abandonAssignmentAttempt(
+    attemptId: number,
+    userSession: UserSession,
+  ): Promise<{ id: number; success: true }> {
+    return this.submissionService.abandonAssignmentAttempt(
+      attemptId,
       userSession,
     );
   }

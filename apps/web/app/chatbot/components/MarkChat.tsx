@@ -16,6 +16,7 @@ import {
   ArchiveBoxIcon,
   BellIcon,
   ChatBubbleBottomCenterTextIcon,
+  PaperClipIcon,
 } from "@heroicons/react/24/outline";
 import {
   ArrowPathIcon,
@@ -32,7 +33,12 @@ import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAuthorContext } from "../store/useAuthorContext";
 import { useLearnerContext } from "../store/useLearnerContext";
-import { ChatRole, useMarkChatStore } from "../store/useMarkChatStore";
+import {
+  AttachedFile,
+  ChatRole,
+  ChatMessage,
+  useMarkChatStore,
+} from "../store/useMarkChatStore";
 import { useAuthorStore } from "@/stores/author";
 import { toast } from "sonner";
 import Tippy from "@tippyjs/react";
@@ -44,20 +50,18 @@ import {
   addMessageToChat,
   endChat,
   getUser,
-  directUpload,
-  getFileType,
+  uploadFileToStorage,
 } from "@/lib/shared";
+import { useDropzone } from "react-dropzone";
 import { getBaseApiPath } from "@/config/constants";
 import UserReportsPanel from "./UserReportsPanel";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
 import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
-import { useUserBehaviorMonitor } from "../../../hooks/useUserBehaviorMonitor";
-import { useDropzone } from "react-dropzone";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
-import type { User } from "@/config/types";
+import type { UploadType, User } from "@/config/types";
 
 let cachedUser: User | null = null;
 let cachedUserPromise: Promise<User | null> | null = null;
@@ -105,11 +109,11 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
         "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
       },
       multiple: false,
-      maxSize: 10 * 1024 * 1024,
+      maxSize: 100 * 1024 * 1024,
       onDropRejected: (rejectedFiles) => {
         const error = rejectedFiles[0]?.errors[0];
         if (error?.code === "file-too-large") {
-          toast.error("File is too large. Maximum size is 10MB.");
+          toast.error("File is too large. Maximum size is 100MB.");
         } else if (error?.code === "file-invalid-type") {
           toast.error("Invalid file type. Please select an image file.");
         } else {
@@ -201,7 +205,7 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
               Drop screenshot here or click to select
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              PNG, JPG, GIF up to 10MB
+              PNG, JPG, GIF up to 100MB
             </p>
           </>
         )}
@@ -694,6 +698,7 @@ const ChatMessages = ({
               <div className="prose dark:prose-invert text-sm max-w-none">
                 <ReactMarkdown>{messageContent}</ReactMarkdown>
               </div>
+              {msg.role === "user" && <FileAttachmentDisplay message={msg} />}
             </div>
           </motion.div>
         );
@@ -794,6 +799,182 @@ const ChatHistoryDrawer = ({
   );
 };
 
+// File upload constants
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB — matches server cap
+const MAX_FILES_PER_MESSAGE = 10;
+
+const ACCEPTED_FILE_TYPES = {
+  "text/plain": [
+    ".txt",
+    ".md",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".css",
+    ".html",
+    ".sql",
+    ".sh",
+  ],
+  "application/pdf": [".pdf"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+    ".docx",
+  ],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+    ".pptx",
+  ],
+  "text/csv": [".csv"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+    ".xlsx",
+  ],
+  "application/vnd.ms-excel": [".xls"],
+  "application/x-ipynb+json": [".ipynb"],
+  // 'application/json': ['.ipynb', '.json'],
+  // Code files - multiple MIME types for browser compatibility
+  "text/javascript": [".js"],
+  "application/javascript": [".js"],
+  "application/typescript": [".ts", ".tsx"],
+  "text/typescript": [".ts", ".tsx"],
+  "video/mp2t": [".ts"], // Some browsers report .ts files as this
+  "text/x-python": [".py"],
+  "application/x-python": [".py"],
+  "text/x-python-script": [".py"],
+  "text/html": [".html"],
+  "text/css": [".css"],
+  "application/sql": [".sql"],
+  "text/x-sql": [".sql"],
+  "application/x-sh": [".sh"],
+  "text/x-sh": [".sh"],
+  "application/x-shellscript": [".sh"],
+};
+
+// Helper to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+};
+
+// FileAttachmentChips component
+interface FileAttachmentChipsProps {
+  files: AttachedFile[];
+  onRemove: (fileId: string) => void;
+  isUploading: boolean;
+}
+
+const FileAttachmentChips: React.FC<FileAttachmentChipsProps> = ({
+  files,
+  onRemove,
+  isUploading,
+}) => {
+  if (files.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="flex flex-wrap gap-2 mb-2 max-h-24 overflow-y-auto"
+    >
+      {files.map((file) => (
+        <motion.div
+          key={file.id}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
+            file.uploadStatus === "error"
+              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+              : file.uploadStatus === "uploading"
+                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                : file.uploadStatus === "waiting"
+                  ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                  : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+          }`}
+        >
+          <PaperClipIcon className="w-3 h-3" />
+          <span className="font-medium truncate max-w-32">{file.fileName}</span>
+          <span className="text-gray-500 dark:text-gray-400">
+            ({formatFileSize(file.fileSize)})
+          </span>
+
+          {file.uploadStatus === "uploading" && (
+            <div className="w-12 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-blue-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${file.uploadProgress}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+          )}
+
+          {file.uploadStatus === "waiting" && (
+            <span className="italic">Waiting to upload…</span>
+          )}
+
+          {file.uploadStatus === "error" && (
+            <ExclamationTriangleIcon className="w-3 h-3" />
+          )}
+
+          <button
+            onClick={() => onRemove(file.id)}
+            className="ml-1 hover:bg-white/50 dark:hover:bg-black/20 rounded-full p-0.5"
+            disabled={isUploading}
+          >
+            <XMarkIcon className="w-3 h-3" />
+          </button>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+};
+
+interface FileAttachmentEntry {
+  id: string;
+  filename: string;
+  size: number;
+  contentType: string;
+  extension: string;
+  s3Link?: string;
+}
+
+// FileAttachmentDisplay component for message history
+interface FileAttachmentDisplayProps {
+  message: ChatMessage;
+}
+
+const FileAttachmentDisplay: React.FC<FileAttachmentDisplayProps> = ({
+  message,
+}) => {
+  if (!message.toolCalls || message.toolCalls.type !== "file_attachments") {
+    return null;
+  }
+
+  const files = message.toolCalls.files || [];
+
+  if (files.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-1">
+      {files.map((file: FileAttachmentEntry) => (
+        <div
+          key={file.id}
+          className="flex items-center gap-2 text-xs bg-white/20 dark:bg-black/20 rounded-full px-3 py-1.5 backdrop-blur-sm"
+        >
+          <PaperClipIcon className="w-3 h-3 flex-shrink-0" />
+          <span className="font-medium truncate">{file.filename}</span>
+          <span className="text-white/70 dark:text-white/60 flex-shrink-0">
+            ({formatFileSize(file.size)})
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export const MarkChat = () => {
   const { isOpen: isChatbotOpen, toggle: toggleChatbot } = useChatbot();
   const {
@@ -806,6 +987,14 @@ export const MarkChat = () => {
     isTyping,
     userRole,
     resetChat,
+    attachedFiles,
+    addAttachedFile,
+    removeAttachedFile,
+    updateFileStatus,
+    clearAttachedFiles,
+    addSessionContextFiles,
+    sessionContextFiles,
+    clearSessionContextFiles,
   } = useMarkChatStore();
 
   const {
@@ -813,9 +1002,6 @@ export const MarkChat = () => {
     dismiss: dismissBubble,
     sayMotionSick,
     sayExcited,
-    sayProactiveHelp,
-    sayIdleHelp,
-    sayStuckHelp,
   } = useMarkSpeech();
 
   const learnerContext = useLearnerContext();
@@ -827,80 +1013,11 @@ export const MarkChat = () => {
     activeAssignmentId: state.activeAssignmentId,
   }));
 
-  const contextData = React.useMemo(() => {
-    if (userRole === "author") {
-      return {
-        assignmentName: authorStore.name,
-        questions: authorStore.questions,
-        focusedQuestionId: authorContext.focusedQuestionId,
-        activeAssignmentId: authorStore.activeAssignmentId,
-      };
-    } else if (userRole === "learner") {
-      return {
-        currentQuestion: learnerContext.currentQuestion,
-        assignmentMeta: learnerContext.assignmentMeta,
-        currentQuestionIndex:
-          learnerContext.questions?.findIndex(
-            (q) => q.id === learnerContext.currentQuestion?.id,
-          ) + 1 || undefined,
-        totalQuestions: learnerContext.questions?.length,
-        isGradedAssignment: learnerContext.isGradedAssignment,
-        isFeedbackMode: learnerContext.isFeedbackMode,
-      };
-    }
-    return {};
-  }, [
-    userRole,
-    authorStore.name,
-    authorStore.questions,
-    authorContext.focusedQuestionId,
-    authorStore.activeAssignmentId,
-    learnerContext.currentQuestion,
-    learnerContext.assignmentMeta,
-    learnerContext.questions,
-    learnerContext.isGradedAssignment,
-    learnerContext.isFeedbackMode,
-  ]);
-
-  const { behaviorData, resetHelpOffer, getChatMessage } =
-    useUserBehaviorMonitor(userRole, contextData);
-
-  useEffect(() => {
-    if (behaviorData.shouldOfferHelp && !isChatbotOpen) {
-      const { helpReason, currentContext } = behaviorData;
-      const subject = currentContext.detectedSubject || "general";
-
-      switch (helpReason) {
-        case "idle_too_long":
-          sayIdleHelp(userRole);
-          break;
-        case "stuck_on_question":
-          sayStuckHelp(currentContext.currentQuestionIndex, userRole);
-          break;
-        case "long_time_on_page":
-          sayProactiveHelp(subject, userRole);
-          break;
-        default:
-          sayProactiveHelp(subject, userRole);
-      }
-
-      setTimeout(() => resetHelpOffer(), 1000);
-    }
-  }, [
-    behaviorData.shouldOfferHelp,
-    behaviorData.helpReason,
-    behaviorData.currentContext,
-    isChatbotOpen,
-    userRole,
-    sayIdleHelp,
-    sayStuckHelp,
-    sayProactiveHelp,
-    resetHelpOffer,
-  ]);
-
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const textareaRef = useRef(null);
+  const isSendingRef = useRef(false);
+  const uploadBatchCountRef = useRef(0);
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [contextReady, setContextReady] = useState(false);
@@ -941,18 +1058,195 @@ export const MarkChat = () => {
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [userChats, setUserChats] = useState([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+
+  // File upload handler
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+      // Create initial file entry
+      const attachedFile = {
+        id: fileId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        extension,
+        uploadStatus: "uploading" as const,
+        uploadProgress: 0,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      addAttachedFile(attachedFile);
+
+      try {
+        // Generate presigned URL
+        const uploadRequest = {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          uploadType: (userRole === "learner"
+            ? "chatbot"
+            : userRole) as UploadType,
+        };
+
+        const uploadedFile = await uploadFileToStorage(file, uploadRequest, {
+          onUploadProgress: (progress) => {
+            const percent = Math.round(
+              (progress.loaded / progress.total) * 100,
+            );
+            updateFileStatus(fileId, {
+              uploadStatus: "uploading",
+              uploadProgress: percent,
+            });
+          },
+          onWaitingForCapacity: () => {
+            updateFileStatus(fileId, { uploadStatus: "waiting" });
+          },
+        });
+
+        // Update file as uploaded
+        updateFileStatus(fileId, {
+          uploadStatus: "uploaded",
+          uploadProgress: 100,
+          s3Link: uploadedFile.s3Link,
+          s3Key: uploadedFile.key,
+          s3Bucket: uploadedFile.bucket,
+        });
+
+        toast.success(`${file.name} uploaded successfully`);
+      } catch (error: unknown) {
+        console.error("File upload error:", error);
+        const { UploadError } = await import("@/lib/reliableUpload");
+        const userMessage =
+          error instanceof UploadError
+            ? error.userMessage
+            : error instanceof Error
+              ? error.message
+              : "Upload failed";
+        updateFileStatus(fileId, {
+          uploadStatus: "error",
+          errorMessage: userMessage,
+        });
+        toast.error(`${file.name}: ${userMessage}`);
+      }
+    },
+    [userRole, addAttachedFile, updateFileStatus],
+  );
+
+  // Handle file selection (immediate upload)
+  const handleFileSelect = useCallback(
+    async (files: File[]) => {
+      const existingKeys = new Set(
+        attachedFiles.map((file) => `${file.fileName}:${file.fileSize}`),
+      );
+      const seenIncomingKeys = new Set<string>();
+      const uniqueFiles = files.filter((file) => {
+        const stableKey = `${file.name}:${file.size}:${file.lastModified}`;
+        const existingKey = `${file.name}:${file.size}`;
+        if (existingKeys.has(existingKey)) return false;
+        if (seenIncomingKeys.has(stableKey)) return false;
+        seenIncomingKeys.add(stableKey);
+        return true;
+      });
+
+      if (uniqueFiles.length < files.length) {
+        toast.info("Skipped duplicate file(s).");
+      }
+
+      if (uniqueFiles.length === 0) return;
+
+      const currentQueuedFiles = attachedFiles.filter(
+        (file) => file.uploadStatus !== "error",
+      );
+      if (
+        currentQueuedFiles.length + uniqueFiles.length >
+        MAX_FILES_PER_MESSAGE
+      ) {
+        toast.error(
+          `You can attach up to ${MAX_FILES_PER_MESSAGE} files to a single message.`,
+        );
+        return;
+      }
+
+      // Validate individual file sizes
+      for (const file of uniqueFiles) {
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(
+            `${file.name} exceeds ${formatFileSize(MAX_FILE_SIZE)} limit`,
+          );
+          return;
+        }
+      }
+
+      // Upload all files
+      uploadBatchCountRef.current += 1;
+      setIsUploadingFiles(true);
+      try {
+        await Promise.all(uniqueFiles.map(handleFileUpload));
+      } finally {
+        uploadBatchCountRef.current = Math.max(
+          0,
+          uploadBatchCountRef.current - 1,
+        );
+        if (uploadBatchCountRef.current === 0) {
+          setIsUploadingFiles(false);
+        }
+      }
+    },
+    [attachedFiles, handleFileUpload],
+  );
+
+  // Handle file removal
+  const handleRemoveFile = useCallback(
+    (fileId: string) => {
+      removeAttachedFile(fileId);
+      toast.success("File removed");
+    },
+    [removeAttachedFile],
+  );
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop: handleFileSelect,
+    onDropRejected: (rejectedFiles) => {
+      const error = rejectedFiles[0]?.errors[0];
+      if (error?.code === "file-too-large") {
+        toast.error(
+          `File is too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
+        );
+      } else if (error?.code === "file-invalid-type") {
+        toast.error("File type not supported.");
+      } else {
+        toast.error("File could not be added.");
+      }
+    },
+    accept: ACCEPTED_FILE_TYPES,
+    maxSize: MAX_FILE_SIZE,
+    noClick: true,
+    noKeyboard: true,
+  });
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isEndingChat, setIsEndingChat] = useState(false);
   const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [reportsSearchQuery, setReportsSearchQuery] = useState("");
   const [reportPreviewModal, setReportPreviewModal] = useState({
     isOpen: false,
     type: "report" as "report" | "feedback" | "suggestion" | "inquiry",
     data: null as any,
   });
+  const openReportsPanel = useCallback(
+    (searchQuery = "") => {
+      toggleChatbot();
+      setReportsSearchQuery(searchQuery);
+      setShowReports(true);
+    },
+    [toggleChatbot],
+  );
   const handleCheckReports = useCallback(() => {
-    toggleChatbot();
-    setShowReports(true);
-  }, []);
+    openReportsPanel("");
+  }, [openReportsPanel]);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -1232,13 +1526,6 @@ export const MarkChat = () => {
       if (isQuickTap && !isDragging && !hasMoved) {
         e.preventDefault();
         e.stopPropagation();
-
-        if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
-          const helpMessage = getChatMessage();
-          setUserInput(helpMessage);
-          dismissBubble();
-          resetHelpOffer();
-        }
         toggleChatbot();
       }
 
@@ -1250,12 +1537,6 @@ export const MarkChat = () => {
       touchStartTime,
       isDragging,
       hasMoved,
-      behaviorData.shouldOfferHelp,
-      behaviorData.helpReason,
-      getChatMessage,
-      setUserInput,
-      dismissBubble,
-      resetHelpOffer,
       toggleChatbot,
     ],
   );
@@ -1300,56 +1581,77 @@ export const MarkChat = () => {
     }
 
     if (shouldToggle) {
-      if (behaviorData.shouldOfferHelp || behaviorData.helpReason) {
-        const helpMessage = getChatMessage();
-        setUserInput(helpMessage);
-        dismissBubble();
-        resetHelpOffer();
-      }
       toggleChatbot();
     }
-  }, [
-    isDragging,
-    isMobileDevice,
-    dragStartTime,
-    toggleChatbot,
-    behaviorData.shouldOfferHelp,
-    behaviorData.helpReason,
-    getChatMessage,
-    setUserInput,
-    dismissBubble,
-    resetHelpOffer,
-  ]);
+  }, [isDragging, isMobileDevice, dragStartTime, toggleChatbot]);
   const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
-  const checkForIssueStatusQuery = (message: string): boolean | number => {
-    const lowerMessage = message.toLowerCase();
+  const checkForIssueStatusQuery = useCallback(
+    (message: string): boolean | number => {
+      const lowerMessage = message.toLowerCase();
 
-    const generalIssuePatterns = [
-      "my issues",
-      "my reports",
-      "reported issues",
-      "issue status",
-      "report status",
-      "check my issues",
-      "check my reports",
-      "view my issues",
-      "view my reports",
-    ];
+      const generalIssuePatterns = [
+        "my issues",
+        "my reports",
+        "reported issues",
+        "issue status",
+        "report status",
+        "check my issues",
+        "check my reports",
+        "view my issues",
+        "view my reports",
+      ];
 
-    const specificIssueMatch =
-      lowerMessage.match(/issue #?(\d+)/i) ||
-      lowerMessage.match(/report #?(\d+)/i) ||
-      lowerMessage.match(/ticket #?(\d+)/i);
+      const specificIssueMatch =
+        lowerMessage.match(/issue #?(\d+)/i) ||
+        lowerMessage.match(/report #?(\d+)/i) ||
+        lowerMessage.match(/ticket #?(\d+)/i);
 
-    if (specificIssueMatch && specificIssueMatch[1]) {
-      return parseInt(specificIssueMatch[1]);
-    }
+      if (specificIssueMatch?.[1]) {
+        return parseInt(specificIssueMatch[1], 10);
+      }
 
-    return generalIssuePatterns.some((pattern) =>
-      lowerMessage.includes(pattern),
-    );
-  };
+      return generalIssuePatterns.some((pattern) =>
+        lowerMessage.includes(pattern),
+      );
+    },
+    [],
+  );
+  const handleIssueStatusQuery = useCallback(
+    (message: string, issueQuery: boolean | number) => {
+      const now = Date.now();
+      const searchQuery =
+        typeof issueQuery === "number" ? issueQuery.toString() : "";
+
+      setHistory((prev) => [...prev, message]);
+      setHistoryIndex(-1);
+      useMarkChatStore.getState().addMessage({
+        id: `user-${now}`,
+        role: "user",
+        content: message,
+        timestamp: new Date(now).toISOString(),
+      });
+      useMarkChatStore.getState().addMessage({
+        id: `assistant-${now}`,
+        role: "assistant",
+        content:
+          typeof issueQuery === "number"
+            ? `Opened your reports panel and filtered it for report #${issueQuery}.`
+            : "Opened your reports panel so you can review your reported issues.",
+        timestamp: new Date(now).toISOString(),
+      });
+      setUserInput("");
+      setShowSuggestions(false);
+      setSpecialActions({ show: false, type: null, data: null });
+      openReportsPanel(searchQuery);
+
+      if (isRecording) {
+        recognitionRef.current?.stop();
+        setIsRecording(false);
+      }
+    },
+    [isRecording, openReportsPanel, setUserInput],
+  );
   useEffect(() => {
     let cancelled = false;
     const fetchUser = async () => {
@@ -1368,34 +1670,38 @@ export const MarkChat = () => {
     };
   }, []);
 
+  const getCurrentAssignmentId = useCallback(() => {
+    const assignmentId =
+      userRole === "learner"
+        ? learnerContext.assignmentId
+        : userRole === "author"
+          ? authorContext.activeAssignmentId
+          : undefined;
+
+    return assignmentId != null && Number.isFinite(Number(assignmentId))
+      ? Number(assignmentId)
+      : undefined;
+  }, [userRole, learnerContext.assignmentId, authorContext.activeAssignmentId]);
+
   useEffect(() => {
+    if (!user?.userId) {
+      setIsInitializing(false);
+      return;
+    }
+
+    let cancelled = false;
+    const assignmentId = getCurrentAssignmentId();
+    setIsInitializing(true);
+
     const initializeChat = async () => {
-      if (!user?.userId) {
-        setIsInitializing(false);
-        return;
-      }
-
-      if (currentChatId) {
-        setIsInitializing(false);
-        return;
-      }
-
-      setIsInitializing(true);
-
       try {
-        const assignmentId =
-          userRole === "learner"
-            ? learnerContext.assignmentId
-            : userRole === "author"
-              ? authorContext.activeAssignmentId
-              : undefined;
+        const todayChat = await getOrCreateTodayChat(user.userId, assignmentId);
 
-        const todayChat = await getOrCreateTodayChat(
-          user.userId,
-          Number(assignmentId),
-        );
+        if (cancelled) return;
 
         setCurrentChatId(todayChat.id);
+        clearAttachedFiles();
+        clearSessionContextFiles();
 
         if (todayChat.messages && todayChat.messages.length > 0) {
           const storeMessages = todayChat.messages.map((msg) => ({
@@ -1405,24 +1711,32 @@ export const MarkChat = () => {
             timestamp: new Date(msg.timestamp).toISOString(),
             toolCalls: msg.toolCalls,
           }));
-
-          if (storeMessages.length > 0) {
-            useMarkChatStore.setState({ messages: storeMessages });
-          }
+          useMarkChatStore.setState({ messages: storeMessages });
+        } else {
+          resetChat();
         }
       } catch (error) {
+        if (cancelled) return;
+        console.error("initializeChat failed:", error);
+        toast.error("Could not load chat session");
       } finally {
-        setIsInitializing(false);
+        if (!cancelled) setIsInitializing(false);
       }
     };
 
     initializeChat();
+    return () => {
+      cancelled = true;
+    };
   }, [
     user?.userId,
     userRole,
     learnerContext.assignmentId,
     authorContext.activeAssignmentId,
-    currentChatId,
+    clearAttachedFiles,
+    clearSessionContextFiles,
+    getCurrentAssignmentId,
+    resetChat,
   ]);
 
   useEffect(() => {
@@ -1522,6 +1836,8 @@ export const MarkChat = () => {
       try {
         const chat = await getChatById(chatId);
         setCurrentChatId(chat.id);
+        clearAttachedFiles();
+        clearSessionContextFiles();
 
         if (chat.messages && chat.messages.length > 0) {
           const storeMessages = chat.messages.map((msg) => ({
@@ -1543,7 +1859,7 @@ export const MarkChat = () => {
         toast.error("Could not load selected chat");
       }
     },
-    [resetChat],
+    [resetChat, clearAttachedFiles, clearSessionContextFiles],
   );
 
   const checkForLearnerSpecialActions = useCallback(
@@ -1791,54 +2107,169 @@ export const MarkChat = () => {
     }
   }, []);
 
+  const hasPendingUploads =
+    isUploadingFiles ||
+    attachedFiles.some((f) => f.uploadStatus === "uploading");
+
   const handleSendWithContext = useCallback(
     async (stream = true) => {
-      if (!userInput.trim()) return;
-      const issueCheck = checkForIssueStatusQuery(userInput);
-      if (issueCheck !== false) {
-        setHistory((prev) => [...prev, userInput]);
-        setHistoryIndex(-1);
-        useMarkChatStore.getState().addMessage({
-          id: `user-${Date.now()}`,
-          role: "user",
-          content: userInput,
-          timestamp: new Date().toISOString(),
-        });
-        setUserInput("");
+      if (isSendingRef.current) return;
+
+      const trimmedInput = userInput.trim();
+      const uploadedFiles = attachedFiles.filter(
+        (file) => file.uploadStatus === "uploaded",
+      );
+      const uploadedFileCount = uploadedFiles.length;
+      const issueStatusQuery =
+        uploadedFileCount === 0
+          ? checkForIssueStatusQuery(trimmedInput)
+          : false;
+
+      if (hasPendingUploads) {
+        toast.error("Please wait for files to finish uploading.");
+        return;
       }
-      try {
-        setHistory((prev) => [...prev, userInput]);
-        setHistoryIndex(-1);
 
-        const contextMessage = await context.getContextMessage();
-        const originalMessages = [...messages];
-        const messagesWithContext = [...originalMessages];
+      if (!trimmedInput && uploadedFileCount === 0) return;
 
-        const lastUserMsgIndex = messagesWithContext
-          .map((msg, i) => (msg.role === "user" ? i : -1))
-          .filter((i) => i !== -1)
-          .pop();
+      if (issueStatusQuery !== false) {
+        handleIssueStatusQuery(trimmedInput, issueStatusQuery);
+        return;
+      }
 
-        if (lastUserMsgIndex !== undefined) {
-          messagesWithContext.splice(lastUserMsgIndex, 0, {
-            ...contextMessage,
-            role: contextMessage.role,
-          });
-        } else {
-          const systemIndex = messagesWithContext.findIndex(
-            (msg) => msg.role === "system",
-          );
-          const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
-          messagesWithContext.splice(insertPosition, 0, {
-            ...contextMessage,
-            role: contextMessage.role,
+      if (uploadedFileCount > 0 && (!currentChatId || !user?.userId)) {
+        toast.error(
+          "Chat session is not ready yet. Please wait a moment and try sending your files again.",
+        );
+        return;
+      }
+
+      isSendingRef.current = true;
+      const fileToolCalls =
+        uploadedFileCount > 0
+          ? {
+              type: "file_attachments",
+              files: uploadedFiles.map((file) => ({
+                id: file.id,
+                filename: file.fileName,
+                size: file.fileSize,
+                contentType: file.fileType,
+                extension: file.extension,
+                s3Link:
+                  file.s3Link ||
+                  (file.s3Bucket && file.s3Key
+                    ? `s3://${file.s3Bucket}/${file.s3Key}`
+                    : undefined),
+                s3Key: file.s3Key,
+                s3Bucket: file.s3Bucket,
+              })),
+            }
+          : undefined;
+
+      const fileContextMessage = (() => {
+        const hasNewFiles = uploadedFileCount > 0;
+        const hasSessionFiles = sessionContextFiles.length > 0;
+        if (!hasNewFiles && !hasSessionFiles) return null;
+
+        let content = "";
+
+        if (hasNewFiles) {
+          content += "New files attached for this message:\n\n";
+          uploadedFiles.forEach((file: AttachedFile, index: number) => {
+            const s3Link =
+              file.s3Link ||
+              (file.s3Bucket && file.s3Key
+                ? `s3://${file.s3Bucket}/${file.s3Key}`
+                : "");
+
+            content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
+            content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
+            if (s3Link) content += `S3 Link: ${s3Link}\n`;
+            content += "\n";
           });
         }
 
+        if (hasSessionFiles) {
+          content +=
+            "Files shared earlier in this conversation (still available):\n\n";
+          sessionContextFiles.forEach((file: AttachedFile, index: number) => {
+            const s3Link =
+              file.s3Link ||
+              (file.s3Bucket && file.s3Key
+                ? `s3://${file.s3Bucket}/${file.s3Key}`
+                : "");
+
+            content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
+            content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
+            if (s3Link) content += `S3 Link: ${s3Link}\n`;
+            content += "\n";
+          });
+        }
+
+        content +=
+          "When the user asks about these files, call tools with the exact S3 link:\n" +
+          "- `extractFileFromLink` for raw extracted text\n" +
+          "- `summarizeFileFromLink` for concise summaries\n";
+
+        return {
+          id: `system-files-${Date.now()}`,
+          role: "system" as ChatRole,
+          content,
+        };
+      })();
+
+      const messageContent =
+        trimmedInput || `[${uploadedFileCount} file(s) attached]`;
+
+      setHistory((prev) => [...prev, messageContent]);
+      setHistoryIndex(-1);
+
+      let didSendSucceed = false;
+      try {
+        let contextMessage = null;
+        try {
+          contextMessage = await context.getContextMessage();
+        } catch (error) {
+          console.warn("Failed to build context message:", error);
+        }
+
+        const originalMessages = messages.filter(
+          (message) =>
+            message.role !== "system" ||
+            (!message.id.includes("context") &&
+              !message.id.startsWith("system-files-")),
+        );
+        const messagesWithContext = [...originalMessages];
+
+        if (contextMessage) {
+          const lastUserMsgIndex = messagesWithContext
+            .map((message, index) => (message.role === "user" ? index : -1))
+            .filter((index) => index !== -1)
+            .pop();
+
+          if (lastUserMsgIndex !== undefined) {
+            messagesWithContext.splice(lastUserMsgIndex, 0, {
+              ...contextMessage,
+            });
+          } else {
+            const systemIndex = messagesWithContext.findIndex(
+              (message) => message.role === "system",
+            );
+            const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
+            messagesWithContext.splice(insertPosition, 0, {
+              ...contextMessage,
+            });
+          }
+        }
+
+        if (fileContextMessage) {
+          messagesWithContext.push(fileContextMessage);
+        }
+
         if (userRole === "learner") {
-          checkForLearnerSpecialActions(userInput);
+          checkForLearnerSpecialActions(trimmedInput);
         } else {
-          checkForAuthorSpecialActions(userInput);
+          checkForAuthorSpecialActions(trimmedInput);
         }
 
         useMarkChatStore.setState({ messages: messagesWithContext });
@@ -1849,8 +2280,8 @@ export const MarkChat = () => {
             await addMessageToChat(
               currentChatId,
               "USER",
-              userInput,
-              undefined,
+              messageContent,
+              fileToolCalls,
               browserCookies,
             );
           } catch (error) {
@@ -1858,110 +2289,34 @@ export const MarkChat = () => {
               "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
               error,
             );
+            if (fileToolCalls) {
+              toast.error(
+                "Could not send this message because the attached files could not be saved to the chat. Please try again.",
+              );
+              return;
+            }
           }
         }
 
-        await sendMessage(stream);
-
-        const saveAssistantMessage = async () => {
-          const currentMessages = useMarkChatStore.getState().messages;
-          const relevantAssistantMessages = currentMessages.filter(
-            (msg) =>
-              msg.role === "assistant" &&
-              msg.id !== "assistant-initial" &&
-              !msg.id.includes("context"),
-          );
-
-          const sortedMessages = relevantAssistantMessages.sort((a, b) => {
-            const getTimestampFromId = (id) => {
-              const match = id.match(/assistant-(\d+)/);
-              return match ? parseInt(match[1]) : 0;
-            };
-
-            if (a.timestamp && b.timestamp) {
-              return (
-                new Date(b.timestamp).getTime() -
-                new Date(a.timestamp).getTime()
-              );
-            }
-
-            return getTimestampFromId(b.id) - getTimestampFromId(a.id);
-          });
-
-          const assistantMessage = sortedMessages[0];
-
-          if (assistantMessage && currentChatId && user?.userId) {
-            try {
-              let toolCallsData = undefined;
-
-              if (assistantMessage.toolCalls) {
-                toolCallsData = assistantMessage.toolCalls;
-              } else if (typeof assistantMessage.content === "string") {
-                const markerMatch = assistantMessage.content.match(
-                  /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
-                );
-
-                if (markerMatch) {
-                  try {
-                    toolCallsData = JSON.parse(markerMatch[1]);
-                  } catch (e) {
-                    console.warn(
-                      "MarkChat: failed to JSON.parse CLIENT_EXECUTION_MARKER payload:",
-                      e,
-                    );
-                  }
-                }
-              }
-
-              await addMessageToChat(
-                currentChatId,
-                "ASSISTANT",
-                assistantMessage.content,
-                toolCallsData,
-              );
-            } catch (error) {
-              console.error(
-                "MarkChat: addMessageToChat(ASSISTANT) failed — assistant reply may not be persisted:",
-                error,
-              );
-            }
-          }
-        };
-
-        const pollIntervals = [300, 500, 700, 1000, 1500, 2000, 3000];
-        let pollIndex = 0;
-
-        const pollForCompletion = async () => {
-          if (!useMarkChatStore.getState().isTyping) {
-            await saveAssistantMessage();
-            return;
-          }
-
-          if (pollIndex < pollIntervals.length - 1) {
-            pollIndex++;
-          }
-
-          setTimeout(pollForCompletion, pollIntervals[pollIndex]);
-        };
-
-        setTimeout(pollForCompletion, 200);
-
-        setTimeout(async () => {
-          if (useMarkChatStore.getState().isTyping) {
-            await saveAssistantMessage();
-          }
-        }, 15000);
-
+        didSendSucceed = await sendMessage(stream, {
+          userText: messageContent,
+          toolCalls: fileToolCalls,
+        });
+      } catch (error) {
+        toast.error("Failed to send message. Please try again.");
+      } finally {
+        isSendingRef.current = false;
         setTimeout(() => {
           const purified = useMarkChatStore
             .getState()
             .messages.filter(
-              (msg) => msg.role !== "system" || !msg.id.includes("context"),
+              (message) =>
+                message.role !== "system" ||
+                (!message.id.includes("context") &&
+                  !message.id.startsWith("system-files-")),
             );
           useMarkChatStore.setState({ messages: purified });
         }, 500);
-      } catch (error) {
-        sendMessage(stream);
       }
 
       setShowSuggestions(false);
@@ -1969,19 +2324,30 @@ export const MarkChat = () => {
         recognitionRef.current?.stop();
         setIsRecording(false);
       }
+
+      if (didSendSucceed && uploadedFileCount > 0) {
+        addSessionContextFiles(uploadedFiles);
+        clearAttachedFiles();
+      }
     },
     [
       userInput,
+      attachedFiles,
+      hasPendingUploads,
       context,
       messages,
-      setShowReports,
       userRole,
       isRecording,
       sendMessage,
+      checkForIssueStatusQuery,
+      handleIssueStatusQuery,
       checkForLearnerSpecialActions,
       checkForAuthorSpecialActions,
       currentChatId,
       user?.userId,
+      sessionContextFiles,
+      addSessionContextFiles,
+      clearAttachedFiles,
     ],
   );
 
@@ -2289,40 +2655,41 @@ Please help me with this.`;
   );
 
   const handleEndChat = useCallback(async () => {
-    if (currentChatId) {
-      try {
-        await endChat(currentChatId);
-        if (user?.userId) {
-          const assignmentId =
-            userRole === "learner"
-              ? learnerContext.assignmentId
-              : userRole === "author"
-                ? authorContext.activeAssignmentId
-                : undefined;
+    if (!user?.userId || isInitializing || isEndingChat) return;
+    const assignmentId = getCurrentAssignmentId();
+    setIsEndingChat(true);
+    try {
+      const chatToEnd =
+        currentChatId ??
+        (await getOrCreateTodayChat(user.userId, assignmentId)).id;
 
-          const newChat = await getOrCreateTodayChat(
-            user.userId,
-            Number(assignmentId),
-          );
-          setCurrentChatId(newChat.id);
-          resetChat();
+      await endChat(chatToEnd);
 
-          const updatedChats = await getUserChats(user.userId);
-          setUserChats(updatedChats);
+      const newChat = await getOrCreateTodayChat(user.userId, assignmentId);
+      setCurrentChatId(newChat.id);
+      resetChat();
+      clearAttachedFiles();
+      clearSessionContextFiles();
 
-          toast.success("Started a new chat session");
-        }
-      } catch (error) {
-        toast.error("Could not end chat session");
-      }
+      const updatedChats = await getUserChats(user.userId);
+      setUserChats(updatedChats);
+
+      toast.success("Started a new chat session");
+    } catch (error) {
+      console.error("handleEndChat failed:", error);
+      toast.error("Could not end chat session");
+    } finally {
+      setIsEndingChat(false);
     }
   }, [
+    isInitializing,
+    isEndingChat,
     currentChatId,
     user?.userId,
-    userRole,
-    learnerContext.assignmentId,
-    authorContext.activeAssignmentId,
+    getCurrentAssignmentId,
     resetChat,
+    clearAttachedFiles,
+    clearSessionContextFiles,
   ]);
 
   const getChatTitle = useCallback(() => {
@@ -2562,67 +2929,22 @@ Please help me with this.`;
     );
   }, [isTyping]);
 
+  const activeFileCount = attachedFiles.filter(
+    (f) => f.uploadStatus !== "error",
+  ).length;
+  const uploadedFileCount = attachedFiles.filter(
+    (f) => f.uploadStatus === "uploaded",
+  ).length;
+  const sessionContextFileCount = sessionContextFiles.length;
+  const hasUploadedFiles = uploadedFileCount > 0;
+  const isSendDisabled =
+    (!userInput.trim() && !hasUploadedFiles) ||
+    isTyping ||
+    isInitializing ||
+    hasPendingUploads;
+
   return (
     <>
-      <SpeechBubble
-        bubble={activeBubble}
-        onDismiss={dismissBubble}
-        position={currentPosition}
-      />
-
-      <AnimatePresence>
-        {!isChatbotOpen && (
-          <Draggable
-            nodeRef={draggableNodeRef}
-            position={dragPosition}
-            onStart={handleDragStart}
-            onDrag={handleDrag}
-            onStop={handleDragStop}
-            bounds={{
-              left: 10,
-              top: 10,
-              right:
-                typeof window !== "undefined" ? window.innerWidth - 76 : 800,
-              bottom:
-                typeof window !== "undefined" ? window.innerHeight - 76 : 600,
-            }}
-          >
-            <div ref={draggableNodeRef} className="fixed z-50">
-              <OrbitingActionDock
-                isVisible={!isChatbotOpen}
-                onActionClick={handleActionClick}
-              />
-
-              <motion.button
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={handleChatToggle}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                className={`p-3 z-99999 rounded-full bg-gradient-to-br ${getAccentColor()} hover:saturate-150 text-white shadow-xl transition-all duration-200 ${isMobileDevice() ? "cursor-pointer" : "cursor-move"} ${isDocked ? "ring-2 ring-blue-400 ring-opacity-75" : ""}`}
-              >
-                {MarkFace ? (
-                  <Image
-                    src={MarkFace}
-                    alt="Mark AI Assistant"
-                    width={50}
-                    height={50}
-                    draggable={false}
-                    className="pointer-events-none select-none"
-                  />
-                ) : (
-                  <ChatBubbleLeftRightIcon className="w-7 h-7 pointer-events-none" />
-                )}
-              </motion.button>
-            </div>
-          </Draggable>
-        )}
-      </AnimatePresence>
-
       <AnimatePresence>
         {isChatbotOpen && (
           <motion.div
@@ -2679,7 +3001,7 @@ Please help me with this.`;
                   onClick={handleEndChat}
                   className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
                   title="Start New Chat"
-                  disabled={!currentChatId || isInitializing}
+                  disabled={isInitializing || isEndingChat || !user?.userId}
                 >
                   <ArrowPathIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 </button>
@@ -2796,7 +3118,19 @@ Please help me with this.`;
                   )}
                 </AnimatePresence>
 
-                <div className=" flex items-center space-x-2">
+                <FileAttachmentChips
+                  files={attachedFiles}
+                  onRemove={handleRemoveFile}
+                  isUploading={isUploadingFiles}
+                />
+
+                <div
+                  {...getRootProps()}
+                  className={`flex items-center space-x-2 ${
+                    isDragActive ? "ring-2 ring-purple-500 rounded-xl" : ""
+                  }`}
+                >
+                  <input {...getInputProps()} />
                   <textarea
                     ref={textareaRef}
                     value={userInput}
@@ -2831,6 +3165,28 @@ Please help me with this.`;
                     <motion.button
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
+                      onClick={open}
+                      className={`relative p-1.5 rounded-full transition-colors ${
+                        activeFileCount > 0
+                          ? "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400"
+                          : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
+                      }`}
+                      title={`Attach files (up to ${MAX_FILES_PER_MESSAGE})`}
+                      disabled={
+                        isInitializing ||
+                        activeFileCount >= MAX_FILES_PER_MESSAGE
+                      }
+                    >
+                      <PaperClipIcon className="w-4 h-4" />
+                      {activeFileCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {activeFileCount}
+                        </span>
+                      )}
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => setShowSuggestions(!showSuggestions)}
                       className="p-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
                       title="Show suggestions"
@@ -2843,12 +3199,12 @@ Please help me with this.`;
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleSendWithContext(true)}
                       className={`p-1.5 ${
-                        !userInput.trim() || isTyping || isInitializing
+                        isSendDisabled
                           ? "bg-purple-400 cursor-not-allowed"
                           : "bg-purple-600 hover:bg-purple-700"
                       } dark:bg-purple-700 dark:hover:bg-purple-800 rounded-full transition-colors`}
                       title="Send message"
-                      disabled={!userInput.trim() || isTyping || isInitializing}
+                      disabled={isSendDisabled}
                     >
                       <PaperAirplaneIcon className="w-4 h-4 text-white" />
                     </motion.button>
@@ -2858,6 +3214,24 @@ Please help me with this.`;
                   <span className="text-xs text-gray-400">
                     {getHelperText()}
                   </span>
+                  {(uploadedFileCount > 0 || sessionContextFileCount > 0) && (
+                    <>
+                      {uploadedFileCount > 0 && (
+                        <div className="text-[11px] text-gray-400 mt-1">
+                          {uploadedFileCount} file
+                          {uploadedFileCount === 1 ? "" : "s"} ready to send
+                          now.
+                        </div>
+                      )}
+                      {sessionContextFileCount > 0 && (
+                        <div className="text-[11px] text-gray-400">
+                          {sessionContextFileCount} file
+                          {sessionContextFileCount === 1 ? "" : "s"} already in
+                          chat context.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -2885,6 +3259,7 @@ Please help me with this.`;
             <UserReportsPanel
               userId={user?.userId || ""}
               onClose={() => setShowReports(false)}
+              initialSearchQuery={reportsSearchQuery}
             />
           </div>
         </div>

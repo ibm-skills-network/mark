@@ -22,21 +22,6 @@ export class JobStatusServiceV1 {
     });
   }
 
-  async createPublishJob(
-    assignmentId: number,
-    userId: string,
-  ): Promise<JobStateRecord> {
-    return this.jobStateService.createJob({
-      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
-      jobName: JOB_NAMES.ASSIGNMENT_V1_PUBLISH,
-      kind: "assignment-publish",
-      assignmentId,
-      userId,
-      status: "In Progress",
-      progress: "Initializing assignment publishing...",
-    });
-  }
-
   getJobStatusStream(jobId: string) {
     return this.jobStateService.getJobStatusStream(jobId);
   }

@@ -139,6 +139,53 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   @IsOptional()
   @IsString()
   aiFeedbackError?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      "Sum of totalPoints across all questions, computed before any visibility filtering. Frontend uses this to render the score line when showQuestions=false strips the questions array.",
+    type: Number,
+    required: false,
+  })
+  @Optional()
+  totalPossiblePoints?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Sum of points earned across all question responses, computed before any visibility filtering. Omitted when showAssignmentScore=false.",
+    type: Number,
+    required: false,
+  })
+  @Optional()
+  totalPointsEarned?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "The version of the assignment this attempt was created against. Null for attempts created before versioning was wired in.",
+    type: Number,
+    nullable: true,
+    required: false,
+  })
+  @Optional()
+  assignmentVersionId?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      "The assignment's current active version. Compare against assignmentVersionId to detect drift.",
+    type: Number,
+    nullable: true,
+    required: false,
+  })
+  @Optional()
+  currentVersionId?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      "True when this attempt is pinned to a stale version (the assignment has been republished since the attempt began). Frontend can use this to prompt the learner to start a fresh attempt.",
+    type: Boolean,
+    required: false,
+  })
+  @Optional()
+  versionMismatch?: boolean;
 }
 
 export class AssignmentAttemptQuestions {
@@ -232,6 +279,18 @@ export class AssignmentAttemptQuestions {
   })
   @Optional()
   learnerChoices?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      "Translation availability marker. Set to 'pending' when a translation is in-flight " +
+      "but not yet written, 'unavailable' when no in-flight job exists and the row is absent. " +
+      "Field is omitted entirely when the Translation row is present.",
+    type: String,
+    enum: ["pending", "unavailable"],
+  })
+  @IsOptional()
+  @IsString()
+  translationStatus?: "pending" | "unavailable";
 
   @Optional()
   _permutation?: boolean;

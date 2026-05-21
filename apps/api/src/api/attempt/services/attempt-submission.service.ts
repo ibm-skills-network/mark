@@ -66,7 +66,14 @@ import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { GRADING_PROGRESS_SERVICE } from "../attempt.constants";
-import { GradingProgressService } from "./grading-progress.service";
+import {
+  GradingProgressService,
+  type GradingProgressDetails,
+} from "./grading-progress.service";
+import {
+  newJobScopedCache,
+  type JobScopedCache,
+} from "./grading/job-scoped-cache";
 import {
   GradedItem,
   QuestionResponseService,
@@ -246,6 +253,7 @@ export class AttemptSubmissionService {
     });
 
     const selectionSeed = assignmentAttempt.id ^ assignmentId;
+    const orderingSeed = Math.imul(selectionSeed, 2_654_435_761) >>> 0;
 
     let questions: QuestionDto[] = [];
     if (assignment.currentVersion?.questionVersions?.length > 0) {
@@ -378,7 +386,7 @@ export class AttemptSubmissionService {
     const orderedQuestions = this.getOrderedQuestions(
       questionDtos,
       assignmentForAttemptFlow,
-      selectionSeed,
+      orderingSeed,
     );
 
     await this.prisma.assignmentAttempt.update({
@@ -400,6 +408,103 @@ export class AttemptSubmissionService {
   }
 
   /**
+   * Discards a pristine attempt that is pinned to a stale assignment version,
+   * so the learner can immediately create a fresh attempt against the current
+   * one. Hard-deletes the row (and its cascade-linked variant selections); the
+   * gates below ensure no graded data is destroyed.
+   */
+  async abandonAssignmentAttempt(
+    attemptId: number,
+    userSession: UserSession,
+  ): Promise<{ id: number; success: true }> {
+    this.logger.log(
+      `abandonAssignmentAttempt: request attempt=${attemptId} user=${userSession.userId}`,
+    );
+
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: {
+        id: true,
+        userId: true,
+        assignmentId: true,
+        assignmentVersionId: true,
+        submitted: true,
+        _count: {
+          select: { questionResponses: true },
+        },
+      },
+    });
+
+    if (!attempt) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: not found attempt=${attemptId} user=${userSession.userId}`,
+      );
+      throw new NotFoundException(`Attempt ${attemptId} not found.`);
+    }
+
+    if (
+      userSession.role !== UserRole.AUTHOR &&
+      attempt.userId !== userSession.userId
+    ) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: forbidden attempt=${attemptId} owner=${attempt.userId} caller=${userSession.userId}`,
+      );
+      throw new NotFoundException(`Attempt ${attemptId} not found.`);
+    }
+
+    if (attempt.submitted) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: already submitted attempt=${attemptId}`,
+      );
+      throw new UnprocessableEntityException(
+        "This attempt has already been submitted.",
+      );
+    }
+
+    if (attempt._count.questionResponses > 0) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: has responses attempt=${attemptId} count=${attempt._count.questionResponses}`,
+      );
+      throw new UnprocessableEntityException(
+        "Cannot abandon an attempt that already has saved responses.",
+      );
+    }
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: attempt.assignmentId },
+      select: { currentVersionId: true },
+    });
+
+    if (!assignment?.currentVersionId) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: no published version assignment=${attempt.assignmentId}`,
+      );
+      throw new UnprocessableEntityException(
+        "This assignment has no active version.",
+      );
+    }
+
+    if (attempt.assignmentVersionId === assignment.currentVersionId) {
+      this.logger.warn(
+        `abandonAssignmentAttempt: no version drift attempt=${attemptId} version=${attempt.assignmentVersionId}`,
+      );
+      throw new UnprocessableEntityException(
+        "Attempt is already pinned to the current version; no need to abandon.",
+      );
+    }
+
+    await this.prisma.assignmentAttempt.delete({
+      where: { id: attemptId },
+    });
+
+    this.logger.log(
+      `abandonAssignmentAttempt: discarded attempt=${attemptId} stale_version=${attempt.assignmentVersionId} current_version=${assignment.currentVersionId}`,
+    );
+
+    return { id: attemptId, success: true };
+  }
+
+  /**
    * Updates an assignment attempt
    */
   async updateAssignmentAttempt(
@@ -409,7 +514,12 @@ export class AttemptSubmissionService {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    progressCallback?: (
+      progress: string,
+      percentage?: number,
+      details?: GradingProgressDetails,
+    ) => Promise<void>,
+    cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role } = request.userSession;
     if (role === UserRole.LEARNER) {
@@ -421,6 +531,7 @@ export class AttemptSubmissionService {
         gradingCallbackRequired,
         request,
         progressCallback,
+        cache,
       );
     } else if (role === UserRole.AUTHOR) {
       return this.updateAuthorAttempt(
@@ -552,6 +663,17 @@ export class AttemptSubmissionService {
         assignmentAttempt.preferredLanguage || undefined,
       );
 
+    // Compute score totals BEFORE applyVisibilitySettings so they survive
+    // even when showQuestions=false strips the questions array. Without this
+    // the success page shows "0 / 0" because it can't sum the (empty) array.
+    const totalPossiblePoints = finalQuestions.reduce(
+      (sum, q) => sum + (q.totalPoints ?? 0),
+      0,
+    );
+    const totalPointsEarned = (
+      assignmentAttempt.questionResponses ?? []
+    ).reduce((sum, response) => sum + (response.points ?? 0), 0);
+
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
     // Expose a pending AI feedback error so the success page can show the
@@ -568,6 +690,11 @@ export class AttemptSubmissionService {
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
+      totalPossiblePoints,
+      totalPointsEarned:
+        assignment.showAssignmentScore === false
+          ? undefined
+          : totalPointsEarned,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
@@ -729,6 +856,7 @@ export class AttemptSubmissionService {
         showQuestions: true,
         showQuestionScore: true,
         updatedAt: true,
+        currentVersionId: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -744,6 +872,7 @@ export class AttemptSubmissionService {
       showQuestions: boolean;
       showQuestionScore: boolean;
       updatedAt: Date;
+      currentVersionId: number | null;
       currentVersion: {
         correctAnswerVisibility: CorrectAnswerVisibility;
       } | null;
@@ -826,6 +955,11 @@ export class AttemptSubmissionService {
       assignment.passingGrade,
     );
 
+    const versionMismatch =
+      assignmentAttempt.assignmentVersionId !== null &&
+      assignment.currentVersionId !== null &&
+      assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
@@ -836,13 +970,15 @@ export class AttemptSubmissionService {
       showQuestions: assignment.showQuestions,
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      currentVersionId: assignment.currentVersionId,
+      versionMismatch,
     };
   }
 
   /**
    * Updates an attempt for a learner.
    *
-   * Uses a 3-phase grading flow (Changes 2+3):
+   * Uses a 3-phase grading flow:
    *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
    *   Grade computation + validation (in-memory)
    *   LTI callback (external, before DB commit)
@@ -856,8 +992,21 @@ export class AttemptSubmissionService {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    progressCallback?: (
+      progress: string,
+      percentage?: number,
+      details?: GradingProgressDetails,
+    ) => Promise<void>,
+    cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
+    // Allocate the per-invocation cache once and share it across both
+    // pre-translate and grading phases. Without this hoist, callers that
+    // omit `cache` (notably the SSE submission path,
+    // updateAssignmentAttemptWithSSE) cause preTranslateQuestions to issue
+    // its own findUnique calls per variant before gradeQuestionsForLearner
+    // allocates its own fresh cache and re-issues the same lookups during
+    // its Phase-0 hoist.
+    const effectiveCache: JobScopedCache = cache ?? newJobScopedCache();
     try {
       if (progressCallback) {
         await progressCallback("Validating submission...", 5);
@@ -897,6 +1046,7 @@ export class AttemptSubmissionService {
           updateDto.responsesForQuestions,
           assignmentAttempt,
           updateDto.language,
+          effectiveCache,
         );
 
       updateDto.preTranslatedQuestions = preTranslatedQuestions;
@@ -960,6 +1110,7 @@ export class AttemptSubmissionService {
           assignmentId,
           updateDto.language,
           updateDto.preTranslatedQuestions,
+          effectiveCache,
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
@@ -1118,7 +1269,11 @@ export class AttemptSubmissionService {
   private async updateAuthorAttempt(
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    progressCallback?: (progress: string, percentage?: number) => Promise<void>,
+    progressCallback?: (
+      progress: string,
+      percentage?: number,
+      details?: GradingProgressDetails,
+    ) => Promise<void>,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
@@ -1367,10 +1522,18 @@ export class AttemptSubmissionService {
         },
       });
     } catch (error) {
-      // Non-fatal: log and continue so the submission is not failed by cleanup.
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      // Best-effort post-commit cleanup: the submission has already committed,
+      // so we surface the failure in logs rather than failing the request.
       this.logger.error(
-        `Failed to prune auto-saved responses for attempt ${attemptId}`,
-        error instanceof Error ? error.stack : String(error),
+        "pruneAutoSavedResponses: failed to delete stale auto-saved responses",
+        {
+          attemptId,
+          response_count: responseIds.length,
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        },
       );
     }
   }

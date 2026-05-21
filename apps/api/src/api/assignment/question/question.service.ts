@@ -19,6 +19,7 @@ import {
   ScoringDto,
   VideoPresentationConfig,
 } from "../dto/update.questions.request.dto";
+import type { JobScopedCache } from "../../attempt/services/grading/job-scoped-cache";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 
@@ -103,11 +104,36 @@ export class QuestionService {
   async findOne(
     id: number,
     tx?: PrismaTransactionalClient,
+    cache?: JobScopedCache,
   ): Promise<QuestionDto> {
     if (!id || Number.isNaN(Number(id))) {
       throw new NotFoundException(`Question with ID ${id} not found`);
     }
 
+    // Cache hit: build the DTO from the cached full Prisma Question row.
+    const cached = cache?.questions.get(id);
+    if (cached) {
+      return {
+        ...cached,
+        scoring: cached.scoring
+          ? (cached.scoring as unknown as ScoringDto)
+          : undefined,
+        choices: cached.choices
+          ? (cached.choices as unknown as Choice[])
+          : undefined,
+        assignmentId: cached.assignmentId,
+        videoPresentationConfig: cached.videoPresentationConfig
+          ? (cached.videoPresentationConfig as unknown as VideoPresentationConfig)
+          : undefined,
+        liveRecordingConfig: cached.liveRecordingConfig
+          ? (cached.liveRecordingConfig as unknown as object)
+          : undefined,
+        alreadyInBackend: true,
+        success: true,
+      };
+    }
+
+    // Cache miss (or no cache provided): fall through to the live read.
     const prisma = tx ?? this.prisma;
     const result = await prisma.question.findUnique({
       where: { id },

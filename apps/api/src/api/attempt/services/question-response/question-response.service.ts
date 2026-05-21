@@ -25,17 +25,31 @@ import {
   CreateQuestionResponseAttemptResponseDto,
   GeneralFeedbackDto,
 } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import {
+  Choice,
+  QuestionDto,
+  ScoringDto,
+  VideoPresentationConfig,
+} from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
+import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GRADING_PROGRESS_SERVICE } from "../../attempt.constants";
 import { GradingFactoryService } from "../grading-factory.service";
-import { GradingProgressService } from "../grading-progress.service";
+import {
+  newJobScopedCache,
+  type JobScopedCache,
+} from "../grading/job-scoped-cache";
+import {
+  GradingProgressService,
+  type SlowGradingType,
+} from "../grading-progress.service";
+import { GradingRateLimiterService } from "../grading-rate-limiter.service";
 
 type PrismaTransactionalClient = Omit<
   PrismaService,
@@ -62,6 +76,7 @@ export class QuestionResponseService {
     private readonly questionService: QuestionService,
     private readonly localizationService: LocalizationService,
     private readonly gradingFactoryService: GradingFactoryService,
+    private readonly rateLimiter: GradingRateLimiterService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     @Optional()
     @Inject(GRADING_PROGRESS_SERVICE)
@@ -70,6 +85,173 @@ export class QuestionResponseService {
     this.logger = parentLogger.child({
       context: QuestionResponseService.name,
     });
+  }
+
+  /**
+   * Compute dependency levels from a topologically sorted question list.
+   *
+   * Level 0 = no gradingContextQuestionIds. Level N = max(level of incoming
+   * deps) + 1. Questions in the same level have no inter-dependencies and
+   * can be graded in parallel.
+   */
+  private computeGradingLevels(
+    sorted: number[],
+    questionMap: Map<number, QuestionDto>,
+  ): number[][] {
+    const level = new Map<number, number>();
+    for (const qId of sorted) {
+      const q = questionMap.get(qId);
+      const depIds = (q?.gradingContextQuestionIds ?? []).filter((dep) =>
+        questionMap.has(dep),
+      );
+      const depLevel =
+        depIds.length > 0
+          ? Math.max(...depIds.map((d) => level.get(d) ?? 0))
+          : -1;
+      level.set(qId, depLevel + 1);
+    }
+
+    const grouped = new Map<number, number[]>();
+    for (const [qId, lvl] of level.entries()) {
+      const existing = grouped.get(lvl) ?? [];
+      existing.push(qId);
+      grouped.set(lvl, existing);
+    }
+    return [...grouped.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, ids]) => ids);
+  }
+
+  /**
+   * Slow-grading classifier — questions whose grading typically waits on file
+   * ingest, transcript generation, or vision. The frontend uses this flag to
+   * render a "this may take a bit longer" hint while the question is in flight.
+   */
+  private detectSlowType(question: QuestionDto): SlowGradingType | undefined {
+    if (question.type === QuestionType.UPLOAD) return "UPLOAD";
+    if (question.type === QuestionType.LINK_FILE) return "LINK_FILE";
+    if (question.type === QuestionType.URL) return "URL";
+    const responseType = question.responseType as string | undefined;
+    if (responseType === "PRESENTATION") return "PRESENTATION";
+    if (responseType === "VIDEO" || responseType === "LIVE_RECORDING") {
+      return "VIDEO_PRESENTATION";
+    }
+    return undefined;
+  }
+
+  /**
+   * DAG-aware wave scheduler — runs each topological level in parallel under
+   * the dedicated grading Bottleneck. Questions in the same level have no
+   * inter-dependencies; questions in a later level can read earlier levels'
+   * responses from {@link inMemoryContext}.
+   *
+   * Caller supplies {@link gradeOne}, which encapsulates the per-question
+   * context lookup + LLM call for either the learner or author path.
+   */
+  private async runGradingWaves(options: {
+    attemptId: number;
+    sorted: number[];
+    questionMap: Map<number, QuestionDto>;
+    requestMap: Map<number, CreateQuestionResponseAttemptRequestDto>;
+    inMemoryContext: Map<number, string>;
+    reportProgress: boolean;
+    gradeOne: (
+      question: QuestionDto,
+      request: CreateQuestionResponseAttemptRequestDto,
+    ) => Promise<{
+      learnerResponse: unknown;
+      responseDto: CreateQuestionResponseAttemptResponseDto;
+    }>;
+  }): Promise<GradedItem[]> {
+    const {
+      attemptId,
+      sorted,
+      questionMap,
+      requestMap,
+      inMemoryContext,
+      reportProgress,
+      gradeOne,
+    } = options;
+
+    const levels = this.computeGradingLevels(sorted, questionMap);
+    const gradedItems: GradedItem[] = [];
+    const gradedItemsLock: { current: GradedItem[] } = { current: gradedItems };
+    const parallelEnabled = this.rateLimiter.parallelEnabled;
+    const totalQuestions = sorted.length;
+    let gradedCount = 0;
+
+    for (const [waveIndex, wave] of levels.entries()) {
+      this.logger.info(
+        `grading.wave.start attempt=${attemptId} wave=${waveIndex} size=${wave.length} parallel=${parallelEnabled}`,
+      );
+
+      await Promise.all(
+        wave.map(async (questionId) => {
+          const question = questionMap.get(questionId);
+          const request = requestMap.get(questionId);
+          if (!question || !request) return;
+
+          if (reportProgress && this.progressService && parallelEnabled) {
+            await this.progressService.setQuestionStatus(
+              attemptId,
+              questionId,
+              "in_progress",
+            );
+          }
+
+          try {
+            const result = await this.rateLimiter.schedule(
+              `grade:q=${questionId}:a=${attemptId}`,
+              () => gradeOne(question, request),
+            );
+
+            result.responseDto.questionId = questionId;
+            result.responseDto.question = question.question;
+            gradedItemsLock.current.push({
+              questionId,
+              learnerResponse: result.learnerResponse,
+              responseDto: result.responseDto,
+            });
+            inMemoryContext.set(
+              questionId,
+              JSON.stringify(result.learnerResponse ?? ""),
+            );
+            gradedCount += 1;
+
+            if (reportProgress && this.progressService) {
+              await (parallelEnabled
+                ? this.progressService.setQuestionStatus(
+                    attemptId,
+                    questionId,
+                    "completed",
+                  )
+                : this.progressService.updateQuestionProgress(
+                    attemptId,
+                    gradedCount,
+                    totalQuestions,
+                    `Grading question ${gradedCount} of ${totalQuestions}...`,
+                  ));
+            }
+          } catch (error) {
+            this.logger.error(
+              `grading.wave.question.failed attempt=${attemptId} question=${questionId} error=${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            if (reportProgress && this.progressService && parallelEnabled) {
+              await this.progressService.setQuestionStatus(
+                attemptId,
+                questionId,
+                "failed",
+              );
+            }
+            throw error;
+          }
+        }),
+      );
+    }
+
+    return gradedItems;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -92,7 +274,41 @@ export class QuestionResponseService {
     assignmentId: number,
     language: string,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    cache?: JobScopedCache,
   ): Promise<GradedItem[]> {
+    // Defense-in-depth: allocate a cache if the caller did not supply one.
+    // The submission entrypoint (updateLearnerAttempt) now hoists this same
+    // allocation up so pre-translate and grading share a cache, but this
+    // fallback keeps the hoist below correct when the method is called
+    // directly (tests, future callers) without an outer cache. The Phase-0
+    // hoist must run unconditionally — without it, the parallel Promise.all
+    // in Phase 1 fans out N concurrent assignment.findUnique +
+    // question.findUnique calls.
+    const effectiveCache: JobScopedCache = cache ?? newJobScopedCache();
+
+    // ── Phase 0: Up-front question + assignment hoist (populates per-job cache before Phase 1 reads) ──
+    // Both hoists must run BEFORE Phase 1's $transaction so the parallel `Promise.all`
+    // inside Phase 1 sees a populated cache. Without the assignment hoist, the N concurrent
+    // `getAssignmentContext` calls inside Phase 1 each see `cache?.assignment` as undefined
+    // at the time of their cache check (the populate-on-resolve happens after the first
+    // `await prisma.assignment.findUnique` returns), causing N races against the same row.
+    if (effectiveCache.questions.size === 0) {
+      const ids = responsesForQuestions.map((r) => r.id);
+      if (ids.length > 0) {
+        const rows = await this.prisma.question.findMany({
+          where: { id: { in: ids } },
+        });
+        for (const row of rows) effectiveCache.questions.set(row.id, row);
+      }
+    }
+    if (!effectiveCache.assignment) {
+      const fetched = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { instructions: true },
+      });
+      if (fetched) effectiveCache.assignment = fetched;
+    }
+
     // ── Phase 1: Read (short transaction) ────────────────────────────────────
     const { questionDtos, sorted, adj, inDegree } =
       await this.prisma.$transaction(
@@ -105,6 +321,7 @@ export class QuestionResponseService {
                 assignmentId,
                 preTranslatedQuestions,
                 tx as PrismaTransactionalClient,
+                effectiveCache,
               );
               return question;
             }),
@@ -131,64 +348,62 @@ export class QuestionResponseService {
       );
     }
 
-    // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
+    // ── Phase 2: Grade (no transaction, parallel by wave) ────────────────────
     const totalQuestions = sorted.length;
-    await this.progressService?.initializeProgress(
-      assignmentAttemptId,
-      totalQuestions,
-    );
-
     const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
     const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
-    // In-memory responses for context questions graded earlier in this batch.
+    // In-memory responses for context questions graded in earlier waves.
     // Key = questionId, value = JSON-stringified learnerResponse (matches DB format).
     const inMemoryContextResponses = new Map<number, string>();
-    const gradedItems: GradedItem[] = [];
 
-    for (const [index, questionId] of sorted.entries()) {
-      const questionNumber = index + 1;
-      const questionResponse = requestMap.get(questionId);
-      if (!questionResponse) continue;
-
-      await this.progressService?.updateQuestionProgress(
+    if (this.progressService) {
+      await this.progressService.initializeProgress(
         assignmentAttemptId,
-        questionNumber,
         totalQuestions,
-        `Grading question ${questionNumber} of ${totalQuestions}...`,
       );
-
-      const question = questionMap.get(questionId);
-      if (!question) continue;
-      questionResponse.language = language;
-
-      const assignmentContext = await this.getAssignmentContext(
-        assignmentId,
-        questionId,
-        assignmentAttemptId,
-        undefined,
-        inMemoryContextResponses,
-      );
-
-      const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
-        question,
-        questionResponse,
-        assignmentContext,
-        assignmentId,
-        language,
-        UserRole.LEARNER,
-        assignmentAttemptId,
-      );
-
-      // Make this response available as context for subsequent questions
-      inMemoryContextResponses.set(
-        questionId,
-        JSON.stringify(learnerResponse ?? ""),
-      );
-
-      responseDto.questionId = questionId;
-      responseDto.question = question.question;
-      gradedItems.push({ questionId, learnerResponse, responseDto });
+      if (this.rateLimiter.parallelEnabled) {
+        this.progressService.initializeQuestions(
+          assignmentAttemptId,
+          questionDtos.map((q, index) => ({
+            id: q.id,
+            displayOrder: index,
+            slowType: this.detectSlowType(q),
+          })),
+        );
+      }
     }
+
+    for (const request of responsesForQuestions) {
+      request.language = language;
+    }
+
+    const gradedItems = await this.runGradingWaves({
+      attemptId: assignmentAttemptId,
+      sorted,
+      questionMap,
+      requestMap,
+      inMemoryContext: inMemoryContextResponses,
+      reportProgress: true,
+      gradeOne: async (question, request) => {
+        const assignmentContext = await this.getAssignmentContext(
+          assignmentId,
+          question.id,
+          assignmentAttemptId,
+          undefined,
+          inMemoryContextResponses,
+          effectiveCache,
+        );
+        return this.gradeQuestionNoSave(
+          question,
+          request,
+          assignmentContext,
+          assignmentId,
+          language,
+          UserRole.LEARNER,
+          assignmentAttemptId,
+        );
+      },
+    });
 
     // markComplete is deliberately NOT called here. The caller
     // (updateAssignmentAttempt) owns the terminal progress state and calls
@@ -369,76 +584,73 @@ export class QuestionResponseService {
       );
     }
 
-    // ── Phase 2: Grade (no transaction) ──────────────────────────────────────
+    // ── Phase 2: Grade (no transaction, parallel by wave) ────────────────────
     const totalQuestions = sorted.length;
-    if (role === UserRole.LEARNER) {
-      await this.progressService?.initializeProgress(
+    const reportProgress = Boolean(this.progressService);
+
+    if (reportProgress && this.progressService) {
+      await this.progressService.initializeProgress(
         assignmentAttemptId,
         totalQuestions,
       );
+      if (this.rateLimiter.parallelEnabled) {
+        this.progressService.initializeQuestions(
+          assignmentAttemptId,
+          questionDtos.map((q, index) => ({
+            id: q.id,
+            displayOrder: index,
+            slowType: this.detectSlowType(q),
+          })),
+        );
+      }
     }
 
     const questionMap = new Map(questionDtos.map((q) => [q.id, q]));
     const requestMap = new Map(responsesForQuestions.map((r) => [r.id, r]));
     const inMemoryContextResponses = new Map<number, string>();
-    const gradedItems: GradedItem[] = [];
 
-    for (const [index, questionId] of sorted.entries()) {
-      const questionNumber = index + 1;
-      const questionResponse = requestMap.get(questionId);
-      if (!questionResponse) continue;
-
-      if (role === UserRole.LEARNER) {
-        await this.progressService?.updateQuestionProgress(
-          assignmentAttemptId,
-          questionNumber,
-          totalQuestions,
-          `Grading question ${questionNumber} of ${totalQuestions}...`,
-        );
-      }
-
-      const question = questionMap.get(questionId);
-      if (!question) continue;
-      questionResponse.language = language;
-
-      const assignmentContext: {
-        assignmentInstructions: string;
-        questionAnswerContext: QuestionAnswerContext[];
-      } =
-        role === UserRole.LEARNER
-          ? await this.getAssignmentContext(
-              assignmentId,
-              questionId,
-              assignmentAttemptId,
-              undefined,
-              inMemoryContextResponses,
-            )
-          : {
-              assignmentInstructions: assignmentDetails?.instructions ?? "",
-              questionAnswerContext: [],
-            };
-
-      const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
-        question,
-        questionResponse,
-        assignmentContext,
-        assignmentId,
-        language,
-        role,
-        assignmentAttemptId,
-      );
-
-      inMemoryContextResponses.set(
-        questionId,
-        JSON.stringify(learnerResponse ?? ""),
-      );
-      responseDto.questionId = questionId;
-      responseDto.question = question.question;
-      gradedItems.push({ questionId, learnerResponse, responseDto });
+    for (const request of responsesForQuestions) {
+      request.language = language;
     }
 
-    if (role === UserRole.LEARNER) {
-      await this.progressService?.markComplete(assignmentAttemptId);
+    const gradedItems = await this.runGradingWaves({
+      attemptId: assignmentAttemptId,
+      sorted,
+      questionMap,
+      requestMap,
+      inMemoryContext: inMemoryContextResponses,
+      reportProgress,
+      gradeOne: async (question, request) => {
+        const assignmentContext: {
+          assignmentInstructions: string;
+          questionAnswerContext: QuestionAnswerContext[];
+        } =
+          role === UserRole.LEARNER
+            ? await this.getAssignmentContext(
+                assignmentId,
+                question.id,
+                assignmentAttemptId,
+                undefined,
+                inMemoryContextResponses,
+              )
+            : {
+                assignmentInstructions: assignmentDetails?.instructions ?? "",
+                questionAnswerContext: [],
+              };
+        return this.gradeQuestionNoSave(
+          question,
+          request,
+          assignmentContext,
+          assignmentId,
+          language,
+          role,
+          assignmentAttemptId,
+        );
+      },
+    });
+
+    if (reportProgress && this.progressService) {
+      await this.progressService.markComplete(assignmentAttemptId);
     }
 
     // ── Phase 3: Write (short transaction) — LEARNER only ────────────────────
@@ -854,17 +1066,39 @@ export class QuestionResponseService {
         );
       }
 
+      const learnerResponseJson = sanitizeUnicodeForJson(
+        JSON.stringify(learnerResponse ?? ""),
+      );
+      const feedbackClean = sanitizeUnicodeForJson(
+        JSON.parse(JSON.stringify(responseDto.feedback)) as object,
+      );
+      const metadataJson = responseDto.metadata
+        ? sanitizeUnicodeForJson(JSON.stringify(responseDto.metadata))
+        : null;
+      const totalReplaced =
+        learnerResponseJson.replaced +
+        feedbackClean.replaced +
+        (metadataJson?.replaced ?? 0);
+      if (totalReplaced > 0) {
+        this.logger.warn(
+          "[saveResponseToDatabase] Replaced lone UTF-16 surrogates before write",
+          {
+            questionId,
+            attemptId: assignmentAttemptId,
+            replacements: totalReplaced,
+          },
+        );
+      }
+
       const result = await prisma.questionResponse.create({
         data: {
           assignmentAttemptId:
             role === UserRole.LEARNER ? assignmentAttemptId : 1,
           questionId: questionId,
-          learnerResponse: JSON.stringify(learnerResponse ?? ""),
+          learnerResponse: learnerResponseJson.value,
           points: responseDto.totalPoints ?? 0,
-          feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
-          metadata: responseDto.metadata
-            ? JSON.stringify(responseDto.metadata)
-            : null,
+          feedback: feedbackClean.value,
+          metadata: metadataJson?.value ?? null,
           gradedAt: new Date(),
         },
       });
@@ -895,6 +1129,7 @@ export class QuestionResponseService {
     assignmentId: number,
     preTranslatedQuestions?: Map<number, QuestionDto>,
     tx?: PrismaTransactionalClient,
+    cache?: JobScopedCache,
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -910,6 +1145,8 @@ export class QuestionResponseService {
         questionId,
         assignmentAttemptId,
         tx,
+        undefined,
+        cache,
       );
       return { question, assignmentContext };
     }
@@ -949,23 +1186,23 @@ export class QuestionResponseService {
         assignmentId: baseQuestion.assignmentId,
         maxWords: variant.maxWords ?? baseQuestion.maxWords,
         maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
-        scoring:
-          this.parseJsonField(variant.scoring) ??
-          this.parseJsonField(baseQuestion.scoring),
-        choices:
-          this.parseJsonField(variant.choices) ??
-          this.parseJsonField(baseQuestion.choices),
+        scoring: (this.parseJsonField(variant.scoring) ??
+          this.parseJsonField(baseQuestion.scoring)) as ScoringDto,
+        choices: (this.parseJsonField(variant.choices) ??
+          this.parseJsonField(baseQuestion.choices)) as Choice[],
         answer: baseQuestion.answer ?? variant.answer,
         alreadyInBackend: true,
         totalPoints: baseQuestion.totalPoints,
         responseType: baseQuestion.responseType,
         gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
         videoPresentationConfig: baseQuestion.videoPresentationConfig
-          ? this.parseJsonField(baseQuestion.videoPresentationConfig)
+          ? (this.parseJsonField(
+              baseQuestion.videoPresentationConfig,
+            ) as VideoPresentationConfig)
           : null,
       };
     } else {
-      question = await this.questionService.findOne(questionId, tx);
+      question = await this.questionService.findOne(questionId, tx, cache);
     }
 
     const assignmentContext = await this.getAssignmentContext(
@@ -973,6 +1210,8 @@ export class QuestionResponseService {
       questionId,
       assignmentAttemptId,
       tx,
+      undefined,
+      cache,
     );
 
     return { question, assignmentContext };
@@ -1021,35 +1260,46 @@ export class QuestionResponseService {
     assignmentAttemptId: number,
     tx?: PrismaTransactionalClient,
     inMemoryResponses?: Map<number, string>,
+    cache?: JobScopedCache,
   ): Promise<{
     assignmentInstructions: string;
     questionAnswerContext: QuestionAnswerContext[];
   }> {
     const prisma = tx ?? this.prisma;
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: { instructions: true },
-    });
 
+    let assignment = cache?.assignment;
     if (!assignment) {
-      throw new NotFoundException(
-        `Assignment with ID ${assignmentId} not found.`,
-      );
+      const fetched = await prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { instructions: true },
+      });
+      if (!fetched) {
+        throw new NotFoundException(
+          `Assignment with ID ${assignmentId} not found.`,
+        );
+      }
+      assignment = fetched;
+      if (cache) cache.assignment = fetched;
     }
 
-    const question = await prisma.question.findUnique({
-      where: { id: questionId },
-      select: { gradingContextQuestionIds: true },
-    });
-
-    if (!question) {
-      throw new NotFoundException(`Question with ID ${questionId} not found.`);
+    let gradingContextQuestionIds: number[];
+    const cachedQuestion = cache?.questions.get(questionId);
+    if (cachedQuestion) {
+      gradingContextQuestionIds = cachedQuestion.gradingContextQuestionIds;
+    } else {
+      const fetched = await prisma.question.findUnique({
+        where: { id: questionId },
+        select: { gradingContextQuestionIds: true },
+      });
+      if (!fetched) {
+        throw new NotFoundException(
+          `Question with ID ${questionId} not found.`,
+        );
+      }
+      gradingContextQuestionIds = fetched.gradingContextQuestionIds;
     }
 
-    if (
-      !question.gradingContextQuestionIds ||
-      question.gradingContextQuestionIds.length === 0
-    ) {
+    if (!gradingContextQuestionIds || gradingContextQuestionIds.length === 0) {
       return {
         assignmentInstructions: assignment.instructions || "",
         questionAnswerContext: [],
@@ -1059,7 +1309,7 @@ export class QuestionResponseService {
     const contextQuestions = await prisma.question.findMany({
       where: {
         id: {
-          in: question.gradingContextQuestionIds,
+          in: gradingContextQuestionIds,
         },
       },
       select: { id: true, question: true, type: true },
@@ -1201,9 +1451,11 @@ export class QuestionResponseService {
   }
 
   /**
-   * Parse a JSON field from a database record
+   * Parse a JSON field from a database record. Prisma stores Json columns as
+   * the deserialized object/array, but legacy rows occasionally hold a
+   * stringified payload — handle both shapes.
    */
-  private parseJsonField(field: any): any {
+  private parseJsonField(field: unknown): unknown {
     if (!field) return null;
 
     if (typeof field === "string") {

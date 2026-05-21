@@ -49,12 +49,23 @@ jobs:
           fetch-depth: 0
 
       - name: Check if service needs scanning
-        id: scan-changes
+        # `id` is `changes` (not `scan-changes`) so every downstream
+        # `if: steps.changes.outputs.needs_scan == 'true'` actually resolves.
+        # The previous `scan-changes` id made every gated step in this job
+        # silently skip (the property was undefined → `'' == 'true'` = false).
+        id: changes
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_scan=true" >> $GITHUB_OUTPUT
           else
-            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            elif [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="$(git rev-parse origin/master)"
+            else
+              BASE_SHA="${{ github.event.before }}"
+            fi
+            if git diff --name-only "$BASE_SHA"...${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
               echo "needs_scan=true" >> $GITHUB_OUTPUT
             else
               echo "needs_scan=false" >> $GITHUB_OUTPUT
@@ -62,7 +73,7 @@ jobs:
           fi
 
       - name: Free disk space
-        if: steps.scan-changes.outputs.needs_scan == 'true'
+        if: steps.changes.outputs.needs_scan == 'true'
         run: |
           echo "Disk usage before cleanup:"
           df -h
@@ -81,19 +92,17 @@ jobs:
         if: steps.changes.outputs.needs_scan == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "22.0.0"
+          node-version: "24.x"
           cache: "yarn"
 
       - name: Configure Yarn
         if: steps.changes.outputs.needs_scan == 'true'
         run: |
           yarn config set network-timeout 600000
-          yarn config set network-concurrency 1
-          yarn config set child-concurrency 1
 
       - name: Install dependencies
         if: steps.changes.outputs.needs_scan == 'true'
-        run: yarn install --frozen-lockfile --verbose
+        run: yarn install --frozen-lockfile
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
@@ -109,33 +118,6 @@ jobs:
           format: "sarif"
           output: "trivy-fs-${{ matrix.service }}.sarif"
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-        continue-on-error: true
-
-      - name: Display filesystem security scan results
-        if: steps.changes.outputs.needs_scan == 'true'
-        run: |
-          echo "🔍 FILESYSTEM SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
-          echo "================================================="
-
-          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
-          echo "📊 DETAILED VULNERABILITY TABLE:"
-          docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
-            --format table \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            /workspace/apps/${{ matrix.service }} || true
-
-          echo ""
-          echo "📋 SUMMARY BY SEVERITY:"
-          docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
-            --format json \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            /workspace/apps/${{ matrix.service }} 2>/dev/null | \
-            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
-
-          echo ""
-          echo "📄 Detailed SARIF report saved as trivy-fs-${{ matrix.service }}.sarif"
         continue-on-error: true
 
       - name: Run dependency security audit
@@ -221,8 +203,78 @@ jobs:
             .secrets.baseline
           retention-days: 30
 
-  lint-and-test:
-    name: Lint & Test - ${{ matrix.service }}
+  lint:
+    name: Lint - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    # Skip lint on tagged releases — tags are produced from already-merged
+    # code that passed lint on its PR. Tests still run on tags as a real
+    # correctness gate; lint is style-only and runs identically anywhere.
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        service: [api-gateway, api, jobs, web]
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if service needs linting
+        id: changes
+        run: |
+          # Check if this is a scheduled run, tag, or if service files changed
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            # Resolve base SHA per event type. `github.event.before` only exists
+            # on push events; pull_request events expand it to empty, which made
+            # the diff a no-op and silently skipped every job on every PR.
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            elif [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="$(git rev-parse origin/master)"
+            else
+              BASE_SHA="${{ github.event.before }}"
+            fi
+            # `...` diffs from the merge-base, so unrelated commits the base
+            # picked up after this branch forked don't show as "changes here".
+            if git diff --name-only "$BASE_SHA"...${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "needs_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: "yarn"
+
+      - name: Configure Yarn
+        if: steps.changes.outputs.needs_build == 'true'
+        run: |
+          yarn config set network-timeout 600000
+
+      - name: Install dependencies
+        if: steps.changes.outputs.needs_build == 'true'
+        run: yarn install --frozen-lockfile
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
+          HUSKY: 0
+        timeout-minutes: 15
+
+      - name: Run linting for ${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true'
+        run: yarn turbo run lint --filter=${{ matrix.service }} --only
+
+  test:
+    name: Test - ${{ matrix.service }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -236,15 +288,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check if service needs building
+      - name: Check if service needs testing
         id: changes
         run: |
           # Check if this is a scheduled run, tag, or if service files changed
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_build=true" >> $GITHUB_OUTPUT
           else
-            # Check for changes in service-specific files
-            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+            # Resolve base SHA per event type. `github.event.before` only exists
+            # on push events; pull_request events expand it to empty, which made
+            # the diff a no-op and silently skipped every job on every PR.
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            elif [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="$(git rev-parse origin/master)"
+            else
+              BASE_SHA="${{ github.event.before }}"
+            fi
+            # `...` diffs from the merge-base, so unrelated commits the base
+            # picked up after this branch forked don't show as "changes here".
+            if git diff --name-only "$BASE_SHA"...${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
               echo "needs_build=true" >> $GITHUB_OUTPUT
             else
               echo "needs_build=false" >> $GITHUB_OUTPUT
@@ -255,28 +318,22 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "22.0.0"
+          node-version: "24.x"
           cache: "yarn"
 
       - name: Configure Yarn
         if: steps.changes.outputs.needs_build == 'true'
         run: |
           yarn config set network-timeout 600000
-          yarn config set network-concurrency 1
-          yarn config set child-concurrency 1
 
       - name: Install dependencies
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn install --frozen-lockfile --verbose
+        run: yarn install --frozen-lockfile
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
           HUSKY: 0
         timeout-minutes: 15
-
-      - name: Run linting for ${{ matrix.service }}
-        if: steps.changes.outputs.needs_build == 'true'
-        run: yarn turbo run lint --filter=${{ matrix.service }} --only
 
       - name: Run tests for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
@@ -286,7 +343,7 @@ jobs:
   job-microservice-contract-test:
     name: Job Microservice Insomnia Tests
     runs-on: ubuntu-latest
-    needs: [lint-and-test]
+    needs: [test]
     permissions:
       contents: read
     env:
@@ -349,7 +406,10 @@ jobs:
   build-and-deploy:
     name: Build & Deploy - ${{ matrix.service }}
     runs-on: ubuntu-latest
-    needs: [security-scan, lint-and-test]
+    # Depend on test for correctness; lint is intentionally NOT a dep so a tag
+    # push (where the lint job is skipped) doesn't cascade-skip the deploy.
+    # Branch protection should still require both Lint and Test on PRs.
+    needs: [security-scan, test]
     permissions:
       contents: read
       packages: write
@@ -375,8 +435,19 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_build=true" >> $GITHUB_OUTPUT
           else
-            # Check for changes in service-specific files
-            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+            # Resolve base SHA per event type. `github.event.before` only exists
+            # on push events; pull_request events expand it to empty, which made
+            # the diff a no-op and silently skipped every job on every PR.
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            elif [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="$(git rev-parse origin/master)"
+            else
+              BASE_SHA="${{ github.event.before }}"
+            fi
+            # `...` diffs from the merge-base, so unrelated commits the base
+            # picked up after this branch forked don't show as "changes here".
+            if git diff --name-only "$BASE_SHA"...${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
               echo "needs_build=true" >> $GITHUB_OUTPUT
             else
               echo "needs_build=false" >> $GITHUB_OUTPUT
@@ -420,16 +491,26 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.service }}/Dockerfile
-          push: true
+          # Verify the Dockerfile builds on PRs but don't publish — same-repo
+          # PRs would otherwise push unmerged images and overwrite :latest.
+          push: ${{ github.event_name != 'pull_request' }}
+          # Only stamp :latest from master pushes and tag pushes. Feature
+          # branches still get their branch-SHA tag, but must not overwrite
+          # :latest (which downstream pulls treat as production).
           tags: |
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
+            ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && format('ghcr.io/{0}/mark-{1}:latest', github.repository, matrix.service) || '' }}
           cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=min,scope=${{ matrix.service }},ignore-error=true
+          # Only write the GHA cache on push events that survive into a
+          # release path (master / tags / scheduled / manual). PR pushes still
+          # READ master's cache via cache-from but skip the export — uploading
+          # mode=max layers to GHA cache was 3-5 min per service per push and
+          # the resulting cache was overwritten on the next push anyway.
+          cache-to: ${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.service) || '' }}
           platforms: linux/amd64
 
       - name: Run container security scan
-        if: steps.changes.outputs.needs_build == 'true'
+        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
@@ -438,35 +519,8 @@ jobs:
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
         continue-on-error: true
 
-      - name: Display container security scan results
-        if: steps.changes.outputs.needs_build == 'true'
-        run: |
-          echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
-          echo "===================================================="
-
-          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
-          echo "📊 DETAILED VULNERABILITY TABLE:"
-          docker run --rm aquasec/trivy:latest image \
-            --format table \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
-
-          echo ""
-          echo "📋 SUMMARY BY SEVERITY:"
-          docker run --rm aquasec/trivy:latest image \
-            --format json \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
-            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
-
-          echo ""
-          echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
-        continue-on-error: true
-
       - name: Check if container SARIF file exists
-        if: always() && steps.changes.outputs.needs_build == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         id: container-sarif-check
         run: |
           if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
@@ -477,14 +531,14 @@ jobs:
           fi
 
       - name: Upload container scan results
-        if: always() && steps.changes.outputs.needs_build == 'true' && steps.container-sarif-check.outputs.sarif_exists == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request' && steps.container-sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: "trivy-container-${{ matrix.service }}.sarif"
           category: trivy-container-${{ matrix.service }}
 
       - name: Upload container security reports as artifacts
-        if: always() && steps.changes.outputs.needs_build == 'true'
+        if: always() && steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: container-security-reports-${{ matrix.service }}-${{ github.run_number }}
@@ -493,7 +547,7 @@ jobs:
           retention-days: 30
 
       - name: Trigger external image mirror
-        if: steps.changes.outputs.needs_build == 'true'
+        if: steps.changes.outputs.needs_build == 'true' && github.event_name != 'pull_request'
         run: |
           curl -X POST \
             -H "Authorization: token ${{ secrets.GH_TOKEN_MIRROR_TO_ICR }}" \

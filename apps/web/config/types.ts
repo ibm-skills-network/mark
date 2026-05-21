@@ -62,7 +62,7 @@ export interface ExtendedFileContent {
   questionId?: string;
 }
 
-export type UploadType = "author" | "learner" | "debug";
+export type UploadType = "author" | "learner" | "debug" | "chatbot";
 
 export interface UploadContext {
   path?: string;
@@ -75,6 +75,7 @@ export interface UploadContext {
 export interface UploadRequest {
   fileName: string;
   fileType: string;
+  fileSize: number;
   uploadType: UploadType;
   context?: UploadContext;
 }
@@ -86,6 +87,46 @@ export interface UploadResponse {
   fileType: string;
   fileName: string;
   uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
+}
+
+export interface MultipartUploadPartUrl {
+  partNumber: number;
+  url: string;
+}
+
+export interface MultipartUploadInitiateResponse {
+  uploadId: string;
+  key: string;
+  bucket: string;
+  fileType: string;
+  fileName: string;
+  uploadType: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  maxAllowedBytes: number;
+  partSizeBytes: number;
+  urls: MultipartUploadPartUrl[];
+}
+
+export interface MultipartUploadCompletedPart {
+  partNumber: number;
+  etag: string;
+}
+
+export interface MultipartUploadCompleteRequest {
+  uploadId: string;
+  key: string;
+  uploadType: UploadType;
+  parts: MultipartUploadCompletedPart[];
+}
+
+export interface MultipartUploadAbortRequest {
+  uploadId: string;
+  key: string;
+  uploadType: UploadType;
 }
 
 export interface FileMetadata {
@@ -422,6 +463,7 @@ export interface BaseQuestion {
   question: string;
   questionResponses?: QuestionResponse[];
   responseType?: ResponseType;
+  gradingContextQuestionIds?: number[];
 }
 
 export interface LearnerGetQuestionResponse extends BaseQuestion {
@@ -439,6 +481,9 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
       translatedChoices: Choice[];
     };
   };
+  // Response-only marker. Omitted entirely when the translation row is present.
+  // Frontend MUST NOT echo this back in any request body.
+  translationStatus?: "pending" | "unavailable";
 }
 
 export interface CreateQuestionRequest extends BaseQuestion {
@@ -662,6 +707,9 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
     Record<string, unknown>;
   assignment?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
     Record<string, unknown>;
+  assignmentVersionId?: number | null;
+  currentVersionId?: number | null;
+  versionMismatch?: boolean;
   grade?: number;
   totalPointsEarned?: number;
   totalPossiblePoints?: number;
@@ -675,6 +723,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   comments?: string;
   preferredLanguage?: string;
   aiFeedbackError?: string | null;
+  questionResponses?: Array<{ questionId: number }>;
 }
 
 export interface QuestionControls {
@@ -693,6 +742,7 @@ export interface AssignmentDetails {
   passingGrade?: number;
   name: string;
   questionDisplay?: QuestionDisplayType;
+  displayOrder?: "DEFINED" | "RANDOM";
   id: number;
   strictTimeLimit?: boolean;
   introduction?: string;

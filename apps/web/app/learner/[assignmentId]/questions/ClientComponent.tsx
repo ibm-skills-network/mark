@@ -5,7 +5,7 @@ import type { AssignmentDetails, QuestionStore } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 interface ClientLearnerLayoutProps {
   assignmentId: number;
@@ -30,12 +30,28 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   const allQuestions = getStoredData("questions", []) as QuestionStore[];
   const numberOfQuestionsPerAttempt =
     assignmentDetails?.numberOfQuestionsPerAttempt || null;
-  const questions: QuestionStore[] =
-    numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
-      ? allQuestions
-          .sort(() => 0.5 - Math.random())
-          .slice(0, numberOfQuestionsPerAttempt)
-      : allQuestions;
+  const displayOrder = assignmentDetails?.displayOrder;
+  // Content-based dep: `allQuestions` is a fresh array each render (re-parsed
+  // from localStorage), so we key the memo on the question id list instead of
+  // the array ref — otherwise the shuffle would re-run on every render.
+  const questionIdsKey = allQuestions.map((q) => q.id).join("|");
+  const questions: QuestionStore[] = useMemo(() => {
+    const shouldShuffle =
+      displayOrder === "RANDOM" ||
+      (numberOfQuestionsPerAttempt !== null && numberOfQuestionsPerAttempt > 0);
+
+    if (!shouldShuffle) return allQuestions;
+
+    const pool = [...allQuestions];
+    for (let index = pool.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
+    }
+
+    return numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
+      ? pool.slice(0, numberOfQuestionsPerAttempt)
+      : pool;
+  }, [questionIdsKey, displayOrder, numberOfQuestionsPerAttempt]);
   useEffect(() => {
     setAssignmentDetails({
       ...assignmentDetails,

@@ -9,11 +9,7 @@ import {
 } from "@tabler/icons-react";
 import { formatFileSize } from "./FileExplorer/utils/fileUtils";
 import { learnerFileResponse } from "@/stores/learner";
-import {
-  deleteFile,
-  generateUploadUrl,
-  uploadWithPresignedUrl,
-} from "@/lib/shared";
+import { deleteFile, uploadFileToStorage } from "@/lib/shared";
 import { UploadType, UploadContext, UploadRequest } from "@/config/types";
 import { toast } from "sonner";
 interface FileData {
@@ -57,7 +53,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   onUploadError,
   onDeleteComplete,
   onUploadStateChange,
-  maxFileSize = 10 * 1024 * 1024,
+  maxFileSize = 100 * 1024 * 1024,
   acceptedFileTypes = {},
   multiple = false,
   currentPath,
@@ -190,18 +186,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       const uploadRequest: UploadRequest = {
         fileName: file.name,
         fileType: file.type,
+        fileSize: file.size,
         uploadType,
         context: uploadContext,
       };
 
-      const responseWithPresignedUrl = await generateUploadUrl(uploadRequest);
-      if (!responseWithPresignedUrl.presignedUrl) {
-        throw new Error("Failed to generate presigned URL");
-      }
-      const result = await uploadWithPresignedUrl(
-        file,
-        responseWithPresignedUrl.presignedUrl,
-        (ProgressEvent: { loaded: number; total: number }) => {
+      const uploadedFile = await uploadFileToStorage(file, uploadRequest, {
+        onUploadProgress: (ProgressEvent: {
+          loaded: number;
+          total: number;
+        }) => {
           const progress = Math.round(
             (ProgressEvent.loaded / ProgressEvent.total) * 100,
           );
@@ -209,53 +203,62 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             ...prev,
             [id]: {
               ...prev[id],
+              status: "uploading",
               progress,
               message: `Uploading... ${progress}%`,
             },
           }));
         },
-      );
+        onWaitingForCapacity: () => {
+          setUploadStatus((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              status: "waiting",
+              message: "Waiting to upload…",
+            },
+          }));
+        },
+      });
       setUploadStatus((prev) => ({
         ...prev,
         [id]: {
           status: "success",
           message: "Upload complete!",
           progress: 100,
-          result,
+          result: uploadedFile,
         },
       }));
 
       if (onUploadComplete) {
         const formattedFile: learnerFileResponse = {
-          filename: responseWithPresignedUrl.fileName,
+          filename: uploadedFile.fileName,
           content: "InCos",
-          fileType: responseWithPresignedUrl.fileType,
-          key: responseWithPresignedUrl.key,
-          bucket: responseWithPresignedUrl.bucket,
+          fileType: uploadedFile.fileType,
+          key: uploadedFile.key,
+          bucket: uploadedFile.bucket,
         };
         setExistingFiles((prev) => [...prev, formattedFile]);
         onUploadComplete(formattedFile);
       }
     } catch (error: unknown) {
+      const { UploadError } = await import("@/lib/reliableUpload");
+      const userMessage =
+        error instanceof UploadError
+          ? error.userMessage
+          : error instanceof Error
+            ? error.message
+            : "An unknown error occurred.";
+      setUploadStatus((prev) => ({
+        ...prev,
+        [id]: {
+          status: "error",
+          message: userMessage,
+          progress: 0,
+        },
+      }));
       if (error instanceof Error) {
-        setUploadStatus((prev) => ({
-          ...prev,
-          [id]: {
-            status: "error",
-            message: error.message,
-            progress: 0,
-          },
-        }));
         onUploadError?.(error, file);
-      } else {
-        setUploadStatus((prev) => ({
-          ...prev,
-          [id]: {
-            status: "error",
-            message: "An unknown error occurred.",
-            progress: 0,
-          },
-        }));
       }
     }
   };
@@ -349,13 +352,24 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                     <div
                       className={`
                       flex items-center justify-center w-10 h-10 rounded-full
-                      ${status.status === "error" ? "bg-red-100" : "bg-purple-100"}
+                      ${
+                        status.status === "error"
+                          ? "bg-red-100"
+                          : status.status === "waiting"
+                            ? "bg-amber-100"
+                            : "bg-purple-100"
+                      }
                     `}
                     >
                       {status.status === "uploading" ? (
                         <IconLoader2
                           size={20}
                           className="text-purple-600 animate-spin"
+                        />
+                      ) : status.status === "waiting" ? (
+                        <IconLoader2
+                          size={20}
+                          className="text-amber-600 animate-spin"
                         />
                       ) : status.status === "error" ? (
                         <IconFile size={20} className="text-red-600" />
@@ -380,11 +394,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                         ? "bg-red-100 text-red-700"
                         : status.status === "uploading"
                           ? "bg-purple-100 text-purple-700"
-                          : "bg-gray-100 text-gray-700"
+                          : status.status === "waiting"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-gray-100 text-gray-700"
                     }
                   `}
                   >
-                    {status.progress}%
+                    {status.status === "waiting" ? "…" : `${status.progress}%`}
                   </span>
                 </div>
 
@@ -396,10 +412,17 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                         ? "bg-red-500"
                         : status.status === "success"
                           ? "bg-green-500"
-                          : "bg-gradient-to-r from-purple-500 to-purple-600"
+                          : status.status === "waiting"
+                            ? "bg-amber-400"
+                            : "bg-gradient-to-r from-purple-500 to-purple-600"
                     }`}
                     initial={{ width: "0%" }}
-                    animate={{ width: `${status.progress}%` }}
+                    animate={{
+                      width:
+                        status.status === "waiting"
+                          ? "100%"
+                          : `${status.progress}%`,
+                    }}
                     transition={{ duration: 0.3, ease: "easeOut" }}
                   >
                     {/* Shimmer effect for active uploads */}
@@ -421,7 +444,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 <p
                   className={`
                   text-xs mt-2
-                  ${status.status === "error" ? "text-red-600" : "text-gray-600"}
+                  ${
+                    status.status === "error"
+                      ? "text-red-600"
+                      : status.status === "waiting"
+                        ? "text-amber-700"
+                        : "text-gray-600"
+                  }
                 `}
                 >
                   {status.message}

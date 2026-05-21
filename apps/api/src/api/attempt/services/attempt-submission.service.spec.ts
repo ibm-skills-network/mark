@@ -24,6 +24,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
   let service: AttemptSubmissionService;
 
   const mockPrisma = {
+    $transaction: jest.fn(),
     assignmentAttempt: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -45,6 +46,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     },
     gradingProgress: {
       findUnique: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn(),
     },
   };
@@ -180,9 +182,20 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     // Reset all mocks before each test
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(
+      async (
+        operation:
+          | Promise<unknown>[]
+          | ((tx: typeof mockPrisma) => Promise<unknown>),
+      ) =>
+        Array.isArray(operation)
+          ? Promise.all(operation)
+          : operation(mockPrisma),
+    );
     mockPrisma.question.findMany.mockResolvedValue([]);
     mockPrisma.questionResponse.deleteMany.mockResolvedValue({ count: 0 });
     mockPrisma.questionResponse.update.mockResolvedValue({});
+    mockPrisma.gradingProgress.update.mockResolvedValue({});
     mockProgressService.markComplete.mockResolvedValue(undefined);
     mockProgressService.markCompleteWithAiFeedbackError.mockResolvedValue(
       undefined,
@@ -613,6 +626,83 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       buildSpy.mockRestore();
       mapperSpy.mockRestore();
+    });
+
+    it("includes totalPossiblePoints and totalPointsEarned so the success page can render the score even when showQuestions strips the questions array", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        questionResponses: [
+          { questionId: 101, points: 4 },
+          { questionId: 202, points: 3 },
+        ],
+      });
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([
+          { id: 101, totalPoints: 5 },
+          { id: 202, totalPoints: 5 },
+        ]);
+      // Force the visibility filter to actually run so we prove totals are
+      // captured before it strips the questions array.
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101, 202],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: false,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      expect(result.totalPossiblePoints).toBe(10);
+      expect(result.totalPointsEarned).toBe(7);
+      expect(result.questions).toEqual([]);
+
+      buildSpy.mockRestore();
+    });
+
+    it("omits totalPointsEarned when showAssignmentScore=false", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        questionResponses: [{ questionId: 101, points: 4 }],
+      });
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: false,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      expect(result.totalPossiblePoints).toBe(5);
+      expect(result.totalPointsEarned).toBeUndefined();
+
+      buildSpy.mockRestore();
     });
 
     it("uses cached questions for translation-aware attempt reads", async () => {

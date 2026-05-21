@@ -73,6 +73,13 @@ api:
   env:
     API_PORT: 3000
     ENABLE_JOB_SCHEDULERS: "false"
+    # Master switches for the two staged rollouts. Both default to "false"
+    # in the chart so a fresh install ships with the legacy code paths and
+    # the new author-side publish-progress card stays hidden. Flip to
+    # "true" per-environment in the deploy overlay once the rollout window
+    # is open. Runtime check is strict equality with "true".
+    ENABLE_TRANSLATION: "false"
+    ENABLE_PARALLEL_GRADING: "false"
   secretEnv: {}
 
 jobs:

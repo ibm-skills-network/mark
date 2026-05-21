@@ -33,7 +33,7 @@ import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
 import { LocalizationService } from "./common/utils/localization.service";
 import { LtiSyncModule } from "./lti-sync.module";
 import { AttemptFeedbackService } from "./services/attempt-feedback.service";
-import { AttemptAccessCacheService } from "./services/attempt-access-cache.service";
+import { AttemptAccessCacheModule } from "./services/attempt-access-cache.module";
 import { AttemptGradingService } from "./services/attempt-grading.service";
 import { AttemptRegradingService } from "./services/attempt-regrading.service";
 import { AttemptReportingService } from "./services/attempt-reporting.service";
@@ -43,6 +43,7 @@ import { AttemptServiceV2 } from "./services/attempt.service";
 import { FileContentExtractionService } from "./services/file-content-extraction";
 import { GradingFactoryService } from "./services/grading-factory.service";
 import { GradingProgressService } from "./services/grading-progress.service";
+import { GradingRateLimiterService } from "./services/grading-rate-limiter.service";
 import { PdfAnnotationService } from "./services/pdf-annotation.service";
 import { PdfStructureExtractorService } from "./services/pdf-structure-extractor.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -57,11 +58,11 @@ import { TranslationService } from "./services/translation/translation.service";
     LtiSyncModule,
     JobQueueModule,
     AdminAuthModule,
+    AttemptAccessCacheModule,
   ],
   controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,
-    AttemptAccessCacheService,
     AttemptSubmissionService,
     AttemptValidationService,
     AttemptGradingService,
@@ -81,6 +82,7 @@ import { TranslationService } from "./services/translation/translation.service";
       provide: GRADING_PROGRESS_SERVICE,
       useClass: GradingProgressService,
     },
+    GradingRateLimiterService,
     {
       provide: GRADING_CONSISTENCY_SERVICE,
       useClass: GradingConsistencyService,
