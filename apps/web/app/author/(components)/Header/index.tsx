@@ -8,7 +8,7 @@ import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
 import Modal from "@/components/Modal";
 import Dropdown from "@/components/Dropdown";
-import ProgressBar, { JobStatus } from "@/components/ProgressBar";
+import { JobStatus } from "@/components/ProgressBar";
 import {
   Assignment,
   Choice,
@@ -48,7 +48,7 @@ import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestio
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import SaveAndPublishButton from "./SaveAndPublishButton";
-import PublishProgress from "./PublishProgress";
+import PublishStatus from "./PublishStatus";
 import type { PublishJobResult } from "@/types/publish-job-result";
 
 function normalizeAssignment(assignment: Assignment): Assignment {
@@ -927,18 +927,12 @@ function AuthorHeader() {
             </div>
           </div>
 
-          {submitting && (
-            <div className="mt-4">
-              <ProgressBar
-                progress={jobProgress}
-                currentMessage={currentMessage}
-                status={progressStatus}
-              />
-            </div>
-          )}
-
-          <PublishProgress
+          <PublishStatus
             key={publishSessionId}
+            submitting={submitting}
+            jobProgress={jobProgress}
+            currentMessage={currentMessage}
+            progressStatus={progressStatus}
             publishResult={publishResult}
             onRetryFailedTranslations={handleRetryFailedTranslations}
             retryInFlight={submitting}
