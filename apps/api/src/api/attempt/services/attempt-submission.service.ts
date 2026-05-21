@@ -643,10 +643,36 @@ export class AttemptSubmissionService {
         assignmentId,
         error: internalError,
       });
-      await this.progressService?.markCompleteWithAiFeedbackError(
-        attemptId,
-        AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
-      );
+      // Restore the row to COMPLETED+error so the learner can retry.
+      // If markCompleteWithAiFeedbackError itself fails (its internal catch
+      // swallows the error) the row stays in PROCESSING, permanently locking
+      // the learner out of retrying. Use a direct fallback update to avoid
+      // that stuck state.
+      try {
+        await this.progressService?.markCompleteWithAiFeedbackError(
+          attemptId,
+          AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+        );
+      } catch {
+        this.logger.error(
+          "markCompleteWithAiFeedbackError threw after rerun failure — attempting direct fallback restore",
+          { attemptId, assignmentId },
+        );
+        await this.prisma.gradingProgress
+          .update({
+            where: { attemptId },
+            data: {
+              status: GradingStatus.COMPLETED,
+              error: AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+            },
+          })
+          .catch((fallbackErr: unknown) =>
+            this.logger.error(
+              "Fallback GradingProgress restore also failed — row may be stuck in PROCESSING",
+              { attemptId, assignmentId, error: String(fallbackErr) },
+            ),
+          );
+      }
       throw rerunError instanceof InternalServerErrorException ||
         rerunError instanceof BadRequestException ||
         rerunError instanceof NotFoundException
@@ -2036,6 +2062,12 @@ Questions:
     const feedbackByQuestionId =
       this.parseDeterministicAiFeedbackResponse(rawResponse);
 
+    // Validate all items before touching the DB.
+    const updates: Array<{
+      id: number;
+      feedbackPayload: Array<{ feedback: string }>;
+      item: GradedItem;
+    }> = [];
     for (const item of gradedItems) {
       if (typeof item.responseDto.id !== "number") {
         throw new InternalServerErrorException(
@@ -2050,12 +2082,25 @@ Questions:
         );
       }
 
-      const feedbackPayload = [{ feedback }];
-      await this.prisma.questionResponse.update({
-        where: { id: item.responseDto.id },
-        data: { feedback: feedbackPayload },
+      updates.push({
+        id: item.responseDto.id,
+        feedbackPayload: [{ feedback }],
+        item,
       });
+    }
 
+    // Batch all updates in a single transaction instead of N sequential writes.
+    await this.prisma.$transaction(
+      updates.map(({ id, feedbackPayload }) =>
+        this.prisma.questionResponse.update({
+          where: { id },
+          data: { feedback: feedbackPayload },
+        }),
+      ),
+    );
+
+    // Update in-memory items so callers see the new feedback without a DB reload.
+    for (const { feedbackPayload, item } of updates) {
       item.responseDto.feedback = feedbackPayload;
     }
   }
