@@ -400,7 +400,7 @@ function SuccessPage() {
     setShowSubmissionFeedback(data.showSubmissionFeedback || false);
     setCorrectAnswerVisibility(data.correctAnswerVisibility ?? "ALWAYS");
     setShowQuestions(data.showQuestions);
-    setUserPreferredLanguage(data.preferredLanguage);
+    setUserPreferredLanguage(data.preferredLanguage ?? "en");
     setAiFeedbackError(data.aiFeedbackError ?? null);
     setGrade(data.grade * 100);
     setTotalPoints(possiblePoints);

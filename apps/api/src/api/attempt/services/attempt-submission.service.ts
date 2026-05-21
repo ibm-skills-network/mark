@@ -591,7 +591,7 @@ export class AttemptSubmissionService {
   ): Promise<{ success: boolean }> {
     // Atomic check-and-lock: only succeeds if the attempt is in the
     // COMPLETED+error state. A second concurrent request will find 0 rows
-    // (status is now IN_PROGRESS) and fail fast, preventing double LLM calls.
+    // (status is now PROCESSING) and fail fast, preventing double LLM calls.
     const { count } = await this.prisma.gradingProgress.updateMany({
       where: {
         attemptId,
@@ -646,35 +646,28 @@ export class AttemptSubmissionService {
         error: internalError,
       });
       // Restore the row to COMPLETED+error so the learner can retry.
-      // If markCompleteWithAiFeedbackError itself fails (its internal catch
-      // swallows the error) the row stays in PROCESSING, permanently locking
-      // the learner out of retrying. Use a direct fallback update to avoid
-      // that stuck state.
-      try {
-        await this.progressService?.markCompleteWithAiFeedbackError(
-          attemptId,
-          AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+      // markCompleteWithAiFeedbackError also triggers the completion email, so
+      // call it first. However it swallows its own DB errors internally, so we
+      // unconditionally follow up with a direct update as a safety net to
+      // prevent the row from staying permanently stuck in PROCESSING.
+      await this.progressService?.markCompleteWithAiFeedbackError(
+        attemptId,
+        AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+      );
+      await this.prisma.gradingProgress
+        .update({
+          where: { attemptId },
+          data: {
+            status: GradingStatus.COMPLETED,
+            error: AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+          },
+        })
+        .catch((error: unknown) =>
+          this.logger.error(
+            "Failed to restore GradingProgress after rerun failure — row may be stuck in PROCESSING",
+            { attemptId, assignmentId, error: String(error) },
+          ),
         );
-      } catch {
-        this.logger.error(
-          "markCompleteWithAiFeedbackError threw after rerun failure — attempting direct fallback restore",
-          { attemptId, assignmentId },
-        );
-        await this.prisma.gradingProgress
-          .update({
-            where: { attemptId },
-            data: {
-              status: GradingStatus.COMPLETED,
-              error: AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
-            },
-          })
-          .catch((error: unknown) =>
-            this.logger.error(
-              "Fallback GradingProgress restore also failed — row may be stuck in PROCESSING",
-              { attemptId, assignmentId, error: String(error) },
-            ),
-          );
-      }
       throw rerunError instanceof InternalServerErrorException ||
         rerunError instanceof BadRequestException ||
         rerunError instanceof NotFoundException
