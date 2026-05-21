@@ -48,9 +48,18 @@ module.exports = {
     "dist/",
     "node_modules/",
     ".turbo",
+    ".next/",
     "tailwind.config.ts",
     "postcss.config.js",
     ".eslintrc.cjs",
     "**/depreciated/*",
+    // `next lint` ignored these by default; eslint . doesn't, so we
+    // re-establish the old scope rather than relax our rules for them.
+    "next.config.js",
+    "jest.config.js",
+    "jest.setup.js",
+    "scripts/",
+    "public/",
+    "coverage/",
   ],
 };
