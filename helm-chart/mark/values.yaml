@@ -80,6 +80,11 @@ api:
     # is open. Runtime check is strict equality with "true".
     ENABLE_TRANSLATION: "false"
     ENABLE_PARALLEL_GRADING: "false"
+    # Bottleneck maxConcurrent ceiling on parallel LLM calls inside ONE
+    # grading job (the wave scheduler's fan-out cap). Distinct from
+    # GRADING_WORKER_CONCURRENCY on mark-jobs, which controls how many
+    # grading jobs the BullMQ worker pulls in parallel per pod.
+    GRADING_CONCURRENCY: "10"
   secretEnv: {}
 
 jobs:
