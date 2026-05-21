@@ -166,36 +166,7 @@ function SuccessPage() {
             return;
           }
           logState("Attempt fetched", `Attempt ${submissionDetails.id}`);
-          setQuestions(submissionDetails.questions);
-          setBackendComments(submissionDetails.comments || "");
-          setShowSubmissionFeedback(
-            submissionDetails.showSubmissionFeedback || false,
-          );
-          setCorrectAnswerVisibility(
-            submissionDetails.correctAnswerVisibility ?? "ALWAYS",
-          );
-          setShowQuestions(submissionDetails.showQuestions);
-          setUserPreferredLanguage(submissionDetails.preferredLanguage);
-          setAiFeedbackError(submissionDetails.aiFeedbackError ?? null);
-          setGrade(submissionDetails.grade * 100);
-          if (submissionDetails.totalPointsEarned) {
-            setTotalPoints(submissionDetails.totalPointsEarned);
-          } else {
-            const totalPoints = submissionDetails.questions.reduce(
-              (acc, question) => acc + question.totalPoints,
-              0,
-            );
-            const totalPointsEarned = totalPoints * submissionDetails.grade;
-            setTotalPoints(
-              totalPoints || submissionDetails.totalPossiblePoints,
-            );
-            setTotalPointsEarned(totalPointsEarned);
-          }
-          setAssignmentDetails({
-            passingGrade: submissionDetails.passingGrade,
-            id: submissionDetails.id,
-            name: submissionDetails.name,
-          });
+          applyAttemptToState(submissionDetails);
           const response = await getFeedback(assignmentId, attemptId);
           if (response) {
             logState("Feedback loaded");
@@ -420,38 +391,34 @@ function SuccessPage() {
     return "Keep Pushing Forward!";
   };
 
-  const refreshAttemptData = async () => {
-    const submissionDetails: AssignmentAttemptWithQuestions =
-      await getCompletedAttempt(assignmentId, attemptId);
-    if (!submissionDetails) return;
-    setQuestions(submissionDetails.questions);
-    setBackendComments(submissionDetails.comments || "");
-    setShowSubmissionFeedback(
-      submissionDetails.showSubmissionFeedback || false,
-    );
-    setCorrectAnswerVisibility(
-      submissionDetails.correctAnswerVisibility ?? "ALWAYS",
-    );
-    setShowQuestions(submissionDetails.showQuestions);
-    setUserPreferredLanguage(submissionDetails.preferredLanguage);
-    setAiFeedbackError(submissionDetails.aiFeedbackError ?? null);
-    setGrade(submissionDetails.grade * 100);
+  const applyAttemptToState = (data: AssignmentAttemptWithQuestions) => {
     const possiblePoints =
-      submissionDetails.totalPossiblePoints ??
-      submissionDetails.questions.reduce(
-        (acc, question) => acc + question.totalPoints,
-        0,
-      );
+      data.totalPossiblePoints ??
+      data.questions.reduce((acc, q) => acc + q.totalPoints, 0);
+    setQuestions(data.questions);
+    setBackendComments(data.comments || "");
+    setShowSubmissionFeedback(data.showSubmissionFeedback || false);
+    setCorrectAnswerVisibility(data.correctAnswerVisibility ?? "ALWAYS");
+    setShowQuestions(data.showQuestions);
+    setUserPreferredLanguage(data.preferredLanguage);
+    setAiFeedbackError(data.aiFeedbackError ?? null);
+    setGrade(data.grade * 100);
     setTotalPoints(possiblePoints);
-    setTotalPointsEarned(
-      submissionDetails.totalPointsEarned ??
-        possiblePoints * submissionDetails.grade,
-    );
+    setTotalPointsEarned(data.totalPointsEarned ?? possiblePoints * data.grade);
     setAssignmentDetails({
-      passingGrade: submissionDetails.passingGrade,
-      id: submissionDetails.id,
-      name: submissionDetails.name,
+      passingGrade: data.passingGrade,
+      id: data.id,
+      name: data.name,
     });
+  };
+
+  const refreshAttemptData = async () => {
+    const data: AssignmentAttemptWithQuestions = await getCompletedAttempt(
+      assignmentId,
+      attemptId,
+    );
+    if (!data) return;
+    applyAttemptToState(data);
   };
 
   const handleRerunAiFeedback = async () => {
@@ -460,7 +427,8 @@ function SuccessPage() {
       await rerunAiFeedback(assignmentId, attemptId);
       await refreshAttemptData();
       toast.success("AI feedback regenerated successfully.");
-    } catch {
+    } catch (err) {
+      console.error("AI feedback rerun failed", err);
       toast.error("AI feedback rerun failed. Please try again.");
     } finally {
       setIsRerunningAiFeedback(false);
