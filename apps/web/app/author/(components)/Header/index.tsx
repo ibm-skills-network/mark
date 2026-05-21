@@ -213,9 +213,6 @@ function AuthorHeader() {
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
-  const [currentMessage, setCurrentMessage] = useState<string>(
-    "Initializing publishing...",
-  );
   const [progressStatus, setProgressStatus] =
     useState<JobStatus>("In Progress");
   const [publishResult, setPublishResult] = useState<
@@ -458,17 +455,15 @@ function AuthorHeader() {
       if (cancelled || !active?.jobId) return;
       setSubmitting(true);
       setJobProgress(0);
-      setCurrentMessage("Reconnecting to publish in progress...");
       setProgressStatus("In Progress");
       setPublishResult(undefined);
       setPublishSessionId((n) => n + 1);
       try {
         const [publishSucceeded] = await subscribeToJobStatus(
           active.jobId,
-          (percentage, progress) => {
+          (percentage) => {
             if (cancelled) return;
             setJobProgress(percentage);
-            setCurrentMessage(progress ?? "");
           },
           setQuestions,
           (result) => {
@@ -544,9 +539,6 @@ function AuthorHeader() {
   ): Promise<void> {
     setSubmitting(true);
     setJobProgress(0);
-    setCurrentMessage(
-      publishImmediately ? "Initializing publishing..." : "Creating version...",
-    );
     setProgressStatus("In Progress");
     setPublishResult(undefined);
     setPublishSessionId((n) => n + 1);
@@ -647,9 +639,8 @@ function AuthorHeader() {
       if (response?.jobId) {
         const [publishSucceeded] = await subscribeToJobStatus(
           response.jobId,
-          (percentage, progress) => {
+          (percentage) => {
             setJobProgress(percentage);
-            setCurrentMessage(progress ?? "");
           },
           setQuestions,
           (result) => setPublishResult(result),
@@ -727,7 +718,6 @@ function AuthorHeader() {
     if (!activeAssignmentId) return;
     setSubmitting(true);
     setJobProgress(0);
-    setCurrentMessage("Retrying failed translations...");
     setProgressStatus("In Progress");
     setPublishResult(undefined);
     setPublishSessionId((n) => n + 1);
@@ -741,9 +731,8 @@ function AuthorHeader() {
       }
       const [retrySucceeded] = await subscribeToJobStatus(
         response.jobId,
-        (percentage, progress) => {
+        (percentage) => {
           setJobProgress(percentage);
-          setCurrentMessage(progress ?? "");
         },
         setQuestions,
         (result) => setPublishResult(result),
@@ -931,7 +920,6 @@ function AuthorHeader() {
             key={publishSessionId}
             submitting={submitting}
             jobProgress={jobProgress}
-            currentMessage={currentMessage}
             progressStatus={progressStatus}
             publishResult={publishResult}
             onRetryFailedTranslations={handleRetryFailedTranslations}

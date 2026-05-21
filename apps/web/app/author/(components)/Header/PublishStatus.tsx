@@ -29,14 +29,18 @@ interface PublishStatusProps {
   submitting: boolean;
   // Server-reported job percentage (0–100). Drives phase 1 bar fill.
   jobProgress: number;
-  // Cycling SSE progress text. Surfaces as subtext during phase 1.
-  currentMessage: string;
   // Job lifecycle. "Failed" flips bar to red + heading to "Publishing failed".
   progressStatus: JobStatus;
   publishResult: PublishJobResult | undefined;
   onRetryFailedTranslations?: () => void;
   retryInFlight?: boolean;
 }
+
+// Window after a clean-success terminal state before the card auto-hides.
+// Long enough for the eye to register "Published" + the green check, short
+// enough to get out of the author's way. Failure / partial-failure stays
+// sticky so the retry button remains reachable.
+const AUTO_DISMISS_MS = 3000;
 
 const TERMINAL_STATUSES: ReadonlySet<PerJobTranslationEntry["status"]> =
   new Set(["completed", "failed"]);
@@ -134,7 +138,6 @@ function sortEntries(
 export default function PublishStatus({
   submitting,
   jobProgress,
-  currentMessage,
   progressStatus,
   publishResult,
   onRetryFailedTranslations,
@@ -208,6 +211,18 @@ export default function PublishStatus({
       perJob.length > 0 ||
       publishResult?.stage === "db_writes_done");
 
+  // Clean-success auto-dismiss. Partial failure or full failure stays
+  // sticky: the retry button (partial) or the failure copy (full) must
+  // remain visible so the author can act on it. The effect must run
+  // before any early returns to keep hook ordering stable across renders.
+  const shouldAutoDismiss =
+    isTerminal && !isFailureMode && (aggregate?.failed ?? 0) === 0;
+  React.useEffect(() => {
+    if (!shouldAutoDismiss) return;
+    const t = setTimeout(() => setDismissed(true), AUTO_DISMISS_MS);
+    return () => clearTimeout(t);
+  }, [shouldAutoDismiss]);
+
   // Auto-hide on no-work terminal state (translation disabled, or
   // metadata-only republish). The server emits aggregate.total=0 on the
   // short-circuit path; PublishProgress had the same guard.
@@ -259,8 +274,15 @@ export default function PublishStatus({
   // come BEFORE the aggregate.total > 0 branch because the fallback
   // wireAggregate still carries total=1 in the meta-only case, which
   // would otherwise misroute into the "0 of 1 questions" copy.
+  //
+  // Phase-1 / failure no longer surfaces the cycling SSE progress text
+  // (e.g. "Translating Question #6346: Қазақ тілі - Checking for existing
+  // translation"). Per-language fan-out is parallel now, so a single
+  // serialized message implies progression the system isn't actually
+  // making, and the bar + aggregate + details drawer already convey
+  // everything the author needs.
   const subtext = isFailureMode
-    ? currentMessage || "Publish encountered an error."
+    ? "Publish encountered an error."
     : isTerminal
       ? aggregate && (aggregate.failed ?? 0) > 0
         ? `Translations finished with ${aggregate.failed} failure(s)`
@@ -279,7 +301,7 @@ export default function PublishStatus({
                   : ""
               }`
             : "Preparing translations..."
-        : currentMessage || "Preparing publish...";
+        : "Saving changes...";
 
   // Terminal-with-partial-failures gets the amber treatment so a green bar
   // doesn't visually disagree with "Translations finished with N failure(s)".
