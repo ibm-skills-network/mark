@@ -104,6 +104,8 @@ export class AttemptSubmissionService {
   private static readonly AI_FEEDBACK_USER_ERROR =
     "AI feedback generation failed. Your result has been saved and you can retry feedback generation.";
 
+  // gpt-4o-mini: cost-effective, fast, sufficient for short structured JSON output.
+  // Update this if the deployment moves to a different OpenAI-compatible endpoint.
   private static readonly DETERMINISTIC_FEEDBACK_MODEL = "gpt-4o-mini";
 
   constructor(
@@ -666,10 +668,10 @@ export class AttemptSubmissionService {
               error: AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
             },
           })
-          .catch((fallbackErr: unknown) =>
+          .catch((error: unknown) =>
             this.logger.error(
               "Fallback GradingProgress restore also failed — row may be stuck in PROCESSING",
-              { attemptId, assignmentId, error: String(fallbackErr) },
+              { attemptId, assignmentId, error: String(error) },
             ),
           );
       }
@@ -2055,6 +2057,9 @@ Questions:
       {
         temperature: 0.2,
         top_p: 1,
+        // 180 tokens/question: ~50 tokens prompt + ~130 tokens feedback per item.
+        // Floor 800 for small assignments; ceiling 4000 to cap cost (gpt-4o-mini
+        // supports 16k output but a structured JSON feedback array never needs more).
         maxTokens: Math.min(4000, Math.max(800, promptItems.length * 180)),
       },
     );

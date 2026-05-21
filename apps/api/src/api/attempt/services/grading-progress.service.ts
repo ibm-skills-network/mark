@@ -199,7 +199,7 @@ export class GradingProgressService {
   /**
    * Clear a previously recorded AI feedback error after a successful rerun.
    * Also restores status to COMPLETED because the rerun guard set it to
-   * IN_PROGRESS to prevent concurrent reruns.
+   * PROCESSING to prevent concurrent reruns.
    */
   async clearAiFeedbackError(attemptId: number): Promise<void> {
     try {
