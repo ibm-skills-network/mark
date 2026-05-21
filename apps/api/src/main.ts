@@ -290,6 +290,10 @@ async function bootstrap() {
     logger.log(`  - http://localhost:${port}/health/liveness`);
     logger.log(`  - http://localhost:${port}/health/readiness`);
   } catch (error) {
+    // Winston's serializer flattens Error stacks to `[{}]`, hiding the real
+    // cause when bootstrap fails. Dump the raw error to stderr first so K8s
+    // pod logs show what actually broke before logger.error swallows it.
+    console.error("Failed to bootstrap application (raw):", error);
     logger.error("Failed to bootstrap application:", error);
     process.exit(1);
   }

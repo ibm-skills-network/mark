@@ -594,7 +594,7 @@ export class UpdateAssignmentQuestionsDto {
   @ApiProperty({
     description: "Question-level controls (copy, paste, right-click, print)",
     required: false,
-    type: "object",
+    type: Object,
   })
   @IsOptional()
   questionControls?: {

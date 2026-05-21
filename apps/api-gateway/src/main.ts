@@ -84,6 +84,8 @@ async function bootstrap() {
       `📚 API Documentation available at http://localhost:${port}/api`,
     );
   } catch (error) {
+    // Winston flattens Error stacks; dump raw first so pod logs surface it.
+    console.error("Failed to start API Gateway (raw):", error);
     logger.error("Failed to start API Gateway:", error);
     // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);

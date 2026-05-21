@@ -45,18 +45,18 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(LoggerMiddleware)
-      .forRoutes({ path: "*", method: RequestMethod.ALL })
+      .forRoutes({ path: "{*splat}", method: RequestMethod.ALL })
       .apply(UserSessionMiddleware)
       .forRoutes(
-        { path: "/v1/assignments*", method: RequestMethod.ALL },
-        { path: "/v1/github*", method: RequestMethod.ALL },
+        { path: "/v1/assignments{/*splat}", method: RequestMethod.ALL },
+        { path: "/v1/github{/*splat}", method: RequestMethod.ALL },
         { path: "/v1/user-session", method: RequestMethod.GET },
-        { path: "/v1/reports*", method: RequestMethod.ALL },
-        { path: "/v1/chats*", method: RequestMethod.ALL },
-        { path: "/v1/files*", method: RequestMethod.ALL },
-        { path: "/v1/admin/translations*", method: RequestMethod.ALL },
-        { path: "/v2/assignments/*", method: RequestMethod.ALL },
-        { path: "/v1/admin-dashboard/*", method: RequestMethod.GET },
+        { path: "/v1/reports{/*splat}", method: RequestMethod.ALL },
+        { path: "/v1/chats{/*splat}", method: RequestMethod.ALL },
+        { path: "/v1/files{/*splat}", method: RequestMethod.ALL },
+        { path: "/v1/admin/translations{/*splat}", method: RequestMethod.ALL },
+        { path: "/v2/assignments{/*splat}", method: RequestMethod.ALL },
+        { path: "/v1/admin-dashboard{/*splat}", method: RequestMethod.GET },
       );
   }
 }

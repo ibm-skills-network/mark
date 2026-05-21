@@ -1,0 +1,146 @@
+version: 2
+
+# Updates run weekly. Minor + patch updates for each ecosystem are grouped
+# into a single PR per week to keep volume low. Security advisories continue
+# to open individual PRs so they're not blocked behind a weekly batch.
+#
+# Major version bumps are kept as individual PRs because they almost always
+# need a deliberate migration and shouldn't ride along with safe patches.
+
+updates:
+  # Root workspace
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+    groups:
+      root-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      root-security:
+        applies-to: security-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/apps/api"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - api
+    groups:
+      api-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      api-security:
+        applies-to: security-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/apps/api-gateway"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - api-gateway
+    groups:
+      api-gateway-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      api-gateway-security:
+        applies-to: security-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/apps/web"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - web
+    groups:
+      web-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      web-security:
+        applies-to: security-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/apps/jobs"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - jobs
+    groups:
+      jobs-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      jobs-security:
+        applies-to: security-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions-all:
+        update-types:
+          - minor
+          - patch

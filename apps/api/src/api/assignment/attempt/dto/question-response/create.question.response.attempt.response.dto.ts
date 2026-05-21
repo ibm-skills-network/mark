@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, getSchemaPath } from "@nestjs/swagger";
 import { IsString } from "class-validator";
 
 export interface StructuredCriterion {
@@ -105,13 +105,15 @@ export class CreateQuestionResponseAttemptResponseDto {
   @ApiProperty({
     description:
       "The feedback received after evaluating the question response of the learner.",
-    type: [
-      ChoiceBasedFeedbackDto,
-      GeneralFeedbackDto,
-      TrueFalseBasedFeedbackDto,
-    ],
-    isArray: true,
     required: false,
+    type: "array",
+    items: {
+      oneOf: [
+        { $ref: getSchemaPath(ChoiceBasedFeedbackDto) },
+        { $ref: getSchemaPath(GeneralFeedbackDto) },
+        { $ref: getSchemaPath(TrueFalseBasedFeedbackDto) },
+      ],
+    },
   })
   feedback?:
     | ChoiceBasedFeedbackDto[]
