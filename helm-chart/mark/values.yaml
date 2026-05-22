@@ -116,7 +116,14 @@ ui:
   resources: {}
   env:
     PORT: 3000
-  secretEnv: {} 
+    # Selects per-environment server-side behavior in the web app —
+    # currently the Instana Real-User-Monitoring key selection in
+    # app/layout.tsx. Only "staging" or "production" activate the RUM
+    # snippet. Chart default "development" keeps RUM off for fresh
+    # installs; deploy overlay sets it to {{ .Environment.Name }} so
+    # one image carries the right key per environment at runtime.
+    APP_ENV: "development"
+  secretEnv: {}
 
 # LTI Credentials Manager configurations
 ltiCredentialsManager:

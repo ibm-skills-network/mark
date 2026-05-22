@@ -6,6 +6,12 @@ import LayoutContent from "../components/LayoutContent";
 
 const inter = Inter({ subsets: ["latin"] });
 
+// Render the layout per request rather than statically prerendering it.
+// Required so the Instana key selection below picks up the container's
+// runtime APP_ENV (set per-environment by the deploy overlay) instead of
+// freezing to whatever was in the build environment.
+export const dynamic = "force-dynamic";
+
 const INSTANA_SCRIPT_SRC = "https://eum.instana.io/1.8.1/eum.min.js";
 const INSTANA_SCRIPT_INTEGRITY =
   "sha384-qFzHZ5BC7HOPEBSYkbYSv+DBWrG34P1QW9mIaCR41db6yOJNYmH4antW6KLkc6v1";
@@ -40,8 +46,13 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // APP_ENV (no NEXT_PUBLIC_ prefix) is intentionally a server-only env
+  // var. NEXT_PUBLIC_* gets inlined at build time, so it can't vary per
+  // environment from a single image — the container's value would never
+  // win. APP_ENV is read on every server render (force-dynamic above),
+  // so the deploy overlay's per-env value lands in the HTML at runtime.
   const appEnvironment =
-    process.env.NEXT_PUBLIC_APP_ENV?.toLowerCase() ?? "development";
+    process.env.APP_ENV?.toLowerCase() ?? "development";
   const instanaKey =
     appEnvironment === "production" || appEnvironment === "staging"
       ? INSTANA_KEYS[appEnvironment]
