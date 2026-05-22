@@ -67,13 +67,19 @@ function mergeGradingState(
   if (!next) return prev;
   if (!prev) return next;
 
-  const prevById = new Map(prev.questions.map((q) => [q.id, q]));
-  const merged = next.questions.map((q) => {
-    const seen = prevById.get(q.id);
-    if (!seen) return q;
-    const status = mergeQuestionStatus(seen.status, q.status);
-    return { ...q, status };
+  const nextById = new Map(next.questions.map((q) => [q.id, q]));
+  // Base on prev to preserve established order; apply next updates via ratchet.
+  const merged = prev.questions.map((q) => {
+    const incoming = nextById.get(q.id);
+    if (!incoming) return q;
+    const status = mergeQuestionStatus(q.status, incoming.status);
+    return { ...incoming, status };
   });
+  // Append any questions new in next that prev didn't have yet.
+  const prevIds = new Set(prev.questions.map((q) => q.id));
+  for (const q of next.questions) {
+    if (!prevIds.has(q.id)) merged.push(q);
+  }
 
   let completed = 0;
   let inFlight = 0;

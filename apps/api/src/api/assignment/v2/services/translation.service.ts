@@ -1360,9 +1360,7 @@ export class TranslationService implements OnModuleDestroy {
           if (
             parentJobId &&
             !parallelDone &&
-            (c % 5 === 0 ||
-              c === getSupportedLanguageCount() ||
-              c >= getSupportedLanguageCount() - 2)
+            (c % 5 === 0 || c >= getSupportedLanguageCount() - 2)
           ) {
             try {
               await this.translationStateRedis?.hset(
@@ -1691,9 +1689,7 @@ export class TranslationService implements OnModuleDestroy {
           if (
             parentJobId &&
             !parallelDone &&
-            (c % 5 === 0 ||
-              c === getSupportedLanguageCount() ||
-              c >= getSupportedLanguageCount() - 2)
+            (c % 5 === 0 || c >= getSupportedLanguageCount() - 2)
           ) {
             try {
               await this.translationStateRedis?.hset(
@@ -2001,9 +1997,7 @@ export class TranslationService implements OnModuleDestroy {
           if (
             parentJobId &&
             !parallelDone &&
-            (c % 5 === 0 ||
-              c === getSupportedLanguageCount() ||
-              c >= getSupportedLanguageCount() - 2)
+            (c % 5 === 0 || c >= getSupportedLanguageCount() - 2)
           ) {
             try {
               await this.translationStateRedis?.hset(
