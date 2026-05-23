@@ -7,13 +7,13 @@
   resolved "https://registry.yarnpkg.com/@adobe/css-tools/-/css-tools-4.4.4.tgz#2856c55443d3d461693f32d2b96fb6ea92e1ffa9"
   integrity sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==
 
-"@ai-sdk/gateway@2.0.43":
-  version "2.0.43"
-  resolved "https://registry.npmjs.org/@ai-sdk/gateway/-/gateway-2.0.43.tgz#89ba930301be820faed8abbc2d875e983b755703"
-  integrity sha512-wVrXKw0ldcU04Y8EY3vR+qPdogZCZEj8pnkpRNRF552jqYPPVY88atPiC9s6XOyE+k6Y1YnusYXqwp6KKaBGAA==
+"@ai-sdk/gateway@2.0.93":
+  version "2.0.93"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.93.tgz#3871b6608c02a6cfde2747a966f7c5ef10a410aa"
+  integrity sha512-aiWQIZIQ69HOySNRLKRPJGsmGtVpPN0qXobK6aKnm8NOEyPbZHYy2ljkSAG5tvaL/Kg015WMInG4x9t2MvnG6A==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "2.0.3"
+    "@ai-sdk/provider-utils" "3.0.25"
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
@@ -33,10 +33,26 @@
     "@standard-schema/spec" "^1.0.0"
     eventsource-parser "^3.0.6"
 
+"@ai-sdk/provider-utils@3.0.25":
+  version "3.0.25"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.25.tgz#052165ea2b034f34eb383c51a47e14f55c1a3a23"
+  integrity sha512-CvsRu+32Y8a167s+lrIBtsybvgTHp8j9y+6BeTvLeoW3Q+okw/b4CnNUFOLIXsRaKHQKAH+IHNJPYWywfpw0LA==
+  dependencies:
+    "@ai-sdk/provider" "2.0.3"
+    "@standard-schema/spec" "^1.0.0"
+    eventsource-parser "^3.0.6"
+
 "@ai-sdk/provider@2.0.1":
   version "2.0.1"
   resolved "https://registry.npmjs.org/@ai-sdk/provider/-/provider-2.0.1.tgz#4aba415f1815da33a7a81e5f41a0219af53278c0"
   integrity sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==
+  dependencies:
+    json-schema "^0.4.0"
+
+"@ai-sdk/provider@2.0.3":
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/provider/-/provider-2.0.3.tgz#8a3727d31947c6238e59dcbb72b7e1a871fd570c"
+  integrity sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==
   dependencies:
     json-schema "^0.4.0"
 
@@ -6325,13 +6341,13 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^5.0.52:
-  version "5.0.137"
-  resolved "https://registry.npmjs.org/ai/-/ai-5.0.137.tgz#d25e7b6ff901c946980b875925d2f52df39f8e47"
-  integrity sha512-ZPqvIG5HlTEaTsf91p5CvOMWYoTxsGpHckgc8qk7FNVM9O375A1A5cvLq6CpkCdTWrdyNZMMs3brnfUIlJP20g==
+  version "5.0.192"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.192.tgz#313bac8c66452b695fd7e98004db82d39e496b55"
+  integrity sha512-m46S3iEuIcX1TjNfIQf+jr2dj+vmOY6gfhj2aKZutxru1nUnRtbCFAe5pZ9mhDApOv/EpfCrWKudwQqtoMzF0g==
   dependencies:
-    "@ai-sdk/gateway" "2.0.43"
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/gateway" "2.0.93"
+    "@ai-sdk/provider" "2.0.3"
+    "@ai-sdk/provider-utils" "3.0.25"
     "@opentelemetry/api" "1.9.0"
 
 ajv-formats@3.0.1:
