@@ -485,7 +485,7 @@ jobs:
 
       - name: Build and push ${{ matrix.service }} image
         if: steps.changes.outputs.needs_build == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         id: build-push
         timeout-minutes: 45
         with:
