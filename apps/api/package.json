@@ -66,7 +66,7 @@
     "ai": "^5.0.52",
     "axios": "^1.13.5",
     "bottleneck": "^2.19.5",
-    "bullmq": "^5.21.1",
+    "bullmq": "^5.77.3",
     "chardet": "^2.1.0",
     "cheerio": "^1.1.2",
     "class-transformer": "^0.5.1",
