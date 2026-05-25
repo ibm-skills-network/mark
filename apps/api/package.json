@@ -58,7 +58,7 @@
     "@nestjs/swagger": "^11.4.3",
     "@nestjs/terminus": "^11.1.1",
     "@nestjs/throttler": "^6.5.0",
-    "@nestjs/websockets": "^11.1.21",
+    "@nestjs/websockets": "^11.1.24",
     "@prisma/client": "^5.3.1",
     "@sendgrid/mail": "^8.1.5",
     "@tanstack/react-query": "^5.85.5",
