@@ -26,7 +26,7 @@
     "@nestjs/core": "11.1.21",
     "api": "*",
     "bullmq": "^5.21.1",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.4.2",
     "ioredis": "^5.4.1",
     "nest-winston": "^1.9.2",
     "reflect-metadata": "0.2.0",
