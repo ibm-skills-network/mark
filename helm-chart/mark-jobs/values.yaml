@@ -33,6 +33,12 @@ env:
   ENABLE_LTI_SCHEDULER: "false"      # gate the LTI cron in mark-jobs
   ENABLE_TRANSLATION: "true"         # required by SharedModule TranslationService ctor
   TRANSLATION_CONCURRENCY: "8"       # BullMQ worker concurrency for mark.assignment.v2.translations queue
+  # Number of grading JOBS the BullMQ worker pulls from the mark.attempt
+  # queue concurrently. Distinct from GRADING_CONCURRENCY on mark-api,
+  # which caps how many LLM CALLS run inside one grading job. Was sharing
+  # the GRADING_CONCURRENCY name with the LLM cap; renamed so tuning one
+  # tier doesn't silently retune the other.
+  GRADING_WORKER_CONCURRENCY: "4"
   # Master switch for the dependency-level wave grading scheduler. mark-jobs
   # is where ATTEMPT_GRADE actually executes (JOBS_EXECUTE_LOCALLY=true), so
   # this is the tier where the flag is load-bearing. Chart default "false"

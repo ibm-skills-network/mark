@@ -8,7 +8,7 @@ import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 import { stripHtml } from "@/app/Helpers/strippers";
 import Modal from "@/components/Modal";
 import Dropdown from "@/components/Dropdown";
-import ProgressBar, { JobStatus } from "@/components/ProgressBar";
+import { JobStatus } from "@/components/ProgressBar";
 import {
   Assignment,
   Choice,
@@ -48,7 +48,7 @@ import { useQuestionsAreReadyToBePublished } from "../../../Helpers/checkQuestio
 import { Nav } from "./Nav";
 import SubmitQuestionsButton from "./SubmitQuestionsButton";
 import SaveAndPublishButton from "./SaveAndPublishButton";
-import PublishProgress from "./PublishProgress";
+import PublishStatus from "./PublishStatus";
 import type { PublishJobResult } from "@/types/publish-job-result";
 
 function normalizeAssignment(assignment: Assignment): Assignment {
@@ -213,9 +213,6 @@ function AuthorHeader() {
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
-  const [currentMessage, setCurrentMessage] = useState<string>(
-    "Initializing publishing...",
-  );
   const [progressStatus, setProgressStatus] =
     useState<JobStatus>("In Progress");
   const [publishResult, setPublishResult] = useState<
@@ -458,17 +455,15 @@ function AuthorHeader() {
       if (cancelled || !active?.jobId) return;
       setSubmitting(true);
       setJobProgress(0);
-      setCurrentMessage("Reconnecting to publish in progress...");
       setProgressStatus("In Progress");
       setPublishResult(undefined);
       setPublishSessionId((n) => n + 1);
       try {
         const [publishSucceeded] = await subscribeToJobStatus(
           active.jobId,
-          (percentage, progress) => {
+          (percentage) => {
             if (cancelled) return;
             setJobProgress(percentage);
-            setCurrentMessage(progress ?? "");
           },
           setQuestions,
           (result) => {
@@ -544,9 +539,6 @@ function AuthorHeader() {
   ): Promise<void> {
     setSubmitting(true);
     setJobProgress(0);
-    setCurrentMessage(
-      publishImmediately ? "Initializing publishing..." : "Creating version...",
-    );
     setProgressStatus("In Progress");
     setPublishResult(undefined);
     setPublishSessionId((n) => n + 1);
@@ -647,9 +639,8 @@ function AuthorHeader() {
       if (response?.jobId) {
         const [publishSucceeded] = await subscribeToJobStatus(
           response.jobId,
-          (percentage, progress) => {
+          (percentage) => {
             setJobProgress(percentage);
-            setCurrentMessage(progress ?? "");
           },
           setQuestions,
           (result) => setPublishResult(result),
@@ -727,7 +718,6 @@ function AuthorHeader() {
     if (!activeAssignmentId) return;
     setSubmitting(true);
     setJobProgress(0);
-    setCurrentMessage("Retrying failed translations...");
     setProgressStatus("In Progress");
     setPublishResult(undefined);
     setPublishSessionId((n) => n + 1);
@@ -741,9 +731,8 @@ function AuthorHeader() {
       }
       const [retrySucceeded] = await subscribeToJobStatus(
         response.jobId,
-        (percentage, progress) => {
+        (percentage) => {
           setJobProgress(percentage);
-          setCurrentMessage(progress ?? "");
         },
         setQuestions,
         (result) => setPublishResult(result),
@@ -927,18 +916,11 @@ function AuthorHeader() {
             </div>
           </div>
 
-          {submitting && (
-            <div className="mt-4">
-              <ProgressBar
-                progress={jobProgress}
-                currentMessage={currentMessage}
-                status={progressStatus}
-              />
-            </div>
-          )}
-
-          <PublishProgress
+          <PublishStatus
             key={publishSessionId}
+            submitting={submitting}
+            jobProgress={jobProgress}
+            progressStatus={progressStatus}
             publishResult={publishResult}
             onRetryFailedTranslations={handleRetryFailedTranslations}
             retryInFlight={submitting}

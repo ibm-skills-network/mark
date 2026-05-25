@@ -1352,13 +1352,15 @@ export class TranslationService implements OnModuleDestroy {
           }
 
           // Throttled mid-loop HSET. Bounds the Redis write rate from a
-          // worst-case 23 writes/job-per-language down to at most 5 by
-          // firing on every 5th language and on the final iteration.
+          // worst-case 23 writes/job-per-language down to ~7 by firing every
+          // 5th language, on the final iteration, AND on the last 2 langs.
+          // The last-2 cases stop the UI from sitting at 20/23 for the tail
+          // latency (otherwise no update fires between 20 and 23).
           const c = ++completedLangCounter;
           if (
             parentJobId &&
             !parallelDone &&
-            (c % 5 === 0 || c === getSupportedLanguageCount())
+            (c % 5 === 0 || c >= getSupportedLanguageCount() - 2)
           ) {
             try {
               await this.translationStateRedis?.hset(
@@ -1679,13 +1681,15 @@ export class TranslationService implements OnModuleDestroy {
           }
 
           // Throttled mid-loop HSET. Bounds the Redis write rate from a
-          // worst-case 23 writes/job-per-language down to at most 5 by
-          // firing on every 5th language and on the final iteration.
+          // worst-case 23 writes/job-per-language down to ~7 by firing every
+          // 5th language, on the final iteration, AND on the last 2 langs.
+          // The last-2 cases stop the UI from sitting at 20/23 for the tail
+          // latency (otherwise no update fires between 20 and 23).
           const c = ++completedLangCounter;
           if (
             parentJobId &&
             !parallelDone &&
-            (c % 5 === 0 || c === getSupportedLanguageCount())
+            (c % 5 === 0 || c >= getSupportedLanguageCount() - 2)
           ) {
             try {
               await this.translationStateRedis?.hset(
@@ -1985,13 +1989,15 @@ export class TranslationService implements OnModuleDestroy {
           }
 
           // Throttled mid-loop HSET. Bounds the Redis write rate from a
-          // worst-case 23 writes/job-per-language down to at most 5 by
-          // firing on every 5th language and on the final iteration.
+          // worst-case 23 writes/job-per-language down to ~7 by firing every
+          // 5th language, on the final iteration, AND on the last 2 langs.
+          // The last-2 cases stop the UI from sitting at 20/23 for the tail
+          // latency (otherwise no update fires between 20 and 23).
           const c = ++completedLangCounter;
           if (
             parentJobId &&
             !parallelDone &&
-            (c % 5 === 0 || c === getSupportedLanguageCount())
+            (c % 5 === 0 || c >= getSupportedLanguageCount() - 2)
           ) {
             try {
               await this.translationStateRedis?.hset(

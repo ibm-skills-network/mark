@@ -39,6 +39,69 @@ interface ProgressState {
   gradingState?: GradingProgressDetails;
 }
 
+// Per-question status follows a monotonic lifecycle:
+// pending → in_progress → completed/failed. The SSE stream is multi-source
+// (the progress service registers one callback; the submission service
+// passes its own callback into updateAssignmentAttempt), and a stale
+// snapshot from one source can land after a fresher one from the other.
+// Without this ratchet, the UI flashes a question from "Grading" back to
+// "Queued" when the stale snapshot wins the race.
+const STATUS_RANK: Record<QuestionGradingStatus, number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+  failed: 2,
+};
+
+function mergeQuestionStatus(
+  prev: QuestionGradingStatus,
+  next: QuestionGradingStatus,
+): QuestionGradingStatus {
+  return STATUS_RANK[next] >= STATUS_RANK[prev] ? next : prev;
+}
+
+function mergeGradingState(
+  prev: GradingProgressDetails | undefined,
+  next: GradingProgressDetails | undefined,
+): GradingProgressDetails | undefined {
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const nextById = new Map(next.questions.map((q) => [q.id, q]));
+  // Base on prev to preserve established order; apply next updates via ratchet.
+  const merged = prev.questions.map((q) => {
+    const incoming = nextById.get(q.id);
+    if (!incoming) return q;
+    const status = mergeQuestionStatus(q.status, incoming.status);
+    return { ...incoming, status };
+  });
+  // Append any questions new in next that prev didn't have yet.
+  const prevIds = new Set(prev.questions.map((q) => q.id));
+  for (const q of next.questions) {
+    if (!prevIds.has(q.id)) merged.push(q);
+  }
+
+  let completed = 0;
+  let inFlight = 0;
+  let failed = 0;
+  let hasSlowInFlight = false;
+  for (const q of merged) {
+    if (q.status === "completed") completed += 1;
+    else if (q.status === "in_progress") {
+      inFlight += 1;
+      if (q.slowType) hasSlowInFlight = true;
+    } else if (q.status === "failed") failed += 1;
+  }
+  return {
+    questions: merged,
+    total: merged.length,
+    completed,
+    inFlight,
+    failed,
+    hasSlowInFlight,
+  };
+}
+
 export default function GradingProgressModal({
   isOpen,
   assignmentId,
@@ -125,7 +188,7 @@ export default function GradingProgressModal({
         currentStage: status === "completed" ? "Grading complete!" : message,
         currentQuestion: data?.currentQuestion,
         totalQuestions: data?.totalQuestions,
-        gradingState: gradingState ?? prev.gradingState,
+        gradingState: mergeGradingState(prev.gradingState, gradingState),
       }));
 
       if (terminalStatus === "Completed" || terminalStatus === "Failed") {
@@ -508,6 +571,8 @@ export default function GradingProgressModal({
                 </div>
 
                 <motion.h3
+                  key={status}
+                  translate="no"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
@@ -728,9 +793,22 @@ function QuestionGradingRow({ question }: { question: QuestionGradingState }) {
         <span className={`flex-shrink-0 ${styles.icon}`} aria-hidden="true">
           {styles.glyph}
         </span>
-        <span className="truncate">Question {question.displayOrder + 1}</span>
+        <span translate="no" className="truncate">
+          Question {question.displayOrder + 1}
+        </span>
       </span>
-      <span className={`text-xs uppercase tracking-wide ${styles.label}`}>
+      {/* key={styles.text} forces a full DOM remount when the status text
+          changes. Firefox's built-in page translation latches onto text
+          nodes after first render and stops applying React's text updates
+          (visible as a green/"Done" container with stale "Grading" text);
+          remounting on text change breaks that latch. translate="no" alone
+          is not reliable when the user has translate-from-English forced
+          on at the browser level. */}
+      <span
+        key={styles.text}
+        translate="no"
+        className={`text-xs uppercase tracking-wide ${styles.label}`}
+      >
         {styles.text}
       </span>
     </li>
