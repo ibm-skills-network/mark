@@ -90,7 +90,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.changes.outputs.needs_scan == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24.x"
           cache: "yarn"
@@ -250,7 +250,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.changes.outputs.needs_build == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24.x"
           cache: "yarn"
@@ -316,7 +316,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.changes.outputs.needs_build == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24.x"
           cache: "yarn"
