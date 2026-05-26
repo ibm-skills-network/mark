@@ -51,8 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // environment from a single image — the container's value would never
   // win. APP_ENV is read on every server render (force-dynamic above),
   // so the deploy overlay's per-env value lands in the HTML at runtime.
-  const appEnvironment =
-    process.env.APP_ENV?.toLowerCase() ?? "development";
+  const appEnvironment = process.env.APP_ENV?.toLowerCase() ?? "development";
   const instanaKey =
     appEnvironment === "production" || appEnvironment === "staging"
       ? INSTANA_KEYS[appEnvironment]
