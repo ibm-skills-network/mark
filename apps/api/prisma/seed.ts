@@ -26,8 +26,14 @@ const questions: CreateUpdateQuestionRequestDto[] = [
           rubricQuestion:
             "Did the learner describe a Cybersecurity role in one sentence?",
           criteria: [
-            { description: "No, the response is missing or off-topic.", points: 0 },
-            { description: "Yes, a Cybersecurity role is described.", points: 1 },
+            {
+              description: "No, the response is missing or off-topic.",
+              points: 0,
+            },
+            {
+              description: "Yes, a Cybersecurity role is described.",
+              points: 1,
+            },
           ],
         },
       ],
