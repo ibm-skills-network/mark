@@ -2065,89 +2065,120 @@ export class VersionManagementService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const assignmentVersion = await tx.assignmentVersion.create({
-          data: {
-            assignmentId,
-            versionNumber: draftData.versionNumber,
-            versionDescription:
-              draftData.versionDescription || "Draft snapshot",
-            isDraft: true,
-            isActive: false,
-            published: false,
-            createdBy: userSession.userId,
-            name: draftData.assignmentData.name || assignment.name,
-            introduction:
-              draftData.assignmentData.introduction ?? assignment.introduction,
-            instructions:
-              draftData.assignmentData.instructions ?? assignment.instructions,
-            gradingCriteriaOverview:
-              draftData.assignmentData.gradingCriteriaOverview ??
-              assignment.gradingCriteriaOverview,
-            timeEstimateMinutes:
-              draftData.assignmentData.timeEstimateMinutes ||
-              assignment.timeEstimateMinutes,
-            type: draftData.assignmentData.type || assignment.type,
-            graded: draftData.assignmentData.graded ?? assignment.graded,
-            numAttempts:
-              draftData.assignmentData.numAttempts ?? assignment.numAttempts,
-            attemptsBeforeCoolDown:
-              draftData.assignmentData.attemptsBeforeCoolDown ??
-              assignment.attemptsBeforeCoolDown,
-            retakeAttemptCoolDownMinutes:
-              draftData.assignmentData.retakeAttemptCoolDownMinutes ??
-              assignment.retakeAttemptCoolDownMinutes,
-            allotedTimeMinutes:
-              draftData.assignmentData.allotedTimeMinutes ??
-              assignment.allotedTimeMinutes,
-            attemptsPerTimeRange:
-              draftData.assignmentData.attemptsPerTimeRange ??
-              assignment.attemptsPerTimeRange,
-            attemptsTimeRangeHours:
-              draftData.assignmentData.attemptsTimeRangeHours ??
-              assignment.attemptsTimeRangeHours,
-            passingGrade:
-              draftData.assignmentData.passingGrade ?? assignment.passingGrade,
-            displayOrder:
-              draftData.assignmentData.displayOrder ?? assignment.displayOrder,
-            questionDisplay:
-              draftData.assignmentData.questionDisplay ??
-              assignment.questionDisplay,
-            numberOfQuestionsPerAttempt:
-              draftData.assignmentData.numberOfQuestionsPerAttempt ??
-              assignment.numberOfQuestionsPerAttempt,
-            questionOrder:
-              draftData.assignmentData.questionOrder ??
-              assignment.questionOrder ??
-              [],
-            showAssignmentScore:
-              draftData.assignmentData.showAssignmentScore ??
-              assignment.showAssignmentScore ??
-              true,
-            showQuestionScore:
-              draftData.assignmentData.showQuestionScore ??
-              assignment.showQuestionScore ??
-              true,
-            showSubmissionFeedback:
-              draftData.assignmentData.showSubmissionFeedback ??
-              assignment.showSubmissionFeedback ??
-              true,
-            showQuestions:
-              draftData.assignmentData.showQuestions ??
-              assignment.showQuestions ??
-              true,
-            correctAnswerVisibility:
-              draftData.assignmentData.correctAnswerVisibility ??
-              assignment.correctAnswerVisibility,
-            requireAllQuestions:
-              draftData.assignmentData.requireAllQuestions ??
-              assignment.requireAllQuestions,
-            optionalQuestionIds:
-              draftData.assignmentData.optionalQuestionIds ??
-              assignment.optionalQuestionIds,
-            languageCode:
-              draftData.assignmentData.languageCode ?? assignment.languageCode,
-          },
-        });
+        let assignmentVersion: AssignmentVersion;
+        try {
+          assignmentVersion = await tx.assignmentVersion.create({
+            data: {
+              assignmentId,
+              versionNumber: draftData.versionNumber,
+              versionDescription:
+                draftData.versionDescription || "Draft snapshot",
+              isDraft: true,
+              isActive: false,
+              published: false,
+              createdBy: userSession.userId,
+              name: draftData.assignmentData.name || assignment.name,
+              introduction:
+                draftData.assignmentData.introduction ??
+                assignment.introduction,
+              instructions:
+                draftData.assignmentData.instructions ??
+                assignment.instructions,
+              gradingCriteriaOverview:
+                draftData.assignmentData.gradingCriteriaOverview ??
+                assignment.gradingCriteriaOverview,
+              timeEstimateMinutes:
+                draftData.assignmentData.timeEstimateMinutes ||
+                assignment.timeEstimateMinutes,
+              type: draftData.assignmentData.type || assignment.type,
+              graded: draftData.assignmentData.graded ?? assignment.graded,
+              numAttempts:
+                draftData.assignmentData.numAttempts ?? assignment.numAttempts,
+              attemptsBeforeCoolDown:
+                draftData.assignmentData.attemptsBeforeCoolDown ??
+                assignment.attemptsBeforeCoolDown,
+              retakeAttemptCoolDownMinutes:
+                draftData.assignmentData.retakeAttemptCoolDownMinutes ??
+                assignment.retakeAttemptCoolDownMinutes,
+              allotedTimeMinutes:
+                draftData.assignmentData.allotedTimeMinutes ??
+                assignment.allotedTimeMinutes,
+              attemptsPerTimeRange:
+                draftData.assignmentData.attemptsPerTimeRange ??
+                assignment.attemptsPerTimeRange,
+              attemptsTimeRangeHours:
+                draftData.assignmentData.attemptsTimeRangeHours ??
+                assignment.attemptsTimeRangeHours,
+              passingGrade:
+                draftData.assignmentData.passingGrade ??
+                assignment.passingGrade,
+              displayOrder:
+                draftData.assignmentData.displayOrder ??
+                assignment.displayOrder,
+              questionDisplay:
+                draftData.assignmentData.questionDisplay ??
+                assignment.questionDisplay,
+              numberOfQuestionsPerAttempt:
+                draftData.assignmentData.numberOfQuestionsPerAttempt ??
+                assignment.numberOfQuestionsPerAttempt,
+              questionOrder:
+                draftData.assignmentData.questionOrder ??
+                assignment.questionOrder ??
+                [],
+              showAssignmentScore:
+                draftData.assignmentData.showAssignmentScore ??
+                assignment.showAssignmentScore ??
+                true,
+              showQuestionScore:
+                draftData.assignmentData.showQuestionScore ??
+                assignment.showQuestionScore ??
+                true,
+              showSubmissionFeedback:
+                draftData.assignmentData.showSubmissionFeedback ??
+                assignment.showSubmissionFeedback ??
+                true,
+              showQuestions:
+                draftData.assignmentData.showQuestions ??
+                assignment.showQuestions ??
+                true,
+              correctAnswerVisibility:
+                draftData.assignmentData.correctAnswerVisibility ??
+                assignment.correctAnswerVisibility,
+              requireAllQuestions:
+                draftData.assignmentData.requireAllQuestions ??
+                assignment.requireAllQuestions,
+              optionalQuestionIds:
+                draftData.assignmentData.optionalQuestionIds ??
+                assignment.optionalQuestionIds,
+              languageCode:
+                draftData.assignmentData.languageCode ??
+                assignment.languageCode,
+            },
+          });
+        } catch (createError) {
+          // A concurrent request (auto-save + manual save, double-click, etc.)
+          // can pass the existingVersion pre-check above and then race here.
+          // The (assignmentId, versionNumber) unique constraint surfaces as
+          // P2002; map it to a 409 so the loser does not propagate as 500.
+          if (
+            createError instanceof Prisma.PrismaClientKnownRequestError &&
+            createError.code === "P2002"
+          ) {
+            throw new ConflictException(
+              `Version ${draftData.versionNumber} already exists for this assignment`,
+            );
+          }
+          throw createError;
+        }
+
+        if (!assignmentVersion?.id) {
+          // Defensive: prevents the QuestionVersion.create loop from running
+          // with assignmentVersionId=undefined if the create above ever
+          // resolves without a row (transaction abort edge cases).
+          throw new Error(
+            `assignmentVersion.create returned no id for assignment ${assignmentId}`,
+          );
+        }
 
         const questionsData = draftData.questionsData || [];
 

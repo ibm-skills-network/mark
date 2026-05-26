@@ -327,16 +327,28 @@ export class GradingProgressService {
   }
 
   /**
-   * Enable email notification for grading completion
+   * Enable email notification for grading completion.
+   *
+   * The frontend can call /notify before the worker has run initializeProgress
+   * (which is the only path that creates a GradingProgress row). Upsert so the
+   * row is created with the notification settings if absent; initializeProgress
+   * will later overwrite totalQuestions/status without touching the
+   * notifyOnComplete / notificationEmail fields.
    */
   async enableEmailNotification(
     attemptId: number,
     email: string,
   ): Promise<void> {
     try {
-      await this.prisma.gradingProgress.update({
+      await this.prisma.gradingProgress.upsert({
         where: { attemptId },
-        data: {
+        create: {
+          attemptId,
+          totalQuestions: 0,
+          notifyOnComplete: true,
+          notificationEmail: email,
+        },
+        update: {
           notifyOnComplete: true,
           notificationEmail: email,
         },
