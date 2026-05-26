@@ -107,7 +107,7 @@ export class MessagingService {
           ? Object.keys(message as Record<string, unknown>)
           : undefined,
     });
-    if (!this.client) return null;
+    if (!this.client) return undefined;
     try {
       const result = await this.client.publishService(action, message);
       return result;
@@ -130,7 +130,7 @@ export class MessagingService {
       username,
       subject,
     });
-    if (!this.client) return null;
+    if (!this.client) return undefined;
     try {
       const result = await this.client.publishUser(username, subject, message);
       return result;
@@ -154,7 +154,7 @@ export class MessagingService {
     errorCallback: ErrorFunction,
   ): Promise<unknown> {
     this.logger.info(`subscribeService project=${project}`);
-    if (!this.client) return null;
+    if (!this.client) return undefined;
     const wrappedError: ErrorFunction = (error) => {
       this.logger.error(`subscribeService stream error project=${project}`, {
         project,
@@ -186,7 +186,7 @@ export class MessagingService {
     errorCallback: ErrorFunction,
   ): Promise<unknown> {
     this.logger.info(`subscribeUser username=${username}`);
-    if (!this.client) return null;
+    if (!this.client) return undefined;
     const wrappedError: ErrorFunction = (error) => {
       this.logger.error(`subscribeUser stream error username=${username}`, {
         username,
