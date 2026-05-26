@@ -182,4 +182,59 @@ describe("S3Service", () => {
       expect(error.getStatus).toBeUndefined();
     });
   });
+
+  describe("constructor env validation", () => {
+    const envBackup = {
+      nodeEnv: process.env.NODE_ENV,
+      endpoint: process.env.IBM_COS_ENDPOINT,
+      accessKeyId: process.env.IBM_COS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.IBM_COS_SECRET_ACCESS_KEY,
+      region: process.env.IBM_COS_REGION,
+    };
+
+    afterEach(() => {
+      process.env.NODE_ENV = envBackup.nodeEnv;
+      process.env.IBM_COS_ENDPOINT = envBackup.endpoint;
+      process.env.IBM_COS_ACCESS_KEY_ID = envBackup.accessKeyId;
+      process.env.IBM_COS_SECRET_ACCESS_KEY = envBackup.secretAccessKey;
+      process.env.IBM_COS_REGION = envBackup.region;
+    });
+
+    it("throws naming IBM_COS_ENDPOINT when missing in production", () => {
+      process.env.NODE_ENV = "production";
+      delete process.env.IBM_COS_ENDPOINT;
+      process.env.IBM_COS_ACCESS_KEY_ID = "key";
+      process.env.IBM_COS_SECRET_ACCESS_KEY = "secret";
+      process.env.IBM_COS_REGION = "us-east";
+
+      expect(() => new S3Service()).toThrow(/IBM_COS_ENDPOINT/);
+    });
+
+    it("throws naming IBM_COS_ACCESS_KEY_ID when missing in staging", () => {
+      process.env.NODE_ENV = "staging";
+      process.env.IBM_COS_ENDPOINT = "https://s3.example.com";
+      delete process.env.IBM_COS_ACCESS_KEY_ID;
+      process.env.IBM_COS_SECRET_ACCESS_KEY = "secret";
+      process.env.IBM_COS_REGION = "us-east";
+
+      expect(() => new S3Service()).toThrow(/IBM_COS_ACCESS_KEY_ID/);
+    });
+
+    it("succeeds in production when all four required vars are set", () => {
+      process.env.NODE_ENV = "production";
+      process.env.IBM_COS_ENDPOINT = "https://s3.example.com";
+      process.env.IBM_COS_ACCESS_KEY_ID = "key";
+      process.env.IBM_COS_SECRET_ACCESS_KEY = "secret";
+      process.env.IBM_COS_REGION = "us-east";
+
+      expect(() => new S3Service()).not.toThrow();
+    });
+
+    it("does not throw in development even when IBM_COS_ENDPOINT is missing", () => {
+      process.env.NODE_ENV = "development";
+      delete process.env.IBM_COS_ENDPOINT;
+
+      expect(() => new S3Service()).not.toThrow();
+    });
+  });
 });
