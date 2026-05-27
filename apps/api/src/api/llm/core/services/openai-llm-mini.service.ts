@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { hashForLog } from "../utils/log-redact";
 
 /**
  * Light-weight provider that targets the smaller/faster gpt-4o-mini model.
@@ -57,7 +58,7 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       model_name: modelName,
       input_tokens: inputTokens,
       input_full_length: inputText.length,
-      input_snippet: inputText.slice(0, 400),
+      input_hash: hashForLog(inputText),
       message_count: messages.length,
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
@@ -77,7 +78,7 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       output_tokens: outputTokens,
       duration_ms: Date.now() - start,
       output_full_length: responseContent.length,
-      output_snippet: responseContent.slice(0, 400),
+      output_hash: hashForLog(responseContent),
     });
 
     return {
@@ -104,7 +105,7 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       input_tokens: textTokens,
       estimated_image_tokens: estimatedImageTokens,
       text_full_length: textContent.length,
-      text_snippet: textContent.slice(0, 400),
+      text_hash: hashForLog(textContent),
       image_data_length: imageData?.length ?? 0,
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
@@ -129,7 +130,7 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       output_tokens: outputTokens,
       duration_ms: Date.now() - start,
       output_full_length: responseContent.length,
-      output_snippet: responseContent.slice(0, 400),
+      output_hash: hashForLog(responseContent),
     });
 
     return {
