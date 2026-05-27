@@ -132,7 +132,7 @@ describe("LtiGradeSyncService - Integration Tests", () => {
         { score: 0.9 },
         expect.objectContaining({
           headers: { Cookie: "authentication=valid-auth" },
-          timeout: 30_000,
+          timeout: 60_000,
         }),
       );
     });
@@ -251,7 +251,7 @@ describe("LtiGradeSyncService - Integration Tests", () => {
         throwError(() => new Error("Persistent failure")),
       );
 
-      for (let index = 0; index < 5; index++) {
+      for (let index = 0; index < 9; index++) {
         mockPrismaService.ltiGradeSync.findUnique.mockResolvedValue({
           ...sync,
           retryCount: index,
@@ -270,7 +270,7 @@ describe("LtiGradeSyncService - Integration Tests", () => {
             ? await service.createAndSync(request)
             : await service.attemptSync(3);
 
-        if (index < 4) {
+        if (index < 8) {
           expect(result.status).toBe(LtiSyncStatus.SCHEDULED);
           expect(result.nextRetryAt).toBeDefined();
         } else {
@@ -279,7 +279,7 @@ describe("LtiGradeSyncService - Integration Tests", () => {
         }
       }
 
-      expect(mockPrismaService.ltiSyncErrorLog.create).toHaveBeenCalledTimes(5);
+      expect(mockPrismaService.ltiSyncErrorLog.create).toHaveBeenCalledTimes(9);
 
       const notifications =
         mockPrismaService.userNotification.create.mock.calls;

@@ -159,7 +159,7 @@ describe("LtiGradeSyncService", () => {
           headers: {
             Cookie: "authentication=test-cookie",
           },
-          timeout: 30_000,
+          timeout: 60_000,
         },
       );
 
@@ -236,7 +236,7 @@ describe("LtiGradeSyncService", () => {
     });
 
     it("should use exponential backoff for retries", async () => {
-      const retryDelays = [5, 60, 120, 1440, 4320];
+      const retryDelays = [5, 15, 30, 60, 240, 720, 1440, 2880, 4320];
 
       for (const [index, retryDelay] of retryDelays.entries()) {
         const sync = {
@@ -296,8 +296,8 @@ describe("LtiGradeSyncService", () => {
         grade: 0.85,
         authCookie: "test-cookie",
         ltiGatewayUrl: "https://test-lti-gateway.com/grades",
-        retryCount: 4,
-        maxRetries: 5,
+        retryCount: 8,
+        maxRetries: 9,
         status: LtiSyncStatus.SCHEDULED,
         errorHistory: [],
         attempt: {},
@@ -324,7 +324,7 @@ describe("LtiGradeSyncService", () => {
         where: { id: 1 },
         data: expect.objectContaining({
           status: LtiSyncStatus.FAILED,
-          retryCount: 5,
+          retryCount: 9,
         }),
       });
 
