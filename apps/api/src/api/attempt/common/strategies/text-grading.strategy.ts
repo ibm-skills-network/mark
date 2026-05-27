@@ -24,6 +24,7 @@ import {
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
+import { checkTextResponseSanity } from "../utils/text-response-sanity";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
 @Injectable()
@@ -96,6 +97,17 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     try {
+      const sanity = checkTextResponseSanity(learnerResponse);
+      if (!sanity.isUsable) {
+        this.logger.warn("text_grading.response_rejected_as_noise", {
+          questionId: question.id,
+          assignmentId: context.assignmentId,
+          reason: sanity.reason,
+          details: sanity.details,
+        });
+        return this.buildNoiseRejectionResponse(question, sanity.reason);
+      }
+
       const reuseDto = await this.tryReuseFromConsistency(
         question,
         learnerResponse,
@@ -258,5 +270,31 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
       ...responseDto.metadata,
       rationale: rationaleText,
     };
+  }
+
+  /**
+   * Build a zero-score response for input the sanity gate classified as
+   * unusable noise. Avoids spending LLM tokens on /dev/urandom-style input
+   * while still producing a learner-visible explanation and an auditable
+   * metadata trail.
+   */
+  private buildNoiseRejectionResponse(
+    question: QuestionDto,
+    reason: string | undefined,
+  ): CreateQuestionResponseAttemptResponseDto {
+    const message =
+      reason === "response_too_short"
+        ? "Your response was too short to grade. Please re-submit a written answer."
+        : "Your response could not be graded because it does not appear to contain readable text. Please re-submit a written answer.";
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    responseDto.totalPoints = 0;
+    responseDto.feedback = [{ feedback: message }];
+    responseDto.metadata = {
+      selectionReason: "rejected_noise",
+      rejectionReason: reason,
+      maxPossiblePoints: question.totalPoints,
+    };
+    return responseDto;
   }
 }

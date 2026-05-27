@@ -249,4 +249,53 @@ describe("TextGradingStrategy - Type Safety Tests", () => {
       expect(result).toBe(true);
     });
   });
+
+  describe("gradeResponse - noise sanity gate", () => {
+    const question = {
+      id: 1,
+      question: "Explain DB2",
+      totalPoints: 10,
+      scoring: { type: "POINTS_BASED" },
+      responseType: "ESSAY",
+    } as unknown as QuestionDto;
+
+    const context = {
+      assignmentId: 1,
+      language: "en",
+      questionAnswerContext: "",
+      assignmentInstructions: "",
+    } as any;
+
+    it("short-circuits with zero score for /dev/urandom-style binary input", async () => {
+      const llmFacade = (strategy as any).llmFacadeService;
+      llmFacade.gradeTextBasedQuestion = jest.fn();
+
+      const controlBytes = Array.from({ length: 16 }, (_, i) =>
+        String.fromCodePoint(i),
+      ).join("");
+      const garbage = (controlBytes + "abc").repeat(3);
+
+      const result = await strategy.gradeResponse(question, garbage, context);
+
+      expect(result.totalPoints).toBe(0);
+      expect((result.metadata as any).selectionReason).toBe("rejected_noise");
+      expect((result.metadata as any).rejectionReason).toBe(
+        "response_unprintable",
+      );
+      expect(llmFacade.gradeTextBasedQuestion).not.toHaveBeenCalled();
+    });
+
+    it("short-circuits with zero score for empty response", async () => {
+      const llmFacade = (strategy as any).llmFacadeService;
+      llmFacade.gradeTextBasedQuestion = jest.fn();
+
+      const result = await strategy.gradeResponse(question, "", context);
+
+      expect(result.totalPoints).toBe(0);
+      expect((result.metadata as any).rejectionReason).toBe(
+        "response_too_short",
+      );
+      expect(llmFacade.gradeTextBasedQuestion).not.toHaveBeenCalled();
+    });
+  });
 });
