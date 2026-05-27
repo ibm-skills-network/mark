@@ -66,7 +66,10 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
 
     const start = Date.now();
     try {
-      const result = await model.invoke(messages);
+      const result = await model.invoke(
+        messages,
+        options?.seed === undefined ? undefined : { seed: options.seed },
+      );
       const responseContent = result.content.toString();
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 

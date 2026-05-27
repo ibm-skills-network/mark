@@ -28,6 +28,7 @@ interface JudgeRequest {
 @Injectable()
 export class CriterionJudgeService {
   private readonly logger = new Logger(CriterionJudgeService.name);
+  private static readonly JUDGE_SEED = 1745;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -111,6 +112,10 @@ Return issues per criterionId if any.
       AIUsageType.GRADING_VALIDATION,
       "criterion_judge",
       selectedModel,
+      // Deterministic options so judge approve/reject is stable across runs:
+      // the same (grades, evidence) should always reach the same verdict.
+      // Ignored by GPT-5 reasoning models, honored by gpt-4o/gpt-4o-mini.
+      { temperature: 0, topP: 1, seed: CriterionJudgeService.JUDGE_SEED },
     );
     const duration = Date.now() - start;
     const responseText =

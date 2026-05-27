@@ -32,6 +32,7 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
     return new ChatOpenAI({
       temperature: options?.temperature ?? 0,
+      topP: options?.topP ?? options?.top_p ?? 1,
       modelName: options?.modelName ?? OpenAiLlmMiniService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens,
     });
@@ -63,7 +64,10 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
     });
 
     const start = Date.now();
-    const result = await model.invoke(messages);
+    const result = await model.invoke(
+      messages,
+      options?.seed === undefined ? undefined : { seed: options.seed },
+    );
     const responseContent = result.content.toString();
     const outputTokens = this.tokenCounter.countTokens(responseContent);
 
