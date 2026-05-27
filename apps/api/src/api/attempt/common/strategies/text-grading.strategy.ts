@@ -1,5 +1,6 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
+import { createHash } from "node:crypto";
 import {
   BadRequestException,
   Inject,
@@ -97,6 +98,7 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     try {
+      const sanityStart = Date.now();
       const sanity = checkTextResponseSanity(learnerResponse);
       if (!sanity.isUsable) {
         this.logger.warn("text_grading.response_rejected_as_noise", {
@@ -105,7 +107,12 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
           reason: sanity.reason,
           details: sanity.details,
         });
-        return this.buildNoiseRejectionResponse(question, sanity.reason);
+        return this.buildNoiseRejectionResponse(
+          question,
+          learnerResponse,
+          sanity.reason,
+          Date.now() - sanityStart,
+        );
       }
 
       const reuseDto = await this.tryReuseFromConsistency(
@@ -276,21 +283,34 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
    * Build a zero-score response for input the sanity gate classified as
    * unusable noise. Avoids spending LLM tokens on /dev/urandom-style input
    * while still producing a learner-visible explanation and an auditable
-   * metadata trail.
+   * metadata trail. Populates the full GradingMetadata shape (judgeApproved,
+   * attempts, gradingTimeMs, contentHash) so downstream consumers don't
+   * need to special-case the rejection path.
    */
   private buildNoiseRejectionResponse(
     question: QuestionDto,
+    learnerResponse: string,
     reason: string | undefined,
+    gradingTimeMs: number,
   ): CreateQuestionResponseAttemptResponseDto {
     const message =
       reason === "response_too_short"
         ? "Your response was too short to grade. Please re-submit a written answer."
         : "Your response could not be graded because it does not appear to contain readable text. Please re-submit a written answer.";
 
+    const contentHash = createHash("sha256")
+      .update(learnerResponse ?? "")
+      .digest("hex");
+
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     responseDto.totalPoints = 0;
     responseDto.feedback = [{ feedback: message }];
     responseDto.metadata = {
+      judgeApproved: false,
+      judgeUsed: false,
+      attempts: 0,
+      gradingTimeMs,
+      contentHash,
       selectionReason: "rejected_noise",
       rejectionReason: reason,
       maxPossiblePoints: question.totalPoints,
