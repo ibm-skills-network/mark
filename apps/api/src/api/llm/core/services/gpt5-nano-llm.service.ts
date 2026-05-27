@@ -56,17 +56,31 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
       )
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
+    const modelName = options?.modelName ?? Gpt5NanoLlmService.DEFAULT_MODEL;
 
-    this.logger.debug(`Invoking GPT-5-nano with ${inputTokens} input tokens`);
+    this.logger.info("openai.invoke.start", {
+      model_name: modelName,
+      input_tokens: inputTokens,
+      input_full_length: inputText.length,
+      input_snippet: inputText.slice(0, 400),
+      message_count: messages.length,
+      max_tokens: options?.maxTokens,
+    });
 
+    const start = Date.now();
     try {
       const result = await model.invoke(messages);
       const responseContent = result.content.toString();
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
-      this.logger.debug(
-        `GPT-5-nano responded with ${outputTokens} output tokens`,
-      );
+      this.logger.info("openai.invoke.complete", {
+        model_name: modelName,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        duration_ms: Date.now() - start,
+        output_full_length: responseContent.length,
+        output_snippet: responseContent.slice(0, 400),
+      });
 
       return {
         content: responseContent,
@@ -76,11 +90,13 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
         },
       };
     } catch (error) {
-      this.logger.error(
-        `GPT-5-nano API error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
+      this.logger.error("Gpt5NanoLlmService.invoke failed", {
+        model_name: modelName,
+        input_tokens: inputTokens,
+        duration_ms: Date.now() - start,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }
@@ -98,13 +114,21 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
 
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
+    const modelName = options?.modelName ?? Gpt5NanoLlmService.DEFAULT_MODEL;
 
     const estimatedImageTokens = 100;
 
-    this.logger.debug(
-      `Invoking GPT-5-nano with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
-    );
+    this.logger.info("openai.invokeWithImage.start", {
+      model_name: modelName,
+      input_tokens: inputTokens,
+      estimated_image_tokens: estimatedImageTokens,
+      text_full_length: textContent.length,
+      text_snippet: textContent.slice(0, 400),
+      image_data_length: imageData?.length ?? 0,
+      max_tokens: options?.maxTokens,
+    });
 
+    const start = Date.now();
     try {
       const result = await model.invoke([
         new HumanMessage({
@@ -124,9 +148,14 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
       const responseContent = result.content.toString();
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
-      this.logger.debug(
-        `GPT-5-nano with image responded with ${outputTokens} output tokens`,
-      );
+      this.logger.info("openai.invokeWithImage.complete", {
+        model_name: modelName,
+        input_tokens: inputTokens + estimatedImageTokens,
+        output_tokens: outputTokens,
+        duration_ms: Date.now() - start,
+        output_full_length: responseContent.length,
+        output_snippet: responseContent.slice(0, 400),
+      });
 
       return {
         content: responseContent,
@@ -136,11 +165,13 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
         },
       };
     } catch (error) {
-      this.logger.error(
-        `Error processing image with GPT-5-nano: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
+      this.logger.error("Gpt5NanoLlmService.invokeWithImage failed", {
+        model_name: modelName,
+        input_tokens: inputTokens,
+        text_length: textContent?.length,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }
