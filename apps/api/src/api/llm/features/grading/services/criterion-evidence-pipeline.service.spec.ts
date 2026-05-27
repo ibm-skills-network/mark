@@ -116,5 +116,6 @@ describe("CriterionEvidencePipelineService", () => {
 
     expect(result.grades[0].attempt).toBe(1);
     expect(result.audit.finalSelection[0].reason).toBe("highest_support_score");
+    expect(result.selectionReason).toBe("highest_support_score");
   });
 });

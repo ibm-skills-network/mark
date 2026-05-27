@@ -1113,6 +1113,7 @@ Language for response: {language}
       summary: GradeSummary;
       judgeCritiques: JudgeCritique[];
       audit: EvidenceAuditLog;
+      selectionReason: "judge_approved" | "highest_support_score";
     },
     maxPossiblePoints: number,
     startTime: number,
@@ -1173,6 +1174,7 @@ Language for response: {language}
       gradingTimeMs: Date.now() - startTime,
       contentHash,
       maxPossiblePoints,
+      selectionReason: pipelineResult.selectionReason,
       ...(pipelineResult.audit ? { gradingAudit: pipelineResult.audit } : {}),
     };
 

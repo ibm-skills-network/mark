@@ -11,6 +11,13 @@ export interface GradingMetadata {
   cacheHitCount?: number;
   maxPossiblePoints?: number;
   gradingAudit?: unknown;
+  /**
+   * "judge_approved": judge approved the final attempt — high confidence.
+   * "highest_support_score": judge never approved within the retry budget;
+   * the score is the best-supported attempt from a degraded fallback path.
+   * Authors/instructors can use this to flag grades worth re-reviewing.
+   */
+  selectionReason?: "judge_approved" | "highest_support_score";
 }
 
 export interface StructuredCriterionData {
