@@ -132,7 +132,11 @@ export class LtiGradeSyncService {
             headers: {
               Cookie: `authentication=${sync.authCookie}`,
             },
-            timeout: 30_000,
+            // 60s rather than 30s — Instana traces show real LMS responses
+            // (e.g. learn.ibm.com POST /mod/lti/service.php) routinely
+            // completing in 35-50s. The shorter timeout was aborting calls
+            // that would otherwise succeed first try.
+            timeout: 60_000,
           },
         ),
       );

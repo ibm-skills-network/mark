@@ -13,7 +13,7 @@ import { LtiSyncAdminController } from "./controllers/lti-sync-admin.controller"
 @Module({
   imports: [
     HttpModule.register({
-      timeout: 30_000,
+      timeout: 60_000,
       maxRedirects: 5,
     }),
     ScheduleModule.forRoot(),

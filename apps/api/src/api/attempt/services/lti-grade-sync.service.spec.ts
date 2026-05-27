@@ -159,7 +159,7 @@ describe("LtiGradeSyncService", () => {
           headers: {
             Cookie: "authentication=test-cookie",
           },
-          timeout: 30_000,
+          timeout: 60_000,
         },
       );
 
