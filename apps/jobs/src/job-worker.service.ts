@@ -500,9 +500,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // window — strikes from a long-past attempt should not influence a new
   // submission for the same attempt id after a re-grade.
   private static readonly OOM_STRIKE_LIMIT = 2;
-  private static readonly OOM_STRIKE_TTL_SECONDS = 86400;
+  private static readonly OOM_STRIKE_TTL_SECONDS = 86_400;
   private static readonly OOM_MESSAGE_RE =
-    /JavaScript heap out of memory|Ineffective mark-compacts|Allocation failed/i;
+    /javascript heap out of memory|ineffective mark-compacts|allocation failed/i;
 
   // Single source for "extract a printable message from an unknown thrown
   // value." Mirrors the pattern at handleTranslationJob's catch block but

@@ -43,7 +43,7 @@ import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
 // Largest legitimate submissions (capstone PDFs, lecture-deck spreadsheets)
 // stay under ~1000 blocks; 50000 gives 50x headroom while still being orders
 // of magnitude smaller than the 1M+ explosion that crashes the worker pod.
-const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION = 50000;
+const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION = 50_000;
 import {
   extractExpectedFilenameFromText,
   filenamesMatch,
