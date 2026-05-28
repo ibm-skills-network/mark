@@ -34,9 +34,16 @@ import {
   PROMPT_PROCESSOR,
   TOKEN_COUNTER,
 } from "../../../llm.constants";
+import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import { RubricCriterion } from "../types/criterion-evidence.types";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
+
+// Hard cap on the number of evidence blocks a single submission can produce.
+// Largest legitimate submissions (capstone PDFs, lecture-deck spreadsheets)
+// stay under ~1000 blocks; 50000 gives 50x headroom while still being orders
+// of magnitude smaller than the 1M+ explosion that crashes the worker pod.
+const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION = 50000;
 import {
   extractExpectedFilenameFromText,
   filenamesMatch,
@@ -1017,7 +1024,14 @@ export class FileGradingService implements IFileGradingService {
       blockIndex += 1;
     }
 
-    const textBlocks = this.splitTextIntoEvidenceBlocks(normalized, blockIndex);
+    const textBlocks = this.splitTextIntoEvidenceBlocks(
+      normalized,
+      blockIndex,
+      {
+        filename: file.filename,
+        questionId: file.questionId,
+      },
+    );
     for (const block of textBlocks) {
       blocks.push(block);
     }
@@ -1052,6 +1066,7 @@ export class FileGradingService implements IFileGradingService {
   private splitTextIntoEvidenceBlocks(
     text: string,
     startIndex = 1,
+    meta?: { filename?: string; questionId?: number; attemptId?: number },
   ): ContentBlock[] {
     if (!text) {
       return [
@@ -1070,6 +1085,28 @@ export class FileGradingService implements IFileGradingService {
       text.includes(" | ");
 
     if (isTabular) {
+      // Count first, allocate second. A pathological spreadsheet with
+      // millions of rows would otherwise allocate the blocks array before
+      // we get a chance to reject it.
+      const rawLineCount = text.split("\n").length;
+      if (rawLineCount > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+        this.logger.warn("grading.submission.oversized", {
+          blockCount: rawLineCount,
+          cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+          filename: meta?.filename,
+          questionId: meta?.questionId,
+          attemptId: meta?.attemptId,
+          branch: "tabular",
+        });
+        throw new OversizedSubmissionError({
+          blockCount: rawLineCount,
+          cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+          filename: meta?.filename,
+          questionId: meta?.questionId,
+          attemptId: meta?.attemptId,
+        });
+      }
+
       const lines = text
         .split("\n")
         .map((line) => line.trim())
@@ -1105,6 +1142,24 @@ export class FileGradingService implements IFileGradingService {
       .filter(Boolean);
 
     const blocksSource = paragraphs.length > 0 ? paragraphs : text.split(/\n+/);
+
+    if (blocksSource.length > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      this.logger.warn("grading.submission.oversized", {
+        blockCount: blocksSource.length,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: meta?.filename,
+        questionId: meta?.questionId,
+        attemptId: meta?.attemptId,
+        branch: "paragraph",
+      });
+      throw new OversizedSubmissionError({
+        blockCount: blocksSource.length,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: meta?.filename,
+        questionId: meta?.questionId,
+        attemptId: meta?.attemptId,
+      });
+    }
 
     const blocks: ContentBlock[] = [];
     let index = startIndex;
