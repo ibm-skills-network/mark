@@ -29,6 +29,7 @@ import { Logger } from "winston";
 import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 import { QuestionGenerationPayload } from "../assignment/dto/post.assignment.request.dto";
+import { UpdateAssignmentQuestionsDto } from "../assignment/dto/update.questions.request.dto";
 import {
   CompleteAssignmentFileDto,
   InitiateAssignmentFilesDto,
@@ -296,6 +297,38 @@ export class AdminController {
   @ApiResponse({ status: 404, description: "Job not found" })
   getQuestionGenerationJobStatus(@Param("jobId") jobId: string) {
     return this.adminService.getQuestionGenerationJobStatus(jobId);
+  }
+
+  @Put("/assignments/:id/publish")
+  @ApiOperation({
+    summary: "Publish an assignment with updated questions using admin auth",
+    description:
+      "Always publishes (forces `published: true` regardless of the request body). Use the regular update endpoint if you need to keep the assignment unpublished.",
+  })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiBody({ type: UpdateAssignmentQuestionsDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      properties: {
+        jobId: { type: "string", description: "Job ID for tracking progress" },
+        message: { type: "string", description: "Status message" },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: "Assignment not found" })
+  publishAssignment(
+    @Param("id") id: number,
+    @Body(new ValidationPipe({ transform: true }))
+    payload: UpdateAssignmentQuestionsDto,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ jobId: string; message: string }> {
+    return this.adminService.publishAssignment(
+      Number(id),
+      payload,
+      this.getActorUserId(request),
+    );
   }
 
   @Put("/assignments/:id")

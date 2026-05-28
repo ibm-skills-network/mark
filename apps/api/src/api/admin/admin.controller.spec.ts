@@ -140,6 +140,33 @@ describe("AdminController", () => {
     );
   });
 
+  it("uses the forwarded user-session header as the publish actor identity", async () => {
+    jest
+      .spyOn(adminService, "publishAssignment")
+      .mockResolvedValue({ message: "Publishing started", jobId: "job-5" });
+
+    await controller.publishAssignment(
+      12,
+      {
+        questions: [],
+        published: true,
+      } as any,
+      {
+        headers: {
+          "user-session": JSON.stringify({
+            userId: "context-manager@skills.network",
+          }),
+        },
+      } as any,
+    );
+
+    expect(adminService.publishAssignment).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({ published: true }),
+      "context-manager@skills.network",
+    );
+  });
+
   it("falls back to admin-api when no forwarded session identity is present", async () => {
     jest
       .spyOn(adminService, "generateQuestions")
