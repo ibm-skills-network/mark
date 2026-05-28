@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { Job, Worker } from "bullmq";
+import { Job, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { randomUUID } from "node:crypto";
@@ -352,31 +352,163 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleAttemptJob(job: Job): Promise<void> {
-    switch (job.name) {
-      case JOB_NAMES.ATTEMPT_GRADE:
-      case JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW: {
-        if (this.shouldExecuteLocally()) {
-          this.logger.debug(
-            `Routing locally: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
-          );
-          await this.jobExecutorService.executeJob({
-            queueName: JOB_QUEUE_NAMES.ATTEMPT,
-            jobName: job.name as JobName,
-            payload: this.getDecryptedJobData(job),
-            bullJobId: job.id,
-          });
-        } else {
-          this.logger.debug(
-            `Forwarding to API: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
-          );
-          await this.forwardJobToApi(JOB_QUEUE_NAMES.ATTEMPT, job);
+    try {
+      switch (job.name) {
+        case JOB_NAMES.ATTEMPT_GRADE:
+        case JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW: {
+          if (this.shouldExecuteLocally()) {
+            this.logger.debug(
+              `Routing locally: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
+            );
+            await this.jobExecutorService.executeJob({
+              queueName: JOB_QUEUE_NAMES.ATTEMPT,
+              jobName: job.name as JobName,
+              payload: this.getDecryptedJobData(job),
+              bullJobId: job.id,
+            });
+          } else {
+            this.logger.debug(
+              `Forwarding to API: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
+            );
+            await this.forwardJobToApi(JOB_QUEUE_NAMES.ATTEMPT, job);
+          }
+          return;
         }
-        return;
+        default: {
+          throw new Error(`Unsupported attempt job: ${job.name}`);
+        }
       }
-      default: {
-        throw new Error(`Unsupported attempt job: ${job.name}`);
-      }
+    } catch (error: unknown) {
+      await this.classifyAttemptError(job, error);
     }
+  }
+
+  // Per-attempt failure classifier. Three branches:
+  //   A. OversizedSubmissionError (name match — keeps cross-app coupling
+  //      loose; the error class lives in apps/api): always permanent. Log
+  //      and rewrap as UnrecoverableError so BullMQ skips remaining retries.
+  //   B. V8 OOM / worker OOM (message regex + code === "ERR_WORKER_OUT_OF_MEMORY"):
+  //      per-attempt strike counter in Redis with 24h TTL. Two strikes →
+  //      permanent fail. One strike → rethrow original so BullMQ retries.
+  //   C. Anything else → rethrow untouched.
+  private async classifyAttemptError(job: Job, error: unknown): Promise<never> {
+    const reason = this.messageOf(error);
+    const errorName = error instanceof Error ? error.name : undefined;
+
+    // Defensively pull contextual fields. Payload decryption itself can
+    // throw; if it does, log and continue with whatever fields we have
+    // rather than masking the original failure under a decryption error.
+    let attemptId: number | undefined;
+    let assignmentId: number | undefined;
+    try {
+      const payload = this.getDecryptedJobData<{
+        attemptId?: number;
+        assignmentId?: number;
+      }>(job);
+      attemptId = payload.attemptId;
+      assignmentId = payload.assignmentId;
+    } catch (decryptError: unknown) {
+      this.structuredLogger.warn("attempt.grade.classify.payload.unavailable", {
+        jobId: job.id,
+        jobName: job.name,
+        decryptError: this.messageOf(decryptError),
+      });
+    }
+
+    // Branch A: oversized submission — never retryable.
+    if (errorName === "OversizedSubmissionError") {
+      this.structuredLogger.error("attempt.grade.oversized", {
+        attemptId,
+        assignmentId,
+        errorClass: "OversizedSubmissionError",
+        reason,
+        jobId: job.id,
+        jobName: job.name,
+      });
+      throw new UnrecoverableError(`OversizedSubmissionError: ${reason}`);
+    }
+
+    // Branch B: V8 heap exhaustion or Node worker OOM. Single narrow cast
+    // pattern with a typeof guard — never `as any`.
+    const rawCode = (error as { code?: unknown }).code;
+    const errorCode = typeof rawCode === "string" ? rawCode : undefined;
+    const isOomClass =
+      errorCode === "ERR_WORKER_OUT_OF_MEMORY" ||
+      (typeof reason === "string" &&
+        JobWorkerService.OOM_MESSAGE_RE.test(reason));
+
+    if (isOomClass) {
+      if (attemptId === undefined) {
+        // Without an attemptId we cannot maintain a per-attempt strike
+        // counter; log and rethrow so BullMQ's existing retry policy still
+        // applies. Better to retry the rare case than to silently swallow.
+        this.structuredLogger.warn("attempt.grade.oom.no.attempt.id", {
+          jobId: job.id,
+          jobName: job.name,
+          assignmentId,
+          reason,
+        });
+        throw error;
+      }
+
+      const key = `mark:jobs:oom-strikes:attempt:${attemptId}`;
+      const pipeline = this.getConnection().pipeline();
+      pipeline.incr(key);
+      pipeline.expire(key, JobWorkerService.OOM_STRIKE_TTL_SECONDS);
+      const results = await pipeline.exec();
+      const incrResult = Array.isArray(results) ? results[0] : undefined;
+      const incrValue =
+        Array.isArray(incrResult) && typeof incrResult[1] === "number"
+          ? incrResult[1]
+          : undefined;
+      const strikeCount = incrValue ?? 1;
+
+      if (strikeCount >= JobWorkerService.OOM_STRIKE_LIMIT) {
+        this.structuredLogger.error("attempt.grade.oom.permanent", {
+          attemptId,
+          assignmentId,
+          errorClass: "OOM",
+          strikeCount,
+          reason,
+          jobId: job.id,
+          jobName: job.name,
+        });
+        throw new UnrecoverableError(
+          `OOM strike limit reached (${strikeCount}/${JobWorkerService.OOM_STRIKE_LIMIT}): ${reason}`,
+        );
+      }
+
+      this.structuredLogger.warn("attempt.grade.oom.strike", {
+        attemptId,
+        assignmentId,
+        errorClass: "OOM",
+        strikeCount,
+        reason,
+        jobId: job.id,
+        jobName: job.name,
+      });
+      throw error;
+    }
+
+    // Branch C: everything else propagates untouched.
+    throw error;
+  }
+
+  // Module-private OOM classification knobs. Kept as static readonly so the
+  // values are visible in stack traces and accessible to tests via the class
+  // itself (no public surface). 24h TTL matches the typical assignment-cycle
+  // window — strikes from a long-past attempt should not influence a new
+  // submission for the same attempt id after a re-grade.
+  private static readonly OOM_STRIKE_LIMIT = 2;
+  private static readonly OOM_STRIKE_TTL_SECONDS = 86400;
+  private static readonly OOM_MESSAGE_RE =
+    /JavaScript heap out of memory|Ineffective mark-compacts|Allocation failed/i;
+
+  // Single source for "extract a printable message from an unknown thrown
+  // value." Mirrors the pattern at handleTranslationJob's catch block but
+  // lifts it into a method so additional callers stay consistent.
+  private messageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   // Routes translation jobs (question / variant / assignment-meta) through the

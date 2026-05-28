@@ -1,5 +1,5 @@
 import { Logger } from "@nestjs/common";
-import { Job, Worker } from "bullmq";
+import { Job, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
@@ -42,39 +42,54 @@ const workerInstances: Array<{
   waitUntilReady: typeof workerWaitUntilReady;
 }> = [];
 
-jest.mock("bullmq", () => ({
-  Worker: jest
-    .fn()
-    .mockImplementation(
-      (
-        queueName: string,
-        processor: (job: unknown) => Promise<void>,
-        options: unknown,
-      ) => {
-        const handlers: Partial<
-          Record<"completed" | "failed", (...arguments_: any[]) => void>
-        > = {};
-        const instance = {
-          queueName,
-          processor,
-          options,
-          close: workerClose,
-          on: jest.fn(
-            (
-              event: "completed" | "failed",
-              handler: (...arguments_: any[]) => void,
-            ) => {
-              handlers[event] = handler;
-            },
-          ),
-          waitUntilReady: workerWaitUntilReady,
-          handlers,
-        };
-        workerInstances.push(instance);
-        return instance;
-      },
-    ),
-}));
+jest.mock("bullmq", () => {
+  // Concrete UnrecoverableError stub: subclass of Error so the production
+  // code's `throw new UnrecoverableError(...)` produces an object that
+  // satisfies both `instanceof Error` and `instanceof UnrecoverableError`
+  // inside the suite. Declared inside the factory because jest hoists
+  // jest.mock calls above top-level declarations.
+  class MockUnrecoverableError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "UnrecoverableError";
+      Object.setPrototypeOf(this, MockUnrecoverableError.prototype);
+    }
+  }
+  return {
+    UnrecoverableError: MockUnrecoverableError,
+    Worker: jest
+      .fn()
+      .mockImplementation(
+        (
+          queueName: string,
+          processor: (job: unknown) => Promise<void>,
+          options: unknown,
+        ) => {
+          const handlers: Partial<
+            Record<"completed" | "failed", (...arguments_: any[]) => void>
+          > = {};
+          const instance = {
+            queueName,
+            processor,
+            options,
+            close: workerClose,
+            on: jest.fn(
+              (
+                event: "completed" | "failed",
+                handler: (...arguments_: any[]) => void,
+              ) => {
+                handlers[event] = handler;
+              },
+            ),
+            waitUntilReady: workerWaitUntilReady,
+            handlers,
+          };
+          workerInstances.push(instance);
+          return instance;
+        },
+      ),
+  };
+});
 
 jest.mock("./redis.connection", () => ({
   createRedisConnection: jest.fn(),
@@ -120,10 +135,20 @@ describe("JobWorkerService", () => {
   const originalMarkApiUrl = process.env.MARK_API_URL;
   const originalApiPort = process.env.API_PORT;
   const originalFetch = global.fetch;
+  // Reusable pipeline mock — INCR + EXPIRE + exec. Tests that exercise the
+  // OOM strike counter reset this between cases via mockClear(); the default
+  // exec return shape `[[null, n]]` matches IORedis's [err, value] result
+  // tuple for the INCR command in position 0.
+  const mockPipeline = {
+    incr: jest.fn().mockReturnThis(),
+    expire: jest.fn().mockReturnThis(),
+    exec: jest.fn(),
+  };
   const mockConnection = {
     del: jest.fn(),
     quit: jest.fn(),
     set: jest.fn(),
+    pipeline: jest.fn(() => mockPipeline),
   };
   const fetchMock = jest.fn();
 
@@ -151,6 +176,12 @@ describe("JobWorkerService", () => {
     mockConnection.del.mockResolvedValue(undefined);
     mockConnection.quit.mockResolvedValue(undefined);
     mockConnection.set.mockResolvedValue("OK");
+    mockPipeline.incr.mockClear();
+    mockPipeline.expire.mockClear();
+    mockPipeline.exec.mockReset();
+    mockPipeline.exec.mockResolvedValue([[null, 1]]);
+    mockConnection.pipeline.mockClear();
+    mockConnection.pipeline.mockReturnValue(mockPipeline);
     (createRedisConnection as jest.Mock).mockReturnValue(mockConnection);
     fetchMock.mockResolvedValue({
       ok: true,
@@ -1040,6 +1071,127 @@ describe("JobWorkerService", () => {
           expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
         }
       });
+    });
+  });
+
+  describe("handleAttemptJob error classification", () => {
+    const originalFlag = process.env.JOBS_EXECUTE_LOCALLY;
+
+    afterAll(() => {
+      if (originalFlag === undefined) {
+        delete process.env.JOBS_EXECUTE_LOCALLY;
+      } else {
+        process.env.JOBS_EXECUTE_LOCALLY = originalFlag;
+      }
+    });
+
+    beforeEach(() => {
+      process.env.JOBS_EXECUTE_LOCALLY = "true";
+    });
+
+    function makeAttemptJob(): Job {
+      const payload = {
+        gradingJobId: "grading-classify",
+        attemptId: 861298,
+        assignmentId: 2537,
+        updateDto: { submitted: true },
+        userSession: {
+          userId: "learner-classify",
+          role: "Learner",
+          gradingCallbackRequired: false,
+        },
+      };
+      return {
+        id: "bull-classify",
+        name: JOB_NAMES.ATTEMPT_GRADE,
+        data: encryptJobPayload(payload),
+      } as unknown as Job;
+    }
+
+    it("wraps OversizedSubmissionError in UnrecoverableError without touching Redis", async () => {
+      const oversized = new Error(
+        "Submission would produce 1048644 blocks, exceeding the per-submission cap of 50000.",
+      );
+      oversized.name = "OversizedSubmissionError";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(oversized);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect((thrown as Error).message).toMatch(/OversizedSubmissionError/);
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "attempt.grade.oversized",
+        expect.objectContaining({
+          attemptId: 861298,
+          assignmentId: 2537,
+          errorClass: "OversizedSubmissionError",
+        }),
+      );
+    });
+
+    it("rethrows original error on the first OOM strike and records INCR+EXPIRE", async () => {
+      const oom = new Error(
+        "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory",
+      );
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(oom);
+      mockPipeline.exec.mockResolvedValueOnce([[null, 1]]);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBe(oom);
+      expect(thrown).not.toBeInstanceOf(UnrecoverableError);
+      expect(mockConnection.pipeline).toHaveBeenCalledTimes(1);
+      expect(mockPipeline.incr).toHaveBeenCalledWith(
+        "mark:jobs:oom-strikes:attempt:861298",
+      );
+      expect(mockPipeline.expire).toHaveBeenCalledWith(
+        "mark:jobs:oom-strikes:attempt:861298",
+        86400,
+      );
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "attempt.grade.oom.strike",
+        expect.objectContaining({
+          attemptId: 861298,
+          strikeCount: 1,
+        }),
+      );
+    });
+
+    it("wraps the second OOM strike in UnrecoverableError", async () => {
+      const oom = new Error(
+        "Ineffective mark-compacts near heap limit Allocation failed",
+      );
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(oom);
+      mockPipeline.exec.mockResolvedValueOnce([[null, 2]]);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "attempt.grade.oom.permanent",
+        expect.objectContaining({
+          attemptId: 861298,
+          assignmentId: 2537,
+          errorClass: "OOM",
+          strikeCount: 2,
+        }),
+      );
     });
   });
 });
