@@ -2,6 +2,8 @@ import { Logger } from "@nestjs/common";
 import { Job, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
+import { JobStateService } from "../../api/src/job-queue/job-state.service";
+import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import { JobWorkerService } from "./job-worker.service";
@@ -69,6 +71,7 @@ jest.mock("bullmq", () => {
             Record<"completed" | "failed", (...arguments_: any[]) => void>
           > = {};
           const instance = {
+            name: queueName, // real BullMQ Worker exposes name = queueName
             queueName,
             processor,
             options,
@@ -110,6 +113,14 @@ jest.mock(
 
 const mockJobExecutorService = {
   executeJob: jest.fn(),
+};
+
+const mockJobStateService = {
+  updateJobStatus: jest.fn(),
+};
+
+const mockGradingProgressService = {
+  markFailed: jest.fn(),
 };
 
 // Mock Winston parent logger. `.child()` returns an object exposing the same
@@ -195,9 +206,13 @@ describe("JobWorkerService", () => {
     mockStructuredLogger.warn.mockClear();
     mockStructuredLogger.error.mockClear();
     mockStructuredLogger.debug.mockClear();
+    mockJobStateService.updateJobStatus.mockReset();
+    mockGradingProgressService.markFailed.mockReset();
 
     service = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockJobStateService as unknown as JobStateService,
+      mockGradingProgressService as unknown as GradingProgressService,
       mockParentWinstonLogger,
     );
   });
@@ -322,9 +337,16 @@ describe("JobWorkerService", () => {
       { connection: mockConnection, concurrency: 1 },
     );
     expect(workerInstances).toHaveLength(5);
-    expect(
-      workerInstances.every((worker) => worker.on.mock.calls.length === 2),
-    ).toBe(true);
+    // Most workers wire two listeners (completed + failed) via createWorker.
+    // The ATTEMPT worker additionally gets a third listener attached after
+    // createWorker returns: the terminal-failure → GradingProgress/JobState
+    // notifier. That extra listener is what unsticks the learner's modal
+    // when a grading job permanent-fails.
+    for (const worker of workerInstances) {
+      const expectedListenerCount =
+        worker.queueName === JOB_QUEUE_NAMES.ATTEMPT ? 3 : 2;
+      expect(worker.on.mock.calls.length).toBe(expectedListenerCount);
+    }
     expect(workerWaitUntilReady).toHaveBeenCalledTimes(5);
   });
 
@@ -336,6 +358,8 @@ describe("JobWorkerService", () => {
     // Re-create service so the new env var is picked up
     const customService = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockJobStateService as unknown as JobStateService,
+      mockGradingProgressService as unknown as GradingProgressService,
       mockParentWinstonLogger,
     );
     await customService.onModuleInit();
@@ -355,6 +379,8 @@ describe("JobWorkerService", () => {
     delete process.env.GRADING_WORKER_CONCURRENCY;
     const defaultService = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockJobStateService as unknown as JobStateService,
+      mockGradingProgressService as unknown as GradingProgressService,
       mockParentWinstonLogger,
     );
     await defaultService.onModuleInit();
@@ -372,6 +398,8 @@ describe("JobWorkerService", () => {
     process.env.GRADING_WORKER_CONCURRENCY = "8";
     const s = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
+      mockJobStateService as unknown as JobStateService,
+      mockGradingProgressService as unknown as GradingProgressService,
       mockParentWinstonLogger,
     );
     await s.onModuleInit();
@@ -1197,6 +1225,86 @@ describe("JobWorkerService", () => {
           strikeCount: 2,
         }),
       );
+    });
+  });
+
+  describe("ATTEMPT worker terminal-failure notification", () => {
+    function makeTerminalJob(attemptsMade: number, maxAttempts: number): Job {
+      const payload = {
+        gradingJobId: "grading-job-xyz",
+        attemptId: 99_001,
+        assignmentId: 2125,
+        updateDto: { submitted: true },
+        userSession: {
+          userId: "learner-xyz",
+          role: "Learner",
+          gradingCallbackRequired: false,
+        },
+      };
+      return {
+        id: "bull-terminal",
+        name: JOB_NAMES.ATTEMPT_GRADE,
+        attemptsMade,
+        opts: { attempts: maxAttempts },
+        data: encryptJobPayload(payload),
+      } as unknown as Job;
+    }
+
+    function getAttemptFailedHandler(): (job: Job, error: Error) => void {
+      const attempt = workerInstances.find(
+        (w) => w.queueName === JOB_QUEUE_NAMES.ATTEMPT,
+      );
+      if (!attempt?.handlers.failed) {
+        throw new Error("ATTEMPT worker failed handler not attached");
+      }
+      return attempt.handlers.failed as (job: Job, error: Error) => void;
+    }
+
+    it("calls markFailed + updateJobStatus when attemptsMade exhausts BullMQ retries", async () => {
+      await service.onModuleInit();
+      const handler = getAttemptFailedHandler();
+
+      await handler(
+        makeTerminalJob(3, 3),
+        new Error("Failed to grade text response: 1.9M tokens > 128k cap"),
+      );
+
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        99_001,
+        expect.stringContaining("Failed to grade text response"),
+      );
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-job-xyz",
+        expect.objectContaining({ status: "Failed" }),
+      );
+    });
+
+    it("fires on UnrecoverableError even when attemptsMade has not exhausted", async () => {
+      await service.onModuleInit();
+      const handler = getAttemptFailedHandler();
+
+      const unrecoverable = new Error(
+        "OversizedSubmissionError: 51011 blocks > 50000 cap",
+      );
+      unrecoverable.name = "UnrecoverableError";
+
+      await handler(makeTerminalJob(1, 3), unrecoverable);
+
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        99_001,
+        expect.any(String),
+      );
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it("skips notification on a non-terminal failure that BullMQ will retry", async () => {
+      await service.onModuleInit();
+      const handler = getAttemptFailedHandler();
+
+      await handler(makeTerminalJob(1, 3), new Error("transient network blip"));
+
+      expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
+      expect(mockJobStateService.updateJobStatus).not.toHaveBeenCalled();
     });
   });
 });

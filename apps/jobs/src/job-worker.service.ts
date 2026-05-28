@@ -26,6 +26,8 @@ import {
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
+import { JobStateService } from "../../api/src/job-queue/job-state.service";
+import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 
 // Allowed-fields-only shape carried in translation-job payloads. Restricted
 // to identifiers; the LLM-produced translatedText/translatedChoices that
@@ -93,6 +95,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly jobExecutorService: JobExecutorService,
+    private readonly jobStateService: JobStateService,
+    @Inject("GradingProgressService")
+    private readonly gradingProgressService: GradingProgressService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: WinstonLogger,
   ) {
     this.structuredLogger = parentLogger.child({
@@ -206,6 +211,27 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         1,
       ),
     );
+
+    // Wire terminal-failure notifications onto the ATTEMPT worker only.
+    // The generic on('failed') in createWorker logs every failure (including
+    // ones BullMQ will retry); this listener fires the additional
+    // GradingProgress + JobState side-effects only when the job is truly
+    // terminal — either an UnrecoverableError rewrap (no more retries
+    // regardless of attemptsMade) or a natural attemptsMade-exhaustion.
+    // Without this, GradingProgress stays at PROCESSING forever after a
+    // permanent fail and the learner's modal sits on "Initializing grading
+    // process…" with no way to know the job is dead.
+    const attemptWorker = this.workers.find(
+      (worker) => worker.name === JOB_QUEUE_NAMES.ATTEMPT,
+    );
+    attemptWorker?.on("failed", (job, error) => {
+      // BullMQ's event signature is `(job, error) => void` — wrap the
+      // async work in a fire-and-forget so we don't return a Promise to
+      // EventEmitter (which would discard it but trips
+      // no-misused-promises). Errors inside are already caught and
+      // logged in handleAttemptWorkerFailure.
+      void this.handleAttemptWorkerFailure(job, error);
+    });
 
     await Promise.all(
       this.workers.map(async (worker) => worker.waitUntilReady()),
@@ -513,6 +539,98 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
     // Branch C: everything else propagates untouched.
     throw error;
+  }
+
+  // BullMQ Worker 'failed' event handler for the ATTEMPT queue. Filters
+  // to terminal failures (UnrecoverableError rewrap OR attemptsMade
+  // exhausted) and dispatches to markAttemptGradingFailed for the
+  // GradingProgress + JobState side-effects. Kept as a private method so
+  // the listener wire-up can stay a single-line void-fire-and-forget,
+  // which satisfies eslint no-misused-promises without an inline IIFE.
+  private async handleAttemptWorkerFailure(
+    job: Job | undefined,
+    error: Error,
+  ): Promise<void> {
+    if (!job) return;
+    const maxAttempts = job.opts?.attempts ?? 1;
+    const errorName = error instanceof Error ? error.name : undefined;
+    const isUnrecoverable =
+      errorName === "UnrecoverableError" ||
+      errorName === "OversizedSubmissionError";
+    const isTerminal = isUnrecoverable || job.attemptsMade >= maxAttempts;
+    if (!isTerminal) return;
+    await this.markAttemptGradingFailed(job, error);
+  }
+
+  // Called from handleAttemptWorkerFailure when a job is terminal
+  // (UnrecoverableError OR attemptsMade exhausted). Marks the
+  // GradingProgress row FAILED (so polling readers, notifications, and the
+  // post-refresh UI see the right state) AND publishes a Failed terminal
+  // status on the JobState SSE channel (so any live modal subscribed to
+  // /grading/:gradingJobId/status-stream flips to the failed state without
+  // requiring a page refresh).
+  //
+  // Best-effort: every step is wrapped in its own try/catch so a Redis or
+  // Prisma hiccup on one side cannot prevent the other from updating, and
+  // failure-to-notify is logged structured rather than thrown (the job is
+  // already failed; raising again here would just spam BullMQ retries on a
+  // signaling path that has no business retrying).
+  private async markAttemptGradingFailed(
+    job: Job,
+    error: unknown,
+  ): Promise<void> {
+    const reason = this.messageOf(error);
+    let attemptId: number | undefined;
+    let gradingJobId: string | undefined;
+    try {
+      const payload = this.getDecryptedJobData<{
+        attemptId?: number;
+        gradingJobId?: string;
+      }>(job);
+      attemptId = payload.attemptId;
+      gradingJobId = payload.gradingJobId;
+    } catch (decryptError: unknown) {
+      this.structuredLogger.warn("attempt.grade.terminal.payload.unavailable", {
+        jobId: job.id,
+        jobName: job.name,
+        decryptError: this.messageOf(decryptError),
+      });
+      return;
+    }
+
+    if (typeof attemptId === "number" && attemptId > 0) {
+      try {
+        await this.gradingProgressService.markFailed(attemptId, reason);
+      } catch (markError: unknown) {
+        this.structuredLogger.warn("attempt.grade.terminal.markfailed.error", {
+          jobId: job.id,
+          attemptId,
+          error: this.messageOf(markError),
+        });
+      }
+    }
+
+    if (gradingJobId) {
+      try {
+        await this.jobStateService.updateJobStatus(gradingJobId, {
+          status: "Failed",
+          progress: reason.slice(0, 255),
+        });
+      } catch (publishError: unknown) {
+        this.structuredLogger.warn("attempt.grade.terminal.publish.error", {
+          jobId: job.id,
+          gradingJobId,
+          error: this.messageOf(publishError),
+        });
+      }
+    }
+
+    this.structuredLogger.info("attempt.grade.terminal.notified", {
+      jobId: job.id,
+      attemptId,
+      gradingJobId,
+      reason,
+    });
   }
 
   // Module-private OOM classification knobs. Kept as static readonly so the
