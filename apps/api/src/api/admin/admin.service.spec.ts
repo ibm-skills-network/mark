@@ -54,6 +54,7 @@ describe("AdminService", () => {
     getAssignmentFiles: jest.Mock;
     initiateAssignmentFileUploads: jest.Mock;
   };
+  let mockAssignmentService: { publishAssignment: jest.Mock };
   let mockQuestionService: { generateQuestions: jest.Mock };
   let mockJobStatusService: { getJobStatus: jest.Mock };
 
@@ -68,6 +69,11 @@ describe("AdminService", () => {
       initiateAssignmentFileUploads: jest
         .fn()
         .mockResolvedValue({ uploads: [{ fileId: 7 }] }),
+    };
+    mockAssignmentService = {
+      publishAssignment: jest
+        .fn()
+        .mockResolvedValue({ message: "Publishing started", jobId: "job-2" }),
     };
     mockQuestionService = {
       generateQuestions: jest.fn().mockResolvedValue({
@@ -90,7 +96,7 @@ describe("AdminService", () => {
         { provide: PrismaService, useValue: mockPrisma },
         {
           provide: AssignmentServiceV2,
-          useValue: { publishAssignment: jest.fn() },
+          useValue: mockAssignmentService,
         },
         {
           provide: AssignmentFileService,
@@ -260,6 +266,45 @@ describe("AdminService", () => {
         }),
         "service-account",
       );
+    });
+  });
+
+  describe("publishAssignment", () => {
+    it("validates the assignment exists and delegates to the v2 publish service", async () => {
+      const payload = {
+        questions: [],
+        published: false,
+        versionDescription: "Admin publish",
+      } as any;
+
+      await expect(
+        service.publishAssignment(9, payload, "service-account"),
+      ).resolves.toEqual({
+        message: "Publishing started",
+        jobId: "job-2",
+      });
+
+      expect(mockPrisma.assignment.findUnique).toHaveBeenCalledWith({
+        where: { id: 9 },
+        select: { id: true },
+      });
+      expect(mockAssignmentService.publishAssignment).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({
+          published: true,
+          versionDescription: "Admin publish",
+        }),
+        "service-account",
+      );
+    });
+
+    it("404s without publishing when the assignment is missing", async () => {
+      mockPrisma.assignment.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.publishAssignment(404, { questions: [] } as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockAssignmentService.publishAssignment).not.toHaveBeenCalled();
     });
   });
 

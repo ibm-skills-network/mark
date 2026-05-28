@@ -1082,6 +1082,22 @@ export class AdminService {
       : { status: job.status, progress: job.progress };
   }
 
+  async publishAssignment(
+    assignmentId: number,
+    payload: UpdateAssignmentQuestionsDto,
+    userId = "admin-api",
+  ): Promise<{ message: string; jobId: string }> {
+    await this.assertAssignmentExists(assignmentId);
+    return this.assignmentService.publishAssignment(
+      assignmentId,
+      {
+        ...payload,
+        published: true,
+      },
+      userId,
+    );
+  }
+
   async updateAssignment(
     id: number,
     updateAssignmentDto: AdminUpdateAssignmentRequestDto,
