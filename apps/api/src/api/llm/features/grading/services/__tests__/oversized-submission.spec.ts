@@ -135,6 +135,64 @@ describe("FileGradingService.splitTextIntoEvidenceBlocks cap enforcement", () =>
     );
   });
 
+  it("does not throw when raw line count exceeds the cap but the filtered count is under it", () => {
+    const { service, mockLogger } = buildService();
+    // A sparse spreadsheet: many blank/whitespace-only lines inflate the raw
+    // line count past the cap, but only a small number of real data rows
+    // survive the trim/non-empty filter. The cap must apply to the filtered set.
+    const dataRowCount = 200;
+    const blankRowCount = 60000;
+    const rows: string[] = [];
+    for (let i = 0; i < dataRowCount; i++) {
+      rows.push(`val${i} | data${i}`);
+    }
+    for (let i = 0; i < blankRowCount; i++) {
+      rows.push("   ");
+    }
+    const text = rows.join("\n");
+    expect(text.split("\n").length).toBeGreaterThan(50000);
+
+    const result = service.splitTextIntoEvidenceBlocks(text, 1, {
+      filename: "sparse.xlsx",
+      questionId: 7,
+    });
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(dataRowCount);
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      "grading.submission.oversized",
+      expect.anything(),
+    );
+  });
+
+  it("reports the filtered (not raw) block count when the cap is exceeded", () => {
+    const { service } = buildService();
+    // Filtered count exceeds the cap; interleaved blank lines must NOT be
+    // counted, so the reported blockCount equals the real data-row count.
+    const dataRowCount = 60000;
+    const rows: string[] = [];
+    for (let i = 0; i < dataRowCount; i++) {
+      rows.push(`val${i} | data${i}`);
+      rows.push("");
+    }
+    const text = rows.join("\n");
+
+    let thrown: unknown;
+    try {
+      service.splitTextIntoEvidenceBlocks(text, 1, {
+        filename: "dense.xlsx",
+        questionId: 11,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(OversizedSubmissionError);
+    const oe = thrown as OversizedSubmissionError;
+    expect(oe.blockCount).toBe(dataRowCount);
+    expect(oe.cap).toBe(50000);
+  });
+
   it("non-tabular paragraph text under the cap is unchanged", () => {
     const { service, mockLogger } = buildService();
     const text =

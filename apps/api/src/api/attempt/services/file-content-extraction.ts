@@ -2979,15 +2979,19 @@ export class FileContentExtractionService {
         }
       }
 
-      // Structured summary log — one record per workbook, queryable by the
-      // numeric fields. Replaces the prior string-interpolated debug log so
-      // production can alert on `totalUsedCells` outliers.
-      this.logger.log("xlsx.extract.complete", {
-        sheetCount: sheetNames.length,
-        totalUsedCells,
-        chartCount,
-        imageCount,
-      });
+      // Summary log — one record per workbook, queryable by the numeric
+      // fields. The NestJS Logger treats a second object argument as a string
+      // context label rather than structured metadata, so the fields are
+      // folded into the message via JSON.stringify to keep them in the log
+      // line (production can then alert on `totalUsedCells` outliers).
+      this.logger.log(
+        `xlsx.extract.complete ${JSON.stringify({
+          sheetCount: sheetNames.length,
+          totalUsedCells,
+          chartCount,
+          imageCount,
+        })}`,
+      );
 
       return {
         text: allText.trim(),
@@ -3005,8 +3009,11 @@ export class FileContentExtractionService {
           : String(error);
       // Log before translating — the outer Error wrapper hides the original
       // stack from downstream catch sites, but operators need the cause to
-      // diagnose extraction failures.
-      this.logger.error("xlsx.extract.failed", { error: errorMessage });
+      // diagnose extraction failures. Fold the field into the message: the
+      // NestJS Logger would otherwise stringify the object as a context label.
+      this.logger.error(
+        `xlsx.extract.failed ${JSON.stringify({ error: errorMessage })}`,
+      );
       throw new Error(`Excel extraction failed: ${errorMessage}`);
     }
   }

@@ -542,11 +542,24 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // BullMQ Worker 'failed' event handler for the ATTEMPT queue. Filters
-  // to terminal failures (UnrecoverableError rewrap OR attemptsMade
-  // exhausted) and dispatches to markAttemptGradingFailed for the
+  // to terminal failures and dispatches to markAttemptGradingFailed for the
   // GradingProgress + JobState side-effects. Kept as a private method so
   // the listener wire-up can stay a single-line void-fire-and-forget,
   // which satisfies eslint no-misused-promises without an inline IIFE.
+  //
+  // A failure is terminal when any of these hold:
+  //   - UnrecoverableError / OversizedSubmissionError rewrap — no more
+  //     retries regardless of attemptsMade.
+  //   - attemptsMade has exhausted the configured attempts.
+  //   - the failure is a stalled-job failure (the worker died mid-job and
+  //     lost its lock). The ATTEMPT worker runs with maxStalledCount=0, so a
+  //     stalled job is permanent-failed with NO retry following — even though
+  //     attemptsMade is typically still 1 (the stall happened mid-first-
+  //     attempt). Detect it by the BullMQ stalled reason carried in the error
+  //     message ("job stalled more than allowable limit"), matched case-
+  //     insensitively so the check is not coupled to exact casing/wording.
+  //     Scoped to /stalled/i specifically so ordinary retryable failures
+  //     stay non-terminal and keep their remaining attempts.
   private async handleAttemptWorkerFailure(
     job: Job | undefined,
     error: Error,
@@ -557,7 +570,11 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const isUnrecoverable =
       errorName === "UnrecoverableError" ||
       errorName === "OversizedSubmissionError";
-    const isTerminal = isUnrecoverable || job.attemptsMade >= maxAttempts;
+    const isStalledFailure = JobWorkerService.STALLED_MESSAGE_RE.test(
+      this.messageOf(error),
+    );
+    const isTerminal =
+      isUnrecoverable || isStalledFailure || job.attemptsMade >= maxAttempts;
     if (!isTerminal) return;
     await this.markAttemptGradingFailed(job, error);
   }
@@ -642,6 +659,13 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private static readonly OOM_STRIKE_TTL_SECONDS = 86_400;
   private static readonly OOM_MESSAGE_RE =
     /javascript heap out of memory|ineffective mark-compacts|allocation failed/i;
+
+  // Matches the BullMQ stalled-failure reason ("job stalled more than
+  // allowable limit") carried in the failed-event error message. Under the
+  // ATTEMPT worker's maxStalledCount=0, a stalled job is permanent-failed
+  // with no retry, so this signals a terminal failure even when attemptsMade
+  // has not yet exhausted.
+  private static readonly STALLED_MESSAGE_RE = /stalled/i;
 
   // Single source for "extract a printable message from an unknown thrown
   // value." Mirrors the pattern at handleTranslationJob's catch block but

@@ -34,16 +34,11 @@ import {
   PROMPT_PROCESSOR,
   TOKEN_COUNTER,
 } from "../../../llm.constants";
+import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../constants";
 import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import { RubricCriterion } from "../types/criterion-evidence.types";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
-
-// Hard cap on the number of evidence blocks a single submission can produce.
-// Largest legitimate submissions (capstone PDFs, lecture-deck spreadsheets)
-// stay under ~1000 blocks; 50000 gives 50x headroom while still being orders
-// of magnitude smaller than the 1M+ explosion that crashes the worker pod.
-const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION = 50_000;
 import {
   extractExpectedFilenameFromText,
   filenamesMatch,
@@ -1085,13 +1080,19 @@ export class FileGradingService implements IFileGradingService {
       text.includes(" | ");
 
     if (isTabular) {
-      // Count first, allocate second. A pathological spreadsheet with
-      // millions of rows would otherwise allocate the blocks array before
-      // we get a chance to reject it.
-      const rawLineCount = text.split("\n").length;
-      if (rawLineCount > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      // Build the trimmed, non-empty line set once and count THAT against the
+      // cap. Blank/whitespace-only rows never become evidence blocks, so they
+      // must not count toward (or inflate) the reported total. Counting the
+      // filtered array length before constructing ContentBlock objects keeps
+      // the "reject before allocating" intent: a pathological spreadsheet is
+      // short-circuited before the blocks array is built.
+      const lines = text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (lines.length > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
         this.logger.warn("grading.submission.oversized", {
-          blockCount: rawLineCount,
+          blockCount: lines.length,
           cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
           filename: meta?.filename,
           questionId: meta?.questionId,
@@ -1099,7 +1100,7 @@ export class FileGradingService implements IFileGradingService {
           branch: "tabular",
         });
         throw new OversizedSubmissionError({
-          blockCount: rawLineCount,
+          blockCount: lines.length,
           cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
           filename: meta?.filename,
           questionId: meta?.questionId,
@@ -1107,10 +1108,6 @@ export class FileGradingService implements IFileGradingService {
         });
       }
 
-      const lines = text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
       const blocks: ContentBlock[] = [];
       let index = startIndex;
 

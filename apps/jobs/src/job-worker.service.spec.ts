@@ -1306,5 +1306,46 @@ describe("JobWorkerService", () => {
       expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
       expect(mockJobStateService.updateJobStatus).not.toHaveBeenCalled();
     });
+
+    it("fires on a stalled-job failure even though attemptsMade has not exhausted", async () => {
+      // A grading worker that dies mid-job (kernel OOM / SIGKILL / pod
+      // eviction) loses its lock; BullMQ's stalled checker permanent-fails
+      // the job under maxStalledCount=0 and surfaces a generic Error whose
+      // message is the BullMQ stalled reason ("job stalled more than
+      // allowable limit") with attemptsMade still at 1. No retry follows, so
+      // the failure is terminal and the learner's modal must be unstuck.
+      await service.onModuleInit();
+      const handler = getAttemptFailedHandler();
+
+      const stalled = new Error("job stalled more than allowable limit");
+      stalled.name = "Error";
+
+      await handler(makeTerminalJob(1, 3), stalled);
+
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        99_001,
+        expect.stringContaining("stalled"),
+      );
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-job-xyz",
+        expect.objectContaining({ status: "Failed" }),
+      );
+    });
+
+    it("matches the stalled reason case-insensitively", async () => {
+      // The match must not be coupled to the exact casing/whitespace of the
+      // BullMQ reason string; a robust /stalled/i keeps the terminal
+      // detection working across BullMQ versions.
+      await service.onModuleInit();
+      const handler = getAttemptFailedHandler();
+
+      await handler(
+        makeTerminalJob(1, 3),
+        new Error("Job STALLED more than allowable limit"),
+      );
+
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledTimes(1);
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledTimes(1);
+    });
   });
 });

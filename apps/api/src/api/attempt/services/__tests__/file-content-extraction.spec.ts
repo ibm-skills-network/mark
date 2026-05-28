@@ -508,15 +508,25 @@ describe("FileContentExtractionService.extractExcelText - used-range clamping", 
 
     await (service as any).extractExcelText(buffer, true);
 
-    // Exactly one summary call carrying structured fields.
+    // Exactly one summary call. The NestJS Logger treats a second object
+    // argument as a context label, so the structured fields are folded into
+    // the message string — assert they actually land in the log line.
     const summaryCalls = loggerInfo.mock.calls.filter(
       (call) =>
-        typeof call[1] === "object" &&
-        call[1] !== null &&
-        "totalUsedCells" in call[1],
+        typeof call[0] === "string" &&
+        call[0].includes("xlsx.extract.complete"),
     );
     expect(summaryCalls).toHaveLength(1);
-    expect(summaryCalls[0][1]).toEqual(
+
+    const message = summaryCalls[0][0] as string;
+    const payloadJson = message.slice("xlsx.extract.complete ".length);
+    const payload = JSON.parse(payloadJson) as {
+      sheetCount: number;
+      totalUsedCells: number;
+      chartCount: number;
+      imageCount: number;
+    };
+    expect(payload).toEqual(
       expect.objectContaining({
         sheetCount: 1,
         totalUsedCells: expect.any(Number),
@@ -524,8 +534,6 @@ describe("FileContentExtractionService.extractExcelText - used-range clamping", 
         imageCount: expect.any(Number),
       }),
     );
-    expect(
-      (summaryCalls[0][1] as { totalUsedCells: number }).totalUsedCells,
-    ).toBeGreaterThan(0);
+    expect(payload.totalUsedCells).toBeGreaterThan(0);
   });
 });
