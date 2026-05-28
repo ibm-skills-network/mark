@@ -141,6 +141,23 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const TRANSLATION_LOCK_DURATION_MS = 120_000;
     const TRANSLATION_NO_STALL_RECOVERY = 0;
 
+    // Attempt-grading lockDuration generous past the in-process
+    // GRADING_OPERATION_TIMEOUT (5 min) so a healthy worker doing legitimate
+    // long LLM grading never gets falsely marked stalled. 10 min leaves ~2x
+    // headroom over the worst observed grading wall-clock (a single attempt
+    // with many evidence-based questions can chain LLM calls for minutes
+    // under provider throttling). The lock auto-renews every lockDuration/2,
+    // so this is the failure-detection threshold for a DEAD worker — not max
+    // execution time. maxStalledCount=0 means a kernel-OOMed / SIGKILL'd
+    // pod's job permanent-fails on the first stall recovery instead of being
+    // re-delivered to two more pods (which also OOM on the same poison
+    // input). Previously default maxStalledCount=1 turned one bad submission
+    // into a 3-pod-crash cascade that disrupted everything sharing the
+    // mark-jobs worker pool — including LTI grade sync — for the duration of
+    // the cascade.
+    const ATTEMPT_LOCK_DURATION_MS = 600_000;
+    const ATTEMPT_NO_STALL_RECOVERY = 0;
+
     this.workers.push(
       this.createWorker(
         JOB_QUEUE_NAMES.ASSIGNMENT_V1,
@@ -178,6 +195,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         // were sharing a name and produced a footgun where setting one
         // accidentally tuned the other; renamed to make the layer explicit.
         Number.parseInt(process.env.GRADING_WORKER_CONCURRENCY ?? "4", 10),
+        {
+          lockDuration: ATTEMPT_LOCK_DURATION_MS,
+          maxStalledCount: ATTEMPT_NO_STALL_RECOVERY,
+        },
       ),
       this.createWorker(
         JOB_QUEUE_NAMES.ADMIN_TRANSLATION,

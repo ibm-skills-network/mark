@@ -308,7 +308,12 @@ describe("JobWorkerService", () => {
       4,
       JOB_QUEUE_NAMES.ATTEMPT,
       expect.any(Function),
-      { connection: mockConnection, concurrency: 4 },
+      {
+        connection: mockConnection,
+        concurrency: 4,
+        lockDuration: 600_000,
+        maxStalledCount: 0,
+      },
     );
     expect(Worker).toHaveBeenNthCalledWith(
       5,

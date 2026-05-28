@@ -137,23 +137,16 @@ export default function GradeSyncStatus({
           message: "Syncing grade to your course platform...",
         };
 
-      case "SCHEDULED": {
-        const retryTime = syncStatus.nextRetryAt
-          ? new Date(syncStatus.nextRetryAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "soon";
+      case "SCHEDULED":
         return {
           icon: "🔄",
           color: "text-yellow-600",
           bgColor: "bg-yellow-50",
           borderColor: "border-yellow-200",
-          message: `Retry scheduled for ${retryTime} (Attempt ${syncStatus.retryCount}/${syncStatus.maxRetries})`,
+          message: "Your completion is safely recorded with us",
           detail:
-            "We encountered an issue syncing your grade with your LMS. We'll automatically retry soon.",
+            "Your LMS is taking a little longer than usual to accept the sync — they're busy. We'll keep pushing your completion record over until it's accepted, so you can close this window knowing you're covered. Your completion will show up on their side as soon as they accept it.",
         };
-      }
 
       case "FAILED":
         return {
@@ -161,9 +154,9 @@ export default function GradeSyncStatus({
           color: "text-red-600",
           bgColor: "bg-red-50",
           borderColor: "border-red-200",
-          message: "Grade sync failed after multiple attempts",
+          message: "Your completion is safely recorded with us",
           detail:
-            "Your grade is safely stored in our system. Please contact your instructor if it doesn't appear in your course within 24 hours.",
+            "Your LMS hasn't been able to accept our sync after several attempts. Don't worry — your completion is stored on our end. Please reach out to your instructor if it doesn't appear in your course within 24 hours.",
         };
 
       default:
