@@ -31,13 +31,12 @@ import {
 import {
   useAssignmentDetails,
   useGitHubStore,
-  useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
@@ -108,7 +107,13 @@ function LearnerHeader() {
     },
   );
   const [returnUrl, setReturnUrl] = useState<string>("");
-  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
+  // The URL is authoritative for the assignment id. Reading it from a store
+  // populated only on the overview route leaves deep links / hard refreshes
+  // with a null id and silently drops the submit.
+  const { assignmentId: assignmentIdParam } = useParams<{
+    assignmentId: string;
+  }>();
+  const assignmentId = Math.trunc(Number(assignmentIdParam));
   const isInQuestionPage = pathname.includes("questions");
   const isAttemptPage = pathname.includes("attempts");
   const isSuccessPage = pathname.includes("successPage");
@@ -260,9 +265,19 @@ function LearnerHeader() {
     setCurrentAttemptId(activeAttemptId);
 
     if (!assignmentId) {
-      toast.error(
-        "Assignment ID is missing, exit and try launching the assignment again.",
+      console.warn(
+        "[learner] submit blocked: assignmentId missing from route",
+        {
+          assignmentIdParam,
+          hasActiveAttemptId: activeAttemptId !== null,
+          route: pathname,
+        },
       );
+      toast.error(
+        "Something went wrong. Please reload the page or exit and relaunch the assignment.",
+      );
+      setShowGradingModal(false);
+      setSubmitting(false);
       return;
     }
 
@@ -356,6 +371,8 @@ function LearnerHeader() {
     role,
     userPreferedLanguage,
     assignmentId,
+    assignmentIdParam,
+    pathname,
     activeAttemptId,
     authorQuestions,
     authorAssignmentDetails,
