@@ -20,7 +20,11 @@ const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
   usePathname: () => "/learner/3428/questions",
-  useRouter: () => ({ push: mockPush, replace: mockReplace, prefetch: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    prefetch: jest.fn(),
+  }),
   useSearchParams: () => ({ get: () => null, toString: () => "" }),
 }));
 
@@ -68,14 +72,29 @@ jest.mock("@/components/Button", () => ({
       props.children,
     ),
 }));
-jest.mock("@/components/Dropdown", () => ({ __esModule: true, default: () => null }));
-jest.mock("@/components/svgs/Spinner", () => ({ __esModule: true, default: () => null }));
-jest.mock("@/components/WarningAlert", () => ({ __esModule: true, default: () => null }));
+jest.mock("@/components/Dropdown", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock("@/components/svgs/Spinner", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock("@/components/WarningAlert", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 jest.mock("@/components/MarkChatToggleButton", () => ({
   MarkChatToggleButton: () => null,
 }));
-jest.mock("@components/SNIcon", () => ({ __esModule: true, default: () => null }));
-jest.mock("@components/Title", () => ({ __esModule: true, default: () => null }));
+jest.mock("@components/SNIcon", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock("@components/Title", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
 const answeredQuestion = {
   id: 1,

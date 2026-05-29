@@ -10,13 +10,21 @@ import Timer from "../Timer";
 const mockUseParams = jest.fn();
 jest.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+  }),
 }));
 
 // Report the timer as already expired so the auto-submit effect fires on mount.
 jest.mock("@/hooks/use-countdown", () => ({
   __esModule: true,
-  default: () => ({ countdown: 0, timerExpired: true, resetCountdown: jest.fn() }),
+  default: () => ({
+    countdown: 0,
+    timerExpired: true,
+    resetCountdown: jest.fn(),
+  }),
 }));
 
 const mockSubmitAssignment = jest.fn();

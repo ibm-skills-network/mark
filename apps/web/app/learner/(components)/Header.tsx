@@ -36,7 +36,12 @@ import {
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useParams,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
