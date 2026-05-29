@@ -12,7 +12,7 @@ import {
   useGitHubStore,
   useLearnerStore,
 } from "@/stores/learner";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import { toast } from "sonner";
 
@@ -45,10 +45,7 @@ function Timer(props: Props) {
     state.setShowSubmissionFeedback,
     state.setLearnerStore,
   ]);
-  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
-    state.assignmentDetails,
-    state.setGrade,
-  ]);
+  const setGrade = useAssignmentDetails((state) => state.setGrade);
   const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
     "assignmentConfig",
@@ -63,7 +60,13 @@ function Timer(props: Props) {
     },
   );
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const assignmentId = assignmentDetails?.id;
+  // The URL is authoritative; assignmentDetails is only populated on the
+  // overview route and is null on a deep link / hard refresh, which would
+  // otherwise gate off auto-submit and silently drop a timed submission.
+  const { assignmentId: assignmentIdParam } = useParams<{
+    assignmentId: string;
+  }>();
+  const assignmentId = Math.trunc(Number(assignmentIdParam));
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const hasCountdown = typeof countdown === "number";
   const safeCountdown = hasCountdown ? countdown : 0;
@@ -129,8 +132,15 @@ function Timer(props: Props) {
     );
 
     if (!assignmentId) {
+      console.warn(
+        "[learner] auto-submit blocked: assignmentId missing from route",
+        {
+          assignmentIdParam,
+          hasActiveAttemptId: activeAttemptId !== null,
+        },
+      );
       toast.error(
-        "Assignment ID is missing, exit and try launching the assignment again.",
+        "Something went wrong. Please reload the page or exit and relaunch the assignment.",
       );
       return;
     }
