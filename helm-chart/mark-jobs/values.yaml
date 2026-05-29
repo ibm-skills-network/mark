@@ -49,6 +49,10 @@ env:
   # the GRADING_CONCURRENCY name with the LLM cap; renamed so tuning one
   # tier doesn't silently retune the other.
   GRADING_WORKER_CONCURRENCY: "4"
+  # Hard cap on evidence blocks per submission ingestion (spreadsheet text
+  # splitting + PDF structure extraction). The code falls back to 50000 when
+  # this is unset, empty, or not a positive integer.
+  GRADING_MAX_EVIDENCE_BLOCKS: "50000"
   # Master switch for the dependency-level wave grading scheduler. mark-jobs
   # is where ATTEMPT_GRADE actually executes (JOBS_EXECUTE_LOCALLY=true), so
   # this is the tier where the flag is load-bearing. Chart default "false"

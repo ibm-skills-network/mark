@@ -5,4 +5,21 @@
 //
 // Shared so every submission ingestion path (spreadsheet text splitting and
 // PDF structure extraction) enforces the SAME ceiling.
-export const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION = 50_000;
+//
+// Tunable per environment via the GRADING_MAX_EVIDENCE_BLOCKS env var; falls
+// back to the default whenever that var is unset, empty, or not a positive
+// integer. Read once at module load (the value is a static deployment knob).
+const DEFAULT_MAX_EVIDENCE_BLOCKS_PER_SUBMISSION = 50_000;
+
+export function resolveMaxEvidenceBlocksPerSubmission(): number {
+  const parsed = Number.parseInt(
+    process.env.GRADING_MAX_EVIDENCE_BLOCKS ?? "",
+    10,
+  );
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_EVIDENCE_BLOCKS_PER_SUBMISSION;
+}
+
+export const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION =
+  resolveMaxEvidenceBlocksPerSubmission();
