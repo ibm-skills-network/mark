@@ -3,6 +3,7 @@
 import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
 import ErrorModal from "@/components/ErrorModal";
+import SessionExpired from "@/components/SessionExpired";
 import {
   createAttempt,
   getAttempt,
@@ -47,28 +48,7 @@ async function LearnerLayout(props: Props) {
     log("User fetched", `Role: ${user?.role ?? "unknown"}`);
   } catch {
     log("User fetch failed", "Unauthorized");
-    return (
-      <ErrorModal
-        statusCode={401}
-        error={
-          "Oopsies! It looks like you tried to launch this assignment incorrectly. Please open the assignment from your LMS (Coursera, OpenEdx, Author Workbench, or yourLearning). If the problem keeps happening, use the chatbot to open a support ticket."
-        }
-        headline="Authentication required"
-        userSteps={[
-          {
-            title: "Open the assignment from your LMS",
-            description:
-              "Launch from Coursera, OpenEdx, Author Workbench, or yourLearning.",
-            cta: "Return to course",
-          },
-          {
-            title: "Refresh and sign in again",
-            description: "Your session may have expired. Sign in and retry.",
-          },
-        ]}
-        stateTimeline={stateTimeline}
-      />
-    );
+    return <SessionExpired />;
   }
 
   const role = user?.role;
