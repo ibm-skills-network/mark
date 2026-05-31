@@ -3,6 +3,7 @@
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import type { AssignmentDetails, QuestionStore } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
+import { shuffleArray } from "@/lib/shuffle";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
 import { useEffect, useMemo } from "react";
@@ -36,17 +37,26 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   // the array ref — otherwise the shuffle would re-run on every render.
   const questionIdsKey = allQuestions.map((q) => q.id).join("|");
   const questions: QuestionStore[] = useMemo(() => {
-    const shouldShuffle =
+    // A real learner's answer choices are shuffled server-side when their
+    // attempt is created. The author preview never creates a real attempt, so
+    // mirror that shuffle here for questions flagged `randomizedChoices` —
+    // otherwise the preview shows every correct answer in its authored position
+    // and looks like shuffling is broken.
+    const withShuffledChoices = allQuestions.map((question) =>
+      question.randomizedChoices === true &&
+      Array.isArray(question.choices) &&
+      question.choices.length > 1
+        ? { ...question, choices: shuffleArray(question.choices) }
+        : question,
+    );
+
+    const shouldShuffleOrder =
       displayOrder === "RANDOM" ||
       (numberOfQuestionsPerAttempt !== null && numberOfQuestionsPerAttempt > 0);
 
-    if (!shouldShuffle) return allQuestions;
+    if (!shouldShuffleOrder) return withShuffledChoices;
 
-    const pool = [...allQuestions];
-    for (let index = pool.length - 1; index > 0; index--) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
-    }
+    const pool = shuffleArray(withShuffledChoices);
 
     return numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
       ? pool.slice(0, numberOfQuestionsPerAttempt)

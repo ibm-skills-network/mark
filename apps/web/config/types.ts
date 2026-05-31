@@ -473,6 +473,7 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
   maxCharacters?: number;
 
   choices?: Choice[];
+  randomizedChoices?: boolean;
   status?: QuestionStatus;
   translations?: {
     [key: string]: {
