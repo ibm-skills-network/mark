@@ -11,9 +11,13 @@ import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { winstonOptions } from "./logger/config";
+import { installProcessErrorGuard } from "./process-error-guard";
 
 async function bootstrap() {
   const logger = WinstonModule.createLogger(winstonOptions);
+  // Survive transient NATS connection errors from the optional messaging
+  // client instead of crashing the gateway (see process-error-guard).
+  installProcessErrorGuard(logger);
   const bootStart = Date.now();
 
   logger.log(
