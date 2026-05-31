@@ -55,7 +55,7 @@
     "test:watch": "turbo run test --parallel ",
     "test:staged": "turbo run test:staged --",
     "test:setup": "playwright test --project=setup",
-    "playwright:install": "playwright install --with-deps",
+    "playwright:install": "playwright install --with-deps chromium",
     "playwright:report": "playwright show-report",
     "playwright:learner": "playwright test --project=learner-chromium --project=learner-firefox --project=learner-webkit",
     "playwright:author": "playwright test --project=author-chromium --project=author-firefox --project=author-webkit",
