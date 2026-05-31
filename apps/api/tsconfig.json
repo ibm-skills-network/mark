@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "useDefineForClassFields": false
   },
+  "include": ["src/**/*"],
   "exclude": [
     "./ensureDb.js",
     "test",

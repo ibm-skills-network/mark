@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "lint:staged": "eslint",
     "start": "dotenv -e ./dev.env -- nest start",
-    "start:e2e": "yarn start",
+    "start:e2e": "dotenv -e ./dev.env -- node dist/main",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
@@ -31,7 +31,7 @@
     "test:staged": "jest --bail --findRelatedTests --passWithNoTests --collectCoverage=false",
     "test:watch": "jest --watch",
     "create-initial-versions": "dotenv -e ./dev.env -- ts-node src/scripts/create-initial-versions.ts",
-    "translation-audit": "node dist/src/scripts/translation-audit.js",
+    "translation-audit": "node dist/scripts/translation-audit.js",
     "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts"
   },
   "prisma": {

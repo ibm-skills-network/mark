@@ -27,7 +27,12 @@ test("author settings persist and reflect in preview", async ({
   await timeLimitInput.fill("25");
 
   // Set number of attempts (dropdown)
-  await page.getByRole("button", { name: "Dropdown Arrow" }).click();
+  await page
+    .locator("section", {
+      hasText: "How will learners complete the assignment",
+    })
+    .locator("button")
+    .click();
   const attemptsOption = page.locator("#dropdown-portal li", {
     hasText: /^3$/,
   });
@@ -38,9 +43,7 @@ test("author settings persist and reflect in preview", async ({
   await page.getByPlaceholder("Ex.").fill("45");
 
   // Set retry behavior
-  await page
-    .getByRole("button", { name: "How many attempts do learners" })
-    .click();
+  await page.locator("#attempts-before-cooldown-period").click();
   await page.getByText("Never wait to retry").click();
 
   // Set question display options

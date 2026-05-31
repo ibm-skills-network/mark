@@ -531,9 +531,9 @@ export class PdfStructureExtractorService {
 
         if (canvasContext) {
           const renderContext: RenderParameters = {
+            canvas: null,
             canvasContext: canvasContext as unknown as CanvasRenderingContext2D,
             viewport,
-            canvas: null,
           };
 
           const renderTask = page.render(renderContext);

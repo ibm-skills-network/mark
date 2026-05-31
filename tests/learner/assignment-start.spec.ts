@@ -7,9 +7,6 @@ test.describe("Learner - Assignment Start", () => {
   }) => {
     await page.goto(`/learner/${assignmentIds.learner.id}`);
 
-    // Wait for the page to load
-    await page.waitForLoadState("networkidle");
-
     // Verify the assignment page loads
     await expect(page).toHaveURL(
       new RegExp(`/learner/${assignmentIds.learner.id}`),
