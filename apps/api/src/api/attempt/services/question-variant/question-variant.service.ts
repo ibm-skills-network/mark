@@ -2,6 +2,7 @@
 import { Injectable } from "@nestjs/common";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { shuffleArray } from "src/common/utils/shuffle.util";
 import { PrismaService } from "../../../../database/prisma.service";
 
 @Injectable()
@@ -89,8 +90,7 @@ export class QuestionVariantService {
     }
 
     if (shouldShuffle) {
-      parsedChoices = [...parsedChoices];
-      parsedChoices.sort(() => Math.random() - 0.5);
+      parsedChoices = shuffleArray(parsedChoices);
     }
 
     return JSON.stringify(parsedChoices);

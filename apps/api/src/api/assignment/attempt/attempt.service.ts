@@ -15,6 +15,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import IORedis from "ioredis";
 import { createRedisConnection } from "src/job-queue/redis.connection";
+import { shuffleArray } from "src/common/utils/shuffle.util";
 import {
   Assignment,
   Question,
@@ -1928,8 +1929,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       return;
     }
     if (shouldShuffle) {
-      parsed = [...parsed];
-      parsed.sort(() => Math.random() - 0.5);
+      parsed = shuffleArray(parsed);
     }
     return JSON.stringify(parsed);
   }
