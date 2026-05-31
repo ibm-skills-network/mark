@@ -39,6 +39,7 @@ import {
   getFileExtension,
 } from "@/lib/shared";
 import PdfAnnotationModal from "./PdfAnnotationModal";
+import { getSelectedChoiceIndexes } from "./choiceSelection";
 
 interface Props {
   question: QuestionStore;
@@ -767,15 +768,23 @@ const Question: FC<Props> = ({
 
       const isSingleChoice = type === "SINGLE_CORRECT";
 
+      const responseStrings: string[] = [];
+      if (typeof learnerResponse === "string") {
+        responseStrings.push(learnerResponse);
+      } else if (Array.isArray(learnerResponse)) {
+        for (const item of learnerResponse) {
+          if (typeof item === "string") responseStrings.push(item);
+        }
+      }
+      const selectedChoiceIndexes = getSelectedChoiceIndexes(
+        responseStrings,
+        choices,
+      );
+
       return (
         <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
           {choices.map((choiceObj, idx) => {
-            const isSelected = Array.isArray(learnerResponse)
-              ? (learnerResponse as string[]).some(
-                  (ans) => ans === choiceObj.choice || ans === String(idx),
-                )
-              : learnerResponse === choiceObj.choice ||
-                learnerResponse === String(idx);
+            const isSelected = selectedChoiceIndexes.has(idx);
 
             const isCorrect = choiceObj.isCorrect;
             return (
