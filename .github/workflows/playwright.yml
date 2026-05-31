@@ -2,7 +2,7 @@ name: Playwright Tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, feat/playwright-workflow]
   pull_request:
     branches: [master]
   workflow_dispatch:
