@@ -3,6 +3,7 @@
 import animationData from "@/animations/LoadSN.json";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import LoadingPage from "@/app/loading";
+import AccessRestricted from "@/components/AccessRestricted";
 import ErrorPage from "@/components/ErrorPage";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
@@ -117,6 +118,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     return <LoadingPage animationData={animationData} />;
   }
   if (error) {
+    if (error.code === 403) {
+      return <AccessRestricted />;
+    }
     return <ErrorPage error={error.message} statusCode={error.code} />;
   }
   if (!assignment) {
