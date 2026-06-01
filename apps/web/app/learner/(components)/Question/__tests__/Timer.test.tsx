@@ -3,6 +3,7 @@
  */
 
 import { render, act } from "@testing-library/react";
+import { toast } from "sonner";
 import type { QuestionStore } from "@/config/types";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Timer from "../Timer";
@@ -73,5 +74,26 @@ describe("Timer auto-submit", () => {
 
     expect(mockSubmitAssignment).toHaveBeenCalled();
     expect(mockSubmitAssignment.mock.calls[0][0]).toBe(3428);
+  });
+
+  it("surfaces an error toast when the timed auto-submit rejects, instead of losing it silently", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    // A 401/network failure during the fire-and-forget auto-submit must not be
+    // swallowed: the learner has to learn the submission did not go through.
+    mockSubmitAssignment.mockRejectedValue(new Error("Unauthorized"));
+
+    render(<Timer />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(2100);
+      // Flush the chain of microtasks the awaited (rejected) submitAssignment
+      // schedules so the catch's toast.error has run before we assert.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockSubmitAssignment).toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
   });
 });

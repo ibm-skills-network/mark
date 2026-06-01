@@ -1,4 +1,4 @@
-import SessionExpired from "@/components/SessionExpired";
+import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import { getUser } from "@/lib/talkToBackend";
 import { headers } from "next/headers";
 import AuthFetchToAbout from "./AuthFetchToAbout";
@@ -27,7 +27,10 @@ async function Component(props: Props) {
     );
   } catch (error) {
     console.error("Learner page error:", error);
-    return <SessionExpired />;
+    // getUser throws Error("Unauthorized") for 401; statusFromError maps that to
+    // 401 -> SessionExpired and anything else to a generic ErrorPage rather than
+    // telling every failure to "reload to sign back in".
+    return <ErrorScreen status={statusFromError(error)} />;
   }
 }
 

@@ -22,9 +22,10 @@ function RefreshIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 /**
- * Shown when a learner's session has expired (401). The one clear action is to
- * reload, which re-establishes the LMS session; relaunching from the course is
- * the fallback.
+ * Shown when a learner's session has expired (401). Reload re-establishes the
+ * LMS session for a transient blip; the "Back to home" link is the escape hatch
+ * so a genuinely-gone session doesn't trap the learner reloading the same
+ * failing assignment URL forever (the learner home redirects out to "/").
  */
 export default function SessionExpired() {
   return (
@@ -32,14 +33,22 @@ export default function SessionExpired() {
       title="Your session has expired"
       description="Reload the page to sign back in and pick up where you left off."
       action={
-        <Button
-          version="primary"
-          LeftIcon={RefreshIcon}
-          onClick={() => window.location.reload()}
-          className="px-6"
-        >
-          Reload page
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button
+            version="primary"
+            LeftIcon={RefreshIcon}
+            onClick={() => window.location.reload()}
+            className="px-6"
+          >
+            Reload page
+          </Button>
+          <a
+            href="/learner"
+            className="btn-tertiary inline-flex items-center px-6"
+          >
+            Back to home
+          </a>
+        </div>
       }
       footnote={
         <>

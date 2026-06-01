@@ -3,7 +3,7 @@
 import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
 import ErrorModal from "@/components/ErrorModal";
-import SessionExpired from "@/components/SessionExpired";
+import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import {
   createAttempt,
   getAttempt,
@@ -46,9 +46,13 @@ async function LearnerLayout(props: Props) {
   try {
     user = await getUser(cookieHeader);
     log("User fetched", `Role: ${user?.role ?? "unknown"}`);
-  } catch {
-    log("User fetch failed", "Unauthorized");
-    return <SessionExpired />;
+  } catch (error) {
+    const status = statusFromError(error);
+    log(
+      "User fetch failed",
+      status === 401 ? "Unauthorized" : `Status ${status}`,
+    );
+    return <ErrorScreen status={status} />;
   }
 
   const role = user?.role;
@@ -189,7 +193,12 @@ async function AttemptLoader({
     lang,
   );
   if (!attempt) {
-    throw new Error("Attempt could not be fetched.");
+    // getAttempt swallows the underlying status and returns undefined, so we
+    // can't distinguish a 401 here. Render a contained error instead of throwing
+    // to Next's error boundary (which would show the generic app crash page).
+    return (
+      <ErrorModal error={"Attempt could not be fetched"} statusCode={500} />
+    );
   }
 
   return (

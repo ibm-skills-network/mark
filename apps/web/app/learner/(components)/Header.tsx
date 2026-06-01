@@ -33,16 +33,16 @@ import {
   useGitHubStore,
   useLearnerStore,
 } from "@/stores/learner";
+import { useAssignmentId } from "@/hooks/use-assignment-id";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
 import {
-  useParams,
   usePathname,
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
 import GradingProgressModal from "./GradingProgressModal";
@@ -115,10 +115,11 @@ function LearnerHeader() {
   // The URL is authoritative for the assignment id. Reading it from a store
   // populated only on the overview route leaves deep links / hard refreshes
   // with a null id and silently drops the submit.
-  const { assignmentId: assignmentIdParam } = useParams<{
-    assignmentId: string;
-  }>();
-  const assignmentId = Math.trunc(Number(assignmentIdParam));
+  const { assignmentId, assignmentIdParam } = useAssignmentId();
+  // Guards re-entrancy: submit can be triggered by the button AND by a window
+  // "triggerAssignmentSubmission" event, so a ref (not the async-stale
+  // `submitting` state) prevents a double submission of the same attempt.
+  const submitInFlightRef = useRef(false);
   const isInQuestionPage = pathname.includes("questions");
   const isAttemptPage = pathname.includes("attempts");
   const isSuccessPage = pathname.includes("successPage");
@@ -224,6 +225,10 @@ function LearnerHeader() {
   };
 
   const handleSubmitAssignment = useCallback(async () => {
+    if (submitInFlightRef.current) {
+      return;
+    }
+    submitInFlightRef.current = true;
     let responsesForQuestions: QuestionAttemptRequestWithId[] = [];
     try {
       responsesForQuestions = questions.map((q) => ({
@@ -262,6 +267,7 @@ function LearnerHeader() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       toast.error(`Error processing responses: ${errorMessage}`);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -283,6 +289,7 @@ function LearnerHeader() {
       );
       setShowGradingModal(false);
       setSubmitting(false);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -290,6 +297,7 @@ function LearnerHeader() {
       toast.error("Active attempt ID is missing.");
       setSubmitting(false);
       setShowGradingModal(false);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -363,12 +371,21 @@ function LearnerHeader() {
           useLearnerStore.getState().setUserPreferedLanguage(null);
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
         }, 500);
+      } else {
+        // submitAssignment resolved without a result (e.g. an SSE finalize
+        // event carrying no payload). Without this branch submitting/modal stay
+        // true forever and the grading modal spins with no error and no exit.
+        toast.error("We couldn't complete your submission. Please try again.");
+        setSubmitting(false);
+        setShowGradingModal(false);
+        submitInFlightRef.current = false;
       }
     } catch (error) {
       setSubmitting(false);
       setTimeout(() => {
         setShowGradingModal(false);
       }, 2000);
+      submitInFlightRef.current = false;
       return;
     }
   }, [
