@@ -10,11 +10,7 @@ export default function AccessRestricted() {
     <LearnerNotice
       title="You don’t have access to this assignment"
       description="Make sure you’re signed in to the right account and opening it from your course. You may need a valid enrollment or instructor access."
-      footnote={
-        <>
-          Still stuck? Please try relaunching the assignment {" "}
-        </>
-      }
+      footnote="Still stuck? Relaunch the assignment from your course."
     />
   );
 }
