@@ -1,0 +1,94 @@
+import { checkTextResponseSanity } from "./text-response-sanity";
+
+/**
+ * Build a string of low-codepoint control bytes (0x00..0x0F) without
+ * embedding them literally in the test source — embedded NULs/control
+ * chars cause git/GitHub to flag this file as binary and hide the diff
+ * from PR review tooling.
+ */
+function controlByteBlock(): string {
+  return Array.from({ length: 16 }, (_, i) => String.fromCodePoint(i)).join("");
+}
+
+describe("checkTextResponseSanity", () => {
+  describe("usable responses", () => {
+    it.each([
+      ["short legit answer", "Yes."],
+      ["DB2 short answer", "DB2 supports stored procedures."],
+      [
+        "normal essay paragraph",
+        "IBM DB2 in 2006 was a mature relational database. It supported stored procedures, triggers, and offered both row-level and column-level security.",
+      ],
+      [
+        "unicode / non-ASCII letters",
+        "Las características de IBM DB2 incluyen seguridad, integridad y disponibilidad de los datos. Soporta procedimientos almacenados.",
+      ],
+      ["code snippet", "function add(a, b) { return a + b; }\nadd(1, 2);"],
+      [
+        "text with emoji",
+        "DB2 is great for transactions! 👍 Highly available.",
+      ],
+    ])("accepts %s", (_label, response) => {
+      expect(checkTextResponseSanity(response).isUsable).toBe(true);
+    });
+  });
+
+  describe("rejected responses", () => {
+    it("rejects empty response", () => {
+      const result = checkTextResponseSanity("");
+      expect(result.isUsable).toBe(false);
+      expect(result.reason).toBe("response_too_short");
+    });
+
+    it("rejects whitespace-only response", () => {
+      const result = checkTextResponseSanity("   \n\t  ");
+      expect(result.isUsable).toBe(false);
+      expect(result.reason).toBe("response_too_short");
+    });
+
+    it("rejects raw-binary-like response (low printable ratio)", () => {
+      const garbage = (controlByteBlock() + "abc").repeat(3);
+      const result = checkTextResponseSanity(garbage);
+      expect(result.isUsable).toBe(false);
+      expect(result.reason).toBe("response_unprintable");
+    });
+
+    it("rejects base64-encoded random data (high entropy)", () => {
+      // Synthetic base64 used to exercise the noise gate, not a real secret.
+      const base64Random =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8" + // pragma: allowlist secret
+        "/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==" + // pragma: allowlist secret
+        "Z3JhcGhpY2FsX3JhbmRvbV9kYXRhX3doaWNoX2RvZXNudF9sb29rX2xpa2Vf" + // pragma: allowlist secret
+        "ZW5nbGlzaF9pdHNfanVzdF9hX2J1bmNoX29mX2JhYmJsZQ==" + // pragma: allowlist secret
+        "kJDk2N1iIqgJlj1XzD8JlMOPcKjI0lAphE32MbZUDVQjOOZ4mAk6kbA1NlhX" + // pragma: allowlist secret
+        "wqLfX1PZ8xkJlwRZ4U5b/Aplxq5gnYsftBHHpAtdTKnj"; // pragma: allowlist secret
+      const result = checkTextResponseSanity(base64Random);
+      expect(result.isUsable).toBe(false);
+      expect(result.reason).toBe("response_high_entropy");
+    });
+
+    it("accepts long natural-language essay below entropy threshold", () => {
+      const essay =
+        "The transaction management features of IBM DB2 are built around ACID properties. ".repeat(
+          10,
+        );
+      const result = checkTextResponseSanity(essay);
+      expect(result.isUsable).toBe(true);
+    });
+  });
+
+  describe("details", () => {
+    it("returns length / printableRatio / entropy when rejecting", () => {
+      // 6 non-whitespace control bytes + ABCDEFGHIJK = 17 chars,
+      // printableRatio = 11/17 ≈ 0.65, below the 0.7 threshold.
+      const controlBytes = [1, 2, 3, 4, 5, 6]
+        .map((c) => String.fromCodePoint(c))
+        .join("");
+      const result = checkTextResponseSanity(controlBytes + "ABCDEFGHIJK");
+      expect(result.isUsable).toBe(false);
+      expect(result.details?.length).toBeGreaterThan(0);
+      expect(result.details?.printableRatio).toBeLessThan(0.7);
+      expect(result.details?.entropyBitsPerChar).toBeGreaterThan(0);
+    });
+  });
+});

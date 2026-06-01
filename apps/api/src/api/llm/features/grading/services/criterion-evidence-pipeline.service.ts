@@ -37,12 +37,23 @@ interface PipelineRequest {
   };
 }
 
+export type PipelineSelectionReason =
+  | "judge_approved"
+  | "highest_support_score";
+
 interface PipelineResult {
   grades: CriterionGrade[];
   evidence: CriterionEvidenceResponse[];
   judgeCritiques: JudgeCritique[];
   summary: GradeSummary;
   audit: EvidenceAuditLog;
+  /**
+   * "judge_approved" means the judge approved the grades on the final attempt.
+   * "highest_support_score" means the judge never approved within the retry
+   * budget and the pipeline fell back to the best-scored attempt per criterion.
+   * Surfaced so consumers can flag degraded grades in the audit + UI.
+   */
+  selectionReason: PipelineSelectionReason;
 }
 
 class AuditCollector implements LlmCallRecorder {
@@ -245,7 +256,7 @@ export class CriterionEvidencePipelineService {
       retryCount += 1;
     }
 
-    let finalSelectionReason = "judge_approved";
+    let finalSelectionReason: PipelineSelectionReason = "judge_approved";
 
     if (!judgeCritique.approved) {
       this.logger.warn(
@@ -305,6 +316,7 @@ export class CriterionEvidencePipelineService {
       judgeCritiques,
       summary,
       audit,
+      selectionReason: finalSelectionReason,
     };
   }
 

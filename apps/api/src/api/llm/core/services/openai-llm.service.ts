@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { hashForLog } from "../utils/log-redact";
 
 @Injectable()
 export class OpenAiLlmService implements IMultimodalLlmProvider {
@@ -57,7 +58,7 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       model_name: modelName,
       input_tokens: inputTokens,
       input_full_length: inputText.length,
-      input_snippet: inputText.slice(0, 400),
+      input_hash: hashForLog(inputText),
       message_count: messages.length,
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
@@ -66,7 +67,10 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
 
     const start = Date.now();
     try {
-      const result = await model.invoke(messages);
+      const result = await model.invoke(
+        messages,
+        options?.seed === undefined ? undefined : { seed: options.seed },
+      );
       const responseContent = result.content.toString();
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
@@ -76,7 +80,7 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
         output_tokens: outputTokens,
         duration_ms: Date.now() - start,
         output_full_length: responseContent.length,
-        output_snippet: responseContent.slice(0, 400),
+        output_hash: hashForLog(responseContent),
       });
 
       return {
@@ -119,7 +123,7 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       input_tokens: inputTokens,
       estimated_image_tokens: estimatedImageTokens,
       text_full_length: textContent.length,
-      text_snippet: textContent.slice(0, 400),
+      text_hash: hashForLog(textContent),
       image_data_length: imageData?.length ?? 0,
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
@@ -145,7 +149,7 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
         output_tokens: outputTokens,
         duration_ms: Date.now() - start,
         output_full_length: responseContent.length,
-        output_snippet: responseContent.slice(0, 400),
+        output_hash: hashForLog(responseContent),
       });
 
       return {

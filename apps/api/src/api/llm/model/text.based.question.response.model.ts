@@ -11,6 +11,26 @@ export interface GradingMetadata {
   cacheHitCount?: number;
   maxPossiblePoints?: number;
   gradingAudit?: unknown;
+  /**
+   * "judge_approved": judge approved the final attempt — high confidence.
+   * "highest_support_score": judge never approved within the retry budget;
+   * the score is the best-supported attempt from a degraded fallback path.
+   * "rejected_noise": pre-grading sanity gate classified the response as
+   * ungradable (empty / binary / encoded-random) and short-circuited the
+   * LLM call. Pair with rejectionReason for the specific signal.
+   * Authors/instructors can use this to flag grades worth re-reviewing.
+   */
+  selectionReason?:
+    | "judge_approved"
+    | "highest_support_score"
+    | "rejected_noise";
+
+  /**
+   * When selectionReason === "rejected_noise", names the heuristic that
+   * fired (e.g. "response_too_short", "response_unprintable",
+   * "response_high_entropy"). Undefined for graded responses.
+   */
+  rejectionReason?: string;
 }
 
 export interface StructuredCriterionData {

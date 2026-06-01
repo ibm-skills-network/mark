@@ -1,5 +1,6 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
+import { createHash } from "node:crypto";
 import {
   BadRequestException,
   Inject,
@@ -24,6 +25,7 @@ import {
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
+import { checkTextResponseSanity } from "../utils/text-response-sanity";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
 @Injectable()
@@ -96,6 +98,23 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     try {
+      const sanityStart = Date.now();
+      const sanity = checkTextResponseSanity(learnerResponse);
+      if (!sanity.isUsable) {
+        this.logger.warn("text_grading.response_rejected_as_noise", {
+          questionId: question.id,
+          assignmentId: context.assignmentId,
+          reason: sanity.reason,
+          details: sanity.details,
+        });
+        return this.buildNoiseRejectionResponse(
+          question,
+          learnerResponse,
+          sanity.reason,
+          Date.now() - sanityStart,
+        );
+      }
+
       const reuseDto = await this.tryReuseFromConsistency(
         question,
         learnerResponse,
@@ -258,5 +277,44 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
       ...responseDto.metadata,
       rationale: rationaleText,
     };
+  }
+
+  /**
+   * Build a zero-score response for input the sanity gate classified as
+   * unusable noise. Avoids spending LLM tokens on /dev/urandom-style input
+   * while still producing a learner-visible explanation and an auditable
+   * metadata trail. Populates the full GradingMetadata shape (judgeApproved,
+   * attempts, gradingTimeMs, contentHash) so downstream consumers don't
+   * need to special-case the rejection path.
+   */
+  private buildNoiseRejectionResponse(
+    question: QuestionDto,
+    learnerResponse: string,
+    reason: string | undefined,
+    gradingTimeMs: number,
+  ): CreateQuestionResponseAttemptResponseDto {
+    const message =
+      reason === "response_too_short"
+        ? "Your response was too short to grade. Please re-submit a written answer."
+        : "Your response could not be graded because it does not appear to contain readable text. Please re-submit a written answer.";
+
+    const contentHash = createHash("sha256")
+      .update(learnerResponse ?? "")
+      .digest("hex");
+
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    responseDto.totalPoints = 0;
+    responseDto.feedback = [{ feedback: message }];
+    responseDto.metadata = {
+      judgeApproved: false,
+      judgeUsed: false,
+      attempts: 0,
+      gradingTimeMs,
+      contentHash,
+      selectionReason: "rejected_noise",
+      rejectionReason: reason,
+      maxPossiblePoints: question.totalPoints,
+    };
+    return responseDto;
   }
 }

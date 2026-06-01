@@ -10,6 +10,13 @@ export interface LlmRequestOptions {
   maxTokens?: number;
   modelName?: string;
   imageDetail?: "auto" | "low" | "high";
+  /**
+   * OpenAI sampling seed. With temperature=0 + topP=1 + a fixed seed, repeat
+   * requests with identical input return identical output (best-effort; OpenAI
+   * does not formally guarantee determinism, but seeded calls collide far more
+   * often than unseeded ones).
+   */
+  seed?: number;
 }
 
 export interface LlmResponse {
