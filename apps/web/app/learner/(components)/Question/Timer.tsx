@@ -4,6 +4,7 @@ import type {
   QuestionStore,
   ReplaceAssignmentRequest,
 } from "@/config/types";
+import { useAssignmentId } from "@/hooks/use-assignment-id";
 import useCountdown from "@/hooks/use-countdown";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
@@ -13,7 +14,12 @@ import {
   useLearnerStore,
 } from "@/stores/learner";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import { toast } from "sonner";
 
 type Props = ComponentPropsWithoutRef<"div">;
@@ -25,7 +31,11 @@ function Timer(props: Props) {
   );
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [role, setRole] = useState<"author" | "learner">("learner");
+  // The auto-submit effect deliberately omits role from its deps; reading the
+  // role through a ref keeps the timed submit from capturing the stale "learner"
+  // default when getUser() resolves to "author" after the effect has run. (Only
+  // submission uses the role — the render does not — so a ref, not state.)
+  const roleRef = useRef<"author" | "learner">("learner");
   const [
     activeAttemptId,
     questions,
@@ -45,10 +55,7 @@ function Timer(props: Props) {
     state.setShowSubmissionFeedback,
     state.setLearnerStore,
   ]);
-  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
-    state.assignmentDetails,
-    state.setGrade,
-  ]);
+  const setGrade = useAssignmentDetails((state) => state.setGrade);
   const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
     "assignmentConfig",
@@ -63,7 +70,10 @@ function Timer(props: Props) {
     },
   );
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const assignmentId = assignmentDetails?.id;
+  // The URL is authoritative; assignmentDetails is only populated on the
+  // overview route and is null on a deep link / hard refresh, which would
+  // otherwise gate off auto-submit and silently drop a timed submission.
+  const { assignmentId, assignmentIdParam } = useAssignmentId();
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const hasCountdown = typeof countdown === "number";
   const safeCountdown = hasCountdown ? countdown : 0;
@@ -78,7 +88,7 @@ function Timer(props: Props) {
     const getUserRole = async () => {
       const user = await getUser();
       if (user) {
-        setRole(user.role);
+        roleRef.current = user.role;
       }
     };
     void getUserRole();
@@ -90,7 +100,7 @@ function Timer(props: Props) {
         learnerTextResponse: q.learnerTextResponse || "",
         learnerUrlResponse: q.learnerUrlResponse || "",
         learnerChoices:
-          role === "author"
+          roleRef.current === "author"
             ? q.choices
                 ?.map((choice, index) =>
                   q.learnerChoices?.find((c) => String(c) === String(index))
@@ -129,20 +139,43 @@ function Timer(props: Props) {
     );
 
     if (!assignmentId) {
+      console.warn(
+        "[learner] auto-submit blocked: assignmentId missing from route",
+        {
+          assignmentIdParam,
+          hasActiveAttemptId: activeAttemptId !== null,
+        },
+      );
       toast.error(
-        "Assignment ID is missing, exit and try launching the assignment again.",
+        "Something went wrong. Please reload the page or exit and relaunch the assignment.",
       );
       return;
     }
 
-    const res = await submitAssignment(
-      assignmentId,
-      activeAttemptId,
-      responsesForQuestions,
-      userPreferedLanguage,
-      role === "author" ? authorQuestions : undefined,
-      role === "author" ? authorAssignmentDetails : undefined,
-    );
+    let res: Awaited<ReturnType<typeof submitAssignment>>;
+    try {
+      res = await submitAssignment(
+        assignmentId,
+        activeAttemptId,
+        responsesForQuestions,
+        userPreferedLanguage,
+        roleRef.current === "author" ? authorQuestions : undefined,
+        roleRef.current === "author" ? authorAssignmentDetails : undefined,
+      );
+    } catch (error) {
+      // Auto-submit runs from a fire-and-forget setTimeout; without this catch a
+      // 401/network rejection is an unhandled promise and the learner is told
+      // their work "will be graded automatically" while it was silently lost.
+      console.error("[learner] auto-submit failed", {
+        assignmentId,
+        activeAttemptId,
+        error,
+      });
+      toast.error(
+        "We couldn't submit your assignment automatically. Check your connection and use the Submit button to try again.",
+      );
+      return;
+    }
     if (!res) {
       toast.error("Failed to submit assignment.");
       return;

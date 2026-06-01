@@ -53,6 +53,13 @@ env:
   # splitting + PDF structure extraction). The code falls back to 50000 when
   # this is unset, empty, or not a positive integer.
   GRADING_MAX_EVIDENCE_BLOCKS: "50000"
+  # Kill switch for structure-preserving PDF extraction (the pdfjs + canvas
+  # render path). "true" (default) uses it; set to "false" to force all PDFs
+  # through plain text extraction with no code change — an escape hatch if the
+  # canvas path regresses (it has crashed workers via native segfault /
+  # unhandled rejection on malformed PDFs). Runtime check is strict equality
+  # with "false".
+  ENABLE_PDF_STRUCTURED_EXTRACTION: "true"
   # Master switch for the dependency-level wave grading scheduler. mark-jobs
   # is where ATTEMPT_GRADE actually executes (JOBS_EXECUTE_LOCALLY=true), so
   # this is the tier where the flag is load-bearing. Chart default "false"

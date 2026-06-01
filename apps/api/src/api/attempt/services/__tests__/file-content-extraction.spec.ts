@@ -537,3 +537,48 @@ describe("FileContentExtractionService.extractExcelText - used-range clamping", 
     expect(payload.totalUsedCells).toBeGreaterThan(0);
   });
 });
+
+describe("FileContentExtractionService.shouldUseStructuredExtraction", () => {
+  let service: FileContentExtractionService;
+  const original = process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    } else {
+      process.env.ENABLE_PDF_STRUCTURED_EXTRACTION = original;
+    }
+  });
+
+  it("enables structured extraction for a PDF by default (flag unset)", () => {
+    delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    expect((service as any).shouldUseStructuredExtraction(true, false)).toBe(
+      true,
+    );
+  });
+
+  it("disables it globally when ENABLE_PDF_STRUCTURED_EXTRACTION=false (kill switch)", () => {
+    process.env.ENABLE_PDF_STRUCTURED_EXTRACTION = "false";
+    expect((service as any).shouldUseStructuredExtraction(true, false)).toBe(
+      false,
+    );
+  });
+
+  it("respects a per-call opt-out even when the flag is enabled", () => {
+    delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    expect((service as any).shouldUseStructuredExtraction(true, true)).toBe(
+      false,
+    );
+  });
+
+  it("never uses structured extraction for non-PDF files", () => {
+    delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    expect((service as any).shouldUseStructuredExtraction(false, false)).toBe(
+      false,
+    );
+  });
+});

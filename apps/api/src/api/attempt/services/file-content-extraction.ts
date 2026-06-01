@@ -207,6 +207,24 @@ export class FileContentExtractionService {
     return extractedFiles;
   }
 
+  /**
+   * Whether structure-preserving PDF extraction (the pdfjs + canvas render
+   * path) should run for this file. Gated by ENABLE_PDF_STRUCTURED_EXTRACTION
+   * so the crash-prone canvas path can be disabled via config without a code
+   * change — set it to the string "false" to force all PDFs through plain
+   * text extraction. Defaults to enabled. A per-call opt-out is always
+   * honoured.
+   */
+  private shouldUseStructuredExtraction(
+    isPDF: boolean,
+    optedOut: boolean,
+  ): boolean {
+    if (process.env.ENABLE_PDF_STRUCTURED_EXTRACTION === "false") {
+      return false;
+    }
+    return isPDF && !optedOut;
+  }
+
   private async extractSingleFileContent(
     file: LearnerFileUpload,
     options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
@@ -215,8 +233,10 @@ export class FileContentExtractionService {
       file.filename.toLowerCase().endsWith(".pdf") ||
       file.fileType === "application/pdf";
 
-    const useStructuredExtraction =
-      isPDF && options?.useStructuredExtraction !== false;
+    const useStructuredExtraction = this.shouldUseStructuredExtraction(
+      isPDF,
+      options?.useStructuredExtraction === false,
+    );
 
     const useVisionMode = isPDF && options?.useVisionForPDFs;
 
