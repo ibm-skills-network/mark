@@ -1,57 +1,49 @@
-import ar from "./ar/translations.json";
-import de from "./de/translations.json";
-import el from "./el/translations.json";
-import en from "./en/translations.json";
-import es from "./es/translations.json";
-import fr from "./fr/translations.json";
-import hi from "./hi/translations.json";
-import hu from "./hu/translations.json";
-import id from "./id/translations.json";
-import it from "./it/translations.json";
-import ja from "./ja/translations.json";
-import kk from "./kk/translations.json";
-import ko from "./ko/translations.json";
-import nl from "./nl/translations.json";
-import pl from "./pl/translations.json";
-import pt from "./pt/translations.json";
-import ru from "./ru/translations.json";
-import sv from "./sv/translations.json";
-import th from "./th/translations.json";
-import tr from "./tr/translations.json";
-import ukUA from "./uk-UA/translations.json";
-import zhCN from "./zh-CN/translations.json";
-import zhTW from "./zh-TW/translations.json";
-
 export type UiTranslationMap = Record<string, string>;
 
-const staticUiTranslations: Record<string, UiTranslationMap> = {
-  ar,
-  de,
-  el,
-  en,
-  es,
-  fr,
-  hi,
-  hu,
-  id,
-  it,
-  ja,
-  kk,
-  ko,
-  nl,
-  pl,
-  pt,
-  ru,
-  sv,
-  th,
-  tr,
-  "uk-UA": ukUA,
-  "zh-CN": zhCN,
-  "zh-TW": zhTW,
-};
+/**
+ * Language codes that have a translations.json on disk. Used as a whitelist so
+ * we never interpolate untrusted input into the dynamic import path, and so the
+ * bundler can enumerate the per-language chunks ahead of time.
+ *
+ * Keep this in sync with the directories under lib/static-ui-translations/.
+ */
+const SUPPORTED_LANGUAGE_CODES = new Set<string>([
+  "ar",
+  "de",
+  "el",
+  "en",
+  "es",
+  "fr",
+  "hi",
+  "hu",
+  "id",
+  "it",
+  "ja",
+  "kk",
+  "ko",
+  "nl",
+  "pl",
+  "pt",
+  "ru",
+  "sv",
+  "th",
+  "tr",
+  "uk-UA",
+  "zh-CN",
+  "zh-TW",
+]);
 
+// Per-language dictionaries are large (~90-160 KB each, ~2.4 MB total). Loading
+// them with a dynamic import() splits each language into its own chunk that is
+// only fetched when that language is actually selected, instead of bundling all
+// 23 into the main client payload.
 export async function getStaticUiTranslations(
   languageCode: string,
 ): Promise<UiTranslationMap> {
-  return staticUiTranslations[languageCode] || {};
+  if (!SUPPORTED_LANGUAGE_CODES.has(languageCode)) {
+    return {};
+  }
+
+  const module = await import(`./${languageCode}/translations.json`);
+  return module.default as UiTranslationMap;
 }
