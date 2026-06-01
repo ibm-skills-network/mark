@@ -61,5 +61,5 @@ COPY --chown=node:node --from=build ${DIR}/apps/api/src/scripts ./scripts
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/main.js"]
 EXPOSE 3000
