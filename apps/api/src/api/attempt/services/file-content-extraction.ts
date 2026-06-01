@@ -2799,6 +2799,68 @@ export class FileContentExtractionService {
     }
   }
 
+  /**
+   * Walk only real cell keys on the worksheet and compute the bounding box of
+   * cells that actually carry a value. SheetJS preserves the worksheet's
+   * declared dimension verbatim in `!ref`, which on Excel files saved with a
+   * full-sheet formal dimension (`A1:XFD1048576`) covers 17 billion virtual
+   * cells. Trusting that value blindly causes downstream consumers such as
+   * `sheet_to_csv` to materialize a row for every virtual row in the sheet.
+   * Returns null when the worksheet contains no real cells.
+   */
+  private computeUsedRange(worksheet: XLSX.WorkSheet): XLSX.Range | null {
+    let minRow = Number.POSITIVE_INFINITY;
+    let minCol = Number.POSITIVE_INFINITY;
+    let maxRow = Number.NEGATIVE_INFINITY;
+    let maxCol = Number.NEGATIVE_INFINITY;
+    let found = false;
+
+    for (const key in worksheet) {
+      if (key.charCodeAt(0) === 33) continue; // '!' meta key
+      const addr = XLSX.utils.decode_cell(key);
+      if (
+        !Number.isFinite(addr.r) ||
+        !Number.isFinite(addr.c) ||
+        addr.r < 0 ||
+        addr.c < 0
+      ) {
+        continue;
+      }
+      found = true;
+      if (addr.r < minRow) minRow = addr.r;
+      if (addr.c < minCol) minCol = addr.c;
+      if (addr.r > maxRow) maxRow = addr.r;
+      if (addr.c > maxCol) maxCol = addr.c;
+    }
+
+    if (!found) return null;
+
+    return {
+      s: { r: minRow, c: minCol },
+      e: { r: maxRow, c: maxCol },
+    };
+  }
+
+  /**
+   * Thin wrapper around `XLSX.read` so tests can swap the parsed workbook
+   * without going through a full disk-format round-trip (writing a workbook
+   * with a formal `A1:XFD1048576` !ref is itself a memory bomb under
+   * SheetJS, so the cheap path is to build a tiny workbook here and
+   * monkey-patch its !ref in the spy). The options set here intentionally
+   * OMIT `sheetStubs` — see the comment in extractExcelText for why.
+   */
+  private readExcelWorkbook(buffer: Buffer): XLSX.WorkBook {
+    return XLSX.read(buffer, {
+      type: "buffer",
+      cellText: true,
+      cellDates: true,
+      cellNF: true,
+      cellStyles: true,
+      cellFormula: true,
+      password: undefined,
+    });
+  }
+
   private async extractExcelText(
     buffer: Buffer,
     isXlsx = true,
@@ -2812,42 +2874,49 @@ export class FileContentExtractionService {
     };
   }> {
     try {
-      const workbook = XLSX.read(buffer, {
-        type: "buffer",
-        cellText: true,
-        cellDates: true,
-        cellNF: true,
-        cellStyles: true,
-        cellFormula: true,
-        sheetStubs: true,
-        password: undefined,
-      });
+      // sheetStubs intentionally OFF inside readExcelWorkbook — stubs cause
+      // SheetJS to materialize a placeholder object for every cell in `!ref`.
+      // On worksheets with a formal full-sheet dimension that produces 17
+      // billion stub keys and turns any `for (const cell in worksheet)` loop
+      // into a memory bomb. We compute the real used range ourselves below.
+      const workbook = this.readExcelWorkbook(buffer);
 
       let allText = "=== EXCEL WORKBOOK ===\n";
       const sheetNames = workbook.SheetNames;
       allText += `Total Sheets: ${sheetNames.length}\n\n`;
+
+      let totalUsedCells = 0;
 
       for (const sheetName of sheetNames) {
         const worksheet = workbook.Sheets[sheetName];
 
         allText += `\n=== SHEET: ${sheetName} ===\n`;
 
-        const range = worksheet["!ref"]
-          ? XLSX.utils.decode_range(worksheet["!ref"])
-          : null;
-        if (range) {
-          allText += `Range: ${worksheet["!ref"]} (${
-            range.e.r - range.s.r + 1
-          } rows × ${range.e.c - range.s.c + 1} cols)\n\n`;
+        // Replace the worksheet's declared !ref with a tight range covering
+        // only real cells. This bounds sheet_to_csv to the actual data and
+        // prevents the formal-dimension explosion.
+        const tightRange = this.computeUsedRange(worksheet);
+        if (tightRange) {
+          const tightRef = XLSX.utils.encode_range(tightRange);
+          worksheet["!ref"] = tightRef;
+          allText += `Range: ${tightRef} (${
+            tightRange.e.r - tightRange.s.r + 1
+          } rows × ${tightRange.e.c - tightRange.s.c + 1} cols)\n\n`;
+        } else {
+          // Drop !ref entirely so sheet_to_csv emits nothing rather than
+          // honoring a stale declared dimension over an empty sheet.
+          delete worksheet["!ref"];
         }
 
-        const csvText = XLSX.utils.sheet_to_csv(worksheet, {
-          blankrows: true,
-          skipHidden: false,
-          rawNumbers: false,
-          strip: false,
-          FS: "\t",
-        });
+        const csvText = tightRange
+          ? XLSX.utils.sheet_to_csv(worksheet, {
+              blankrows: true,
+              skipHidden: false,
+              rawNumbers: false,
+              strip: false,
+              FS: "\t",
+            })
+          : "";
 
         if (csvText.trim()) {
           allText += csvText + "\n";
@@ -2855,25 +2924,38 @@ export class FileContentExtractionService {
           allText += "[Empty sheet]\n";
         }
 
+        let sheetUsedCells = 0;
         const formulas: string[] = [];
         for (const cell in worksheet) {
-          if (cell[0] === "!") continue;
+          if (cell.charCodeAt(0) === 33) continue; // '!' meta keys
+          sheetUsedCells += 1;
           const cellData = worksheet[cell];
-          if (cellData.f) {
-            formulas.push(`${cell}: ${cellData.f}`);
+          if (cellData && typeof cellData === "object" && "f" in cellData) {
+            const formula = (cellData as { f?: unknown }).f;
+            if (typeof formula === "string" && formula.length > 0) {
+              formulas.push(`${cell}: ${formula}`);
+            }
           }
         }
+        totalUsedCells += sheetUsedCells;
 
         if (formulas.length > 0) {
           allText += "\n--- FORMULAS ---\n";
           allText += formulas.join("\n") + "\n";
         }
 
-        if (worksheet["!comments"]) {
+        const comments = worksheet["!comments"] as
+          | Record<string, { t?: string } | string>
+          | undefined;
+        if (comments) {
           allText += "\n--- COMMENTS ---\n";
-          for (const cell in worksheet["!comments"]) {
-            const comment = worksheet["!comments"][cell];
-            allText += `${cell}: ${comment.t || comment}\n`;
+          for (const cell in comments) {
+            const comment = comments[cell];
+            const commentText =
+              typeof comment === "object" && comment !== null && "t" in comment
+                ? (comment.t ?? String(comment))
+                : String(comment);
+            allText += `${cell}: ${commentText}\n`;
           }
         }
       }
@@ -2897,8 +2979,18 @@ export class FileContentExtractionService {
         }
       }
 
-      this.logger.debug(
-        `Extracted ${sheetNames.length} sheets, ${chartCount} charts, ${imageCount} images from Excel`,
+      // Summary log — one record per workbook, queryable by the numeric
+      // fields. The NestJS Logger treats a second object argument as a string
+      // context label rather than structured metadata, so the fields are
+      // folded into the message via JSON.stringify to keep them in the log
+      // line (production can then alert on `totalUsedCells` outliers).
+      this.logger.log(
+        `xlsx.extract.complete ${JSON.stringify({
+          sheetCount: sheetNames.length,
+          totalUsedCells,
+          chartCount,
+          imageCount,
+        })}`,
       );
 
       return {
@@ -2915,6 +3007,13 @@ export class FileContentExtractionService {
         typeof error === "object" && error !== null && "message" in error
           ? (error as { message: string }).message
           : String(error);
+      // Log before translating — the outer Error wrapper hides the original
+      // stack from downstream catch sites, but operators need the cause to
+      // diagnose extraction failures. Fold the field into the message: the
+      // NestJS Logger would otherwise stringify the object as a context label.
+      this.logger.error(
+        `xlsx.extract.failed ${JSON.stringify({ error: errorMessage })}`,
+      );
       throw new Error(`Excel extraction failed: ${errorMessage}`);
     }
   }

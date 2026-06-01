@@ -121,6 +121,11 @@ import { TranslationService } from "./services/translation/translation.service";
     AttemptRegradingService,
     AttemptReportingService,
     QuestionResponseService,
+    // Exported so apps/jobs JobWorkerService can call markFailed when a
+    // grading BullMQ job permanent-fails — keeps GradingProgress.status
+    // in sync with the worker's terminal state instead of leaving rows
+    // stuck at PROCESSING when the UI's SSE stream goes silent.
+    "GradingProgressService",
   ],
 })
 export class AttemptModule {}

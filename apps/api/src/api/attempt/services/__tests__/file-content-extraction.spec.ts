@@ -392,3 +392,148 @@ describe("FileContentExtractionService.extractExcelText - chart and image detect
     expect(result.text).toContain("Revenue");
   });
 });
+
+// ─── extractExcelText – formal-dimension clamp ────────────────────────────
+
+describe("FileContentExtractionService.extractExcelText - used-range clamping", () => {
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  // Jest test timeout: with the bug present, sheet_to_csv on a wide !ref
+  // hangs the worker (the original production failure mode). A tight per-test
+  // timeout converts that into a deterministic failure inside Jest.
+  it("clamps a worksheet with formal full-sheet !ref to only its real used cells", async () => {
+    // Strategy: build a normal narrow-range workbook (cheap, just 3 rows),
+    // then intercept XLSX.read inside the service so it returns that
+    // workbook with !ref forcibly widened to the full-sheet formal range.
+    // This mirrors what a production XLSX with a formal `dimension`
+    // attribute looks like after parse, without paying the cost of writing
+    // a 17-billion-cell sheet to disk.
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Item", "Qty", "Price"],
+      ["Widget", 3, 4.5],
+      ["Gadget", 1, 12.25],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+
+    const readSpy = jest
+      .spyOn(service as any, "readExcelWorkbook")
+      .mockImplementation(() => {
+        // Mutate the parsed workbook to carry the wide !ref the production
+        // file had baked in.
+        wb.Sheets["Inventory"]["!ref"] = "A1:XFD1048576";
+        return wb;
+      });
+    // Avoid the ZIP traversal — not relevant to the clamping behavior.
+    jest
+      .spyOn(service as any, "extractExcelChartsAndImages")
+      .mockResolvedValue({ section: "", chartCount: 0, imageCount: 0 });
+
+    try {
+      const result = await (service as any).extractExcelText(
+        Buffer.from([]),
+        true,
+      );
+
+      // Real values must survive the clamp.
+      expect(result.text).toContain("Widget");
+      expect(result.text).toContain("Gadget");
+      expect(result.text).toContain("4.5");
+
+      // The pre-fix output for this fixture explodes into >1,000,000 lines
+      // because sheet_to_csv honors the wide !ref. After the clamp the
+      // output must be bounded.
+      const lineCount = result.text.split("\n").length;
+      expect(lineCount).toBeLessThan(50);
+
+      // The Range banner must reflect the clamped range, not the formal one.
+      expect(result.text).not.toContain("A1:XFD1048576");
+    } finally {
+      readSpy.mockRestore();
+    }
+  }, 15_000);
+
+  it("preserves CSV body for a worksheet with a legitimate used range", async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Name", "Score"],
+      ["Alice", 90],
+      ["Bob", 85],
+      ["Carol", 77],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "Results");
+    const buffer = Buffer.from(
+      XLSX.write(wb, { type: "buffer", bookType: "xlsx" }),
+    );
+
+    const result = await (service as any).extractExcelText(buffer, true);
+
+    expect(result.text).toContain("Alice");
+    expect(result.text).toContain("Bob");
+    expect(result.text).toContain("Carol");
+    expect(result.text).toContain("90");
+    expect(result.text).toContain("85");
+    expect(result.text).toContain("77");
+    // No phantom blank rows past the real used range.
+    const blankTabRowMatches = result.text.match(/\n\t+\n/g) ?? [];
+    expect(blankTabRowMatches.length).toBeLessThan(5);
+  });
+
+  it("emits one structured info log per workbook with sheetCount and totalUsedCells", async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["A", "B"],
+      [1, 2],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    const buffer = Buffer.from(
+      XLSX.write(wb, { type: "buffer", bookType: "xlsx" }),
+    );
+
+    const loggerInfo = jest.fn();
+    (service as any).logger = {
+      debug: jest.fn(),
+      log: loggerInfo,
+      info: loggerInfo,
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+
+    await (service as any).extractExcelText(buffer, true);
+
+    // Exactly one summary call. The NestJS Logger treats a second object
+    // argument as a context label, so the structured fields are folded into
+    // the message string — assert they actually land in the log line.
+    const summaryCalls = loggerInfo.mock.calls.filter(
+      (call) =>
+        typeof call[0] === "string" &&
+        call[0].includes("xlsx.extract.complete"),
+    );
+    expect(summaryCalls).toHaveLength(1);
+
+    const message = summaryCalls[0][0] as string;
+    const payloadJson = message.slice("xlsx.extract.complete ".length);
+    const payload = JSON.parse(payloadJson) as {
+      sheetCount: number;
+      totalUsedCells: number;
+      chartCount: number;
+      imageCount: number;
+    };
+    expect(payload).toEqual(
+      expect.objectContaining({
+        sheetCount: 1,
+        totalUsedCells: expect.any(Number),
+        chartCount: expect.any(Number),
+        imageCount: expect.any(Number),
+      }),
+    );
+    expect(payload.totalUsedCells).toBeGreaterThan(0);
+  });
+});

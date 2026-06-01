@@ -6,14 +6,15 @@ metadata:
   annotations: {{- include "mark-jobs.install-first.annotations" . | nindent 4 }}
 data:
   # GRADING_LTI_GATEWAY_URL is required for in-process grade callbacks
-  # when JOBS_EXECUTE_LOCALLY=true. If the overlay doesn't set it we
-  # fall back to the standard cluster-local hostname derived from the
-  # Helm release name (the lti-gateway subchart names its service
-  # `<release>-lti-gateway`). This default prevents the failure mode
-  # where the deploy overlay enables in-process grading but forgets to
-  # also set the gateway URL — every grade callback then fails with
-  # axios `Invalid URL` and rows pile up in LtiGradeSync as SCHEDULED.
-  GRADING_LTI_GATEWAY_URL: {{ .Values.env.GRADING_LTI_GATEWAY_URL | default (printf "http://%s-lti-gateway/grade" .Release.Name) | quote }}
+  # when JOBS_EXECUTE_LOCALLY=true. The chart deliberately does not
+  # provide a default: the correct service hostname depends on the
+  # deployment topology (subchart-under-same-release vs separate
+  # release in same namespace), and a silent wrong default has
+  # previously caused full LMS sync outages — every PUT fails DNS,
+  # rows pile up in LtiGradeSync, retry budgets burn, and student
+  # grades land hours late or in FAILED state. Set it explicitly in
+  # the overlay, e.g. `http://mark-lti-gateway/grade`.
+  GRADING_LTI_GATEWAY_URL: {{ required "env.GRADING_LTI_GATEWAY_URL must be set in the overlay (e.g. http://mark-lti-gateway/grade)" .Values.env.GRADING_LTI_GATEWAY_URL | quote }}
 {{- range $name, $value := .Values.env }}
 {{- if ne $name "GRADING_LTI_GATEWAY_URL" }}
   {{ $name }}: {{ $value | quote }}
