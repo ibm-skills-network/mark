@@ -24,7 +24,12 @@ const customJestConfig = {
     "^@/config/(.*)$": "<rootDir>/config/$1",
     "^@/lib/(.*)$": "<rootDir>/lib/$1",
     "^@/types/(.*)$": "<rootDir>/types/$1",
-    "^@/(.*)$": "<rootDir>/app/$1",
+    "^@components/(.*)$": "<rootDir>/components/$1",
+    "^@config/(.*)$": "<rootDir>/config/$1",
+    "^@lib/(.*)$": "<rootDir>/lib/$1",
+    "^@learnerComponents/(.*)$": "<rootDir>/app/learner/(components)/$1",
+    "^@authorComponents/(.*)$": "<rootDir>/app/author/(components)/$1",
+    "^@/(.*)$": "<rootDir>/$1",
   },
 };
 

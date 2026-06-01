@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { cn } from "@/lib/strings";
 
 type UserStep = {
@@ -21,11 +21,6 @@ type StateEvent = {
 };
 
 type ErrorInput = Error | string | { message: string };
-
-type ReportStatus = {
-  tone: "success" | "error";
-  message: string;
-};
 
 const DEFAULT_HEADLINES: Record<number, string> = {
   401: "Authentication required",
@@ -86,9 +81,8 @@ const DEFAULT_STEPS: Record<number, UserStep[]> = {
       description: "We hit an unexpected error. Please try again shortly.",
     },
     {
-      title: "Report this issue",
-      description: "Send the prefilled report so we can investigate fast.",
-      cta: "Report issue",
+      title: "Let us know if it persists",
+      description: "Contact your instructor or support if this keeps happening.",
     },
   ],
 };
@@ -97,43 +91,6 @@ function parseErrorMessage(error: ErrorInput): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message || "Unknown error";
   return error?.message || "Unknown error";
-}
-
-function buildPrefill(
-  statusCode: number,
-  headline: string,
-  message: string,
-  devDetails: DebugEntry[],
-  stateEvents: StateEvent[],
-): string {
-  const serializedDev = devDetails
-    .map((d) => `${d.label}: ${d.value}`)
-    .join("\n");
-  const serializedEvents =
-    stateEvents.length > 0
-      ? stateEvents
-          .map(
-            (e, idx) =>
-              `${idx + 1}. ${e.step}${e.timestamp ? ` @ ${e.timestamp}` : ""}${
-                e.detail ? ` -> ${e.detail}` : ""
-              }`,
-          )
-          .join("\n")
-      : "No state events captured.";
-
-  return [
-    `Issue Type: Frontend error ${statusCode} - ${headline}`,
-    `User-facing message: ${message}`,
-    "",
-    "State timeline (most recent first):",
-    serializedEvents,
-    "",
-    "Debug details:",
-    serializedDev || "No extra debug details provided.",
-    "",
-    "What I was doing: ",
-    "- Please add any extra steps to reproduce here -",
-  ].join("\n");
 }
 
 export default function ErrorPage({
@@ -146,7 +103,6 @@ export default function ErrorPage({
   debugDetails = [],
   stateTimeline = [],
   variant = "page",
-  onReportStatusChange,
 }: {
   error: ErrorInput;
   statusCode?: number;
@@ -157,13 +113,7 @@ export default function ErrorPage({
   debugDetails?: DebugEntry[];
   stateTimeline?: StateEvent[];
   variant?: "page" | "modal";
-  onReportStatusChange?: (status: ReportStatus | null) => void;
 }) {
-  const [isReporting, setIsReporting] = useState(false);
-  const [reportStatus, setReportStatus] = useState<"success" | "error" | null>(
-    null,
-  );
-
   const errorMessage = useMemo(() => parseErrorMessage(error), [error]);
 
   const resolvedHeadline =
@@ -189,66 +139,6 @@ export default function ErrorPage({
     return [...base, ...debugDetails];
   }, [statusCode, resolvedHeadline, errorMessage, context, debugDetails]);
 
-  const prefillText = useMemo(
-    () =>
-      buildPrefill(
-        statusCode,
-        resolvedHeadline,
-        errorMessage,
-        enrichedDebugDetails,
-        stateTimeline,
-      ),
-    [
-      statusCode,
-      resolvedHeadline,
-      errorMessage,
-      enrichedDebugDetails,
-      stateTimeline,
-    ],
-  );
-
-  const reportSuccessMessage = "Issue reported. Thank you!";
-  const reportErrorMessage = "Failed to send report. Please try again.";
-
-  const reportStatusMessage =
-    reportStatus === "success"
-      ? reportSuccessMessage
-      : reportStatus === "error"
-        ? reportErrorMessage
-        : null;
-
-  const handleReport = async () => {
-    setIsReporting(true);
-    setReportStatus(null);
-    onReportStatusChange?.(null);
-    try {
-      const res = await fetch("/api/error-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          statusCode,
-          headline: resolvedHeadline,
-          message: errorMessage,
-          context,
-          debugDetails: enrichedDebugDetails,
-          stateTimeline,
-          prefill: prefillText,
-        }),
-      });
-      if (!res.ok) throw new Error(`Report failed with status ${res.status}`);
-      setReportStatus("success");
-      onReportStatusChange?.({
-        tone: "success",
-        message: reportSuccessMessage,
-      });
-    } catch {
-      setReportStatus("error");
-      onReportStatusChange?.({ tone: "error", message: reportErrorMessage });
-    } finally {
-      setIsReporting(false);
-    }
-  };
-
   const isModal = variant === "modal";
   const outerClasses = cn(
     isModal
@@ -268,39 +158,20 @@ export default function ErrorPage({
     <div className={outerClasses}>
       <div className={cardClasses}>
         <div className={`flex flex-col gap-6 ${paddingClasses}`}>
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-                <span className="text-xl font-bold">{statusCode}</span>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-wide text-indigo-600 font-semibold">
-                  Attention needed
-                </p>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {resolvedHeadline}
-                </h1>
-                <p className="text-gray-600">{errorMessage}</p>
-                {context ? (
-                  <p className="text-sm text-gray-500">Context: {context}</p>
-                ) : null}
-              </div>
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+              <span className="text-xl font-bold">{statusCode}</span>
             </div>
-
-            <div className="flex flex-col gap-2 items-end">
-              {reportStatusMessage ? (
-                <span
-                  role="status"
-                  aria-live="polite"
-                  className={cn(
-                    "text-xs max-w-xs text-right rounded-md border px-2 py-1",
-                    reportStatus === "success"
-                      ? "text-emerald-700 border-emerald-200 bg-emerald-50"
-                      : "text-rose-700 border-rose-200 bg-rose-50",
-                  )}
-                >
-                  {reportStatusMessage}
-                </span>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-indigo-600 font-semibold">
+                Attention needed
+              </p>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {resolvedHeadline}
+              </h1>
+              <p className="text-gray-600">{errorMessage}</p>
+              {context ? (
+                <p className="text-sm text-gray-500">Context: {context}</p>
               ) : null}
             </div>
           </div>
@@ -359,23 +230,18 @@ export default function ErrorPage({
             </div>
           </div>
 
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4 shadow-inner space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-indigo-900 uppercase tracking-wide">
-                  State timeline (for reproduction)
-                </h3>
-                <p className="text-xs text-indigo-800 mt-1">
-                  Most recent events first. Sent with your report.
-                </p>
+          {stateTimeline.length > 0 ? (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4 shadow-inner space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-indigo-900 uppercase tracking-wide">
+                    Recent activity
+                  </h3>
+                  <p className="text-xs text-indigo-800 mt-1">
+                    Most recent events first.
+                  </p>
+                </div>
               </div>
-            </div>
-            {stateTimeline.length === 0 ? (
-              <div className="text-indigo-800 text-sm">
-                No state events captured. The report will include current
-                context.
-              </div>
-            ) : (
               <div className="relative pl-4 max-h-60 overflow-auto pr-2">
                 <div
                   className="absolute left-4 top-1 bottom-1 w-px bg-indigo-200"
@@ -394,10 +260,7 @@ export default function ErrorPage({
                         }).format(new Date(event.timestamp))
                       : null;
                     return (
-                      <div
-                        key={`${event.step}-${idx}`}
-                        className="relative pl-4"
-                      >
+                      <div key={`${event.step}-${idx}`} className="relative pl-4">
                         <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full border-2 border-white bg-indigo-500 shadow" />
                         <div className="rounded-lg bg-white/85 border border-indigo-100 px-3 py-2 shadow-sm">
                           <div className="flex items-center justify-between gap-2">
@@ -421,8 +284,8 @@ export default function ErrorPage({
                   })}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
