@@ -116,14 +116,7 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Install Playwright browsers
-        run: |
-          set -x
-          df -h
-          yarn playwright install chromium --dry-run
-          yarn playwright:install
-          df -h
-          ls -la ~/.cache/ms-playwright/ || true
-        timeout-minutes: 10
+        run: yarn playwright:install
 
       - name: Run Playwright tests
         run: yarn test:e2e
