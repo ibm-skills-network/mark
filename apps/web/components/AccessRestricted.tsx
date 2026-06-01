@@ -12,12 +12,7 @@ export default function AccessRestricted() {
       description="Make sure you’re signed in to the right account and opening it from your course. You may need a valid enrollment or instructor access."
       footnote={
         <>
-          Still stuck? Relaunch the assignment from{" "}
-          <span className="text-gray-500">Coursera</span>,{" "}
-          <span className="text-gray-500">edX</span>,{" "}
-          <span className="text-gray-500">Author Workbench</span>, or{" "}
-          <span className="text-gray-500">yourLearning</span> — or contact your
-          instructor.
+          Still stuck? Please try relaunching the assignment {" "}
         </>
       }
     />
