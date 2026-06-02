@@ -132,11 +132,14 @@ export class LtiGradeSyncService {
             headers: {
               Cookie: `authentication=${sync.authCookie}`,
             },
-            // 60s rather than 30s — Instana traces show real LMS responses
-            // (e.g. learn.ibm.com POST /mod/lti/service.php) routinely
-            // completing in 35-50s. The shorter timeout was aborting calls
-            // that would otherwise succeed first try.
-            timeout: 60_000,
+            // 90s rather than 60s — Instana flags the gateway's inbound
+            // PUT /grade span as errored whenever we abort the connection
+            // early, and real LMS responses (e.g. learn.ibm.com POST
+            // /mod/lti/service.php) sometimes run past 60s. A longer ceiling
+            // lets slow-but-valid calls finish instead of surfacing as
+            // gateway errors. The gateway's own LMS call is unbounded, so
+            // this is the binding limit on the chain.
+            timeout: 90_000,
           },
         ),
       );

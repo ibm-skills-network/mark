@@ -132,7 +132,7 @@ describe("LtiGradeSyncService - Integration Tests", () => {
         { score: 0.9 },
         expect.objectContaining({
           headers: { Cookie: "authentication=valid-auth" },
-          timeout: 60_000,
+          timeout: 90_000,
         }),
       );
     });
