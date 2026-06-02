@@ -37,11 +37,7 @@ import { useAssignmentId } from "@/hooks/use-assignment-id";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
-import {
-  usePathname,
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";

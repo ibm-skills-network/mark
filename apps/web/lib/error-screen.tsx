@@ -51,5 +51,7 @@ export function ErrorScreen({
   if (status === 403) {
     return <AccessRestricted />;
   }
-  return <ErrorPage error={message || "Unexpected error"} statusCode={status} />;
+  return (
+    <ErrorPage error={message || "Unexpected error"} statusCode={status} />
+  );
 }

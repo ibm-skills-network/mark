@@ -165,7 +165,10 @@
     "**/@langchain/core": "~1.1.46",
     "**/@langchain/openai": "~1.4.4",
     "**/@langchain/classic": "~1.0.31",
-    "@ibm-cloud/watsonx-ai": "~1.6.0"
+    "@ibm-cloud/watsonx-ai": "~1.6.0",
+    "**/@opentelemetry/sdk-node": "0.217.0",
+    "**/@opentelemetry/exporter-prometheus": "0.217.0",
+    "**/@tootallnate/once": "3.0.1"
   },
   "turbo": {
     "pipeline": {
