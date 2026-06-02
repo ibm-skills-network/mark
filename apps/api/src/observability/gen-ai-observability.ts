@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires, unicorn/prefer-module --
+   lazily require()s the heavy Traceloop SDK only when enabled */
 /**
  * Gen AI observability helpers (Instana / OpenLLMetry).
  *
@@ -35,7 +37,6 @@ export async function withGenAILabels<T>(
     return function_();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, unicorn/prefer-module
   const traceloop =
     require("@traceloop/node-server-sdk") as typeof import("@traceloop/node-server-sdk");
 

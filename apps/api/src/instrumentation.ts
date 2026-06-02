@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-var-requires, unicorn/prefer-module --
+   lazily require()s the heavy Traceloop SDK only when enabled */
 /**
  * Gen AI observability bootstrap (Instana / OpenLLMetry).
  *
@@ -15,7 +17,6 @@
 if (process.env.INSTANA_GENAI_ENABLED === "true") {
   try {
     // Lazy require so the SDK and its instrumentation only load when enabled.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, unicorn/prefer-module
     const traceloop =
       require("@traceloop/node-server-sdk") as typeof import("@traceloop/node-server-sdk");
     traceloop.initialize({
