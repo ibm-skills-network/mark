@@ -1,3 +1,7 @@
+// Gen AI observability bootstrap — must load before any LLM library so
+// Traceloop can patch it. No-op unless INSTANA_GENAI_ENABLED=true. Reuses the
+// API's instrumentation module (this worker runs the API's LLM services).
+import "../../api/src/instrumentation";
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";

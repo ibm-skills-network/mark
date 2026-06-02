@@ -64,10 +64,7 @@ describe("PdfStructureExtractorService block-cap enforcement", () => {
     const { extractor, mockLogger } = buildExtractor();
 
     expect(() =>
-      extractor.enforceBlockCap(
-        MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
-        "ok.pdf",
-      ),
+      extractor.enforceBlockCap(MAX_EVIDENCE_BLOCKS_PER_SUBMISSION, "ok.pdf"),
     ).not.toThrow();
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });

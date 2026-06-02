@@ -21,6 +21,10 @@ import { FileContentExtractionService } from "src/api/attempt/services/file-cont
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
+import {
+  startChatLlmSpan,
+  traceChatLlmCall,
+} from "src/observability/gen-ai-observability";
 import { ChatRole, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { ChatRepository } from "../repositories/chat.repository";
@@ -337,21 +341,33 @@ export class MarkChatService {
       ...this.fileTools(allowedLinks),
     };
 
-    const result = await generateText({
-      model: openai(chatModel),
-      system:
-        systemPrompt +
-        (systemContextMessages.length > 0
-          ? "\n\n" +
-            systemContextMessages.map((message) => message.content).join("\n\n")
-          : ""),
-      messages: formattedMessages,
-      temperature: 0.7,
-      tools,
-      toolChoice: "auto",
-      stopWhen: stepCountIs(MAX_TOOL_STEPS),
-      maxOutputTokens,
-    });
+    const result = await traceChatLlmCall(
+      { model: chatModel, labels: { usageType: "CHAT_ASSISTANT" } },
+      async (span) => {
+        const generated = await generateText({
+          model: openai(chatModel),
+          system:
+            systemPrompt +
+            (systemContextMessages.length > 0
+              ? "\n\n" +
+                systemContextMessages
+                  .map((message) => message.content)
+                  .join("\n\n")
+              : ""),
+          messages: formattedMessages,
+          temperature: 0.7,
+          tools,
+          toolChoice: "auto",
+          stopWhen: stepCountIs(MAX_TOOL_STEPS),
+          maxOutputTokens,
+        });
+        span.setUsage(
+          generated.usage?.inputTokens,
+          generated.usage?.outputTokens,
+        );
+        return generated;
+      },
+    );
 
     const functionResults =
       result.toolResults?.map((toolResult) => ({
@@ -413,6 +429,10 @@ export class MarkChatService {
       ...this.fileTools(allowedLinks),
     };
 
+    const llmSpan = startChatLlmSpan({
+      model: chatModel,
+      labels: { usageType: "CHAT_ASSISTANT" },
+    });
     const result = streamText({
       model: openai(chatModel),
       system:
@@ -431,6 +451,7 @@ export class MarkChatService {
     });
 
     if (!result || !result.textStream) {
+      llmSpan.end();
       response.status(500).send(STANDARD_ERROR_MESSAGE);
       return;
     }
@@ -471,6 +492,8 @@ export class MarkChatService {
         rawResult: string;
       }> = [];
       const toolResults = await result.toolResults;
+      const usage = await result.usage;
+      llmSpan.setUsage(usage?.inputTokens, usage?.outputTokens);
       const resolvedToolResults = Array.isArray(toolResults) ? toolResults : [];
       for (const toolResult of resolvedToolResults) {
         if (!toolResult || toolResult.output === undefined) continue;
@@ -541,7 +564,11 @@ export class MarkChatService {
           );
         }
       }
+    } catch (error) {
+      llmSpan.recordError(error);
+      throw error;
     } finally {
+      llmSpan.end();
       response.end();
     }
   }

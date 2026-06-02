@@ -86,6 +86,20 @@ api:
     # grading jobs the BullMQ worker pulls in parallel per pod.
     GRADING_CONCURRENCY: "10"
   secretEnv: {}
+  # Gen AI observability (Instana / OpenLLMetry). OFF by default; flip
+  # `enabled: true` in the deploy overlay for an environment whose Instana
+  # agent has the OpenTelemetry receiver enabled. Emits gen_ai.* spans only —
+  # independent of the @instana/collector APM tracer.
+  genaiObservability:
+    enabled: false
+    # Service/app name shown in Instana's Gen AI view. Defaults to the api
+    # service name; override per env, e.g. "mark-api-staging".
+    serviceName: ""
+    # OTLP/HTTP target. Defaults to the node-local Instana agent via the pod's
+    # host IP. Override only if the agent is reached via a Service.
+    endpoint: ""
+    # Keep "false" — avoids shipping prompt/response bodies (PII).
+    traceContent: "false"
 
 jobs:
   enabled: false

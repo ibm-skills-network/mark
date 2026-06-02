@@ -2,12 +2,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { HumanMessage } from "@langchain/core/messages";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { withGenAILabels } from "src/observability/gen-ai-observability";
 import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { USAGE_TRACKER } from "../../llm.constants";
 import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
@@ -163,7 +165,10 @@ export class PromptProcessorService implements IPromptProcessor {
     let result: any;
 
     try {
-      result = await llm.invoke([new HumanMessage(input)], options);
+      result = await withGenAILabels(
+        { usageType, assignmentId, modelKey: llm.key },
+        () => llm.invoke([new HumanMessage(input)], options),
+      );
     } catch (error) {
       this.logger.error(
         `Provider invocation failed: ${
@@ -233,10 +238,9 @@ export class PromptProcessorService implements IPromptProcessor {
 
       const decodedImageData = decodeIfBase64(imageData) || imageData;
 
-      const result = await llm.invokeWithImage(
-        textContent,
-        decodedImageData,
-        options,
+      const result = await withGenAILabels(
+        { usageType, assignmentId, modelKey: llm.key },
+        () => llm.invokeWithImage(textContent, decodedImageData, options),
       );
 
       const response = this.cleanResponse(result.content);
