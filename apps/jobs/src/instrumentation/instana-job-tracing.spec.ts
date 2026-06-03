@@ -1,10 +1,10 @@
 import type { Job } from "bullmq";
+import { DOMAIN_ID_FIELDS } from "../../../api/src/job-queue/job-domain-ids";
 import { encryptJobPayload } from "../job-payload.crypto";
 import {
   __clearInstanaTestOverride,
   __setInstanaTestOverride,
   annotateDomainIds,
-  DOMAIN_ID_FIELDS,
   isInstanaEnabled,
   resolveInstana,
   traceJob,

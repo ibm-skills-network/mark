@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { pickDomainIds } from "../../../job-queue/job-domain-ids";
 import { JOB_QUEUE_NAMES } from "../../../job-queue/job-queue.constants";
 import { decryptJobPayload } from "../../../job-queue/job-payload.crypto";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
@@ -8,15 +9,6 @@ const HEARTBEAT_STALE_AFTER_MS = 20_000;
 const FAILED_JOBS_MAX = 100;
 const FAILED_JOBS_DEFAULT = 25;
 const FAILED_REASON_MAX_CHARS = 2000;
-
-// IDs safe to expose. NEVER userId (email/PII) or any payload text.
-const DOMAIN_ID_FIELDS = [
-  "assignmentId",
-  "attemptId",
-  "questionId",
-  "variantId",
-  "organizationId",
-] as const;
 
 export interface QueueStatDto {
   name: string;
@@ -156,15 +148,7 @@ export class QueueStatusService {
       );
       return {};
     }
-    if (!payload || typeof payload !== "object") return {};
-    const out: Record<string, number | string> = {};
-    for (const field of DOMAIN_ID_FIELDS) {
-      const value = payload[field];
-      if (typeof value === "number" || typeof value === "string") {
-        out[field] = value;
-      }
-    }
-    return out;
+    return pickDomainIds(payload);
   }
 
   private messageOf(error: unknown): string {

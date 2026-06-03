@@ -1,5 +1,8 @@
 import { Logger } from "@nestjs/common";
 import type { Job } from "bullmq";
+// The span-tag allowlist is single-sourced in the api (job-domain-ids) so the
+// worker and the admin failed-jobs view can never drift.
+import { pickDomainIds } from "../../../api/src/job-queue/job-domain-ids";
 import { decryptJobPayload } from "../job-payload.crypto";
 
 const logger = new Logger("InstanaJobTracing");
@@ -67,17 +70,6 @@ export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Domain identifiers safe to attach to spans. IDs only — NEVER userId (an
-// email / PII), never payload text, never secrets. Anything not in this list
-// is never tagged, even if present in the payload.
-export const DOMAIN_ID_FIELDS = [
-  "assignmentId",
-  "attemptId",
-  "questionId",
-  "variantId",
-  "organizationId",
-] as const;
-
 export function annotateDomainIds(span: InstanaSpanHandle, job: Job): void {
   let payload: Record<string, unknown>;
   try {
@@ -92,12 +84,8 @@ export function annotateDomainIds(span: InstanaSpanHandle, job: Job): void {
     );
     return;
   }
-  if (!payload || typeof payload !== "object") return;
-  for (const field of DOMAIN_ID_FIELDS) {
-    const value = payload[field];
-    if (typeof value === "number" || typeof value === "string") {
-      span.annotate(`sdk.custom.tags.${field}`, value);
-    }
+  for (const [field, value] of Object.entries(pickDomainIds(payload))) {
+    span.annotate(`sdk.custom.tags.${field}`, value);
   }
 }
 

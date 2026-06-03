@@ -2030,14 +2030,12 @@ export async function getQueueFailedJobs(
   queueName: string,
   limit = 25,
 ): Promise<FailedJobsResponse> {
-  // Mirror the server-side clamp so the transport layer is self-consistent;
-  // the server still re-clamps regardless.
-  const safeLimit = Number.isFinite(limit)
-    ? Math.min(Math.max(Math.floor(limit), 1), 100)
-    : 25;
+  // The server validates and clamps `limit` (1..100, with NaN/negatives falling
+  // back to the default) as the authoritative bound, so we forward the
+  // requested value rather than re-implementing those bounds here.
   const url = `${getBaseApiPath("v1")}/admin/queue-status/${encodeURIComponent(
     queueName,
-  )}/failed?limit=${safeLimit}`;
+  )}/failed?limit=${limit}`;
   return apiClient.get(url, {
     headers: {
       "Content-Type": "application/json",

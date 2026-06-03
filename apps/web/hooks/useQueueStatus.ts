@@ -9,7 +9,10 @@ export function useQueueStatus(
 ) {
   return useQuery({
     queryKey: ["admin", "queue-status", sessionToken ?? ""],
-    queryFn: () => getQueueStatus(sessionToken),
+    queryFn: async () => {
+      if (!sessionToken) throw new Error("Session token required");
+      return getQueueStatus(sessionToken);
+    },
     enabled: !!sessionToken,
     refetchInterval: autoRefresh ? STATUS_POLL_MS : false,
     staleTime: STATUS_POLL_MS,
@@ -29,7 +32,11 @@ export function useQueueFailedJobs(
       queueName ?? "",
       limit,
     ],
-    queryFn: () => getQueueFailedJobs(sessionToken, queueName, limit),
+    queryFn: async () => {
+      if (!sessionToken) throw new Error("Session token required");
+      if (!queueName) throw new Error("Queue name required");
+      return getQueueFailedJobs(sessionToken, queueName, limit);
+    },
     enabled: !!sessionToken && !!queueName,
   });
 }
