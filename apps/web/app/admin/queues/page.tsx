@@ -1,7 +1,9 @@
 "use client";
 
+import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { readAdminSessionFromStorage } from "@/lib/admin-session";
+import { queryClient } from "@/lib/query-client";
 import { QueueStatusDashboard } from "../components/QueueStatusDashboard";
 
 export default function AdminQueuesPage() {
@@ -27,8 +29,10 @@ export default function AdminQueuesPage() {
     );
   }
   return (
-    <div className="p-6">
-      <QueueStatusDashboard sessionToken={token} />
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <div className="p-6">
+        <QueueStatusDashboard sessionToken={token} />
+      </div>
+    </QueryClientProvider>
   );
 }
