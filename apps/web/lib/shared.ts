@@ -1974,3 +1974,74 @@ export async function executeQuickAction(
 
   return await apiClient.get(url, { headers });
 }
+
+export interface QueueStatusResponse {
+  generatedAt: string;
+  queues: Array<{
+    name: string;
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    completed: number;
+    paused: number;
+    unavailable?: boolean;
+  }>;
+  workers: Array<{
+    instanceId: string;
+    hostname: string;
+    pid: number;
+    startedAt: string | null;
+    updatedAt: string | null;
+    uptimeMs: number | null;
+    lastSeenMs: number | null;
+    stale: boolean;
+    workerCount: number;
+    queues: string[];
+  }>;
+}
+
+export interface FailedJobsResponse {
+  queueName: string;
+  failed: Array<{
+    id: string;
+    name: string;
+    attemptsMade: number;
+    maxAttempts: number;
+    failedReason: string;
+    failedAt: string | null;
+    domainIds: Record<string, number | string>;
+  }>;
+}
+
+export async function getQueueStatus(
+  sessionToken: string,
+): Promise<QueueStatusResponse> {
+  return apiClient.get(`${getBaseApiPath("v1")}/admin/queue-status`, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export async function getQueueFailedJobs(
+  sessionToken: string,
+  queueName: string,
+  limit = 25,
+): Promise<FailedJobsResponse> {
+  // Mirror the server-side clamp so the transport layer is self-consistent;
+  // the server still re-clamps regardless.
+  const safeLimit = Number.isFinite(limit)
+    ? Math.min(Math.max(Math.floor(limit), 1), 100)
+    : 25;
+  const url = `${getBaseApiPath("v1")}/admin/queue-status/${encodeURIComponent(
+    queueName,
+  )}/failed?limit=${safeLimit}`;
+  return apiClient.get(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
