@@ -1,6 +1,0 @@
-Playwright E2E upload fixture.
-
-This is a small plain-text file used by the UPLOAD question-type spec to
-exercise the learner file-upload flow. Its contents are not graded for a
-specific value (open/LLM-graded), only that the upload completes and the
-grading loop runs to completion.
