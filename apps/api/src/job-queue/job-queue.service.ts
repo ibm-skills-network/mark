@@ -1,8 +1,17 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import { JobsOptions, JobState, Queue } from "bullmq";
+import { Job, JobsOptions, JobState, Queue } from "bullmq";
 import IORedis from "ioredis";
 import { encryptJobPayload } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
+
+export interface QueueCounts {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  completed: number;
+  paused: number;
+}
 
 @Injectable()
 export class JobQueueService implements OnModuleDestroy {
@@ -76,6 +85,30 @@ export class JobQueueService implements OnModuleDestroy {
 
     const resolvedId: string = job.id ?? jobId;
     return { id: resolvedId, state };
+  }
+
+  async getQueueCounts(queueName: string): Promise<QueueCounts> {
+    const counts = await this.getQueue(queueName).getJobCounts(
+      "waiting",
+      "active",
+      "delayed",
+      "failed",
+      "completed",
+      "paused",
+    );
+    return {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+      paused: counts.paused ?? 0,
+    };
+  }
+
+  async getFailedJobs(queueName: string, limit: number): Promise<Job[]> {
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    return queue.getFailed(0, Math.max(0, limit - 1));
   }
 
   async onModuleDestroy(): Promise<void> {

@@ -15,9 +15,11 @@ import { AssignmentAnalyticsController } from "./controllers/assignment-analytic
 import { FlaggedSubmissionsController } from "./controllers/flagged-submissions.controller";
 import { LLMAssignmentController } from "./controllers/llm-assignment.controller";
 import { LLMPricingController } from "./controllers/llm-pricing.controller";
+import { QueueStatusController } from "./controllers/queue-status.controller";
 import { RegradingRequestsController } from "./controllers/regrading-requests.controller";
 import { TranslationMaintenanceController } from "./controllers/translation-maintenance.controller";
 import { TRANSLATION_MAINTENANCE_JOB_RUNNER } from "./controllers/translation-maintenance.job-runner";
+import { QueueStatusService } from "./services/queue-status.service";
 
 @Module({
   imports: [
@@ -39,10 +41,12 @@ import { TRANSLATION_MAINTENANCE_JOB_RUNNER } from "./controllers/translation-ma
     AssignmentAnalyticsController,
     AssignmentLevelStandardsController,
     TranslationMaintenanceController,
+    QueueStatusController,
   ],
   providers: [
     AdminService,
     AdminRepository,
+    QueueStatusService,
     TranslationMaintenanceController,
     {
       provide: TRANSLATION_MAINTENANCE_JOB_RUNNER,
