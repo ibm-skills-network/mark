@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { Job, UnrecoverableError, Worker } from "bullmq";
+import { Job, Queue, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { randomUUID } from "node:crypto";
@@ -21,9 +21,18 @@ import {
 import {
   DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS,
   DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS,
+  JOB_METRICS_DEFAULT_SAMPLE_INTERVAL_MS,
   JOB_WORKER_HEARTBEAT_KEY_PREFIX,
 } from "./job-worker-heartbeat.constants";
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
+import {
+  isInstanaEnabled,
+  traceJob,
+} from "./instrumentation/instana-job-tracing";
+import {
+  QueueDepthSampler,
+  type QueueDepthCounts,
+} from "./instrumentation/queue-depth-sampler";
 import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
@@ -92,6 +101,8 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private heartbeatInterval?: NodeJS.Timeout;
   private readonly workerInstanceId = randomUUID();
   private readonly startedAt = new Date().toISOString();
+  private depthSampler?: QueueDepthSampler;
+  private readonly depthQueues = new Map<string, Queue>();
 
   constructor(
     private readonly jobExecutorService: JobExecutorService,
@@ -238,6 +249,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     );
     await this.writeHeartbeat();
     this.startHeartbeat();
+    if (isInstanaEnabled()) {
+      this.startQueueDepthSampling();
+    }
     this.logger.log(`Started ${this.workers.length} background job workers`);
   }
 
@@ -245,6 +259,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }
+    this.depthSampler?.stop();
+    await Promise.all(
+      [...this.depthQueues.values()].map(async (queue) => queue.close()),
+    );
     await Promise.all(this.workers.map(async (worker) => worker.close()));
     if (this.connection) {
       await this.connection.del(this.getHeartbeatKey()).catch(() => null);
@@ -258,16 +276,20 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     concurrency: number,
     options: { lockDuration?: number; maxStalledCount?: number } = {},
   ): Worker {
-    const worker = new Worker(queueName, processor, {
-      connection: this.getConnection(),
-      concurrency,
-      ...(options.lockDuration !== undefined && {
-        lockDuration: options.lockDuration,
-      }),
-      ...(options.maxStalledCount !== undefined && {
-        maxStalledCount: options.maxStalledCount,
-      }),
-    });
+    const worker = new Worker(
+      queueName,
+      (job: Job) => traceJob(queueName, job, async () => processor(job)),
+      {
+        connection: this.getConnection(),
+        concurrency,
+        ...(options.lockDuration !== undefined && {
+          lockDuration: options.lockDuration,
+        }),
+        ...(options.maxStalledCount !== undefined && {
+          maxStalledCount: options.maxStalledCount,
+        }),
+      },
+    );
 
     worker.on("completed", (job) => {
       this.logger.log(`Completed ${job.name}#${job.id}`);
@@ -289,6 +311,63 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     }
 
     return this.connection;
+  }
+
+  private startQueueDepthSampling(): void {
+    const queueNames = Object.values(JOB_QUEUE_NAMES);
+    for (const name of queueNames) {
+      this.depthQueues.set(
+        name,
+        new Queue(name, { connection: this.getConnection() }),
+      );
+    }
+    this.depthSampler = new QueueDepthSampler(
+      queueNames,
+      async (name) => this.readQueueCounts(name),
+      this.structuredLogger,
+      this.getMetricsSampleIntervalMs(),
+    );
+    this.depthSampler.start();
+  }
+
+  private async readQueueCounts(name: string): Promise<QueueDepthCounts> {
+    const queue = this.depthQueues.get(name);
+    if (!queue) {
+      return {
+        waiting: 0,
+        active: 0,
+        delayed: 0,
+        failed: 0,
+        completed: 0,
+        paused: 0,
+      };
+    }
+    const counts = await queue.getJobCounts(
+      "waiting",
+      "active",
+      "delayed",
+      "failed",
+      "completed",
+      "paused",
+    );
+    return {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+      paused: counts.paused ?? 0,
+    };
+  }
+
+  private getMetricsSampleIntervalMs(): number {
+    const parsed = Number.parseInt(
+      process.env.JOB_METRICS_SAMPLE_INTERVAL_MS ?? "",
+      10,
+    );
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : JOB_METRICS_DEFAULT_SAMPLE_INTERVAL_MS;
   }
 
   private startHeartbeat(): void {

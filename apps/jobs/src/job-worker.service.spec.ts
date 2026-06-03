@@ -6,6 +6,11 @@ import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
+import {
+  __clearInstanaTestOverride,
+  __setInstanaTestOverride,
+  type InstanaInstance,
+} from "./instrumentation/instana-job-tracing";
 import { JobWorkerService } from "./job-worker.service";
 import { createRedisConnection } from "./redis.connection";
 
@@ -25,6 +30,12 @@ type JobWorkerServiceTestAccessor = JobWorkerService & {
   handleTranslationJob: (job: Job) => Promise<void>;
   getConnection: () => IORedis;
   heartbeatInterval?: NodeJS.Timeout;
+  createWorker: (
+    queueName: string,
+    processor: (job: Job) => Promise<void>,
+    concurrency: number,
+    options?: { lockDuration?: number; maxStalledCount?: number },
+  ) => unknown;
 };
 
 const asTestAccessor = (s: JobWorkerService): JobWorkerServiceTestAccessor =>
@@ -1346,6 +1357,44 @@ describe("JobWorkerService", () => {
 
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledTimes(1);
       expect(mockJobStateService.updateJobStatus).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("createWorker Instana instrumentation", () => {
+    afterEach(() => __clearInstanaTestOverride());
+
+    it("wraps the processor in a job span that still runs the handler", async () => {
+      const annotate = jest.fn();
+      const startEntrySpan = jest.fn().mockResolvedValue(undefined);
+      const completeEntrySpan = jest.fn();
+      const instance: InstanaInstance = {
+        sdk: { async: { startEntrySpan, completeEntrySpan } },
+        currentSpan: () => ({ annotate }),
+        isTracing: () => true,
+      };
+      __setInstanaTestOverride(instance);
+
+      // Reuse the per-test `service` built in beforeEach the same way the
+      // rest of this suite does, then drive createWorker directly via the
+      // typed accessor.
+      const handler = jest.fn().mockResolvedValue(undefined);
+      asTestAccessor(service).createWorker(JOB_QUEUE_NAMES.ATTEMPT, handler, 1);
+
+      const created = workerInstances.at(-1);
+      const job = {
+        name: "attempt.grade",
+        id: "9",
+        attemptsMade: 0,
+        opts: {},
+        timestamp: Date.now(),
+        data: {},
+      } as unknown as Job;
+
+      await created?.processor(job);
+
+      expect(startEntrySpan).toHaveBeenCalledWith("job.attempt.grade");
+      expect(handler).toHaveBeenCalledWith(job);
+      expect(completeEntrySpan).toHaveBeenCalledWith(undefined);
     });
   });
 });
