@@ -98,6 +98,10 @@ jobs:
   resources: {}
   env:
     ENABLE_JOB_SCHEDULERS: "true"
+    # Enable Instana APM for the jobs worker. The collector reads
+    # INSTANA_SERVICE_NAME to label this service in Instana.
+    INSTANA_ENABLED: "true"
+    INSTANA_SERVICE_NAME: "mark-jobs"
   secretEnv: {}
 
 # UI configurations

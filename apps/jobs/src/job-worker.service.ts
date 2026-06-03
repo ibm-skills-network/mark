@@ -24,6 +24,7 @@ import {
   JOB_WORKER_HEARTBEAT_KEY_PREFIX,
 } from "./job-worker-heartbeat.constants";
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
+import { traceJob } from "./instrumentation/instana-job-tracing";
 import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
@@ -258,16 +259,20 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     concurrency: number,
     options: { lockDuration?: number; maxStalledCount?: number } = {},
   ): Worker {
-    const worker = new Worker(queueName, processor, {
-      connection: this.getConnection(),
-      concurrency,
-      ...(options.lockDuration !== undefined && {
-        lockDuration: options.lockDuration,
-      }),
-      ...(options.maxStalledCount !== undefined && {
-        maxStalledCount: options.maxStalledCount,
-      }),
-    });
+    const worker = new Worker(
+      queueName,
+      (job: Job) => traceJob(queueName, job, async () => processor(job)),
+      {
+        connection: this.getConnection(),
+        concurrency,
+        ...(options.lockDuration !== undefined && {
+          lockDuration: options.lockDuration,
+        }),
+        ...(options.maxStalledCount !== undefined && {
+          maxStalledCount: options.maxStalledCount,
+        }),
+      },
+    );
 
     worker.on("completed", (job) => {
       this.logger.log(`Completed ${job.name}#${job.id}`);

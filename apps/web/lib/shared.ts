@@ -1974,3 +1974,72 @@ export async function executeQuickAction(
 
   return await apiClient.get(url, { headers });
 }
+
+export interface QueueStatusResponse {
+  generatedAt: string;
+  queues: Array<{
+    name: string;
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    completed: number;
+    paused: number;
+    unavailable?: boolean;
+  }>;
+  workers: Array<{
+    instanceId: string;
+    hostname: string;
+    pid: number;
+    startedAt: string | null;
+    updatedAt: string | null;
+    uptimeMs: number | null;
+    lastSeenMs: number | null;
+    stale: boolean;
+    workerCount: number;
+    queues: string[];
+  }>;
+}
+
+export interface FailedJobsResponse {
+  queueName: string;
+  failed: Array<{
+    id: string;
+    name: string;
+    attemptsMade: number;
+    maxAttempts: number;
+    failedReason: string;
+    failedAt: string | null;
+    domainIds: Record<string, number | string>;
+  }>;
+}
+
+export async function getQueueStatus(
+  sessionToken: string,
+): Promise<QueueStatusResponse> {
+  return apiClient.get(`${getBaseApiPath("v1")}/admin/queue-status`, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export async function getQueueFailedJobs(
+  sessionToken: string,
+  queueName: string,
+  limit = 25,
+): Promise<FailedJobsResponse> {
+  // The server validates and clamps `limit` (1..100, with NaN/negatives falling
+  // back to the default) as the authoritative bound, so we forward the
+  // requested value rather than re-implementing those bounds here.
+  const url = `${getBaseApiPath("v1")}/admin/queue-status/${encodeURIComponent(
+    queueName,
+  )}/failed?limit=${limit}`;
+  return apiClient.get(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
