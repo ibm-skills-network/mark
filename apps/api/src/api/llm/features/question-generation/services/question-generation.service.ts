@@ -844,6 +844,7 @@ FORMAT INSTRUCTIONS:
   - These questions should be simple and straightforward and show that the learner was paying attention to the content.
   - Their answers should NOT be quantitative.
   - Only ask useful questions about the product or market — do NOT ask about websites, who to contact, or where to find more information.
+  - Use a "What" or "How" format only when the answer is still a concise noun phrase from the content.
   - CRITICAL: A Short question MUST be answerable in a 2-8 word noun phrase WITHOUT explanation. If answering the question requires explaining how or why something works, contributes, or helps — it is NOT a Short question. Questions beginning with "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify" require explanation and MUST be typed as Long, not Short.
     WRONG (do not do this): How does Instana's automated discovery help clients? → Type: Short
     CORRECT (do this instead): How does Instana's automated discovery help clients? → Type: Long
@@ -1590,6 +1591,7 @@ Rules:
 
     type SubtypeBucket = {
       subtype: MCSubtype;
+      required: number;
       fromPool: IGeneratedQuestion[];
       fromShortfall: IGeneratedQuestion[];
       fromFallback: IGeneratedQuestion[];
@@ -1656,19 +1658,32 @@ Rules:
           }
         }
 
-        return { subtype, fromPool, fromShortfall, fromFallback };
+        return { subtype, required, fromPool, fromShortfall, fromFallback };
       });
 
     const buckets = await Promise.all(tasks);
 
     // Re-review all shortfall-generated questions together so they pass through
     // the same semantic filter as the originally generated batch. Template
-    // fallbacks stay out — they're last-resort synthetic data.
+    // fallbacks stay out — they're last-resort synthetic data. Keep bucket
+    // ownership separate from reviewed mcSubtype so a question generated for a
+    // missing Short slot cannot inflate the Long bucket after reclassification.
     const allShortfall = buckets.flatMap((b) => b.fromShortfall);
 
-    let reviewedBySubtype: Map<MCSubtype, IGeneratedQuestion[]> | undefined;
+    let reviewedByOriginalSubtype:
+      | Map<MCSubtype, IGeneratedQuestion[]>
+      | undefined;
     if (allShortfall.length > 0) {
       try {
+        const shortfallOwnerById = new Map<number, MCSubtype>();
+        for (const bucket of buckets) {
+          for (const q of bucket.fromShortfall) {
+            if (typeof q.id === "number") {
+              shortfallOwnerById.set(q.id, bucket.subtype);
+            }
+          }
+        }
+
         const reviewedShortfall = await this.reviewSubtypeQuestions(
           allShortfall,
           assignmentId,
@@ -1676,13 +1691,30 @@ Rules:
           learningObjectives,
         );
 
-        reviewedBySubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
+        reviewedByOriginalSubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
         for (const q of reviewedShortfall) {
-          if (q.mcSubtype) {
-            const list = reviewedBySubtype.get(q.mcSubtype) ?? [];
-            list.push(q);
-            reviewedBySubtype.set(q.mcSubtype, list);
+          const originalSubtype =
+            typeof q.id === "number" ? shortfallOwnerById.get(q.id) : undefined;
+
+          if (!originalSubtype) {
+            this.logger.warn(
+              "Reviewed shortfall question could not be mapped to its requested subtype — skipping it",
+            );
+            continue;
           }
+
+          if (q.mcSubtype !== originalSubtype) {
+            this.logger.warn(
+              `Review reclassified a ${originalSubtype} shortfall question as ${
+                q.mcSubtype ?? "unknown"
+              } — not using it to satisfy the ${originalSubtype} quota`,
+            );
+            continue;
+          }
+
+          const list = reviewedByOriginalSubtype.get(originalSubtype) ?? [];
+          list.push(q);
+          reviewedByOriginalSubtype.set(originalSubtype, list);
         }
       } catch (error) {
         this.logger.warn(
@@ -1690,20 +1722,46 @@ Rules:
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        reviewedBySubtype = undefined;
+        reviewedByOriginalSubtype = undefined;
       }
     }
 
     const result: IGeneratedQuestion[] = [];
     for (const bucket of buckets) {
-      const reviewedShortfallForSubtype = reviewedBySubtype
-        ? (reviewedBySubtype.get(bucket.subtype) ?? [])
+      const selected = bucket.fromPool.slice(0, bucket.required);
+      const reviewedShortfallForSubtype = reviewedByOriginalSubtype
+        ? (reviewedByOriginalSubtype.get(bucket.subtype) ?? [])
         : bucket.fromShortfall;
-      result.push(
-        ...bucket.fromPool,
-        ...reviewedShortfallForSubtype,
-        ...bucket.fromFallback,
-      );
+
+      let remaining = bucket.required - selected.length;
+      if (remaining > 0) {
+        selected.push(...reviewedShortfallForSubtype.slice(0, remaining));
+      }
+
+      remaining = bucket.required - selected.length;
+      if (remaining > 0) {
+        selected.push(...bucket.fromFallback.slice(0, remaining));
+      }
+
+      remaining = bucket.required - selected.length;
+      if (remaining > 0) {
+        this.logger.warn(
+          `Subtype ${bucket.subtype} quota still missing ${remaining} question(s) after review — using template fallback`,
+        );
+        selected.push(
+          ...this.generateFallbackQuestionsOfType(
+            QuestionType.SINGLE_CORRECT,
+            remaining,
+            difficultyLevel,
+            assignmentId,
+            content,
+            learningObjectives,
+            bucket.subtype,
+          ),
+        );
+      }
+
+      result.push(...selected);
     }
 
     return result;
