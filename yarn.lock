@@ -7833,9 +7833,9 @@ csstype@3.1.3, csstype@^3.0.2, csstype@^3.1.2:
   integrity sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==
 
 csv-parser@^3.2.0:
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/csv-parser/-/csv-parser-3.2.0.tgz#7e5515e3763e963dc8660dc9dcfc3f0eaf72b0a9"
-  integrity sha512-fgKbp+AJbn1h2dcAHKIdKNSSjfp43BZZykXsCjzALjKy80VXQNHPFJ6T9Afwdzoj24aMkq8GwDS7KGcDPpejrA==
+  version "3.2.1"
+  resolved "https://registry.yarnpkg.com/csv-parser/-/csv-parser-3.2.1.tgz#af3ef6f591a7edbd99e92e0fe97f325d83701b7b"
+  integrity sha512-v8RPMSglouR9od735SnwSxLBbCJqEPSbgm1R5qfr8yIiMUCEFjox56kRZid0SvgHJEkxeIEu3+a9QS3YRh7CuA==
 
 damerau-levenshtein@^1.0.8:
   version "1.0.8"
