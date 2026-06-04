@@ -17,7 +17,11 @@ import { ReportService } from "../../../services/report.repository";
 describe("AssignmentControllerV2 — publish job status auth", () => {
   let controller: AssignmentControllerV2;
   let jobStatusService: { getJobStatus: jest.Mock };
-  let prisma: { assignmentGroup: { findFirst: jest.Mock } };
+  let prisma: {
+    assignmentGroup: { findFirst: jest.Mock };
+    assignmentAuthor: { findFirst: jest.Mock };
+  };
+  let adminService: { getDetailedAssignmentInsights: jest.Mock };
 
   const mockLogger = {
     child: jest.fn().mockReturnValue({
@@ -66,6 +70,13 @@ describe("AssignmentControllerV2 — publish job status auth", () => {
       assignmentGroup: {
         findFirst: jest.fn(),
       },
+      assignmentAuthor: {
+        findFirst: jest.fn(),
+      },
+    };
+
+    adminService = {
+      getDetailedAssignmentInsights: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -83,7 +94,7 @@ describe("AssignmentControllerV2 — publish job status auth", () => {
             cleanupJobStream: jest.fn(),
           },
         },
-        { provide: AdminService, useValue: {} },
+        { provide: AdminService, useValue: adminService },
         { provide: PrismaService, useValue: prisma },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
@@ -215,6 +226,45 @@ describe("AssignmentControllerV2 — publish job status auth", () => {
           buildSessionRequest("stranger@example.com", "other-group") as never,
         ),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe("getAuthorAssignmentInsights", () => {
+    it("404s when the caller is not an author of the assignment", async () => {
+      prisma.assignmentAuthor.findFirst.mockResolvedValue(null);
+
+      await expect(
+        controller.getAuthorAssignmentInsights(
+          100,
+          buildSessionRequest("stranger@example.com") as never,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      // Must refuse before touching the (cache-backed) insights service.
+      expect(adminService.getDetailedAssignmentInsights).not.toHaveBeenCalled();
+    });
+
+    it("returns ownership-scoped insights with admin-only reports stripped", async () => {
+      prisma.assignmentAuthor.findFirst.mockResolvedValue({
+        assignmentId: 100,
+        userId: "author-A@example.com",
+      });
+      adminService.getDetailedAssignmentInsights.mockResolvedValue({
+        assignment: { id: 100 },
+        analytics: { totalCost: 1 },
+        reports: [{ id: 7, description: "admin-only" }],
+      });
+
+      const result = await controller.getAuthorAssignmentInsights(
+        100,
+        buildSessionRequest("author-A@example.com") as never,
+      );
+
+      expect(result.reports).toEqual([]);
+      expect(result.analytics).toEqual({ totalCost: 1 });
+      expect(adminService.getDetailedAssignmentInsights).toHaveBeenCalledWith(
+        { userId: "author-A@example.com", groupId: "group-shared" },
+        100,
+      );
     });
   });
 });

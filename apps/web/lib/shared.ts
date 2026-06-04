@@ -1955,6 +1955,16 @@ export async function getDetailedAssignmentInsights(
 }
 
 /**
+ * Get insights for one of the current author's own assignments. Uses the normal
+ * app session (cookie) and the ownership-scoped author endpoint — no admin
+ * session and no admin-only data.
+ */
+export async function getAuthorAssignmentInsights(assignmentId: number) {
+  const url = `${getApiRoutes().assignments}/${assignmentId}/insights`;
+  return await apiClient.get(url);
+}
+
+/**
  * Execute a quick action for dashboard insights
  */
 export async function executeQuickAction(

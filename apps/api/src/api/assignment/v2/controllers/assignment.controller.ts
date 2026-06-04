@@ -204,6 +204,39 @@ export class AssignmentControllerV2 {
   }
 
   /**
+   * Insights for one of the author's own assignments (ownership-scoped). The
+   * author-facing counterpart to the admin insights endpoint — same data, minus
+   * admin-only issue reports, over the normal app session.
+   */
+  @Get(":id/insights")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({ summary: "Author insights for one of their own assignments" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({ status: 200 })
+  async getAuthorAssignmentInsights(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<Record<string, unknown>> {
+    // Enforce ownership here, not only in the service: the insights cache can
+    // short-circuit the service's authorship filter, so a fresh check stops an
+    // author reading another author's assignment via a warm cache.
+    const owns = await this.prisma.assignmentAuthor.findFirst({
+      where: { assignmentId: id, userId: request.userSession.userId },
+    });
+    if (!owns) {
+      throw new NotFoundException("Assignment not found");
+    }
+
+    const insights = (await this.adminService.getDetailedAssignmentInsights(
+      request.userSession,
+      id,
+    )) as Record<string, unknown>;
+
+    // Issue reports are admin-only; never expose them on the author surface.
+    return { ...insights, reports: [] };
+  }
+
+  /**
    * List assignments for the current user
    */
   @Get()
