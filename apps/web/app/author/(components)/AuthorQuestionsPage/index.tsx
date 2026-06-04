@@ -1,7 +1,6 @@
 /* eslint-disable */
 "use client";
 import { stripHtml } from "@/app/Helpers/strippers";
-import Dropdown from "@/components/Dropdown";
 import FileUploadModal from "@/components/FileUploadModal";
 import ReportModal from "@/components/ReportModal";
 import GripVertical from "@/components/svgs/GripVertical";
@@ -200,7 +199,6 @@ const AuthorQuestionsPage: FC<Props> = ({
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [showMassVariations, setShowMassVariations] = useState(false);
-  const [] = useState<any>(null);
 
   const questionTypes = useMemo(
     () => [
@@ -1456,7 +1454,7 @@ const SortableNavItem = ({
   const label =
     question.question.trim() === "" || question.question.trim() === "<p></p>"
       ? "Untitled"
-      : question.question.replace(/<\/?[^>]+(>|$)/g, "").trim();
+      : stripHtml(question.question).trim();
 
   return (
     <div
