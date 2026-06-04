@@ -2017,7 +2017,7 @@ export interface FailedJobsResponse {
 export async function getQueueStatus(
   sessionToken: string,
 ): Promise<QueueStatusResponse> {
-  return apiClient.get(`${getBaseApiPath("v1")}/admin/queue-status`, {
+  return apiClient.get(`${getBaseApiPath("v1")}/admin-dashboard/queue-status`, {
     headers: {
       "Content-Type": "application/json",
       "x-admin-token": sessionToken,
@@ -2033,7 +2033,9 @@ export async function getQueueFailedJobs(
   // The server validates and clamps `limit` (1..100, with NaN/negatives falling
   // back to the default) as the authoritative bound, so we forward the
   // requested value rather than re-implementing those bounds here.
-  const url = `${getBaseApiPath("v1")}/admin/queue-status/${encodeURIComponent(
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/queue-status/${encodeURIComponent(
     queueName,
   )}/failed?limit=${limit}`;
   return apiClient.get(url, {

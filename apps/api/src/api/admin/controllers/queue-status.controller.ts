@@ -22,14 +22,19 @@ const DEFAULT_FAILED_LIMIT = 25;
 @ApiTags("Admin Queue Status")
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
-@Controller({ path: "admin/queue-status", version: "1" })
+// NOTE: path is intentionally NOT under "admin/..." — the api-gateway guards
+// "/admin/*" with a JWT *bearer* admin token, whereas the admin dashboard
+// authenticates with the cookie session + x-admin-token. Living under
+// "admin-dashboard/..." routes through the same gateway path as the working
+// admin-dashboard endpoints and reaches mark-api's AdminGuard.
+@Controller({ path: "admin-dashboard/queue-status", version: "1" })
 export class QueueStatusController {
   private readonly logger = new Logger(QueueStatusController.name);
 
   constructor(private readonly queueStatusService: QueueStatusService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @ApiOperation({ summary: "Live queue counts + worker pod health" })
   async getStatus(): Promise<{
     generatedAt: string;
@@ -47,7 +52,7 @@ export class QueueStatusController {
   }
 
   @Get(":queueName/failed")
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @ApiOperation({ summary: "Recent failed jobs for one queue" })
   async getFailed(
     @Param("queueName") queueName: string,
