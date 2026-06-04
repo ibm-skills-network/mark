@@ -53,7 +53,7 @@ export class QueueStatusController {
   constructor(private readonly queueStatusService: QueueStatusService) {}
 
   @Get()
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Live queue counts + worker pod health" })
   async getStatus(): Promise<{
     generatedAt: string;
@@ -71,7 +71,7 @@ export class QueueStatusController {
   }
 
   @Get("redis-health")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Redis health + worker-connection reconciliation" })
   async getRedisHealth(): Promise<RedisHealthDto> {
     const health = await this.queueStatusService.getRedisHealth();
@@ -83,7 +83,7 @@ export class QueueStatusController {
   }
 
   @Get(":queueName/failed")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Recent failed jobs for one queue" })
   async getFailed(
     @Param("queueName") queueName: string,
@@ -101,7 +101,7 @@ export class QueueStatusController {
   }
 
   @Get(":queueName/active")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "In-flight (active) jobs for one queue" })
   async getActive(
     @Param("queueName") queueName: string,

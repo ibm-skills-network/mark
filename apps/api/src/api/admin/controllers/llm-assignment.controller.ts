@@ -20,6 +20,8 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AdminGuard } from "../../../auth/guards/admin.guard";
+import { UserRole } from "../../../auth/interfaces/user.session.interface";
+import { Roles } from "../../../auth/role/roles.global.guard";
 import {
   AssignmentRequest,
   LLMAssignmentService,
@@ -45,6 +47,9 @@ interface AdminSessionRequest extends Request {
   version: "1",
 })
 @UseGuards(AdminGuard)
+// LLM model assignment is admin-only. Class-level role gate so every endpoint is
+// ADMIN-restricted even if a new one is added without its own @Roles.
+@Roles(UserRole.ADMIN)
 export class LLMAssignmentController {
   constructor(
     @Inject(LLM_ASSIGNMENT_SERVICE)

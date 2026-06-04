@@ -105,7 +105,7 @@ export class AdminDashboardController {
   ) {}
 
   @Get("stats")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: "Get admin dashboard statistics",
   })
@@ -129,7 +129,7 @@ export class AdminDashboardController {
     });
   }
   @Get("quick-actions/:action")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: "Execute predefined quick actions for dashboard insights",
   })
@@ -152,7 +152,7 @@ export class AdminDashboardController {
    * Get assignment analytics with detailed insights
    */
   @Get("analytics")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary:
@@ -181,7 +181,7 @@ export class AdminDashboardController {
    * Get detailed insights for a specific assignment
    */
   @Get("assignments/:id/insights")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: "Get detailed insights for a specific assignment",

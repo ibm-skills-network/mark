@@ -693,7 +693,7 @@ export class AssignmentControllerV2 {
    * Get assignment analytics with detailed insights
    */
   @Get("analytics")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary:
