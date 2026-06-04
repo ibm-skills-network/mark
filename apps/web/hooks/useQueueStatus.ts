@@ -11,6 +11,9 @@ import {
 } from "../lib/shared";
 
 const STATUS_POLL_MS = 5000;
+// Redis health does an INFO + worker-list probe per poll and doesn't need 5s
+// freshness, so it refreshes less often than the queue counts.
+const REDIS_HEALTH_POLL_MS = 15_000;
 const HISTORY_MAX_SAMPLES = 60;
 
 export function useQueueStatus(
@@ -84,8 +87,8 @@ export function useRedisHealth(
       return getRedisHealth(sessionToken);
     },
     enabled: !!sessionToken,
-    refetchInterval: autoRefresh ? STATUS_POLL_MS : false,
-    staleTime: STATUS_POLL_MS,
+    refetchInterval: autoRefresh ? REDIS_HEALTH_POLL_MS : false,
+    staleTime: REDIS_HEALTH_POLL_MS,
   });
 }
 
