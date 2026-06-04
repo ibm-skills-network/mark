@@ -8,7 +8,6 @@ import {
   MagnifyingGlassIcon,
   QuestionMarkCircleIcon,
 } from "@heroicons/react/24/solid";
-import { motion } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { FC, useEffect, useState } from "react";
 
@@ -131,45 +130,20 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
           const Icon = step.icon;
 
           return (
-            <motion.li
-              key={step.id}
-              className="flex items-center"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
+            <li key={step.id} className="flex items-center">
               <div className="relative group">
-                <motion.button
+                <button
                   onClick={() => handleStepClick(index)}
                   className="relative flex text-center p-3 gap-x-2.5 focus:outline-none items-center text-nowrap rounded-lg transition-all duration-200"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
                 >
                   {isActive && (
-                    <motion.div
-                      className="absolute inset-0 rounded-lg bg-violet-100"
-                      layoutId="activeBackground"
-                      transition={{
-                        type: "spring",
-                        stiffness: 350,
-                        damping: 30,
-                      }}
-                    />
+                    <div className="absolute inset-0 rounded-lg bg-violet-100" />
                   )}
 
-                  <motion.div
-                    initial={{ scale: 1 }}
-                    animate={{
-                      scale: isActive ? 1.3 : 1,
-                    }}
-                    transition={{
-                      duration: 0.4,
-                      type: "spring",
-                      stiffness: 300,
-                    }}
-                    className={`w-6 h-6 flex items-center justify-center rounded-full relative z-10 ${
+                  <div
+                    className={`w-6 h-6 flex items-center justify-center rounded-full relative z-10 transition-transform duration-200 ${
                       isActive
-                        ? "text-violet-600 drop-shadow-lg"
+                        ? "text-violet-600 drop-shadow-lg scale-125"
                         : isCompleted
                           ? "text-violet-500"
                           : "text-gray-400"
@@ -178,17 +152,13 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                     <Icon className={isActive ? "drop-shadow-sm" : ""} />
 
                     {isCompleted && !isActive && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center"
-                      >
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center">
                         <span className="text-white text-[8px] font-bold">
                           ✓
                         </span>
-                      </motion.div>
+                      </div>
                     )}
-                  </motion.div>
+                  </div>
 
                   <span
                     className={`text-sm font-medium relative z-10 transition-all duration-200 ${
@@ -201,25 +171,19 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                   >
                     {step.name}
                   </span>
-                </motion.button>
+                </button>
               </div>
 
               {index < steps.length - 1 && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{
-                    opacity: 1,
-                    scale: 1,
-                  }}
-                  transition={{ duration: 0.3, delay: index * 0.1 + 0.1 }}
+                <div
                   className={`mx-3 transition-colors duration-300 ${
                     index < currentStepId ? "text-violet-400" : "text-gray-300"
                   }`}
                 >
                   <ArrowRightIcon className="w-5 h-5" />
-                </motion.div>
+                </div>
               )}
-            </motion.li>
+            </li>
           );
         })}
       </ol>
