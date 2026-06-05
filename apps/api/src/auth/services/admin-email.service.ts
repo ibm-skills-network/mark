@@ -77,8 +77,8 @@ export class AdminEmailService {
     }
   }
 
-  private useSendGrid(apiKey: string): void {
-    sgMail.setApiKey(apiKey);
+  private useSendGrid(key: string): void {
+    sgMail.setApiKey(key);
     this.provider = "sendgrid";
     const email = process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL;
     const name = process.env.SENDGRID_FROM_NAME || DEFAULT_FROM_NAME;
@@ -240,7 +240,7 @@ export class AdminEmailService {
       `<h1 style="font-size: 20px;">Admin verification code</h1>
        <p>Use this code to finish signing in. It expires in 10 minutes.</p>
        <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; margin: 24px 0;">${code}</p>
-       <p>If you didn't request this, you can ignore this email. Mark will never ask you for this code.</p>`,
+       <p>If you didn't request this, you can ignore this email. Don't share this code please.</p>`,
     );
   }
 
@@ -279,11 +279,16 @@ ${score}View your results: ${resultsUrl}`;
     reportedAt?: string,
     issueNumber?: number,
   ): string {
-    const reference = issueNumber ? `Issue #${issueNumber}` : issueTitle;
+    // issueTitle/issueBody originate from user-submitted bug reports — escape
+    // them before interpolating into the HTML body so report content can't
+    // inject markup or rewrite the renew/close links in the recipient's client.
+    const safeTitle = this.escapeHtml(issueTitle);
+    const safeBody = this.escapeHtml(issueBody);
+    const reference = issueNumber ? `Issue #${issueNumber}` : safeTitle;
     const heading =
-      reference === issueTitle
+      reference === safeTitle
         ? ""
-        : `<p style="margin: 8px 0 0; font-weight: 600;">${issueTitle}</p>`;
+        : `<p style="margin: 8px 0 0; font-weight: 600;">${safeTitle}</p>`;
     return this.layout(
       "Issue follow-up",
       `<h1 style="font-size: 20px;">Are you still experiencing this issue?</h1>
@@ -292,7 +297,7 @@ ${score}View your results: ${resultsUrl}`;
          <p style="margin: 0; font-weight: 600;">${reference}</p>
          <p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Reported ${this.formatReportedAt(reportedAt)}</p>
          ${heading}
-         <p style="margin: 12px 0 0; white-space: pre-wrap;">${issueBody}</p>
+         <p style="margin: 12px 0 0; white-space: pre-wrap;">${safeBody}</p>
        </div>
        <p>
          <a href="${renewLink}" style="display: inline-block; padding: 12px 20px; margin: 0 8px 0 0; border-radius: 8px; background: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600;">Yes, still happening</a>
@@ -344,10 +349,36 @@ If we don't hear back within 7 days, we'll close the issue.`;
 </html>`;
   }
 
+  // Escape the HTML-significant characters so user-derived text can be safely
+  // interpolated into an email's HTML body.
+  private escapeHtml(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
   private webAppUrl(): string {
-    if (process.env.NODE_ENV === "production") return process.env.WEB_APP_URL ?? "";
-    if (process.env.NODE_ENV === "staging")
-      return process.env.STAGING_WEB_APP_URL ?? "";
+    if (process.env.NODE_ENV === "production") {
+      const url = process.env.WEB_APP_URL ?? "";
+      if (!url) {
+        this.logger.warn(
+          "WEB_APP_URL is not set; email links will be relative and may not resolve.",
+        );
+      }
+      return url;
+    }
+    if (process.env.NODE_ENV === "staging") {
+      const url = process.env.STAGING_WEB_APP_URL ?? "";
+      if (!url) {
+        this.logger.warn(
+          "STAGING_WEB_APP_URL is not set; email links will be relative and may not resolve.",
+        );
+      }
+      return url;
+    }
     return "http://localhost:3010";
   }
 

@@ -732,8 +732,7 @@ export class AssignmentControllerV2 {
   @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
-    summary:
-      "Get detailed assignment analytics with insights (for authors and admins)",
+    summary: "Get detailed assignment analytics with insights (admin only)",
   })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })

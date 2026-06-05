@@ -10,7 +10,9 @@ describe("ErrorPage", () => {
     render(<ErrorPage error="Something broke" statusCode={500} />);
 
     expect(
-      screen.getByRole("heading", { name: /something went wrong on our side/i }),
+      screen.getByRole("heading", {
+        name: /something went wrong on our side/i,
+      }),
     ).toBeInTheDocument();
     // The message shows in the header and again in the support details.
     expect(screen.getAllByText("Something broke").length).toBeGreaterThan(0);
