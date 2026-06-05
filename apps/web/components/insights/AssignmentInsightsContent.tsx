@@ -69,13 +69,14 @@ interface DetailedInsightData {
     totalPoints: number;
   };
   analytics: {
-    totalCost: number;
+    // Cost fields are admin/internal-only and omitted from the author payload.
+    totalCost?: number;
     uniqueLearners: number;
     totalAttempts: number;
     completedAttempts: number;
     averageGrade: number;
     averageRating: number;
-    costBreakdown: {
+    costBreakdown?: {
       grading: number;
       questionGeneration: number;
       translation: number;
@@ -120,7 +121,9 @@ interface DetailedInsightData {
     status: string;
     createdAt: string;
   }>;
-  aiUsage: Array<{
+  // Admin/internal-only: per-call AI spend with model keys and token prices.
+  // Omitted from the author payload, so optional here.
+  aiUsage?: Array<{
     usageType: string;
     tokensIn: number;
     tokensOut: number;
@@ -455,34 +458,43 @@ export function AssignmentInsightsContent({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Cost</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(data.analytics.totalCost)}
-                </p>
+      {/* Total Cost + Authors are admin/internal-only (AI spend, cross-author
+          activity); the author endpoint omits them. Drop those two cards and
+          narrow the grid so it stays balanced in author mode. */}
+      <div
+        className={`grid grid-cols-1 md:grid-cols-2 ${isUserAdmin ? "lg:grid-cols-6" : "lg:grid-cols-4"} gap-4`}
+      >
+        {isUserAdmin && (
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Cost</p>
+                  <p className="text-2xl font-bold">
+                    {formatCurrency(data.analytics.totalCost ?? 0)}
+                  </p>
+                </div>
+                <DollarSign className="h-8 w-8 text-green-600" />
               </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Authors</p>
-                <p className="text-2xl font-bold">
-                  {data.authorActivity?.totalAuthors || 0}
-                </p>
+        {isUserAdmin && (
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Authors</p>
+                  <p className="text-2xl font-bold">
+                    {data.authorActivity?.totalAuthors || 0}
+                  </p>
+                </div>
+                <FileText className="h-8 w-8 text-indigo-600" />
               </div>
-              <FileText className="h-8 w-8 text-indigo-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="pt-4">
@@ -554,20 +566,25 @@ export function AssignmentInsightsContent({
       >
         <TabsList
           className={`
-        grid w-full ${isUserAdmin ? "grid-cols-7" : "grid-cols-6"} border-b mb-4
+        grid w-full ${isUserAdmin ? "grid-cols-7" : "grid-cols-4"} border-b mb-4
         `}
         >
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="authors">Authors</TabsTrigger>
+          {/* Authors, AI Usage, and Reports carry admin-only/internal data
+              (cross-author activity + emails, model keys, AI spend) and the
+              author endpoint omits it — hide these tabs outside admin mode. */}
+          {isUserAdmin && <TabsTrigger value="authors">Authors</TabsTrigger>}
           <TabsTrigger value="questions">Questions</TabsTrigger>
           <TabsTrigger value="attempts">Attempts</TabsTrigger>
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
-          <TabsTrigger value="ai-usage">AI Usage</TabsTrigger>
+          {isUserAdmin && <TabsTrigger value="ai-usage">AI Usage</TabsTrigger>}
           {isUserAdmin && <TabsTrigger value="reports">Reports</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div
+            className={`grid grid-cols-1 ${isUserAdmin ? "lg:grid-cols-2" : ""} gap-6`}
+          >
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -621,161 +638,165 @@ export function AssignmentInsightsContent({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-blue-600" />
-                  Cost Analysis Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3">
-                      <TrendingUp className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Cost per Attempt
-                    </div>
-                    <div className="text-2xl font-bold text-blue-700">
-                      {data.analytics.totalAttempts > 0
-                        ? formatCurrency(
-                            data.analytics.totalCost /
-                              data.analytics.totalAttempts,
-                          )
-                        : "N/A"}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {data.analytics.totalAttempts} total attempts
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mx-auto mb-3">
-                      <FileText className="h-6 w-6 text-green-600" />
-                    </div>
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Authoring Costs
-                    </div>
-                    <div className="text-2xl font-bold text-green-700">
-                      {formatCurrency(
-                        data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Content creation & translation
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3">
-                      <Users className="h-6 w-6 text-purple-600" />
-                    </div>
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Grading Costs
-                    </div>
-                    <div className="text-2xl font-bold text-purple-700">
-                      {formatCurrency(
-                        data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "LIVE_RECORDING_FEEDBACK",
-                              "GRADING_VALIDATION",
-                              "ASSIGNMENT_GRADING",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Student feedback & validation
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-6 border-t">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h4 className="font-semibold text-sm mb-3 text-green-700">
-                        Authoring Details
-                      </h4>
-                      <div className="space-y-2">
-                        {data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType),
-                          )
-                          .map((usage, index) => (
-                            <div
-                              key={index}
-                              className="flex justify-between items-center py-1"
-                            >
-                              <span className="text-xs text-muted-foreground">
-                                {usage.usageType
-                                  .replace("_", " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
-                              </span>
-                              <span className="text-sm font-mono">
-                                {formatCurrency(usage.totalCost || 0)}
-                              </span>
-                            </div>
-                          ))}
+            {/* Cost figures and per-call AI usage are admin/internal-only and
+                absent from the author payload — show this card only to admins. */}
+            {isUserAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                    Cost Analysis Breakdown
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3">
+                        <TrendingUp className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-2">
+                        Cost per Attempt
+                      </div>
+                      <div className="text-2xl font-bold text-blue-700">
+                        {data.analytics.totalAttempts > 0
+                          ? formatCurrency(
+                              (data.analytics.totalCost ?? 0) /
+                                data.analytics.totalAttempts,
+                            )
+                          : "N/A"}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {data.analytics.totalAttempts} total attempts
                       </div>
                     </div>
 
-                    <div>
-                      <h4 className="font-semibold text-sm mb-3 text-purple-700">
-                        Grading Details
-                      </h4>
-                      <div className="space-y-2">
-                        {data.aiUsage
-                          .filter((usage) =>
-                            [
-                              "LIVE_RECORDING_FEEDBACK",
-                              "GRADING_VALIDATION",
-                              "ASSIGNMENT_GRADING",
-                            ].includes(usage.usageType),
-                          )
-                          .map((usage, index) => (
-                            <div
-                              key={index}
-                              className="flex justify-between items-center py-1"
-                            >
-                              <span className="text-xs text-muted-foreground">
-                                {usage.usageType
-                                  .replace("_", " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
-                              </span>
-                              <span className="text-sm font-mono">
-                                {formatCurrency(usage.totalCost || 0)}
-                              </span>
-                            </div>
-                          ))}
+                    <div className="text-center">
+                      <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mx-auto mb-3">
+                        <FileText className="h-6 w-6 text-green-600" />
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-2">
+                        Authoring Costs
+                      </div>
+                      <div className="text-2xl font-bold text-green-700">
+                        {formatCurrency(
+                          (data.aiUsage ?? [])
+                            .filter((usage) =>
+                              [
+                                "TRANSLATION",
+                                "QUESTION_GENERATION",
+                                "ASSIGNMENT_GENERATION",
+                              ].includes(usage.usageType),
+                            )
+                            .reduce(
+                              (sum, usage) => sum + (usage.totalCost || 0),
+                              0,
+                            ),
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Content creation & translation
+                      </div>
+                    </div>
+
+                    <div className="text-center">
+                      <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3">
+                        <Users className="h-6 w-6 text-purple-600" />
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-2">
+                        Grading Costs
+                      </div>
+                      <div className="text-2xl font-bold text-purple-700">
+                        {formatCurrency(
+                          (data.aiUsage ?? [])
+                            .filter((usage) =>
+                              [
+                                "LIVE_RECORDING_FEEDBACK",
+                                "GRADING_VALIDATION",
+                                "ASSIGNMENT_GRADING",
+                              ].includes(usage.usageType),
+                            )
+                            .reduce(
+                              (sum, usage) => sum + (usage.totalCost || 0),
+                              0,
+                            ),
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Student feedback & validation
                       </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+
+                  <div className="mt-6 pt-6 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-semibold text-sm mb-3 text-green-700">
+                          Authoring Details
+                        </h4>
+                        <div className="space-y-2">
+                          {(data.aiUsage ?? [])
+                            .filter((usage) =>
+                              [
+                                "TRANSLATION",
+                                "QUESTION_GENERATION",
+                                "ASSIGNMENT_GENERATION",
+                              ].includes(usage.usageType),
+                            )
+                            .map((usage, index) => (
+                              <div
+                                key={index}
+                                className="flex justify-between items-center py-1"
+                              >
+                                <span className="text-xs text-muted-foreground">
+                                  {usage.usageType
+                                    .replace("_", " ")
+                                    .toLowerCase()
+                                    .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                </span>
+                                <span className="text-sm font-mono">
+                                  {formatCurrency(usage.totalCost || 0)}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold text-sm mb-3 text-purple-700">
+                          Grading Details
+                        </h4>
+                        <div className="space-y-2">
+                          {(data.aiUsage ?? [])
+                            .filter((usage) =>
+                              [
+                                "LIVE_RECORDING_FEEDBACK",
+                                "GRADING_VALIDATION",
+                                "ASSIGNMENT_GRADING",
+                              ].includes(usage.usageType),
+                            )
+                            .map((usage, index) => (
+                              <div
+                                key={index}
+                                className="flex justify-between items-center py-1"
+                              >
+                                <span className="text-xs text-muted-foreground">
+                                  {usage.usageType
+                                    .replace("_", " ")
+                                    .toLowerCase()
+                                    .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                </span>
+                                <span className="text-sm font-mono">
+                                  {formatCurrency(usage.totalCost || 0)}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {data.analytics.performanceInsights.length > 0 && (
@@ -800,214 +821,220 @@ export function AssignmentInsightsContent({
           )}
         </TabsContent>
 
-        <TabsContent value="authors" className="space-y-6">
-          {data.authorActivity && data.authorActivity.totalAuthors > 0 ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Authors
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {data.authorActivity.totalAuthors}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {
-                            data.authorActivity.authors.filter(
-                              (a) => a.isActiveContributor,
-                            ).length
-                          }{" "}
-                          active contributors
-                        </p>
+        {isUserAdmin && (
+          <TabsContent value="authors" className="space-y-6">
+            {data.authorActivity && data.authorActivity.totalAuthors > 0 ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Total Authors
+                          </p>
+                          <p className="text-2xl font-bold">
+                            {data.authorActivity.totalAuthors}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {
+                              data.authorActivity.authors.filter(
+                                (a) => a.isActiveContributor,
+                              ).length
+                            }{" "}
+                            active contributors
+                          </p>
+                        </div>
+                        <Users className="h-8 w-8 text-indigo-600" />
                       </div>
-                      <Users className="h-8 w-8 text-indigo-600" />
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Most Active
+                          </p>
+                          <p className="text-lg font-bold text-truncate">
+                            {data.authorActivity.authors[0]?.userId || "N/A"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {data.authorActivity.authors[0]?.totalAssignments ||
+                              0}{" "}
+                            assignments
+                          </p>
+                        </div>
+                        <TrendingUp className="h-8 w-8 text-green-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Total Assignments
+                          </p>
+                          <p className="text-2xl font-bold">
+                            {data.authorActivity.authors.reduce(
+                              (sum, a) => sum + a.totalAssignments,
+                              0,
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            by all authors combined
+                          </p>
+                        </div>
+                        <BarChart3 className="h-8 w-8 text-purple-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {data.authorActivity.activityInsights.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="h-5 w-5" />
+                        Author Activity Insights
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2">
+                        {data.authorActivity.activityInsights.map(
+                          (insight, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <span className="text-sm">{insight}</span>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Most Active
-                        </p>
-                        <p className="text-lg font-bold text-truncate">
-                          {data.authorActivity.authors[0]?.userId || "N/A"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {data.authorActivity.authors[0]?.totalAssignments ||
-                            0}{" "}
-                          assignments
-                        </p>
-                      </div>
-                      <TrendingUp className="h-8 w-8 text-green-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Assignments
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {data.authorActivity.authors.reduce(
-                            (sum, a) => sum + a.totalAssignments,
-                            0,
-                          )}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          by all authors combined
-                        </p>
-                      </div>
-                      <BarChart3 className="h-8 w-8 text-purple-600" />
-                    </div>
+                  <CardHeader>
+                    <CardTitle>Author Activity Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Author</TableHead>
+                          <TableHead className="text-center">
+                            Activity Score
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Assignments
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Questions published
+                          </TableHead>
+                          <TableHead className="text-center">
+                            AI Usage
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Feedback
+                          </TableHead>
+                          <TableHead className="text-center">Joined</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.authorActivity.authors.map((author) => (
+                          <TableRow key={author.userId}>
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                  <span className="text-xs font-semibold text-indigo-600">
+                                    {author.userId
+                                      .split("@")[0]
+                                      ?.substring(0, 2)
+                                      .toUpperCase() || "AU"}
+                                  </span>
+                                </div>
+                                <div>
+                                  <div className="font-medium">
+                                    {author.userId.split("@")[0]}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {author.userId.split("@")[1]}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge
+                                variant={
+                                  author.activityScore > 10
+                                    ? "default"
+                                    : "secondary"
+                                }
+                              >
+                                {author.activityScore}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {author.totalAssignments}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {author.totalQuestions}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {author.totalAIUsage > 1000
+                                ? "Ridiculous Usage!"
+                                : author.totalAIUsage > 500
+                                  ? "Very High Usage"
+                                  : author.totalAIUsage > 100
+                                    ? "High Usage"
+                                    : author.totalAIUsage > 50
+                                      ? "Moderate Usage"
+                                      : author.totalAIUsage > 0
+                                        ? "Low Usage"
+                                        : "No Usage"}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {author.totalFeedback}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {formatDate(author.joinedAt)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge
+                                variant={
+                                  author.isActiveContributor
+                                    ? "default"
+                                    : "outline"
+                                }
+                              >
+                                {author.isActiveContributor
+                                  ? "Active"
+                                  : "Occasional"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </CardContent>
                 </Card>
               </div>
-
-              {data.authorActivity.activityInsights.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Activity className="h-5 w-5" />
-                      Author Activity Insights
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {data.authorActivity.activityInsights.map(
-                        (insight, index) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                            <span className="text-sm">{insight}</span>
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
+            ) : (
               <Card>
-                <CardHeader>
-                  <CardTitle>Author Activity Details</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Author</TableHead>
-                        <TableHead className="text-center">
-                          Activity Score
-                        </TableHead>
-                        <TableHead className="text-center">
-                          Assignments
-                        </TableHead>
-                        <TableHead className="text-center">
-                          Questions published
-                        </TableHead>
-                        <TableHead className="text-center">AI Usage</TableHead>
-                        <TableHead className="text-center">Feedback</TableHead>
-                        <TableHead className="text-center">Joined</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.authorActivity.authors.map((author) => (
-                        <TableRow key={author.userId}>
-                          <TableCell className="font-mono text-sm">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                <span className="text-xs font-semibold text-indigo-600">
-                                  {author.userId
-                                    .split("@")[0]
-                                    ?.substring(0, 2)
-                                    .toUpperCase() || "AU"}
-                                </span>
-                              </div>
-                              <div>
-                                <div className="font-medium">
-                                  {author.userId.split("@")[0]}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {author.userId.split("@")[1]}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge
-                              variant={
-                                author.activityScore > 10
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {author.activityScore}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {author.totalAssignments}
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {author.totalQuestions}
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {author.totalAIUsage > 1000
-                              ? "Ridiculous Usage!"
-                              : author.totalAIUsage > 500
-                                ? "Very High Usage"
-                                : author.totalAIUsage > 100
-                                  ? "High Usage"
-                                  : author.totalAIUsage > 50
-                                    ? "Moderate Usage"
-                                    : author.totalAIUsage > 0
-                                      ? "Low Usage"
-                                      : "No Usage"}
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {author.totalFeedback}
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {formatDate(author.joinedAt)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge
-                              variant={
-                                author.isActiveContributor
-                                  ? "default"
-                                  : "outline"
-                              }
-                            >
-                              {author.isActiveContributor
-                                ? "Active"
-                                : "Occasional"}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <CardContent className="pt-4">
+                  <div className="text-center text-muted-foreground py-8">
+                    No author information available for this assignment
+                  </div>
                 </CardContent>
               </Card>
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="pt-4">
-                <div className="text-center text-muted-foreground py-8">
-                  No author information available for this assignment
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="questions">
           <Card>
@@ -1427,19 +1454,35 @@ export function AssignmentInsightsContent({
           </Card>
         </TabsContent>
 
-        <TabsContent value="ai-usage" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-green-700">
-                  <FileText className="h-5 w-5" />
-                  Authoring Costs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-green-700 mb-4">
-                  {formatCurrency(
-                    data.aiUsage
+        {isUserAdmin && (
+          <TabsContent value="ai-usage" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-green-700">
+                    <FileText className="h-5 w-5" />
+                    Authoring Costs
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-green-700 mb-4">
+                    {formatCurrency(
+                      (data.aiUsage ?? [])
+                        .filter((usage) =>
+                          [
+                            "TRANSLATION",
+                            "QUESTION_GENERATION",
+                            "ASSIGNMENT_GENERATION",
+                          ].includes(usage.usageType),
+                        )
+                        .reduce(
+                          (sum, usage) => sum + (usage.totalCost || 0),
+                          0,
+                        ),
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {(data.aiUsage ?? [])
                       .filter((usage) =>
                         [
                           "TRANSLATION",
@@ -1447,49 +1490,52 @@ export function AssignmentInsightsContent({
                           "ASSIGNMENT_GENERATION",
                         ].includes(usage.usageType),
                       )
-                      .reduce((sum, usage) => sum + (usage.totalCost || 0), 0),
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {data.aiUsage
-                    .filter((usage) =>
-                      [
-                        "TRANSLATION",
-                        "QUESTION_GENERATION",
-                        "ASSIGNMENT_GENERATION",
-                      ].includes(usage.usageType),
-                    )
-                    .map((usage, index) => (
-                      <div
-                        key={index}
-                        className="flex justify-between items-center"
-                      >
-                        <span className="text-sm text-muted-foreground">
-                          {usage.usageType
-                            .replace("_", " ")
-                            .toLowerCase()
-                            .replace(/\b\w/g, (l) => l.toUpperCase())}
-                        </span>
-                        <span className="font-mono text-sm">
-                          {formatCurrency(usage.totalCost || 0)}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
+                      .map((usage, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center"
+                        >
+                          <span className="text-sm text-muted-foreground">
+                            {usage.usageType
+                              .replace("_", " ")
+                              .toLowerCase()
+                              .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          </span>
+                          <span className="font-mono text-sm">
+                            {formatCurrency(usage.totalCost || 0)}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-purple-700">
-                  <Users className="h-5 w-5" />
-                  Grading Costs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-purple-700 mb-4">
-                  {formatCurrency(
-                    data.aiUsage
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-purple-700">
+                    <Users className="h-5 w-5" />
+                    Grading Costs
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-purple-700 mb-4">
+                    {formatCurrency(
+                      (data.aiUsage ?? [])
+                        .filter((usage) =>
+                          [
+                            "LIVE_RECORDING_FEEDBACK",
+                            "GRADING_VALIDATION",
+                            "ASSIGNMENT_GRADING",
+                          ].includes(usage.usageType),
+                        )
+                        .reduce(
+                          (sum, usage) => sum + (usage.totalCost || 0),
+                          0,
+                        ),
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {(data.aiUsage ?? [])
                       .filter((usage) =>
                         [
                           "LIVE_RECORDING_FEEDBACK",
@@ -1497,197 +1543,190 @@ export function AssignmentInsightsContent({
                           "ASSIGNMENT_GRADING",
                         ].includes(usage.usageType),
                       )
-                      .reduce((sum, usage) => sum + (usage.totalCost || 0), 0),
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {data.aiUsage
-                    .filter((usage) =>
-                      [
-                        "LIVE_RECORDING_FEEDBACK",
-                        "GRADING_VALIDATION",
-                        "ASSIGNMENT_GRADING",
-                      ].includes(usage.usageType),
-                    )
-                    .map((usage, index) => (
-                      <div
-                        key={index}
-                        className="flex justify-between items-center"
-                      >
-                        <span className="text-sm text-muted-foreground">
-                          {usage.usageType
-                            .replace("_", " ")
-                            .toLowerCase()
-                            .replace(/\b\w/g, (l) => l.toUpperCase())}
-                        </span>
-                        <span className="font-mono text-sm">
-                          {formatCurrency(usage.totalCost || 0)}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>AI Usage Details</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Detailed breakdown of AI usage by type and model
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowDetailedUsage(!showDetailedUsage)}
-                  className="flex items-center gap-2"
-                >
-                  {showDetailedUsage ? "Hide Details" : "Show Details"}
-                  {showDetailedUsage ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Usage Type</TableHead>
-                    <TableHead>Model Used</TableHead>
-                    <TableHead className="text-center">Total Cost</TableHead>
-                    {showDetailedUsage && (
-                      <>
-                        <TableHead className="text-center">Tokens In</TableHead>
-                        <TableHead className="text-center">
-                          Tokens Out
-                        </TableHead>
-                        <TableHead className="text-center">
-                          Input Cost
-                        </TableHead>
-                        <TableHead className="text-center">
-                          Output Cost
-                        </TableHead>
-                        <TableHead>Last Used On</TableHead>
-                      </>
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.aiUsage.map((usage, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType)
-                              ? "border-green-300 text-green-700"
-                              : [
-                                    "LIVE_RECORDING_FEEDBACK",
-                                    "GRADING_VALIDATION",
-                                    "ASSIGNMENT_GRADING",
-                                  ].includes(usage.usageType)
-                                ? "border-purple-300 text-purple-700"
-                                : ""
-                          }
+                      .map((usage, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center"
                         >
-                          {usage.usageType.replace("_", " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <Badge variant="secondary">{usage.modelUsed}</Badge>
-                          {showDetailedUsage && (
-                            <div className="text-xs text-muted-foreground">
-                              In:{" "}
-                              {formatPricePerMillionTokens(
-                                usage.inputTokenPrice,
-                              )}
-                              /1M | Out:{" "}
-                              {formatPricePerMillionTokens(
-                                usage.outputTokenPrice,
-                              )}
-                              /1M
-                            </div>
-                          )}
+                          <span className="text-sm text-muted-foreground">
+                            {usage.usageType
+                              .replace("_", " ")
+                              .toLowerCase()
+                              .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          </span>
+                          <span className="font-mono text-sm">
+                            {formatCurrency(usage.totalCost || 0)}
+                          </span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-center font-mono font-semibold text-green-600">
-                        {formatCurrency(usage.totalCost)}
-                      </TableCell>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>AI Usage Details</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Detailed breakdown of AI usage by type and model
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDetailedUsage(!showDetailedUsage)}
+                    className="flex items-center gap-2"
+                  >
+                    {showDetailedUsage ? "Hide Details" : "Show Details"}
+                    {showDetailedUsage ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usage Type</TableHead>
+                      <TableHead>Model Used</TableHead>
+                      <TableHead className="text-center">Total Cost</TableHead>
                       {showDetailedUsage && (
                         <>
-                          <TableCell className="text-center font-mono">
-                            {usage.tokensIn.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {usage.tokensOut.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-center font-mono text-blue-600">
-                            {formatCurrency(usage.inputCost)}
-                          </TableCell>
-                          <TableCell className="text-center font-mono text-purple-600">
-                            {formatCurrency(usage.outputCost)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div>{formatDate(usage.createdAt)}</div>
-                              <div className="text-xs text-muted-foreground">
-                                Pricing:{" "}
-                                {formatDate(usage.pricingEffectiveDate)}
-                              </div>
-                            </div>
-                          </TableCell>
+                          <TableHead className="text-center">
+                            Tokens In
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Tokens Out
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Input Cost
+                          </TableHead>
+                          <TableHead className="text-center">
+                            Output Cost
+                          </TableHead>
+                          <TableHead>Last Used On</TableHead>
                         </>
                       )}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {showDetailedUsage && (
-                <div className="mt-6 space-y-4">
-                  <h3 className="text-lg font-semibold">Calculation Details</h3>
-                  {data.aiUsage.map((usage, index) => (
-                    <div
-                      key={index}
-                      className="border rounded-lg p-4 bg-slate-50"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{usage.usageType}</Badge>
-                          <Badge variant="secondary">{usage.modelUsed}</Badge>
-                        </div>
-                        <span className="font-semibold text-green-600">
+                  </TableHeader>
+                  <TableBody>
+                    {(data.aiUsage ?? []).map((usage, index) => (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              [
+                                "TRANSLATION",
+                                "QUESTION_GENERATION",
+                                "ASSIGNMENT_GENERATION",
+                              ].includes(usage.usageType)
+                                ? "border-green-300 text-green-700"
+                                : [
+                                      "LIVE_RECORDING_FEEDBACK",
+                                      "GRADING_VALIDATION",
+                                      "ASSIGNMENT_GRADING",
+                                    ].includes(usage.usageType)
+                                  ? "border-purple-300 text-purple-700"
+                                  : ""
+                            }
+                          >
+                            {usage.usageType.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Badge variant="secondary">{usage.modelUsed}</Badge>
+                            {showDetailedUsage && (
+                              <div className="text-xs text-muted-foreground">
+                                In:{" "}
+                                {formatPricePerMillionTokens(
+                                  usage.inputTokenPrice,
+                                )}
+                                /1M | Out:{" "}
+                                {formatPricePerMillionTokens(
+                                  usage.outputTokenPrice,
+                                )}
+                                /1M
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-semibold text-green-600">
                           {formatCurrency(usage.totalCost)}
-                        </span>
+                        </TableCell>
+                        {showDetailedUsage && (
+                          <>
+                            <TableCell className="text-center font-mono">
+                              {usage.tokensIn.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">
+                              {usage.tokensOut.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-center font-mono text-blue-600">
+                              {formatCurrency(usage.inputCost)}
+                            </TableCell>
+                            <TableCell className="text-center font-mono text-purple-600">
+                              {formatCurrency(usage.outputCost)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div>{formatDate(usage.createdAt)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Pricing:{" "}
+                                  {formatDate(usage.pricingEffectiveDate)}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                {showDetailedUsage && (
+                  <div className="mt-6 space-y-4">
+                    <h3 className="text-lg font-semibold">
+                      Calculation Details
+                    </h3>
+                    {(data.aiUsage ?? []).map((usage, index) => (
+                      <div
+                        key={index}
+                        className="border rounded-lg p-4 bg-slate-50"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{usage.usageType}</Badge>
+                            <Badge variant="secondary">{usage.modelUsed}</Badge>
+                          </div>
+                          <span className="font-semibold text-green-600">
+                            {formatCurrency(usage.totalCost)}
+                          </span>
+                        </div>
+                        <div className="font-mono text-sm space-y-1 text-slate-700">
+                          <div className="text-blue-600">
+                            {usage.calculationSteps.inputCalculation}
+                          </div>
+                          <div className="text-purple-600">
+                            {usage.calculationSteps.outputCalculation}
+                          </div>
+                          <div className="text-green-600 font-semibold">
+                            {usage.calculationSteps.totalCalculation}
+                          </div>
+                        </div>
                       </div>
-                      <div className="font-mono text-sm space-y-1 text-slate-700">
-                        <div className="text-blue-600">
-                          {usage.calculationSteps.inputCalculation}
-                        </div>
-                        <div className="text-purple-600">
-                          {usage.calculationSteps.outputCalculation}
-                        </div>
-                        <div className="text-green-600 font-semibold">
-                          {usage.calculationSteps.totalCalculation}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {isUserAdmin && (
           <TabsContent value="reports">

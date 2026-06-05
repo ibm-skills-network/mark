@@ -232,8 +232,29 @@ export class AssignmentControllerV2 {
       id,
     )) as Record<string, unknown>;
 
-    // Issue reports are admin-only; never expose them on the author surface.
-    return { ...insights, reports: [] };
+    // Whitelist projection: the admin payload also carries platform-wide and
+    // internal-only data (other authors' cross-assignment activity and emails,
+    // raw model keys / per-token prices, and AI spend). Authors only get their
+    // own assignment's learner-scoped data, so build the response by copying the
+    // allowed keys rather than spreading-then-deleting — a new admin-only field
+    // added upstream then can't leak through by default.
+    const analytics = (insights.analytics ?? {}) as Record<string, unknown>;
+    return {
+      assignment: insights.assignment,
+      questions: insights.questions,
+      attempts: insights.attempts,
+      feedback: insights.feedback,
+      analytics: {
+        uniqueLearners: analytics.uniqueLearners,
+        totalAttempts: analytics.totalAttempts,
+        completedAttempts: analytics.completedAttempts,
+        averageGrade: analytics.averageGrade,
+        averageRating: analytics.averageRating,
+        performanceInsights: analytics.performanceInsights,
+      },
+      // Issue reports are admin-only; never expose them on the author surface.
+      reports: [],
+    };
   }
 
   /**
@@ -726,10 +747,12 @@ export class AssignmentControllerV2 {
    * Get assignment analytics with detailed insights
    */
   @Get("analytics")
-  // Admin-only is enforced by AdminGuard. @Roles stays AUTHOR,ADMIN so the
-  // global RolesGlobalGuard (which sees the LTI author role, before AdminGuard
-  // upgrades it from the admin token) lets the request reach AdminGuard.
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  // Admin-only is enforced by AdminGuard (it rejects any non-admin session). No
+  // @Roles here: the global RolesGlobalGuard runs before AdminGuard and is a
+  // no-op without @Roles metadata, so the request reaches AdminGuard, which is
+  // the sole gate. Adding @Roles(AUTHOR, ...) here would be misleading — it
+  // never widens access past AdminGuard, only obscures who can actually reach
+  // this route.
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: "Get detailed assignment analytics with insights (admin only)",
