@@ -11,8 +11,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AdminGuard } from "../../../auth/guards/admin.guard";
-import { UserRole } from "../../../auth/interfaces/user.session.interface";
-import { Roles } from "../../../auth/role/roles.global.guard";
 import { LLMPricingService } from "../../llm/core/services/llm-pricing.service";
 import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
 
@@ -21,9 +19,6 @@ import { LLM_PRICING_SERVICE } from "../../llm/llm.constants";
   version: "1",
 })
 @UseGuards(AdminGuard)
-// LLM pricing is admin-only. Class-level role gate so every endpoint is
-// ADMIN-restricted even if a new one is added without its own @Roles.
-@Roles(UserRole.ADMIN)
 export class LLMPricingController {
   constructor(
     @Inject(LLM_PRICING_SERVICE)

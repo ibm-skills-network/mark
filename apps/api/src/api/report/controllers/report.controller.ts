@@ -41,7 +41,6 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
   @Get("feedback")
   @UseGuards(AdminGuard)
-  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: "Get all assignment feedback with pagination and filtering",
   })
@@ -89,7 +88,6 @@ export class ReportsController {
 
   @Get()
   @UseGuards(AdminGuard)
-  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "Get all reports with pagination and filtering" })
   @ApiQuery({ name: "page", required: false, type: Number, example: 1 })
   @ApiQuery({ name: "limit", required: false, type: Number, example: 20 })
@@ -122,7 +120,6 @@ export class ReportsController {
 
   @Post("renewal-email")
   @UseGuards(AdminGuard)
-  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: "Send bug renewal email for a report issue",
   })

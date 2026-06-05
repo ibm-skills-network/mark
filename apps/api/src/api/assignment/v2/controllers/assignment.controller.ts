@@ -726,7 +726,10 @@ export class AssignmentControllerV2 {
    * Get assignment analytics with detailed insights
    */
   @Get("analytics")
-  @Roles(UserRole.ADMIN)
+  // Admin-only is enforced by AdminGuard. @Roles stays AUTHOR,ADMIN so the
+  // global RolesGlobalGuard (which sees the LTI author role, before AdminGuard
+  // upgrades it from the admin token) lets the request reach AdminGuard.
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary:
