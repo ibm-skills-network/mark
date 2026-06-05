@@ -34,6 +34,7 @@ import {
   Calculator,
   RotateCcw,
   Calendar,
+  Activity,
 } from "lucide-react";
 import {
   Select,
@@ -836,6 +837,13 @@ function AdminDashboardContent({
                 <Button variant="outline" size="sm">
                   <Settings className="h-4 w-4 mr-2" />
                   LLM Settings
+                </Button>
+              </Link>
+
+              <Link href="/admin/queues">
+                <Button variant="outline" size="sm">
+                  <Activity className="h-4 w-4 mr-2" />
+                  Queues
                 </Button>
               </Link>
             </>

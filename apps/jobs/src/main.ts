@@ -1,3 +1,16 @@
+/* eslint-disable unicorn/prefer-module */
+// Instana must initialize before any other import so it can instrument http /
+// ioredis before bullmq loads. Gate mirrors isInstanaEnabled() in
+// ./instrumentation/instana-job-tracing — kept inlined here so this runs
+// before module imports rather than importing the helper.
+if (
+  (process.env.NODE_ENV === "production" ||
+    process.env.INSTANA_ENABLED === "true") &&
+  process.env.INSTANA_ENABLED !== "false"
+) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-var-requires
+  require("@instana/collector")({ autoProfile: true });
+}
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";

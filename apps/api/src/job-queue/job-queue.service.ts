@@ -1,8 +1,45 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import { JobsOptions, JobState, Queue } from "bullmq";
+import { Job, JobsOptions, JobState, Queue } from "bullmq";
 import IORedis from "ioredis";
+import { JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
+
+export interface QueueCounts {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  completed: number;
+  paused: number;
+}
+
+/**
+ * Compact, payload-free timing sample for throughput derivation. Carries only
+ * BullMQ lifecycle timestamps — never job data — so the read-model can compute
+ * completed/failed-per-minute and average wait/run without touching encrypted
+ * payloads or PII.
+ */
+export interface ThroughputSample {
+  completed: Array<{
+    timestamp: number | null;
+    processedOn: number | null;
+    finishedOn: number | null;
+  }>;
+  failed: Array<{ finishedOn: number | null }>;
+}
+
+export interface RedisInfo {
+  usedMemoryBytes: number | null;
+  usedMemoryHuman: string | null;
+  connectedClients: number | null;
+  opsPerSec: number | null;
+}
+
+// Upper bound on the number of recently-retained completed/failed jobs scanned
+// when deriving throughput. BullMQ retains up to 1000 of each
+// (removeOnComplete/removeOnFail), so this caps the scan well under that.
+const THROUGHPUT_SAMPLE_MAX = 500;
 
 @Injectable()
 export class JobQueueService implements OnModuleDestroy {
@@ -76,6 +113,173 @@ export class JobQueueService implements OnModuleDestroy {
 
     const resolvedId: string = job.id ?? jobId;
     return { id: resolvedId, state };
+  }
+
+  async getQueueCounts(queueName: string): Promise<QueueCounts> {
+    const counts = await this.getQueue(queueName).getJobCounts(
+      "waiting",
+      "active",
+      "delayed",
+      "failed",
+      "completed",
+      "paused",
+    );
+    return {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+      paused: counts.paused ?? 0,
+    };
+  }
+
+  async getFailedJobs(queueName: string, limit: number): Promise<Job[]> {
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    return queue.getFailed(0, Math.max(0, limit - 1));
+  }
+
+  /**
+   * Recent in-flight (active) jobs for a queue, newest-first. Returns the raw
+   * BullMQ jobs; decryption and PII handling are the read-model's job, not this
+   * layer's.
+   */
+  async getActiveJobs(queueName: string, limit: number): Promise<Job[]> {
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    return queue.getActive(0, Math.max(0, limit - 1));
+  }
+
+  /**
+   * Compact timing sample for throughput derivation. Pulls only the lifecycle
+   * timestamps off recently-retained completed/failed jobs — never payloads —
+   * so the read-model can compute rates and averages without decrypting data.
+   */
+  async getThroughputSample(queueName: string): Promise<ThroughputSample> {
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    const end = THROUGHPUT_SAMPLE_MAX - 1;
+    const [completedJobs, failedJobs] = await Promise.all([
+      queue.getCompleted(0, end),
+      queue.getFailed(0, end),
+    ]);
+
+    return {
+      completed: completedJobs.map((job) => ({
+        timestamp: this.toFiniteOrNull(job.timestamp),
+        processedOn: this.toFiniteOrNull(job.processedOn),
+        finishedOn: this.toFiniteOrNull(job.finishedOn),
+      })),
+      failed: failedJobs.map((job) => ({
+        finishedOn: this.toFiniteOrNull(job.finishedOn),
+      })),
+    };
+  }
+
+  /**
+   * Retry a job only if it currently exists and is in the failed state.
+   * Returns false (never throws) when the job is missing or not failed, so a
+   * raced or already-retried id is a no-op rather than an error.
+   */
+  async retryFailedJob(queueName: string, jobId: string): Promise<boolean> {
+    this.assertKnownQueue(queueName);
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    const job = await queue.getJob(jobId);
+    if (!job) {
+      return false;
+    }
+    const state = await job.getState();
+    if (state !== "failed") {
+      return false;
+    }
+    await job.retry("failed");
+    return true;
+  }
+
+  /**
+   * Remove a job only if it currently exists and is in the failed state.
+   * Returns false (never throws) when the job is missing or not failed, so the
+   * caller cannot remove an active job by racing its id.
+   */
+  async removeFailedJob(queueName: string, jobId: string): Promise<boolean> {
+    this.assertKnownQueue(queueName);
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    const job = await queue.getJob(jobId);
+    if (!job) {
+      return false;
+    }
+    const state = await job.getState();
+    if (state !== "failed") {
+      return false;
+    }
+    await job.remove();
+    return true;
+  }
+
+  /**
+   * Parse the fields the dashboard needs out of Redis `INFO`. Missing or
+   * unparseable fields degrade to null rather than failing the call.
+   */
+  async getRedisInfo(): Promise<RedisInfo> {
+    const raw = await this.getConnection().info();
+    const fields = this.parseRedisInfo(raw);
+    return {
+      usedMemoryBytes: this.parseIntField(fields.get("used_memory")),
+      usedMemoryHuman: fields.get("used_memory_human") ?? null,
+      connectedClients: this.parseIntField(fields.get("connected_clients")),
+      opsPerSec: this.parseIntField(fields.get("instantaneous_ops_per_sec")),
+    };
+  }
+
+  /**
+   * Number of live worker connections BullMQ sees registered against a queue.
+   */
+  async getQueueWorkerConnections(queueName: string): Promise<number> {
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    const workers = await queue.getWorkers();
+    return workers.length;
+  }
+
+  async isQueuePaused(queueName: string): Promise<boolean> {
+    const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
+    return queue.isPaused();
+  }
+
+  private assertKnownQueue(queueName: string): void {
+    if (!(Object.values(JOB_QUEUE_NAMES) as string[]).includes(queueName)) {
+      // Generic error — never echo the offending value or hint at internals.
+      throw new Error("Unknown queue");
+    }
+  }
+
+  private toFiniteOrNull(value: number | undefined): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  private parseRedisInfo(raw: string): Map<string, string> {
+    const fields = new Map<string, string>();
+    for (const line of raw.split(/\r?\n/)) {
+      // Section headers ("# Memory") and blank lines carry no field.
+      if (!line || line.startsWith("#")) {
+        continue;
+      }
+      const separatorIndex = line.indexOf(":");
+      if (separatorIndex === -1) {
+        continue;
+      }
+      const key = line.slice(0, separatorIndex).trim();
+      const value = line.slice(separatorIndex + 1).trim();
+      if (key) {
+        fields.set(key, value);
+      }
+    }
+    return fields;
+  }
+
+  private parseIntField(value: string | undefined): number | null {
+    if (value === undefined) {
+      return null;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   async onModuleDestroy(): Promise<void> {
