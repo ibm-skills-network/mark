@@ -59,6 +59,31 @@ describe("ActiveJobsDialog", () => {
     expect(screen.getByText(/assignmentId=12/)).toBeInTheDocument();
   });
 
+  it.each([
+    [1, "1"],
+    [0.5, "50"],
+    [50, "50"],
+    [100, "100"],
+  ])(
+    "renders numeric progress %p on the 0..100 scale (aria-valuenow %s)",
+    async (progress, expected) => {
+      (shared.getQueueActiveJobs as jest.Mock).mockResolvedValue({
+        queueName: "mark.attempt",
+        active: [{ ...job, progress }],
+      });
+      wrap(
+        <ActiveJobsDialog
+          sessionToken="tok"
+          queueName="mark.attempt"
+          onClose={noop}
+        />,
+      );
+
+      const bar = await screen.findByRole("progressbar");
+      expect(bar).toHaveAttribute("aria-valuenow", expected);
+    },
+  );
+
   it("shows an empty state when there are no active jobs", async () => {
     (shared.getQueueActiveJobs as jest.Mock).mockResolvedValue({
       queueName: "mark.attempt",

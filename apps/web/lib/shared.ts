@@ -2090,22 +2090,16 @@ export interface RedisHealthResponse {
 }
 
 /**
- * Build a URL-path-safe segment for a queue name.
- *
- * Queue names contain dots (e.g. "mark.assignment.v2"). `encodeURIComponent`
- * leaves dots untouched, and a path segment with literal dots is treated as a
- * file-like segment by the same-origin Next.js rewrite proxy, which then fails
- * to forward the request — the browser `fetch()` rejects at the transport layer
- * with a bare "fetch failed" (never reaching an HTTP status). Percent-encoding
- * the dots keeps the segment opaque through the proxy; the gateway and API
- * preserve `%2E` without normalizing, so the API still receives the real,
- * decoded queue name. This is the root-cause fix for the drill-down
- * "fetch failed" error.
+ * Queue names contain dots (e.g. "mark.assignment.v2"). A path segment with
+ * literal dots is treated as a file-like segment by the same-origin Next.js
+ * rewrite proxy, which then fails to forward the request — the browser `fetch()`
+ * rejects at the transport layer with a bare "fetch failed" (never reaching an
+ * HTTP status). The queue name is therefore passed as a `?queue=` query value
+ * (see the drill-down/retry/remove builders below) instead of a path segment:
+ * query strings are not path-normalized, so the dotted name survives every proxy
+ * hop opaquely without depending on percent-encoding being preserved. The job id
+ * stays a path segment — BullMQ ids are dot-free alphanumeric tokens.
  */
-export function encodeQueueNameSegment(queueName: string): string {
-  return encodeURIComponent(queueName).replace(/\./g, "%2E");
-}
-
 export async function getQueueStatus(
   sessionToken: string,
 ): Promise<QueueStatusResponse> {
@@ -2127,9 +2121,9 @@ export async function getQueueFailedJobs(
   // requested value rather than re-implementing those bounds here.
   const url = `${getBaseApiPath(
     "v1",
-  )}/admin-dashboard/queue-status/${encodeQueueNameSegment(
+  )}/admin-dashboard/queue-status/failed?queue=${encodeURIComponent(
     queueName,
-  )}/failed?limit=${limit}`;
+  )}&limit=${limit}`;
   return apiClient.get(url, {
     headers: {
       "Content-Type": "application/json",
@@ -2145,9 +2139,9 @@ export async function getQueueActiveJobs(
 ): Promise<ActiveJobsResponse> {
   const url = `${getBaseApiPath(
     "v1",
-  )}/admin-dashboard/queue-status/${encodeQueueNameSegment(
+  )}/admin-dashboard/queue-status/active?queue=${encodeURIComponent(
     queueName,
-  )}/active?limit=${limit}`;
+  )}&limit=${limit}`;
   return apiClient.get(url, {
     headers: {
       "Content-Type": "application/json",
@@ -2177,9 +2171,9 @@ export async function retryFailedJob(
 ): Promise<{ ok: true }> {
   const url = `${getBaseApiPath(
     "v1",
-  )}/admin-dashboard/queue-status/${encodeQueueNameSegment(
-    queueName,
-  )}/jobs/${encodeURIComponent(jobId)}/retry`;
+  )}/admin-dashboard/queue-status/jobs/${encodeURIComponent(
+    jobId,
+  )}/retry?queue=${encodeURIComponent(queueName)}`;
   return apiClient.post(url, undefined, {
     headers: {
       "Content-Type": "application/json",
@@ -2195,9 +2189,9 @@ export async function removeFailedJob(
 ): Promise<{ ok: true }> {
   const url = `${getBaseApiPath(
     "v1",
-  )}/admin-dashboard/queue-status/${encodeQueueNameSegment(
-    queueName,
-  )}/jobs/${encodeURIComponent(jobId)}`;
+  )}/admin-dashboard/queue-status/jobs/${encodeURIComponent(
+    jobId,
+  )}?queue=${encodeURIComponent(queueName)}`;
   return apiClient.delete(url, {
     headers: {
       "Content-Type": "application/json",

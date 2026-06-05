@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   getQueueActiveJobs,
   getQueueFailedJobs,
@@ -16,12 +16,14 @@ const STATUS_POLL_MS = 5000;
 const REDIS_HEALTH_POLL_MS = 15_000;
 const HISTORY_MAX_SAMPLES = 60;
 
+const QUEUE_STATUS_KEY = ["admin", "queue-status"] as const;
+
 export function useQueueStatus(
   sessionToken: string | null | undefined,
   autoRefresh = true,
 ) {
   return useQuery({
-    queryKey: ["admin", "queue-status", sessionToken ?? ""],
+    queryKey: [...QUEUE_STATUS_KEY, sessionToken ?? ""],
     queryFn: async () => {
       if (!sessionToken) throw new Error("Session token required");
       return getQueueStatus(sessionToken);
@@ -101,18 +103,48 @@ export interface QueueHistorySample {
 export type QueueHistory = Record<string, QueueHistorySample[]>;
 
 /**
+ * Tracks the `dataUpdatedAt` of the queue-status query straight from the cache.
+ * React Query bumps this on every successful fetch even when structural sharing
+ * hands back a deeply-equal (same-reference) payload, so it is a reliable
+ * per-poll signal — unlike the identity of the polled `queues` array, which
+ * stays stable while an idle queue's counts don't change.
+ */
+function useQueueStatusUpdatedAt(): number {
+  const queryClient = useQueryClient();
+  const cache = queryClient.getQueryCache();
+
+  const read = () =>
+    cache.find({ queryKey: [...QUEUE_STATUS_KEY], exact: false })?.state
+      .dataUpdatedAt ?? 0;
+
+  return useSyncExternalStore(
+    (onChange) => cache.subscribe(onChange),
+    read,
+    read,
+  );
+}
+
+/**
  * Client-side, in-memory ring buffer of recent queue counts for sparklines.
- * Appends one sample per queue each time `queues` changes identity (i.e. each
- * poll), keeping the most recent ~5 minutes (HISTORY_MAX_SAMPLES). History is
- * intentionally ephemeral — it resets on reload. Nothing is persisted.
+ * Appends one sample per queue per successful poll — keyed off the queue-status
+ * query's `dataUpdatedAt` rather than the identity of the `queues` array, so
+ * every queue advances in lockstep even when an idle queue's counts (and thus
+ * its array reference under structural sharing) don't change. Keeps the most
+ * recent ~5 minutes (HISTORY_MAX_SAMPLES). History is intentionally ephemeral —
+ * it resets on reload. Nothing is persisted.
  */
 export function useQueueHistory(queues: QueueStat[] | undefined): QueueHistory {
   const [history, setHistory] = useState<QueueHistory>({});
-  const lastQueuesRef = useRef<QueueStat[] | undefined>(undefined);
+  const updatedAt = useQueueStatusUpdatedAt();
+  const lastUpdatedAtRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!queues || queues === lastQueuesRef.current) return;
-    lastQueuesRef.current = queues;
+    // Dedupe by poll timestamp: a re-render without a fresh fetch leaves
+    // `updatedAt` unchanged and must not double-append.
+    if (!queues || updatedAt === 0 || updatedAt === lastUpdatedAtRef.current) {
+      return;
+    }
+    lastUpdatedAtRef.current = updatedAt;
 
     setHistory((previous) => {
       const next: QueueHistory = {};
@@ -127,7 +159,7 @@ export function useQueueHistory(queues: QueueStat[] | undefined): QueueHistory {
       }
       return next;
     });
-  }, [queues]);
+  }, [queues, updatedAt]);
 
   return history;
 }
@@ -143,7 +175,7 @@ export function useQueueJobActions(sessionToken: string | null | undefined) {
   const invalidate = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["admin", "queue-failed"] }),
-      queryClient.invalidateQueries({ queryKey: ["admin", "queue-status"] }),
+      queryClient.invalidateQueries({ queryKey: [...QUEUE_STATUS_KEY] }),
     ]);
   };
 
