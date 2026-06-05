@@ -21,6 +21,7 @@ import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { applyQuestionOrder } from "../../utils/question-order.util";
 import { PrismaService } from "../../../../database/prisma.service";
+import { AttemptAccessCacheService } from "../../../attempt/services/attempt-access-cache.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
 
 export interface CreateVersionDto {
@@ -90,6 +91,7 @@ export class VersionManagementService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
+    private readonly attemptAccessCache: AttemptAccessCacheService,
   ) {
     this.logger = parentLogger.child({ context: "VersionManagementService" });
   }
@@ -610,7 +612,7 @@ export class VersionManagementService {
       throw new NotFoundException("Version to restore not found");
     }
 
-    return await this.prisma.$transaction(async (tx) => {
+    const restoredSummary = await this.prisma.$transaction(async (tx) => {
       if (restoreVersionDto.createAsNewVersion) {
         const nextVersionNumber = await this.getNextVersionNumber(
           assignmentId,
@@ -763,6 +765,26 @@ export class VersionManagementService {
         }
       }
     });
+
+    // Activating a version changes which questions and metadata learners
+    // receive, so the cached attempt-access payload for this assignment must be
+    // dropped. Creating a draft (isActive=false) leaves the active version
+    // untouched and needs no invalidation. Cache failures are non-fatal — the
+    // entries self-expire — so we log and continue rather than fail the restore.
+    if (restoredSummary.isActive) {
+      try {
+        await this.attemptAccessCache.invalidateForAssignment(assignmentId);
+      } catch (cacheError) {
+        this.logger.warn(
+          `Failed to invalidate attempt-access cache after restoring version ` +
+            `for assignment ${assignmentId}: ${
+              cacheError instanceof Error ? cacheError.message : "Unknown error"
+            }`,
+        );
+      }
+    }
+
+    return restoredSummary;
   }
 
   async publishVersion(
