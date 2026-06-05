@@ -426,6 +426,125 @@ describe("JobWorkerService", () => {
     delete process.env.GRADING_WORKER_CONCURRENCY;
   });
 
+  describe("malformed concurrency env falls back to the default", () => {
+    const concurrencyOf = (queueName: string): unknown => {
+      const MockWorker = Worker as unknown as jest.Mock;
+      const call = MockWorker.mock.calls.find(
+        (c: unknown[]) => c[0] === queueName,
+      );
+      return (call?.[2] as { concurrency?: unknown } | undefined)?.concurrency;
+    };
+
+    const startWithEnv = async (
+      env: Record<string, string>,
+    ): Promise<JobWorkerService> => {
+      for (const [key, value] of Object.entries(env)) {
+        process.env[key] = value;
+      }
+      const s = new JobWorkerService(
+        mockJobExecutorService as unknown as JobExecutorService,
+        mockJobStateService as unknown as JobStateService,
+        mockGradingProgressService as unknown as GradingProgressService,
+        mockParentWinstonLogger,
+      );
+      await s.onModuleInit();
+      return s;
+    };
+
+    afterEach(() => {
+      delete process.env.GRADING_WORKER_CONCURRENCY;
+      delete process.env.TRANSLATION_CONCURRENCY;
+    });
+
+    it("uses the default and warns when GRADING_WORKER_CONCURRENCY is non-numeric", async () => {
+      const s = await startWithEnv({ GRADING_WORKER_CONCURRENCY: "eight" });
+
+      expect(concurrencyOf(JOB_QUEUE_NAMES.ATTEMPT)).toBe(4);
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "worker.concurrency.invalid",
+        expect.objectContaining({
+          envName: "GRADING_WORKER_CONCURRENCY",
+          rawValue: "eight",
+          fallback: 4,
+        }),
+      );
+
+      await s.onModuleDestroy();
+    });
+
+    it("uses the default and warns when TRANSLATION_CONCURRENCY is non-numeric", async () => {
+      const s = await startWithEnv({ TRANSLATION_CONCURRENCY: "lots" });
+
+      expect(concurrencyOf(JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS)).toBe(8);
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "worker.concurrency.invalid",
+        expect.objectContaining({
+          envName: "TRANSLATION_CONCURRENCY",
+          rawValue: "lots",
+          fallback: 8,
+        }),
+      );
+
+      await s.onModuleDestroy();
+    });
+
+    it.each(["0", "-3"])(
+      "uses the default when concurrency env is the non-positive value %s",
+      async (rawValue) => {
+        const s = await startWithEnv({ GRADING_WORKER_CONCURRENCY: rawValue });
+
+        expect(concurrencyOf(JOB_QUEUE_NAMES.ATTEMPT)).toBe(4);
+        expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+          "worker.concurrency.invalid",
+          expect.objectContaining({
+            envName: "GRADING_WORKER_CONCURRENCY",
+            rawValue,
+          }),
+        );
+
+        await s.onModuleDestroy();
+      },
+    );
+
+    it("respects a valid TRANSLATION_CONCURRENCY value without warning", async () => {
+      const s = await startWithEnv({ TRANSLATION_CONCURRENCY: "12" });
+
+      expect(concurrencyOf(JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS)).toBe(
+        12,
+      );
+      expect(mockStructuredLogger.warn).not.toHaveBeenCalledWith(
+        "worker.concurrency.invalid",
+        expect.anything(),
+      );
+
+      await s.onModuleDestroy();
+    });
+
+    it("publishes only valid positive integers in the heartbeat when env is malformed", async () => {
+      const s = await startWithEnv({
+        GRADING_WORKER_CONCURRENCY: "NaN",
+        TRANSLATION_CONCURRENCY: "eight",
+      });
+
+      const heartbeatBody = mockConnection.set.mock.calls.at(-1)?.[1] as string;
+      const concurrencyByQueue = (
+        JSON.parse(heartbeatBody) as {
+          concurrencyByQueue: Record<string, number>;
+        }
+      ).concurrencyByQueue;
+      for (const value of Object.values(concurrencyByQueue)) {
+        expect(Number.isInteger(value)).toBe(true);
+        expect(value).toBeGreaterThanOrEqual(1);
+      }
+      expect(concurrencyByQueue[JOB_QUEUE_NAMES.ATTEMPT]).toBe(4);
+      expect(
+        concurrencyByQueue[JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS],
+      ).toBe(8);
+
+      await s.onModuleDestroy();
+    });
+  });
+
   it("closes every worker and the Redis connection on shutdown", async () => {
     await service.onModuleInit();
 
