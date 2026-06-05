@@ -930,6 +930,82 @@ describe("QuestionGenerationService", () => {
     });
   });
 
+  it("does not count an initially-reclassified short question toward the long bucket", async () => {
+    // The reclassified short has a longer stem than the legitimate long question.
+    // Without the initial-review ownership guard, quality sort would promote it
+    // into the long bucket (longer question = higher quality score), leaving the
+    // long quota filled with a short-answer-style question.
+    promptProcessor.processPromptForFeature
+      // short gen: intentionally long stem so it would "win" quality sort
+      .mockResolvedValueOnce(
+        buildGenerationResponse(
+          1,
+          "How does IBM watsonx help clients achieve operational efficiency in complex environments",
+        ),
+      )
+      // long gen: shorter stem (would lose quality sort without the fix)
+      .mockResolvedValueOnce(buildGenerationResponse(1, "What IBM offers"))
+      // initial review: reclassifies short→long, keeps long as long
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          {
+            question:
+              "How does IBM watsonx help clients achieve operational efficiency in complex environments 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+          {
+            question: "What IBM offers 0?",
+            type: MCSubtype.LONG,
+            page: 1,
+          },
+        ]),
+      )
+      // choice refresh for the reclassified short (subtype changed SHORT→LONG)
+      .mockResolvedValueOnce(buildChoicesResponse("Initial reclassified"))
+      // shortfall generation for the now-empty short bucket
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Replacement short"))
+      // re-review of shortfall: keeps the replacement as short (not reclassified)
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          { question: "Replacement short 0?", type: MCSubtype.SHORT, page: 0 },
+        ]),
+      );
+    // No choice refresh call for the shortfall because its subtype is unchanged.
+
+    const result = await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 1,
+          quantitative: 0,
+          long: 1,
+          scenario: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    expect(result).toHaveLength(2);
+    const longQ = result.find((q) => q.mcSubtype === MCSubtype.LONG);
+    const shortQ = result.find((q) => q.mcSubtype === MCSubtype.SHORT);
+
+    // The long bucket must contain the legitimately-generated long question,
+    // not the reclassified short question (even though it had the longer stem).
+    expect(longQ?.question).toContain("What IBM offers");
+    // The short quota must be filled from the shortfall batch, not from any
+    // reclassified question.
+    expect(shortQ?.question).toContain("Replacement short");
+  });
+
   it("does not break the review prompt when content contains curly braces", async () => {
     promptProcessor.processPromptForFeature
       .mockResolvedValueOnce(buildGenerationResponse(1))

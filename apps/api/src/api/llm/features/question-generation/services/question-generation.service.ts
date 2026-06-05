@@ -110,6 +110,10 @@ export class QuestionGenerationService implements IQuestionGenerationService {
   private readonly MAX_GENERATION_RETRIES = 3;
   private readonly BATCH_SIZE = 5;
   private readonly BATCH_CONCURRENCY = 2;
+  // Monotonic counter — guarantees globally-unique question IDs within a
+  // service instance. Math.random()-based IDs could collide across concurrent
+  // batch calls, corrupting the initialSubtypeById / shortfallOwnerById maps.
+  private nextQuestionId = 0;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -211,6 +215,16 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
+    // Snapshot each question's original subtype before the review pass can
+    // reclassify them. Used in finalizeSubtypeQuestions to exclude reclassified
+    // questions from both the original and the new bucket.
+    const initialSubtypeById = new Map<number, MCSubtype>();
+    for (const q of allQuestions) {
+      if (q.mcSubtype !== undefined && typeof q.id === "number") {
+        initialSubtypeById.set(q.id, q.mcSubtype);
+      }
+    }
+
     // Semantic review pass — only runs when subtype questions are present
     let reviewedQuestions = allQuestions;
     if (subtypeTotal > 0) {
@@ -232,6 +246,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
             assignmentId,
             content,
             learningObjectives,
+            initialSubtypeById,
           )
         : [];
 
@@ -1277,8 +1292,8 @@ Rules:
     rawQuestions: IGeneratedQuestion[],
     assignmentId: number,
   ): IGeneratedQuestion[] {
-    return rawQuestions.map((question, index) => ({
-      id: Math.floor(Math.random() * 1_000_000) + index,
+    return rawQuestions.map((question) => ({
+      id: ++this.nextQuestionId,
       assignmentId,
       question: question.question?.replaceAll("```", "").trim(),
       totalPoints: question.totalPoints || this.getDefaultPoints(question.type),
@@ -1570,6 +1585,7 @@ Rules:
     assignmentId: number,
     content?: string,
     learningObjectives?: string,
+    initialSubtypeById?: Map<number, MCSubtype>,
   ): Promise<IGeneratedQuestion[]> {
     const bySubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
     for (const subtype of Object.values(MCSubtype)) {
@@ -1577,9 +1593,21 @@ Rules:
     }
 
     for (const q of questions) {
-      if (q.mcSubtype) {
-        bySubtype.get(q.mcSubtype)?.push(q);
+      if (q.mcSubtype === undefined) continue;
+
+      const originalSubtype =
+        typeof q.id === "number"
+          ? (initialSubtypeById?.get(q.id) ?? q.mcSubtype)
+          : q.mcSubtype;
+
+      if (q.mcSubtype !== originalSubtype) {
+        this.logger.warn(
+          `Initial review reclassified a ${originalSubtype} question as ${q.mcSubtype} — not counting it toward either bucket`,
+        );
+        continue;
       }
+
+      bySubtype.get(q.mcSubtype)?.push(q);
     }
 
     const entries: [MCSubtype, number][] = [
@@ -1947,7 +1975,6 @@ Rules:
         difficultyLevel,
         keyTerms,
         assignmentId,
-        index + 1,
       );
       if (mcSubtype) {
         q.mcSubtype = mcSubtype;
@@ -2019,9 +2046,8 @@ Rules:
     difficultyLevel: DifficultyLevel,
     keyTerms: string[],
     assignmentId: number,
-    id?: number,
   ): IGeneratedQuestion {
-    const questionId = id || Math.floor(Math.random() * 1_000_000);
+    const questionId = ++this.nextQuestionId;
     const term = keyTerms.length > 0 ? keyTerms[0] : "the concept";
     const levelText = difficultyLevel.toString().toLowerCase();
 
@@ -2077,22 +2103,14 @@ Rules:
         return {
           ...baseQuestion,
           randomizedChoices: true,
-          choices: this.createContentRelevantChoices(
-            type,
-            difficultyLevel,
-            term,
-          ),
+          choices: this.createContentRelevantChoices(type, term),
         };
       }
       case QuestionType.MULTIPLE_CORRECT: {
         return {
           ...baseQuestion,
           randomizedChoices: true,
-          choices: this.createContentRelevantChoices(
-            type,
-            difficultyLevel,
-            term,
-          ),
+          choices: this.createContentRelevantChoices(type, term),
         };
       }
       case QuestionType.TRUE_FALSE: {
@@ -2140,7 +2158,6 @@ Rules:
   }
   private createContentRelevantChoices(
     type: QuestionType,
-    difficultyLevel: DifficultyLevel,
     term: string,
   ): Choice[] {
     switch (type) {
