@@ -36,7 +36,10 @@ const DEFAULT_ACTIVE_LIMIT = 25;
 const JOB_ID_PATTERN = /^[\w.:-]{1,128}$/;
 
 @ApiTags("Admin Queue Status")
-@UseGuards(AdminGuard, ThrottlerGuard)
+// AdminGuard covers the whole controller. ThrottlerGuard is applied per-method
+// on the mutating actions only — the GET reads are polled every few seconds by
+// the dashboard, so a controller-wide limit would 429 normal usage.
+@UseGuards(AdminGuard)
 @ApiBearerAuth()
 // NOTE: path is intentionally NOT under "admin/..." — the api-gateway guards
 // "/admin/*" with a JWT *bearer* admin token, whereas the admin dashboard
@@ -118,6 +121,7 @@ export class QueueStatusController {
   @Post(":queueName/jobs/:jobId/retry")
   @Roles(UserRole.ADMIN)
   // Mutating + cost-bearing: rate-limit per the admin auth flow's strict tier.
+  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: "Retry a single failed job (ADMIN only)" })
   async retryJob(
@@ -147,6 +151,7 @@ export class QueueStatusController {
 
   @Delete(":queueName/jobs/:jobId")
   @Roles(UserRole.ADMIN)
+  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: "Remove a single failed job (ADMIN only)" })
   async removeJob(
