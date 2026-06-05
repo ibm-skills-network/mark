@@ -729,7 +729,7 @@ const Question: FC<QuestionProps> = ({
               ) : (
                 maxWordCount && (
                   <div className="flex items-center">
-                    <span className="text-gray-600 typography-body shit">
+                    <span className="text-gray-600 typography-body">
                       Word Count: {maxWordCount}
                     </span>
                   </div>

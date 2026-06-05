@@ -246,11 +246,10 @@ textarea:focus {
 
 .question-container {
   border: 1px solid transparent;
-  border-left: 8px solid transparent;
 }
 
 .question-container:focus-within {
-  border-left-color: purple;
+  border-color: #7c3aed;
 }
 
 pre {

@@ -7,9 +7,9 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import type { ComponentPropsWithoutRef, FC, MouseEvent } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const Component: FC<Props> = () => {
+const Component: FC<Props> = ({ compact }) => {
   const [questionDisplay, setQuestionDisplay, errors] = useAssignmentConfig(
     (state) => [state.questionDisplay, state.setQuestionDisplay, state.errors],
   );
@@ -22,6 +22,7 @@ const Component: FC<Props> = () => {
       title={stepTwoSections.questionDisplay.title}
       className="flex flex-col gap-y-6"
       required
+      compact={compact}
     >
       <button
         onClick={handleChangeQuestionDisplay}

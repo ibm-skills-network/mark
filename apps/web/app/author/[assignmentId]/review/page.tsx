@@ -15,6 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState, useMemo } from "react";
+import { toast } from "sonner";
 import { useAssignmentConfig } from "../../../../stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "../../../../stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "../../../../stores/author";
@@ -322,7 +323,7 @@ const ChangeComparison = ({
         {onNavigate && (
           <button
             onClick={onNavigate}
-            className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
+            className="text-xs text-violet-600 hover:text-violet-700 flex items-center gap-1"
           >
             Go to section
             <ArrowRightIcon className="w-3 h-3" />
@@ -377,11 +378,11 @@ const ChangesSection = ({
   const router = useRouter();
 
   return (
-    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-purple-200 shadow-sm hover:shadow-md transition-all">
+    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-violet-200 hover:shadow-sm transition-all">
       <div className="flex items-center justify-between w-full mb-4">
         <div className="flex items-center gap-2">
-          <h4 className="text-grey-900 text-xl">{title}</h4>
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 rounded-full">
+          <h4 className="text-gray-900 text-xl font-bold">{title}</h4>
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
             <PencilIcon className="w-3 h-3" />
             Modified
           </span>
@@ -420,17 +421,17 @@ const Section = ({
   return (
     <div
       className={cn(
-        "flex flex-col gap-y-4 px-8 py-6 bg-white rounded border shadow-sm hover:shadow-md transition-all",
-        hasChanges && "border-purple-300 bg-white",
+        "flex flex-col gap-y-4 px-8 py-6 bg-white rounded border hover:shadow-sm transition-all",
+        hasChanges && "border-violet-300 bg-white",
         !isValid && "border-red-300 bg-red-50/30",
         isValid && !hasChanges && "border-gray-200",
       )}
     >
       <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-2">
-          <h4 className="text-grey-900 text-xl">{title}</h4>
+          <h4 className="text-gray-900 text-xl font-bold">{title}</h4>
           {hasChanges && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
               <PencilIcon className="w-3 h-3" />
               Modified
             </span>
@@ -673,7 +674,7 @@ const QuestionChanges = ({
         <h6 className="text-sm font-medium text-gray-600 mb-2">
           Rubric Changes
         </h6>
-        <div className="p-3 bg-purple-50 border border-purple-200 rounded text-sm text-purple-900">
+        <div className="p-3 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900">
           Rubric criteria have been modified
         </div>
       </div>,
@@ -688,7 +689,7 @@ const QuestionChanges = ({
         <h6 className="text-sm font-medium text-gray-600 mb-2">
           Video Presentation Configuration
         </h6>
-        <div className="p-3 bg-purple-50 border border-purple-200 rounded text-sm text-purple-900">
+        <div className="p-3 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900">
           Video presentation settings have been modified
         </div>
       </div>,
@@ -701,7 +702,7 @@ const QuestionChanges = ({
         <h6 className="text-sm font-medium text-gray-600 mb-2">
           Live Recording Configuration
         </h6>
-        <div className="p-3 bg-purple-50 border border-purple-200 rounded text-sm text-purple-900">
+        <div className="p-3 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900">
           Live recording settings have been modified
         </div>
       </div>,
@@ -719,7 +720,7 @@ const QuestionChanges = ({
           {variantChanges.map((change, idx) => (
             <div
               key={idx}
-              className="p-2 bg-purple-50 border border-purple-200 rounded text-sm text-purple-900"
+              className="p-2 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900"
             >
               {change}
             </div>
@@ -732,19 +733,19 @@ const QuestionChanges = ({
   if (changes.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-purple-200 shadow-sm hover:shadow-md transition-all mb-4">
+    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-violet-200 hover:shadow-sm transition-all mb-4">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-lg font-medium text-gray-900">
+        <span className="text-xl font-bold text-gray-900">
           Question {index + 1}
         </span>
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 rounded-full">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
           <PencilIcon className="w-3 h-3" />
           Modified
         </span>
       </div>
       <button
         onClick={onNavigateToQuestion}
-        className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
+        className="text-sm text-violet-600 hover:text-violet-700 flex items-center gap-1"
       >
         Go to question
         <ArrowRightIcon className="w-3 h-3" />
@@ -1138,7 +1139,7 @@ function Component() {
 
     replaceQuestion(questionId, updatedQuestion);
 
-    alert(`Auto-fixed: ${issue}`);
+    toast.success(`Auto-fixed: ${issue}`);
   };
 
   const handleExport = async (exportOptions: ExportOptions) => {
@@ -1217,7 +1218,7 @@ function Component() {
         await generatePDF(exportData, filename);
       }
     } catch (error) {
-      alert("Export failed. Please try again.");
+      toast.error("Export failed. Please try again.");
     }
   };
 
@@ -1378,7 +1379,7 @@ function Component() {
       const pdfContent = formatForPDF(data);
       const blob = new Blob([pdfContent], { type: "text/plain" });
       downloadFile(blob, `${filename}.txt`);
-      alert("PDF generation failed. Exported as text file instead.");
+      toast.error("PDF generation failed. Exported as text file instead.");
     }
   };
 
@@ -1454,7 +1455,7 @@ function Component() {
           <div className="flex items-center gap-3">
             {changes.details.length ? (
               <span className="flex items-center gap-2 text-sm">
-                <InformationCircleIcon className="w-5 h-5 text-purple-500" />
+                <InformationCircleIcon className="w-5 h-5 text-violet-500" />
                 <span className="font-medium">
                   {changes.details.length} changes detected
                 </span>
@@ -1501,7 +1502,7 @@ function Component() {
 
           <button
             onClick={() => setIsExportModalOpen(true)}
-            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-sm font-medium text-white bg-violet-600 border border-transparent rounded-md hover:bg-violet-700 transition-colors flex items-center gap-2"
           >
             <DocumentArrowUpIcon className="w-4 h-4" />
             Export
@@ -1541,17 +1542,17 @@ function Component() {
       </div>
 
       {changes.details.length ? (
-        <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-          <h3 className="font-semibold text-purple-900 mb-2">
+        <div className="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
+          <h3 className="font-semibold text-violet-900 mb-2">
             Changes Summary
           </h3>
           <ul className="space-y-1">
             {changes.details.map((change, idx) => (
               <li
                 key={idx}
-                className="text-sm text-purple-800 flex items-start gap-2"
+                className="text-sm text-violet-800 flex items-start gap-2"
               >
-                <span className="text-purple-400 mt-1">•</span>
+                <span className="text-violet-400 mt-1">•</span>
                 {change}
               </li>
             ))}
@@ -1668,13 +1669,13 @@ function Component() {
             changes.requireAllQuestions ||
             changes.optionalQuestionIds) &&
             originalAssignment && (
-              <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-purple-200 shadow-sm hover:shadow-md transition-all">
+              <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-violet-200 hover:shadow-sm transition-all">
                 <div className="flex items-center justify-between w-full mb-4">
                   <div className="flex items-center gap-2">
-                    <h4 className="text-grey-900 text-xl">
+                    <h4 className="text-gray-900 text-xl font-bold">
                       Assignment Configuration
                     </h4>
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 rounded-full">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
                       <PencilIcon className="w-3 h-3" />
                       Modified
                     </span>
@@ -1953,11 +1954,11 @@ function Component() {
                 <div
                   key={question.id}
                   className={cn(
-                    "flex flex-col gap-y-4 px-8 py-6 bg-white rounded border shadow-sm hover:shadow-md transition-all mb-4",
+                    "flex flex-col gap-y-4 px-8 py-6 bg-white rounded border hover:shadow-sm transition-all mb-4",
                     hasIssues && "border-red-300 bg-red-50/30",
                     questionChanges.length > 0 &&
                       !hasIssues &&
-                      "border-purple-300 bg-purple-50/30",
+                      "border-violet-300 bg-violet-50/30",
                     !hasIssues &&
                       questionChanges.length === 0 &&
                       "border-gray-200",
@@ -1969,7 +1970,7 @@ function Component() {
                         Question {index + 1}
                       </span>
                       {questionChanges.length > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 rounded-full">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
                           <PencilIcon className="w-3 h-3" />
                           Modified
                         </span>
@@ -2023,10 +2024,10 @@ function Component() {
               return (
                 <div
                   key={question.id}
-                  className="flex flex-col gap-y-4 px-8 py-6 bg-white  rounded border border-green-200 shadow-sm hover:shadow-md transition-all mb-4"
+                  className="flex flex-col gap-y-4 px-8 py-6 bg-white  rounded border border-green-200 hover:shadow-sm transition-all mb-4"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg font-medium text-gray-900">
+                    <span className="text-xl font-bold text-gray-900">
                       Question {index + 1}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
@@ -2088,10 +2089,10 @@ function Component() {
               return (
                 <div
                   key={origQuestion.id}
-                  className="flex flex-col gap-y-4 px-8 py-6 bg-red-50 rounded border border-red-200 shadow-sm hover:shadow-md transition-all mb-4"
+                  className="flex flex-col gap-y-4 px-8 py-6 bg-red-50 rounded border border-red-200 hover:shadow-sm transition-all mb-4"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg font-medium text-gray-900">
+                    <span className="text-xl font-bold text-gray-900">
                       Question (Deleted)
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">

@@ -8,9 +8,9 @@ import { InformationCircleIcon } from "@heroicons/react/24/solid";
 import type { ComponentPropsWithoutRef, FC } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const Component: FC<Props> = () => {
+const Component: FC<Props> = ({ compact }) => {
   const [
     attemptsBeforeCoolDown,
     setAttemptsBeforeCoolDown,
@@ -49,6 +49,7 @@ const Component: FC<Props> = () => {
       title={stepTwoSections.retakes.title}
       className="flex flex-col gap-y-6"
       required
+      compact={compact}
     >
       <div className="flex flex-col gap-y-1">
         <label
