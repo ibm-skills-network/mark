@@ -11,16 +11,24 @@
  *
  * These helpers let a spec authenticate as an ARBITRARY identity, and also
  * construct deliberately invalid tokens (expired / forged signature) for
- * negative-auth tests. They intentionally re-implement the signing here (rather
- * than importing the bootstrap's private helper) so callers can vary every
- * claim, the expiry, and the signing secret.
+ * negative-auth tests. The JWT signing itself lives in `./jwt.ts` — shared with
+ * the LTI helper so the two cannot drift.
  */
-import { createHmac } from "node:crypto";
 import type { BrowserContext } from "@playwright/test";
 import {
   getTestEnvironmentConfig,
   type TestEnvironmentConfig,
 } from "./assignment-helpers";
+import {
+  AUTH_COOKIE_NAME,
+  DEFAULT_EXPIRES_IN_SECONDS,
+  DEFAULT_LOCALE,
+  DEFAULT_RETURN_URL,
+  buildAuthStorageState,
+  signAuthJwt,
+  type StorageState,
+  type StorageStateCookie,
+} from "./jwt";
 
 export type AuthRole = "author" | "learner";
 
@@ -45,29 +53,7 @@ export type MintAuthOptions = {
   config?: TestEnvironmentConfig;
 };
 
-export type StorageStateCookie = {
-  name: string;
-  value: string;
-  domain: string;
-  path: string;
-  expires: number;
-  httpOnly: boolean;
-  secure: boolean;
-  sameSite: "Lax" | "Strict" | "None";
-};
-
-export type StorageState = {
-  cookies: StorageStateCookie[];
-  origins: never[];
-};
-
-const DEFAULT_RETURN_URL = "https://skills.network";
-const DEFAULT_LOCALE = "en";
-const DEFAULT_EXPIRES_IN_SECONDS = 6 * 60 * 60;
-
-function base64UrlEncode(value: string): string {
-  return Buffer.from(value).toString("base64url");
-}
+export type { StorageState, StorageStateCookie };
 
 type JwtPayload = {
   userID: string;
@@ -108,16 +94,8 @@ export function mintAuthToken(options: MintAuthOptions): {
   };
 
   const signingSecret = options.forgeWithSecret ?? config.jwtSecret; // pragma: allowlist secret
-  const encodedHeader = base64UrlEncode(
-    JSON.stringify({ alg: "HS256", typ: "JWT" }),
-  );
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signature = createHmac("sha256", signingSecret)
-    .update(`${encodedHeader}.${encodedPayload}`)
-    .digest("base64url");
-
   return {
-    token: `${encodedHeader}.${encodedPayload}.${signature}`,
+    token: signAuthJwt(payload, signingSecret),
     expiresAt,
   };
 }
@@ -131,22 +109,7 @@ export function mintAuthCookie(options: MintAuthOptions): StorageState {
   const config = options.config ?? getTestEnvironmentConfig();
   const { token, expiresAt } = mintAuthToken(options);
   const { hostname } = new URL(config.webBaseUrl);
-
-  return {
-    cookies: [
-      {
-        name: "authentication",
-        value: token,
-        domain: hostname,
-        path: "/",
-        expires: expiresAt,
-        httpOnly: false,
-        secure: false,
-        sameSite: "Lax",
-      },
-    ],
-    origins: [],
-  };
+  return buildAuthStorageState({ token, expiresAt, hostname });
 }
 
 /**
@@ -166,10 +129,10 @@ export async function attachAuthCookie(
   const { token, expiresAt } = mintAuthToken(options);
   const { hostname } = new URL(config.webBaseUrl);
 
-  await context.clearCookies({ name: "authentication" });
+  await context.clearCookies({ name: AUTH_COOKIE_NAME });
   await context.addCookies([
     {
-      name: "authentication",
+      name: AUTH_COOKIE_NAME,
       value: token,
       domain: hostname,
       path: "/",

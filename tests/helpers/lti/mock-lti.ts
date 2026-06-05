@@ -50,7 +50,6 @@
  *      that env wiring lands, the full round-trip passback spec is `test.fixme`;
  *      the mock, launch, and status-UI specs run unconditionally.
  */
-import { createHmac } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { BrowserContext } from "@playwright/test";
@@ -58,6 +57,16 @@ import {
   getTestEnvironmentConfig,
   type TestEnvironmentConfig,
 } from "../assignment-helpers";
+import {
+  AUTH_COOKIE_NAME,
+  DEFAULT_EXPIRES_IN_SECONDS,
+  DEFAULT_LOCALE,
+  DEFAULT_RETURN_URL,
+  buildAuthStorageState,
+  signAuthJwt,
+  type StorageState,
+  type StorageStateCookie,
+} from "../jwt";
 
 export type LtiRole = "learner" | "author";
 
@@ -89,26 +98,7 @@ export type LtiLaunchOptions = {
   config?: TestEnvironmentConfig;
 };
 
-export type StorageStateCookie = {
-  name: string;
-  value: string;
-  domain: string;
-  path: string;
-  expires: number;
-  httpOnly: boolean;
-  secure: boolean;
-  sameSite: "Lax" | "Strict" | "None";
-};
-
-export type StorageState = {
-  cookies: StorageStateCookie[];
-  origins: never[];
-};
-
-const DEFAULT_RETURN_URL = "https://skills.network";
-const DEFAULT_LOCALE = "en";
-const DEFAULT_EXPIRES_IN_SECONDS = 6 * 60 * 60;
-const COOKIE_NAME = "authentication"; // pragma: allowlist secret
+export type { StorageState, StorageStateCookie };
 
 /** The exact JWT payload an LTI launch produces (matches UserSessionPayload). */
 type LtiJwtPayload = {
@@ -122,10 +112,6 @@ type LtiJwtPayload = {
   iat: number;
   exp: number;
 };
-
-function base64UrlEncode(value: string): string {
-  return Buffer.from(value).toString("base64url");
-}
 
 export type LtiLaunchToken = {
   token: string;
@@ -155,16 +141,8 @@ export function mintLtiLaunchToken(options: LtiLaunchOptions): LtiLaunchToken {
     exp: expiresAt,
   };
 
-  const encodedHeader = base64UrlEncode(
-    JSON.stringify({ alg: "HS256", typ: "JWT" }),
-  );
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signature = createHmac("sha256", config.jwtSecret)
-    .update(`${encodedHeader}.${encodedPayload}`)
-    .digest("base64url");
-
   return {
-    token: `${encodedHeader}.${encodedPayload}.${signature}`,
+    token: signAuthJwt(payload, config.jwtSecret),
     expiresAt,
     payload,
   };
@@ -179,22 +157,7 @@ export function buildLtiLaunchCookie(options: LtiLaunchOptions): StorageState {
   const config = options.config ?? getTestEnvironmentConfig();
   const { token, expiresAt } = mintLtiLaunchToken(options);
   const { hostname } = new URL(config.webBaseUrl);
-
-  return {
-    cookies: [
-      {
-        name: COOKIE_NAME,
-        value: token,
-        domain: hostname,
-        path: "/",
-        expires: expiresAt,
-        httpOnly: false,
-        secure: false,
-        sameSite: "Lax",
-      },
-    ],
-    origins: [],
-  };
+  return buildAuthStorageState({ token, expiresAt, hostname });
 }
 
 /**
@@ -214,10 +177,10 @@ export async function performLtiLaunch(
   const minted = mintLtiLaunchToken(options);
   const { hostname } = new URL(config.webBaseUrl);
 
-  await context.clearCookies({ name: COOKIE_NAME });
+  await context.clearCookies({ name: AUTH_COOKIE_NAME });
   await context.addCookies([
     {
-      name: COOKIE_NAME,
+      name: AUTH_COOKIE_NAME,
       value: minted.token,
       domain: hostname,
       path: "/",
@@ -308,7 +271,7 @@ function extractAuthCookie(cookieHeader: string | undefined): string | null {
   }
   for (const part of cookieHeader.split(";")) {
     const [rawName, ...rest] = part.trim().split("=");
-    if (rawName === COOKIE_NAME) {
+    if (rawName === AUTH_COOKIE_NAME) {
       return rest.join("=");
     }
   }
@@ -414,9 +377,20 @@ export async function startMockLms(options?: {
   });
 
   await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
+    const onError = (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        reject(
+          new Error(
+            `Mock LMS port ${requestedPort} is already in use. Free it or set MOCK_LMS_PORT to an open port (also update GRADING_LTI_GATEWAY_URL to match).`,
+          ),
+        );
+        return;
+      }
+      reject(error);
+    };
+    server.once("error", onError);
     server.listen(requestedPort, "127.0.0.1", () => {
-      server.removeListener("error", reject);
+      server.removeListener("error", onError);
       resolve();
     });
   });

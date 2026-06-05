@@ -78,7 +78,17 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   ],
 
   // Default question set for `freshAssignment` (overridable via test.use).
-  freshAssignmentQuestions: [[defaultMathQuestion()], { option: true }],
+  // Use the fixture-function form so each test gets a FRESH array+question
+  // object: the literal-value form ([[defaultMathQuestion()], { option: true }])
+  // would evaluate defaultMathQuestion() once at module load and share the same
+  // object reference across every test that uses the default.
+  freshAssignmentQuestions: [
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use) => {
+      await use([defaultMathQuestion()]);
+    },
+    { option: true },
+  ],
 
   apiContext: async ({}, use) => {
     const context = await createApiContext();

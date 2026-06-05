@@ -196,7 +196,16 @@ export function multipleCorrect(options: {
   }
 
   const correctSet = new Set(correctIndexes);
-  const perCorrect = Math.round(points / correctIndexes.length);
+  // Distribute `points` across correct choices so a perfect selection ALWAYS
+  // totals `points`. A naive Math.round split silently drops a point when
+  // points doesn't divide evenly (e.g. 10/3 -> 3+3+3 = 9), which would make
+  // tests asserting a perfect score flake.
+  const baseShare = Math.floor(points / correctIndexes.length);
+  const remainder = points - baseShare * correctIndexes.length;
+  const pointsByIndex = new Map<number, number>();
+  correctIndexes.forEach((index, position) => {
+    pointsByIndex.set(index, baseShare + (position < remainder ? 1 : 0));
+  });
 
   return {
     type: "MULTIPLE_CORRECT",
@@ -210,7 +219,7 @@ export function multipleCorrect(options: {
       id: index + 1,
       choice,
       isCorrect: correctSet.has(index),
-      points: correctSet.has(index) ? perCorrect : 0,
+      points: pointsByIndex.get(index) ?? 0,
       feedback: correctSet.has(index) ? "Correct!" : "Incorrect.",
     })),
     scoring: OBJECTIVE_SCORING,

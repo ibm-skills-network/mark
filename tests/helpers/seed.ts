@@ -467,9 +467,14 @@ export async function seedCompletedAttempt(
 }
 
 /**
- * Best-effort teardown: delete a seeded assignment so isolated tests don't leak
- * state. Uses the admin delete endpoint. Swallows failures (the assignment may
- * already be gone) but logs, so a flaky teardown never fails a test.
+ * Teardown: delete a seeded assignment so isolated tests don't leak state.
+ *
+ * 404 is treated as benign (already cleaned up). Any other non-OK status, or a
+ * transport-level error, is THROWN — silently swallowed delete failures were
+ * letting DB state accumulate across runs and masking real bugs.
+ *
+ * Callers that must not let teardown fail a test (e.g. a best-effort cleanup
+ * after an already-failed test) should wrap this in their own try/catch.
  */
 export async function deleteSeededAssignment(
   ctx: APIRequestContext | undefined,
@@ -489,17 +494,12 @@ export async function deleteSeededAssignment(
         }),
       },
     );
-    if (!response.ok()) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `deleteSeededAssignment: assignment ${assignmentId} delete returned ${response.status()} (ignored).`,
-      );
+    if (response.ok() || response.status() === 404) {
+      return;
     }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `deleteSeededAssignment: failed to delete assignment ${assignmentId} (ignored):`,
-      error instanceof Error ? error.message : error,
+    const body = await response.text().catch(() => "<no body>");
+    throw new Error(
+      `deleteSeededAssignment: assignment ${assignmentId} delete returned ${response.status()}: ${body}`,
     );
   } finally {
     if (ownsContext) {
