@@ -1,7 +1,10 @@
+import "reflect-metadata";
 import { NotFoundException } from "@nestjs/common";
+import { AdminGuard } from "src/auth/guards/admin.guard";
 import { QueueStatusController } from "./queue-status.controller";
 
 const service = {
+  getAllWorkerHeartbeats: jest.fn().mockResolvedValue([]),
   getQueueStats: jest.fn().mockResolvedValue([]),
   getWorkers: jest.fn().mockResolvedValue([]),
   getFailedJobs: jest.fn().mockResolvedValue([]),
@@ -25,6 +28,16 @@ describe("QueueStatusController", () => {
     expect(result).toHaveProperty("queues");
     expect(result).toHaveProperty("workers");
     expect(typeof result.generatedAt).toBe("string");
+  });
+
+  it("getStatus scans heartbeats once and shares them with both reads", async () => {
+    const heartbeats = [{ instanceId: "pod-a" }];
+    service.getAllWorkerHeartbeats.mockResolvedValueOnce(heartbeats);
+    await make().getStatus();
+    // Exactly one heartbeat scan per status request, passed into both reads.
+    expect(service.getAllWorkerHeartbeats).toHaveBeenCalledTimes(1);
+    expect(service.getQueueStats).toHaveBeenCalledWith(heartbeats);
+    expect(service.getWorkers).toHaveBeenCalledWith(heartbeats);
   });
 
   it("getFailed parses the limit query and delegates", async () => {
@@ -102,6 +115,39 @@ describe("QueueStatusController", () => {
       await expect(
         make().removeJob("mark.attempt", "9", req()),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("access gating", () => {
+    // AdminGuard is the single source of truth: it is applied at the class
+    // level so every current and future route is admin-gated by default, and no
+    // route carries @Roles (which would route through RolesGlobalGuard and
+    // couple admin access to an author-role session being present).
+    const handlerNames = [
+      "getStatus",
+      "getRedisHealth",
+      "getFailed",
+      "getActive",
+      "retryJob",
+      "removeJob",
+    ] as const;
+
+    it("applies AdminGuard at the controller class level", () => {
+      const guards = (Reflect.getMetadata(
+        "__guards__",
+        QueueStatusController,
+      ) ?? []) as unknown[];
+      expect(guards).toContain(AdminGuard);
+    });
+
+    it("declares no @Roles metadata on any route (AdminGuard-only gating)", () => {
+      for (const name of handlerNames) {
+        const handler = (
+          QueueStatusController.prototype as Record<string, unknown>
+        )[name];
+        const roles = Reflect.getMetadata("roles", handler as object);
+        expect(roles).toBeUndefined();
+      }
     });
   });
 });

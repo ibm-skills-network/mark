@@ -15,18 +15,23 @@ export interface QueueCounts {
 }
 
 /**
- * Compact, payload-free timing sample for throughput derivation. Carries only
- * BullMQ lifecycle timestamps — never job data — so the read-model can compute
- * completed/failed-per-minute and average wait/run without touching encrypted
- * payloads or PII.
+ * Compact, payload-free throughput sample for one queue over a trailing window.
+ *
+ * The per-minute counts come straight from a Redis ZCOUNT over BullMQ's
+ * completed/failed sorted sets (scored by finish timestamp) — no job hashes are
+ * hydrated, so this stays cheap regardless of queue throughput. The average
+ * wait/run timings hydrate only a tiny, bounded sample of the most-recent
+ * completed jobs inside the window, carrying lifecycle timestamps only — never
+ * job data, so no encrypted payloads or PII are touched.
  */
 export interface ThroughputSample {
-  completed: Array<{
+  completedPerMin: number;
+  failedPerMin: number;
+  avgSample: Array<{
     timestamp: number | null;
     processedOn: number | null;
     finishedOn: number | null;
   }>;
-  failed: Array<{ finishedOn: number | null }>;
 }
 
 export interface RedisInfo {
@@ -36,10 +41,17 @@ export interface RedisInfo {
   opsPerSec: number | null;
 }
 
-// Upper bound on the number of recently-retained completed/failed jobs scanned
-// when deriving throughput. BullMQ retains up to 1000 of each
-// (removeOnComplete/removeOnFail), so this caps the scan well under that.
-const THROUGHPUT_SAMPLE_MAX = 500;
+// Trailing window (ms) over which throughput rates and averages are derived.
+// Kept here so the windowing happens inside the Redis query rather than after
+// hydrating jobs into the read-model.
+const THROUGHPUT_WINDOW_MS = 60_000;
+
+// Hard cap on how many completed jobs are hydrated per call to derive the
+// average wait/run timings. The per-minute counts never hydrate a job (ZCOUNT
+// only); only the averages read job hashes, and only this many of the most
+// recent ones inside the window — so hydration cost is a tiny constant no
+// matter how busy the queue is.
+const THROUGHPUT_AVG_SAMPLE_MAX = 20;
 
 @Injectable()
 export class JobQueueService implements OnModuleDestroy {
@@ -150,28 +162,81 @@ export class JobQueueService implements OnModuleDestroy {
   }
 
   /**
-   * Compact timing sample for throughput derivation. Pulls only the lifecycle
-   * timestamps off recently-retained completed/failed jobs — never payloads —
-   * so the read-model can compute rates and averages without decrypting data.
+   * Throughput sample for one queue over the trailing window.
+   *
+   * BullMQ v5 keeps completed/failed jobs in sorted sets scored by their finish
+   * timestamp (ms). The per-minute counts are a Redis ZCOUNT over those sets for
+   * the window — no job hashes are hydrated, so this is cheap and not capped at
+   * a fixed scan size (busy queues are no longer undercounted). For the average
+   * wait/run timings, only a tiny bounded sample of the most-recent completed
+   * jobs inside the window is hydrated, and only their lifecycle timestamps are
+   * read — never payloads, so no PII is touched.
    */
   async getThroughputSample(queueName: string): Promise<ThroughputSample> {
     const queue = this.getQueue(queueName) as Queue<unknown, unknown>;
-    const end = THROUGHPUT_SAMPLE_MAX - 1;
-    const [completedJobs, failedJobs] = await Promise.all([
-      queue.getCompleted(0, end),
-      queue.getFailed(0, end),
-    ]);
+    const completedKey = queue.toKey("completed");
+    const failedKey = queue.toKey("failed");
+    const windowStart = Date.now() - THROUGHPUT_WINDOW_MS;
+    const windowStartScore = String(windowStart);
+
+    // `queue.client` resolves to the shared ioredis client. In cluster mode the
+    // BullMQ hash-tag prefix keeps a queue's keys colocated, so each single-key
+    // command below stays on one node.
+    const client = await queue.client;
+
+    // Per-minute rates: count members scored at-or-after the window start. The
+    // score is the finish timestamp, so this is "finished in the last minute".
+    const [completedPerMin, failedPerMin, recentCompletedIds] =
+      await Promise.all([
+        client.zcount(completedKey, windowStartScore, "+inf"),
+        client.zcount(failedKey, windowStartScore, "+inf"),
+        // Newest-first ids of completed jobs inside the window, capped hard.
+        client.zrevrangebyscore(
+          completedKey,
+          "+inf",
+          windowStartScore,
+          "LIMIT",
+          0,
+          THROUGHPUT_AVG_SAMPLE_MAX,
+        ),
+      ]);
+
+    const avgSample = await this.hydrateTimingSample(queue, recentCompletedIds);
 
     return {
-      completed: completedJobs.map((job) => ({
+      completedPerMin: this.toCount(completedPerMin),
+      failedPerMin: this.toCount(failedPerMin),
+      avgSample,
+    };
+  }
+
+  /**
+   * Hydrate only the lifecycle timestamps (no payload) for a small, bounded set
+   * of completed job ids. A single missing/unreadable job is skipped rather than
+   * failing the whole sample.
+   */
+  private async hydrateTimingSample(
+    queue: Queue<unknown, unknown>,
+    jobIds: string[],
+  ): Promise<ThroughputSample["avgSample"]> {
+    const jobs = await Promise.all(jobIds.map((jobId) => queue.getJob(jobId)));
+    const sample: ThroughputSample["avgSample"] = [];
+    for (const job of jobs) {
+      if (!job) {
+        // Job aged out between the ZSET read and the hydrate — skip it.
+        continue;
+      }
+      sample.push({
         timestamp: this.toFiniteOrNull(job.timestamp),
         processedOn: this.toFiniteOrNull(job.processedOn),
         finishedOn: this.toFiniteOrNull(job.finishedOn),
-      })),
-      failed: failedJobs.map((job) => ({
-        finishedOn: this.toFiniteOrNull(job.finishedOn),
-      })),
-    };
+      });
+    }
+    return sample;
+  }
+
+  private toCount(value: number): number {
+    return Number.isFinite(value) && value > 0 ? value : 0;
   }
 
   /**

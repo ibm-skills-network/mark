@@ -27,12 +27,16 @@ const jobQueue = {
   removeFailedJob: jest.fn(),
 };
 const workerConn = { getAllWorkerHeartbeats: jest.fn() };
-const s3 = { getSignedUrl: jest.fn() };
+const s3 = { getSignedUrl: jest.fn(), isConfiguredUploadBucket: jest.fn() };
 
 const make = () =>
   new QueueStatusService(jobQueue as never, workerConn as never, s3 as never);
 
-const emptySample = { completed: [], failed: [] };
+const emptySample = {
+  completedPerMin: 0,
+  failedPerMin: 0,
+  avgSample: [],
+};
 
 describe("QueueStatusService", () => {
   beforeEach(() => {
@@ -40,6 +44,9 @@ describe("QueueStatusService", () => {
     jobQueue.isQueuePaused.mockResolvedValue(false);
     jobQueue.getThroughputSample.mockResolvedValue(emptySample);
     workerConn.getAllWorkerHeartbeats.mockResolvedValue([]);
+    // Default: every bucket the tests use is a configured upload bucket. Tests
+    // that exercise the foreign-bucket path override this per-case.
+    s3.isConfiguredUploadBucket.mockReturnValue(true);
   });
 
   it("aggregates queue counts and flags a failing queue as unavailable", async () => {
@@ -119,6 +126,71 @@ describe("QueueStatusService", () => {
     expect(translations?.clusterCapacity).toBe(8);
   });
 
+  it("sums per-pod concurrency for cluster capacity during a mixed rolling deploy", async () => {
+    const now = Date.now();
+    jobQueue.getQueueCounts.mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+      paused: 0,
+    });
+    // Rolling deploy: an old pod at concurrency 4 and a new pod at 6. True
+    // capacity is 4 + 6 = 10, not max(6) * 2 = 12.
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        instanceId: "old-pod",
+        queues: ["mark.attempt"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+        concurrencyByQueue: { "mark.attempt": 4 },
+      },
+      {
+        instanceId: "new-pod",
+        queues: ["mark.attempt"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+        concurrencyByQueue: { "mark.attempt": 6 },
+      },
+    ]);
+    const queues = await make().getQueueStats();
+    const attempt = queues.find((q) => q.name === "mark.attempt");
+    expect(attempt?.livePods).toBe(2);
+    expect(attempt?.clusterCapacity).toBe(10);
+    // Representative per-pod value for display is the max published concurrency.
+    expect(attempt?.concurrencyPerPod).toBe(6);
+  });
+
+  it("sums default concurrency for pods that omit the published value", async () => {
+    const now = Date.now();
+    jobQueue.getQueueCounts.mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+      paused: 0,
+    });
+    // One pod publishes 6, the other (older) omits it and falls back to the
+    // metadata default of 4 for mark.attempt. Capacity = 6 + 4 = 10.
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        instanceId: "new-pod",
+        queues: ["mark.attempt"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+        concurrencyByQueue: { "mark.attempt": 6 },
+      },
+      {
+        instanceId: "old-pod",
+        queues: ["mark.attempt"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+    ]);
+    const queues = await make().getQueueStats();
+    const attempt = queues.find((q) => q.name === "mark.attempt");
+    expect(attempt?.livePods).toBe(2);
+    expect(attempt?.clusterCapacity).toBe(10);
+  });
+
   it("does not count stale heartbeats as live pods", async () => {
     const now = Date.now();
     jobQueue.getQueueCounts.mockResolvedValue({
@@ -143,8 +215,50 @@ describe("QueueStatusService", () => {
     expect(attempt?.clusterCapacity).toBe(0);
   });
 
-  it("computes throughput per minute and average wait/run", async () => {
+  it("passes through windowed counts and averages the bounded sample", async () => {
     const now = Date.now();
+    jobQueue.getQueueCounts.mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+      paused: 0,
+    });
+    // The per-minute counts are now computed by the service layer (via ZCOUNT)
+    // and handed to the read-model already windowed; only the wait/run averages
+    // are derived here from the small hydrated sample.
+    jobQueue.getThroughputSample.mockImplementation(async (name: string) => {
+      if (name !== "mark.attempt") return emptySample;
+      return {
+        completedPerMin: 4,
+        failedPerMin: 2,
+        avgSample: [
+          // wait 1000ms, run 2000ms
+          {
+            timestamp: now - 5_000,
+            processedOn: now - 4_000,
+            finishedOn: now - 2_000,
+          },
+          // wait 1000ms, run 3000ms
+          {
+            timestamp: now - 200_000,
+            processedOn: now - 199_000,
+            finishedOn: now - 196_000,
+          },
+        ],
+      };
+    });
+    const queues = await make().getQueueStats();
+    const attempt = queues.find((q) => q.name === "mark.attempt");
+    expect(attempt?.throughput?.completedPerMin).toBe(4);
+    expect(attempt?.throughput?.failedPerMin).toBe(2);
+    // Waits: 1000 and 1000 -> mean 1000. Runs: 2000 and 3000 -> mean 2500.
+    expect(attempt?.throughput?.avgWaitMs).toBe(1000);
+    expect(attempt?.throughput?.avgRunMs).toBe(2500);
+  });
+
+  it("reports null averages when the sample is empty but keeps the counts", async () => {
     jobQueue.getQueueCounts.mockResolvedValue({
       waiting: 0,
       active: 0,
@@ -155,31 +269,63 @@ describe("QueueStatusService", () => {
     });
     jobQueue.getThroughputSample.mockImplementation(async (name: string) => {
       if (name !== "mark.attempt") return emptySample;
-      return {
-        completed: [
-          // In the last minute: wait 1000ms, run 2000ms.
-          {
-            timestamp: now - 5_000,
-            processedOn: now - 4_000,
-            finishedOn: now - 2_000,
-          },
-          // Older than a minute — excluded from per-min, included in averages.
-          {
-            timestamp: now - 200_000,
-            processedOn: now - 199_000,
-            finishedOn: now - 196_000,
-          },
-        ],
-        failed: [{ finishedOn: now - 3_000 }, { finishedOn: now - 500_000 }],
-      };
+      return { completedPerMin: 7, failedPerMin: 0, avgSample: [] };
     });
     const queues = await make().getQueueStats();
     const attempt = queues.find((q) => q.name === "mark.attempt");
-    expect(attempt?.throughput?.completedPerMin).toBe(1);
-    expect(attempt?.throughput?.failedPerMin).toBe(1);
-    // Waits: 1000 and 1000 -> mean 1000. Runs: 2000 and 3000 -> mean 2500.
-    expect(attempt?.throughput?.avgWaitMs).toBe(1000);
-    expect(attempt?.throughput?.avgRunMs).toBe(2500);
+    expect(attempt?.throughput?.completedPerMin).toBe(7);
+    expect(attempt?.throughput?.failedPerMin).toBe(0);
+    expect(attempt?.throughput?.avgWaitMs).toBeNull();
+    expect(attempt?.throughput?.avgRunMs).toBeNull();
+  });
+
+  it("uses supplied heartbeats without re-scanning when passed in", async () => {
+    const now = Date.now();
+    jobQueue.getQueueCounts.mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+      paused: 0,
+    });
+    const heartbeats = [
+      {
+        instanceId: "pod-a",
+        queues: ["mark.attempt"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+        concurrencyByQueue: { "mark.attempt": 6 },
+      },
+    ];
+    const service = make();
+    const stats = await service.getQueueStats(heartbeats as never);
+    const workers = await service.getWorkers(heartbeats as never);
+
+    // Neither call re-fetched heartbeats — the caller already supplied them.
+    expect(workerConn.getAllWorkerHeartbeats).not.toHaveBeenCalled();
+    expect(stats.find((q) => q.name === "mark.attempt")?.livePods).toBe(1);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].instanceId).toBe("pod-a");
+  });
+
+  it("fetches heartbeats itself when none are supplied (back-compat)", async () => {
+    jobQueue.getQueueCounts.mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+      paused: 0,
+    });
+    await make().getQueueStats();
+    expect(workerConn.getAllWorkerHeartbeats).toHaveBeenCalledTimes(1);
+  });
+
+  it("getAllWorkerHeartbeats delegates to the worker-connection service", async () => {
+    const hbs = [{ instanceId: "p1" }];
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue(hbs);
+    const out = await make().getAllWorkerHeartbeats();
+    expect(out).toBe(hbs);
   });
 
   it("getFailedJobs rejects an unknown queue name", async () => {
@@ -263,6 +409,32 @@ describe("QueueStatusService", () => {
     ]);
     const out = await make().getFailedJobs("mark.attempt", 5);
     expect(out[0].files[0].downloadUrl).toBeNull();
+    expect(out[0].files[0].filename).toBe("essay.pdf");
+  });
+
+  it("does not presign a file ref whose bucket is not configured (downloadUrl:null)", async () => {
+    // Hostile payload: bucket the app is not configured to use. It must never
+    // be turned into a signed URL — degrade to no link without calling S3.
+    s3.isConfiguredUploadBucket.mockImplementation(
+      (bucket: string) => bucket === "learner-bucket",
+    );
+    s3.getSignedUrl.mockResolvedValue("https://signed.example/get");
+    jobQueue.getFailedJobs.mockResolvedValue([
+      makeJob({
+        data: encryptJobPayload({
+          files: [
+            {
+              filename: "essay.pdf",
+              storageKey: "k/essay.pdf",
+              storageBucket: "attacker-controlled-bucket",
+            },
+          ],
+        }),
+      }),
+    ]);
+    const out = await make().getFailedJobs("mark.attempt", 5);
+    expect(out[0].files[0].downloadUrl).toBeNull();
+    expect(s3.getSignedUrl).not.toHaveBeenCalled();
     expect(out[0].files[0].filename).toBe("essay.pdf");
   });
 
