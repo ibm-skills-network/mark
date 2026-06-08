@@ -172,18 +172,18 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     // and the heartbeat report the same numbers (no drift).
     const ASSIGNMENT_V1_CONCURRENCY = 2;
     const ASSIGNMENT_V2_CONCURRENCY = 2;
-    const TRANSLATION_CONCURRENCY = Number.parseInt(
-      process.env.TRANSLATION_CONCURRENCY ?? "8",
-      10,
+    const TRANSLATION_CONCURRENCY = this.resolveConcurrency(
+      "TRANSLATION_CONCURRENCY",
+      8,
     );
     // Number of grading JOBS the worker pulls from BullMQ concurrently.
     // Distinct from GRADING_CONCURRENCY (apps/api), which caps how many
     // LLM CALLS run in parallel inside one grading job. The two values
     // were sharing a name and produced a footgun where setting one
     // accidentally tuned the other; renamed to make the layer explicit.
-    const GRADING_WORKER_CONCURRENCY = Number.parseInt(
-      process.env.GRADING_WORKER_CONCURRENCY ?? "4",
-      10,
+    const GRADING_WORKER_CONCURRENCY = this.resolveConcurrency(
+      "GRADING_WORKER_CONCURRENCY",
+      4,
     );
     const ADMIN_TRANSLATION_CONCURRENCY = 1;
 
@@ -352,6 +352,34 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private getHeartbeatKey(): string {
     return `${JOB_WORKER_HEARTBEAT_KEY_PREFIX}:${this.workerInstanceId}`;
+  }
+
+  // Parses a worker-concurrency env var into a valid positive integer.
+  // Concurrency is passed straight to BullMQ's createWorker and republished
+  // in the heartbeat's concurrencyByQueue; a NaN/Infinity/<1 value stalls the
+  // queue and corrupts the dashboard's capacity math. A malformed value (e.g.
+  // "eight") is therefore rejected and the documented default is used instead.
+  // When an env value is present but invalid we log a warn with the var name
+  // and the offending raw value — concurrency is just a number, no secret —
+  // so a typo'd config is observable rather than silently swallowed.
+  private resolveConcurrency(
+    environmentName: string,
+    defaultValue: number,
+  ): number {
+    const raw = process.env[environmentName];
+    if (raw === undefined || raw === "") {
+      return defaultValue;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed >= 1) {
+      return Math.trunc(parsed);
+    }
+    this.structuredLogger.warn("worker.concurrency.invalid", {
+      envName: environmentName,
+      rawValue: raw,
+      fallback: defaultValue,
+    });
+    return defaultValue;
   }
 
   private getHeartbeatIntervalMs(): number {

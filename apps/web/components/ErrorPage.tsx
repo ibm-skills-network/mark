@@ -82,7 +82,8 @@ const DEFAULT_STEPS: Record<number, UserStep[]> = {
     },
     {
       title: "Let us know if it persists",
-      description: "Contact your instructor or support if this keeps happening.",
+      description:
+        "Contact your instructor or support if this keeps happening.",
     },
   ],
 };
@@ -260,7 +261,10 @@ export default function ErrorPage({
                         }).format(new Date(event.timestamp))
                       : null;
                     return (
-                      <div key={`${event.step}-${idx}`} className="relative pl-4">
+                      <div
+                        key={`${event.step}-${idx}`}
+                        className="relative pl-4"
+                      >
                         <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full border-2 border-white bg-indigo-500 shadow" />
                         <div className="rounded-lg bg-white/85 border border-indigo-100 px-3 py-2 shadow-sm">
                           <div className="flex items-center justify-between gap-2">

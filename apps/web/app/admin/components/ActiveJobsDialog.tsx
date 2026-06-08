@@ -21,8 +21,12 @@ function formatRunningFor(ms: number | null): string {
 
 function progressPercent(progress: ActiveJob["progress"]): number | null {
   if (typeof progress === "number" && Number.isFinite(progress)) {
-    // BullMQ progress is reported either as 0..1 or 0..100; normalize both.
-    const value = progress <= 1 ? progress * 100 : progress;
+    // BullMQ reports progress either as a 0..100 percentage or, less commonly,
+    // a 0..1 fraction. Only a non-integer strictly between 0 and 1 is treated
+    // as a fraction; everything else (including an exact 1, meaning 1%) is
+    // already on the percentage scale.
+    const isFraction = progress > 0 && progress < 1;
+    const value = isFraction ? progress * 100 : progress;
     return Math.max(0, Math.min(100, value));
   }
   return null;

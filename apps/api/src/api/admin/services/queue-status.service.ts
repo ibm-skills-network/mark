@@ -24,7 +24,6 @@ const ACTIVE_JOBS_DEFAULT = 25;
 const FAILED_REASON_MAX_CHARS = 2000;
 const STACKTRACE_MAX_ENTRIES = 20;
 const STACKTRACE_ENTRY_MAX_CHARS = 2000;
-const THROUGHPUT_WINDOW_MS = 60_000;
 const DOWNLOAD_URL_TTL_SECONDS = 600;
 
 export interface QueueThroughputDto {
@@ -120,21 +119,39 @@ export class QueueStatusService {
     private readonly s3Service: S3Service,
   ) {}
 
-  async getQueueStats(): Promise<QueueStatDto[]> {
+  /**
+   * Fetch the raw worker heartbeats (one Redis SCAN + per-key GET). Exposed so
+   * the status endpoint can scan once per request and pass the result into both
+   * getQueueStats() and getWorkers() instead of each scanning independently.
+   */
+  async getAllWorkerHeartbeats(): Promise<JobWorkerHeartbeat[]> {
+    return this.workerConnectionService.getAllWorkerHeartbeats();
+  }
+
+  /**
+   * Build the per-queue stat rows. Heartbeats may be supplied by the caller so a
+   * single status request scans them once and shares them with getWorkers();
+   * when omitted (other callers) they are fetched here to stay self-contained.
+   */
+  async getQueueStats(
+    heartbeats?: JobWorkerHeartbeat[],
+  ): Promise<QueueStatDto[]> {
     const names = Object.values(JOB_QUEUE_NAMES);
-    const heartbeats =
-      await this.workerConnectionService.getAllWorkerHeartbeats();
-    const livePodHeartbeats = this.liveHeartbeats(heartbeats);
+    const resolvedHeartbeats =
+      heartbeats ??
+      (await this.workerConnectionService.getAllWorkerHeartbeats());
+    const livePodHeartbeats = this.liveHeartbeats(resolvedHeartbeats);
 
     return Promise.all(
       names.map(async (name): Promise<QueueStatDto> => {
         const metadata = QUEUE_METADATA[name];
         const role: QueueRole | null = metadata?.role ?? null;
-        const { concurrencyPerPod, livePods } = this.deriveCapacity(
-          name,
-          livePodHeartbeats,
-          metadata?.defaultConcurrencyPerPod ?? 0,
-        );
+        const { concurrencyPerPod, livePods, clusterCapacity } =
+          this.deriveCapacity(
+            name,
+            livePodHeartbeats,
+            metadata?.defaultConcurrencyPerPod ?? 0,
+          );
         try {
           const [counts, isPaused, throughput] = await Promise.all([
             this.jobQueueService.getQueueCounts(name),
@@ -147,7 +164,7 @@ export class QueueStatusService {
             role,
             concurrencyPerPod,
             livePods,
-            clusterCapacity: concurrencyPerPod * livePods,
+            clusterCapacity,
             isPaused,
             throughput,
           };
@@ -167,7 +184,7 @@ export class QueueStatusService {
             role,
             concurrencyPerPod,
             livePods,
-            clusterCapacity: concurrencyPerPod * livePods,
+            clusterCapacity,
             isPaused: false,
             throughput: null,
             unavailable: true,
@@ -177,11 +194,17 @@ export class QueueStatusService {
     );
   }
 
-  async getWorkers(): Promise<WorkerDto[]> {
-    const heartbeats =
-      await this.workerConnectionService.getAllWorkerHeartbeats();
+  /**
+   * Build the worker pod rows. Heartbeats may be supplied by the caller so a
+   * single status request shares one scan with getQueueStats(); when omitted
+   * they are fetched here.
+   */
+  async getWorkers(heartbeats?: JobWorkerHeartbeat[]): Promise<WorkerDto[]> {
+    const resolvedHeartbeats =
+      heartbeats ??
+      (await this.workerConnectionService.getAllWorkerHeartbeats());
     const now = Date.now();
-    return heartbeats.map((hb): WorkerDto => {
+    return resolvedHeartbeats.map((hb): WorkerDto => {
       const startedAt = typeof hb.startedAt === "string" ? hb.startedAt : null;
       const updatedAt = typeof hb.updatedAt === "string" ? hb.updatedAt : null;
       const lastSeenMs = updatedAt ? now - Date.parse(updatedAt) : null;
@@ -348,6 +371,15 @@ export class QueueStatusService {
       return base;
     }
 
+    // Only presign against a bucket the app is actually configured to use. The
+    // bucket here comes from a decrypted job payload — hostile input — so an
+    // unrecognized bucket must never be turned into a signed URL (it could point
+    // at an arbitrary object). Degrade to no link instead. Do NOT log the
+    // bucket/key/url; an empty or foreign bucket value is not noteworthy here.
+    if (!this.s3Service.isConfiguredUploadBucket(reference.bucket)) {
+      return base;
+    }
+
     try {
       base.downloadUrl = await this.s3Service.getSignedUrl("getObject", {
         Bucket: reference.bucket,
@@ -382,19 +414,12 @@ export class QueueStatusService {
   }
 
   private throughputFromSample(sample: ThroughputSample): QueueThroughputDto {
-    const now = Date.now();
-    const windowStart = now - THROUGHPUT_WINDOW_MS;
-
-    const completedPerMin = sample.completed.filter(
-      (entry) => entry.finishedOn !== null && entry.finishedOn >= windowStart,
-    ).length;
-    const failedPerMin = sample.failed.filter(
-      (entry) => entry.finishedOn !== null && entry.finishedOn >= windowStart,
-    ).length;
-
+    // Per-minute counts already come windowed from the ZCOUNT query. Only the
+    // average wait/run timings are derived here, from the small bounded sample
+    // of recent completed jobs.
     const waits: number[] = [];
     const runs: number[] = [];
-    for (const entry of sample.completed) {
+    for (const entry of sample.avgSample) {
       if (entry.processedOn !== null && entry.timestamp !== null) {
         const wait = entry.processedOn - entry.timestamp;
         if (wait >= 0) waits.push(wait);
@@ -406,8 +431,8 @@ export class QueueStatusService {
     }
 
     return {
-      completedPerMin,
-      failedPerMin,
+      completedPerMin: sample.completedPerMin,
+      failedPerMin: sample.failedPerMin,
       avgWaitMs: this.mean(waits),
       avgRunMs: this.mean(runs),
     };
@@ -420,20 +445,27 @@ export class QueueStatusService {
   }
 
   /**
-   * Resolve per-pod concurrency and live-pod count for one queue from the live
-   * heartbeats. Concurrency prefers the heartbeat's published concurrencyByQueue
-   * value (accurate, no drift); falls back to the static metadata default for
-   * pods that predate that field. livePods counts heartbeats whose worker set
-   * includes this queue.
+   * Resolve capacity for one queue from the live heartbeats.
+   *
+   * clusterCapacity is the SUM over live pods serving the queue of each pod's
+   * own concurrency — its published concurrencyByQueue value when present,
+   * otherwise the static metadata default for pods that predate that field.
+   * Summing (rather than max × pod count) keeps the number accurate during a
+   * rolling deploy when pods run mixed concurrency. livePods counts heartbeats
+   * whose worker set includes this queue. concurrencyPerPod is a single
+   * representative value (the max across pods, or the default when no pod
+   * published one) for display only — clusterCapacity is the authoritative
+   * total and is not derived from it.
    */
   private deriveCapacity(
     queueName: string,
     liveHeartbeats: JobWorkerHeartbeat[],
     defaultConcurrencyPerPod: number,
-  ): { concurrencyPerPod: number; livePods: number } {
-    let concurrencyPerPod = 0;
+  ): { concurrencyPerPod: number; livePods: number; clusterCapacity: number } {
     let livePods = 0;
-    let sawConcurrencyForQueue = false;
+    let clusterCapacity = 0;
+    let maxPublished = 0;
+    let sawPublishedForQueue = false;
 
     for (const hb of liveHeartbeats) {
       const servesQueue = Array.isArray(hb.queues)
@@ -444,19 +476,22 @@ export class QueueStatusService {
       }
       livePods += 1;
       const published = hb.concurrencyByQueue?.[queueName];
+      const podConcurrency =
+        typeof published === "number" && Number.isFinite(published)
+          ? published
+          : defaultConcurrencyPerPod;
+      clusterCapacity += podConcurrency;
       if (typeof published === "number" && Number.isFinite(published)) {
-        // Take the max across pods in case of a rolling deploy with mixed
-        // configs — capacity is bounded by the most-capable live pod's setting.
-        concurrencyPerPod = Math.max(concurrencyPerPod, published);
-        sawConcurrencyForQueue = true;
+        maxPublished = Math.max(maxPublished, published);
+        sawPublishedForQueue = true;
       }
     }
 
-    if (!sawConcurrencyForQueue) {
-      concurrencyPerPod = defaultConcurrencyPerPod;
-    }
+    const concurrencyPerPod = sawPublishedForQueue
+      ? maxPublished
+      : defaultConcurrencyPerPod;
 
-    return { concurrencyPerPod, livePods };
+    return { concurrencyPerPod, livePods, clusterCapacity };
   }
 
   private liveHeartbeats(

@@ -889,15 +889,15 @@ function AuthorHeader() {
                   <button
                     onClick={() =>
                       window.open(
-                        `/admin/insights/${activeAssignmentId}`,
+                        `/author/${activeAssignmentId}/insights`,
                         "_blank",
                       )
                     }
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md"
-                    title="View admin insights and analytics for this assignment"
+                    title="View insights and analytics for this assignment"
                   >
                     <BarChart3 className="w-4 h-4" />
-                    <span className="hidden sm:inline">Admin Insights</span>
+                    <span className="hidden sm:inline">Insights</span>
                   </button>
                 )}
 

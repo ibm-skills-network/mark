@@ -2,11 +2,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserRole } from "../../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../../database/prisma.service";
+import { AttemptAccessCacheService } from "../../../../attempt/services/attempt-access-cache.service";
 import { VersionManagementService } from "../version-management.service";
 
 describe("VersionManagementService", () => {
@@ -42,6 +43,10 @@ describe("VersionManagementService", () => {
     error: jest.fn(),
   };
 
+  const mockAttemptAccessCache = {
+    invalidateForAssignment: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -54,6 +59,10 @@ describe("VersionManagementService", () => {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: mockLogger,
         },
+        {
+          provide: AttemptAccessCacheService,
+          useValue: mockAttemptAccessCache,
+        },
       ],
     }).compile();
 
@@ -62,6 +71,75 @@ describe("VersionManagementService", () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe("restoreVersion cache invalidation", () => {
+    const userSession = {
+      userId: "author@example.com",
+      role: UserRole.AUTHOR,
+    } as never;
+
+    it("invalidates the attempt-access cache after activating a published version", async () => {
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue({
+        id: 50,
+        assignmentId: 10,
+        versionNumber: "0.0.7",
+        versionDescription: "Stable release",
+        published: true,
+        isDraft: false,
+        isActive: false,
+        createdBy: "author@example.com",
+        createdAt: new Date("2026-05-14T00:00:00.000Z"),
+        questionVersions: [],
+      });
+      const tx = {
+        assignmentVersion: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        assignment: { update: jest.fn().mockResolvedValue({}) },
+        versionHistory: { create: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrismaService.$transaction.mockImplementation(
+        async (callback: (tx: unknown) => unknown) => callback(tx),
+      );
+
+      await service.restoreVersion(10, { versionId: 50 } as never, userSession);
+
+      expect(
+        mockAttemptAccessCache.invalidateForAssignment,
+      ).toHaveBeenCalledWith(10);
+    });
+
+    it("does not invalidate the cache when activation fails because the version is unpublished", async () => {
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue({
+        id: 50,
+        assignmentId: 10,
+        versionNumber: "0.0.7",
+        published: false,
+        isDraft: false,
+        isActive: false,
+        createdBy: "author@example.com",
+        createdAt: new Date("2026-05-14T00:00:00.000Z"),
+        questionVersions: [],
+      });
+      mockPrismaService.$transaction.mockImplementation(
+        async (callback: (tx: unknown) => unknown) =>
+          callback({
+            assignmentVersion: { updateMany: jest.fn(), update: jest.fn() },
+            assignment: { update: jest.fn() },
+            versionHistory: { create: jest.fn() },
+          }),
+      );
+
+      await expect(
+        service.restoreVersion(10, { versionId: 50 } as never, userSession),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(
+        mockAttemptAccessCache.invalidateForAssignment,
+      ).not.toHaveBeenCalled();
+    });
   });
 
   describe("listVersions", () => {

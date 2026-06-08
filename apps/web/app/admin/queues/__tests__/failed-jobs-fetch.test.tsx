@@ -8,13 +8,13 @@
  * dots is treated as file-like by that proxy and the request never forwards,
  * surfacing as a bare "fetch failed" at the transport layer (no HTTP status).
  *
- * The fix percent-encodes the dots so the drill-down path segment stays opaque
- * through the proxy. This test pins that behavior: the request URL for the
- * dotted queue must contain no literal dots in the queue-name segment, and the
- * status call (no dotted segment) keeps working unchanged.
+ * The fix carries the queue name in a `?queue=` query value instead of a path
+ * segment — query strings are not path-normalized, so the dotted name survives
+ * the proxy opaquely. This test pins that behavior: the request path (before the
+ * query string) must contain no dotted queue segment, and the queue name must be
+ * forwarded as a `queue` query parameter.
  */
 import {
-  encodeQueueNameSegment,
   getQueueActiveJobs,
   getQueueFailedJobs,
   removeFailedJob,
@@ -43,39 +43,39 @@ describe("admin queues failed-jobs fetch (dotted queue name)", () => {
     return String(mock.mock.calls[0]?.[0] ?? "");
   };
 
-  it("encodeQueueNameSegment escapes dots so no literal dot reaches the path", () => {
-    const encoded = encodeQueueNameSegment("mark.assignment.v2");
-    expect(encoded).toBe("mark%2Eassignment%2Ev2");
-    expect(encoded).not.toContain(".");
-  });
+  const pathOf = (url: string): string => url.split("?")[0] ?? "";
 
-  it("requests the failed endpoint with a dot-free queue segment", async () => {
+  it("requests the failed endpoint with a dot-free path and the queue in the query", async () => {
     await getQueueFailedJobs("tok", "mark.assignment.v2", 25);
     const url = requestedUrl();
-    const segment = url.split("/queue-status/")[1]?.split("/failed")[0] ?? "";
-    expect(segment).toBe("mark%2Eassignment%2Ev2");
-    expect(segment).not.toContain(".");
+    expect(pathOf(url)).toContain("/queue-status/failed");
+    // No dotted queue segment anywhere in the path portion.
+    expect(pathOf(url).split("/queue-status/")[1]).not.toContain(".");
+    expect(url).toContain("queue=mark.assignment.v2");
     expect(url).toContain("limit=25");
   });
 
-  it("requests the active endpoint with a dot-free queue segment", async () => {
+  it("requests the active endpoint with a dot-free path and the queue in the query", async () => {
     await getQueueActiveJobs("tok", "mark.assignment.v2", 25);
-    const segment =
-      requestedUrl().split("/queue-status/")[1]?.split("/active")[0] ?? "";
-    expect(segment).not.toContain(".");
+    const url = requestedUrl();
+    expect(pathOf(url)).toContain("/queue-status/active");
+    expect(pathOf(url).split("/queue-status/")[1]).not.toContain(".");
+    expect(url).toContain("queue=mark.assignment.v2");
   });
 
-  it("retry/remove also escape the dotted queue segment", async () => {
+  it("retry/remove carry the queue in the query, never as a dotted path segment", async () => {
     await retryFailedJob("tok", "mark.assignment.v2", "42");
-    expect(
-      requestedUrl().split("/queue-status/")[1]?.split("/jobs")[0] ?? "",
-    ).not.toContain(".");
+    let url = requestedUrl();
+    expect(pathOf(url)).toContain("/queue-status/jobs/42/retry");
+    expect(pathOf(url).split("/queue-status/")[1]).not.toContain(".");
+    expect(url).toContain("queue=mark.assignment.v2");
 
     (global.fetch as jest.Mock).mockClear();
     await removeFailedJob("tok", "mark.assignment.v2", "42");
-    expect(
-      requestedUrl().split("/queue-status/")[1]?.split("/jobs")[0] ?? "",
-    ).not.toContain(".");
+    url = requestedUrl();
+    expect(pathOf(url)).toContain("/queue-status/jobs/42");
+    expect(pathOf(url).split("/queue-status/")[1]).not.toContain(".");
+    expect(url).toContain("queue=mark.assignment.v2");
   });
 
   it("forwards the x-admin-token header on the drill-down request", async () => {
