@@ -10,13 +10,16 @@
 #   ./scripts/lti-sync-check.sh                  # auto-pick a mark-api pod
 #   ./scripts/lti-sync-check.sh <pod-name>       # use a specific pod
 #
+# Override which read-only diagnostic to stream with LTI_DIAG:
+#   LTI_DIAG=scripts/lti-sync-waiting.js ./scripts/lti-sync-check.sh
+#
 # Prereq: kubectl must already point at the target cluster/namespace.
 # For prod, run your `markprod` alias first.
 
 set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-diag="$script_dir/lti-sync-diagnose.js"
+diag="${LTI_DIAG:-$script_dir/lti-sync-diagnose.js}"
 
 if [[ ! -f "$diag" ]]; then
   echo "error: cannot find $diag" >&2
@@ -42,7 +45,7 @@ if [[ -z "$pod" ]]; then
   exit 1
 fi
 
-echo "▶ lti-sync-diagnose via pod $pod" >&2
+echo "▶ $(basename "$diag") via pod $pod" >&2
 
 kubectl exec -i "$pod" -c mark-api \
   -- sh -c 'NODE_PATH=/usr/src/app/node_modules node' \
