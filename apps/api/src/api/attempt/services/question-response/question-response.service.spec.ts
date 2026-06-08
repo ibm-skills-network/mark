@@ -303,15 +303,11 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
     );
 
     expect(mockProgressService.initializeProgress).toHaveBeenCalledWith(20, 1);
-    expect(mockProgressService.updateProgress).toHaveBeenCalledWith(20, {
-      currentQuestion: 1,
-      currentStage: "Grading question 1 of 1...",
-    });
     expect(mockProgressService.updateQuestionProgress).toHaveBeenCalledWith(
       20,
       1,
       1,
-      "Graded question 1 of 1",
+      "Grading question 1 of 1...",
     );
     expect(mockProgressService.markComplete).toHaveBeenCalledWith(20);
   });
