@@ -11,6 +11,7 @@ import {
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import { ConcurrencyLimiter } from "../llm/features/grading/services/concurrency-limiter";
 import {
   Choice,
   QuestionDto,
@@ -1154,6 +1155,11 @@ export class AdminService {
     );
     const skip = (Math.max(1, page) - 1) * safeLimit;
 
+    // How many assignments' cost chains may compute at once. Each chain does
+    // uncached per-row pricing lookups (one pool connection at a time), so this
+    // bounds how many connections this endpoint can hold concurrently.
+    const COST_CALC_CONCURRENCY = 4;
+
     const searchCondition = search
       ? {
           OR: [
@@ -1314,8 +1320,14 @@ export class AdminService {
       }
     }
 
-    const analyticsData = await Promise.all(
-      assignments.map(async (assignment) => {
+    // Cost calculation does an uncached per-row pricing lookup, so running
+    // every assignment's cost chain at once would hold one pool connection per
+    // assignment and could starve the pool. Bound how many run concurrently.
+    // (The per-row lookup volume itself is left to the pricing-batching fix.)
+    const analyticsData = await new ConcurrencyLimiter(
+      COST_CALC_CONCURRENCY,
+    ).run(
+      assignments.map((assignment) => async () => {
         const totalAttempts = totalStatsMap.get(assignment.id) || 0;
         const submittedData = submittedStatsMap.get(assignment.id);
         const completedAttempts = submittedData?._count.id || 0;

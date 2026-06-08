@@ -61,6 +61,11 @@ describe("AdminService", () => {
   let mockAssignmentService: { publishAssignment: jest.Mock };
   let mockQuestionService: { generateQuestions: jest.Mock };
   let mockJobStatusService: { getJobStatus: jest.Mock };
+  let mockLlmPricingService: {
+    calculateCost: jest.Mock;
+    getTokenCount: jest.Mock;
+    calculateCostWithBreakdown: jest.Mock;
+  };
 
   beforeEach(async () => {
     mockPrisma = makeMockPrisma();
@@ -89,9 +94,18 @@ describe("AdminService", () => {
       getJobStatus: jest.fn(),
     };
 
-    const mockLlmPricingService = {
+    mockLlmPricingService = {
       calculateCost: jest.fn().mockReturnValue(0.01),
       getTokenCount: jest.fn().mockReturnValue(100),
+      calculateCostWithBreakdown: jest.fn().mockResolvedValue({
+        totalCost: 0.01,
+        inputCost: 0.005,
+        outputCost: 0.005,
+        inputTokenPrice: 0.000_001,
+        outputTokenPrice: 0.000_002,
+        pricingEffectiveDate: new Date(),
+        modelKey: "gpt-4o",
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -213,6 +227,57 @@ describe("AdminService", () => {
       const a2 = result.data.find((d) => d.id === 2);
       expect(a1?.uniqueLearners).toBe(2);
       expect(a2?.uniqueLearners).toBe(1);
+    });
+
+    it("bounds how many assignment cost chains hit pricing lookups concurrently", async () => {
+      const ids = [1, 2, 3, 4, 5, 6];
+      mockPrisma.assignment.findMany = jest.fn().mockResolvedValue(
+        ids.map((id) => ({
+          id,
+          name: `A${id}`,
+          published: true,
+          updatedAt: new Date(),
+        })),
+      );
+      // Every assignment has AI usage, so each cost chain calls the (uncached,
+      // DB-backed) pricing lookup at least once.
+      mockPrisma.aIUsage.findMany = jest.fn().mockResolvedValue(
+        ids.map((assignmentId) => ({
+          assignmentId,
+          tokensIn: 10,
+          tokensOut: 5,
+          createdAt: new Date(),
+          usageType: "grading",
+          modelKey: "gpt-4o",
+        })),
+      );
+
+      let active = 0;
+      let maxActive = 0;
+      mockLlmPricingService.calculateCostWithBreakdown.mockImplementation(
+        async () => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          // Yield so concurrent chains overlap inside the limiter.
+          await new Promise((resolve) => setImmediate(resolve));
+          active -= 1;
+          return {
+            totalCost: 0.01,
+            inputCost: 0.005,
+            outputCost: 0.005,
+            inputTokenPrice: 0.000_001,
+            outputTokenPrice: 0.000_002,
+            pricingEffectiveDate: new Date(),
+            modelKey: "gpt-4o",
+          };
+        },
+      );
+
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      // Pricing was exercised, but never more than the cost-calc cap at once.
+      expect(maxActive).toBeGreaterThan(0);
+      expect(maxActive).toBeLessThanOrEqual(4);
     });
   });
 
