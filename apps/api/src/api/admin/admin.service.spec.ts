@@ -13,6 +13,10 @@ import {
 } from "../../auth/interfaces/user.session.interface";
 import { AssignmentTypeEnum } from "../llm/features/question-generation/services/question-generation.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
+import {
+  UserRole,
+  UserSession,
+} from "../../auth/interfaces/user.session.interface";
 import { AdminService } from "./admin.service";
 
 const mockLogger = {
@@ -76,6 +80,11 @@ describe("AdminService", () => {
   let mockAssignmentService: { publishAssignment: jest.Mock };
   let mockQuestionService: { generateQuestions: jest.Mock };
   let mockJobStatusService: { getJobStatus: jest.Mock };
+  let mockLlmPricingService: {
+    calculateCost: jest.Mock;
+    getTokenCount: jest.Mock;
+    calculateCostWithBreakdown: jest.Mock;
+  };
 
   beforeEach(async () => {
     mockPrisma = makeMockPrisma();
@@ -104,10 +113,19 @@ describe("AdminService", () => {
       getJobStatus: jest.fn(),
     };
 
-    const mockLlmPricingService = {
+    mockLlmPricingService = {
       calculateCost: jest.fn().mockReturnValue(0.01),
       getTokenCount: jest.fn().mockReturnValue(100),
       calculateCostBatch: jest.fn().mockResolvedValue([]),
+      calculateCostWithBreakdown: jest.fn().mockResolvedValue({
+        totalCost: 0.01,
+        inputCost: 0.005,
+        outputCost: 0.005,
+        inputTokenPrice: 0.000_001,
+        outputTokenPrice: 0.000_002,
+        pricingEffectiveDate: new Date(),
+        modelKey: "gpt-4o",
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -140,6 +158,151 @@ describe("AdminService", () => {
 
   it("should be defined", () => {
     expect(service).toBeDefined();
+  });
+
+  describe("getAssignmentAnalytics (connection-pool guard)", () => {
+    const adminSession = {
+      role: UserRole.ADMIN,
+      userId: "admin@ibm.com",
+    } as unknown as UserSession;
+
+    beforeEach(() => {
+      mockPrisma.assignment.count = jest.fn().mockResolvedValue(500);
+      mockPrisma.assignment.findMany = jest.fn().mockResolvedValue([
+        { id: 1, name: "A1", published: true, updatedAt: new Date() },
+        { id: 2, name: "A2", published: false, updatedAt: new Date() },
+      ]);
+      // One mock for all three assignmentAttempt.groupBy calls; branch on args
+      // so the call order doesn't matter.
+      mockPrisma.assignmentAttempt.groupBy = jest.fn((args: any) => {
+        if (args.by?.includes("userId")) {
+          // distinct (assignmentId, userId) pairs — assignment 1 has 2 learners,
+          // assignment 2 has 1.
+          return Promise.resolve([
+            { assignmentId: 1, userId: "u1" },
+            { assignmentId: 1, userId: "u2" },
+            { assignmentId: 2, userId: "u1" },
+          ]);
+        }
+        if (args.where?.submitted) {
+          return Promise.resolve([
+            { assignmentId: 1, _count: { id: 5 }, _avg: { grade: 0.8 } },
+          ]);
+        }
+        return Promise.resolve([
+          { assignmentId: 1, _count: { id: 10 } },
+          { assignmentId: 2, _count: { id: 3 } },
+        ]);
+      });
+      mockPrisma.assignmentFeedback.groupBy = jest
+        .fn()
+        .mockResolvedValue([
+          { assignmentId: 1, _avg: { assignmentRating: 4 } },
+        ]);
+      mockPrisma.aIUsage.findMany = jest.fn().mockResolvedValue([]);
+    });
+
+    // NOTE: #527's service-level page-size clamp was dropped in favour of the
+    // authoritative controller cap (MAX_LIMIT=25, which 400s oversized limits).
+    // That behaviour is covered by the controller spec; there is no service
+    // clamp to test here anymore.
+
+    it("derives unique learners with ONE grouped query, not one per assignment", async () => {
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      const pairCalls = (
+        mockPrisma.assignmentAttempt.groupBy as jest.Mock
+      ).mock.calls.filter(([args]) => args.by?.includes("userId"));
+      expect(pairCalls).toHaveLength(1);
+    });
+
+    it("batches AI usage into batched queries (page + full-set), never per-assignment", async () => {
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      // Two batched scans, each with an `in` filter — one for the page, one for
+      // the filter-wide aggregates — instead of one findMany per assignment.
+      expect(mockPrisma.aIUsage.findMany).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.aIUsage.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { assignmentId: { in: [1, 2] } },
+        }),
+      );
+    });
+
+    it("returns the correct per-assignment unique-learner counts", async () => {
+      const result = await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        1000,
+      );
+
+      const a1 = result.data.find((d) => d.id === 1);
+      const a2 = result.data.find((d) => d.id === 2);
+      expect(a1?.uniqueLearners).toBe(2);
+      expect(a2?.uniqueLearners).toBe(1);
+    });
+
+    it("bounds how many assignment cost chains hit pricing lookups concurrently", async () => {
+      const ids = [1, 2, 3, 4, 5, 6];
+      // Return the page rows for the paged query (has `take`), but no rows for
+      // the id-only aggregate query — that isolates this test to the per-page
+      // cost chains (the limiter's job), excluding the single full-set aggregate
+      // cost call which runs outside the limiter.
+      mockPrisma.assignment.findMany = jest.fn((args: any) =>
+        Promise.resolve(
+          args?.take === undefined
+            ? []
+            : ids.map((id) => ({
+                id,
+                name: `A${id}`,
+                published: true,
+                updatedAt: new Date(),
+              })),
+        ),
+      );
+      // Every assignment has AI usage, so each cost chain calls pricing.
+      mockPrisma.aIUsage.findMany = jest.fn().mockResolvedValue(
+        ids.map((assignmentId) => ({
+          assignmentId,
+          tokensIn: 10,
+          tokensOut: 5,
+          createdAt: new Date(),
+          usageType: "grading",
+          modelKey: "gpt-4o",
+        })),
+      );
+
+      let active = 0;
+      let maxActive = 0;
+      // Cost now flows through the batched pricing call (one per assignment's
+      // cost chain); the limiter caps how many run at once.
+      mockLlmPricingService.calculateCostBatch.mockImplementation(
+        async (records: Array<unknown>) => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          // Yield so concurrent chains overlap inside the limiter.
+          await new Promise((resolve) => setImmediate(resolve));
+          active -= 1;
+          return records.map(() => ({
+            inputTokens: 10,
+            outputTokens: 5,
+            inputCost: 0.005,
+            outputCost: 0.005,
+            totalCost: 0.01,
+            modelKey: "gpt-4o",
+            pricingEffectiveDate: new Date(),
+            inputTokenPrice: 0.000_001,
+            outputTokenPrice: 0.000_002,
+          }));
+        },
+      );
+
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      // Pricing was exercised, but never more than the cost-calc cap at once.
+      expect(maxActive).toBeGreaterThan(0);
+      expect(maxActive).toBeLessThanOrEqual(4);
+    });
   });
 
   describe("removeAssignment", () => {

@@ -11,6 +11,7 @@ import {
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import { ConcurrencyLimiter } from "../llm/features/grading/services/concurrency-limiter";
 import {
   Choice,
   QuestionDto,
@@ -1153,6 +1154,11 @@ export class AdminService {
     const isAdmin = adminSession.role === UserRole.ADMIN;
     const skip = (page - 1) * limit;
 
+    // How many assignments' cost chains may compute at once. Each chain does
+    // per-row pricing lookups (one pool connection at a time), so this bounds
+    // how many connections this endpoint can hold concurrently.
+    const COST_CALC_CONCURRENCY = 4;
+
     const searchCondition = search
       ? {
           OR: [
@@ -1278,16 +1284,29 @@ export class AdminService {
           return { totalStatsMap, submittedStatsMap };
         }),
 
-        Promise.all(
-          assignmentIds.map(async (assignmentId) => {
-            const uniqueUsers = await this.prisma.assignmentAttempt.findMany({
-              where: { assignmentId },
-              distinct: ["userId"],
-              select: { userId: true },
-            });
-            return { assignmentId, uniqueUsersCount: uniqueUsers.length };
+        // Distinct learners per assignment in ONE query: grouping by
+        // (assignmentId, userId) yields one row per unique pair, so counting
+        // rows per assignmentId is the unique-learner count. Replaces a
+        // per-assignment findMany (one Postgres query each) that fanned out
+        // across the whole page.
+        this.prisma.assignmentAttempt
+          .groupBy({
+            by: ["assignmentId", "userId"],
+            where: { assignmentId: { in: assignmentIds } },
+          })
+          .then((pairs) => {
+            const counts = new Map<number, number>();
+            for (const pair of pairs) {
+              counts.set(
+                pair.assignmentId,
+                (counts.get(pair.assignmentId) ?? 0) + 1,
+              );
+            }
+            return assignmentIds.map((assignmentId) => ({
+              assignmentId,
+              uniqueUsersCount: counts.get(assignmentId) ?? 0,
+            }));
           }),
-        ),
 
         this.prisma.assignmentFeedback.groupBy({
           by: ["assignmentId"],
@@ -1332,8 +1351,14 @@ export class AdminService {
       }
     }
 
-    const analyticsData = await Promise.all(
-      assignments.map(async (assignment) => {
+    // Cost calculation does per-row pricing lookups, so running every
+    // assignment's cost chain at once would hold one pool connection per
+    // assignment and could starve the pool. Bound how many run concurrently —
+    // the page is already capped (controller), this caps connections too.
+    const analyticsData = await new ConcurrencyLimiter(
+      COST_CALC_CONCURRENCY,
+    ).run(
+      assignments.map((assignment) => async () => {
         const totalAttempts = totalStatsMap.get(assignment.id) || 0;
         const submittedData = submittedStatsMap.get(assignment.id);
         const completedAttempts = submittedData?._count.id || 0;
