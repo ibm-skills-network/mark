@@ -92,10 +92,13 @@ export function AssignmentAnalyticsTable({
     setError(null);
 
     try {
+      // Request a bounded page. The previous limit=1000 made the server fan out
+      // to one Postgres query per assignment and starve the connection pool; the
+      // server now also caps this, so asking for the whole table no longer helps.
       const response = await getAssignmentAnalytics(
         sessionToken,
         1,
-        1000,
+        50,
         undefined,
       );
       setData(response.data);

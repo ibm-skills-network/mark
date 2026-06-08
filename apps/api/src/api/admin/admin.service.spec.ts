@@ -9,6 +9,10 @@ import { JobStatusServiceV2 } from "../assignment/v2/services/job-status.service
 import { QuestionService } from "../assignment/v2/services/question.service";
 import { AssignmentTypeEnum } from "../llm/features/question-generation/services/question-generation.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
+import {
+  UserRole,
+  UserSession,
+} from "../../auth/interfaces/user.session.interface";
 import { AdminService } from "./admin.service";
 
 const mockLogger = {
@@ -120,6 +124,96 @@ describe("AdminService", () => {
 
   it("should be defined", () => {
     expect(service).toBeDefined();
+  });
+
+  describe("getAssignmentAnalytics (connection-pool guard)", () => {
+    const adminSession = {
+      role: UserRole.ADMIN,
+      userId: "admin@ibm.com",
+    } as unknown as UserSession;
+
+    beforeEach(() => {
+      mockPrisma.assignment.count = jest.fn().mockResolvedValue(500);
+      mockPrisma.assignment.findMany = jest.fn().mockResolvedValue([
+        { id: 1, name: "A1", published: true, updatedAt: new Date() },
+        { id: 2, name: "A2", published: false, updatedAt: new Date() },
+      ]);
+      // One mock for all three assignmentAttempt.groupBy calls; branch on args
+      // so the call order doesn't matter.
+      mockPrisma.assignmentAttempt.groupBy = jest.fn((args: any) => {
+        if (args.by?.includes("userId")) {
+          // distinct (assignmentId, userId) pairs — assignment 1 has 2 learners,
+          // assignment 2 has 1.
+          return Promise.resolve([
+            { assignmentId: 1, userId: "u1" },
+            { assignmentId: 1, userId: "u2" },
+            { assignmentId: 2, userId: "u1" },
+          ]);
+        }
+        if (args.where?.submitted) {
+          return Promise.resolve([
+            { assignmentId: 1, _count: { id: 5 }, _avg: { grade: 0.8 } },
+          ]);
+        }
+        return Promise.resolve([
+          { assignmentId: 1, _count: { id: 10 } },
+          { assignmentId: 2, _count: { id: 3 } },
+        ]);
+      });
+      mockPrisma.assignmentFeedback.groupBy = jest
+        .fn()
+        .mockResolvedValue([
+          { assignmentId: 1, _avg: { assignmentRating: 4 } },
+        ]);
+      mockPrisma.aIUsage.findMany = jest.fn().mockResolvedValue([]);
+    });
+
+    it("clamps an oversized requested limit to the page cap", async () => {
+      const result = await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        1000,
+      );
+
+      // The page the DB is asked for is bounded regardless of the request.
+      expect(mockPrisma.assignment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 50 }),
+      );
+      expect(result.pagination.limit).toBe(50);
+    });
+
+    it("derives unique learners with ONE grouped query, not one per assignment", async () => {
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      const pairCalls = (
+        mockPrisma.assignmentAttempt.groupBy as jest.Mock
+      ).mock.calls.filter(([args]) => args.by?.includes("userId"));
+      expect(pairCalls).toHaveLength(1);
+    });
+
+    it("batches AI usage into ONE query scoped to the page's assignments", async () => {
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      expect(mockPrisma.aIUsage.findMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.aIUsage.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { assignmentId: { in: [1, 2] } },
+        }),
+      );
+    });
+
+    it("returns the correct per-assignment unique-learner counts", async () => {
+      const result = await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        1000,
+      );
+
+      const a1 = result.data.find((d) => d.id === 1);
+      const a2 = result.data.find((d) => d.id === 2);
+      expect(a1?.uniqueLearners).toBe(2);
+      expect(a2?.uniqueLearners).toBe(1);
+    });
   });
 
   describe("removeAssignment", () => {
