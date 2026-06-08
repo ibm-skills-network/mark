@@ -263,15 +263,6 @@ export async function getLiveRecordingFeedback(
   }
 }
 
-function parseQuestionProgress(progressStr: string): {
-  currentQuestion?: number;
-  totalQuestions?: number;
-} {
-  const match = progressStr?.match(/question\s+(\d+)\s+of\s+(\d+)/i);
-  return match
-    ? { currentQuestion: Number(match[1]), totalQuestions: Number(match[2]) }
-    : {};
-}
 
 /**
  * Submits an assignment with progress tracking
@@ -435,7 +426,10 @@ export async function submitAssignment(
                 "processing",
                 percentage,
                 progress,
-                parseQuestionProgress(progress),
+                {
+                  currentQuestion: data.currentQuestion,
+                  totalQuestions: data.totalQuestions,
+                },
               );
             } else if (data.status === "Completed" && !isCompleted) {
               isCompleted = true;
@@ -488,7 +482,10 @@ export async function submitAssignment(
                   "processing",
                   data.percentage,
                   data.progress,
-                  parseQuestionProgress(data.progress),
+                  {
+                    currentQuestion: data.currentQuestion,
+                    totalQuestions: data.totalQuestions,
+                  },
                 );
               }
             } catch (error) {
