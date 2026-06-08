@@ -9,17 +9,15 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type SortingState,
-  type ColumnFiltersState,
 } from "@tanstack/react-table";
 import {
   getAssignmentAnalytics,
   type AssignmentAnalyticsData,
+  type AssignmentAnalyticsAggregates,
+  type AssignmentAnalyticsSortField,
 } from "@/lib/talkToBackend";
 import { QuickActions } from "./QuickActions";
 import {
@@ -39,6 +37,9 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
+
+const PAGE_SIZE = 25;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface AssignmentAnalyticsTableProps {
   sessionToken?: string | null;
@@ -76,29 +77,79 @@ export function AssignmentAnalyticsTable({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [debouncedGlobalFilter, setDebouncedGlobalFilter] = useState("");
+  const [publishedFilter, setPublishedFilter] = useState<boolean | undefined>(
+    undefined,
+  );
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [tablePagination, setTablePagination] = useState({
     pageIndex: 0,
-    pageSize: 10,
+    pageSize: PAGE_SIZE,
   });
+  const [serverPageCount, setServerPageCount] = useState(1);
+  const [serverRowCount, setServerRowCount] = useState(0);
+  const [aggregates, setAggregates] =
+    useState<AssignmentAnalyticsAggregates | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [localFilters, setLocalFilters] = useState(filters || {});
 
+  const isShowingQuickActionResults = !!quickActionResults;
+  const currentQuickActionTitle = quickActionTitle;
+
+  // Debounce: 300ms idle before search syncs to the server.
+  useEffect(() => {
+    const t = setTimeout(
+      () => setDebouncedGlobalFilter(globalFilter),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(t);
+  }, [globalFilter]);
+
+  // Snap back to page 1 whenever a filter/sort changes, so the user isn't
+  // staring at an out-of-range page after narrowing the result set.
+  useEffect(() => {
+    setTablePagination((prev) =>
+      prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
+    );
+  }, [debouncedGlobalFilter, publishedFilter, sorting]);
+
+  useEffect(() => {
+    setLocalFilters(filters || {});
+  }, [filters]);
+
   const fetchData = async () => {
     if (!sessionToken) return;
-
     setLoading(true);
     setError(null);
-
     try {
+      const sortState = sorting[0];
       const response = await getAssignmentAnalytics(
         sessionToken,
-        1,
-        1000,
-        undefined,
+        tablePagination.pageIndex + 1,
+        PAGE_SIZE,
+        debouncedGlobalFilter || undefined,
+        {
+          sortBy: sortState?.id as AssignmentAnalyticsSortField | undefined,
+          sortOrder: sortState ? (sortState.desc ? "desc" : "asc") : undefined,
+          published: publishedFilter,
+        },
       );
       setData(response.data);
+      setServerPageCount(response.pagination.totalPages);
+      setServerRowCount(response.pagination.total);
+      setAggregates(response.aggregates);
+
+      // Page clamp: if the new filter made the current page fall off the end,
+      // snap back to the last valid page.
+      if (
+        response.pagination.totalPages > 0 &&
+        tablePagination.pageIndex >= response.pagination.totalPages
+      ) {
+        setTablePagination((prev) => ({
+          ...prev,
+          pageIndex: response.pagination.totalPages - 1,
+        }));
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -111,21 +162,26 @@ export function AssignmentAnalyticsTable({
   };
 
   useEffect(() => {
-    if (!quickActionResults) {
+    if (!isShowingQuickActionResults) {
       fetchData();
     }
-  }, [sessionToken, quickActionResults]);
-
-  useEffect(() => {
-    setLocalFilters(filters || {});
-  }, [filters]);
+  }, [
+    sessionToken,
+    isShowingQuickActionResults,
+    tablePagination.pageIndex,
+    sorting,
+    publishedFilter,
+    debouncedGlobalFilter,
+  ]);
 
   const handleClearQuickActionResults = () => {
-    if (onClearQuickActionResults) {
-      onClearQuickActionResults();
-    }
-
-    fetchData();
+    onClearQuickActionResults?.();
+    // Reset to a fresh server view.
+    setTablePagination({ pageIndex: 0, pageSize: PAGE_SIZE });
+    setGlobalFilter("");
+    setDebouncedGlobalFilter("");
+    setPublishedFilter(undefined);
+    setSorting([]);
   };
 
   const handleFilterChange = (key: string, value: string | number) => {
@@ -137,14 +193,17 @@ export function AssignmentAnalyticsTable({
   };
 
   const applyFilters = () => {
-    if (onFiltersChange) {
-      onFiltersChange(localFilters);
-    }
+    onFiltersChange?.(localFilters);
+  };
+
+  const clearAllFilters = () => {
+    setGlobalFilter("");
+    setDebouncedGlobalFilter("");
+    setPublishedFilter(undefined);
+    setSorting([]);
   };
 
   const rawData = quickActionResults || data;
-  const isShowingQuickActionResults = !!quickActionResults;
-  const currentQuickActionTitle = quickActionTitle;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -177,7 +236,6 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
-
         enableSorting: true,
       }),
 
@@ -195,10 +253,11 @@ export function AssignmentAnalyticsTable({
             {getValue() ? "Published" : "Draft"}
           </Badge>
         ),
-
         enableSorting: true,
-        filterFn: "equals",
       }),
+
+      // Derived/computed columns: sort disabled because the backend doesn't
+      // sort by these (they're computed in JS from batched per-page stats).
       columnHelper.display({
         id: "costPerAttempt",
         header: "Cost/Attempt",
@@ -221,16 +280,7 @@ export function AssignmentAnalyticsTable({
             </div>
           );
         },
-        enableSorting: true,
-        sortingFn: (rowA, rowB) => {
-          const a = rowA.original;
-          const b = rowB.original;
-          const aValue =
-            a.totalAttempts > 0 ? a.totalCost / a.totalAttempts : 0;
-          const bValue =
-            b.totalAttempts > 0 ? b.totalCost / b.totalAttempts : 0;
-          return aValue - bValue;
-        },
+        enableSorting: false,
       }),
       columnHelper.accessor("totalCost", {
         header: "Total Cost",
@@ -247,8 +297,7 @@ export function AssignmentAnalyticsTable({
             )}
           </div>
         ),
-
-        enableSorting: true,
+        enableSorting: false,
       }),
 
       columnHelper.accessor("uniqueLearners", {
@@ -261,8 +310,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
-
-        enableSorting: true,
+        enableSorting: false,
       }),
 
       columnHelper.accessor("totalAttempts", {
@@ -277,8 +325,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
-
-        enableSorting: true,
+        enableSorting: false,
       }),
 
       columnHelper.display({
@@ -306,20 +353,7 @@ export function AssignmentAnalyticsTable({
             </div>
           );
         },
-        enableSorting: true,
-        sortingFn: (rowA, rowB) => {
-          const a = rowA.original;
-          const b = rowB.original;
-          const aCompletion =
-            a.totalAttempts > 0
-              ? (a.completedAttempts / a.totalAttempts) * 100
-              : 0;
-          const bCompletion =
-            b.totalAttempts > 0
-              ? (b.completedAttempts / b.totalAttempts) * 100
-              : 0;
-          return aCompletion - bCompletion;
-        },
+        enableSorting: false,
       }),
 
       columnHelper.accessor("averageGrade", {
@@ -352,7 +386,7 @@ export function AssignmentAnalyticsTable({
             </div>
           );
         },
-        enableSorting: true,
+        enableSorting: false,
       }),
 
       columnHelper.accessor("averageRating", {
@@ -367,8 +401,7 @@ export function AssignmentAnalyticsTable({
             </div>
           </div>
         ),
-
-        enableSorting: true,
+        enableSorting: false,
       }),
 
       columnHelper.display({
@@ -389,44 +422,35 @@ export function AssignmentAnalyticsTable({
         ),
       }),
     ],
-
     [formatCurrency, formatPercentage, navigateToInsights],
   );
 
+  // Server-driven mode for the normal analytics view; client-side for the
+  // bounded quick-action result set (no pagination, no sort/filter UI).
   const table = useReactTable({
     data: rawData,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    manualPagination: !isShowingQuickActionResults,
+    manualSorting: !isShowingQuickActionResults,
+    manualFiltering: !isShowingQuickActionResults,
+    pageCount: isShowingQuickActionResults ? 1 : serverPageCount,
+    rowCount: isShowingQuickActionResults ? rawData.length : serverRowCount,
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setTablePagination,
     state: {
       sorting,
-      columnFilters,
-      globalFilter,
       pagination: tablePagination,
-    },
-    globalFilterFn: (row, _columnId, value) => {
-      const assignment = row.original;
-      const searchValue = value.toLowerCase();
-
-      const nameMatch = assignment.name.toLowerCase().includes(searchValue);
-
-      const idMatch = assignment.id.toString().includes(searchValue);
-
-      return nameMatch || idMatch;
     },
   });
 
-  const hasActiveFilters = Object.values(filters || {}).some(
+  const hasAdvancedFilters = Object.values(filters || {}).some(
     (value) => value !== undefined && value !== "",
   );
+  const hasTableFilters =
+    !!debouncedGlobalFilter || publishedFilter !== undefined;
 
-  if (loading && !quickActionResults && data.length === 0) {
+  if (loading && !isShowingQuickActionResults && data.length === 0) {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center py-8">
@@ -447,6 +471,13 @@ export function AssignmentAnalyticsTable({
       </div>
     );
   }
+
+  const showingFrom =
+    serverRowCount === 0 ? 0 : tablePagination.pageIndex * PAGE_SIZE + 1;
+  const showingTo = Math.min(
+    (tablePagination.pageIndex + 1) * PAGE_SIZE,
+    serverRowCount,
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -480,278 +511,257 @@ export function AssignmentAnalyticsTable({
                 </div>
               )}
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className="gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                {showFilters ? "Hide" : "Show"} Advanced Filters
-              </Button>
+              {!isShowingQuickActionResults && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="gap-2"
+                >
+                  <Filter className="h-4 w-4" />
+                  {showFilters ? "Hide" : "Show"} Advanced Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">
-              Global Search
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search assignments by name or ID..."
-                value={globalFilter ?? ""}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-                className="pl-10"
-              />
 
-              {globalFilter && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setGlobalFilter("")}
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Search, status filter, and advanced filters are server-driven —
+            hidden for quick-action results because that data has its own
+            shape and is already pre-ranked. */}
+        {!isShowingQuickActionResults && (
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">
-                Status Filter
+                Global Search
               </label>
-              <select
-                value={
-                  (table.getColumn("published")?.getFilterValue() as
-                    | boolean
-                    | undefined) === true
-                    ? "published"
-                    : (table.getColumn("published")?.getFilterValue() as
-                          | boolean
-                          | undefined) === false
-                      ? "draft"
-                      : "all"
-                }
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === "all") {
-                    table.getColumn("published")?.setFilterValue(undefined);
-                  } else {
-                    table
-                      .getColumn("published")
-                      ?.setFilterValue(value === "published");
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search assignments by name or ID..."
+                  value={globalFilter ?? ""}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                  className="pl-10"
+                />
+
+                {globalFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setGlobalFilter("");
+                      setDebouncedGlobalFilter("");
+                    }}
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Status Filter
+                </label>
+                <select
+                  value={
+                    publishedFilter === true
+                      ? "published"
+                      : publishedFilter === false
+                        ? "draft"
+                        : "all"
                   }
-                }}
-                className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
-              >
-                <option value="all">All Assignments</option>
-                <option value="published">Published Only</option>
-                <option value="draft">Draft Only</option>
-              </select>
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPublishedFilter(
+                      value === "all" ? undefined : value === "published",
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
+                >
+                  <option value="all">All Assignments</option>
+                  <option value="published">Published Only</option>
+                  <option value="draft">Draft Only</option>
+                </select>
+                <div className="text-xs text-muted-foreground">25 per page</div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">
-                Items per Page
-              </label>
-              <select
-                value={table.getState().pagination.pageSize}
-                onChange={(e) => {
-                  table.setPageSize(Number(e.target.value));
-                }}
-                className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
-              >
-                <option value="5">5</option>
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-            </div>
-          </div>
-
-          {showFilters && (
-            <div className="space-y-4 border-t pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Date Range
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
-                      <Input
-                        type="date"
-                        placeholder="Start Date"
-                        value={localFilters.startDate || ""}
-                        onChange={(e) =>
-                          handleFilterChange("startDate", e.target.value)
-                        }
-                        className="pl-10"
-                      />
+            {showFilters && (
+              <div className="space-y-4 border-t pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Date Range
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          placeholder="Start Date"
+                          value={localFilters.startDate || ""}
+                          onChange={(e) =>
+                            handleFilterChange("startDate", e.target.value)
+                          }
+                          className="pl-10"
+                        />
+                      </div>
+                      <div className="relative flex-1">
+                        <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          placeholder="End Date"
+                          value={localFilters.endDate || ""}
+                          onChange={(e) =>
+                            handleFilterChange("endDate", e.target.value)
+                          }
+                          className="pl-10"
+                        />
+                      </div>
                     </div>
-                    <div className="relative flex-1">
-                      <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Assignment
+                    </label>
+                    <div className="space-y-2">
                       <Input
-                        type="date"
-                        placeholder="End Date"
-                        value={localFilters.endDate || ""}
+                        type="number"
+                        placeholder="Assignment ID"
+                        value={localFilters.assignmentId || ""}
                         onChange={(e) =>
-                          handleFilterChange("endDate", e.target.value)
+                          handleFilterChange(
+                            "assignmentId",
+                            e.target.value ? parseInt(e.target.value) : "",
+                          )
                         }
-                        className="pl-10"
+                      />
+
+                      <Input
+                        type="text"
+                        placeholder="Assignment Name"
+                        value={localFilters.assignmentName || ""}
+                        onChange={(e) =>
+                          handleFilterChange("assignmentName", e.target.value)
+                        }
                       />
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Assignment
-                  </label>
                   <div className="space-y-2">
-                    <Input
-                      type="number"
-                      placeholder="Assignment ID"
-                      value={localFilters.assignmentId || ""}
-                      onChange={(e) =>
-                        handleFilterChange(
-                          "assignmentId",
-                          e.target.value ? parseInt(e.target.value) : "",
-                        )
-                      }
-                    />
-
+                    <label className="text-sm font-medium text-muted-foreground">
+                      User
+                    </label>
                     <Input
                       type="text"
-                      placeholder="Assignment Name"
-                      value={localFilters.assignmentName || ""}
+                      placeholder="User ID or Email"
+                      value={localFilters.userId || ""}
                       onChange={(e) =>
-                        handleFilterChange("assignmentName", e.target.value)
+                        handleFilterChange("userId", e.target.value)
                       }
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    User
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="User ID or Email"
-                    value={localFilters.userId || ""}
-                    onChange={(e) =>
-                      handleFilterChange("userId", e.target.value)
-                    }
-                  />
+                <div className="flex gap-2 pt-4">
+                  <Button onClick={applyFilters} size="sm">
+                    Apply Advanced Filters
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setLocalFilters(filters || {})}
+                    size="sm"
+                  >
+                    Reset Advanced
+                  </Button>
+                </div>
+
+                {hasAdvancedFilters && (
+                  <div className="border-t pt-4">
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Active Advanced Filters:
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {filters?.startDate && (
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          From: {filters.startDate}
+                        </span>
+                      )}
+                      {filters?.endDate && (
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          To: {filters.endDate}
+                        </span>
+                      )}
+                      {filters?.assignmentId && (
+                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                          Assignment ID: {filters.assignmentId}
+                        </span>
+                      )}
+                      {filters?.assignmentName && (
+                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                          Assignment: {filters.assignmentName}
+                        </span>
+                      )}
+                      {filters?.userId && (
+                        <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                          User: {filters.userId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasTableFilters && (
+              <div className="border-t pt-4">
+                <div className="text-sm text-muted-foreground mb-2">
+                  Active Filters:
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {debouncedGlobalFilter && (
+                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                      Search: {debouncedGlobalFilter}
+                    </span>
+                  )}
+                  {publishedFilter !== undefined && (
+                    <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
+                      Status: {publishedFilter ? "Published" : "Draft"}
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    className="h-6 px-2 text-xs"
+                  >
+                    Clear All Filters
+                  </Button>
                 </div>
               </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button onClick={applyFilters} size="sm">
-                  Apply Advanced Filters
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setLocalFilters(filters || {})}
-                  size="sm"
-                >
-                  Reset Advanced
-                </Button>
-              </div>
-
-              {hasActiveFilters && (
-                <div className="border-t pt-4">
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Active Advanced Filters:
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {filters?.startDate && (
-                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                        From: {filters.startDate}
-                      </span>
-                    )}
-                    {filters?.endDate && (
-                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                        To: {filters.endDate}
-                      </span>
-                    )}
-                    {filters?.assignmentId && (
-                      <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                        Assignment ID: {filters.assignmentId}
-                      </span>
-                    )}
-                    {filters?.assignmentName && (
-                      <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                        Assignment: {filters.assignmentName}
-                      </span>
-                    )}
-                    {filters?.userId && (
-                      <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
-                        User: {filters.userId}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {(globalFilter ||
-            table.getColumn("published")?.getFilterValue() !== undefined) && (
-            <div className="border-t pt-4">
-              <div className="text-sm text-muted-foreground mb-2">
-                Active Filters:
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {globalFilter && (
-                  <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                    Search: {globalFilter}
-                  </span>
-                )}
-                {table.getColumn("published")?.getFilterValue() !==
-                  undefined && (
-                  <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
-                    Status:{" "}
-                    {table.getColumn("published")?.getFilterValue()
-                      ? "Published"
-                      : "Draft"}
-                  </span>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setGlobalFilter("");
-                    table.resetColumnFilters();
-                  }}
-                  className="h-6 px-2 text-xs"
-                >
-                  Clear All Filters
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
+            )}
+          </CardContent>
+        )}
       </Card>
 
-      {rawData && rawData.length > 0 && (
+      {/* Aggregate cards reflect the full filtered server-side dataset, not
+          the current page. Hidden in quick-action mode because that data
+          has a different shape and would render NaN for most cards. */}
+      {!isShowingQuickActionResults && rawData.length > 0 && aggregates && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-4">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-blue-500" />
               <div>
                 <div className="text-2xl font-bold">
-                  {table.getFilteredRowModel().rows.length}
+                  {aggregates.totalAssignments}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {globalFilter ||
-                  table.getColumn("published")?.getFilterValue() !== undefined
+                  {hasTableFilters
                     ? "Filtered Assignments"
                     : "Total Assignments"}
                 </div>
@@ -763,20 +773,10 @@ export function AssignmentAnalyticsTable({
               <DollarSign className="h-4 w-4 text-green-500" />
               <div>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(
-                    table
-                      .getFilteredRowModel()
-                      .rows.reduce(
-                        (sum, row) => sum + row.original.totalCost,
-                        0,
-                      ),
-                  ).replace("$", "")}
+                  {formatCurrency(aggregates.totalCost).replace("$", "")}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {globalFilter ||
-                  table.getColumn("published")?.getFilterValue() !== undefined
-                    ? "Filtered Cost"
-                    : "Total Cost"}
+                  {hasTableFilters ? "Filtered Cost" : "Total Cost"}
                 </div>
               </div>
             </div>
@@ -786,16 +786,10 @@ export function AssignmentAnalyticsTable({
               <Users className="h-4 w-4 text-purple-500" />
               <div>
                 <div className="text-2xl font-bold">
-                  {table
-                    .getFilteredRowModel()
-                    .rows.reduce(
-                      (sum, row) => sum + row.original.uniqueLearners,
-                      0,
-                    )}
+                  {aggregates.totalLearnerAssignmentPairs}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {globalFilter ||
-                  table.getColumn("published")?.getFilterValue() !== undefined
+                  {hasTableFilters
                     ? "Filtered Learner-Assignment Pairs"
                     : "Total Learner-Assignment Pairs"}
                 </div>
@@ -807,27 +801,12 @@ export function AssignmentAnalyticsTable({
               <Star className="h-4 w-4 text-yellow-500" />
               <div>
                 <div className="text-2xl font-bold">
-                  {(() => {
-                    const filteredData = table
-                      .getFilteredRowModel()
-                      .rows.map((row) => row.original);
-                    const validRatings = filteredData.filter(
-                      (a) => a.averageRating > 0,
-                    );
-                    if (validRatings.length === 0) return "N/A";
-                    const avgRating =
-                      validRatings.reduce(
-                        (sum, a) => sum + a.averageRating,
-                        0,
-                      ) / validRatings.length;
-                    return avgRating.toFixed(1);
-                  })()}
+                  {aggregates.averageRating > 0
+                    ? aggregates.averageRating.toFixed(1)
+                    : "N/A"}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {globalFilter ||
-                  table.getColumn("published")?.getFilterValue() !== undefined
-                    ? "Filtered Avg Rating"
-                    : "Avg Rating"}
+                  {hasTableFilters ? "Filtered Avg Rating" : "Avg Rating"}
                 </div>
               </div>
             </div>
@@ -840,11 +819,16 @@ export function AssignmentAnalyticsTable({
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              My Assignment Analytics
+              {isShowingQuickActionResults
+                ? "Quick Action Results"
+                : "Assignment Analytics"}
             </CardTitle>
             <div className="text-sm text-muted-foreground">
-              Showing {table.getFilteredRowModel().rows.length} of{" "}
-              {rawData.length} assignments
+              {isShowingQuickActionResults
+                ? `${rawData.length} ${rawData.length === 1 ? "result" : "results"}`
+                : serverRowCount === 0
+                  ? "No assignments"
+                  : `Showing ${showingFrom}–${showingTo} of ${serverRowCount} assignments`}
             </div>
           </div>
         </CardHeader>
@@ -857,54 +841,69 @@ export function AssignmentAnalyticsTable({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div
+                className={`overflow-hidden rounded-lg border border-gray-200 ${
+                  loading && data.length > 0 && !isShowingQuickActionResults
+                    ? "opacity-60 pointer-events-none transition-opacity"
+                    : ""
+                }`}
+              >
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       {table.getHeaderGroups().map((headerGroup) => (
                         <tr key={headerGroup.id}>
-                          {headerGroup.headers.map((header) => (
-                            <th
-                              key={header.id}
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                              onClick={
-                                header.column.getCanSort()
-                                  ? header.column.getToggleSortingHandler()
-                                  : undefined
-                              }
-                            >
-                              <div className="flex items-center space-x-1">
-                                <span>
-                                  {header.isPlaceholder
-                                    ? null
-                                    : flexRender(
-                                        header.column.columnDef.header,
-                                        header.getContext(),
-                                      )}
-                                </span>
-                                {header.column.getCanSort() && (
-                                  <span className="flex flex-col">
-                                    {{
-                                      asc: (
-                                        <SortAsc className="h-3 w-3 text-gray-400" />
-                                      ),
-
-                                      desc: (
-                                        <SortDesc className="h-3 w-3 text-gray-400" />
-                                      ),
-                                    }[
-                                      header.column.getIsSorted() as string
-                                    ] ?? (
-                                      <div className="flex flex-col">
-                                        <ChevronUp className="h-2 w-2 text-gray-300" />
-                                        <ChevronDown className="h-2 w-2 text-gray-300 -mt-1" />
-                                      </div>
-                                    )}
+                          {headerGroup.headers.map((header) => {
+                            const canSort =
+                              !isShowingQuickActionResults &&
+                              header.column.getCanSort();
+                            return (
+                              <th
+                                key={header.id}
+                                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider transition-colors ${
+                                  canSort
+                                    ? "cursor-pointer hover:bg-gray-100"
+                                    : ""
+                                }`}
+                                onClick={
+                                  canSort
+                                    ? header.column.getToggleSortingHandler()
+                                    : undefined
+                                }
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>
+                                    {header.isPlaceholder
+                                      ? null
+                                      : flexRender(
+                                          header.column.columnDef.header,
+                                          header.getContext(),
+                                        )}
                                   </span>
-                                )}
-                              </div>
-                            </th>
-                          ))}
+                                  {canSort && (
+                                    <span className="flex flex-col">
+                                      {{
+                                        asc: (
+                                          <SortAsc className="h-3 w-3 text-gray-400" />
+                                        ),
+
+                                        desc: (
+                                          <SortDesc className="h-3 w-3 text-gray-400" />
+                                        ),
+                                      }[
+                                        header.column.getIsSorted() as string
+                                      ] ?? (
+                                        <div className="flex flex-col">
+                                          <ChevronUp className="h-2 w-2 text-gray-300" />
+                                          <ChevronDown className="h-2 w-2 text-gray-300 -mt-1" />
+                                        </div>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                              </th>
+                            );
+                          })}
                         </tr>
                       ))}
                     </thead>
@@ -932,26 +931,11 @@ export function AssignmentAnalyticsTable({
                 </div>
               </div>
 
-              {table.getFilteredRowModel().rows.length === 0 &&
-                rawData.length > 0 && (
-                  <div className="text-center py-12">
-                    <div className="p-4 bg-gray-50 rounded-2xl mx-auto w-fit mb-4">
-                      <Search className="h-8 w-8 mx-auto text-gray-300" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-600 mb-1">
-                      No assignments match your filters
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Try adjusting your search terms or filters
-                    </p>
-                  </div>
-                )}
-
-              {table.getPageCount() > 1 && (
+              {!isShowingQuickActionResults && table.getPageCount() > 1 && (
                 <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-700">
-                      Page {table.getState().pagination.pageIndex + 1} of{" "}
+                      Page {tablePagination.pageIndex + 1} of{" "}
                       {table.getPageCount()}
                     </span>
                   </div>

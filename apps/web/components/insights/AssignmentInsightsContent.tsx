@@ -280,6 +280,7 @@ export function AssignmentInsightsContent({
         const response = await getDetailedAssignmentInsights(
           stored.sessionToken,
           assignmentId,
+          true,
         );
         setData(response);
       } catch (err) {
@@ -303,13 +304,13 @@ export function AssignmentInsightsContent({
     }
   }, [assignmentId, router, mode]);
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | undefined | null) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 4,
-    }).format(amount);
+    }).format(amount ?? 0);
   };
 
   const formatDate = (dateString: string) => {

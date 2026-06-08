@@ -7,6 +7,10 @@ import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.servic
 import { AssignmentFileService } from "../assignment/v2/services/assignment-file.service";
 import { JobStatusServiceV2 } from "../assignment/v2/services/job-status.service";
 import { QuestionService } from "../assignment/v2/services/question.service";
+import {
+  UserRole,
+  type UserSession,
+} from "../../auth/interfaces/user.session.interface";
 import { AssignmentTypeEnum } from "../llm/features/question-generation/services/question-generation.service";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminService } from "./admin.service";
@@ -25,13 +29,26 @@ const noopDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
 const makeMockPrisma = () => ({
   questionResponse: { deleteMany: noopDeleteMany },
   assignmentAttemptQuestionVariant: { deleteMany: noopDeleteMany },
-  assignmentAttempt: { deleteMany: noopDeleteMany },
+  assignmentAttempt: {
+    deleteMany: noopDeleteMany,
+    groupBy: jest.fn().mockResolvedValue([]),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   assignmentGroup: { deleteMany: noopDeleteMany },
-  assignmentFeedback: { deleteMany: noopDeleteMany },
+  assignmentFeedback: {
+    deleteMany: noopDeleteMany,
+    groupBy: jest.fn().mockResolvedValue([]),
+    aggregate: jest
+      .fn()
+      .mockResolvedValue({ _avg: { assignmentRating: null } }),
+  },
   regradingRequest: { deleteMany: noopDeleteMany },
   report: { deleteMany: noopDeleteMany },
   assignmentTranslation: { deleteMany: noopDeleteMany },
-  aIUsage: { deleteMany: noopDeleteMany },
+  aIUsage: {
+    deleteMany: noopDeleteMany,
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   question: { deleteMany: noopDeleteMany },
   assignment: {
     findUnique: jest.fn().mockResolvedValue({
@@ -40,6 +57,8 @@ const makeMockPrisma = () => ({
       type: AssignmentType.AI_GRADED,
     }),
     delete: jest.fn().mockResolvedValue(undefined),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
   },
 });
 
@@ -88,6 +107,7 @@ describe("AdminService", () => {
     const mockLlmPricingService = {
       calculateCost: jest.fn().mockReturnValue(0.01),
       getTokenCount: jest.fn().mockReturnValue(100),
+      calculateCostBatch: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -305,6 +325,222 @@ describe("AdminService", () => {
         service.publishAssignment(404, { questions: [] } as any),
       ).rejects.toThrow(NotFoundException);
       expect(mockAssignmentService.publishAssignment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("getAssignmentAnalytics", () => {
+    const adminSession = {
+      userId: "admin-1",
+      role: UserRole.ADMIN,
+    } as unknown as UserSession;
+
+    // The assignment.findMany is called twice: once for the paged listing
+    // (carries `take`) and once id-only for the filter-wide aggregate set.
+    // Route each call to the right fixture by inspecting the args.
+    const setAssignments = (
+      pageRows: Array<{
+        id: number;
+        name: string;
+        published: boolean;
+        updatedAt: Date;
+      }>,
+      allMatchingIds: number[],
+    ) => {
+      mockPrisma.assignment.findMany.mockImplementation((args: any) =>
+        args?.take === undefined
+          ? Promise.resolve(allMatchingIds.map((id) => ({ id })))
+          : Promise.resolve(pageRows),
+      );
+    };
+
+    // Route assignmentAttempt.findMany: the aggregate path asks for distinct
+    // (assignmentId, userId) pairs; the per-row path asks for distinct userId.
+    const setAttemptFindMany = (
+      pairRows: Array<{ assignmentId: number; userId: string }>,
+      perRowUsers: Array<{ userId: string }> = [],
+    ) => {
+      mockPrisma.assignmentAttempt.findMany.mockImplementation((args: any) =>
+        Array.isArray(args?.distinct) && args.distinct.includes("assignmentId")
+          ? Promise.resolve(pairRows)
+          : Promise.resolve(perRowUsers),
+      );
+    };
+
+    const pageRow = (id: number, published = true) => ({
+      id,
+      name: `Assignment ${id}`,
+      published,
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    it("orders the paged query by the requested sortBy/sortOrder", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(1);
+      setAssignments([pageRow(1)], [1]);
+
+      await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        25,
+        undefined,
+        false,
+        "name",
+        "asc",
+      );
+
+      const pagedCall = mockPrisma.assignment.findMany.mock.calls.find(
+        ([args]) => args?.take !== undefined,
+      );
+      expect(pagedCall?.[0].orderBy).toEqual({ name: "asc" });
+    });
+
+    it("defaults the order to updatedAt desc when no sort is given", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(1);
+      setAssignments([pageRow(1)], [1]);
+
+      await service.getAssignmentAnalytics(adminSession, 1, 25);
+
+      const pagedCall = mockPrisma.assignment.findMany.mock.calls.find(
+        ([args]) => args?.take !== undefined,
+      );
+      expect(pagedCall?.[0].orderBy).toEqual({ updatedAt: "desc" });
+    });
+
+    it("filters by published when the flag is provided", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(0);
+      setAssignments([], []);
+
+      await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        25,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(mockPrisma.assignment.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ published: true }),
+      });
+    });
+
+    it("omits the published filter entirely when the flag is undefined", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(0);
+      setAssignments([], []);
+
+      await service.getAssignmentAnalytics(adminSession, 1, 25);
+
+      const where = mockPrisma.assignment.count.mock.calls.at(-1)?.[0].where;
+      expect(where).not.toHaveProperty("published");
+    });
+
+    it("reports pagination.total from the filtered count, not the page size", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(7);
+      setAssignments([pageRow(1), pageRow(2)], [1, 2, 3, 4, 5, 6, 7]);
+
+      const result = await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        25,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(result.pagination).toEqual({
+        total: 7,
+        page: 1,
+        limit: 25,
+        totalPages: 1,
+      });
+      // The count query carries the same whereClause as the listing.
+      expect(mockPrisma.assignment.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ published: true }),
+      });
+    });
+
+    it("computes aggregates over the full filtered set, not just the page", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(50);
+      setAssignments(
+        [pageRow(1), pageRow(2)], // page shows 2 rows
+        Array.from({ length: 50 }, (_, i) => i + 1), // 50 match the filter
+      );
+      setAttemptFindMany(
+        Array.from({ length: 30 }, (_, i) => ({
+          assignmentId: i,
+          userId: `u${i}`,
+        })),
+      );
+      mockPrisma.assignmentFeedback.aggregate.mockResolvedValue({
+        _avg: { assignmentRating: 4.5 },
+      });
+
+      const result = await service.getAssignmentAnalytics(adminSession, 1, 25);
+
+      expect(result.data).toHaveLength(2);
+      expect(result.aggregates).toEqual({
+        totalAssignments: 50, // from count, not page length
+        totalCost: 0,
+        totalLearnerAssignmentPairs: 30, // from the full distinct-pair set
+        averageRating: 4.5,
+      });
+    });
+
+    it("still returns populated aggregates when the requested page is empty", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(5);
+      setAssignments([], [1, 2, 3, 4, 5]); // out-of-range page, but matches exist
+      setAttemptFindMany([
+        { assignmentId: 1, userId: "u1" },
+        { assignmentId: 1, userId: "u2" },
+      ]);
+      mockPrisma.assignmentFeedback.aggregate.mockResolvedValue({
+        _avg: { assignmentRating: 3 },
+      });
+
+      const result = await service.getAssignmentAnalytics(
+        adminSession,
+        999,
+        25,
+      );
+
+      expect(result.data).toEqual([]);
+      expect(result.pagination).toEqual({
+        total: 5,
+        page: 999,
+        limit: 25,
+        totalPages: 1,
+      });
+      expect(result.aggregates).toEqual({
+        totalAssignments: 5,
+        totalCost: 0,
+        totalLearnerAssignmentPairs: 2,
+        averageRating: 3,
+      });
+    });
+
+    it("short-circuits to empty aggregates when nothing matches the filter", async () => {
+      mockPrisma.assignment.count.mockResolvedValue(0);
+      setAssignments([], []);
+
+      const result = await service.getAssignmentAnalytics(
+        adminSession,
+        1,
+        25,
+        "no-such-assignment",
+      );
+
+      expect(result.data).toEqual([]);
+      expect(result.aggregates).toEqual({
+        totalAssignments: 0,
+        totalCost: 0,
+        totalLearnerAssignmentPairs: 0,
+        averageRating: 0,
+      });
+      // The aggregate query work is skipped entirely for an empty match set.
+      expect(mockPrisma.assignmentFeedback.aggregate).not.toHaveBeenCalled();
     });
   });
 

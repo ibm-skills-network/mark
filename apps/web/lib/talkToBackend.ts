@@ -50,6 +50,8 @@ export type {
   ReportsFilters,
   AssignmentAnalyticsData,
   AssignmentAnalyticsResponse,
+  AssignmentAnalyticsAggregates,
+  AssignmentAnalyticsSortField,
 } from "./shared";
 
 export const replaceAssignment = apiAuthor.replaceAssignment;
