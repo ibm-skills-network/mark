@@ -75,8 +75,17 @@ export class AdminService {
   /**
    * Helper method to get cached insights data
    */
-  private getCachedInsights(assignmentId: number): any | null {
-    const cacheKey = `insights:${assignmentId}`;
+  private insightsCacheKey(assignmentId: number, details: boolean): string {
+    // Keyed by detail level: a lite payload (no aiUsage/costCalculationDetails)
+    // must never satisfy a details=true request, and vice versa.
+    return `insights:${assignmentId}:${details ? "full" : "lite"}`;
+  }
+
+  private getCachedInsights(
+    assignmentId: number,
+    details: boolean,
+  ): any | null {
+    const cacheKey = this.insightsCacheKey(assignmentId, details);
     const cached = this.insightsCache.get(cacheKey);
 
     if (cached && Date.now() - cached.cachedAt < this.INSIGHTS_CACHE_TTL) {
@@ -94,8 +103,12 @@ export class AdminService {
   /**
    * Helper method to cache insights data
    */
-  private setCachedInsights(assignmentId: number, data: any): void {
-    const cacheKey = `insights:${assignmentId}`;
+  private setCachedInsights(
+    assignmentId: number,
+    details: boolean,
+    data: any,
+  ): void {
+    const cacheKey = this.insightsCacheKey(assignmentId, details);
     this.insightsCache.set(cacheKey, {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       data,
@@ -108,8 +121,9 @@ export class AdminService {
    * Helper method to invalidate insights cache for an assignment
    */
   private invalidateInsightsCache(assignmentId: number): void {
-    const cacheKey = `insights:${assignmentId}`;
-    this.insightsCache.delete(cacheKey);
+    // Clear both detail-level variants so stale data can't survive a change.
+    this.insightsCache.delete(this.insightsCacheKey(assignmentId, true));
+    this.insightsCache.delete(this.insightsCacheKey(assignmentId, false));
     this.logger.debug(
       `Invalidated insights cache for assignment ${assignmentId}`,
     );
@@ -340,9 +354,12 @@ export class AdminService {
         await Promise.all(
           batch.map(async (assignment) => {
             try {
+              // Warm the full (details=true) variant — that's the payload the
+              // admin dashboard reads, and the cache is keyed by detail level.
               await this.getDetailedAssignmentInsights(
                 adminSession,
                 assignment.assignmentId,
+                true,
               );
               this.logger.debug(
                 `Precomputed insights for assignment ${assignment.assignmentId}`,
@@ -1196,8 +1213,7 @@ export class AdminService {
       averageRating: 0,
     };
 
-    const [totalCount, assignments, allMatchingIds] = await Promise.all([
-      this.prisma.assignment.count({ where: whereClause }),
+    const [assignments, allMatchingIds] = await Promise.all([
       this.prisma.assignment.findMany({
         where: whereClause,
         skip,
@@ -1214,6 +1230,10 @@ export class AdminService {
         .findMany({ where: whereClause, select: { id: true } })
         .then((rows) => rows.map((r) => r.id)),
     ]);
+
+    // The id-only scan already enumerates every matching row, so its length is
+    // the total — no need for a separate count() roundtrip on the same filter.
+    const totalCount = allMatchingIds.length;
 
     // Aggregates reflect the entire filtered set, not just the current page.
     // Fire as early as possible so it runs concurrently with the page-stats work.
@@ -1841,7 +1861,7 @@ export class AdminService {
     details?: boolean,
   ) {
     try {
-      const cachedInsights = this.getCachedInsights(assignmentId);
+      const cachedInsights = this.getCachedInsights(assignmentId, !!details);
       if (cachedInsights) {
         return cachedInsights;
       }
@@ -1912,9 +1932,9 @@ export class AdminService {
         );
       }
 
-      // Question insights are expensive — only compute when `details` is set.
-      // One groupBy gathers per-question response counts + average points;
-      // N parallel counts gather "fully-correct" counts (one per question).
+      // Per-question insights power both the admin and author detail views, so
+      // always compute them. One groupBy gathers per-question response counts +
+      // average points; N parallel counts gather "fully-correct" counts.
       let questionInsights: Array<{
         id: number;
         question: string;
@@ -1928,96 +1948,91 @@ export class AdminService {
         translations: { languageCode: string }[];
       }> = [];
 
-      if (details) {
-        try {
-          const questionIds = assignment.questions.map((q) => q.id);
-          const responseStats = await this.prisma.questionResponse.groupBy({
-            by: ["questionId"],
-            where: {
-              questionId: { in: questionIds },
-              assignmentAttempt: { assignmentId },
+      try {
+        const questionIds = assignment.questions.map((q) => q.id);
+        const responseStats = await this.prisma.questionResponse.groupBy({
+          by: ["questionId"],
+          where: {
+            questionId: { in: questionIds },
+            assignmentAttempt: { assignmentId },
+          },
+          _count: { id: true },
+          _avg: { points: true },
+        });
+        const statsMap = new Map(
+          responseStats.map((s) => [
+            s.questionId,
+            {
+              totalResponses: s._count.id,
+              averagePoints: s._avg.points || 0,
             },
-            _count: { id: true },
-            _avg: { points: true },
-          });
-          const statsMap = new Map(
-            responseStats.map((s) => [
-              s.questionId,
-              {
-                totalResponses: s._count.id,
-                averagePoints: s._avg.points || 0,
+          ]),
+        );
+
+        const correctCounts = await Promise.all(
+          assignment.questions.map((q) =>
+            this.prisma.questionResponse.count({
+              where: {
+                questionId: q.id,
+                assignmentAttempt: { assignmentId },
+                points: q.totalPoints,
               },
-            ]),
-          );
+            }),
+          ),
+        );
+        const correctCountMap = new Map(
+          assignment.questions.map((q, index) => [q.id, correctCounts[index]]),
+        );
 
-          const correctCounts = await Promise.all(
-            assignment.questions.map((q) =>
-              this.prisma.questionResponse.count({
-                where: {
-                  questionId: q.id,
-                  assignmentAttempt: { assignmentId },
-                  points: q.totalPoints,
-                },
-              }),
-            ),
-          );
-          const correctCountMap = new Map(
-            assignment.questions.map((q, index) => [
-              q.id,
-              correctCounts[index],
-            ]),
-          );
-
-          questionInsights = assignment.questions.map((question) => {
-            const stats = statsMap.get(question.id) ?? {
-              totalResponses: 0,
-              averagePoints: 0,
-            };
-            const correctCount = correctCountMap.get(question.id) ?? 0;
-            const correctPercentage =
-              stats.totalResponses > 0
-                ? (correctCount / stats.totalResponses) * 100
-                : 0;
-            let insight = `${Math.round(correctPercentage)}% of learners answered correctly`;
-            if (correctPercentage < 50) {
-              insight += ` - consider reviewing this question`;
-            }
-            return {
-              id: question.id,
-              question: question.question,
-              type: question.type,
-              totalPoints: question.totalPoints,
-              correctPercentage,
-              averagePoints: stats.averagePoints,
-              responseCount: stats.totalResponses,
-              insight,
-              variants: question.variants.length,
-              translations: question.translations.map((t) => ({
-                languageCode: t.languageCode,
-              })),
-            };
-          });
-        } catch (error) {
-          this.logger.error(
-            `Error fetching batched question statistics for assignment ${assignmentId}:`,
-            error,
-          );
-          questionInsights = assignment.questions.map((question) => ({
+        questionInsights = assignment.questions.map((question) => {
+          const stats = statsMap.get(question.id) ?? {
+            totalResponses: 0,
+            averagePoints: 0,
+          };
+          const correctCount = correctCountMap.get(question.id) ?? 0;
+          const correctPercentage =
+            stats.totalResponses > 0
+              ? (correctCount / stats.totalResponses) * 100
+              : 0;
+          let insight = `${Math.round(correctPercentage)}% of learners answered correctly`;
+          if (correctPercentage < 50) {
+            insight += ` - consider reviewing this question`;
+          }
+          return {
             id: question.id,
             question: question.question,
             type: question.type,
             totalPoints: question.totalPoints,
-            correctPercentage: 0,
-            averagePoints: 0,
-            responseCount: 0,
-            insight: "Data unavailable due to processing error",
-            variants: question.variants?.length || 0,
-            translations:
-              question.translations?.map((t) => ({
-                languageCode: t.languageCode,
-              })) || [],
-          }));
-        }
+            correctPercentage,
+            averagePoints: stats.averagePoints,
+            responseCount: stats.totalResponses,
+            insight,
+            variants: question.variants.length,
+            translations: question.translations.map((t) => ({
+              languageCode: t.languageCode,
+            })),
+          };
+        });
+      } catch (error) {
+        this.logger.error(
+          `Error fetching batched question statistics for assignment ${assignmentId}:`,
+          error,
+        );
+        questionInsights = assignment.questions.map((question) => ({
+          id: question.id,
+          question: question.question,
+          type: question.type,
+          totalPoints: question.totalPoints,
+          correctPercentage: 0,
+          averagePoints: 0,
+          responseCount: 0,
+          insight: "Data unavailable due to processing error",
+          variants: question.variants?.length || 0,
+          translations:
+            question.translations?.map((t) => ({
+              languageCode: t.languageCode,
+            })) || [],
+        }));
       }
 
       const uniqueLearners = await this.prisma.assignmentAttempt.groupBy({
@@ -2258,7 +2273,7 @@ export class AdminService {
         },
       };
 
-      this.setCachedInsights(assignmentId, insights);
+      this.setCachedInsights(assignmentId, !!details, insights);
 
       return insights;
     } catch (error) {

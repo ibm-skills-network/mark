@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,29 +96,47 @@ export function AssignmentAnalyticsTable({
   const isShowingQuickActionResults = !!quickActionResults;
   const currentQuickActionTitle = quickActionTitle;
 
-  // Debounce: 300ms idle before search syncs to the server.
-  useEffect(() => {
-    const t = setTimeout(
-      () => setDebouncedGlobalFilter(globalFilter),
-      SEARCH_DEBOUNCE_MS,
-    );
-    return () => clearTimeout(t);
-  }, [globalFilter]);
-
-  // Snap back to page 1 whenever a filter/sort changes, so the user isn't
-  // staring at an out-of-range page after narrowing the result set.
-  useEffect(() => {
+  // Snap back to page 1: filters/sorts change the result set, so the current
+  // page could fall out of range. Called at each change site (not in a separate
+  // effect) so the page reset and the filter change land in the same render —
+  // React 19 batches them, so the data effect fires one fetch, not two.
+  const goToFirstPage = useCallback(() => {
     setTablePagination((prev) =>
       prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 },
     );
-  }, [debouncedGlobalFilter, publishedFilter, sorting]);
+  }, []);
+
+  // Full reset to the default server view (clearing all filters, or leaving
+  // quick-action results).
+  const resetServerView = useCallback(() => {
+    setGlobalFilter("");
+    setDebouncedGlobalFilter("");
+    setPublishedFilter(undefined);
+    setSorting([]);
+    setTablePagination({ pageIndex: 0, pageSize: PAGE_SIZE });
+  }, []);
+
+  // Debounce: 300ms idle before search syncs to the server.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedGlobalFilter(globalFilter);
+      goToFirstPage();
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [globalFilter, goToFirstPage]);
 
   useEffect(() => {
     setLocalFilters(filters || {});
   }, [filters]);
 
+  // Sequence guard: overlapping requests (rapid paging/filtering) can resolve
+  // out of order, so only the most-recently-issued request is allowed to write
+  // state — a stale response is dropped instead of clobbering newer data.
+  const latestRequestId = useRef(0);
+
   const fetchData = async () => {
     if (!sessionToken) return;
+    const requestId = ++latestRequestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -134,6 +152,7 @@ export function AssignmentAnalyticsTable({
           published: publishedFilter,
         },
       );
+      if (requestId !== latestRequestId.current) return;
       setData(response.data);
       setServerPageCount(response.pagination.totalPages);
       setServerRowCount(response.pagination.total);
@@ -151,13 +170,14 @@ export function AssignmentAnalyticsTable({
         }));
       }
     } catch (err) {
+      if (requestId !== latestRequestId.current) return;
       setError(
         err instanceof Error
           ? err.message
           : "Failed to fetch assignment analytics",
       );
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestId.current) setLoading(false);
     }
   };
 
@@ -176,12 +196,7 @@ export function AssignmentAnalyticsTable({
 
   const handleClearQuickActionResults = () => {
     onClearQuickActionResults?.();
-    // Reset to a fresh server view.
-    setTablePagination({ pageIndex: 0, pageSize: PAGE_SIZE });
-    setGlobalFilter("");
-    setDebouncedGlobalFilter("");
-    setPublishedFilter(undefined);
-    setSorting([]);
+    resetServerView();
   };
 
   const handleFilterChange = (key: string, value: string | number) => {
@@ -196,31 +211,25 @@ export function AssignmentAnalyticsTable({
     onFiltersChange?.(localFilters);
   };
 
-  const clearAllFilters = () => {
-    setGlobalFilter("");
-    setDebouncedGlobalFilter("");
-    setPublishedFilter(undefined);
-    setSorting([]);
-  };
-
   const rawData = quickActionResults || data;
 
-  const formatCurrency = (amount: number) => {
+  // Stable identities so the `columns` memo below isn't rebuilt every render.
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 4,
     }).format(amount);
-  };
+  }, []);
 
-  const formatPercentage = (value: number) => {
+  const formatPercentage = useCallback((value: number) => {
     return `${Math.round(value)}%`;
-  };
+  }, []);
 
-  const navigateToInsights = (assignmentId: number) => {
+  const navigateToInsights = useCallback((assignmentId: number) => {
     window.open(`/admin/insights/${assignmentId}`, "_blank");
-  };
+  }, []);
 
   const columnHelper = createColumnHelper<AssignmentAnalyticsData>();
 
@@ -436,7 +445,10 @@ export function AssignmentAnalyticsTable({
     manualFiltering: !isShowingQuickActionResults,
     pageCount: isShowingQuickActionResults ? 1 : serverPageCount,
     rowCount: isShowingQuickActionResults ? rawData.length : serverRowCount,
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      setSorting(updater);
+      goToFirstPage();
+    },
     onPaginationChange: setTablePagination,
     state: {
       sorting,
@@ -551,6 +563,7 @@ export function AssignmentAnalyticsTable({
                     onClick={() => {
                       setGlobalFilter("");
                       setDebouncedGlobalFilter("");
+                      goToFirstPage();
                     }}
                     className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
                   >
@@ -578,6 +591,7 @@ export function AssignmentAnalyticsTable({
                     setPublishedFilter(
                       value === "all" ? undefined : value === "published",
                     );
+                    goToFirstPage();
                   }}
                   className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
                 >
@@ -636,7 +650,7 @@ export function AssignmentAnalyticsTable({
                         onChange={(e) =>
                           handleFilterChange(
                             "assignmentId",
-                            e.target.value ? parseInt(e.target.value) : "",
+                            e.target.value ? parseInt(e.target.value, 10) : "",
                           )
                         }
                       />
@@ -736,7 +750,7 @@ export function AssignmentAnalyticsTable({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={clearAllFilters}
+                    onClick={resetServerView}
                     className="h-6 px-2 text-xs"
                   >
                     Clear All Filters

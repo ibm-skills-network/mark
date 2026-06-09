@@ -569,7 +569,6 @@ describe("AdminService", () => {
     });
 
     it("filters by published when the flag is provided", async () => {
-      mockPrisma.assignment.count.mockResolvedValue(0);
       setAssignments([], []);
 
       await service.getAssignmentAnalytics(
@@ -583,23 +582,27 @@ describe("AdminService", () => {
         true,
       );
 
-      expect(mockPrisma.assignment.count).toHaveBeenCalledWith({
-        where: expect.objectContaining({ published: true }),
-      });
+      // The filtered-id scan (the source of the total) carries the filter.
+      expect(mockPrisma.assignment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ published: true }),
+          select: { id: true },
+        }),
+      );
     });
 
     it("omits the published filter entirely when the flag is undefined", async () => {
-      mockPrisma.assignment.count.mockResolvedValue(0);
       setAssignments([], []);
 
       await service.getAssignmentAnalytics(adminSession, 1, 25);
 
-      const where = mockPrisma.assignment.count.mock.calls.at(-1)?.[0].where;
-      expect(where).not.toHaveProperty("published");
+      const idScan = mockPrisma.assignment.findMany.mock.calls.find(
+        ([args]: [{ take?: number }]) => args?.take === undefined,
+      );
+      expect(idScan?.[0].where).not.toHaveProperty("published");
     });
 
-    it("reports pagination.total from the filtered count, not the page size", async () => {
-      mockPrisma.assignment.count.mockResolvedValue(7);
+    it("reports pagination.total from the full filtered set, not the page size", async () => {
       setAssignments([pageRow(1), pageRow(2)], [1, 2, 3, 4, 5, 6, 7]);
 
       const result = await service.getAssignmentAnalytics(
@@ -619,10 +622,13 @@ describe("AdminService", () => {
         limit: 25,
         totalPages: 1,
       });
-      // The count query carries the same whereClause as the listing.
-      expect(mockPrisma.assignment.count).toHaveBeenCalledWith({
-        where: expect.objectContaining({ published: true }),
-      });
+      // The filtered-id scan (the source of the total) carries the same filter.
+      expect(mockPrisma.assignment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ published: true }),
+          select: { id: true },
+        }),
+      );
     });
 
     it("computes aggregates over the full filtered set, not just the page", async () => {

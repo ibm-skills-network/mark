@@ -311,5 +311,25 @@ describe("AdminDashboardController", () => {
       ).rejects.toThrow(new BadRequestException("Limit cannot exceed 25"));
       expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
     });
+
+    it("rejects a non-positive limit with 400 (no negative/zero Prisma take)", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 1, 0),
+      ).rejects.toThrow(new BadRequestException("Limit must be at least 1"));
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 1, -1),
+      ).rejects.toThrow(new BadRequestException("Limit must be at least 1"));
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-positive page with 400 (no negative Prisma skip)", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 0, 25),
+      ).rejects.toThrow(new BadRequestException("Page must be at least 1"));
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, -5, 25),
+      ).rejects.toThrow(new BadRequestException("Page must be at least 1"));
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
   });
 });

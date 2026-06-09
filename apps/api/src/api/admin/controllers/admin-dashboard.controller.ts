@@ -121,10 +121,20 @@ export class AdminDashboardController {
   ) {}
 
   private validateLimit(limit: number): number {
+    if (limit < 1) {
+      throw new BadRequestException("Limit must be at least 1");
+    }
     if (limit > MAX_LIMIT) {
       throw new BadRequestException(`Limit cannot exceed ${MAX_LIMIT}`);
     }
     return limit;
+  }
+
+  private validatePage(page: number): number {
+    if (page < 1) {
+      throw new BadRequestException("Page must be at least 1");
+    }
+    return page;
   }
 
   private validateDateWindow(startDate?: string, endDate?: string): void {
@@ -243,12 +253,13 @@ export class AdminDashboardController {
     @Query("published", new ParseBoolPipe({ optional: true }))
     published?: boolean,
   ): Promise<AssignmentAnalyticsResponse> {
+    const validatedPage = this.validatePage(page);
     const validatedLimit = this.validateLimit(limit);
     const validatedSortBy = this.validateSortBy(sortBy);
     const validatedSortOrder = this.validateSortOrder(sortOrder);
     return await this.adminService.getAssignmentAnalytics(
       request.userSession,
-      page,
+      validatedPage,
       validatedLimit,
       search,
       details,
