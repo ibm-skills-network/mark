@@ -321,6 +321,7 @@ function LearnerHeader() {
             currentStage: status === "completed" ? "Grading complete!" : message,
             currentQuestion: metadata?.currentQuestion,
             totalQuestions: metadata?.totalQuestions,
+            gradingState: metadata?.gradingState,
           });
         },
         undefined,

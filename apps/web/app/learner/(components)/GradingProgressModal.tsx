@@ -1,27 +1,14 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence, useTransform } from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
+import type {
+  GradingProgressDetails,
+  QuestionGradingState,
+  QuestionGradingStatus,
+} from "@/lib/learner";
 import { toast } from "sonner";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
 import { useCreepingProgress } from "./useCreepingProgress";
-
-type QuestionGradingStatus = "pending" | "in_progress" | "completed" | "failed";
-
-interface QuestionGradingState {
-  id: number;
-  displayOrder: number;
-  status: QuestionGradingStatus;
-  slowType?: string;
-}
-
-interface GradingProgressDetails {
-  questions: QuestionGradingState[];
-  total: number;
-  completed: number;
-  inFlight: number;
-  failed: number;
-  hasSlowInFlight: boolean;
-}
 
 export interface ProgressState {
   status: "processing" | "completed" | "failed" | "idle";

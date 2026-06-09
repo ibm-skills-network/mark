@@ -264,6 +264,53 @@ export async function getLiveRecordingFeedback(
 }
 
 
+export type QuestionGradingStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed";
+
+export interface QuestionGradingState {
+  id: number;
+  displayOrder: number;
+  status: QuestionGradingStatus;
+  slowType?: string;
+}
+
+export interface GradingProgressDetails {
+  questions: QuestionGradingState[];
+  total: number;
+  completed: number;
+  inFlight: number;
+  failed: number;
+  hasSlowInFlight: boolean;
+}
+
+// On Processing/update SSE events the API nests the per-question grading
+// snapshot under `result.gradingState` (and double-stringifies `result`).
+// Returns the snapshot if present, else undefined.
+function parseGradingState(
+  result: unknown,
+): GradingProgressDetails | undefined {
+  let parsed: unknown = result;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    "gradingState" in parsed &&
+    (parsed as { gradingState?: unknown }).gradingState
+  ) {
+    return (parsed as { gradingState: GradingProgressDetails }).gradingState;
+  }
+  return undefined;
+}
+
 /**
  * Submits an assignment with progress tracking
  */
@@ -279,7 +326,11 @@ export async function submitAssignment(
     status: "processing" | "completed" | "failed",
     progress: number,
     message: string,
-    metadata?: { currentQuestion?: number; totalQuestions?: number },
+    metadata?: {
+      currentQuestion?: number;
+      totalQuestions?: number;
+      gradingState?: GradingProgressDetails;
+    },
   ) => void,
   onGradingJobCreated?: (gradingJobId: string) => void,
 ): Promise<SubmitAssignmentResponse | undefined> {
@@ -429,6 +480,7 @@ export async function submitAssignment(
                 {
                   currentQuestion: data.currentQuestion,
                   totalQuestions: data.totalQuestions,
+                  gradingState: parseGradingState(data.result),
                 },
               );
             } else if (data.status === "Completed" && !isCompleted) {
@@ -485,6 +537,7 @@ export async function submitAssignment(
                   {
                     currentQuestion: data.currentQuestion,
                     totalQuestions: data.totalQuestions,
+                    gradingState: parseGradingState(data.result),
                   },
                 );
               }
