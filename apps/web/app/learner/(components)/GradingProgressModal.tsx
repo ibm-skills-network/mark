@@ -1,14 +1,9 @@
 import React, { useEffect, useState, useMemo } from "react";
-import {
-  motion,
-  AnimatePresence,
-  useMotionValue,
-  useSpring,
-  useTransform,
-} from "framer-motion";
+import { motion, AnimatePresence, useTransform } from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
 import { toast } from "sonner";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
+import { useCreepingProgress } from "./useCreepingProgress";
 
 type QuestionGradingStatus = "pending" | "in_progress" | "completed" | "failed";
 
@@ -163,24 +158,20 @@ export default function GradingProgressModal({
     [],
   );
 
-  const rawProgress = useMotionValue(0);
-  const springProgress = useSpring(rawProgress, {
-    stiffness: 100,
-    damping: 25,
-  });
+  const displayProgress = useCreepingProgress(
+    progress,
+    progressData.gradingState,
+    progressData.status,
+  );
   const strokeDasharrayMotion = useTransform(
-    springProgress,
+    displayProgress,
     (v) => `${v * 2.64} 264`,
   );
   const displayProgressPercent = useTransform(
-    springProgress,
+    displayProgress,
     (v) => `${Math.round(v)}%`,
   );
-  const barWidth = useTransform(springProgress, (v) => `${Math.round(v)}%`);
-
-  useEffect(() => {
-    rawProgress.set(progress);
-  }, [progress, rawProgress]);
+  const barWidth = useTransform(displayProgress, (v) => `${Math.round(v)}%`);
   const getStatusColor = () => {
     switch (status) {
       case "completed":
