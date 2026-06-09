@@ -158,10 +158,15 @@ export default function GradingProgressModal({
     [],
   );
 
+  // Raw status (not the delayed displayStatus) so the creep eases to 100 the
+  // moment grading completes, finishing before the 700ms icon swap. `isOpen`
+  // gates the RAF loop so it does no work while the always-mounted modal is
+  // closed.
   const displayProgress = useCreepingProgress(
     progress,
     progressData.gradingState,
     progressData.status,
+    isOpen,
   );
   const strokeDasharrayMotion = useTransform(
     displayProgress,

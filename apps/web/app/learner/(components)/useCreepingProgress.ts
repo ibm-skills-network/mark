@@ -14,6 +14,9 @@ const K_MAX = 0.6;
 const JITTER = 0.3;
 // Clamp dt so a backgrounded tab doesn't produce one giant catch-up jump.
 const MAX_DT = 0.1;
+// The terminal ease is asymptotic and never returns exactly 100; once within
+// this of 100 we snap to 100 and stop the loop.
+const SETTLE_AT = 99.9;
 
 /**
  * The two fields the creep needs from a grading snapshot. Kept structural (not
@@ -90,11 +93,17 @@ export function computeCreepStep({
  * updates. Between real updates the value eases toward the next-completion
  * bound at a randomized rate, approaching but never reaching it, then leaps
  * forward when a real update lands. Honors prefers-reduced-motion.
+ *
+ * The loop only runs while `active` is true (e.g. the modal is open). The host
+ * modal is always mounted, so each (re)activation also resets the baseline to
+ * zero — otherwise a new grading run would inherit the previous run's settled
+ * value.
  */
 export function useCreepingProgress(
   realProgress: number,
   gradingState: CreepGradingState | undefined,
   status: string,
+  active: boolean,
 ): MotionValue<number> {
   const motionValue = useMotionValue(0);
   const reduceMotion = useReducedMotion();
@@ -107,18 +116,27 @@ export function useCreepingProgress(
   const k = useRef(K_MIN);
   const boundKey = useRef("");
 
+  // Reset the baseline whenever the modal (re)activates, so a new grading run
+  // starts from zero rather than inheriting a previous run's value.
+  useEffect(() => {
+    if (!active) return;
+    displayed.current = 0;
+    boundKey.current = "";
+    motionValue.set(0);
+  }, [active, motionValue]);
+
   // Reduced motion: no creep — track the real value (or 100 when done).
   useEffect(() => {
-    if (!reduceMotion) return;
+    if (!active || !reduceMotion) return;
     const floor =
       status === "completed" || realProgress >= 100 ? 100 : realProgress;
     displayed.current = Math.max(displayed.current, floor);
     motionValue.set(displayed.current);
-  }, [reduceMotion, realProgress, status, motionValue]);
+  }, [active, reduceMotion, realProgress, status, motionValue]);
 
-  // Animated creep.
+  // Animated creep — only while active.
   useEffect(() => {
-    if (reduceMotion) return;
+    if (!active || reduceMotion) return;
     let raf = 0;
     let last = performance.now();
 
@@ -151,12 +169,20 @@ export function useCreepingProgress(
       });
       displayed.current = next;
       motionValue.set(next);
+
+      // Once the terminal ease has visually reached 100, snap and stop looping.
+      if ((st === "completed" || rp >= 100) && next >= SETTLE_AT) {
+        displayed.current = 100;
+        motionValue.set(100);
+        return;
+      }
+
       raf = requestAnimationFrame(tick);
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [reduceMotion, motionValue]);
+  }, [active, reduceMotion, motionValue]);
 
   return motionValue;
 }
