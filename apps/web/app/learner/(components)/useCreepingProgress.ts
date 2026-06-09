@@ -1,7 +1,19 @@
+import { useEffect, useRef } from "react";
+import { useMotionValue, useReducedMotion } from "framer-motion";
+import type { MotionValue } from "framer-motion";
+
 // Decay constant for the terminal ease up to 100% once grading completes.
 // K_FINISH = 7 brings the wheel to ~99.9% within ~630ms, comfortably inside
 // the modal's 700ms success-icon delay.
 const K_FINISH = 7;
+// Creep decay range (per second). Re-rolled on every milestone change so the
+// climb rate visibly varies between completions.
+const K_MIN = 0.25;
+const K_MAX = 0.6;
+// Per-frame multiplicative jitter applied to k (+/- 15%).
+const JITTER = 0.3;
+// Clamp dt so a backgrounded tab doesn't produce one giant catch-up jump.
+const MAX_DT = 0.1;
 
 /**
  * The two fields the creep needs from a grading snapshot. Kept structural (not
@@ -71,4 +83,80 @@ export function computeCreepStep({
   }
 
   return next;
+}
+
+/**
+ * Drives a smoothly creeping progress MotionValue from discrete backend
+ * updates. Between real updates the value eases toward the next-completion
+ * bound at a randomized rate, approaching but never reaching it, then leaps
+ * forward when a real update lands. Honors prefers-reduced-motion.
+ */
+export function useCreepingProgress(
+  realProgress: number,
+  gradingState: CreepGradingState | undefined,
+  status: string,
+): MotionValue<number> {
+  const motionValue = useMotionValue(0);
+  const reduceMotion = useReducedMotion();
+
+  // Latest inputs, read by the RAF loop without restarting it each render.
+  const inputs = useRef({ realProgress, gradingState, status });
+  inputs.current = { realProgress, gradingState, status };
+
+  const displayed = useRef(0);
+  const k = useRef(K_MIN);
+  const boundKey = useRef("");
+
+  // Reduced motion: no creep — track the real value (or 100 when done).
+  useEffect(() => {
+    if (!reduceMotion) return;
+    const floor =
+      status === "completed" || realProgress >= 100 ? 100 : realProgress;
+    displayed.current = Math.max(displayed.current, floor);
+    motionValue.set(displayed.current);
+  }, [reduceMotion, realProgress, status, motionValue]);
+
+  // Animated creep.
+  useEffect(() => {
+    if (reduceMotion) return;
+    let raf = 0;
+    let last = performance.now();
+
+    const tick = (now: number) => {
+      const dt = Math.min(MAX_DT, (now - last) / 1000);
+      last = now;
+      const {
+        realProgress: rp,
+        gradingState: gsnap,
+        status: st,
+      } = inputs.current;
+
+      // Re-roll the decay rate whenever the milestone/bound changes.
+      const key = `${st}|${gsnap?.completed ?? -1}|${gsnap?.total ?? -1}|${
+        rp >= 100
+      }`;
+      if (key !== boundKey.current) {
+        boundKey.current = key;
+        k.current = K_MIN + Math.random() * (K_MAX - K_MIN);
+      }
+      const jitteredK = k.current * (1 + (Math.random() - 0.5) * JITTER);
+
+      const next = computeCreepStep({
+        displayed: displayed.current,
+        realProgress: rp,
+        gradingState: gsnap,
+        status: st,
+        dt,
+        k: jitteredK,
+      });
+      displayed.current = next;
+      motionValue.set(next);
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [reduceMotion, motionValue]);
+
+  return motionValue;
 }
