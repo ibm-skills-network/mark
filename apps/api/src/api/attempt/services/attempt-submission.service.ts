@@ -115,6 +115,13 @@ export class AttemptSubmissionService {
   // Update this if the deployment moves to a different OpenAI-compatible endpoint.
   private static readonly DETERMINISTIC_FEEDBACK_MODEL = "gpt-4o-mini";
 
+  private static readonly DETERMINISTIC_FEEDBACK_QUESTION_TYPES =
+    new Set<QuestionType>([
+      QuestionType.SINGLE_CORRECT,
+      QuestionType.MULTIPLE_CORRECT,
+      QuestionType.TRUE_FALSE,
+    ]);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly validationService: AttemptValidationService,
@@ -772,15 +779,10 @@ export class AttemptSubmissionService {
         assignmentId,
         error: internalError,
       });
-      // Restore the row to COMPLETED+error so the learner can retry.
-      // markCompleteWithAiFeedbackError also triggers the completion email, so
-      // call it first. However it swallows its own DB errors internally, so we
-      // unconditionally follow up with a direct update as a safety net to
-      // prevent the row from staying permanently stuck in PROCESSING.
-      await this.progressService?.markCompleteWithAiFeedbackError(
-        attemptId,
-        AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
-      );
+      // Restore the row to COMPLETED+error so the learner can retry. Do this
+      // directly instead of calling markCompleteWithAiFeedbackError: the
+      // attempt was already completed, and rerun failures must not re-send
+      // grading completion notifications.
       await this.prisma.gradingProgress
         .update({
           where: { attemptId },
@@ -1199,7 +1201,11 @@ export class AttemptSubmissionService {
       // learner can rerun without losing their saved grade. Skipped entirely
       // when promptProcessor is absent to avoid a permanently broken rerun banner.
       let aiFeedbackError: string | null = null;
-      if (assignment.showSubmissionFeedback && this.promptProcessor) {
+      if (
+        assignment.showSubmissionFeedback &&
+        this.promptProcessor &&
+        this.areAllGradedItemsDeterministic(gradedItems, assignment.questions)
+      ) {
         try {
           await this.generateAiFeedbackForDeterministicAttempt(
             gradedItems,
@@ -2108,6 +2114,13 @@ export class AttemptSubmissionService {
     });
 
     const questionById = new Map(questions.map((q) => [q.id, q]));
+
+    if (!this.areAllResponsesDeterministic(responses, questionById)) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} contains non-deterministic questions and cannot rerun deterministic AI feedback.`,
+      );
+    }
+
     const variantTextByQuestionId = new Map(
       assignmentAttempt.questionVariants
         .filter((qv) => qv.questionVariant?.variantContent)
@@ -2296,6 +2309,43 @@ Questions:
         1200,
       ),
     };
+  }
+
+  private areAllGradedItemsDeterministic(
+    gradedItems: GradedItem[],
+    questions: Array<Pick<Question, "id" | "type">>,
+  ): boolean {
+    if (gradedItems.length === 0) {
+      return false;
+    }
+
+    const questionById = new Map(questions.map((q) => [q.id, q]));
+    return gradedItems.every((item) => {
+      const questionType = questionById.get(item.questionId)?.type;
+      return this.isDeterministicFeedbackQuestionType(questionType);
+    });
+  }
+
+  private areAllResponsesDeterministic(
+    responses: Array<Pick<GradedItem, "questionId">>,
+    questionById: Map<number, Pick<Question, "type">>,
+  ): boolean {
+    return responses.every((response) =>
+      this.isDeterministicFeedbackQuestionType(
+        questionById.get(response.questionId)?.type,
+      ),
+    );
+  }
+
+  private isDeterministicFeedbackQuestionType(
+    questionType?: QuestionType,
+  ): boolean {
+    return (
+      questionType !== undefined &&
+      AttemptSubmissionService.DETERMINISTIC_FEEDBACK_QUESTION_TYPES.has(
+        questionType,
+      )
+    );
   }
 
   private parseDeterministicAiFeedbackResponse(

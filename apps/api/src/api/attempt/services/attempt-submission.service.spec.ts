@@ -1242,6 +1242,46 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       ).not.toHaveBeenCalled();
       expect(mockProgressService.markFailed).not.toHaveBeenCalled();
     });
+
+    it("skips deterministic AI feedback for non-deterministic submissions", async () => {
+      mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        requireAllQuestions: false,
+        questions: [
+          {
+            id: 1,
+            type: QuestionType.TEXT,
+            totalPoints: 10,
+            isDeleted: false,
+          },
+        ],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        attemptId,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "auth-cookie",
+        true,
+        learnerRequest as UpdateAttemptRequest,
+      );
+
+      expect(
+        mockPromptProcessor.processPromptForFeature,
+      ).not.toHaveBeenCalled();
+      expect(mockPrisma.questionResponse.update).not.toHaveBeenCalled();
+      expect(result.aiFeedbackError).toBeNull();
+      expect(mockProgressService.markComplete).toHaveBeenCalledWith(attemptId);
+      expect(
+        mockProgressService.markCompleteWithAiFeedbackError,
+      ).not.toHaveBeenCalled();
+      expect(mockProgressService.markFailed).not.toHaveBeenCalled();
+    });
   });
 
   describe("rerunAiFeedbackForDeterministicAttempt (rerunAiFeedback)", () => {
@@ -1312,6 +1352,40 @@ describe("AttemptSubmissionService - Grading Validation", () => {
               feedback: "Regenerated AI feedback from persisted response.",
             },
           ],
+        },
+      });
+    });
+
+    it("rejects rerun for non-deterministic persisted responses", async () => {
+      mockPrisma.question.findMany.mockResolvedValue([
+        {
+          id: 1,
+          question: "Explain your answer.",
+          type: QuestionType.TEXT,
+          totalPoints: 10,
+          choices: [],
+          answer: null,
+        },
+      ]);
+
+      await expect(
+        service.rerunAiFeedbackForDeterministicAttempt(attemptId, assignmentId),
+      ).rejects.toThrow(
+        "contains non-deterministic questions and cannot rerun deterministic AI feedback",
+      );
+
+      expect(
+        mockPromptProcessor.processPromptForFeature,
+      ).not.toHaveBeenCalled();
+      expect(mockPrisma.questionResponse.update).not.toHaveBeenCalled();
+      expect(
+        mockProgressService.markCompleteWithAiFeedbackError,
+      ).not.toHaveBeenCalled();
+      expect(mockPrisma.gradingProgress.update).toHaveBeenCalledWith({
+        where: { attemptId },
+        data: {
+          status: GradingStatus.COMPLETED,
+          error: expect.stringContaining("AI feedback generation failed"),
         },
       });
     });
