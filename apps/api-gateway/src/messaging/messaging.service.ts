@@ -17,7 +17,7 @@ function formatStreamError(error: unknown): string {
 
 @Injectable()
 export class MessagingService {
-  private client: MessagingClient;
+  private client?: MessagingClient;
   private readonly logger: Logger;
 
   constructor(
@@ -35,17 +35,7 @@ export class MessagingService {
     const program = this.configService.get<string>("NATS_PROGRAM");
     const project = this.configService.get<string>("NATS_PROJECT");
 
-    if (url) {
-      this.logger.info("messaging client initializing", {
-        nats_url: url,
-        nats_user_set: !!user,
-        nats_pass_set: !!pass,
-        nats_organization: organization,
-        nats_program: program,
-        nats_project: project,
-        tls: true,
-      });
-    } else {
+    if (!url) {
       this.logger.warn(
         "NATS_URL is not set; messaging client will not connect",
         {
@@ -56,7 +46,18 @@ export class MessagingService {
           nats_project: project,
         },
       );
+      return;
     }
+
+    this.logger.info("messaging client initializing", {
+      nats_url: url,
+      nats_user_set: !!user,
+      nats_pass_set: !!pass,
+      nats_organization: organization,
+      nats_program: program,
+      nats_project: project,
+      tls: true,
+    });
 
     const options: ConnectionOptions = {
       user,
@@ -81,6 +82,9 @@ export class MessagingService {
   }
 
   onApplicationBootstrap() {
+    if (!this.client) {
+      return;
+    }
     this.logger.info("publishing bootstrap 'start' event");
     void this.client.publishService("start", {}).then(
       () => this.logger.info("bootstrap 'start' event published"),
@@ -103,6 +107,7 @@ export class MessagingService {
           ? Object.keys(message as Record<string, unknown>)
           : undefined,
     });
+    if (!this.client) return undefined;
     try {
       const result = await this.client.publishService(action, message);
       return result;
@@ -125,6 +130,7 @@ export class MessagingService {
       username,
       subject,
     });
+    if (!this.client) return undefined;
     try {
       const result = await this.client.publishUser(username, subject, message);
       return result;
@@ -148,6 +154,7 @@ export class MessagingService {
     errorCallback: ErrorFunction,
   ): Promise<unknown> {
     this.logger.info(`subscribeService project=${project}`);
+    if (!this.client) return undefined;
     const wrappedError: ErrorFunction = (error) => {
       this.logger.error(`subscribeService stream error project=${project}`, {
         project,
@@ -179,6 +186,7 @@ export class MessagingService {
     errorCallback: ErrorFunction,
   ): Promise<unknown> {
     this.logger.info(`subscribeUser username=${username}`);
+    if (!this.client) return undefined;
     const wrappedError: ErrorFunction = (error) => {
       this.logger.error(`subscribeUser stream error username=${username}`, {
         username,

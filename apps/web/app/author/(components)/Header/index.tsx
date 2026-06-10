@@ -41,6 +41,7 @@ import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { BarChart3 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -888,15 +889,15 @@ function AuthorHeader() {
                   <button
                     onClick={() =>
                       window.open(
-                        `/admin/insights/${activeAssignmentId}`,
+                        `/author/${activeAssignmentId}/insights`,
                         "_blank",
                       )
                     }
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md"
-                    title="View admin insights and analytics for this assignment"
+                    title="View insights and analytics for this assignment"
                   >
                     <BarChart3 className="w-4 h-4" />
-                    <span className="hidden sm:inline">Admin Insights</span>
+                    <span className="hidden sm:inline">Insights</span>
                   </button>
                 )}
 
@@ -941,7 +942,7 @@ function AuthorHeader() {
             <div className="flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => setShowAreYouSureModal(false)}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 border-gray-300 bg-white hover:bg-gray-50"
               >
                 Cancel
               </button>
@@ -975,7 +976,7 @@ function AuthorHeader() {
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
                 placeholder={`Draft - ${new Date().toLocaleDateString()}`}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-600 focus:border-violet-600"
               />
 
               <p className="text-xs text-gray-500">
@@ -991,7 +992,7 @@ function AuthorHeader() {
               </button>
               <button
                 onClick={handleConfirmSaveDraft}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-blue-500 focus:ring-2 focus:outline-none transition-all text-white border-blue-600 bg-blue-600 hover:bg-blue-700 hover:border-blue-700"
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none transition-all text-white border-violet-600 bg-violet-600 hover:bg-violet-800 hover:border-violet-800"
               >
                 Save Draft
               </button>

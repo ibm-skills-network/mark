@@ -181,6 +181,7 @@ model AIUsage {
   modelKey     String? /// The key of the LLM model actually used for this AI operation
 
   @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
+  @@index([assignmentId, createdAt, usageType, modelKey]) /// Composite index for analytics queries
 }
 
 /// Enum to track different types of AI usage
@@ -488,6 +489,7 @@ model AssignmentAttempt {
   @@index([createdAt])
   @@index([assignmentId, userId])
   @@index([assignmentVersionId])
+  @@index([assignmentId, submitted, createdAt]) /// Composite index for analytics queries
 }
 
 /// Tracks real-time progress of assignment grading
@@ -565,6 +567,7 @@ model QuestionResponse {
   gradedAt            DateTime? /// Timestamp for when the response was graded
 
   @@index([assignmentAttemptId])
+  @@index([questionId, assignmentAttemptId]) /// Composite index for analytics queries
 }
 
 /// This model captures feedback and regrading requests for assignments

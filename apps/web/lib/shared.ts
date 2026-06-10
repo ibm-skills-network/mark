@@ -1277,10 +1277,20 @@ export interface AssignmentAnalyticsData {
   };
 }
 
+export interface AssignmentAnalyticsAggregates {
+  totalAssignments: number;
+  totalCost: number;
+  totalLearnerAssignmentPairs: number;
+  averageRating: number;
+}
+
 export interface AssignmentAnalyticsResponse {
   data: AssignmentAnalyticsData[];
   pagination: AdminPaginationInfo;
+  aggregates: AssignmentAnalyticsAggregates;
 }
+
+export type AssignmentAnalyticsSortField = "name" | "updatedAt" | "published";
 
 export interface ReportData {
   id: number;
@@ -1425,12 +1435,26 @@ export async function getAssignmentAnalytics(
   page: number = 1,
   limit: number = 10,
   search?: string,
+  options?: {
+    sortBy?: AssignmentAnalyticsSortField;
+    sortOrder?: "asc" | "desc";
+    published?: boolean;
+  },
 ): Promise<AssignmentAnalyticsResponse> {
   const params = new URLSearchParams();
   params.append("page", page.toString());
   params.append("limit", limit.toString());
   if (search) {
     params.append("search", search);
+  }
+  if (options?.sortBy) {
+    params.append("sortBy", options.sortBy);
+  }
+  if (options?.sortOrder) {
+    params.append("sortOrder", options.sortOrder);
+  }
+  if (options?.published !== undefined) {
+    params.append("published", String(options.published));
   }
 
   const url = `${getBaseApiPath("v1")}/admin-dashboard/analytics?${params.toString()}`;
@@ -1943,8 +1967,12 @@ export async function translateQuestion(
 export async function getDetailedAssignmentInsights(
   sessionToken: string,
   assignmentId: number,
+  details?: boolean,
 ) {
-  const url = `${getBaseApiPath("v1")}/admin-dashboard/assignments/${assignmentId}/insights`;
+  const params = new URLSearchParams();
+  if (details) params.append("details", "true");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/assignments/${assignmentId}/insights${query}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -1952,6 +1980,16 @@ export async function getDetailedAssignmentInsights(
   };
 
   return await apiClient.get(url, { headers });
+}
+
+/**
+ * Get insights for one of the current author's own assignments. Uses the normal
+ * app session (cookie) and the ownership-scoped author endpoint — no admin
+ * session and no admin-only data.
+ */
+export async function getAuthorAssignmentInsights(assignmentId: number) {
+  const url = `${getApiRoutes().assignments}/${assignmentId}/insights`;
+  return await apiClient.get(url);
 }
 
 /**
@@ -1973,4 +2011,219 @@ export async function executeQuickAction(
   };
 
   return await apiClient.get(url, { headers });
+}
+
+export type QueueRole =
+  | "author"
+  | "learner"
+  | "translation"
+  | "admin-maintenance";
+
+export interface QueueThroughput {
+  completedPerMin: number;
+  failedPerMin: number;
+  avgWaitMs: number | null;
+  avgRunMs: number | null;
+}
+
+export interface QueueStat {
+  name: string;
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  completed: number;
+  paused: number;
+  role: QueueRole | null;
+  concurrencyPerPod: number;
+  livePods: number;
+  clusterCapacity: number;
+  isPaused: boolean;
+  throughput: QueueThroughput | null;
+  unavailable?: boolean;
+}
+
+export interface QueueWorker {
+  instanceId: string;
+  hostname: string;
+  pid: number;
+  startedAt: string | null;
+  updatedAt: string | null;
+  uptimeMs: number | null;
+  lastSeenMs: number | null;
+  stale: boolean;
+  workerCount: number;
+  queues: string[];
+}
+
+export interface QueueStatusResponse {
+  generatedAt: string;
+  queues: QueueStat[];
+  workers: QueueWorker[];
+}
+
+export interface FailedJobFileRef {
+  filename: string;
+  sizeBytes?: number;
+  mimeType?: string;
+  bucket?: string;
+  storageKey?: string;
+  downloadUrl: string | null;
+}
+
+export interface FailedJob {
+  id: string;
+  name: string;
+  attemptsMade: number;
+  maxAttempts: number;
+  failedReason: string;
+  failedAt: string | null;
+  enqueuedAt: string | null;
+  processedAt: string | null;
+  finishedAt: string | null;
+  stacktrace: string[];
+  files: FailedJobFileRef[];
+  domainIds: Record<string, number | string>;
+}
+
+export interface FailedJobsResponse {
+  queueName: string;
+  failed: FailedJob[];
+}
+
+export interface ActiveJob {
+  id: string;
+  name: string;
+  attemptsMade: number;
+  maxAttempts: number;
+  runningForMs: number | null;
+  progress: number | Record<string, unknown> | null;
+  processedBy: string | null;
+  domainIds: Record<string, number | string>;
+}
+
+export interface ActiveJobsResponse {
+  queueName: string;
+  active: ActiveJob[];
+}
+
+export interface RedisHealthResponse {
+  usedMemoryBytes: number | null;
+  usedMemoryHuman: string | null;
+  connectedClients: number | null;
+  opsPerSec: number | null;
+  workerConnections: number;
+  heartbeatPods: number;
+  reconciled: boolean;
+}
+
+/**
+ * Queue names contain dots (e.g. "mark.assignment.v2"). A path segment with
+ * literal dots is treated as a file-like segment by the same-origin Next.js
+ * rewrite proxy, which then fails to forward the request — the browser `fetch()`
+ * rejects at the transport layer with a bare "fetch failed" (never reaching an
+ * HTTP status). The queue name is therefore passed as a `?queue=` query value
+ * (see the drill-down/retry/remove builders below) instead of a path segment:
+ * query strings are not path-normalized, so the dotted name survives every proxy
+ * hop opaquely without depending on percent-encoding being preserved. The job id
+ * stays a path segment — BullMQ ids are dot-free alphanumeric tokens.
+ */
+export async function getQueueStatus(
+  sessionToken: string,
+): Promise<QueueStatusResponse> {
+  return apiClient.get(`${getBaseApiPath("v1")}/admin-dashboard/queue-status`, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export async function getQueueFailedJobs(
+  sessionToken: string,
+  queueName: string,
+  limit = 25,
+): Promise<FailedJobsResponse> {
+  // The server validates and clamps `limit` (1..100, with NaN/negatives falling
+  // back to the default) as the authoritative bound, so we forward the
+  // requested value rather than re-implementing those bounds here.
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/queue-status/failed?queue=${encodeURIComponent(
+    queueName,
+  )}&limit=${limit}`;
+  return apiClient.get(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export async function getQueueActiveJobs(
+  sessionToken: string,
+  queueName: string,
+  limit = 25,
+): Promise<ActiveJobsResponse> {
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/queue-status/active?queue=${encodeURIComponent(
+    queueName,
+  )}&limit=${limit}`;
+  return apiClient.get(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export async function getRedisHealth(
+  sessionToken: string,
+): Promise<RedisHealthResponse> {
+  return apiClient.get(
+    `${getBaseApiPath("v1")}/admin-dashboard/queue-status/redis-health`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": sessionToken,
+      },
+    },
+  );
+}
+
+export async function retryFailedJob(
+  sessionToken: string,
+  queueName: string,
+  jobId: string,
+): Promise<{ ok: true }> {
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/queue-status/jobs/${encodeURIComponent(
+    jobId,
+  )}/retry?queue=${encodeURIComponent(queueName)}`;
+  return apiClient.post(url, undefined, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export async function removeFailedJob(
+  sessionToken: string,
+  queueName: string,
+  jobId: string,
+): Promise<{ ok: true }> {
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/queue-status/jobs/${encodeURIComponent(
+    jobId,
+  )}?queue=${encodeURIComponent(queueName)}`;
+  return apiClient.delete(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
 }

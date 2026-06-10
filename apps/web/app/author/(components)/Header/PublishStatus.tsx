@@ -178,8 +178,7 @@ export default function PublishStatus({
   // still visible in the details drawer with its own label, so authors
   // can find it if they expand details.
   const visibleEntries = perJob.filter((e) => e.kind !== "meta");
-  const hasOnlyMetaWork =
-    perJob.length > 0 && visibleEntries.length === 0;
+  const hasOnlyMetaWork = perJob.length > 0 && visibleEntries.length === 0;
 
   // Compose the wire-level aggregate with whatever has been merged locally —
   // visibleEntries takes precedence once any non-meta entries have arrived

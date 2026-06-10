@@ -12,6 +12,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
     className?: string;
     IconForTitle?: ElementType;
     error?: string;
+    compact?: boolean;
   },
 ) {
   const {
@@ -22,39 +23,47 @@ export function SectionWithTitle<T extends ElementType = "section">(
     children,
     IconForTitle,
     required = false,
+    compact = false,
+    error,
     ...rest
   } = props;
   const Component = as ?? "section";
   return (
     <Component
-      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid border-gray-400 max-md:px-5 "
+      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid border-gray-400 max-md:px-5"
       {...rest}
     >
       <div className="flex flex-col gap-y-1.5">
         <Title
-          className={cn("flex text-2xl font-bold text-black max-md:flex-wrap")}
+          className={cn(
+            "flex items-center gap-2 max-md:flex-wrap",
+            compact
+              ? "text-base font-semibold text-gray-700"
+              : "text-2xl font-bold text-black",
+          )}
         >
           {IconForTitle && (
             <IconForTitle className="shrink-0 my-auto w-6 aspect-square text-gray-500" />
           )}
-          <span
-            className={cn(
-              required && "after:text-violet-600 after:content-['*']",
-              IconForTitle && "pl-1.5",
-            )}
-          >
-            {title}
-          </span>
+          <span className={cn(IconForTitle && "pl-1.5")}>{title}</span>
+          {required && (
+            <span className="text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded">
+              Required
+            </span>
+          )}
         </Title>
-        <p className="text-base leading-6 text-gray-600 font-[450]">
-          {description}
-        </p>
+        {description && (
+          <p className="text-base leading-6 text-gray-600 font-[450]">
+            {description}
+          </p>
+        )}
       </div>
       <div className={cn("w-full", className)}>{children}</div>
-      <p className="text-sm text-red-500" id={`error-${props.error}`}>
-        {" "}
-        {props.error}
-      </p>
+      {error && (
+        <p className="text-sm text-red-500" id={`error-${error}`}>
+          {error}
+        </p>
+      )}
     </Component>
   );
 }

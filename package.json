@@ -55,7 +55,7 @@
     "test:watch": "turbo run test --parallel ",
     "test:staged": "turbo run test:staged --",
     "test:setup": "playwright test --project=setup",
-    "playwright:install": "playwright install --with-deps",
+    "playwright:install": "playwright install --with-deps chromium",
     "playwright:report": "playwright show-report",
     "playwright:learner": "playwright test --project=learner-chromium --project=learner-firefox --project=learner-webkit",
     "playwright:author": "playwright test --project=author-chromium --project=author-firefox --project=author-webkit",
@@ -96,7 +96,7 @@
     "node-fetch": "^2.6.7",
     "nodemailer": "^7.0.11",
     "papaparse": "^5.4.1",
-    "pdfjs-dist": "^4.7.76",
+    "pdfjs-dist": "^5.4.449",
     "prismjs": "1.30.0",
     "puppeteer": "^24.43.1",
     "react": "^19.0.0",
@@ -118,7 +118,7 @@
     "zod": "^3.23.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^24.9.2",
     "detect-secrets": "^1.0.6",
     "dotenv-cli": "^8.0.0",

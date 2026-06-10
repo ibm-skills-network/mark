@@ -4,6 +4,7 @@ import animationData from "@/animations/LoadSN.json";
 import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
+import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
@@ -73,9 +74,16 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
             setListOfAttempts(normalizedAttempts);
           }
         } catch (error) {
+          // Preserve the real HTTP status so a 401 (expired session) routes to
+          // SessionExpired, not AccessRestricted. apiClient throws APIError with
+          // a `.status`; statusFromError falls back to 500 for anything opaque.
+          const status = statusFromError(error);
           setError({
-            code: 403,
-            message: "You are not authorized to view this page",
+            code: status,
+            message:
+              status === 403
+                ? "You are not authorized to view this page"
+                : "We couldn't load this assignment.",
           });
           if (isMounted) {
             setAssignment(null);
@@ -117,7 +125,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     return <LoadingPage animationData={animationData} />;
   }
   if (error) {
-    return <ErrorPage error={error.message} statusCode={error.code} />;
+    return <ErrorScreen status={error.code} message={error.message} />;
   }
   if (!assignment) {
     const errorMessage =

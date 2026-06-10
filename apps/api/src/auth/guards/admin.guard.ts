@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -61,6 +62,21 @@ export class AdminGuard implements CanActivate {
       );
     }
 
+    // The admin dashboard surface is admin-only. A valid session whose email is
+    // not in the admin allow-list (role !== "admin") is rejected here, so every
+    // endpoint behind this guard is admin-gated regardless of its @Roles — no
+    // author-role session can reach admin tooling. Authors use the normal app.
+    if (userInfo.role !== "admin") {
+      this.logger.warn("admin_auth_denied: non-admin session", {
+        denial_reason: "not_admin_role",
+        admin_email: userInfo.email,
+        method: request.method,
+        url: request.originalUrl,
+        client_ip: request.get("true-client-ip"),
+      });
+      throw new ForbiddenException("Admin access required.");
+    }
+
     this.logger.debug("admin_auth_granted", {
       admin_email: userInfo.email,
       admin_role: userInfo.role,
@@ -71,7 +87,7 @@ export class AdminGuard implements CanActivate {
     request.userSession = {
       ...request.userSession,
       userId: userInfo.email.toLowerCase(),
-      role: userInfo.role === "admin" ? UserRole.ADMIN : UserRole.AUTHOR,
+      role: UserRole.ADMIN,
       sessionToken: adminToken,
     };
 

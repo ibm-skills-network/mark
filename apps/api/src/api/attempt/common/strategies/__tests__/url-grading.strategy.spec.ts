@@ -174,7 +174,10 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       expect(result).toBe(true);
     });
 
-    it("should reject invalid URL string", async () => {
+    it("accepts a non-empty response and defers URL validity to grading time", async () => {
+      // Format validity is no longer a hard validation gate: an unparseable
+      // URL must be graded 0-with-feedback in gradeResponse, not thrown here
+      // (a throw fails the whole grading job and leaves the attempt ungraded).
       const requestDto = {
         learnerUrlResponse: "not a valid url",
         language: "en",
@@ -182,7 +185,36 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
 
       await expect(
         strategy.validateResponse(mockQuestion, requestDto),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.toBe(true);
+    });
+  });
+
+  describe("gradeResponse - invalid URL handling", () => {
+    const mockQuestion: QuestionDto = {
+      id: 1,
+      question: "Submit your project URL",
+      type: "URL" as any,
+      totalPoints: 10,
+    } as QuestionDto;
+
+    const context = {
+      language: "en",
+      assignmentId: 1,
+      questionAnswerContext: "",
+      assignmentInstructions: "",
+    } as any;
+
+    it("grades an unparseable URL as 0 with feedback instead of throwing or fetching", async () => {
+      const result = await strategy.gradeResponse(
+        mockQuestion,
+        "script.js",
+        context,
+      );
+
+      expect(result.totalPoints).toBe(0);
+      expect(JSON.stringify(result)).toMatch(/invalid url/i);
+      // Must short-circuit before any LLM grading call.
+      expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
     });
   });
 

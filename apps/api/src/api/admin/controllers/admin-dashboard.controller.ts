@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Controller,
   DefaultValuePipe,
   Get,
   Injectable,
   Param,
+  ParseBoolPipe,
   ParseIntPipe,
   Post,
   Query,
@@ -89,7 +91,21 @@ interface AssignmentAnalyticsResponse {
     limit: number;
     totalPages: number;
   };
+  aggregates: {
+    totalAssignments: number;
+    totalCost: number;
+    totalLearnerAssignmentPairs: number;
+    averageRating: number;
+  };
 }
+
+// Input validation constants
+const MAX_LIMIT = 25;
+const DEFAULT_LIMIT = 10;
+const MAX_DATE_WINDOW_DAYS = 365;
+const ANALYTICS_SORT_FIELDS = ["name", "updatedAt", "published"] as const;
+type AnalyticsSortField = (typeof ANALYTICS_SORT_FIELDS)[number];
+
 @ApiTags("Admin Dashboard")
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
@@ -103,6 +119,37 @@ export class AdminDashboardController {
     private adminService: AdminService,
     private scheduledTasksService: ScheduledTasksService,
   ) {}
+
+  private validateLimit(limit: number): number {
+    if (limit < 1) {
+      throw new BadRequestException("Limit must be at least 1");
+    }
+    if (limit > MAX_LIMIT) {
+      throw new BadRequestException(`Limit cannot exceed ${MAX_LIMIT}`);
+    }
+    return limit;
+  }
+
+  private validatePage(page: number): number {
+    if (page < 1) {
+      throw new BadRequestException("Page must be at least 1");
+    }
+    return page;
+  }
+
+  private validateDateWindow(startDate?: string, endDate?: string): void {
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffDays =
+        (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays > MAX_DATE_WINDOW_DAYS) {
+        throw new BadRequestException(
+          `Date range cannot exceed ${MAX_DATE_WINDOW_DAYS} days`,
+        );
+      }
+    }
+  }
 
   @Get("stats")
   @Roles(UserRole.AUTHOR, UserRole.ADMIN)
@@ -120,6 +167,7 @@ export class AdminDashboardController {
     @Req() request: UserSessionRequest,
     @Query() query: DashboardStatsQueryDto,
   ): Promise<any> {
+    this.validateDateWindow(query.startDate, query.endDate);
     return this.adminService.getDashboardStats(request.userSession, {
       startDate: query.startDate,
       endDate: query.endDate,
@@ -133,18 +181,25 @@ export class AdminDashboardController {
   @ApiOperation({
     summary: "Execute predefined quick actions for dashboard insights",
   })
-  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    type: Number,
+    description: `Maximum ${MAX_LIMIT}`,
+  })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   async executeQuickAction(
     @Req() request: AdminSessionRequest,
     @Param("action") action: string,
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("limit", new DefaultValuePipe(DEFAULT_LIMIT), ParseIntPipe)
+    limit: number,
   ): Promise<any> {
+    const validatedLimit = this.validateLimit(limit);
     return this.adminService.executeQuickAction(
       request.adminSession,
       action,
-      limit,
+      validatedLimit,
     );
   }
 
@@ -159,22 +214,75 @@ export class AdminDashboardController {
       "Get detailed assignment analytics with insights (for authors and admins)",
   })
   @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    type: Number,
+    description: `Maximum ${MAX_LIMIT}`,
+  })
   @ApiQuery({ name: "search", required: false, type: String })
+  @ApiQuery({
+    name: "details",
+    required: false,
+    type: Boolean,
+    description: "Include detailed cost breakdown",
+  })
+  @ApiQuery({
+    name: "sortBy",
+    required: false,
+    enum: ANALYTICS_SORT_FIELDS,
+  })
+  @ApiQuery({
+    name: "sortOrder",
+    required: false,
+    enum: ["asc", "desc"],
+  })
+  @ApiQuery({ name: "published", required: false, type: Boolean })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   async getAssignmentAnalytics(
     @Req() request: UserSessionRequest,
     @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query("limit", new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query("limit", new DefaultValuePipe(DEFAULT_LIMIT), ParseIntPipe)
+    limit: number,
     @Query("search") search?: string,
+    @Query("details", new DefaultValuePipe(false), ParseBoolPipe)
+    details?: boolean,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: string,
+    @Query("published", new ParseBoolPipe({ optional: true }))
+    published?: boolean,
   ): Promise<AssignmentAnalyticsResponse> {
+    const validatedPage = this.validatePage(page);
+    const validatedLimit = this.validateLimit(limit);
+    const validatedSortBy = this.validateSortBy(sortBy);
+    const validatedSortOrder = this.validateSortOrder(sortOrder);
     return await this.adminService.getAssignmentAnalytics(
       request.userSession,
-      page,
-      limit,
+      validatedPage,
+      validatedLimit,
       search,
+      details,
+      validatedSortBy,
+      validatedSortOrder,
+      published,
     );
+  }
+
+  private validateSortBy(sortBy?: string): AnalyticsSortField | undefined {
+    if (sortBy === undefined) return undefined;
+    if ((ANALYTICS_SORT_FIELDS as readonly string[]).includes(sortBy)) {
+      return sortBy as AnalyticsSortField;
+    }
+    throw new BadRequestException(
+      `sortBy must be one of: ${ANALYTICS_SORT_FIELDS.join(", ")}`,
+    );
+  }
+
+  private validateSortOrder(sortOrder?: string): "asc" | "desc" | undefined {
+    if (sortOrder === undefined) return undefined;
+    if (sortOrder === "asc" || sortOrder === "desc") return sortOrder;
+    throw new BadRequestException(`sortOrder must be "asc" or "desc"`);
   }
 
   /**
@@ -186,17 +294,26 @@ export class AdminDashboardController {
   @ApiOperation({
     summary: "Get detailed insights for a specific assignment",
   })
+  @ApiQuery({
+    name: "details",
+    required: false,
+    type: Boolean,
+    description: "Include detailed cost breakdown and question insights",
+  })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   @ApiResponse({ status: 404 })
   async getDetailedAssignmentInsights(
     @Req() request: UserSessionRequest,
     @Param("id", ParseIntPipe) id: number,
+    @Query("details", new DefaultValuePipe(false), ParseBoolPipe)
+    details?: boolean,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return await this.adminService.getDetailedAssignmentInsights(
       request.userSession,
       id,
+      details,
     );
   }
 

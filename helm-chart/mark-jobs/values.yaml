@@ -30,7 +30,17 @@ env:
   # to enable; any other value keeps the default-OFF forward-to-API path. The runtime check is strict
   # equality with "true".
   JOBS_EXECUTE_LOCALLY: "true"
-  ENABLE_LTI_SCHEDULER: "false"      # gate the LTI cron in mark-jobs
+  # In-process LtiSyncScheduler. Default OFF because the in-process
+  # scheduler has a known race condition: with N>1 replicas, all pods
+  # grab the same 50 SCHEDULED rows on each tick and PUT them in
+  # parallel, causing duplicate submissions and burning retry budget.
+  # Envs that want retries should ship a separate single-instance
+  # mechanism (we use a K8s CronJob `lti-sync-drain` in apps-faculty-deploy
+  # — see config/lti-sync-drain/cronjob.yaml). Once the race is fixed in
+  # apps/api/src/api/attempt/schedulers/lti-sync-scheduler.ts (Redis
+  # lock or FOR UPDATE SKIP LOCKED), this can be flipped back to "true"
+  # and the CronJob retired.
+  ENABLE_LTI_SCHEDULER: "false"
   ENABLE_TRANSLATION: "true"         # required by SharedModule TranslationService ctor
   TRANSLATION_CONCURRENCY: "8"       # BullMQ worker concurrency for mark.assignment.v2.translations queue
   # Number of grading JOBS the BullMQ worker pulls from the mark.attempt
@@ -39,6 +49,17 @@ env:
   # the GRADING_CONCURRENCY name with the LLM cap; renamed so tuning one
   # tier doesn't silently retune the other.
   GRADING_WORKER_CONCURRENCY: "4"
+  # Hard cap on evidence blocks per submission ingestion (spreadsheet text
+  # splitting + PDF structure extraction). The code falls back to 50000 when
+  # this is unset, empty, or not a positive integer.
+  GRADING_MAX_EVIDENCE_BLOCKS: "50000"
+  # Kill switch for structure-preserving PDF extraction (the pdfjs + canvas
+  # render path). "true" (default) uses it; set to "false" to force all PDFs
+  # through plain text extraction with no code change — an escape hatch if the
+  # canvas path regresses (it has crashed workers via native segfault /
+  # unhandled rejection on malformed PDFs). Runtime check is strict equality
+  # with "false".
+  ENABLE_PDF_STRUCTURED_EXTRACTION: "true"
   # Master switch for the dependency-level wave grading scheduler. mark-jobs
   # is where ATTEMPT_GRADE actually executes (JOBS_EXECUTE_LOCALLY=true), so
   # this is the tier where the flag is load-bearing. Chart default "false"

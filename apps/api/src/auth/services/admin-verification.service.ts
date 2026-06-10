@@ -147,20 +147,13 @@ export class AdminVerificationService {
   }
 
   /**
-   * Check if email is authorized (admin or has authored assignments)
+   * Whether an email may obtain an admin session. Restricted to the configured
+   * ADMIN_EMAILS allow-list. Having authored an assignment does NOT grant
+   * admin-dashboard access — authors use the normal app auth, and admin tooling
+   * is admin-only. Kept returning a Promise so the call sites are unaffected.
    */
-  async isAuthorizedEmail(email: string): Promise<boolean> {
-    if (isAdminEmail(email)) {
-      return true;
-    }
-
-    const authorRecord = await this.prisma.assignmentAuthor.findFirst({
-      where: {
-        userId: email.toLowerCase(),
-      },
-    });
-
-    return !!authorRecord;
+  isAuthorizedEmail(email: string): Promise<boolean> {
+    return Promise.resolve(isAdminEmail(email));
   }
 
   /**

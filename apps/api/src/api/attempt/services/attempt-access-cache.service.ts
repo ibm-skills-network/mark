@@ -84,6 +84,24 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
           }),
         );
 
+    // Never cache an empty result. For a versioned attempt an empty build almost
+    // always means the version's questions failed to load upstream (a transient
+    // relation miss), and a cached empty payload would serve a question-less quiz
+    // to every learner until the next publish-triggered invalidation. Re-deriving
+    // on the next request is cheap and lets the cache self-heal.
+    if (built.length === 0) {
+      if (parameters.assignmentVersionId) {
+        this.logger.warn(
+          `attempt-access-cache.empty-build { assignmentId: ${parameters.assignmentId}, assignmentVersionId: ${parameters.assignmentVersionId} }`,
+        );
+      } else {
+        this.logger.debug(
+          `attempt-access-cache.empty-build { assignmentId: ${parameters.assignmentId}, assignmentVersionId: null }`,
+        );
+      }
+      return built;
+    }
+
     await this.redisSet(cacheKey, built);
     return built;
   }

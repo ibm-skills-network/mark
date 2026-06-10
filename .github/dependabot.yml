@@ -1,25 +1,28 @@
 version: 2
 
-# Updates run weekly. Minor + patch updates for each ecosystem are grouped
-# into a single PR per week to keep volume low. Security advisories continue
-# to open individual PRs so they're not blocked behind a weekly batch.
-#
-# Major version bumps are kept as individual PRs because they almost always
-# need a deliberate migration and shouldn't ride along with safe patches.
+# Dependabot runs MONTHLY per workspace. Minor + patch updates are grouped into
+# a single PR per ecosystem so CI cost stays bounded. Major version bumps are
+# ignored entirely — we handle major upgrades manually because they almost
+# always need a deliberate migration. Security advisories are NOT affected by
+# the ignore rules; Dependabot still raises individual security PRs immediately.
 
 updates:
   # Root workspace
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     versioning-strategy: increase
     labels:
       - dependencies
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       root-minor-and-patch:
         applies-to: version-updates
@@ -35,15 +38,19 @@ updates:
   - package-ecosystem: npm
     directory: "/apps/api"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     versioning-strategy: increase
     labels:
       - dependencies
       - api
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       api-minor-and-patch:
         applies-to: version-updates
@@ -59,15 +66,19 @@ updates:
   - package-ecosystem: npm
     directory: "/apps/api-gateway"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     versioning-strategy: increase
     labels:
       - dependencies
       - api-gateway
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       api-gateway-minor-and-patch:
         applies-to: version-updates
@@ -83,15 +94,19 @@ updates:
   - package-ecosystem: npm
     directory: "/apps/web"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     versioning-strategy: increase
     labels:
       - dependencies
       - web
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       web-minor-and-patch:
         applies-to: version-updates
@@ -107,15 +122,19 @@ updates:
   - package-ecosystem: npm
     directory: "/apps/jobs"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     versioning-strategy: increase
     labels:
       - dependencies
       - jobs
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       jobs-minor-and-patch:
         applies-to: version-updates
@@ -131,14 +150,18 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - dependencies
       - github-actions
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       actions-all:
         update-types:

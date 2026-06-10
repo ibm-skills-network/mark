@@ -358,6 +358,9 @@ function printSummary(
 
 export async function bootstrapPlaywrightState() {
   const config = getTestEnvironmentConfig();
+  console.log(`Mark API:  ${config.markApiBaseUrl}`);
+  console.log(`Gateway:   ${config.gatewayBaseUrl}`);
+  console.log(`Web:       ${config.webBaseUrl}`);
   const assignments = await ensureTestAssignments(config);
   writeAuthStorageStates(assignments, config);
   printSummary(assignments, config);

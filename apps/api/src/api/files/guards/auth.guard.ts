@@ -132,7 +132,9 @@ export class AuthGuard implements CanActivate {
           method,
           url: originalUrl,
         });
-        throw new ForbiddenException("Assignment ID is missing in user session");
+        throw new ForbiddenException(
+          "Assignment ID is missing in user session",
+        );
       }
 
       const [assignment, assignmentGroup] = await this.prisma.$transaction([

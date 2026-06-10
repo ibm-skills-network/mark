@@ -1,7 +1,6 @@
 "use client";
 
-import { Button } from "@headlessui/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface GradeSyncStatusProps {
   attemptId: number;
@@ -20,28 +19,9 @@ interface SyncStatus {
   canRetry: boolean;
 }
 
-function formatCountdown(ms: number) {
-  if (ms <= 0) return "now";
-
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  return `${seconds}s`;
-}
-
 /**
  * Component to display LTI grade sync status to learners.
- * Shows real-time status of grade syncing to their course platform.
+ * Shows the status of syncing their completion to their course platform.
  */
 export default function GradeSyncStatus({
   attemptId,
@@ -49,7 +29,6 @@ export default function GradeSyncStatus({
 }: GradeSyncStatusProps) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     fetchSyncStatus();
@@ -79,19 +58,6 @@ export default function GradeSyncStatus({
     }
   };
 
-  const nextRetryMs = useMemo(() => {
-    if (!syncStatus?.nextRetryAt) return null;
-    const t = new Date(syncStatus.nextRetryAt).getTime();
-    return Number.isFinite(t) ? t : null;
-  }, [syncStatus?.nextRetryAt]);
-
-  useEffect(() => {
-    if (syncStatus?.status !== "SCHEDULED" || !nextRetryMs) return;
-
-    const id = globalThis.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => globalThis.clearInterval(id);
-  }, [syncStatus?.status, nextRetryMs]);
-
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -105,17 +71,6 @@ export default function GradeSyncStatus({
     return null;
   }
 
-  const remainingMs =
-    syncStatus.status === "SCHEDULED" && nextRetryMs ? nextRetryMs - nowMs : 0;
-
-  const countdownLabel =
-    syncStatus.status === "SCHEDULED"
-      ? nextRetryMs
-        ? remainingMs > 0
-          ? formatCountdown(remainingMs)
-          : "Retrying now…"
-        : "—"
-      : null;
   const getStatusDisplay = () => {
     switch (syncStatus.status) {
       case "SUCCESS":
@@ -124,7 +79,7 @@ export default function GradeSyncStatus({
           color: "text-green-600",
           bgColor: "bg-green-50",
           borderColor: "border-green-200",
-          message: "Grade successfully synced to your course platform",
+          message: "Your completion has been synced to your course platform",
         };
 
       case "IN_PROGRESS":
@@ -134,36 +89,29 @@ export default function GradeSyncStatus({
           color: "text-blue-600",
           bgColor: "bg-blue-50",
           borderColor: "border-blue-200",
-          message: "Syncing grade to your course platform...",
+          message: "Syncing your completion to your course platform...",
         };
 
-      case "SCHEDULED": {
-        const retryTime = syncStatus.nextRetryAt
-          ? new Date(syncStatus.nextRetryAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "soon";
+      case "SCHEDULED":
         return {
-          icon: "🔄",
-          color: "text-yellow-600",
-          bgColor: "bg-yellow-50",
-          borderColor: "border-yellow-200",
-          message: `Retry scheduled for ${retryTime} (Attempt ${syncStatus.retryCount}/${syncStatus.maxRetries})`,
+          icon: "⏳",
+          color: "text-blue-600",
+          bgColor: "bg-blue-50",
+          borderColor: "border-blue-200",
+          message: "Your completion is safely recorded with us",
           detail:
-            "We encountered an issue syncing your grade with your LMS. We'll automatically retry soon.",
+            "We're still syncing your completion to your course platform. It may take as long as 4–6 hours depending on how quickly your course platform responds, but we'll make sure your quiz gets there. There's nothing you need to do — your completion is safely recorded with us and will appear in your course as soon as it's accepted. You can close this window.",
         };
-      }
 
       case "FAILED":
         return {
-          icon: "⚠️",
-          color: "text-red-600",
-          bgColor: "bg-red-50",
-          borderColor: "border-red-200",
-          message: "Grade sync failed after multiple attempts",
+          icon: "ℹ️",
+          color: "text-blue-600",
+          bgColor: "bg-blue-50",
+          borderColor: "border-blue-200",
+          message: "Your completion is safely recorded with us",
           detail:
-            "Your grade is safely stored in our system. Please contact your instructor if it doesn't appear in your course within 24 hours.",
+            "Your completion is stored safely on our end and we're working to get it into your course platform. If it hasn't appeared in your course within 24 hours, please reach out to your instructor.",
         };
 
       default:
@@ -190,20 +138,7 @@ export default function GradeSyncStatus({
           {statusDisplay.detail && (
             <p className="text-sm text-gray-600 mt-1">{statusDisplay.detail}</p>
           )}
-          {syncStatus.status === "SCHEDULED" && (
-            <div className="text-sm text-gray-600 mt-2">
-              Next retry in:{" "}
-              <span className="font-medium">{countdownLabel}</span>
-            </div>
-          )}
         </div>
-        <Button
-          onClick={fetchSyncStatus}
-          aria-label="Refresh grade sync status"
-          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-sm rounded-md"
-        >
-          Refresh
-        </Button>
       </div>
     </div>
   );

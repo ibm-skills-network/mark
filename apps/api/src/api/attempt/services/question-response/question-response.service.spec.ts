@@ -100,7 +100,7 @@ describe("QuestionResponseService", () => {
 
     jest
       .spyOn(
-        service as unknown as { getAssignmentContext: () => void },
+        service as unknown as { getAssignmentContext: (...args: any[]) => any },
         "getAssignmentContext",
       )
       .mockResolvedValue({
@@ -154,6 +154,7 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
 
   const mockProgressService = {
     initializeProgress: jest.fn(),
+    updateProgress: jest.fn(),
     updateQuestionProgress: jest.fn(),
     markComplete: jest.fn(),
     markFailed: jest.fn(),
@@ -200,7 +201,10 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
     implementation?: (...args: any[]) => any,
   ) {
     return jest
-      .spyOn(service as unknown as Record<K, (...args: any[]) => any>, method)
+      .spyOn(
+        service as unknown as Record<K, (...args: any[]) => any>,
+        method as any,
+      )
       .mockImplementation(implementation ?? jest.fn());
   }
 
@@ -373,7 +377,8 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
     );
 
     // The second call to getAssignmentContext should receive the in-memory map
-    const secondContextCall = contextSpy.mock.calls[1];
+    const secondContextCall = (contextSpy as jest.Mock).mock
+      .calls[1] as unknown[];
     const inMemoryMap = secondContextCall[4] as Map<number, string>;
     expect(inMemoryMap).toBeInstanceOf(Map);
     expect(inMemoryMap.has(10)).toBe(true);
@@ -571,7 +576,7 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
       inMemoryResponses,
     ) as Promise<{
       assignmentInstructions: string;
-      questionAnswerContext: { question: string; response: string }[];
+      questionAnswerContext: { question: string; answer: string }[];
     }>;
 
   it("returns empty context when question has no gradingContextQuestionIds", async () => {

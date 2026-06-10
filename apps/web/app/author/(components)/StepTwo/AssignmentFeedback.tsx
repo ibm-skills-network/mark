@@ -54,11 +54,11 @@ const FeedbackOption: React.FC<FeedbackOptionProps> = ({
   );
 };
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const Component: FC<Props> = () => {
+const Component: FC<Props> = ({ compact }) => {
   const [
-    ,
+    verbosityLevel,
     setVerbosityLevel,
     setShowAssignmentScore,
     setShowSubmissionFeedback,
@@ -149,6 +149,7 @@ const Component: FC<Props> = () => {
       description={stepTwoSections.feedback.description}
       className="flex flex-col gap-y-6 justify-evenly"
       required
+      compact={compact}
     >
       <div className="flex gap-x-4 max-md:flex-wrap">
         <FeedbackOption
@@ -169,7 +170,7 @@ const Component: FC<Props> = () => {
           onClick={() => handleButtonClick("None")}
         />
       </div>
-      <SettingsContainer />
+      {verbosityLevel === "Custom" && <SettingsContainer />}
     </SectionWithTitle>
   );
 };
