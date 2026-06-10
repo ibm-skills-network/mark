@@ -165,7 +165,9 @@ export class SubmissionQualityService {
       }
     }
 
-    const pageNumbers = this.extractPageNumbers(chunks);
+    // Use only eligible-chunk pages as the denominator so ineligible boilerplate
+    // pages don't dilute the per-page token average for real learner content.
+    const pageNumbers = this.extractPageNumbers(eligibleChunks);
     const pageCount = pageNumbers.size > 0 ? pageNumbers.size : undefined;
 
     const avgSubstantiveTokensPerPage =

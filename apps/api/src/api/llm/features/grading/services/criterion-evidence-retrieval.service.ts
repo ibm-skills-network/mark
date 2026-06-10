@@ -294,7 +294,9 @@ export class CriterionEvidenceRetrievalService {
     searchScore: number;
     contradiction: boolean;
   }> | null> {
-    if (chunks.length === 0) return [];
+    // No candidates to validate — not a definitive LLM rejection, signal parse failure
+    // so the caller falls back to keyword scoring rather than treating it as "LLM rejected all".
+    if (chunks.length === 0) return null;
 
     const parser = StructuredOutputParser.fromZodSchema(
       EvidenceValidationSchema,

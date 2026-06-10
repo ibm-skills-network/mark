@@ -120,7 +120,7 @@ export class CriterionEvidencePipelineService {
 
       const grades: CriterionGrade[] = request.criteria.map((criterion) => {
         const allowedPoints = criterion.criteria.map((l) => l.points);
-        const minPoints = Math.min(...allowedPoints);
+        const minPoints = allowedPoints.length > 0 ? Math.min(...allowedPoints) : 0;
         return {
           criterionId: criterion.id,
           rubricQuestion: criterion.rubricQuestion,
