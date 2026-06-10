@@ -260,7 +260,6 @@ const buildAssignmentDetailsFromAttempt = (
         attempt.correctAnswerVisibility,
       questionControls:
         attempt.assignmentDetails.questionControls ?? attempt.questionControls,
-      questions: attempt.questions,
     } as Assignment;
   }
 
@@ -275,7 +274,6 @@ const buildAssignmentDetailsFromAttempt = (
       showQuestionScore: attempt.showQuestionScore,
       correctAnswerVisibility: attempt.correctAnswerVisibility,
       questionControls: attempt.questionControls,
-      questions: attempt.questions,
     } as Assignment;
   }
 
