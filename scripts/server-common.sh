@@ -26,6 +26,10 @@ ensure_dependencies_installed() {
 }
 
 ensure_database_running() {
+    if [ -n "${CI:-}" ]; then
+        return
+    fi
+
     if docker ps -q -f name="^${CONTAINER_NAME}$" | grep -q .; then
         return
     fi

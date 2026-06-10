@@ -128,8 +128,11 @@ import { TranslationService } from "./services/translation/translation.service";
     QuestionResponseService,
     GRADING_PROGRESS_SERVICE,
     // Exported so apps/jobs JobWorkerService can call markFailed when a
-    // grading BullMQ job permanent-fails. Keep the legacy string token as an
-    // alias while new code injects GRADING_PROGRESS_SERVICE.
+    // grading BullMQ job permanent-fails — keeps GradingProgress.status
+    // in sync with the worker's terminal state instead of leaving rows
+    // stuck at PROCESSING when the UI's SSE stream goes silent. Keep the
+    // legacy string token as an alias while new code injects
+    // GRADING_PROGRESS_SERVICE.
     "GradingProgressService",
   ],
 })

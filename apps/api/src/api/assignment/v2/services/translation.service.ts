@@ -748,8 +748,31 @@ export class TranslationService implements OnModuleDestroy {
   }
 
   /**
-   * Detect if the limiter appears to be stalled and reset it if necessary
-   * Should be called before major translation operations
+   * Detect if the limiter appears to be stalled and reset it if necessary.
+   *
+   * The genuine stall signal is "lots received, lots running, almost
+   * nothing finishing" — which means Bottleneck has wedged and ops are
+   * piling up without progress. Recreating the limiter is the only way
+   * out of that state. This is the load-bearing protection here.
+   *
+   * A prior version of this method also throttled maxConcurrent from
+   * 200 → 5 whenever QUEUED > 500 (and restored to 25, not 200, so each
+   * firing permanently halved the limiter's ceiling). For any publish
+   * larger than ~12 questions the queue normally crosses 500 during the
+   * parallel fan-out window — the throttle then starved the queue, the
+   * 90s OPERATION_TIMEOUT killed ops sitting behind only 5 active slots,
+   * `executeWithOptimizedRetry` re-scheduled them onto the same throttled
+   * limiter, and the retries timed out too. Net effect: deterministic
+   * mid-publish failures on every assignment >~12 questions, "fixed" only
+   * by the author clicking Retry (which re-runs the small set of failed
+   * languages — a load small enough not to re-trip the threshold).
+   *
+   * Overload is already constrained by the other layers configured on
+   * the limiter: maxConcurrent=200 caps simultaneous LLM calls, the
+   * reservoir caps sustained TPS at ~166/s, highWater=5000 with
+   * strategy.OVERFLOW rejects new schedules past the queue ceiling, and
+   * TRANSLATION_CONCURRENCY=8 caps inflow at the BullMQ layer. The
+   * throttle was a redundant fifth layer that got the numbers wrong.
    */
   private checkLimiterHealth(): void {
     try {
@@ -765,19 +788,6 @@ export class TranslationService implements OnModuleDestroy {
           `Potential bottleneck issue detected: ${counts.RUNNING} running, ${counts.DONE} completed, ${counts.RECEIVED} received`,
         );
         this.resetLimiter();
-        return;
-      }
-
-      if (counts.QUEUED > 500) {
-        this.logger.warn(
-          `High queue load: ${counts.QUEUED} jobs queued. Reducing accepting rate.`,
-        );
-        limiter.updateSettings({ maxConcurrent: 5 });
-
-        setTimeout(() => {
-          limiter.updateSettings({ maxConcurrent: 25 });
-          this.logger.log("Restored normal concurrency limits");
-        }, 30_000);
       }
     } catch (error: unknown) {
       const errorMessage =

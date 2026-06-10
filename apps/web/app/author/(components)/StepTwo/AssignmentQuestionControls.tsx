@@ -5,9 +5,9 @@ import { cn } from "@/lib/strings";
 import { type ComponentPropsWithoutRef, type FC } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const AssignmentQuestionControls: FC<Props> = () => {
+const AssignmentQuestionControls: FC<Props> = ({ compact }) => {
   const [questionControls, setQuestionControls] = useAssignmentConfig(
     (state) => [state.questionControls, state.setQuestionControls],
   );
@@ -28,6 +28,7 @@ const AssignmentQuestionControls: FC<Props> = () => {
       title="Assignment Restrictions"
       description="Configure restrictions to prevent unauthorized behaviors during the assignment"
       className="flex flex-col gap-y-4"
+      compact={compact}
     >
       <div className="flex flex-col gap-y-3">
         <ControlToggle
@@ -72,8 +73,8 @@ const ControlToggle: FC<ControlToggleProps> = ({
   checked,
   onChange,
 }) => {
-  const bgColor = checked ? "bg-orange-600" : "bg-gray-200";
-  const ringColor = "focus:ring-orange-600";
+  const bgColor = checked ? "bg-violet-600" : "bg-gray-200";
+  const ringColor = "focus:ring-violet-600";
 
   return (
     <div className="flex items-start justify-between p-4 border border-gray-200 rounded-md hover:border-gray-300 transition-colors">

@@ -1,12 +1,15 @@
 {
-  "extends": "tsconfig/nestjs.json",
+  "extends": "../../packages/tsconfig/nestjs.json",
   "compilerOptions": {
+    "target": "es2022",
     "lib": ["es2022", "dom"],
     "types": ["node"],
     "outDir": "./dist",
     "baseUrl": "./",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "useDefineForClassFields": false
   },
+  "include": ["src/**/*"],
   "exclude": [
     "./ensureDb.js",
     "test",

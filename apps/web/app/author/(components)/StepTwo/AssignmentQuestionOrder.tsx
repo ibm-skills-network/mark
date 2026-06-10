@@ -13,9 +13,9 @@ import {
 } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const Component: FC<Props> = () => {
+const Component: FC<Props> = ({ compact }) => {
   const [displayOrder, setDisplayOrder, errors] = useAssignmentConfig((s) => [
     s.displayOrder,
     s.setDisplayOrder,
@@ -69,6 +69,7 @@ const Component: FC<Props> = () => {
       title={stepTwoSections.order.title}
       className="flex flex-col gap-y-6"
       required
+      compact={compact}
     >
       <button type="button" value="DEFINED" onClick={handleDefinedOrRandom}>
         <div className="flex items-center gap-x-1.5 cursor-pointer">

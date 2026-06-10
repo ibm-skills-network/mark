@@ -51,12 +51,17 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       )
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
+    const modelName = options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL;
 
-    this.logger.debug(`Invoking LLM with ${inputTokens} input tokens`, {
-      model_name: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
+    this.logger.info("openai.invoke.start", {
+      model_name: modelName,
       input_tokens: inputTokens,
+      input_full_length: inputText.length,
+      input_snippet: inputText.slice(0, 400),
+      message_count: messages.length,
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
+      top_p: options?.topP ?? options?.top_p ?? 1,
     });
 
     const start = Date.now();
@@ -65,11 +70,13 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       const responseContent = result.content.toString();
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
-      this.logger.debug(`LLM responded with ${outputTokens} output tokens`, {
-        model_name: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
+      this.logger.info("openai.invoke.complete", {
+        model_name: modelName,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         duration_ms: Date.now() - start,
+        output_full_length: responseContent.length,
+        output_snippet: responseContent.slice(0, 400),
       });
 
       return {
@@ -103,13 +110,22 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
 
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
+    const modelName = options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL;
 
     const estimatedImageTokens = 150;
 
-    this.logger.debug(
-      `Invoking LLM with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
-    );
+    this.logger.info("openai.invokeWithImage.start", {
+      model_name: modelName,
+      input_tokens: inputTokens,
+      estimated_image_tokens: estimatedImageTokens,
+      text_full_length: textContent.length,
+      text_snippet: textContent.slice(0, 400),
+      image_data_length: imageData?.length ?? 0,
+      max_tokens: options?.maxTokens,
+      temperature: options?.temperature ?? 0,
+    });
 
+    const start = Date.now();
     try {
       const result = await model.invoke([
         new HumanMessage({
@@ -123,9 +139,14 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       const responseContent = result.content.toString();
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
-      this.logger.debug(
-        `LLM with image responded with ${outputTokens} output tokens`,
-      );
+      this.logger.info("openai.invokeWithImage.complete", {
+        model_name: modelName,
+        input_tokens: inputTokens + estimatedImageTokens,
+        output_tokens: outputTokens,
+        duration_ms: Date.now() - start,
+        output_full_length: responseContent.length,
+        output_snippet: responseContent.slice(0, 400),
+      });
 
       return {
         content: responseContent,

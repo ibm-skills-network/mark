@@ -43,7 +43,31 @@ export class S3Service {
   private s3ClientEast: S3Client;
   private s3ClientSouth: S3Client;
 
+  // Fail fast in prod/staging — silent misconfig caused invalid host s3.us-east.amazonaws.com.
+  private static assertRequiredCosEnvForProdLike(): void {
+    const nodeEnvironment = process.env.NODE_ENV;
+    if (nodeEnvironment !== "production" && nodeEnvironment !== "staging") {
+      return;
+    }
+    const required = [
+      "IBM_COS_ENDPOINT",
+      "IBM_COS_ACCESS_KEY_ID",
+      "IBM_COS_SECRET_ACCESS_KEY",
+      "IBM_COS_REGION",
+    ] as const;
+    const missing = required.filter((name) => !process.env[name]);
+    if (missing.length > 0) {
+      throw new Error(
+        `S3Service: missing required env var(s) for NODE_ENV=${nodeEnvironment}: ${missing.join(
+          ", ",
+        )}. Ensure these keys are present in the IBM COS credentials Secret mounted on this pod.`,
+      );
+    }
+  }
+
   constructor() {
+    S3Service.assertRequiredCosEnvForProdLike();
+
     const requestHandlerOptions = {
       connectionTimeout: 10_000,
       requestTimeout: 120_000,

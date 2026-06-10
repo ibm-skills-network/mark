@@ -15,9 +15,9 @@ import {
 } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const Component: FC<Props> = () => {
+const Component: FC<Props> = ({ compact }) => {
   const [
     allotedTimeMinutes,
     setAllotedTimeMinutes,
@@ -123,6 +123,7 @@ const Component: FC<Props> = () => {
       title={stepTwoSections.time.title}
       className="flex flex-col gap-y-6"
       required={stepTwoSections.time.required}
+      compact={compact}
     >
       <div className="flex flex-col gap-y-4">
         <div className="flex items-center gap-6">

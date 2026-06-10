@@ -13,11 +13,12 @@ import type {
   PDFDocumentProxy,
   PDFPageProxy,
   PDFOperatorList,
-  RenderParameters,
   TextContent,
   TextItem as PdfJsTextItem,
 } from "pdfjs-dist/types/src/display/api";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
+import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../../llm/features/grading/constants";
+import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import {
   CanonicalSubmission,
   ContentBlock,
@@ -129,6 +130,13 @@ export class PdfStructureExtractorService {
       }
 
       const allBlocks = pages.flatMap((p) => p.blocks);
+
+      // Mirror the spreadsheet ingestion ceiling onto the PDF path. A
+      // pathological PDF (thousands of pages) expands into an unbounded block
+      // array that is graded with no size guard and can crash the worker pod.
+      // Reject before returning the assembled submission.
+      this.enforceBlockCap(allBlocks.length, submissionId);
+
       const wordCount = this.calculateWordCount(allBlocks);
       const checksum = sha256Short;
 
@@ -170,6 +178,13 @@ export class PdfStructureExtractorService {
 
       return { submission, metadata };
     } catch (error) {
+      // The oversized-submission guard is a terminal, non-retryable rejection.
+      // Re-throw it unchanged so its name survives for downstream
+      // classification — wrapping it in a generic Error would erase that
+      // signal and make the failure look retryable.
+      if (error instanceof OversizedSubmissionError) {
+        throw error;
+      }
       this.logger.error(
         `PDF structure extraction failed: submissionId=${submissionId} ` +
           `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex} ` +
@@ -180,6 +195,31 @@ export class PdfStructureExtractorService {
         `Failed to extract PDF structure: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * Enforce the per-submission evidence-block ceiling on the assembled PDF
+   * blocks. Mirrors the spreadsheet guard so both ingestion paths share the
+   * same limit. Throws OversizedSubmissionError (terminal, non-retryable) when
+   * the count exceeds the cap.
+   */
+  private enforceBlockCap(blockCount: number, submissionId: string): void {
+    if (blockCount <= MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      return;
+    }
+    this.logger.warn(
+      `grading.submission.oversized ${JSON.stringify({
+        blockCount,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        submissionId,
+        branch: "pdf",
+      })}`,
+    );
+    throw new OversizedSubmissionError({
+      blockCount,
+      cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+      filename: submissionId,
+    });
   }
 
   /**
@@ -482,38 +522,13 @@ export class PdfStructureExtractorService {
     const imageBlocks: ContentBlock[] = [];
 
     try {
-      const viewport = page.getViewport({ scale: 1 });
-
-      try {
-        const canvas = createCanvas(viewport.width, viewport.height);
-        const canvasContext = canvas.getContext("2d");
-
-        if (canvasContext) {
-          const renderContext: RenderParameters = {
-            canvasContext: canvasContext as unknown as CanvasRenderingContext2D,
-            viewport,
-            canvas: null,
-          };
-
-          const renderTask = page.render(renderContext);
-          // Attach a tail catch BEFORE awaiting so any late rejection
-          // (e.g., font load or image decode resolving after the worker
-          // already moved on) is captured here and cannot escape as an
-          // unhandled promise rejection at the process level.
-          renderTask.promise.catch((lateError: unknown) => {
-            this.logger.warn(
-              `Late render rejection on page ${pageNumber}: ` +
-                `${lateError instanceof Error ? lateError.message : String(lateError)}`,
-            );
-          });
-          await renderTask.promise;
-        }
-      } catch (renderError) {
-        this.logger.debug(
-          `Page ${pageNumber} render failed (continuing with image extraction): ${renderError instanceof Error ? renderError.message : String(renderError)}`,
-        );
-      }
-
+      // NOTE: we deliberately do NOT render the page to a canvas here. The
+      // previous full-page page.render() produced a canvas that was never
+      // read (image data is taken from the operator list + page.objs below),
+      // called the pdfjs v4 render API under v5 (which rejects with "Image or
+      // Canvas expected"), and was the native-crash trigger — a SIGSEGV in the
+      // canvas addon and the unhandled AbortException that exited the worker.
+      // Removing it eliminates the crash with no loss of extraction fidelity.
       const operatorListTask = page.getOperatorList();
       // Same late-rejection guard for getOperatorList — it returns a Promise
       // directly, so attach .catch to the Promise itself.

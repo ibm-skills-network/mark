@@ -65,18 +65,13 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         );
       }
 
-      try {
-        new URL(urlResponse);
-      } catch {
-        throw new BadRequestException(
-          this.localizationService?.getLocalizedString?.(
-            "invalidUrl",
-            requestDto.language,
-            { url: urlResponse },
-          ) || `Invalid URL: ${urlResponse}`,
-        );
-      }
-
+      // URL *format* validity is intentionally NOT a hard gate here. Throwing
+      // at validation time fails the entire grading job and leaves the
+      // learner's attempt ungraded (observed in prod: "Failed to process
+      // question response: Invalid URL: script.js"). An unparseable URL is
+      // instead graded 0-with-feedback in gradeResponse (see the invalid-URL
+      // guard there), so the learner still gets a score + feedback and LMS
+      // sync proceeds. Presence/type is still enforced above.
       return true;
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -108,6 +103,43 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     learnerResponse: string,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    // Guard: an unparseable URL is a learner input error, not a system
+    // failure. Grade it 0 with feedback and skip the fetch/LLM path entirely
+    // (mirrors the unfetchable-URL branch below). validateResponse lets
+    // invalid formats through on purpose so they are graded here rather than
+    // failing the job.
+    if (!this.isParseableUrl(learnerResponse)) {
+      const responseDto = this.createResponseDto(0, [
+        {
+          feedback:
+            this.localizationService?.getLocalizedString?.(
+              "invalidUrl",
+              context.language,
+              { url: learnerResponse },
+            ) || `Invalid URL: ${learnerResponse}`,
+        },
+      ]);
+
+      responseDto.metadata = {
+        error: "invalid_url",
+        url: learnerResponse,
+        status: "error",
+        maxPossiblePoints: question.totalPoints,
+      };
+
+      await this.recordGrading(
+        question,
+        {
+          learnerUrlResponse: learnerResponse,
+        } as CreateQuestionResponseAttemptRequestDto,
+        responseDto,
+        context,
+        "UrlGradingStrategy-InvalidUrl",
+      );
+
+      return responseDto;
+    }
+
     let urlFetchResponse: { body: string; isFunctional: boolean };
 
     try {
@@ -260,6 +292,19 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     const preview = content.slice(0, 150).trim();
 
     return content.length > 150 ? `${preview}...` : preview;
+  }
+
+  /**
+   * Whether a learner response parses as an absolute URL. Used to short-
+   * circuit invalid submissions to a graded-0 response instead of throwing.
+   */
+  private isParseableUrl(value: string): boolean {
+    try {
+      new URL(value);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**

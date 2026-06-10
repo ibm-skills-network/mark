@@ -31,17 +31,19 @@ import {
 import {
   useAssignmentDetails,
   useGitHubStore,
-  useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
+import { useAssignmentId } from "@/hooks/use-assignment-id";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
-import GradingProgressModal from "./GradingProgressModal";
+import GradingProgressModal, {
+  type ProgressState,
+} from "./GradingProgressModal";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -53,9 +55,11 @@ function LearnerHeader() {
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
-  const [currentGradingJobId, setCurrentGradingJobId] = useState<string | null>(
-    null,
-  );
+  const [progressData, setProgressData] = useState<ProgressState>({
+    status: "idle",
+    progress: 0,
+    currentStage: "Preparing to grade your assignment...",
+  });
 
   const [
     questions,
@@ -108,7 +112,14 @@ function LearnerHeader() {
     },
   );
   const [returnUrl, setReturnUrl] = useState<string>("");
-  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
+  // The URL is authoritative for the assignment id. Reading it from a store
+  // populated only on the overview route leaves deep links / hard refreshes
+  // with a null id and silently drops the submit.
+  const { assignmentId, assignmentIdParam } = useAssignmentId();
+  // Guards re-entrancy: submit can be triggered by the button AND by a window
+  // "triggerAssignmentSubmission" event, so a ref (not the async-stale
+  // `submitting` state) prevents a double submission of the same attempt.
+  const submitInFlightRef = useRef(false);
   const isInQuestionPage = pathname.includes("questions");
   const isAttemptPage = pathname.includes("attempts");
   const isSuccessPage = pathname.includes("successPage");
@@ -214,6 +225,10 @@ function LearnerHeader() {
   };
 
   const handleSubmitAssignment = useCallback(async () => {
+    if (submitInFlightRef.current) {
+      return;
+    }
+    submitInFlightRef.current = true;
     let responsesForQuestions: QuestionAttemptRequestWithId[] = [];
     try {
       responsesForQuestions = questions.map((q) => ({
@@ -252,17 +267,34 @@ function LearnerHeader() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       toast.error(`Error processing responses: ${errorMessage}`);
+      submitInFlightRef.current = false;
       return;
     }
 
     setSubmitting(true);
+    setProgressData({
+      status: "processing",
+      progress: 0,
+      currentStage: "Preparing to grade your assignment...",
+    });
     setShowGradingModal(true);
     setCurrentAttemptId(activeAttemptId);
 
     if (!assignmentId) {
-      toast.error(
-        "Assignment ID is missing, exit and try launching the assignment again.",
+      console.warn(
+        "[learner] submit blocked: assignmentId missing from route",
+        {
+          assignmentIdParam,
+          hasActiveAttemptId: activeAttemptId !== null,
+          route: pathname,
+        },
       );
+      toast.error(
+        "Something went wrong. Please reload the page or exit and relaunch the assignment.",
+      );
+      setShowGradingModal(false);
+      setSubmitting(false);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -270,6 +302,7 @@ function LearnerHeader() {
       toast.error("Active attempt ID is missing.");
       setSubmitting(false);
       setShowGradingModal(false);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -283,14 +316,18 @@ function LearnerHeader() {
         role === "author" ? authorQuestions : undefined,
         role === "author" ? authorAssignmentDetails : undefined,
         undefined,
-        () => {
-          // Progress callback not used - grading progress shown via modal
+        (status, progress, message, metadata) => {
+          setProgressData({
+            status,
+            progress: status === "completed" ? 100 : progress,
+            currentStage:
+              status === "completed" ? "Grading complete!" : message,
+            currentQuestion: metadata?.currentQuestion,
+            totalQuestions: metadata?.totalQuestions,
+            gradingState: metadata?.gradingState,
+          });
         },
-        (gradingJobId) => {
-          setCurrentGradingJobId(gradingJobId);
-          setCurrentAttemptId(activeAttemptId);
-          setShowGradingModal(true);
-        },
+        undefined,
       );
 
       if (res) {
@@ -336,19 +373,27 @@ function LearnerHeader() {
           clearLearnerAnswers();
         }
         useLearnerStore.getState().setActiveQuestionNumber(null);
-        router.push(`/learner/${assignmentId}/successPage/${res.id}`);
 
         setTimeout(() => {
           setShowGradingModal(false);
           useLearnerStore.getState().setUserPreferedLanguage(null);
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
-        }, 500);
+        }, 1000);
+      } else {
+        // submitAssignment resolved without a result (e.g. an SSE finalize
+        // event carrying no payload). Without this branch submitting/modal stay
+        // true forever and the grading modal spins with no error and no exit.
+        toast.error("We couldn't complete your submission. Please try again.");
+        setSubmitting(false);
+        setShowGradingModal(false);
+        submitInFlightRef.current = false;
       }
     } catch (error) {
       setSubmitting(false);
       setTimeout(() => {
         setShowGradingModal(false);
       }, 2000);
+      submitInFlightRef.current = false;
       return;
     }
   }, [
@@ -356,6 +401,8 @@ function LearnerHeader() {
     role,
     userPreferedLanguage,
     assignmentId,
+    assignmentIdParam,
+    pathname,
     activeAttemptId,
     authorQuestions,
     authorAssignmentDetails,
@@ -606,7 +653,7 @@ function LearnerHeader() {
         isOpen={showGradingModal}
         assignmentId={assignmentId || 0}
         attemptId={currentAttemptId}
-        gradingJobId={currentGradingJobId}
+        progressData={progressData}
       />
     </>
   );

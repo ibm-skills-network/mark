@@ -36,11 +36,13 @@ type ErrorHistoryEntry = {
 export class LtiGradeSyncService {
   private readonly logger = new Logger(LtiGradeSyncService.name);
   private readonly ltiGatewayUrl: string;
-  private readonly maxRetries = 5;
+  private readonly maxRetries = 9;
 
-  // Retry delays in minutes: 5min, 1hr, 2hrs, 1day, 3days
-  // Aligned with cron running every 5 minutes
-  private readonly retryDelays = [5, 60, 120, 1440, 4320];
+  // Retry delays in minutes: 5m, 15m, 30m, 1h, 4h, 12h, 24h, 48h, 72h.
+  // First slot aligns with the 5-min retry cron so transient failures
+  // (gateway blip, momentary LMS slowness) recover on the very next tick.
+  // Longer back-offs follow for genuinely flaky upstream LMSes.
+  private readonly retryDelays = [5, 15, 30, 60, 240, 720, 1440, 2880, 4320];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -130,7 +132,14 @@ export class LtiGradeSyncService {
             headers: {
               Cookie: `authentication=${sync.authCookie}`,
             },
-            timeout: 30_000,
+            // 90s rather than 60s — Instana flags the gateway's inbound
+            // PUT /grade span as errored whenever we abort the connection
+            // early, and real LMS responses (e.g. learn.ibm.com POST
+            // /mod/lti/service.php) sometimes run past 60s. A longer ceiling
+            // lets slow-but-valid calls finish instead of surfacing as
+            // gateway errors. The gateway's own LMS call is unbounded, so
+            // this is the binding limit on the chain.
+            timeout: 90_000,
           },
         ),
       );

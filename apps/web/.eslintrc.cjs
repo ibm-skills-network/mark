@@ -58,6 +58,7 @@ module.exports = {
     "next.config.js",
     "jest.config.js",
     "jest.setup.js",
+    "next-env.d.ts",
     "scripts/",
     "public/",
     "coverage/",

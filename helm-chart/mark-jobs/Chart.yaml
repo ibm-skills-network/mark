@@ -2,5 +2,5 @@ apiVersion: v2
 name: mark-jobs
 description: Mark background job worker service
 type: application
-version: 0.1.0
+version: 0.1.2
 appVersion: "1.0.0"

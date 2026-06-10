@@ -11,13 +11,19 @@ import {
 } from "./job-worker-heartbeat.constants";
 import { createRedisConnection } from "./redis.connection";
 
-interface JobWorkerHeartbeat {
+export interface JobWorkerHeartbeat {
   hostname?: string;
   instanceId?: string;
   pid?: number;
   queues?: string[];
+  startedAt?: string;
   updatedAt?: string;
   workerCount?: number;
+  // Per-queue concurrency the publishing pod actually configured its workers
+  // with. Optional so heartbeats written by older pods (which never wrote this
+  // field) still parse; the read-model falls back to static defaults when it
+  // is absent.
+  concurrencyByQueue?: Record<string, number>;
 }
 
 @Injectable()
@@ -119,6 +125,22 @@ export class JobWorkerConnectionService
     }
 
     return null;
+  }
+
+  async getAllWorkerHeartbeats(): Promise<JobWorkerHeartbeat[]> {
+    const keys = await this.scanHeartbeatKeys();
+    const heartbeats: JobWorkerHeartbeat[] = [];
+    for (const key of keys) {
+      const raw = await this.getConnection().get(key);
+      if (!raw) continue;
+      try {
+        heartbeats.push(JSON.parse(raw) as JobWorkerHeartbeat);
+      } catch {
+        // Skip a corrupt heartbeat value rather than failing the whole scan.
+        this.logger.warn(`Skipping unparseable worker heartbeat at ${key}`);
+      }
+    }
+    return heartbeats;
   }
 
   private async scanHeartbeatKeys(): Promise<string[]> {

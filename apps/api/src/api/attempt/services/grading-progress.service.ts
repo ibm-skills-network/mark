@@ -51,6 +51,8 @@ export type ProgressUpdateCallback = (
   progress: string,
   percentage?: number,
   details?: GradingProgressDetails,
+  currentQuestion?: number,
+  totalQuestions?: number,
 ) => Promise<void>;
 
 @Injectable()
@@ -199,6 +201,8 @@ export class GradingProgressService {
           "Processing",
           update.currentStage,
           update.progress,
+          update.currentQuestion,
+          update.totalQuestions,
         );
       }
     } catch (error) {
@@ -394,16 +398,28 @@ export class GradingProgressService {
   }
 
   /**
-   * Enable email notification for grading completion
+   * Enable email notification for grading completion.
+   *
+   * The frontend can call /notify before the worker has run initializeProgress
+   * (which is the only path that creates a GradingProgress row). Upsert so the
+   * row is created with the notification settings if absent; initializeProgress
+   * will later overwrite totalQuestions/status without touching the
+   * notifyOnComplete / notificationEmail fields.
    */
   async enableEmailNotification(
     attemptId: number,
     email: string,
   ): Promise<void> {
     try {
-      await this.prisma.gradingProgress.update({
+      await this.prisma.gradingProgress.upsert({
         where: { attemptId },
-        data: {
+        create: {
+          attemptId,
+          totalQuestions: 0,
+          notifyOnComplete: true,
+          notificationEmail: email,
+        },
+        update: {
           notifyOnComplete: true,
           notificationEmail: email,
         },
@@ -481,12 +497,21 @@ export class GradingProgressService {
     status: string,
     progress: string,
     percentage?: number,
+    currentQuestion?: number,
+    totalQuestions?: number,
   ): Promise<void> {
     const callback = this.progressCallbacks.get(attemptId);
     if (!callback) return;
     const details = this.snapshot(attemptId);
     try {
-      await callback(status, progress, percentage, details);
+      await callback(
+        status,
+        progress,
+        percentage,
+        details,
+        currentQuestion,
+        totalQuestions,
+      );
     } catch (error) {
       this.logger.warn(
         `progress.callback.threw attempt=${attemptId} error=${
