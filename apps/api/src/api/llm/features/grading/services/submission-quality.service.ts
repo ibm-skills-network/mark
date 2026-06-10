@@ -92,7 +92,7 @@ const STOPWORDS = new Set([
 ]);
 
 const PAGE_LABEL_PATTERN =
-  /^-?\s*(page\s+)?\d+(\s*[-/]\s*\d+|\s+of\s+\d+)?\s*-?\.?$/i;
+  /^-?\s*(page\s+)?\d+(\s*[/-]\s*\d+|\s+of\s+\d+)?\s*-?\.?$/i;
 
 const METADATA_BANNER_PREFIXES = [
   "=== pdf document ===",
@@ -209,7 +209,7 @@ export class SubmissionQualityService {
     };
   }
 
-  private buildWarnings(params: {
+  private buildWarnings(parameters: {
     ineligibleCount: number;
     totalChunks: number;
     boilerplateRatio: number;
@@ -217,31 +217,31 @@ export class SubmissionQualityService {
     classification: SubmissionQualityClassification;
   }): string[] {
     const warnings: string[] = [];
-    if (params.ineligibleCount > 0) {
+    if (parameters.ineligibleCount > 0) {
       warnings.push(
-        `${params.ineligibleCount}/${params.totalChunks} chunks excluded as ineligible`,
+        `${parameters.ineligibleCount}/${parameters.totalChunks} chunks excluded as ineligible`,
       );
     }
-    if (params.boilerplateRatio >= 0.5) {
+    if (parameters.boilerplateRatio >= 0.5) {
       warnings.push(
-        `High boilerplate ratio: ${Math.round(params.boilerplateRatio * 100)}%`,
+        `High boilerplate ratio: ${Math.round(parameters.boilerplateRatio * 100)}%`,
       );
     }
-    if (params.reasonBreakdown.prompt_copy) {
+    if (parameters.reasonBreakdown.prompt_copy) {
       warnings.push(
-        `${params.reasonBreakdown.prompt_copy} chunk(s) matched question text (prompt_copy)`,
+        `${parameters.reasonBreakdown.prompt_copy} chunk(s) matched question text (prompt_copy)`,
       );
     }
-    if (params.reasonBreakdown.rubric_copy) {
+    if (parameters.reasonBreakdown.rubric_copy) {
       warnings.push(
-        `${params.reasonBreakdown.rubric_copy} chunk(s) matched rubric text (rubric_copy)`,
+        `${parameters.reasonBreakdown.rubric_copy} chunk(s) matched rubric text (rubric_copy)`,
       );
     }
     if (
-      params.classification === "boilerplate_many_pages" ||
-      params.classification === "low_information"
+      parameters.classification === "boilerplate_many_pages" ||
+      parameters.classification === "low_information"
     ) {
-      warnings.push(`Submission classified as ${params.classification}`);
+      warnings.push(`Submission classified as ${parameters.classification}`);
     }
     return warnings;
   }
@@ -324,14 +324,14 @@ export class SubmissionQualityService {
     const pagesByText = new Map<string, Set<number>>();
 
     for (const chunk of chunks) {
-      const pageNum = this.getChunkPage(chunk);
-      if (pageNum === null) continue;
+      const pageNumber = this.getChunkPage(chunk);
+      if (pageNumber === null) continue;
 
       const key = this.normalizeForDedup(chunk.text);
       if (!key) continue;
 
       const pages = pagesByText.get(key) ?? new Set<number>();
-      pages.add(pageNum);
+      pages.add(pageNumber);
       pagesByText.set(key, pages);
     }
 
@@ -404,31 +404,31 @@ export class SubmissionQualityService {
     return total / pageNumbers.size;
   }
 
-  private classifySubmission(params: {
+  private classifySubmission(parameters: {
     eligibleCount: number;
     totalChunks: number;
     boilerplateRatio: number;
     pageCount?: number;
     avgSubstantiveTokensPerPage?: number;
   }): SubmissionQualityClassification {
-    if (params.totalChunks === 0) return "empty";
+    if (parameters.totalChunks === 0) return "empty";
 
     // Rejection-level classifications only apply when there are NO eligible chunks.
     // When eligible chunks exist, grading proceeds and the classification is "clean"
     // regardless of boilerplate ratio — quality signal is surfaced via qualityWarnings.
-    if (params.eligibleCount === 0) {
+    if (parameters.eligibleCount === 0) {
       if (
-        params.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL &&
-        (params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
+        parameters.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL &&
+        (parameters.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
       ) {
         return "boilerplate_many_pages";
       }
 
       if (
-        params.avgSubstantiveTokensPerPage !== undefined &&
-        params.avgSubstantiveTokensPerPage <
+        parameters.avgSubstantiveTokensPerPage !== undefined &&
+        parameters.avgSubstantiveTokensPerPage <
           GRADING_QUALITY.LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE &&
-        (params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
+        (parameters.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
       ) {
         return "low_information";
       }

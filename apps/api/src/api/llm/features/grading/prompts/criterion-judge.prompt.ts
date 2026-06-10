@@ -62,7 +62,7 @@ Return issues per criterionId if any. Approve only if all checks pass.
         inputs.evidence
           .map((item) => {
             const citations = item.evidence
-              .map((e) => `${e.chunkId}: ${e.quote}`)
+              .map((ev) => `${ev.chunkId}: ${ev.quote}`)
               .slice(0, 3)
               .join(" | ");
             return `${item.criterionId}: ${citations}`;
