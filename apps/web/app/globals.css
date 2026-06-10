@@ -236,7 +236,8 @@ textarea:focus {
   font-weight: 450; /* Font weight for description */
 }
 
-.ql-code-block-container {
+.quill-editor-shell .ql-code-block-container,
+.quill-viewer .ql-code-block-container {
   background-color: #23241f;
   color: #f8f8f2;
   padding: 10px;
@@ -267,7 +268,7 @@ code {
 /* Custom Quill Styles */
 
 /* Base styling for Quill editor */
-.quill-editor {
+.quill-editor-shell .quill-editor {
   border: 1px solid #e5e7eb;
   border-radius: 5px;
   padding: 10px;
@@ -287,12 +288,12 @@ code {
   font-weight: 450 !important;
   line-height: 24px !important;
 }
-.ql-editor.ql-blank::before {
+.quill-editor-shell .ql-editor.ql-blank::before {
   padding-left: 8px;
 }
 
 /* Toolbar styling */
-.ql-toolbar {
+.quill-editor-shell .ql-toolbar {
   border-bottom: 1px solid #e5e7eb;
   background-color: #f9f9f9;
   border-radius: 5px 5px 0 0;
@@ -301,7 +302,8 @@ code {
 }
 
 /* Container styling */
-.ql-container {
+.quill-editor-shell .ql-container,
+.quill-viewer .ql-container {
   min-height: 200px;
   border-radius: 0 0 5px 5px;
   transition: min-height 0.3s ease-in-out;
@@ -310,16 +312,19 @@ code {
   font-weight: 400;
 }
 
-.ql-container.ql-snow,
-.ql-toolbar.ql-snow {
+.quill-editor-shell .ql-container.ql-snow,
+.quill-editor-shell .ql-toolbar.ql-snow,
+.quill-viewer .ql-container.ql-snow {
   border-color: #e5e7eb !important;
 }
-.ql-snow .ql-editor .ql-code-block-container {
+.quill-editor-shell .ql-snow .ql-editor .ql-code-block-container,
+.quill-viewer .ql-snow .ql-editor .ql-code-block-container {
   min-height: 40px !important;
 }
 
 /* Editor UI styling */
-.ql-code-block-container .ql-ui {
+.quill-editor-shell .ql-code-block-container .ql-ui,
+.quill-viewer .ql-code-block-container .ql-ui {
   border: 1px solid #e5e7eb;
   border-radius: 5px;
   transition: border-color 0.3s ease-in-out;
@@ -355,7 +360,8 @@ code {
 }
 
 /* Syntax highlighting styling */
-pre.ql-syntax {
+.quill-editor-shell pre.ql-syntax,
+.quill-viewer pre.ql-syntax {
   background-color: #f5f5f5;
   padding: 10px;
   border-radius: 5px;
@@ -373,24 +379,27 @@ pre.ql-syntax {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .quill-editor {
+  .quill-editor-shell .quill-editor {
     padding: 8px;
   }
 
-  .ql-toolbar {
+  .quill-editor-shell .ql-toolbar {
     padding: 4px;
   }
 
-  .ql-container {
+  .quill-editor-shell .ql-container,
+  .quill-viewer .ql-container {
     min-height: 150px;
   }
 
-  .ql-editor {
+  .quill-editor-shell .ql-editor,
+  .quill-viewer .ql-editor {
     min-height: 150px;
     padding: 8px;
   }
 
-  pre.ql-syntax {
+  .quill-editor-shell pre.ql-syntax,
+  .quill-viewer pre.ql-syntax {
     padding: 8px;
   }
 }

@@ -101,7 +101,7 @@ const MarkdownViewer: FC<Props> = (props) => {
       .quill-viewer .ql-container .ql-editor .ql-code-block-container .ql-ui {
         display: none !important;
       }
-      .ql-container.ql-snow .ql-editor {
+      .quill-viewer .ql-container.ql-snow .ql-editor {
         font-family: "IBM Plex Sans", sans-serif !important;
         font-size: 16px !important;
         line-height: 1.3 !important;
@@ -110,26 +110,26 @@ const MarkdownViewer: FC<Props> = (props) => {
         overflow: visible !important;
         padding: 0 !important;
       }
-      .ql-editor p,
-      .ql-editor li,
-      .ql-editor blockquote {
+      .quill-viewer .ql-editor p,
+      .quill-viewer .ql-editor li,
+      .quill-viewer .ql-editor blockquote {
         margin: 0.25em 0 !important; 
       }
-      .ql-editor ul,
-      .ql-editor ol {
+      .quill-viewer .ql-editor ul,
+      .quill-viewer .ql-editor ol {
         padding-left: 1em !important; 
         margin: 0.25em 0 !important; 
       }
-      .ql-editor code {
+      .quill-viewer .ql-editor code {
         white-space: pre-wrap !important;
         line-height: 1 !important; 
         padding: 0.1em 0.2em !important;
         background-color: #f5f5f5 !important;
       }
-      .ql-editor pre {
+      .quill-viewer .ql-editor pre {
         background-color: #f5f5f5 !important;
       }
-      .ql-editor .hljs {
+      .quill-viewer .ql-editor .hljs {
         padding: 0.2em !important;
         font-size: 0.95em !important;
       }
