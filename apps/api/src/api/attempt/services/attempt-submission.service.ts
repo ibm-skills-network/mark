@@ -102,6 +102,12 @@ type DeterministicAiFeedbackPayload = {
   }>;
 };
 
+type DeterministicAiFeedbackMetadata = Record<string, any> & {
+  aiFeedback?: string;
+  deterministicFeedback?: unknown;
+  deterministicAiFeedbackGeneratedAt?: string;
+};
+
 @Injectable()
 export class AttemptSubmissionService {
   private readonly logger = new Logger(AttemptSubmissionService.name);
@@ -2270,7 +2276,7 @@ Questions:
     // Validate all items before touching the DB.
     const updates: Array<{
       id: number;
-      feedbackPayload: Array<{ feedback: string }>;
+      metadataPayload: DeterministicAiFeedbackMetadata;
       item: GradedItem;
     }> = [];
     for (const item of gradedItems) {
@@ -2289,24 +2295,29 @@ Questions:
 
       updates.push({
         id: item.responseDto.id,
-        feedbackPayload: [{ feedback }],
+        metadataPayload: Object.assign({}, item.responseDto.metadata, {
+          aiFeedback: feedback,
+          deterministicFeedback: item.responseDto.feedback ?? [],
+          deterministicAiFeedbackGeneratedAt: new Date().toISOString(),
+        }),
         item,
       });
     }
 
     // Batch all updates in a single transaction instead of N sequential writes.
     await this.prisma.$transaction(
-      updates.map(({ id, feedbackPayload }) =>
+      updates.map(({ id, metadataPayload }) =>
         this.prisma.questionResponse.update({
           where: { id },
-          data: { feedback: feedbackPayload },
+          data: { metadata: metadataPayload },
         }),
       ),
     );
 
-    // Update in-memory items so callers see the new feedback without a DB reload.
-    for (const { feedbackPayload, item } of updates) {
-      item.responseDto.feedback = feedbackPayload;
+    // Update in-memory items so callers see the AI feedback without a DB reload,
+    // while leaving deterministic feedback in the original feedback field.
+    for (const { metadataPayload, item } of updates) {
+      item.responseDto.metadata = metadataPayload;
     }
   }
 

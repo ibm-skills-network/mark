@@ -98,6 +98,7 @@ jobs:
   resources: {}
   env:
     ENABLE_JOB_SCHEDULERS: "true"
+    AI_FEEDBACK_RERUN_STALE_PROCESSING_MINUTES: "30"
     # Enable Instana APM for the jobs worker. The collector reads
     # INSTANA_SERVICE_NAME to label this service in Instana.
     INSTANA_ENABLED: "true"

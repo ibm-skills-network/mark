@@ -49,6 +49,7 @@ env:
   # the GRADING_CONCURRENCY name with the LLM cap; renamed so tuning one
   # tier doesn't silently retune the other.
   GRADING_WORKER_CONCURRENCY: "4"
+  AI_FEEDBACK_RERUN_STALE_PROCESSING_MINUTES: "30"
   # Hard cap on evidence blocks per submission ingestion (spreadsheet text
   # splitting + PDF structure extraction). The code falls back to 50000 when
   # this is unset, empty, or not a positive integer.

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import { GradingStatus } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
 import { AdminEmailService } from "../../../auth/services/admin-email.service";
@@ -58,6 +59,7 @@ export type ProgressUpdateCallback = (
 @Injectable()
 export class GradingProgressService {
   private readonly logger = new Logger(GradingProgressService.name);
+  private isCleaningStaleAiFeedbackReruns = false;
   private progressCallbacks = new Map<number, ProgressUpdateCallback>();
   private perQuestionState = new Map<
     number,
@@ -68,6 +70,64 @@ export class GradingProgressService {
     private readonly prisma: PrismaService,
     private readonly emailService: AdminEmailService,
   ) {}
+
+  private areSchedulersEnabled(): boolean {
+    return process.env.ENABLE_JOB_SCHEDULERS === "true";
+  }
+
+  private getStaleAiFeedbackRerunCutoff(): Date {
+    const rawMinutes = process.env.AI_FEEDBACK_RERUN_STALE_PROCESSING_MINUTES;
+    const parsed = rawMinutes ? Number(rawMinutes) : 30;
+    const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+    return new Date(Date.now() - minutes * 60_000);
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async cleanupStaleAiFeedbackReruns(): Promise<number> {
+    if (!this.areSchedulersEnabled()) {
+      return 0;
+    }
+
+    if (this.isCleaningStaleAiFeedbackReruns) {
+      this.logger.warn(
+        "Skipping stale AI feedback rerun cleanup - previous run still in progress",
+      );
+      return 0;
+    }
+
+    this.isCleaningStaleAiFeedbackReruns = true;
+    try {
+      const cutoff = this.getStaleAiFeedbackRerunCutoff();
+      const result = await this.prisma.gradingProgress.updateMany({
+        where: {
+          status: GradingStatus.PROCESSING,
+          error: { not: null },
+          updatedAt: { lt: cutoff },
+        },
+        data: {
+          status: GradingStatus.COMPLETED,
+          progress: 100,
+          currentStage: "Grading complete!",
+        },
+      });
+
+      if (result.count > 0) {
+        this.logger.warn(
+          `Restored ${result.count} stale AI feedback rerun lock(s) to retryable state`,
+        );
+      }
+
+      return result.count;
+    } catch (error) {
+      this.logger.error(
+        "Failed to clean up stale AI feedback rerun locks",
+        error,
+      );
+      return 0;
+    } finally {
+      this.isCleaningStaleAiFeedbackReruns = false;
+    }
+  }
 
   /**
    * Register a callback for progress updates

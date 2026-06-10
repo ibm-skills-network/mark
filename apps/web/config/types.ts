@@ -453,6 +453,11 @@ export type QuestionResponse = {
   learnerResponse: string;
   points: number;
   feedback: Feedback[];
+  metadata?: {
+    aiFeedback?: string;
+    deterministicFeedback?: Feedback[] | unknown;
+    [key: string]: unknown;
+  } | null;
   learnerAnswerChoice?: boolean;
 };
 export interface BaseQuestion {
