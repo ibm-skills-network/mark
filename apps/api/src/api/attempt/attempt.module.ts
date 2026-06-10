@@ -82,6 +82,10 @@ import { TranslationService } from "./services/translation/translation.service";
       provide: GRADING_PROGRESS_SERVICE,
       useClass: GradingProgressService,
     },
+    {
+      provide: "GradingProgressService",
+      useExisting: GRADING_PROGRESS_SERVICE,
+    },
     GradingRateLimiterService,
     {
       provide: GRADING_CONSISTENCY_SERVICE,
@@ -122,6 +126,11 @@ import { TranslationService } from "./services/translation/translation.service";
     AttemptRegradingService,
     AttemptReportingService,
     QuestionResponseService,
+    GRADING_PROGRESS_SERVICE,
+    // Exported so apps/jobs JobWorkerService can call markFailed when a
+    // grading BullMQ job permanent-fails. Keep the legacy string token as an
+    // alias while new code injects GRADING_PROGRESS_SERVICE.
+    "GradingProgressService",
   ],
 })
 export class AttemptModule {}
