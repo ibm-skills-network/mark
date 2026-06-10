@@ -1166,7 +1166,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       );
     }
 
-    const assignment = (await this.prisma.assignment.findUnique({
+    const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
         id: true,
@@ -1203,7 +1203,13 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           },
         },
       },
-    })) as LearnerGetAssignmentResponseDto;
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
+      );
+    }
 
     const correctAnswerVisibility =
       assignment.currentVersion?.correctAnswerVisibility || "NEVER";
