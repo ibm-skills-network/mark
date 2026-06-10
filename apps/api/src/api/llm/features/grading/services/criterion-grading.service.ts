@@ -78,7 +78,10 @@ export class CriterionGradingService {
       question: request.question,
       allowedPoints,
       evidenceText: request.evidence
-        .map((item) => `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}`)
+        .map((item) => {
+          const label = item.contradiction ? " [CONTRADICTS CRITERION]" : "";
+          return `- ${item.chunkId}${label}: ${item.quote} | ${this.formatAnchor(item)}`;
+        })
         .join("\n"),
       judgeFeedback: request.judgeFeedback || "None",
       formatInstructions,

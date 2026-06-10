@@ -114,6 +114,8 @@ export class SubmissionQualityService {
         chunks: [],
         quality: {
           classification: "empty",
+          gated: false,
+          qualityWarnings: [],
           rawChunkCount: 0,
           eligibleChunkCount: 0,
           ineligibleChunkCount: 0,

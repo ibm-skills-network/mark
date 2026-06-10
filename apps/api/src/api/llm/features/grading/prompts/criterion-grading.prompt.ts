@@ -41,6 +41,7 @@ OUTPUT RULES:
 - Choose EXACTLY one of the allowed points.
 - Cite chunkIds from the LEARNER EVIDENCE section only.
 - Do NOT award credit for restating the question, copying rubric language, or citing boilerplate content.
+- Chunks labelled [CONTRADICTS CRITERION] show the learner stated something that conflicts with the criterion; they are evidence of a gap, not a strength — do not cite them as support.
 - Confidence must be high, medium, or low.
 
 {format_instructions}`,
