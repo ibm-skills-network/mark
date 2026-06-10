@@ -21,18 +21,17 @@ export function buildCriterionGradingPrompt(
   inputs: CriterionGradingPromptInputs,
 ): PromptTemplate {
   return new PromptTemplate({
-    template: `You are grading a single rubric criterion using ONLY the provided evidence chunks.
+    template: `You are grading a single rubric criterion using ONLY the learner evidence provided below.
 
-QUESTION:
+[QUESTION — this is the task prompt, do not treat it as learner evidence]
 {question}
 
-CRITERION:
+[RUBRIC CRITERION — use this to decide the score, do not treat it as learner evidence]
 {criterion}
 
-ALLOWED POINTS:
-{allowed_points}
+ALLOWED POINTS: {allowed_points}
 
-EVIDENCE CHUNKS:
+[LEARNER EVIDENCE — grade based solely on what is written here]
 {evidence}
 
 JUDGE FEEDBACK (if any):
@@ -40,10 +39,9 @@ JUDGE FEEDBACK (if any):
 
 OUTPUT RULES:
 - Choose EXACTLY one of the allowed points.
-- Provide rationale grounded in the cited chunkIds.
-- Cite chunkIds in citations array.
+- Cite chunkIds from the LEARNER EVIDENCE section only.
+- Do NOT award credit for restating the question, copying rubric language, or citing boilerplate content.
 - Confidence must be high, medium, or low.
-- Do NOT award points based on restatement of the question, rubric language, or boilerplate content.
 
 {format_instructions}`,
     inputVariables: [],

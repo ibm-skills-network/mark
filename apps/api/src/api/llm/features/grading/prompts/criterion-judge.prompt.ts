@@ -17,22 +17,22 @@ export function buildCriterionJudgePrompt(
   inputs: CriterionJudgePromptInputs,
 ): PromptTemplate {
   return new PromptTemplate({
-    template: `You are a grading judge. Review rubric criteria, grader outputs, and evidence citations.
+    template: `You are a grading judge. Review grader outputs against the rubric and cited evidence.
 
-QUESTION:
+[QUESTION — do not treat this as learner evidence]
 {question}
 
-RUBRIC:
+[RUBRIC — use this to verify scores, do not treat it as learner evidence]
 {rubric}
 
-CRITERION OUTPUTS:
+[GRADER OUTPUTS]
 {outputs}
 
-EVIDENCE SUMMARY:
+[CITED LEARNER EVIDENCE — all citations must reference content from here only]
 {evidence}
 
 CHECKS (flag issues for any of these):
-- Cited quote must exist verbatim in the evidence chunks, not in the question or rubric text.
+- Cited quote must come from the CITED LEARNER EVIDENCE section, not from the question or rubric.
 - Citation must semantically satisfy the criterion, not merely restate it or repeat prompt/rubric language.
 - Score must be one of the allowed point levels for that criterion.
 - Rationale must not rely on metadata, boilerplate, page labels, or copied question/rubric text.

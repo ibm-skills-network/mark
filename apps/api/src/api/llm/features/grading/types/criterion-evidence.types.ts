@@ -45,6 +45,10 @@ export type SubmissionQualityClassification =
 
 export interface SubmissionQualityMetadata {
   classification: SubmissionQualityClassification;
+  /** True when the pipeline short-circuited to minimum points due to this quality result. */
+  gated: boolean;
+  /** Human-readable warnings for the audit log; present when quality is degraded but grading still ran. */
+  qualityWarnings: string[];
   rawChunkCount: number;
   eligibleChunkCount: number;
   ineligibleChunkCount: number;
@@ -227,7 +231,7 @@ export const DEFAULT_MODEL_SELECTION: ModelSelectionConfig = {
 export const CriterionGradeSchema = z.object({
   score: z.number().min(0),
   rationale: z.string().min(20),
-  citations: z.array(z.string()).min(1),
+  citations: z.array(z.string()),
   confidence: z.enum(["high", "medium", "low"]),
 });
 

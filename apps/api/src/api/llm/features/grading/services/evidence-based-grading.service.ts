@@ -308,17 +308,16 @@ export class EvidenceBasedGradingService {
     const prompt = new PromptTemplate({
       template: `You are grading a single criterion from a rubric. You MUST provide evidence before making any decision.
 
-QUESTION:
+[QUESTION — this is the task prompt, do not cite it as evidence]
 {question}
 
-CRITERION TO EVALUATE:
+[RUBRIC CRITERION — use this to decide the score, do not cite it as evidence]
 {criterion_name}
 {criterion_description}
 
-ALLOWED POINTS:
-{allowed_points_list}
+ALLOWED POINTS: {allowed_points_list}
 
-SUBMISSION CONTENT:
+[LEARNER SUBMISSION — cite only from this section as evidence]
 {submission_context}
 
 JUDGE FEEDBACK (if any):

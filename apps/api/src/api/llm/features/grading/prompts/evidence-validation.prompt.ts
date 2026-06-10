@@ -14,13 +14,13 @@ export function buildEvidenceValidationPrompt(
   return new PromptTemplate({
     template: `You are validating evidence for a single grading criterion.
 
-CRITERION:
+[CRITERION — do not cite this section as learner evidence]
 {criterion}
 
-QUESTION CONTEXT:
+[QUESTION — do not cite this section as learner evidence]
 {question}
 
-CANDIDATE CHUNKS (ID + text + anchor):
+[CANDIDATE LEARNER EVIDENCE CHUNKS — classify only what the learner wrote]
 {chunks}
 
 Return JSON listing which chunkIds are relevant.

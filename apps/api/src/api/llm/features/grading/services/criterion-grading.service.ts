@@ -179,13 +179,6 @@ export class CriterionGradingService {
     return nearest;
   }
 
-  private formatCriterion(criterion: RubricCriterion): string {
-    const levels = criterion.criteria
-      .map((level) => `- ${level.points} pts: ${level.description}`)
-      .join("\n");
-    return `${criterion.rubricQuestion}\n${criterion.description}\n${levels}`;
-  }
-
   private formatAnchor(evidence: CriterionEvidence): string {
     switch (evidence.anchor.type) {
       case "file": {

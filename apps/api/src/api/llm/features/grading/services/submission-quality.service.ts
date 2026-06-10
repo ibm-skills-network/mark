@@ -131,7 +131,8 @@ export class SubmissionQualityService {
       : new Set<string>();
 
     const pageTextCounts = this.buildPageTextCounts(chunks);
-    const boilerplateTexts = this.detectBoilerplateTexts(pageTextCounts);
+    const textRepeatCounts = this.buildTextRepeatCounts(chunks);
+    const boilerplateTexts = this.detectBoilerplateTexts(pageTextCounts, textRepeatCounts);
 
     const annotated: ExtractedChunk[] = chunks.map((chunk) => {
       const quality = this.classifyChunk(
@@ -183,10 +184,20 @@ export class SubmissionQualityService {
       avgSubstantiveTokensPerPage,
     });
 
+    const qualityWarnings = this.buildWarnings({
+      ineligibleCount: ineligibleChunks.length,
+      totalChunks: chunks.length,
+      boilerplateRatio,
+      reasonBreakdown,
+      classification,
+    });
+
     return {
       chunks: annotated,
       quality: {
         classification,
+        gated: false, // pipeline sets this to true when it short-circuits
+        qualityWarnings,
         rawChunkCount: chunks.length,
         eligibleChunkCount: eligibleChunks.length,
         ineligibleChunkCount: ineligibleChunks.length,
@@ -196,6 +207,43 @@ export class SubmissionQualityService {
         ineligibleReasonBreakdown: reasonBreakdown,
       },
     };
+  }
+
+  private buildWarnings(params: {
+    ineligibleCount: number;
+    totalChunks: number;
+    boilerplateRatio: number;
+    reasonBreakdown: Partial<Record<ChunkIneligibleReason, number>>;
+    classification: SubmissionQualityClassification;
+  }): string[] {
+    const warnings: string[] = [];
+    if (params.ineligibleCount > 0) {
+      warnings.push(
+        `${params.ineligibleCount}/${params.totalChunks} chunks excluded as ineligible`,
+      );
+    }
+    if (params.boilerplateRatio >= 0.5) {
+      warnings.push(
+        `High boilerplate ratio: ${Math.round(params.boilerplateRatio * 100)}%`,
+      );
+    }
+    if (params.reasonBreakdown.prompt_copy) {
+      warnings.push(
+        `${params.reasonBreakdown.prompt_copy} chunk(s) matched question text (prompt_copy)`,
+      );
+    }
+    if (params.reasonBreakdown.rubric_copy) {
+      warnings.push(
+        `${params.reasonBreakdown.rubric_copy} chunk(s) matched rubric text (rubric_copy)`,
+      );
+    }
+    if (
+      params.classification === "boilerplate_many_pages" ||
+      params.classification === "low_information"
+    ) {
+      warnings.push(`Submission classified as ${params.classification}`);
+    }
+    return warnings;
   }
 
   private classifyChunk(
@@ -290,12 +338,30 @@ export class SubmissionQualityService {
     return pagesByText;
   }
 
+  // For text/url chunks that have no page anchor, count raw repetitions.
+  private buildTextRepeatCounts(chunks: ExtractedChunk[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const chunk of chunks) {
+      if (this.getChunkPage(chunk) !== null) continue; // page-based detection covers these
+      const key = this.normalizeForDedup(chunk.text);
+      if (!key) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }
+
   private detectBoilerplateTexts(
     pageTextCounts: Map<string, Set<number>>,
+    textRepeatCounts: Map<string, number>,
   ): Set<string> {
     const boilerplate = new Set<string>();
     for (const [text, pages] of pageTextCounts) {
       if (pages.size >= GRADING_QUALITY.BOILERPLATE_REPEAT_MIN_PAGES) {
+        boilerplate.add(text);
+      }
+    }
+    for (const [text, count] of textRepeatCounts) {
+      if (count >= GRADING_QUALITY.BOILERPLATE_REPEAT_MIN_PAGES) {
         boilerplate.add(text);
       }
     }
@@ -345,9 +411,12 @@ export class SubmissionQualityService {
     pageCount?: number;
     avgSubstantiveTokensPerPage?: number;
   }): SubmissionQualityClassification {
-    if (params.totalChunks === 0 || params.eligibleCount === 0) {
-      if (params.totalChunks === 0) return "empty";
+    if (params.totalChunks === 0) return "empty";
 
+    // Rejection-level classifications only apply when there are NO eligible chunks.
+    // When eligible chunks exist, grading proceeds and the classification is "clean"
+    // regardless of boilerplate ratio — quality signal is surfaced via qualityWarnings.
+    if (params.eligibleCount === 0) {
       if (
         params.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL &&
         (params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
@@ -358,30 +427,13 @@ export class SubmissionQualityService {
       if (
         params.avgSubstantiveTokensPerPage !== undefined &&
         params.avgSubstantiveTokensPerPage <
-          GRADING_QUALITY.LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE
+          GRADING_QUALITY.LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE &&
+        (params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
       ) {
-        if ((params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD) {
-          return "low_information";
-        }
+        return "low_information";
       }
 
       return "empty";
-    }
-
-    if (
-      params.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL &&
-      (params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
-    ) {
-      return "boilerplate_many_pages";
-    }
-
-    if (
-      params.avgSubstantiveTokensPerPage !== undefined &&
-      params.avgSubstantiveTokensPerPage <
-        GRADING_QUALITY.LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE &&
-      (params.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
-    ) {
-      return "low_information";
     }
 
     return "clean";

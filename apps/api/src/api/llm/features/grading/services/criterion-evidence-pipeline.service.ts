@@ -162,7 +162,13 @@ export class CriterionEvidencePipelineService {
         createdAt: new Date().toISOString(),
       };
 
-      return { grades, evidence: [], judgeCritiques: [], summary, audit };
+      return {
+        grades,
+        evidence: [],
+        judgeCritiques: [],
+        summary,
+        audit: { ...audit, submissionQuality: { ...submissionQuality, gated: true } },
+      };
     }
 
     const limiter = new ConcurrencyLimiter(request.maxConcurrency ?? 6);
