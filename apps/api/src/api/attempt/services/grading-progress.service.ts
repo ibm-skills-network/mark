@@ -301,6 +301,7 @@ export class GradingProgressService {
         `Failed to persist AI feedback error for attempt ${attemptId}`,
         updateError,
       );
+      throw updateError;
     }
   }
 
@@ -320,6 +321,7 @@ export class GradingProgressService {
         `Failed to clear AI feedback error for attempt ${attemptId}`,
         updateError,
       );
+      throw updateError;
     }
   }
 

@@ -806,7 +806,10 @@ export class AttemptSubmissionService {
           );
     }
 
-    await this.progressService?.clearAiFeedbackError(attemptId);
+    await this.prisma.gradingProgress.update({
+      where: { attemptId },
+      data: { status: GradingStatus.COMPLETED, error: null },
+    });
 
     return { success: true };
   }
@@ -1231,12 +1234,37 @@ export class AttemptSubmissionService {
         await progressCallback("Grading completed!", 100);
       }
 
-      await (aiFeedbackError
-        ? this.progressService?.markCompleteWithAiFeedbackError(
+      if (aiFeedbackError && this.progressService) {
+        try {
+          await this.progressService.markCompleteWithAiFeedbackError(
             attemptId,
             aiFeedbackError,
-          )
-        : this.progressService?.markComplete(attemptId));
+          );
+        } catch (progressError) {
+          this.logger.error(
+            "AI feedback failed but retry state could not be persisted; completing attempt without retry marker",
+            {
+              attemptId,
+              assignmentId,
+              error:
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError),
+            },
+          );
+          aiFeedbackError = null;
+          await this.progressService.markComplete(attemptId);
+        }
+      } else {
+        if (aiFeedbackError) {
+          this.logger.warn(
+            "AI feedback failed but GradingProgressService is unavailable; completing attempt without retry marker",
+            { attemptId, assignmentId },
+          );
+          aiFeedbackError = null;
+        }
+        await this.progressService?.markComplete(attemptId);
+      }
 
       return {
         id: attemptId,

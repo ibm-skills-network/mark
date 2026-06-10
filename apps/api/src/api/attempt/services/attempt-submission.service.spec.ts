@@ -1199,6 +1199,35 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       ]);
     });
 
+    it("does not expose a retry marker when AI feedback error persistence fails", async () => {
+      mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
+      mockPromptProcessor.processPromptForFeature.mockRejectedValue(
+        new Error("AI service unavailable"),
+      );
+      mockProgressService.markCompleteWithAiFeedbackError.mockRejectedValue(
+        new Error("progress update failed"),
+      );
+
+      const result = await service.updateAssignmentAttempt(
+        attemptId,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "auth-cookie",
+        true,
+        learnerRequest as UpdateAttemptRequest,
+      );
+
+      expect(result.aiFeedbackError).toBeNull();
+      expect(
+        mockProgressService.markCompleteWithAiFeedbackError,
+      ).toHaveBeenCalledWith(
+        attemptId,
+        expect.stringContaining("AI feedback generation failed"),
+      );
+      expect(mockProgressService.markComplete).toHaveBeenCalledWith(attemptId);
+      expect(mockProgressService.markFailed).not.toHaveBeenCalled();
+    });
+
     it("skips AI feedback when submission feedback is hidden", async () => {
       mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
       mockPrisma.assignment.findUnique.mockResolvedValue({
@@ -1343,6 +1372,33 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           where: { assignmentAttemptId: attemptId },
         }),
       );
+      expect(mockPromptProcessor.processPromptForFeature).toHaveBeenCalled();
+      expect(mockPrisma.questionResponse.update).toHaveBeenCalledWith({
+        where: { id: 456 },
+        data: {
+          feedback: [
+            {
+              feedback: "Regenerated AI feedback from persisted response.",
+            },
+          ],
+        },
+      });
+      expect(mockPrisma.gradingProgress.update).toHaveBeenCalledWith({
+        where: { attemptId },
+        data: { status: GradingStatus.COMPLETED, error: null },
+      });
+      expect(mockProgressService.clearAiFeedbackError).not.toHaveBeenCalled();
+    });
+
+    it("fails rerun when regenerated feedback cannot clear the retry marker", async () => {
+      mockPrisma.gradingProgress.update.mockRejectedValueOnce(
+        new Error("clear failed"),
+      );
+
+      await expect(
+        service.rerunAiFeedbackForDeterministicAttempt(attemptId, assignmentId),
+      ).rejects.toThrow("clear failed");
+
       expect(mockPromptProcessor.processPromptForFeature).toHaveBeenCalled();
       expect(mockPrisma.questionResponse.update).toHaveBeenCalledWith({
         where: { id: 456 },
