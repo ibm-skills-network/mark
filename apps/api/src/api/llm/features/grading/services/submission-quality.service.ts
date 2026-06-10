@@ -166,14 +166,17 @@ export class SubmissionQualityService {
       }
     }
 
-    // Use only eligible-chunk pages as the denominator so ineligible boilerplate
-    // pages don't dilute the per-page token average for real learner content.
-    const pageNumbers = this.extractPageNumbers(eligibleChunks);
-    const pageCount = pageNumbers.size > 0 ? pageNumbers.size : undefined;
+    // pageCount uses ALL chunks so the threshold check (>= 25 pages) works even
+    // when every chunk is ineligible (e.g. poison PDFs with zero eligible content).
+    const allPageNumbers = this.extractPageNumbers(chunks);
+    const pageCount = allPageNumbers.size > 0 ? allPageNumbers.size : undefined;
 
+    // Avg tokens per page uses only eligible-chunk pages so boilerplate pages
+    // don't dilute the density signal for real learner content.
+    const eligiblePageNumbers = this.extractPageNumbers(eligibleChunks);
     const avgSubstantiveTokensPerPage =
-      pageCount && pageCount > 0
-        ? this.computeAvgSubstantiveTokensPerPage(eligibleChunks, pageNumbers)
+      eligiblePageNumbers.size > 0
+        ? this.computeAvgSubstantiveTokensPerPage(eligibleChunks, eligiblePageNumbers)
         : undefined;
 
     const classification = this.classifySubmission({
@@ -338,11 +341,13 @@ export class SubmissionQualityService {
     return pagesByText;
   }
 
-  // For text/url chunks that have no page anchor, count raw repetitions.
+  // For text/url chunks only, count raw repetitions for boilerplate detection.
+  // Image chunks (pageless or not) are excluded: identical OCR text across
+  // multiple images (e.g. same header or logo) is not a sign of boilerplate.
   private buildTextRepeatCounts(chunks: ExtractedChunk[]): Map<string, number> {
     const counts = new Map<string, number>();
     for (const chunk of chunks) {
-      if (this.getChunkPage(chunk) !== null) continue; // page-based detection covers these
+      if (chunk.anchor.type !== "text" && chunk.anchor.type !== "url") continue;
       const key = this.normalizeForDedup(chunk.text);
       if (!key) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
