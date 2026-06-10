@@ -173,14 +173,17 @@ export class TranslationService implements OnModuleDestroy {
   // rejected the operation, and the retries never ran: every publish with
   // enough concurrent calls lost 1-2 languages at exactly the 90s mark.
   // Worst-case per-language time exceeds the 120s BullMQ lockDuration on
-  // the translations queue; that is fine — the worker auto-renews its lock
-  // while the event loop is responsive, and a job that is genuinely lost is
-  // redelivered with forceRetranslation: false, re-attempting only the
-  // still-missing languages.
-  private readonly FANOUT_OPERATION_EXPIRATION =
-    this.OPERATION_TIMEOUT * this.MAX_RETRY_ATTEMPTS +
-    this.RETRY_DELAY_BASE * 2 * (this.MAX_RETRY_ATTEMPTS - 1) +
-    10_000;
+  // the translations queue; that is fine while the event loop stays
+  // responsive, because the worker auto-renews its lock every
+  // lockDuration/2. If the event loop stalls past the lock window the job
+  // fails permanently — the translations queue runs maxStalledCount=0, so
+  // there is NO stall redelivery — and recovery is the author-facing
+  // Retry, which re-runs with forceRetranslation: false and fills only
+  // the missing languages.
+  // Assigned in the constructor rather than via a field initializer: an
+  // initializer reading sibling fields silently evaluates to NaN if the
+  // constant declarations above are ever reordered below this one.
+  private readonly FANOUT_OPERATION_EXPIRATION: number;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
 
@@ -210,6 +213,11 @@ export class TranslationService implements OnModuleDestroy {
   ) {
     this._languageTranslation =
       process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";
+
+    this.FANOUT_OPERATION_EXPIRATION =
+      this.OPERATION_TIMEOUT * this.MAX_RETRY_ATTEMPTS +
+      this.RETRY_DELAY_BASE * 2 * (this.MAX_RETRY_ATTEMPTS - 1) +
+      10_000;
 
     this.limiter = this.createDefaultLimiter();
     this.watsonxLimiter = this.createWatsonxLimiter();
@@ -358,6 +366,21 @@ export class TranslationService implements OnModuleDestroy {
     const codes = getAllLanguageCodes();
     if (codes.length === 0) return;
     await this.releaseInflightLanguages(assignmentId, codes);
+  }
+
+  /**
+   * Terminal status for a publish-hash entry after a fan-out run.
+   * While BullMQ attempts remain the executor rethrows on partial failure
+   * and a retry will fill the missing languages, so the entry stays
+   * in_progress — "failed" is reserved for the final attempt
+   * (markTerminalFailure), where it is what the author actually sees.
+   */
+  private terminalEntryStatus(
+    failed: number,
+    markTerminalFailure: boolean,
+  ): PerJobTranslationEntry["status"] {
+    if (failed === 0) return "completed";
+    return markTerminalFailure ? "failed" : "in_progress";
   }
 
   private async markPublishTranslationCompleted(
@@ -1455,16 +1478,10 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "meta",
             id: assignmentId,
-            // While BullMQ attempts remain the executor rethrows on partial
-            // failure and a retry will fill the missing languages, so the
-            // entry stays in_progress — "failed" is reserved for the final
-            // attempt, where it is what the author actually sees.
-            status:
-              outcome.failed > 0
-                ? markTerminalFailure
-                  ? "failed"
-                  : "in_progress"
-                : "completed",
+            status: this.terminalEntryStatus(
+              outcome.failed,
+              markTerminalFailure,
+            ),
             languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
@@ -1780,16 +1797,10 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "question",
             id: questionId,
-            // While BullMQ attempts remain the executor rethrows on partial
-            // failure and a retry will fill the missing languages, so the
-            // entry stays in_progress — "failed" is reserved for the final
-            // attempt, where it is what the author actually sees.
-            status:
-              outcome.failed > 0
-                ? markTerminalFailure
-                  ? "failed"
-                  : "in_progress"
-                : "completed",
+            status: this.terminalEntryStatus(
+              outcome.failed,
+              markTerminalFailure,
+            ),
             languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
@@ -2093,16 +2104,10 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "variant",
             id: variantId,
-            // While BullMQ attempts remain the executor rethrows on partial
-            // failure and a retry will fill the missing languages, so the
-            // entry stays in_progress — "failed" is reserved for the final
-            // attempt, where it is what the author actually sees.
-            status:
-              outcome.failed > 0
-                ? markTerminalFailure
-                  ? "failed"
-                  : "in_progress"
-                : "completed",
+            status: this.terminalEntryStatus(
+              outcome.failed,
+              markTerminalFailure,
+            ),
             languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),

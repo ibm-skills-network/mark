@@ -239,12 +239,10 @@ export class JobExecutorService {
     switch (jobName) {
       case JOB_NAMES.TRANSLATE_QUESTION: {
         const jobPayload = payload as TranslateQuestionJobPayload;
-        // Retry attempts must not force-retranslate: the first attempt
-        // already wrote every language that succeeded, and forcing would
-        // delete those rows and redo all of them. forceRetranslation: false
-        // fills only the still-missing languages.
-        const forceRetranslation =
-          (jobPayload.forceRetranslation ?? true) && attemptsMade === 0;
+        const forceRetranslation = this.resolveForceRetranslation(
+          jobPayload.forceRetranslation,
+          attemptsMade,
+        );
         try {
           const { inserted, skipped, failed } =
             await this.translationService.translateQuestion(
@@ -292,8 +290,10 @@ export class JobExecutorService {
       }
       case JOB_NAMES.TRANSLATE_VARIANT: {
         const jobPayload = payload as TranslateVariantJobPayload;
-        const forceRetranslation =
-          (jobPayload.forceRetranslation ?? true) && attemptsMade === 0;
+        const forceRetranslation = this.resolveForceRetranslation(
+          jobPayload.forceRetranslation,
+          attemptsMade,
+        );
         try {
           const { inserted, skipped, failed } =
             await this.translationService.translateVariant(
@@ -391,6 +391,19 @@ export class JobExecutorService {
         );
       }
     }
+  }
+
+  /**
+   * Retry attempts must not force-retranslate: the first attempt already
+   * wrote every language that succeeded, and forcing would delete those
+   * rows and redo all of them. forceRetranslation: false fills only the
+   * still-missing languages.
+   */
+  private resolveForceRetranslation(
+    requested: boolean | undefined,
+    attemptsMade: number,
+  ): boolean {
+    return (requested ?? true) && attemptsMade === 0;
   }
 
   /**

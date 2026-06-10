@@ -35,6 +35,8 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       modelName:
         options?.modelName ?? Gpt4VisionPreviewLlmService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens ?? 4096,
+      timeout: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
     });
   }
 

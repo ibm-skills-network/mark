@@ -33,12 +33,11 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
    * Create a ChatOpenAI instance with the given options
    */
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
-    const config: any = {
+    return new ChatOpenAI({
       modelName: options?.modelName ?? Gpt5NanoLlmService.DEFAULT_MODEL,
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    return new ChatOpenAI(config);
+      timeout: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
+    });
   }
 
   /**
