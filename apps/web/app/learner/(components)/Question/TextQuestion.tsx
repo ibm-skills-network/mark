@@ -30,6 +30,7 @@ function TextQuestion(props: Props) {
       value={question?.learnerTextResponse || ""}
       setValue={(value) => setTextResponse(value, question.id)}
       placeholder="Type your answer here"
+      toolbarMode="learner"
       maxWords={maxWords}
       maxCharacters={maxCharacters}
       allowCopy={!(questionControls?.disableCopy ?? false)}
