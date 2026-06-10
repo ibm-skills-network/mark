@@ -20,6 +20,7 @@ import { CriterionGradingService } from "./criterion-grading.service";
 import { CriterionJudgeService } from "./criterion-judge.service";
 import { CriterionRetryManagerService } from "./criterion-retry-manager.service";
 import { CriterionGradeCompilerService } from "./criterion-grade-compiler.service";
+import { SubmissionQualityService } from "./submission-quality.service";
 
 interface PipelineRequest {
   question: string;
@@ -88,11 +89,82 @@ export class CriterionEvidencePipelineService {
     private readonly judgeService: CriterionJudgeService,
     private readonly retryManager: CriterionRetryManagerService,
     private readonly compiler: CriterionGradeCompilerService,
+    private readonly qualityService: SubmissionQualityService,
   ) {}
 
   async gradeWithEvidence(request: PipelineRequest): Promise<PipelineResult> {
     const auditCollector = new AuditCollector();
-    const index = new ChunkIndex(request.chunks);
+
+    const rubricText = request.criteria
+      .map(
+        (c) =>
+          `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`,
+      )
+      .join(" ");
+
+    const { chunks: qualifiedChunks, quality: submissionQuality } =
+      this.qualityService.classifyChunks(request.chunks, {
+        question: request.question,
+        rubricText,
+      });
+
+    const index = new ChunkIndex(qualifiedChunks);
+
+    if (!index.hasEligibleChunks) {
+      this.logger.warn(
+        `Quality gate: zero eligible chunks for assignment ${request.assignmentId}. ` +
+          `classification=${submissionQuality.classification}, ` +
+          `raw=${submissionQuality.rawChunkCount}, ` +
+          `ineligible=${submissionQuality.ineligibleChunkCount}`,
+      );
+
+      const grades: CriterionGrade[] = request.criteria.map((criterion) => {
+        const allowedPoints = criterion.criteria.map((l) => l.points);
+        const minPoints = Math.min(...allowedPoints);
+        return {
+          criterionId: criterion.id,
+          rubricQuestion: criterion.rubricQuestion,
+          pointsAwarded: minPoints,
+          maxPoints: criterion.maxPoints,
+          rationale:
+            "No substantive learner evidence found in the submission.",
+          citations: [],
+          confidence: "low" as const,
+          decision: "does_not_meet" as const,
+          evidence: [],
+          attempt: 1,
+          gradedAt: new Date().toISOString(),
+          modelUsed: "quality_gate",
+        };
+      });
+
+      const summary = this.compiler.compile(grades);
+
+      const rubricHash = crypto
+        .createHash("sha256")
+        .update(JSON.stringify(request.criteria))
+        .digest("hex");
+
+      const audit: EvidenceAuditLog = {
+        rubricHash,
+        chunkHashes: request.chunks.map((c) => c.hash),
+        evidenceRetrieval: [],
+        gradingAttempts: [],
+        judgeCritiques: [],
+        finalSelection: grades.map((g) => ({
+          criterionId: g.criterionId,
+          attempt: 1,
+          supportScore: 0,
+          reason: "quality_gate_no_eligible_chunks",
+        })),
+        llmCalls: [],
+        submissionQuality,
+        createdAt: new Date().toISOString(),
+      };
+
+      return { grades, evidence: [], judgeCritiques: [], summary, audit };
+    }
+
     const limiter = new ConcurrencyLimiter(request.maxConcurrency ?? 6);
     const maxRetries = request.maxRetries ?? 3;
 
@@ -103,7 +175,7 @@ export class CriterionEvidencePipelineService {
             {
               criterion,
               question: request.question,
-              chunks: request.chunks,
+              chunks: qualifiedChunks,
               assignmentId: request.assignmentId,
               language: request.language,
               modelOverride: request.modelOverrides?.retrievalModel,
@@ -297,6 +369,7 @@ export class CriterionEvidencePipelineService {
       judgeCritiques,
       auditCollector.getCalls(),
       finalSelection,
+      submissionQuality,
     );
 
     return {
@@ -315,6 +388,7 @@ export class CriterionEvidencePipelineService {
     judgeCritiques: JudgeCritique[],
     llmCalls: EvidenceAuditLog["llmCalls"],
     finalSelection: EvidenceAuditLog["finalSelection"],
+    submissionQuality?: EvidenceAuditLog["submissionQuality"],
   ): EvidenceAuditLog {
     const rubricHash = crypto
       .createHash("sha256")
@@ -333,6 +407,7 @@ export class CriterionEvidencePipelineService {
       judgeCritiques,
       finalSelection,
       llmCalls,
+      submissionQuality,
       createdAt: new Date().toISOString(),
     };
   }

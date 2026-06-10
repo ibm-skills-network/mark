@@ -1,3 +1,14 @@
+export const GRADING_QUALITY = {
+  MIN_SUBSTANTIVE_TOKENS: 6,
+  MIN_FULL_CREDIT_EVIDENCE_TOKENS: 10,
+  BOILERPLATE_REPEAT_MIN_PAGES: 5,
+  BOILERPLATE_RATIO_FAIL: 0.8,
+  LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE: 3,
+  MANY_PAGE_THRESHOLD: 25,
+  PROMPT_COPY_SIMILARITY_THRESHOLD: 0.85,
+  RUBRIC_COPY_SIMILARITY_THRESHOLD: 0.85,
+} as const;
+
 // Hard cap on the number of evidence blocks a single submission can produce.
 // Largest legitimate submissions (capstone PDFs, lecture-deck spreadsheets)
 // stay under ~1000 blocks; 50000 gives 50x headroom while still being orders

@@ -16,6 +16,44 @@ export interface RubricCriterion {
 
 export type EvidenceSourceType = "text" | "file" | "image" | "url" | "unknown";
 
+export type ChunkEligibility = "eligible" | "ineligible";
+
+export type ChunkIneligibleReason =
+  | "boilerplate"
+  | "page_label"
+  | "metadata_only"
+  | "prompt_copy"
+  | "rubric_copy"
+  | "too_short"
+  | "low_information"
+  | "duplicate"
+  | "generated_summary"
+  | "non_learner_source";
+
+export interface ChunkQuality {
+  eligibility: ChunkEligibility;
+  ineligibleReasons?: ChunkIneligibleReason[];
+  substantiveTokenCount?: number;
+}
+
+export type SubmissionQualityClassification =
+  | "clean"
+  | "boilerplate_many_pages"
+  | "low_information"
+  | "needs_visual_evidence"
+  | "empty";
+
+export interface SubmissionQualityMetadata {
+  classification: SubmissionQualityClassification;
+  rawChunkCount: number;
+  eligibleChunkCount: number;
+  ineligibleChunkCount: number;
+  boilerplateRatio: number;
+  pageCount?: number;
+  avgSubstantiveTokensPerPage?: number;
+  ineligibleReasonBreakdown: Partial<Record<ChunkIneligibleReason, number>>;
+}
+
 export type EvidenceAnchor =
   | {
       type: "text";
@@ -50,6 +88,7 @@ export interface ExtractedChunk {
   sourceId: string;
   anchor: EvidenceAnchor;
   hash: string;
+  quality?: ChunkQuality;
   metadata?: {
     filename?: string;
     mimeType?: string;
@@ -169,6 +208,7 @@ export interface EvidenceAuditLog {
     responseHash: string;
     durationMs: number;
   }>;
+  submissionQuality?: SubmissionQualityMetadata;
   createdAt: string;
 }
 
@@ -196,7 +236,14 @@ export const EvidenceValidationSchema = z.object({
     .array(
       z.object({
         chunkId: z.string(),
-        relevance: z.enum(["supports", "partial", "contradicts", "irrelevant"]),
+        relevance: z.enum([
+          "supports",
+          "partial",
+          "contradicts",
+          "restatement_only",
+          "boilerplate_only",
+          "irrelevant",
+        ]),
         note: z.string().optional(),
       }),
     )

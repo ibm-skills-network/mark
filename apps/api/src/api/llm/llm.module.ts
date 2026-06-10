@@ -28,6 +28,7 @@ import { CriterionJudgeService } from "./features/grading/services/criterion-jud
 import { CriterionRetryManagerService } from "./features/grading/services/criterion-retry-manager.service";
 import { CriterionGradeCompilerService } from "./features/grading/services/criterion-grade-compiler.service";
 import { CriterionEvidencePipelineService } from "./features/grading/services/criterion-evidence-pipeline.service";
+import { SubmissionQualityService } from "./features/grading/services/submission-quality.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
 import { EvidenceBasedGradingService } from "./features/grading/services/evidence-based-grading.service";
 import { GradingCacheService } from "./features/grading/services/grading-cache.service";
@@ -180,6 +181,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     },
     EvidenceBasedGradingService,
     EvidenceChunkingService,
+    SubmissionQualityService,
     CriterionEvidenceRetrievalService,
     CriterionGradingService,
     CriterionJudgeService,

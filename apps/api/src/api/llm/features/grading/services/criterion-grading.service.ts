@@ -1,4 +1,3 @@
-import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -12,6 +11,7 @@ import {
   CriterionGradeSchema,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { buildCriterionGradingPrompt } from "../prompts/criterion-grading.prompt";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
 type ParsedGrade = {
@@ -73,46 +73,15 @@ export class CriterionGradingService {
     const parser = StructuredOutputParser.fromZodSchema(CriterionGradeSchema);
     const formatInstructions = parser.getFormatInstructions();
 
-    const prompt = new PromptTemplate({
-      template: `You are grading a single rubric criterion using ONLY the provided evidence chunks.
-
-QUESTION:
-{question}
-
-CRITERION:
-{criterion}
-
-ALLOWED POINTS:
-{allowed_points}
-
-EVIDENCE CHUNKS:
-{evidence}
-
-JUDGE FEEDBACK (if any):
-{judge_feedback}
-
-OUTPUT RULES:
-- Choose EXACTLY one of the allowed points.
-- Provide rationale grounded in the cited chunkIds.
-- Cite chunkIds in citations array.
-- Confidence must be high, medium, or low.
-
-{format_instructions}`,
-      inputVariables: [],
-      partialVariables: {
-        question: () => request.question,
-        criterion: () => this.formatCriterion(request.criterion),
-        allowed_points: () => allowedPoints.join(", "),
-        evidence: () =>
-          request.evidence
-            .map(
-              (item) =>
-                `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}`,
-            )
-            .join("\n"),
-        judge_feedback: () => request.judgeFeedback || "None",
-        format_instructions: () => formatInstructions,
-      },
+    const prompt = buildCriterionGradingPrompt({
+      criterion: request.criterion,
+      question: request.question,
+      allowedPoints,
+      evidenceText: request.evidence
+        .map((item) => `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}`)
+        .join("\n"),
+      judgeFeedback: request.judgeFeedback || "None",
+      formatInstructions,
     });
 
     const selectedModel =

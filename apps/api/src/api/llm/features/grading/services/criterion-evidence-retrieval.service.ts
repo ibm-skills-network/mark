@@ -1,5 +1,4 @@
 import * as crypto from "node:crypto";
-import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -17,6 +16,7 @@ import {
   ExtractedChunk,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { buildEvidenceValidationPrompt } from "../prompts/evidence-validation.prompt";
 import { ChunkIndex } from "./chunk-index.service";
 
 export interface LlmCallRecorder {
@@ -138,6 +138,7 @@ export class CriterionEvidenceRetrievalService {
 
     let evidence: CriterionEvidence[] = [];
     let validatedCount = 0;
+    let validationDefinitive = false;
 
     const skipValidation = usedFallback && reranked.length > maxEvidence;
 
@@ -151,22 +152,29 @@ export class CriterionEvidenceRetrievalService {
         recorder,
       );
 
-      if (validation.length > 0) {
-        validatedCount = validation.length;
-        evidence = validation.map((item) => ({
-          chunkId: item.chunk.chunkId,
-          quote: item.chunk.text.slice(0, 220),
-          anchor: item.chunk.anchor,
-          sourceType: item.chunk.sourceType,
-          sourceId: item.chunk.sourceId,
-          relevanceScore: item.relevanceScore,
-          searchScore: item.searchScore,
-          contradiction: item.contradiction,
-        }));
+      if (validation !== null) {
+        // LLM ran and parsed successfully — its judgment is definitive.
+        // An empty array means it explicitly rejected all candidates; do not fall back.
+        validationDefinitive = true;
+        if (validation.length > 0) {
+          validatedCount = validation.length;
+          evidence = validation.map((item) => ({
+            chunkId: item.chunk.chunkId,
+            quote: item.chunk.text.slice(0, 220),
+            anchor: item.chunk.anchor,
+            sourceType: item.chunk.sourceType,
+            sourceId: item.chunk.sourceId,
+            relevanceScore: item.relevanceScore,
+            searchScore: item.searchScore,
+            contradiction: item.contradiction,
+          }));
+        }
       }
     }
 
-    if (evidence.length === 0) {
+    // Only fall back to keyword-scored candidates when validation was skipped or
+    // failed to parse (null). Never override a definitive LLM rejection.
+    if (evidence.length === 0 && !validationDefinitive) {
       evidence = reranked.map((item) => ({
         chunkId: item.chunk.chunkId,
         quote: item.chunk.text.slice(0, 220),
@@ -274,18 +282,18 @@ export class CriterionEvidenceRetrievalService {
     );
   }
 
+  // Returns null when the LLM response could not be parsed (use keyword fallback).
+  // Returns [] when the LLM ran successfully but rejected all chunks (do not fall back).
   private async validateWithLlm(
     request: CriterionEvidenceRequest,
     chunks: ExtractedChunk[],
     recorder?: LlmCallRecorder,
-  ): Promise<
-    Array<{
-      chunk: ExtractedChunk;
-      relevanceScore: number;
-      searchScore: number;
-      contradiction: boolean;
-    }>
-  > {
+  ): Promise<Array<{
+    chunk: ExtractedChunk;
+    relevanceScore: number;
+    searchScore: number;
+    contradiction: boolean;
+  }> | null> {
     if (chunks.length === 0) return [];
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -293,41 +301,16 @@ export class CriterionEvidenceRetrievalService {
     );
     const formatInstructions = parser.getFormatInstructions();
 
-    const prompt = new PromptTemplate({
-      template: `You are validating evidence for a single grading criterion.
-
-CRITERION:
-{criterion}
-
-QUESTION CONTEXT:
-{question}
-
-CANDIDATE CHUNKS (ID + text + anchor):
-{chunks}
-
-Return JSON listing which chunkIds are relevant.
-- relevance: supports | partial | contradicts | irrelevant
-- If irrelevant, still include it if it clearly contradicts the criterion.
-- Keep only the most relevant 6 chunks.
-
-{format_instructions}`,
-      inputVariables: [],
-      partialVariables: {
-        criterion: () =>
-          `${request.criterion.rubricQuestion}\n${request.criterion.description}`,
-        question: () => request.question,
-        chunks: () =>
-          chunks
-            .map(
-              (chunk) =>
-                `- ${chunk.chunkId}: ${chunk.text.slice(
-                  0,
-                  240,
-                )} | ${this.formatAnchor(chunk.anchor)}`,
-            )
-            .join("\n"),
-        format_instructions: () => formatInstructions,
-      },
+    const prompt = buildEvidenceValidationPrompt({
+      criterion: request.criterion,
+      question: request.question,
+      chunksText: chunks
+        .map(
+          (chunk) =>
+            `- ${chunk.chunkId}: ${chunk.text.slice(0, 240)} | ${this.formatAnchor(chunk.anchor)}`,
+        )
+        .join("\n"),
+      formatInstructions,
     });
 
     const model =
@@ -380,7 +363,7 @@ Return JSON listing which chunkIds are relevant.
     }
 
     this.logger.warn("Evidence validation parse failed for all candidates");
-    return [];
+    return null;
   }
 
   private mapParsedSelections(
@@ -425,6 +408,10 @@ Return JSON listing which chunkIds are relevant.
       }
       case "contradicts": {
         return 0.2;
+      }
+      case "restatement_only":
+      case "boilerplate_only": {
+        return 0;
       }
       default: {
         return 0;
