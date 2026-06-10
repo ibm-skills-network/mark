@@ -204,6 +204,60 @@ export class AssignmentControllerV2 {
   }
 
   /**
+   * Insights for one of the author's own assignments (ownership-scoped). The
+   * author-facing counterpart to the admin insights endpoint — same data, minus
+   * admin-only issue reports, over the normal app session.
+   */
+  @Get(":id/insights")
+  @Roles(UserRole.AUTHOR)
+  @ApiOperation({ summary: "Author insights for one of their own assignments" })
+  @ApiParam({ name: "id", required: true, description: "Assignment ID" })
+  @ApiResponse({ status: 200 })
+  async getAuthorAssignmentInsights(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<Record<string, unknown>> {
+    // Enforce ownership here, not only in the service: the insights cache can
+    // short-circuit the service's authorship filter, so a fresh check stops an
+    // author reading another author's assignment via a warm cache.
+    const owns = await this.prisma.assignmentAuthor.findFirst({
+      where: { assignmentId: id, userId: request.userSession.userId },
+    });
+    if (!owns) {
+      throw new NotFoundException("Assignment not found");
+    }
+
+    const insights = (await this.adminService.getDetailedAssignmentInsights(
+      request.userSession,
+      id,
+    )) as Record<string, unknown>;
+
+    // Whitelist projection: the admin payload also carries platform-wide and
+    // internal-only data (other authors' cross-assignment activity and emails,
+    // raw model keys / per-token prices, and AI spend). Authors only get their
+    // own assignment's learner-scoped data, so build the response by copying the
+    // allowed keys rather than spreading-then-deleting — a new admin-only field
+    // added upstream then can't leak through by default.
+    const analytics = (insights.analytics ?? {}) as Record<string, unknown>;
+    return {
+      assignment: insights.assignment,
+      questions: insights.questions,
+      attempts: insights.attempts,
+      feedback: insights.feedback,
+      analytics: {
+        uniqueLearners: analytics.uniqueLearners,
+        totalAttempts: analytics.totalAttempts,
+        completedAttempts: analytics.completedAttempts,
+        averageGrade: analytics.averageGrade,
+        averageRating: analytics.averageRating,
+        performanceInsights: analytics.performanceInsights,
+      },
+      // Issue reports are admin-only; never expose them on the author surface.
+      reports: [],
+    };
+  }
+
+  /**
    * List assignments for the current user
    */
   @Get()
@@ -693,11 +747,15 @@ export class AssignmentControllerV2 {
    * Get assignment analytics with detailed insights
    */
   @Get("analytics")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  // Admin-only is enforced by AdminGuard (it rejects any non-admin session). No
+  // @Roles here: the global RolesGlobalGuard runs before AdminGuard and is a
+  // no-op without @Roles metadata, so the request reaches AdminGuard, which is
+  // the sole gate. Adding @Roles(AUTHOR, ...) here would be misleading — it
+  // never widens access past AdminGuard, only obscures who can actually reach
+  // this route.
   @UseGuards(AdminGuard)
   @ApiOperation({
-    summary:
-      "Get detailed assignment analytics with insights (for authors and admins)",
+    summary: "Get detailed assignment analytics with insights (admin only)",
   })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })

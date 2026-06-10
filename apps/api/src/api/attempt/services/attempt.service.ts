@@ -357,12 +357,16 @@ export class AttemptServiceV2 {
             progress: string,
             percentage?: number,
             details?: GradingProgressDetails,
+            currentQuestion?: number,
+            totalQuestions?: number,
           ) => {
             await this.updateGradingJobStatus(gradingJobId, {
               status,
               progress,
               percentage,
               result: details ? { gradingState: details } : undefined,
+              currentQuestion,
+              totalQuestions,
             });
           },
         );
@@ -442,6 +446,8 @@ export class AttemptServiceV2 {
       status: string;
       progress: string;
       percentage?: number;
+      currentQuestion?: number;
+      totalQuestions?: number;
       result?: any;
     },
   ): Promise<void> {

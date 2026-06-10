@@ -51,6 +51,8 @@ export type ProgressUpdateCallback = (
   progress: string,
   percentage?: number,
   details?: GradingProgressDetails,
+  currentQuestion?: number,
+  totalQuestions?: number,
 ) => Promise<void>;
 
 @Injectable()
@@ -199,6 +201,8 @@ export class GradingProgressService {
           "Processing",
           update.currentStage,
           update.progress,
+          update.currentQuestion,
+          update.totalQuestions,
         );
       }
     } catch (error) {
@@ -426,12 +430,14 @@ export class GradingProgressService {
     status: string,
     progress: string,
     percentage?: number,
+    currentQuestion?: number,
+    totalQuestions?: number,
   ): Promise<void> {
     const callback = this.progressCallbacks.get(attemptId);
     if (!callback) return;
     const details = this.snapshot(attemptId);
     try {
-      await callback(status, progress, percentage, details);
+      await callback(status, progress, percentage, details, currentQuestion, totalQuestions);
     } catch (error) {
       this.logger.warn(
         `progress.callback.threw attempt=${attemptId} error=${

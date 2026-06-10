@@ -184,6 +184,51 @@ describe("AttemptAccessCacheService", () => {
     ).toBeTruthy();
   });
 
+  describe("empty builds are not cached", () => {
+    it("does not cache an empty versioned build so a transient empty load cannot poison the cache", async () => {
+      const result = await service.getQuestionDtosForAttemptAccess({
+        assignmentId: 10,
+        assignmentUpdatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        assignmentVersionId: 77,
+        questionVersions: [],
+      });
+
+      expect(result).toEqual([]);
+      expect(
+        fakeRedis.values.get("mark:attempt-access:version:77"),
+      ).toBeUndefined();
+    });
+
+    it("warns when a versioned attempt resolves to zero questions", async () => {
+      await service.getQuestionDtosForAttemptAccess({
+        assignmentId: 10,
+        assignmentUpdatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        assignmentVersionId: 77,
+        questionVersions: [],
+      });
+
+      expect(childLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("attempt-access-cache.empty-build"),
+      );
+    });
+
+    it("does not cache an empty assignment-scoped build and does not warn for it", async () => {
+      mockPrisma.question.findMany = jest.fn().mockResolvedValue([]);
+
+      const result = await service.getQuestionDtosForAttemptAccess({
+        assignmentId: 44,
+        assignmentUpdatedAt: new Date("2026-04-26T01:00:00.000Z"),
+        assignmentVersionId: null,
+      });
+
+      expect(result).toEqual([]);
+      expect(
+        fakeRedis.values.get("mark:attempt-access:assignment:44:1777165200000"),
+      ).toBeUndefined();
+      expect(childLogger.warn).not.toHaveBeenCalled();
+    });
+  });
+
   describe("invalidateForAssignment", () => {
     it("scans and deletes only assignment-scoped keys for the target id", async () => {
       fakeRedis.values.set("mark:attempt-access:assignment:44:1000", "[]");

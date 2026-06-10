@@ -19,7 +19,19 @@ const wrap = (ui: ReactNode) => {
 };
 
 describe("QueueStatusDashboard", () => {
-  it("renders a queue row and a stale worker badge", async () => {
+  beforeEach(() => {
+    (shared.getRedisHealth as jest.Mock).mockResolvedValue({
+      usedMemoryBytes: 1024,
+      usedMemoryHuman: "1K",
+      connectedClients: 3,
+      opsPerSec: 12,
+      workerConnections: 1,
+      heartbeatPods: 1,
+      reconciled: true,
+    });
+  });
+
+  it("renders a queue row, capacity line, throughput and a stale worker badge", async () => {
     (shared.getQueueStatus as jest.Mock).mockResolvedValue({
       generatedAt: "t",
       queues: [
@@ -31,6 +43,17 @@ describe("QueueStatusDashboard", () => {
           failed: 3,
           completed: 9,
           paused: 0,
+          role: "learner",
+          concurrencyPerPod: 4,
+          livePods: 2,
+          clusterCapacity: 8,
+          isPaused: false,
+          throughput: {
+            completedPerMin: 5,
+            failedPerMin: 1,
+            avgWaitMs: 120,
+            avgRunMs: 2500,
+          },
         },
       ],
       workers: [
@@ -51,5 +74,8 @@ describe("QueueStatusDashboard", () => {
     wrap(<QueueStatusDashboard sessionToken="tok" />);
     expect(await screen.findByText("mark.attempt")).toBeInTheDocument();
     expect(await screen.findByText(/stale/i)).toBeInTheDocument();
+    expect(await screen.findByText(/8/)).toBeInTheDocument();
+    expect(await screen.findByText(/learner/i)).toBeInTheDocument();
+    expect(await screen.findByText(/✓ 5\/min/)).toBeInTheDocument();
   });
 });

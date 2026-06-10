@@ -3,9 +3,11 @@
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useQueueStatus } from "@/hooks/useQueueStatus";
+import { useQueueHistory, useQueueStatus } from "@/hooks/useQueueStatus";
+import { ActiveJobsDialog } from "./ActiveJobsDialog";
 import { FailedJobsDialog } from "./FailedJobsDialog";
 import { QueueCard } from "./QueueCard";
+import { RedisHealthStrip } from "./RedisHealthStrip";
 import { WorkersTable } from "./WorkersTable";
 
 export function QueueStatusDashboard({
@@ -14,11 +16,13 @@ export function QueueStatusDashboard({
   sessionToken: string;
 }) {
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [inspecting, setInspecting] = useState<string | null>(null);
+  const [inspectingFailed, setInspectingFailed] = useState<string | null>(null);
+  const [inspectingActive, setInspectingActive] = useState<string | null>(null);
   const { data, isLoading, isError, refetch, isFetching } = useQueueStatus(
     sessionToken,
     autoRefresh,
   );
+  const history = useQueueHistory(data?.queues);
 
   return (
     <div className="space-y-6">
@@ -50,7 +54,9 @@ export function QueueStatusDashboard({
               <QueueCard
                 key={q.name}
                 queue={q}
-                onInspectFailed={setInspecting}
+                history={history[q.name]}
+                onInspectFailed={setInspectingFailed}
+                onInspectActive={setInspectingActive}
               />
             ))}
           </section>
@@ -58,13 +64,22 @@ export function QueueStatusDashboard({
             <h2 className="text-sm font-semibold mb-2">Worker pods</h2>
             <WorkersTable workers={data?.workers ?? []} />
           </section>
+          <RedisHealthStrip
+            sessionToken={sessionToken}
+            autoRefresh={autoRefresh}
+          />
         </>
       )}
 
       <FailedJobsDialog
         sessionToken={sessionToken}
-        queueName={inspecting}
-        onClose={() => setInspecting(null)}
+        queueName={inspectingFailed}
+        onClose={() => setInspectingFailed(null)}
+      />
+      <ActiveJobsDialog
+        sessionToken={sessionToken}
+        queueName={inspectingActive}
+        onClose={() => setInspectingActive(null)}
       />
     </div>
   );

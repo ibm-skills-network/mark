@@ -6,9 +6,9 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { type ComponentPropsWithoutRef, type FC, type MouseEvent } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 
-type Props = ComponentPropsWithoutRef<"div">;
+type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
-const Component: FC<Props> = () => {
+const Component: FC<Props> = ({ compact }) => {
   const [graded, setGraded, errors] = useAssignmentConfig((state) => [
     state.graded,
     state.setGraded,
@@ -23,6 +23,7 @@ const Component: FC<Props> = () => {
       title={stepTwoSections.type.title}
       className="flex flex-col gap-y-6"
       required
+      compact={compact}
     >
       <button onClick={handleGradedChange} type="button" value="graded">
         <div className="flex items-center gap-x-1.5 cursor-pointer">

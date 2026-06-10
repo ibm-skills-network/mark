@@ -19,6 +19,11 @@ export interface JobWorkerHeartbeat {
   startedAt?: string;
   updatedAt?: string;
   workerCount?: number;
+  // Per-queue concurrency the publishing pod actually configured its workers
+  // with. Optional so heartbeats written by older pods (which never wrote this
+  // field) still parse; the read-model falls back to static defaults when it
+  // is absent.
+  concurrencyByQueue?: Record<string, number>;
 }
 
 @Injectable()

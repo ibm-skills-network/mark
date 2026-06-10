@@ -1,9 +1,11 @@
 import { Module } from "@nestjs/common";
 import { PassportModule } from "@nestjs/passport";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { JobQueueModule } from "src/job-queue/job-queue.module";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { AuthModule } from "../../auth/auth.module";
 import { AssignmentModuleV2 } from "../assignment/v2/modules/assignment.module";
+import { FilesModule } from "../files/files.module";
 import { LlmModule } from "../llm/llm.module";
 import { ScheduledTasksModule } from "../scheduled-tasks/scheduled-tasks.module";
 import { AdminController } from "./admin.controller";
@@ -30,6 +32,11 @@ import { QueueStatusService } from "./services/queue-status.service";
     LlmModule,
     ScheduledTasksModule,
     JobQueueModule,
+    FilesModule,
+    // Per-admin rate limits for the queue-status write actions (retry/remove).
+    // Registered here (not as APP_GUARD) so it stays scoped to this module;
+    // QueueStatusController opts in via @UseGuards(ThrottlerGuard) + @Throttle.
+    ThrottlerModule.forRoot([{ name: "default", ttl: 60_000, limit: 20 }]),
   ],
   controllers: [
     AdminController,

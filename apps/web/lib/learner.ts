@@ -263,6 +263,54 @@ export async function getLiveRecordingFeedback(
   }
 }
 
+
+export type QuestionGradingStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed";
+
+export interface QuestionGradingState {
+  id: number;
+  displayOrder: number;
+  status: QuestionGradingStatus;
+  slowType?: string;
+}
+
+export interface GradingProgressDetails {
+  questions: QuestionGradingState[];
+  total: number;
+  completed: number;
+  inFlight: number;
+  failed: number;
+  hasSlowInFlight: boolean;
+}
+
+// On Processing/update SSE events the API nests the per-question grading
+// snapshot under `result.gradingState` (and double-stringifies `result`).
+// Returns the snapshot if present, else undefined.
+function parseGradingState(
+  result: unknown,
+): GradingProgressDetails | undefined {
+  let parsed: unknown = result;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    "gradingState" in parsed &&
+    (parsed as { gradingState?: unknown }).gradingState
+  ) {
+    return (parsed as { gradingState: GradingProgressDetails }).gradingState;
+  }
+  return undefined;
+}
+
 /**
  * Submits an assignment with progress tracking
  */
@@ -278,6 +326,11 @@ export async function submitAssignment(
     status: "processing" | "completed" | "failed",
     progress: number,
     message: string,
+    metadata?: {
+      currentQuestion?: number;
+      totalQuestions?: number;
+      gradingState?: GradingProgressDetails;
+    },
   ) => void,
   onGradingJobCreated?: (gradingJobId: string) => void,
 ): Promise<SubmitAssignmentResponse | undefined> {
@@ -371,11 +424,16 @@ export async function submitAssignment(
               });
 
               eventSource.close();
-              onProgress?.("failed", 0, timeoutError);
 
               if (currentAttempt < maxRetries) {
+                onProgress?.(
+                  "processing",
+                  0,
+                  `Connection timed out. Retrying... (${currentAttempt}/${maxRetries})`,
+                );
                 setTimeout(() => attemptConnection(), 2000 * currentAttempt);
               } else {
+                onProgress?.("failed", 0, timeoutError);
                 handleFinalFailure();
               }
             }
@@ -415,7 +473,16 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.("processing", percentage, progress);
+              onProgress?.(
+                "processing",
+                percentage,
+                progress,
+                {
+                  currentQuestion: data.currentQuestion,
+                  totalQuestions: data.totalQuestions,
+                  gradingState: parseGradingState(data.result),
+                },
+              );
             } else if (data.status === "Completed" && !isCompleted) {
               isCompleted = true;
               onProgress?.("completed", 100, "Grading completed successfully!");
@@ -463,7 +530,16 @@ export async function submitAssignment(
               }
 
               if (data.progress && data.percentage !== undefined) {
-                onProgress?.("processing", data.percentage, data.progress);
+                onProgress?.(
+                  "processing",
+                  data.percentage,
+                  data.progress,
+                  {
+                    currentQuestion: data.currentQuestion,
+                    totalQuestions: data.totalQuestions,
+                    gradingState: parseGradingState(data.result),
+                  },
+                );
               }
             } catch (error) {
               console.warn("SSE update event parse failed:", error);
@@ -531,9 +607,9 @@ export async function submitAssignment(
             if (currentAttempt < maxRetries) {
               const retryDelay = 2000 * currentAttempt;
               onProgress?.(
-                "failed",
+                "processing",
                 0,
-                `Connection lost. Retrying in ${retryDelay / 1000} seconds... (attempt ${currentAttempt}/${maxRetries})`,
+                `Connection lost. Retrying in ${retryDelay / 1000} seconds...`,
               );
               setTimeout(() => attemptConnection(), retryDelay);
             } else {
@@ -570,7 +646,7 @@ export async function submitAssignment(
               } else if (data?.error) {
                 const streamErrorMessage =
                   data.error || "Grading stream reported an error";
-                onProgress?.("failed", 0, streamErrorMessage);
+                onProgress?.("processing", 0, streamErrorMessage);
               }
             } catch (error) {
               console.warn("SSE error-event parse failed:", error);

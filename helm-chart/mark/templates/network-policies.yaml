@@ -130,7 +130,7 @@ spec:
 ---
 
 {{- if .Values.jobs.enabled }}
-# For mark-jobs: no ingress (internal worker), egress to postgres and redis only.
+# For mark-jobs: no ingress (internal worker), egress to lti-gateway (grade sync), postgres, redis, and external services.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -140,6 +140,10 @@ spec:
     matchLabels:
       {{- include "mark.jobs.labels" $ | nindent 6 }}
   egress:
+    - to: # mark-jobs runs the grader and fires the first LTI grade-sync attempt; it must reach lti-gateway or it fails fast at linkerd's 3s gate.
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: lti-gateway
     - to:
       - namespaceSelector:
           matchLabels:

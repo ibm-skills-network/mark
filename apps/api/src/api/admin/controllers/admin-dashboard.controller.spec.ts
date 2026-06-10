@@ -210,4 +210,126 @@ describe("AdminDashboardController", () => {
       );
     });
   });
+
+  describe("getAssignmentAnalytics validation & forwarding", () => {
+    const fakeRequest = {
+      userSession: { userId: "admin-1", role: "ADMIN" },
+    } as unknown as UserSessionRequest;
+
+    it("forwards every validated param to the service in order", async () => {
+      await controller.getAssignmentAnalytics(
+        fakeRequest,
+        2, // page
+        25, // limit
+        "essay", // search
+        true, // details
+        "name", // sortBy
+        "asc", // sortOrder
+        true, // published
+      );
+
+      expect(mockAdminService.getAssignmentAnalytics).toHaveBeenCalledWith(
+        fakeRequest.userSession,
+        2,
+        25,
+        "essay",
+        true,
+        "name",
+        "asc",
+        true,
+      );
+    });
+
+    it("passes undefined sortBy/sortOrder/published through (service applies defaults)", async () => {
+      await controller.getAssignmentAnalytics(fakeRequest, 1, 10);
+
+      expect(mockAdminService.getAssignmentAnalytics).toHaveBeenCalledWith(
+        fakeRequest.userSession,
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it("accepts every allow-listed sortBy field", async () => {
+      for (const field of ["name", "updatedAt", "published"]) {
+        await expect(
+          controller.getAssignmentAnalytics(
+            fakeRequest,
+            1,
+            10,
+            undefined,
+            false,
+            field,
+          ),
+        ).resolves.toBeDefined();
+      }
+    });
+
+    it("rejects an unknown sortBy with 400 and the allow-list message", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(
+          fakeRequest,
+          1,
+          10,
+          undefined,
+          false,
+          "garbage",
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          "sortBy must be one of: name, updatedAt, published",
+        ),
+      );
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
+
+    it("rejects an unknown sortOrder with 400", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(
+          fakeRequest,
+          1,
+          10,
+          undefined,
+          false,
+          "name",
+          "sideways",
+        ),
+      ).rejects.toThrow(
+        new BadRequestException('sortOrder must be "asc" or "desc"'),
+      );
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
+
+    it("rejects a limit above the MAX_LIMIT cap with 400", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 1, 26),
+      ).rejects.toThrow(new BadRequestException("Limit cannot exceed 25"));
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-positive limit with 400 (no negative/zero Prisma take)", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 1, 0),
+      ).rejects.toThrow(new BadRequestException("Limit must be at least 1"));
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 1, -1),
+      ).rejects.toThrow(new BadRequestException("Limit must be at least 1"));
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-positive page with 400 (no negative Prisma skip)", async () => {
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, 0, 25),
+      ).rejects.toThrow(new BadRequestException("Page must be at least 1"));
+      await expect(
+        controller.getAssignmentAnalytics(fakeRequest, -5, 25),
+      ).rejects.toThrow(new BadRequestException("Page must be at least 1"));
+      expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
+    });
+  });
 });

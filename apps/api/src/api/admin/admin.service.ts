@@ -11,6 +11,7 @@ import {
   UserSession,
 } from "../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../database/prisma.service";
+import { ConcurrencyLimiter } from "../llm/features/grading/services/concurrency-limiter";
 import {
   Choice,
   QuestionDto,
@@ -74,8 +75,17 @@ export class AdminService {
   /**
    * Helper method to get cached insights data
    */
-  private getCachedInsights(assignmentId: number): any | null {
-    const cacheKey = `insights:${assignmentId}`;
+  private insightsCacheKey(assignmentId: number, details: boolean): string {
+    // Keyed by detail level: a lite payload (no aiUsage/costCalculationDetails)
+    // must never satisfy a details=true request, and vice versa.
+    return `insights:${assignmentId}:${details ? "full" : "lite"}`;
+  }
+
+  private getCachedInsights(
+    assignmentId: number,
+    details: boolean,
+  ): any | null {
+    const cacheKey = this.insightsCacheKey(assignmentId, details);
     const cached = this.insightsCache.get(cacheKey);
 
     if (cached && Date.now() - cached.cachedAt < this.INSIGHTS_CACHE_TTL) {
@@ -93,8 +103,12 @@ export class AdminService {
   /**
    * Helper method to cache insights data
    */
-  private setCachedInsights(assignmentId: number, data: any): void {
-    const cacheKey = `insights:${assignmentId}`;
+  private setCachedInsights(
+    assignmentId: number,
+    details: boolean,
+    data: any,
+  ): void {
+    const cacheKey = this.insightsCacheKey(assignmentId, details);
     this.insightsCache.set(cacheKey, {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       data,
@@ -107,8 +121,9 @@ export class AdminService {
    * Helper method to invalidate insights cache for an assignment
    */
   private invalidateInsightsCache(assignmentId: number): void {
-    const cacheKey = `insights:${assignmentId}`;
-    this.insightsCache.delete(cacheKey);
+    // Clear both detail-level variants so stale data can't survive a change.
+    this.insightsCache.delete(this.insightsCacheKey(assignmentId, true));
+    this.insightsCache.delete(this.insightsCacheKey(assignmentId, false));
     this.logger.debug(
       `Invalidated insights cache for assignment ${assignmentId}`,
     );
@@ -339,9 +354,12 @@ export class AdminService {
         await Promise.all(
           batch.map(async (assignment) => {
             try {
+              // Warm the full (details=true) variant — that's the payload the
+              // admin dashboard reads, and the cache is keyed by detail level.
               await this.getDetailedAssignmentInsights(
                 adminSession,
                 assignment.assignmentId,
+                true,
               );
               this.logger.debug(
                 `Precomputed insights for assignment ${assignment.assignmentId}`,
@@ -415,7 +433,10 @@ export class AdminService {
       other: 0,
     };
 
-    for (const usage of aiUsageRecords) {
+    // Normalize each usage row to a batch input. Token counts are coerced
+    // here (BigInt → number) and missing model keys fall back deterministically
+    // by usage type so the pricing cache can dedupe by (modelKey, day).
+    const normalized = aiUsageRecords.map((usage) => {
       const tokensIn = toAiUsageCounterNumber(
         usage.tokensIn,
         "AIUsage.tokensIn",
@@ -425,38 +446,43 @@ export class AdminService {
         "AIUsage.tokensOut",
       );
       let modelKey = usage.modelKey;
-
       if (!modelKey) {
         this.logger.warn(
           `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`,
         );
-
-        const usageType = usage.usageType?.toLowerCase() || "";
-        if (usageType.includes("translation")) {
+        const usageTypeLower = usage.usageType?.toLowerCase() || "";
+        if (usageTypeLower.includes("translation")) {
           modelKey = "gpt-4o-mini";
         } else if (
-          usageType.includes("image") ||
-          usageType.includes("vision")
+          usageTypeLower.includes("image") ||
+          usageTypeLower.includes("vision")
         ) {
           modelKey = "gpt-4.1-mini";
         } else if (
-          usageType.includes("grading") ||
-          usageType.includes("generation")
+          usageTypeLower.includes("grading") ||
+          usageTypeLower.includes("generation")
         ) {
           modelKey = "gpt-4o";
         } else {
           modelKey = "gpt-4o-mini";
         }
       }
+      return { usage, tokensIn, tokensOut, modelKey };
+    });
 
-      const costBreakdown =
-        await this.llmPricingService.calculateCostWithBreakdown(
-          modelKey,
-          tokensIn,
-          tokensOut,
-          usage.createdAt,
-          usage.usageType,
-        );
+    const breakdowns = await this.llmPricingService.calculateCostBatch(
+      normalized.map((n) => ({
+        modelKey: n.modelKey,
+        inputTokens: n.tokensIn,
+        outputTokens: n.tokensOut,
+        usageDate: n.usage.createdAt,
+        usageType: n.usage.usageType,
+      })),
+    );
+
+    for (const [index, item] of normalized.entries()) {
+      const { usage, tokensIn, tokensOut, modelKey } = item;
+      const costBreakdown = breakdowns[index];
 
       if (costBreakdown) {
         totalCost += costBreakdown.totalCost;
@@ -1137,9 +1163,18 @@ export class AdminService {
     page: number,
     limit: number,
     search?: string,
+    details?: boolean,
+    sortBy?: "name" | "updatedAt" | "published",
+    sortOrder?: "asc" | "desc",
+    published?: boolean,
   ) {
     const isAdmin = adminSession.role === UserRole.ADMIN;
     const skip = (page - 1) * limit;
+
+    // How many assignments' cost chains may compute at once. Each chain does
+    // per-row pricing lookups (one pool connection at a time), so this bounds
+    // how many connections this endpoint can hold concurrently.
+    const COST_CALC_CONCURRENCY = 4;
 
     const searchCondition = search
       ? {
@@ -1154,6 +1189,7 @@ export class AdminService {
 
     const whereClause = {
       ...searchCondition,
+      ...(published === undefined ? {} : { published }),
       ...(isAdmin
         ? {}
         : {
@@ -1165,22 +1201,57 @@ export class AdminService {
           }),
     };
 
-    const totalCount = await this.prisma.assignment.count({
-      where: whereClause,
-    });
+    const orderBy = { [sortBy ?? "updatedAt"]: sortOrder ?? "desc" } as Record<
+      string,
+      "asc" | "desc"
+    >;
 
-    const assignments = await this.prisma.assignment.findMany({
-      where: whereClause,
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        name: true,
-        published: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    const emptyAggregates = {
+      totalAssignments: 0,
+      totalCost: 0,
+      totalLearnerAssignmentPairs: 0,
+      averageRating: 0,
+    };
+
+    const [assignments, allMatchingIds] = await Promise.all([
+      this.prisma.assignment.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          published: true,
+          updatedAt: true,
+        },
+        orderBy,
+      }),
+      this.prisma.assignment
+        .findMany({ where: whereClause, select: { id: true } })
+        .then((rows) => rows.map((r) => r.id)),
+    ]);
+
+    // The id-only scan already enumerates every matching row, so its length is
+    // the total — no need for a separate count() roundtrip on the same filter.
+    const totalCount = allMatchingIds.length;
+
+    // Aggregates reflect the entire filtered set, not just the current page.
+    // Fire as early as possible so it runs concurrently with the page-stats work.
+    const aggregatesPromise =
+      allMatchingIds.length === 0
+        ? Promise.resolve(emptyAggregates)
+        : this.computeAnalyticsAggregates(allMatchingIds, totalCount).catch(
+            (error) => {
+              // Never let the (early-fired) aggregates promise reject without a
+              // handler — if the page-stats path throws first, an unhandled
+              // rejection could crash the process. Degrade to empty cards.
+              this.logger.error(
+                "Failed to compute analytics aggregates",
+                error,
+              );
+              return emptyAggregates;
+            },
+          );
 
     if (assignments.length === 0) {
       return {
@@ -1191,6 +1262,7 @@ export class AdminService {
           limit,
           totalPages: Math.ceil(totalCount / limit),
         },
+        aggregates: await aggregatesPromise,
       };
     }
 
@@ -1232,16 +1304,29 @@ export class AdminService {
           return { totalStatsMap, submittedStatsMap };
         }),
 
-        Promise.all(
-          assignmentIds.map(async (assignmentId) => {
-            const uniqueUsers = await this.prisma.assignmentAttempt.findMany({
-              where: { assignmentId },
-              distinct: ["userId"],
-              select: { userId: true },
-            });
-            return { assignmentId, uniqueUsersCount: uniqueUsers.length };
+        // Distinct learners per assignment in ONE query: grouping by
+        // (assignmentId, userId) yields one row per unique pair, so counting
+        // rows per assignmentId is the unique-learner count. Replaces a
+        // per-assignment findMany (one Postgres query each) that fanned out
+        // across the whole page.
+        this.prisma.assignmentAttempt
+          .groupBy({
+            by: ["assignmentId", "userId"],
+            where: { assignmentId: { in: assignmentIds } },
+          })
+          .then((pairs) => {
+            const counts = new Map<number, number>();
+            for (const pair of pairs) {
+              counts.set(
+                pair.assignmentId,
+                (counts.get(pair.assignmentId) ?? 0) + 1,
+              );
+            }
+            return assignmentIds.map((assignmentId) => ({
+              assignmentId,
+              uniqueUsersCount: counts.get(assignmentId) ?? 0,
+            }));
           }),
-        ),
 
         this.prisma.assignmentFeedback.groupBy({
           by: ["assignmentId"],
@@ -1263,8 +1348,37 @@ export class AdminService {
       uniqueLearnersStats.map((s) => [s.assignmentId, s.uniqueUsersCount]),
     );
     const feedbackMap = new Map(feedbackStats.map((s) => [s.assignmentId, s]));
-    const analyticsData = await Promise.all(
-      assignments.map(async (assignment) => {
+
+    // Batch-fetch AI usage for all assignments on the page, then group by id.
+    const allAiUsage = await this.prisma.aIUsage.findMany({
+      where: { assignmentId: { in: assignmentIds } },
+      select: {
+        assignmentId: true,
+        tokensIn: true,
+        tokensOut: true,
+        createdAt: true,
+        usageType: true,
+        modelKey: true,
+      },
+    });
+    const aiUsageByAssignment = new Map<number, typeof allAiUsage>();
+    for (const usage of allAiUsage) {
+      const list = aiUsageByAssignment.get(usage.assignmentId);
+      if (list) {
+        list.push(usage);
+      } else {
+        aiUsageByAssignment.set(usage.assignmentId, [usage]);
+      }
+    }
+
+    // Cost calculation does per-row pricing lookups, so running every
+    // assignment's cost chain at once would hold one pool connection per
+    // assignment and could starve the pool. Bound how many run concurrently —
+    // the page is already capped (controller), this caps connections too.
+    const analyticsData = await new ConcurrencyLimiter(
+      COST_CALC_CONCURRENCY,
+    ).run(
+      assignments.map((assignment) => async () => {
         const totalAttempts = totalStatsMap.get(assignment.id) || 0;
         const submittedData = submittedStatsMap.get(assignment.id);
         const completedAttempts = submittedData?._count.id || 0;
@@ -1273,16 +1387,7 @@ export class AdminService {
         const averageGrade = (submittedData?._avg.grade || 0) * 100;
         const averageRating = feedback?._avg.assignmentRating || 0;
 
-        const aiUsageDetails = await this.prisma.aIUsage.findMany({
-          where: { assignmentId: assignment.id },
-          select: {
-            tokensIn: true,
-            tokensOut: true,
-            createdAt: true,
-            usageType: true,
-            modelKey: true,
-          },
-        });
+        const aiUsageDetails = aiUsageByAssignment.get(assignment.id) || [];
 
         const costData = await this.calculateHistoricalCosts(aiUsageDetails);
         const totalCost = costData.totalCost;
@@ -1335,15 +1440,22 @@ export class AdminService {
             questionInsights: [],
             performanceInsights,
             costBreakdown,
-            detailedCostBreakdown: costData.detailedBreakdown.map((detail) => ({
-              ...detail,
-              usageDate: detail.usageDate.toISOString(),
-              pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
-            })),
+            ...(details && {
+              detailedCostBreakdown: costData.detailedBreakdown.map(
+                (detail) => ({
+                  ...detail,
+                  usageDate: detail.usageDate.toISOString(),
+                  pricingEffectiveDate:
+                    detail.pricingEffectiveDate.toISOString(),
+                }),
+              ),
+            }),
           },
         };
       }),
     );
+
+    const aggregates = await aggregatesPromise;
 
     return {
       data: analyticsData,
@@ -1353,6 +1465,56 @@ export class AdminService {
         limit,
         totalPages: Math.ceil(totalCount / limit),
       },
+      aggregates,
+    };
+  }
+
+  /**
+   * Compute filter-wide aggregates for the analytics table cards.
+   *
+   * The card "Total Learner-Assignment Pairs" sums per-assignment unique
+   * learner counts (a user attempting 3 distinct filtered assignments
+   * contributes 3 to the total). Implemented via Prisma's `distinct` on
+   * (assignmentId, userId), which uses the existing composite index.
+   */
+  private async computeAnalyticsAggregates(
+    allMatchingIds: number[],
+    totalCount: number,
+  ) {
+    const assignmentIdFilter = { assignmentId: { in: allMatchingIds } };
+
+    const [pairRows, feedbackAgg, allAiUsage] = await Promise.all([
+      this.prisma.assignmentAttempt.findMany({
+        where: assignmentIdFilter,
+        distinct: ["assignmentId", "userId"],
+        select: { assignmentId: true, userId: true },
+      }),
+      this.prisma.assignmentFeedback.aggregate({
+        where: {
+          ...assignmentIdFilter,
+          assignmentRating: { not: null },
+        },
+        _avg: { assignmentRating: true },
+      }),
+      this.prisma.aIUsage.findMany({
+        where: assignmentIdFilter,
+        select: {
+          tokensIn: true,
+          tokensOut: true,
+          createdAt: true,
+          usageType: true,
+          modelKey: true,
+        },
+      }),
+    ]);
+
+    const costData = await this.calculateHistoricalCosts(allAiUsage);
+
+    return {
+      totalAssignments: totalCount,
+      totalCost: costData.totalCost,
+      totalLearnerAssignmentPairs: pairRows.length,
+      averageRating: feedbackAgg._avg.assignmentRating ?? 0,
     };
   }
 
@@ -1696,9 +1858,10 @@ export class AdminService {
   async getDetailedAssignmentInsights(
     adminSession: UserSession,
     assignmentId: number,
+    details?: boolean,
   ) {
     try {
-      const cachedInsights = this.getCachedInsights(assignmentId);
+      const cachedInsights = this.getCachedInsights(assignmentId, !!details);
       if (cachedInsights) {
         return cachedInsights;
       }
@@ -1769,110 +1932,107 @@ export class AdminService {
         );
       }
 
-      const questionInsights = [];
-      const batchSize = 3;
+      // Per-question insights power both the admin and author detail views, so
+      // always compute them. One groupBy gathers per-question response counts +
+      // average points; N parallel counts gather "fully-correct" counts.
+      let questionInsights: Array<{
+        id: number;
+        question: string;
+        type: any;
+        totalPoints: number;
+        correctPercentage: number;
+        averagePoints: number;
+        responseCount: number;
+        insight: string;
+        variants: number;
+        translations: { languageCode: string }[];
+      }> = [];
 
-      for (
-        let index = 0;
-        index < assignment.questions.length;
-        index += batchSize
-      ) {
-        const batch = assignment.questions.slice(index, index + batchSize);
+      try {
+        const questionIds = assignment.questions.map((q) => q.id);
+        const responseStats = await this.prisma.questionResponse.groupBy({
+          by: ["questionId"],
+          where: {
+            questionId: { in: questionIds },
+            assignmentAttempt: { assignmentId },
+          },
+          _count: { id: true },
+          _avg: { points: true },
+        });
+        const statsMap = new Map(
+          responseStats.map((s) => [
+            s.questionId,
+            {
+              totalResponses: s._count.id,
+              averagePoints: s._avg.points || 0,
+            },
+          ]),
+        );
 
-        try {
-          const batchResults = await Promise.all(
-            batch.map(async (question) => {
-              let totalResponses = 0;
-              let correctCount = 0;
-              let averagePoints = 0;
-
-              try {
-                totalResponses = await this.prisma.questionResponse.count({
-                  where: {
-                    questionId: question.id,
-                    assignmentAttempt: { assignmentId },
-                  },
-                });
-
-                if (totalResponses > 0) {
-                  correctCount = await this.prisma.questionResponse.count({
-                    where: {
-                      questionId: question.id,
-                      assignmentAttempt: { assignmentId },
-                      points: question.totalPoints,
-                    },
-                  });
-
-                  const pointsAvg =
-                    await this.prisma.questionResponse.aggregate({
-                      where: {
-                        questionId: question.id,
-                        assignmentAttempt: { assignmentId },
-                      },
-                      _avg: { points: true },
-                    });
-                  averagePoints = pointsAvg._avg.points || 0;
-                }
-              } catch (error) {
-                this.logger.error(
-                  `Error fetching response statistics for question ${question.id}:`,
-                  error,
-                );
-              }
-
-              const correctPercentage =
-                totalResponses > 0 ? (correctCount / totalResponses) * 100 : 0;
-
-              let insight = `${Math.round(
-                correctPercentage,
-              )}% of learners answered correctly`;
-              if (correctPercentage < 50) {
-                insight += ` - consider reviewing this question`;
-              }
-
-              return {
-                id: question.id,
-                question: question.question,
-                type: question.type,
-                totalPoints: question.totalPoints,
-                correctPercentage,
-                averagePoints,
-                responseCount: totalResponses,
-                insight,
-                variants: question.variants.length,
-                translations: question.translations.map((t) => ({
-                  languageCode: t.languageCode,
-                })),
-              };
+        const correctCounts = await Promise.all(
+          assignment.questions.map((q) =>
+            this.prisma.questionResponse.count({
+              where: {
+                questionId: q.id,
+                assignmentAttempt: { assignmentId },
+                points: q.totalPoints,
+              },
             }),
-          );
-          questionInsights.push(...batchResults);
+          ),
+        );
+        const correctCountMap = new Map(
+          assignment.questions.map((q, index) => [q.id, correctCounts[index]]),
+        );
 
-          if (index + batchSize < assignment.questions.length) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
+        questionInsights = assignment.questions.map((question) => {
+          const stats = statsMap.get(question.id) ?? {
+            totalResponses: 0,
+            averagePoints: 0,
+          };
+          const correctCount = correctCountMap.get(question.id) ?? 0;
+          const correctPercentage =
+            stats.totalResponses > 0
+              ? (correctCount / stats.totalResponses) * 100
+              : 0;
+          let insight = `${Math.round(correctPercentage)}% of learners answered correctly`;
+          if (correctPercentage < 50) {
+            insight += ` - consider reviewing this question`;
           }
-        } catch (error) {
-          this.logger.error(
-            `Error processing question batch starting at index ${index}:`,
-            error,
-          );
-          const fallbackResults = batch.map((question) => ({
+          return {
             id: question.id,
             question: question.question,
             type: question.type,
             totalPoints: question.totalPoints,
-            correctPercentage: 0,
-            averagePoints: 0,
-            responseCount: 0,
-            insight: "Data unavailable due to processing error",
-            variants: question.variants?.length || 0,
-            translations:
-              question.translations?.map((t) => ({
-                languageCode: t.languageCode,
-              })) || [],
-          }));
-          questionInsights.push(...fallbackResults);
-        }
+            correctPercentage,
+            averagePoints: stats.averagePoints,
+            responseCount: stats.totalResponses,
+            insight,
+            variants: question.variants.length,
+            translations: question.translations.map((t) => ({
+              languageCode: t.languageCode,
+            })),
+          };
+        });
+      } catch (error) {
+        this.logger.error(
+          `Error fetching batched question statistics for assignment ${assignmentId}:`,
+          error,
+        );
+        questionInsights = assignment.questions.map((question) => ({
+          id: question.id,
+          question: question.question,
+          type: question.type,
+          totalPoints: question.totalPoints,
+          correctPercentage: 0,
+          averagePoints: 0,
+          responseCount: 0,
+          insight: "Data unavailable due to processing error",
+          variants: question.variants?.length || 0,
+          translations:
+            question.translations?.map((t) => ({
+              languageCode: t.languageCode,
+            })) || [],
+        }));
       }
 
       const uniqueLearners = await this.prisma.assignmentAttempt.groupBy({
@@ -2027,81 +2187,85 @@ export class AdminService {
           status: report.status,
           createdAt: report.createdAt.toISOString(),
         })),
-        aiUsage: aiUsageWithCost,
-        costCalculationDetails: {
-          totalCost: Math.round(totalCost * 100) / 100,
-          breakdown: costData.detailedBreakdown.map((detail) => ({
-            usageType: detail.usageType || "Unknown",
-            tokensIn: detail.tokensIn,
-            tokensOut: detail.tokensOut,
-            modelUsed: detail.modelKey,
-            inputTokenPrice: detail.inputTokenPrice,
-            outputTokenPrice: detail.outputTokenPrice,
-            inputCost: Math.round(detail.inputCost * 100_000_000) / 100_000_000,
-            outputCost:
-              Math.round(detail.outputCost * 100_000_000) / 100_000_000,
-            totalCost: Math.round(detail.totalCost * 100_000_000) / 100_000_000,
-            pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
-            usageDate: detail.usageDate.toISOString(),
-            calculationSteps: detail.calculationSteps,
-          })),
-          summary: {
-            totalInputTokens: costData.detailedBreakdown.reduce(
-              (sum, d) => sum + d.tokensIn,
-              0,
-            ),
-            totalOutputTokens: costData.detailedBreakdown.reduce(
-              (sum, d) => sum + d.tokensOut,
-              0,
-            ),
-            totalInputCost:
-              Math.round(
-                costData.detailedBreakdown.reduce(
-                  (sum, d) => sum + d.inputCost,
-                  0,
-                ) * 100_000_000,
-              ) / 100_000_000,
-            totalOutputCost:
-              Math.round(
-                costData.detailedBreakdown.reduce(
-                  (sum, d) => sum + d.outputCost,
-                  0,
-                ) * 100_000_000,
-              ) / 100_000_000,
-            averageInputPrice:
-              costData.detailedBreakdown.length > 0
-                ? costData.detailedBreakdown.reduce(
-                    (sum, d) => sum + d.inputTokenPrice,
+        ...(details && {
+          aiUsage: aiUsageWithCost,
+          costCalculationDetails: {
+            totalCost: Math.round(totalCost * 100) / 100,
+            breakdown: costData.detailedBreakdown.map((detail) => ({
+              usageType: detail.usageType || "Unknown",
+              tokensIn: detail.tokensIn,
+              tokensOut: detail.tokensOut,
+              modelUsed: detail.modelKey,
+              inputTokenPrice: detail.inputTokenPrice,
+              outputTokenPrice: detail.outputTokenPrice,
+              inputCost:
+                Math.round(detail.inputCost * 100_000_000) / 100_000_000,
+              outputCost:
+                Math.round(detail.outputCost * 100_000_000) / 100_000_000,
+              totalCost:
+                Math.round(detail.totalCost * 100_000_000) / 100_000_000,
+              pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
+              usageDate: detail.usageDate.toISOString(),
+              calculationSteps: detail.calculationSteps,
+            })),
+            summary: {
+              totalInputTokens: costData.detailedBreakdown.reduce(
+                (sum, d) => sum + d.tokensIn,
+                0,
+              ),
+              totalOutputTokens: costData.detailedBreakdown.reduce(
+                (sum, d) => sum + d.tokensOut,
+                0,
+              ),
+              totalInputCost:
+                Math.round(
+                  costData.detailedBreakdown.reduce(
+                    (sum, d) => sum + d.inputCost,
                     0,
-                  ) / costData.detailedBreakdown.length
-                : 0,
-            averageOutputPrice:
-              costData.detailedBreakdown.length > 0
-                ? costData.detailedBreakdown.reduce(
-                    (sum, d) => sum + d.outputTokenPrice,
+                  ) * 100_000_000,
+                ) / 100_000_000,
+              totalOutputCost:
+                Math.round(
+                  costData.detailedBreakdown.reduce(
+                    (sum, d) => sum + d.outputCost,
                     0,
-                  ) / costData.detailedBreakdown.length
-                : 0,
-            // eslint-disable-next-line unicorn/no-array-reduce
-            modelDistribution: costData.detailedBreakdown.reduce(
-              (accumulator: Record<string, number>, detail) => {
-                accumulator[detail.modelKey] =
-                  (accumulator[detail.modelKey] || 0) + detail.totalCost;
-                return accumulator;
+                  ) * 100_000_000,
+                ) / 100_000_000,
+              averageInputPrice:
+                costData.detailedBreakdown.length > 0
+                  ? costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.inputTokenPrice,
+                      0,
+                    ) / costData.detailedBreakdown.length
+                  : 0,
+              averageOutputPrice:
+                costData.detailedBreakdown.length > 0
+                  ? costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.outputTokenPrice,
+                      0,
+                    ) / costData.detailedBreakdown.length
+                  : 0,
+              // eslint-disable-next-line unicorn/no-array-reduce
+              modelDistribution: costData.detailedBreakdown.reduce(
+                (accumulator: Record<string, number>, detail) => {
+                  accumulator[detail.modelKey] =
+                    (accumulator[detail.modelKey] || 0) + detail.totalCost;
+                  return accumulator;
+                },
+                {} as Record<string, number>,
+              ),
+              usageTypeDistribution: {
+                grading: Math.round(costData.costBreakdown.grading * 100) / 100,
+                questionGeneration:
+                  Math.round(costData.costBreakdown.questionGeneration * 100) /
+                  100,
+                translation:
+                  Math.round(costData.costBreakdown.translation * 100) / 100,
+                other: Math.round(costData.costBreakdown.other * 100) / 100,
               },
-              {} as Record<string, number>,
-            ),
-            usageTypeDistribution: {
-              grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-              questionGeneration:
-                Math.round(costData.costBreakdown.questionGeneration * 100) /
-                100,
-              translation:
-                Math.round(costData.costBreakdown.translation * 100) / 100,
-              other: Math.round(costData.costBreakdown.other * 100) / 100,
             },
           },
-        },
+        }),
         authorActivity: {
           totalAuthors: authorActivity.totalAuthors,
           authors: authorActivity.authors,
@@ -2109,7 +2273,7 @@ export class AdminService {
         },
       };
 
-      this.setCachedInsights(assignmentId, insights);
+      this.setCachedInsights(assignmentId, !!details, insights);
 
       return insights;
     } catch (error) {
