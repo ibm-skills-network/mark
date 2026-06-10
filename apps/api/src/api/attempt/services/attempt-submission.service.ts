@@ -771,6 +771,14 @@ export class AttemptSubmissionService {
         attemptId,
         persistedAttempt.language,
       );
+
+      if (!this.progressService) {
+        throw new InternalServerErrorException(
+          "Grading progress service is not configured.",
+        );
+      }
+
+      await this.progressService.clearAiFeedbackError(attemptId);
     } catch (rerunError) {
       const internalError =
         rerunError instanceof Error ? rerunError.message : String(rerunError);
@@ -805,11 +813,6 @@ export class AttemptSubmissionService {
             AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
           );
     }
-
-    await this.prisma.gradingProgress.update({
-      where: { attemptId },
-      data: { status: GradingStatus.COMPLETED, error: null },
-    });
 
     return { success: true };
   }
