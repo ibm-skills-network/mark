@@ -25,6 +25,7 @@ describe("JobExecutorService translation jobs", () => {
     const logger = {
       child: jest.fn().mockReturnThis(),
       info: jest.fn(),
+      warn: jest.fn(),
     };
     const noopService = {};
 
@@ -146,5 +147,137 @@ describe("JobExecutorService translation jobs", () => {
       translationService.markPublishTranslationFailed,
     ).not.toHaveBeenCalled();
     expect(translationService.rollbackOneInflightSeed).not.toHaveBeenCalled();
+  });
+
+  it("throws on partial language failure while attempts remain so BullMQ retries", async () => {
+    const { executor, translationService } = makeExecutor();
+    translationService.translateQuestion.mockResolvedValueOnce({
+      inserted: 22,
+      skipped: 0,
+      failed: 1,
+    });
+
+    await expect(
+      executor.executeJob({
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        jobName: JOB_NAMES.TRANSLATE_QUESTION,
+        attemptsMade: 0,
+        maxAttempts: 3,
+        payload: {
+          parentJobId: "publish:v2:7",
+          assignmentId: 7,
+          questionId: 42,
+          question: { question: "content" },
+        },
+      }),
+    ).rejects.toThrow(/1 language/);
+
+    expect(
+      translationService.markPublishTranslationFailed,
+    ).not.toHaveBeenCalled();
+    expect(translationService.rollbackOneInflightSeed).not.toHaveBeenCalled();
+  });
+
+  it("completes without throwing when languages fail on the final attempt", async () => {
+    const { executor, translationService } = makeExecutor();
+    translationService.translateQuestion.mockResolvedValueOnce({
+      inserted: 22,
+      skipped: 0,
+      failed: 1,
+    });
+
+    await expect(
+      executor.executeJob({
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        jobName: JOB_NAMES.TRANSLATE_QUESTION,
+        attemptsMade: 2,
+        maxAttempts: 3,
+        payload: {
+          parentJobId: "publish:v2:7",
+          assignmentId: 7,
+          questionId: 42,
+          question: { question: "content" },
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(
+      translationService.markPublishTranslationFailed,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("drops forceRetranslation on retry attempts so completed languages are kept", async () => {
+    const { executor, translationService } = makeExecutor();
+    const question = { question: "content" };
+
+    await executor.executeJob({
+      queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+      jobName: JOB_NAMES.TRANSLATE_QUESTION,
+      attemptsMade: 1,
+      maxAttempts: 3,
+      payload: {
+        parentJobId: "publish:v2:7",
+        assignmentId: 7,
+        questionId: 42,
+        question,
+        forceRetranslation: true,
+      },
+    });
+
+    expect(translationService.translateQuestion).toHaveBeenCalledWith(
+      7,
+      42,
+      question,
+      "publish:v2:7",
+      false,
+      false,
+    );
+  });
+
+  it("throws on partial variant language failure while attempts remain", async () => {
+    const { executor, translationService } = makeExecutor();
+    translationService.translateVariant.mockResolvedValueOnce({
+      inserted: 21,
+      skipped: 0,
+      failed: 2,
+    });
+
+    await expect(
+      executor.executeJob({
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        jobName: JOB_NAMES.TRANSLATE_VARIANT,
+        attemptsMade: 0,
+        maxAttempts: 3,
+        payload: {
+          parentJobId: "publish:v2:7",
+          assignmentId: 7,
+          questionId: 42,
+          variantId: 99,
+          variant: { variantContent: "content" },
+        },
+      }),
+    ).rejects.toThrow(/2 language/);
+  });
+
+  it("throws on partial meta language failure while attempts remain", async () => {
+    const { executor, translationService } = makeExecutor();
+    translationService.translateAssignment.mockResolvedValueOnce({
+      inserted: 22,
+      skipped: 0,
+      failed: 1,
+    });
+
+    await expect(
+      executor.executeJob({
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        jobName: JOB_NAMES.TRANSLATE_META,
+        attemptsMade: 0,
+        maxAttempts: 3,
+        payload: {
+          parentJobId: "publish:v2:7",
+          assignmentId: 7,
+        },
+      }),
+    ).rejects.toThrow(/1 language/);
   });
 });
