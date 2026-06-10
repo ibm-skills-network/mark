@@ -10,29 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   useDashboardStats,
-  useCurrentPriceUpscaling,
-  useUpscalePricing,
-  useRemovePriceUpscaling,
   useRefreshDashboard,
 } from "@/hooks/useAdminDashboard";
 import {
   Settings,
   RefreshCw,
-  TrendingUp,
   AlertTriangle,
-  Calculator,
-  RotateCcw,
   Calendar,
   Activity,
 } from "lucide-react";
@@ -50,6 +36,19 @@ import {
 } from "@/components/ui/popover";
 import Link from "next/link";
 import { queryClient } from "@/lib/query-client";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Default dashboard window. "All time" makes getDashboardStats load every
+// AIUsage row and run full-table group-bys (cost grows unbounded with history),
+// so the dashboard opens on a bounded last-24h window instead.
+function getLast24hRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  return {
+    startDate: new Date(now.getTime() - DAY_MS).toISOString(),
+    endDate: now.toISOString(),
+  };
+}
 
 interface AdminDashboardProps {
   sessionToken?: string | null;
@@ -69,8 +68,8 @@ function AdminDashboardContent({
     assignmentId?: number;
     assignmentName?: string;
     userId?: string;
-  }>({});
-  const [datePreset, setDatePreset] = useState<string>("all");
+  }>(() => getLast24hRange());
+  const [datePreset, setDatePreset] = useState<string>("last24hours");
   const [customDateRange, setCustomDateRange] = useState<{
     start: string;
     end: string;
@@ -81,29 +80,12 @@ function AdminDashboardContent({
   );
   const [quickActionTitle, setQuickActionTitle] = useState<string>("");
 
-  const [isPriceUpscalingModalOpen, setIsPriceUpscalingModalOpen] =
-    useState(false);
-  const [globalUpscalingFactor, setGlobalUpscalingFactor] = useState("");
-  const [usageTypeUpscaling, setUsageTypeUpscaling] = useState({
-    TRANSLATION: "",
-    QUESTION_GENERATION: "",
-    ASSIGNMENT_GENERATION: "",
-    LIVE_RECORDING_FEEDBACK: "",
-    GRADING_VALIDATION: "",
-    ASSIGNMENT_GRADING: "",
-    OTHER: "",
-  });
-
   const {
     data: stats,
     isLoading: loadingStats,
     error: statsError,
   } = useDashboardStats(sessionToken, filters);
 
-  const { data: currentUpscaling } = useCurrentPriceUpscaling(sessionToken);
-
-  const upscalePricingMutation = useUpscalePricing(sessionToken);
-  const removePricingMutation = useRemovePriceUpscaling(sessionToken);
   const refreshDashboard = useRefreshDashboard(sessionToken);
 
   const handleFiltersChange = (newFilters: typeof filters) => {
@@ -118,6 +100,12 @@ function AdminDashboardContent({
     const newFilters = { ...filters };
 
     switch (preset) {
+      case "last24hours": {
+        const range = getLast24hRange();
+        newFilters.startDate = range.startDate;
+        newFilters.endDate = range.endDate;
+        break;
+      }
       case "today": {
         newFilters.startDate = today.toISOString();
         newFilters.endDate = new Date(
@@ -215,6 +203,7 @@ function AdminDashboardContent({
     const start = new Date(filters.startDate);
     const end = new Date(filters.endDate);
 
+    if (datePreset === "last24hours") return "Last 24 hours";
     if (datePreset === "today") return "Today";
     if (datePreset === "yesterday") return "Yesterday";
     if (datePreset === "last7days") return "Last 7 days";
@@ -240,239 +229,6 @@ function AdminDashboardContent({
   const clearQuickActionResults = () => {
     setQuickActionResults(null);
     setQuickActionTitle("");
-  };
-
-  const handleUsageTypeUpscalingChange = (
-    usageType: keyof typeof usageTypeUpscaling,
-    value: string,
-  ) => {
-    setUsageTypeUpscaling((prev) => ({
-      ...prev,
-      [usageType]: value,
-    }));
-  };
-
-  const resetUpscalingModal = () => {
-    setGlobalUpscalingFactor("");
-    setUsageTypeUpscaling({
-      TRANSLATION: "",
-      QUESTION_GENERATION: "",
-      ASSIGNMENT_GENERATION: "",
-      LIVE_RECORDING_FEEDBACK: "",
-      GRADING_VALIDATION: "",
-      ASSIGNMENT_GRADING: "",
-      OTHER: "",
-    });
-  };
-
-  const calculatePriceExample = () => {
-    const useRealData = stats && stats.costBreakdown;
-
-    const exampleUsage = useRealData
-      ? {
-          TRANSLATION: {
-            inputTokens: 1500,
-            outputTokens: 800,
-            currentCost:
-              stats.costBreakdown.translation /
-              Math.max(stats.publishedAssignments, 1),
-          },
-          QUESTION_GENERATION: {
-            inputTokens: 2000,
-            outputTokens: 1200,
-            currentCost:
-              stats.costBreakdown.questionGeneration /
-              Math.max(stats.publishedAssignments, 1),
-          },
-          ASSIGNMENT_GENERATION: {
-            inputTokens: 800,
-            outputTokens: 1500,
-            currentCost:
-              (stats.costBreakdown.questionGeneration /
-                Math.max(stats.publishedAssignments, 1)) *
-              0.3,
-          },
-          LIVE_RECORDING_FEEDBACK: {
-            inputTokens: 1200,
-            outputTokens: 900,
-            currentCost:
-              (stats.costBreakdown.grading /
-                Math.max(stats.publishedAssignments, 1)) *
-              0.2,
-          },
-          GRADING_VALIDATION: {
-            inputTokens: 600,
-            outputTokens: 400,
-            currentCost:
-              (stats.costBreakdown.grading /
-                Math.max(stats.publishedAssignments, 1)) *
-              0.1,
-          },
-          ASSIGNMENT_GRADING: {
-            inputTokens: 2200,
-            outputTokens: 1800,
-            currentCost:
-              (stats.costBreakdown.grading /
-                Math.max(stats.publishedAssignments, 1)) *
-              0.7,
-          },
-          OTHER: {
-            inputTokens: 300,
-            outputTokens: 200,
-            currentCost:
-              stats.costBreakdown.other /
-              Math.max(stats.publishedAssignments, 1),
-          },
-        }
-      : {
-          TRANSLATION: {
-            inputTokens: 1500,
-            outputTokens: 800,
-            currentCost: 0.0085,
-          },
-          QUESTION_GENERATION: {
-            inputTokens: 2000,
-            outputTokens: 1200,
-            currentCost: 0.0125,
-          },
-          ASSIGNMENT_GENERATION: {
-            inputTokens: 800,
-            outputTokens: 1500,
-            currentCost: 0.0095,
-          },
-          LIVE_RECORDING_FEEDBACK: {
-            inputTokens: 1200,
-            outputTokens: 900,
-            currentCost: 0.0105,
-          },
-          GRADING_VALIDATION: {
-            inputTokens: 600,
-            outputTokens: 400,
-            currentCost: 0.0045,
-          },
-          ASSIGNMENT_GRADING: {
-            inputTokens: 2200,
-            outputTokens: 1800,
-            currentCost: 0.0185,
-          },
-          OTHER: { inputTokens: 300, outputTokens: 200, currentCost: 0.0025 },
-        };
-
-    let totalCurrentCost = 0;
-    let totalNewCost = 0;
-    const breakdown: {
-      [key: string]: { current: number; new: number; factor: number };
-    } = {};
-
-    for (const [usageType, usage] of Object.entries(exampleUsage)) {
-      totalCurrentCost += usage.currentCost;
-
-      let scalingFactor = 1;
-
-      const globalFactor = parseFloat(globalUpscalingFactor);
-      if (globalFactor && globalFactor > 0) {
-        scalingFactor *= globalFactor;
-      }
-
-      const usageFactorValue =
-        usageTypeUpscaling[usageType as keyof typeof usageTypeUpscaling];
-      const usageFactor = parseFloat(usageFactorValue);
-      if (usageFactor && usageFactor > 0) {
-        scalingFactor *= usageFactor;
-      }
-
-      const newCost = usage.currentCost * scalingFactor;
-      totalNewCost += newCost;
-
-      breakdown[usageType] = {
-        current: usage.currentCost,
-        new: newCost,
-        factor: scalingFactor,
-      };
-    }
-
-    return {
-      totalCurrentCost,
-      totalNewCost,
-      breakdown,
-      percentageChange:
-        totalCurrentCost > 0
-          ? ((totalNewCost - totalCurrentCost) / totalCurrentCost) * 100
-          : 0,
-    };
-  };
-
-  const handlePriceUpscaling = async () => {
-    if (!sessionToken) return;
-
-    const globalFactor = parseFloat(globalUpscalingFactor);
-    if (globalUpscalingFactor && (isNaN(globalFactor) || globalFactor <= 0)) {
-      alert("Global upscaling factor must be a positive number");
-      return;
-    }
-
-    const usageFactors: { [key: string]: number } = {};
-    for (const [usageType, value] of Object.entries(usageTypeUpscaling)) {
-      if (value.trim()) {
-        const factor = parseFloat(value);
-        if (isNaN(factor) || factor <= 0) {
-          alert(`${usageType} upscaling factor must be a positive number`);
-          return;
-        }
-        usageFactors[usageType] = factor;
-      }
-    }
-
-    if (!globalUpscalingFactor && Object.keys(usageFactors).length === 0) {
-      alert("Please enter at least one upscaling factor");
-      return;
-    }
-
-    try {
-      await upscalePricingMutation.mutateAsync({
-        globalFactor: globalFactor || undefined,
-        usageFactors:
-          Object.keys(usageFactors).length > 0 ? usageFactors : undefined,
-        reason: "Manual price upscaling via admin interface",
-      });
-
-      alert("Prices have been successfully upscaled!");
-      setIsPriceUpscalingModalOpen(false);
-      resetUpscalingModal();
-    } catch (error) {
-      console.error("Failed to upscale prices:", error);
-      alert(
-        `Failed to upscale prices: ${error instanceof Error ? error.message : "Please try again."}`,
-      );
-    }
-  };
-
-  const handleRemoveUpscaling = async () => {
-    if (!sessionToken) return;
-
-    const confirmRemoval = confirm(
-      "Are you sure you want to remove the current price upscaling? This will revert all pricing to base rates.",
-    );
-    if (!confirmRemoval) return;
-
-    try {
-      const result = await removePricingMutation.mutateAsync(
-        "Manual removal via admin interface",
-      );
-
-      if (result.success) {
-        alert(
-          "Price upscaling has been successfully removed. All pricing reverted to base rates.",
-        );
-      } else {
-        alert(result.message || "No active price upscaling found to remove.");
-      }
-    } catch (error) {
-      console.error("Failed to remove upscaling:", error);
-      alert(
-        `Failed to remove price upscaling: ${error instanceof Error ? error.message : "Please try again."}`,
-      );
-    }
   };
 
   if (statsError) {
@@ -540,299 +296,6 @@ function AdminDashboardContent({
           </Button>
           {isAdmin && (
             <>
-              {currentUpscaling && (
-                <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded border border-orange-200">
-                  <TrendingUp className="h-3 w-3" />
-                  <span>Price Upscaling Active</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRemoveUpscaling}
-                    disabled={removePricingMutation.isPending}
-                    className="h-6 px-2 text-orange-600 hover:bg-orange-100"
-                  >
-                    {removePricingMutation.isPending ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b border-orange-600" />
-                    ) : (
-                      <RotateCcw className="h-3 w-3" />
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              <Dialog
-                open={isPriceUpscalingModalOpen}
-                onOpenChange={setIsPriceUpscalingModalOpen}
-              >
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-orange-600 border-orange-200 hover:bg-orange-50"
-                  >
-                    <TrendingUp className="h-4 w-4 mr-2" />
-                    Upscale Prices
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-orange-600">
-                      <TrendingUp className="h-5 w-5" />
-                      Price Upscaling (Super Admin Only)
-                    </DialogTitle>
-                    <DialogDescription>
-                      Apply upscaling factors to AI pricing. You can set a
-                      global factor or specific factors for each usage type.
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <div className="space-y-6">
-                    {currentUpscaling && (
-                      <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <TrendingUp className="h-5 w-5 text-blue-600 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-blue-800">
-                            Current Active Upscaling
-                          </p>
-                          <div className="text-sm text-blue-700 space-y-1 mt-1">
-                            {currentUpscaling.globalFactor && (
-                              <div>
-                                Global Factor: {currentUpscaling.globalFactor}x
-                              </div>
-                            )}
-                            {currentUpscaling.usageTypeFactors && (
-                              <div>Usage-specific factors applied</div>
-                            )}
-                            <div className="text-xs text-blue-600">
-                              Applied:{" "}
-                              {new Date(
-                                currentUpscaling.effectiveDate,
-                              ).toLocaleString()}
-                            </div>
-                            {currentUpscaling.reason && (
-                              <div className="text-xs text-blue-600">
-                                Reason: {currentUpscaling.reason}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRemoveUpscaling}
-                          disabled={removePricingMutation.isPending}
-                          className="text-blue-600 border-blue-200 hover:bg-blue-100"
-                        >
-                          {removePricingMutation.isPending ? (
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2" />
-                          ) : (
-                            <RotateCcw className="h-3 w-3 mr-2" />
-                          )}
-                          Remove
-                        </Button>
-                      </div>
-                    )}
-
-                    <div>
-                      <Label
-                        htmlFor="global-factor"
-                        className="text-sm font-medium"
-                      >
-                        Global Upscaling Factor (optional)
-                      </Label>
-                      <Input
-                        id="global-factor"
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        placeholder="e.g., 1.2 (20% increase)"
-                        value={globalUpscalingFactor}
-                        onChange={(e) =>
-                          setGlobalUpscalingFactor(e.target.value)
-                        }
-                        className="mt-1"
-                      />
-
-                      <p className="text-xs text-muted-foreground mt-1">
-                        If set, this will be applied to all usage types
-                        (multiplied with individual factors)
-                      </p>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium mb-3 block">
-                        Usage Type Specific Factors (optional)
-                      </Label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {Object.entries(usageTypeUpscaling).map(
-                          ([usageType, value]) => (
-                            <div key={usageType}>
-                              <Label
-                                htmlFor={usageType}
-                                className="text-xs text-muted-foreground"
-                              >
-                                {usageType
-                                  .replace(/_/g, " ")
-                                  .toLowerCase()
-                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
-                              </Label>
-                              <Input
-                                id={usageType}
-                                type="number"
-                                step="0.1"
-                                min="0"
-                                placeholder="1.0"
-                                value={value}
-                                onChange={(e) =>
-                                  handleUsageTypeUpscalingChange(
-                                    usageType as keyof typeof usageTypeUpscaling,
-                                    e.target.value,
-                                  )
-                                }
-                                className="mt-1"
-                              />
-                            </div>
-                          ),
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Individual factors are applied after the global factor
-                        (if set)
-                      </p>
-                    </div>
-
-                    {(globalUpscalingFactor ||
-                      Object.values(usageTypeUpscaling).some((v) =>
-                        v.trim(),
-                      )) && (
-                      <div className="border-t pt-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Calculator className="h-4 w-4 text-blue-600" />
-                          <Label className="text-sm font-medium text-blue-600">
-                            Price Impact Example
-                          </Label>
-                        </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          {(() => {
-                            const example = calculatePriceExample();
-                            const useRealData = stats && stats.costBreakdown;
-                            return (
-                              <>
-                                <p className="text-xs text-blue-700 mb-3">
-                                  {useRealData
-                                    ? `Based on your current assignment data (average per assignment)`
-                                    : `Based on a typical assignment with average AI usage`}
-                                </p>
-                                <div className="space-y-3">
-                                  <div className="flex justify-between items-center p-3 bg-white rounded border">
-                                    <div>
-                                      <div className="text-sm font-medium">
-                                        Total Assignment Cost
-                                      </div>
-                                      <div className="text-xs text-muted-foreground">
-                                        Current → New
-                                      </div>
-                                    </div>
-                                    <div className="text-right">
-                                      <div className="text-lg font-bold">
-                                        ${example.totalCurrentCost.toFixed(4)} →
-                                        ${example.totalNewCost.toFixed(4)}
-                                      </div>
-                                      <div
-                                        className={`text-xs font-medium ${example.percentageChange > 0 ? "text-red-600" : example.percentageChange < 0 ? "text-green-600" : "text-gray-600"}`}
-                                      >
-                                        {example.percentageChange > 0
-                                          ? "+"
-                                          : ""}
-                                        {example.percentageChange.toFixed(1)}%
-                                        change
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
-                                    {Object.entries(example.breakdown)
-                                      .filter(([, data]) => data.factor !== 1)
-                                      .map(([usageType, data]) => (
-                                        <div
-                                          key={usageType}
-                                          className="flex justify-between items-center text-xs p-2 bg-white rounded border"
-                                        >
-                                          <div className="font-medium">
-                                            {usageType
-                                              .replace(/_/g, " ")
-                                              .toLowerCase()
-                                              .replace(/\b\w/g, (l) =>
-                                                l.toUpperCase(),
-                                              )}
-                                          </div>
-                                          <div className="text-right">
-                                            <div>
-                                              ${data.current.toFixed(4)} → $
-                                              {data.new.toFixed(4)}
-                                            </div>
-                                            <div className="text-gray-500">
-                                              ×{data.factor.toFixed(1)}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                  </div>
-
-                                  {Object.values(example.breakdown).every(
-                                    (data) => data.factor === 1,
-                                  ) && (
-                                    <div className="text-xs text-gray-500 text-center p-2">
-                                      No changes applied with current factors
-                                    </div>
-                                  )}
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between pt-4">
-                      <Button
-                        variant="outline"
-                        onClick={resetUpscalingModal}
-                        disabled={upscalePricingMutation.isPending}
-                      >
-                        Reset All
-                      </Button>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => setIsPriceUpscalingModalOpen(false)}
-                          disabled={upscalePricingMutation.isPending}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={handlePriceUpscaling}
-                          disabled={upscalePricingMutation.isPending}
-                          className="bg-orange-600 hover:bg-orange-700"
-                        >
-                          {upscalePricingMutation.isPending ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                              Applying...
-                            </>
-                          ) : (
-                            <>
-                              <TrendingUp className="h-4 w-4 mr-2" />
-                              Apply Upscaling
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
               <Link href="/admin/llm-assignments">
                 <Button variant="outline" size="sm">
                   <Settings className="h-4 w-4 mr-2" />
@@ -865,6 +328,7 @@ function AdminDashboardContent({
                 <SelectValue>{formatDateRange()}</SelectValue>
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="last24hours">Last 24 hours</SelectItem>
                 <SelectItem value="all">All time</SelectItem>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="yesterday">Yesterday</SelectItem>

@@ -1309,21 +1309,30 @@ const AuthorQuestionsPage: FC<Props> = ({
                   {showMassVariations && (
                     <div className="px-4 pb-4 border-t border-gray-100 flex flex-col gap-3">
                       <p className="text-xs text-gray-500 mt-3">
-                        Generate AI variants for all questions. Select how many per question.
+                        Generate AI variants for all questions. Select how many
+                        per question.
                       </p>
                       <select
                         value={questionVariationNumber ?? ""}
-                        onChange={(e) => setQuestionVariationNumber(e.target.value ? Number(e.target.value) : null)}
+                        onChange={(e) =>
+                          setQuestionVariationNumber(
+                            e.target.value ? Number(e.target.value) : null,
+                          )
+                        }
                         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-600 focus:border-violet-600 bg-white"
                       >
                         <option value="">Variations per question</option>
-                        {[1,2,3,4,5,6,7,8,9,10].map((n) => (
-                          <option key={n} value={n}>{n}</option>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
                         ))}
                       </select>
                       <button
                         className="px-4 py-2 bg-violet-600 text-white rounded-md text-sm font-medium hover:bg-violet-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        disabled={isMassVariationLoading || !questionVariationNumber}
+                        disabled={
+                          isMassVariationLoading || !questionVariationNumber
+                        }
                         onClick={() => void handleMassVariation(questions)}
                       >
                         {isMassVariationLoading ? (
@@ -1468,9 +1477,7 @@ const SortableNavItem = ({
       key={question?.id}
       id={`toc-${question?.id}`}
       className={`flex items-center gap-1.5 px-3 py-2 rounded-md transition-colors unselectable cursor-pointer ${
-        isActive
-          ? "bg-violet-50"
-          : "hover:bg-gray-50"
+        isActive ? "bg-violet-50" : "hover:bg-gray-50"
       }`}
       {...attributes}
     >
@@ -1481,7 +1488,9 @@ const SortableNavItem = ({
       >
         <DragHandle />
       </div>
-      <span className={`text-sm truncate flex-1 min-w-0 ${isActive ? "font-semibold text-violet-700" : "text-gray-600"}`}>
+      <span
+        className={`text-sm truncate flex-1 min-w-0 ${isActive ? "font-semibold text-violet-700" : "text-gray-600"}`}
+      >
         <span className="text-gray-400 mr-1">{questionIndex + 1}.</span>
         {label}
       </span>
@@ -1656,7 +1665,9 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                     }
                     className="text-xs text-gray-500 hover:text-violet-600 transition-colors"
                   >
-                    {selectedQuestions.length === questions.length ? "None" : "All"}
+                    {selectedQuestions.length === questions.length
+                      ? "None"
+                      : "All"}
                   </button>
                   {selectedQuestions.length > 0 ? (
                     <button
@@ -1671,8 +1682,19 @@ const NavigationBox: FC<NavigationBoxProps> = ({
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                       aria-label="Cancel"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     </button>
                   )}
