@@ -136,7 +136,7 @@ export class SubmissionQualityService {
     const textRepeatCounts = this.buildTextRepeatCounts(chunks);
     const boilerplateTexts = this.detectBoilerplateTexts(pageTextCounts, textRepeatCounts);
 
-    const annotated: ExtractedChunk[] = chunks.map((chunk) => {
+    const perChunkAnnotated: ExtractedChunk[] = chunks.map((chunk) => {
       const quality = this.classifyChunk(
         chunk,
         boilerplateTexts,
@@ -144,6 +144,24 @@ export class SubmissionQualityService {
         rubricTokens,
       );
       return { ...chunk, quality };
+    });
+
+    const headingOnlyPages = this.detectHeadingOnlyPages(perChunkAnnotated);
+
+    // Re-mark chunks on heading-only pages as ineligible (unless already ineligible).
+    const annotated: ExtractedChunk[] = perChunkAnnotated.map((chunk) => {
+      const page = this.getChunkPage(chunk);
+      if (page !== null && headingOnlyPages.has(page) && chunk.quality?.eligibility === "eligible") {
+        return {
+          ...chunk,
+          quality: {
+            ...chunk.quality,
+            eligibility: "ineligible" as const,
+            ineligibleReasons: ["heading_only_page" as const],
+          },
+        };
+      }
+      return chunk;
     });
 
     const eligibleChunks = annotated.filter(
@@ -242,6 +260,11 @@ export class SubmissionQualityService {
         `${parameters.reasonBreakdown.rubric_copy} chunk(s) matched rubric text (rubric_copy)`,
       );
     }
+    if (parameters.reasonBreakdown.heading_only_page) {
+      warnings.push(
+        `${parameters.reasonBreakdown.heading_only_page} chunk(s) on heading-only pages (no body content)`,
+      );
+    }
     if (
       parameters.classification === "boilerplate_many_pages" ||
       parameters.classification === "low_information"
@@ -321,6 +344,43 @@ export class SubmissionQualityService {
     // Reject the pattern on long text to avoid false-positives on learner content
     // that begins with "Subject:", "Title:", "Author:", etc.
     return lowerText.length <= 80 && METADATA_KEY_PATTERN.test(lowerText);
+  }
+
+  // A heading-only page has chunks exclusively of type "heading" (or "unknown")
+  // with no paragraph, table, code, list, equation, or quote blocks.
+  // Slideshows that contain only a title on each slide match this pattern.
+  private detectHeadingOnlyPages(chunks: ExtractedChunk[]): Set<number> {
+    const SUBSTANTIVE_BLOCK_TYPES = new Set([
+      "paragraph",
+      "table",
+      "code",
+      "list",
+      "equation",
+      "quote",
+    ]);
+
+    const pageHasSubstantive = new Map<number, boolean>();
+    const pageHasAny = new Map<number, boolean>();
+
+    for (const chunk of chunks) {
+      const page = this.getChunkPage(chunk);
+      if (page === null) continue;
+
+      const blockType = chunk.metadata?.blockType ?? "unknown";
+      pageHasAny.set(page, true);
+
+      if (SUBSTANTIVE_BLOCK_TYPES.has(blockType)) {
+        pageHasSubstantive.set(page, true);
+      }
+    }
+
+    const headingOnly = new Set<number>();
+    for (const [page, hasAny] of pageHasAny) {
+      if (hasAny && !pageHasSubstantive.get(page)) {
+        headingOnly.add(page);
+      }
+    }
+    return headingOnly;
   }
 
   private buildPageTextCounts(

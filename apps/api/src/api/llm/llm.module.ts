@@ -252,6 +252,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     QUESTION_GENERATION_SERVICE,
     RUBRIC_SERVICE,
     TRANSLATION_SERVICE,
+    SubmissionQualityService,
   ],
 })
 export class LlmModule {}

@@ -28,7 +28,8 @@ export type ChunkIneligibleReason =
   | "low_information"
   | "duplicate"
   | "generated_summary"
-  | "non_learner_source";
+  | "non_learner_source"
+  | "heading_only_page";
 
 export interface ChunkQuality {
   eligibility: ChunkEligibility;
@@ -101,6 +102,8 @@ export interface ExtractedChunk {
     imageIndex?: number;
     structured?: boolean;
     checksum?: string;
+    /** Preserved from ContentBlock.type so the quality service can detect heading-only pages. */
+    blockType?: string;
   };
 }
 
