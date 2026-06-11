@@ -23,6 +23,22 @@ describe("computeUsedRange", () => {
 
     expect(computeUsedRange(ws)).toBeNull();
   });
+
+  it("ignores style-only placeholder cells when computing the range", () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Name", "Score"],
+      ["Alice", 90],
+    ]);
+    // Direct-formatting an empty cell far below the data is a common
+    // real-world pattern; with cellStyles on it parses as a t:"z" stub
+    // even when sheetStubs is off.
+    ws["J5000"] = { t: "z", z: "0.00" };
+    ws["!ref"] = "A1:J5000";
+
+    const range = computeUsedRange(ws);
+
+    expect(range).toEqual({ s: { r: 0, c: 0 }, e: { r: 1, c: 1 } });
+  });
 });
 
 describe("clampWorkbookToUsedRanges", () => {
@@ -112,5 +128,27 @@ describe("readClampedWorkbook", () => {
       header: 1,
     }) as unknown[][];
     expect(rows[0]).toEqual(["Name", "Score"]);
+  });
+
+  it("clamps past styled-empty cells on a real cellStyles round-trip", () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Name", "Score"],
+      ["Alice", 90],
+    ]);
+    ws["J5000"] = { t: "z", z: "0.00" };
+    ws["!ref"] = "A1:J5000";
+    XLSX.utils.book_append_sheet(wb, ws, "Results");
+    const buffer = Buffer.from(
+      XLSX.write(wb, { type: "buffer", bookType: "xlsx", cellStyles: true }),
+    );
+
+    const parsed = readClampedWorkbook(buffer, { cellStyles: true });
+
+    expect(parsed.Sheets["Results"]["!ref"]).toBe("A1:B2");
+    const rows = XLSX.utils.sheet_to_json(parsed.Sheets["Results"], {
+      header: 1,
+    }) as unknown[][];
+    expect(rows).toHaveLength(2);
   });
 });

@@ -18,6 +18,8 @@ export function computeUsedRange(worksheet: XLSX.WorkSheet): XLSX.Range | null {
 
   for (const key in worksheet) {
     if (key.codePointAt(0) === 33) continue; // '!' meta key
+    const cell = worksheet[key] as XLSX.CellObject;
+    if (cell.t === "z") continue; // style-only placeholder, carries no value
     const addr = XLSX.utils.decode_cell(key);
     if (
       !Number.isFinite(addr.r) ||
@@ -63,10 +65,12 @@ export function clampWorkbookToUsedRanges(workbook: XLSX.WorkBook): void {
 
 /**
  * Parse a spreadsheet buffer with `sheetStubs` forced OFF and every sheet
- * clamped to its real used range. Stubs make SheetJS materialize a
- * placeholder object for every cell inside the declared `!ref`; on files
- * with a formal full-sheet dimension that is ~17 billion stub keys. All
- * spreadsheet parsing in grading must go through this function.
+ * clamped to its real used range. Stubs materialize placeholder objects for
+ * valueless `<c>` elements physically present in the sheet XML (e.g.
+ * style-only cells), bloating the cell map for no grading value; the real
+ * explosion risk is downstream walks honoring a declared full-sheet `!ref`
+ * (`A1:XFD1048576`), which the clamp removes. All spreadsheet parsing in
+ * grading must go through this function.
  */
 export function readClampedWorkbook(
   buffer: Buffer,
