@@ -48,6 +48,7 @@ import {
   JudgeCritique,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { ContentSummarizationService } from "./content-summarization.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 
@@ -123,6 +124,7 @@ export class TextGradingService implements ITextGradingService {
     private readonly moderationService: IModerationService,
     private readonly chunkingService: EvidenceChunkingService,
     private readonly evidencePipeline: CriterionEvidencePipelineService,
+    private readonly contentSummarization: ContentSummarizationService,
     @Inject(GRADING_JUDGE_SERVICE)
     private readonly gradingJudgeService: IGradingJudgeService,
     @Optional()
@@ -555,6 +557,85 @@ export class TextGradingService implements ITextGradingService {
 
     const template = this.loadEnhancedTextGradingTemplate();
 
+    const rubricJson = JSON.stringify(scoringCriteria);
+    const judgeFeedbackText = previousJudgeFeedback || "No previous feedback";
+
+    // Budget the prompt against the model's safe context window. The grader
+    // previously injected the raw learner response, unbounded previous-Q&A
+    // context, and rubric JSON with no token check, which produced prompts far
+    // over the model's context limit. Compute the fixed overhead first, then
+    // reduce the variable parts (context, then response) only when over budget.
+    const safeLimit =
+      this.contentSummarization.getSafeContextLimit("gpt-4o-mini");
+
+    const overheadText = [
+      template,
+      question,
+      assignmentInstrctions ?? "",
+      responseSpecificInstruction,
+      rubricJson,
+      formatInstructions,
+      judgeFeedbackText,
+    ].join("\n");
+    const overheadTokens = this.contentSummarization.countTokens(overheadText);
+
+    let previousQaJson = JSON.stringify(previousQuestionsAnswersContext ?? []);
+    let previousQaTokens =
+      this.contentSummarization.countTokens(previousQaJson);
+    let responseText = learnerResponse;
+    let responseTokens = this.contentSummarization.countTokens(responseText);
+    let summaryNote = "";
+
+    if (overheadTokens + previousQaTokens + responseTokens > safeLimit) {
+      // Reduction 1: drop oversized previous-Q&A context. It is supplementary,
+      // so it goes first. Drop when it is large on its own or when the total is
+      // over budget.
+      if (
+        previousQaTokens > 8000 ||
+        overheadTokens + previousQaTokens + responseTokens > safeLimit
+      ) {
+        this.logger.info("text.grading.context.dropped", {
+          assignmentId,
+          prevQaTokens: previousQaTokens,
+          responseTokens,
+          overheadTokens,
+        });
+        previousQaJson = "[]";
+        previousQaTokens = this.contentSummarization.countTokens(previousQaJson);
+      }
+
+      // Reduction 2: if still over budget, chunk-summarize the learner response
+      // down to whatever room remains and disclose the reduction to the model.
+      if (overheadTokens + previousQaTokens + responseTokens > safeLimit) {
+        const targetTokens = safeLimit - overheadTokens - previousQaTokens;
+        const reduction = await this.contentSummarization.summarizeTextToBudget(
+          {
+            text: learnerResponse,
+            label: "learner response",
+            questionText: question,
+            modelKey: "gpt-4o-mini",
+            assignmentId,
+            usageType: AIUsageType.ASSIGNMENT_GRADING,
+            feature: "text_grading",
+            targetTokens,
+          },
+        );
+
+        if (reduction.summarized) {
+          this.logger.warn("text.grading.response.summarized", {
+            assignmentId,
+            originalTokens: reduction.originalTokens,
+            finalTokens: reduction.finalTokens,
+          });
+          summaryNote =
+            "NOTE: The learner submission below is a summarized extract of an oversized response. If details are missing, be conservative and state what evidence is insufficient rather than guessing.";
+        }
+
+        responseText = reduction.text;
+        responseTokens = reduction.finalTokens;
+      }
+    }
+
     this.logger.info("Rubric data being passed to LLM", {
       assignmentId,
       scoringCriteriaType,
@@ -580,17 +661,17 @@ export class TextGradingService implements ITextGradingService {
         question: () => question,
         assignment_instructions: () => assignmentInstrctions ?? "",
         responseSpecificInstruction: () => responseSpecificInstruction,
-        previous_questions_and_answers: () =>
-          JSON.stringify(previousQuestionsAnswersContext ?? []),
-        learner_response: () => learnerResponse,
+        previous_questions_and_answers: () => previousQaJson,
+        learner_response: () => responseText,
+        summary_note: () => summaryNote,
         total_points: () => maxPossiblePoints.toString(),
         scoring_type: () => scoringCriteriaType,
-        scoring_criteria: () => JSON.stringify(scoringCriteria),
+        scoring_criteria: () => rubricJson,
         format_instructions: () => formatInstructions,
         grading_type: () => responseType,
         language: () => language ?? "en",
         content_hash: () => contentHash,
-        judge_feedback: () => previousJudgeFeedback || "No previous feedback",
+        judge_feedback: () => judgeFeedbackText,
       },
     });
 
@@ -600,7 +681,7 @@ export class TextGradingService implements ITextGradingService {
       AIUsageType.ASSIGNMENT_GRADING,
       "text_grading",
       "gpt-4o-mini",
-      { temperature: 0, top_p: 0 },
+      { temperature: 0, top_p: 0, maxRetries: 1 },
     );
 
     const parsedResponse = GradingAttemptSchema.parse(
@@ -1058,6 +1139,7 @@ PREVIOUS JUDGE FEEDBACK (if any): {judge_feedback}
 
 Maximum Points: {total_points}
 
+{summary_note}
 ### Learner Submission
 {learner_response}
 
