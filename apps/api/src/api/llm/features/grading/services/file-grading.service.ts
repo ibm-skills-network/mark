@@ -44,6 +44,7 @@ import {
   filenamesMatch,
   mentionsFilenameRequirement,
 } from "./spreadsheet-rubric.utils";
+import { readClampedWorkbook } from "./spreadsheet-used-range.utils";
 
 type RubricScore = {
   rubricQuestion: string;
@@ -1681,17 +1682,19 @@ export class FileGradingService implements IFileGradingService {
 
       try {
         const options: XLSX.ParsingOptions & { FS?: string } = {
-          type: "buffer",
           cellText: true,
           cellDates: true,
-          sheetStubs: true,
         };
 
         if (extension === "tsv") {
           options.FS = "\t";
         }
 
-        const workbook = XLSX.read(buffer, options);
+        // Stubs stay OFF and every sheet is clamped to its real used range:
+        // a declared full-sheet dimension (A1:XFD1048576) would otherwise
+        // materialize a placeholder per virtual cell at parse time and a row
+        // per virtual row in every later sheet walk.
+        const workbook = readClampedWorkbook(buffer, options);
         if (workbook.SheetNames.length === 0) {
           continue;
         }
