@@ -29,6 +29,11 @@ export class ContentSummarizationService {
   private readonly contextSafetyRatio = 0.8;
   private readonly minimumChunkTokens = 4000;
   private readonly maximumChunkTokens = 20_000;
+  // Upper bound on how many chunks we will issue LLM summarize calls for. Chunk
+  // count scales linearly with input size, so without a ceiling an adversarially
+  // large submission could fan out into hundreds of calls. Beyond this we keep
+  // the first MAX_SUMMARY_CHUNKS and disclose the omission instead.
+  private static readonly MAX_SUMMARY_CHUNKS = 25;
 
   constructor(
     @Inject(TOKEN_COUNTER)
@@ -62,6 +67,18 @@ export class ContentSummarizationService {
    */
   getSafeContextLimit(modelKey: string): number {
     return Math.floor(this.getContextWindow(modelKey) * this.contextSafetyRatio);
+  }
+
+  /**
+   * Size each summarization chunk relative to the available budget: roughly a
+   * fifth of the target, clamped between the minimum and maximum chunk sizes.
+   * Shared by every grader so the chunking math lives in exactly one place.
+   */
+  getChunkTokenLimit(targetTokens: number): number {
+    return Math.max(
+      this.minimumChunkTokens,
+      Math.min(this.maximumChunkTokens, Math.floor(targetTokens * 0.2)),
+    );
   }
 
   /**
@@ -230,6 +247,7 @@ Write a concise summary (max 200 words) highlighting evidence relevant to the ru
   }): Promise<string> {
     const {
       summary,
+      label,
       modelKey,
       assignmentId,
       usageType,
@@ -291,7 +309,7 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       return this.truncateToTokenLimit(compressed, targetTokens, modelKey);
     } catch (error) {
       this.logger.warn(
-        `Summary compression failed: ${
+        `Summary compression failed for ${label}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -335,6 +353,23 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
 
     const originalTokens = this.tokenCounter.countTokens(text, modelKey);
 
+    // Fail fast on a non-positive budget BEFORE issuing any LLM call. This
+    // happens when the prompt's fixed overhead (rubric, instructions, format)
+    // already exceeds the model's safe context limit, leaving no room for
+    // content. Summarizing here would burn the entire chunk-summarization
+    // budget and then truncate to "", which the grader would grade as the
+    // submission. Throwing fails the attempt deterministically instead.
+    if (targetTokens <= 0) {
+      this.logger.error("content.summarization.invalid.budget", {
+        label,
+        targetTokens,
+        originalTokens,
+      });
+      throw new Error(
+        `Cannot summarize ${label}: the prompt's fixed overhead leaves no token budget for content.`,
+      );
+    }
+
     if (originalTokens <= targetTokens) {
       return {
         text,
@@ -344,16 +379,23 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
       };
     }
 
-    this.logger.warn(
-      `Content too large for model ${modelKey}. Estimated ${originalTokens} tokens (limit ${targetTokens}). Using chunked summarization.`,
-    );
+    const chunkTokenLimit = this.getChunkTokenLimit(targetTokens);
 
-    const chunkTokenLimit = Math.max(
-      this.minimumChunkTokens,
-      Math.min(this.maximumChunkTokens, Math.floor(targetTokens * 0.2)),
-    );
+    const allChunks = this.splitTextIntoChunks(text, chunkTokenLimit, modelKey);
+    const cappedAtMaxChunks =
+      allChunks.length > ContentSummarizationService.MAX_SUMMARY_CHUNKS;
+    const chunks = cappedAtMaxChunks
+      ? allChunks.slice(0, ContentSummarizationService.MAX_SUMMARY_CHUNKS)
+      : allChunks;
 
-    const chunks = this.splitTextIntoChunks(text, chunkTokenLimit, modelKey);
+    this.logger.warn("content.summarization.engaged", {
+      label,
+      originalTokens,
+      targetTokens,
+      chunkCount: allChunks.length,
+      cappedAtMaxChunks,
+    });
+
     const chunkSummaries: string[] = [];
 
     for (const chunk of chunks) {
@@ -377,6 +419,14 @@ Return a concise summary (max 300 words) focused on evidence and gaps.`,
         );
         chunkSummaries.push(this.truncateToTokenLimit(chunk, 1200, modelKey));
       }
+    }
+
+    // Disclose the truncation to the grader without spending an LLM call on the
+    // dropped tail.
+    if (cappedAtMaxChunks) {
+      chunkSummaries.push(
+        "[remaining content omitted: input exceeded the summarization ceiling]",
+      );
     }
 
     let summaryText = chunkSummaries.filter(Boolean).join("\n");

@@ -128,4 +128,142 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
     expect(result.finalTokens).toBeLessThanOrEqual(1000);
     expect(result.originalTokens).toBeGreaterThan(result.finalTokens);
   });
+
+  // (a) A non-positive token budget must fail fast BEFORE any LLM call rather
+  // than burning the chunk-summarization budget and returning empty text that
+  // would then be graded as the submission.
+  it("throws before any LLM call and logs when targetTokens <= 0", async () => {
+    const { service, mockPromptProcessor, mockLogger } = buildMocks();
+    const text = "abcd ".repeat(5000); // non-empty, ~6.25k tokens
+
+    await expect(
+      service.summarizeTextToBudget({
+        text,
+        label: "learner response",
+        questionText: "Explain the topic.",
+        modelKey: "gpt-4o-mini",
+        assignmentId: 1,
+        usageType: AIUsageType.ASSIGNMENT_GRADING,
+        feature: "text_grading",
+        targetTokens: 0,
+      }),
+    ).rejects.toThrow(/no token budget/i);
+
+    expect(mockPromptProcessor.processPromptForFeature).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "content.summarization.invalid.budget",
+      expect.objectContaining({
+        label: "learner response",
+        targetTokens: 0,
+      }),
+    );
+  });
+
+  // (b) A single chunk's summarize call failing must not abort the pipeline:
+  // the per-chunk catch substitutes a raw excerpt and the result stays bounded.
+  it("substitutes a raw excerpt when one chunk's summarize call rejects and stays bounded", async () => {
+    const { service, mockPromptProcessor } = buildMocks();
+    const processMock =
+      mockPromptProcessor.processPromptForFeature as jest.Mock;
+    processMock
+      .mockRejectedValueOnce(new Error("transient LLM failure"))
+      .mockResolvedValue("summary text");
+
+    const text = "abcd ".repeat(20_000); // ~25k tokens, over budget
+
+    const result = await service.summarizeTextToBudget({
+      text,
+      label: "answer.txt",
+      questionText: "Explain the topic.",
+      modelKey: "gpt-4o-mini",
+      assignmentId: 1,
+      usageType: AIUsageType.ASSIGNMENT_GRADING,
+      feature: "text_grading",
+      targetTokens: 1000,
+    });
+
+    expect(result.summarized).toBe(true);
+    expect(result.text.length).toBeGreaterThan(0);
+    expect(result.finalTokens).toBeLessThanOrEqual(1000);
+  });
+
+  // (c) When the joined chunk summaries are themselves over budget, the compress
+  // pass must engage and the final result must still be bounded.
+  it("engages the compress pass when joined summaries exceed budget and stays bounded", async () => {
+    const { service, mockPromptProcessor } = buildMocks();
+    const processMock =
+      mockPromptProcessor.processPromptForFeature as jest.Mock;
+    // Long per-chunk summaries (~5k tokens each) so the joined text is well over
+    // the 1000-token budget and compress is forced.
+    const longSummary = "word ".repeat(4000); // ~5k tokens
+    processMock.mockImplementation(() => Promise.resolve(longSummary));
+
+    const text = "abcd ".repeat(40_000); // ~50k tokens => multiple chunks
+
+    const result = await service.summarizeTextToBudget({
+      text,
+      label: "answer.txt",
+      questionText: "Explain the topic.",
+      modelKey: "gpt-4o-mini",
+      assignmentId: 1,
+      usageType: AIUsageType.ASSIGNMENT_GRADING,
+      feature: "text_grading",
+      targetTokens: 1000,
+    });
+
+    // The compress prompt ("compressing grading notes") must have been called.
+    const compressCalled = processMock.mock.calls.some((call) => {
+      const prompt = call[0] as { template?: string };
+      return (
+        typeof prompt?.template === "string" &&
+        prompt.template.includes("compressing grading notes")
+      );
+    });
+    expect(compressCalled).toBe(true);
+    expect(result.summarized).toBe(true);
+    expect(result.finalTokens).toBeLessThanOrEqual(1000);
+  });
+
+  // (d) Adversarially large inputs must not fan out into unbounded summarize
+  // calls: only the first MAX_SUMMARY_CHUNKS are summarized, an omission marker
+  // is appended, and the cap is recorded in the structured engagement log.
+  it("caps chunk fan-out at MAX_SUMMARY_CHUNKS and discloses the omission", async () => {
+    const { service, mockPromptProcessor, mockLogger } = buildMocks();
+    const processMock =
+      mockPromptProcessor.processPromptForFeature as jest.Mock;
+    processMock.mockResolvedValue("s");
+
+    // chunkTokenLimit for targetTokens=100_000 is max(4000, min(20_000, 20_000))
+    // = 20_000 tokens (~80_000 chars/chunk). 30 chunks => ~2.4M chars.
+    const text = "abcd ".repeat(600_000); // ~3M chars => > 25 chunks
+
+    const result = await service.summarizeTextToBudget({
+      text,
+      label: "answer.txt",
+      questionText: "Explain the topic.",
+      modelKey: "gpt-4o-mini",
+      assignmentId: 1,
+      usageType: AIUsageType.ASSIGNMENT_GRADING,
+      feature: "text_grading",
+      targetTokens: 100_000,
+    });
+
+    // Exactly 25 summarize calls; the omitted tail is NOT sent to the LLM.
+    const summarizeCalls = processMock.mock.calls.filter((call) => {
+      const prompt = call[0] as { template?: string };
+      return (
+        typeof prompt?.template === "string" &&
+        prompt.template.includes("condensing a learner submission chunk")
+      );
+    });
+    expect(summarizeCalls.length).toBe(25);
+    expect(result.text).toContain("remaining content omitted");
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "content.summarization.engaged",
+      expect.objectContaining({
+        label: "answer.txt",
+        cappedAtMaxChunks: true,
+      }),
+    );
+  });
 });

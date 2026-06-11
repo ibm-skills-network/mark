@@ -122,8 +122,6 @@ type SpreadsheetCheckDefinition = {
 @Injectable()
 export class FileGradingService implements IFileGradingService {
   private readonly logger: Logger;
-  private readonly minimumChunkTokens = 4000;
-  private readonly maximumChunkTokens = 20_000;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -2321,10 +2319,8 @@ export class FileGradingService implements IFileGradingService {
     safeTokenLimit: number,
   ): Promise<Array<{ filename: string; summary: string }>> {
     const summaries: Array<{ filename: string; summary: string }> = [];
-    const chunkTokenLimit = Math.max(
-      this.minimumChunkTokens,
-      Math.min(this.maximumChunkTokens, Math.floor(safeTokenLimit * 0.2)),
-    );
+    const chunkTokenLimit =
+      this.contentSummarization.getChunkTokenLimit(safeTokenLimit);
     const criteriaText = this.contentSummarization.truncateToTokenLimit(
       this.safeStringify(scoringCriteria),
       2000,
