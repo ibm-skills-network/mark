@@ -5,6 +5,28 @@ import Papa, { ParseResult } from "papaparse";
 import pdfToText from "react-pdftotext";
 import { remark } from "remark";
 import * as XLSX from "xlsx";
+import { clampWorkbookToUsedRanges } from "./spreadsheetUsedRange";
+
+/**
+ * Convert a parsed workbook into per-sheet row arrays, clamping each sheet
+ * to its real used range first so the output is bounded by actual data.
+ * Mutates the workbook in place: each sheet's !ref is tightened or removed.
+ */
+export const workbookToSheetData = (
+  workbook: XLSX.WorkBook,
+): { sheetName: string; data: unknown[][] }[] => {
+  clampWorkbookToUsedRanges(workbook);
+  return workbook.SheetNames.map((sheetName) => {
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+    }) as unknown[][];
+    return {
+      sheetName,
+      data: jsonData,
+    };
+  });
+};
 
 /**
  * Reads an Excel file (XLSX or XLS) using SheetJS.
@@ -17,22 +39,18 @@ export const readExcel = (
     const reader = new FileReader();
     reader.onload = async () => {
       try {
+        // sheetStubs stays OFF so style-only cells can't bloat the parsed
+        // cell map; the declared-dimension explosion itself is prevented by
+        // workbookToSheetData clamping each sheet's !ref to real data before
+        // sheet_to_json walks it.
         const workbook = XLSX.read(reader.result, {
           type: "array",
           cellStyles: true,
           cellFormula: true,
           cellDates: true,
           cellNF: true,
-          sheetStubs: true,
         });
-        const result = workbook.SheetNames.map((sheetName) => {
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          return {
-            sheetName,
-            data: jsonData,
-          };
-        });
+        const result = workbookToSheetData(workbook);
 
         const content = JSON.stringify(result);
         const sanitized = sanitizeContent(
