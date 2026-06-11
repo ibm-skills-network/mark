@@ -10,6 +10,7 @@ import { clampWorkbookToUsedRanges } from "./spreadsheetUsedRange";
 /**
  * Convert a parsed workbook into per-sheet row arrays, clamping each sheet
  * to its real used range first so the output is bounded by actual data.
+ * Mutates the workbook in place: each sheet's !ref is tightened or removed.
  */
 export const workbookToSheetData = (
   workbook: XLSX.WorkBook,

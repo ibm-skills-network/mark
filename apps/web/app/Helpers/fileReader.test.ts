@@ -31,7 +31,7 @@ describe("workbookToSheetData", () => {
     expect(result).toHaveLength(1);
     expect(result[0].sheetName).toBe("Inventory");
     // Pre-fix this is ~1,048,576 row arrays.
-    expect(result[0].data.length).toBeLessThan(10);
+    expect(result[0].data).toHaveLength(2);
     expect(result[0].data[0]).toEqual(["Item", "Qty", "Price"]);
     expect(result[0].data[1]).toEqual(["Widget", 3, 4.5]);
   }, 15_000);
