@@ -138,7 +138,6 @@ export class CriterionEvidenceRetrievalService {
 
     let evidence: CriterionEvidence[] = [];
     let validatedCount = 0;
-    let validationDefinitive = false;
 
     const skipValidation = usedFallback && reranked.length > maxEvidence;
 
@@ -152,29 +151,22 @@ export class CriterionEvidenceRetrievalService {
         recorder,
       );
 
-      if (validation !== null) {
-        // LLM ran and parsed successfully — its judgment is definitive.
-        // An empty array means it explicitly rejected all candidates; do not fall back.
-        validationDefinitive = true;
-        if (validation.length > 0) {
-          validatedCount = validation.length;
-          evidence = validation.map((item) => ({
-            chunkId: item.chunk.chunkId,
-            quote: item.chunk.text.slice(0, 220),
-            anchor: item.chunk.anchor,
-            sourceType: item.chunk.sourceType,
-            sourceId: item.chunk.sourceId,
-            relevanceScore: item.relevanceScore,
-            searchScore: item.searchScore,
-            contradiction: item.contradiction,
-          }));
-        }
+      if (validation.length > 0) {
+        validatedCount = validation.length;
+        evidence = validation.map((item) => ({
+          chunkId: item.chunk.chunkId,
+          quote: item.chunk.text.slice(0, 220),
+          anchor: item.chunk.anchor,
+          sourceType: item.chunk.sourceType,
+          sourceId: item.chunk.sourceId,
+          relevanceScore: item.relevanceScore,
+          searchScore: item.searchScore,
+          contradiction: item.contradiction,
+        }));
       }
     }
 
-    // Only fall back to keyword-scored candidates when validation was skipped or
-    // failed to parse (null). Never override a definitive LLM rejection.
-    if (evidence.length === 0 && !validationDefinitive) {
+    if (evidence.length === 0) {
       evidence = reranked.map((item) => ({
         chunkId: item.chunk.chunkId,
         quote: item.chunk.text.slice(0, 220),
@@ -282,8 +274,6 @@ export class CriterionEvidenceRetrievalService {
     );
   }
 
-  // Returns null when the LLM response could not be parsed (use keyword fallback).
-  // Returns [] when the LLM ran successfully but rejected all chunks (do not fall back).
   private async validateWithLlm(
     request: CriterionEvidenceRequest,
     chunks: ExtractedChunk[],
@@ -293,10 +283,8 @@ export class CriterionEvidenceRetrievalService {
     relevanceScore: number;
     searchScore: number;
     contradiction: boolean;
-  }> | null> {
-    // No candidates to validate — not a definitive LLM rejection, signal parse failure
-    // so the caller falls back to keyword scoring rather than treating it as "LLM rejected all".
-    if (chunks.length === 0) return null;
+  }>> {
+    if (chunks.length === 0) return [];
 
     const parser = StructuredOutputParser.fromZodSchema(
       EvidenceValidationSchema,
@@ -365,7 +353,7 @@ export class CriterionEvidenceRetrievalService {
     }
 
     this.logger.warn("Evidence validation parse failed for all candidates");
-    return null;
+    return [];
   }
 
   private mapParsedSelections(

@@ -98,12 +98,29 @@ describe("CriterionEvidencePipelineService", () => {
       }),
     };
 
+    const qualityService = {
+      classifyChunks: jest.fn().mockImplementation((chunks: ExtractedChunk[]) => ({
+        chunks,
+        quality: {
+          classification: "clean",
+          gated: false,
+          qualityWarnings: [],
+          rawChunkCount: chunks.length,
+          eligibleChunkCount: chunks.length,
+          ineligibleChunkCount: 0,
+          boilerplateRatio: 0,
+          ineligibleReasonBreakdown: {},
+        },
+      })),
+    };
+
     const pipeline = new CriterionEvidencePipelineService(
       evidenceRetrieval as any,
       gradingService as any,
       judgeService as any,
       new CriterionRetryManagerService(),
       new CriterionGradeCompilerService(),
+      qualityService as any,
     );
 
     const result = await pipeline.gradeWithEvidence({

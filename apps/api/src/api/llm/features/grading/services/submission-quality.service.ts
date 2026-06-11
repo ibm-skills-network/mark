@@ -346,9 +346,11 @@ export class SubmissionQualityService {
     return lowerText.length <= 80 && METADATA_KEY_PATTERN.test(lowerText);
   }
 
-  // A heading-only page has chunks exclusively of type "heading" (or "unknown")
-  // with no paragraph, table, code, list, equation, or quote blocks.
-  // Slideshows that contain only a title on each slide match this pattern.
+  // A heading-only page has chunks exclusively of type "heading" with no
+  // paragraph, table, code, list, equation, quote, or image blocks.
+  // Only processes chunks that have an explicit blockType in metadata —
+  // chunks without blockType (text/url sources) are skipped so they never
+  // trigger false heading-only flags.
   private detectHeadingOnlyPages(chunks: ExtractedChunk[]): Set<number> {
     const SUBSTANTIVE_BLOCK_TYPES = new Set([
       "paragraph",
@@ -357,26 +359,28 @@ export class SubmissionQualityService {
       "list",
       "equation",
       "quote",
+      "image", // image-only slides (diagrams, infographics) are substantive
     ]);
 
     const pageHasSubstantive = new Map<number, boolean>();
-    const pageHasAny = new Map<number, boolean>();
+    const pageHasKnownBlock = new Map<number, boolean>();
 
     for (const chunk of chunks) {
       const page = this.getChunkPage(chunk);
       if (page === null) continue;
 
-      const blockType = chunk.metadata?.blockType ?? "unknown";
-      pageHasAny.set(page, true);
+      const blockType = chunk.metadata?.blockType;
+      if (!blockType) continue; // only act on chunks with explicit block type
 
+      pageHasKnownBlock.set(page, true);
       if (SUBSTANTIVE_BLOCK_TYPES.has(blockType)) {
         pageHasSubstantive.set(page, true);
       }
     }
 
     const headingOnly = new Set<number>();
-    for (const [page, hasAny] of pageHasAny) {
-      if (hasAny && !pageHasSubstantive.get(page)) {
+    for (const [page] of pageHasKnownBlock) {
+      if (!pageHasSubstantive.get(page)) {
         headingOnly.add(page);
       }
     }
