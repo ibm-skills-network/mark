@@ -29,6 +29,7 @@ import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
+import { OversizedSubmissionError } from "../../api/src/api/llm/features/grading/errors/oversized-submission.error";
 
 // Allowed-fields-only shape carried in translation-job payloads. Restricted
 // to identifiers; the LLM-produced translatedText/translatedChoices that
@@ -491,9 +492,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Per-attempt failure classifier. Three branches:
-  //   A. OversizedSubmissionError (name match — keeps cross-app coupling
-  //      loose; the error class lives in apps/api): always permanent. Log
-  //      and rewrap as UnrecoverableError so BullMQ skips remaining retries.
+  //   A. OversizedSubmissionError (instanceof, with a name-match fallback for
+  //      the error class that lives in apps/api): always permanent. Log and
+  //      rewrap as UnrecoverableError so BullMQ skips remaining retries; the
+  //      learner-facing message rides along when the typed error survives.
   //   B. V8 OOM / worker OOM (message regex + code === "ERR_WORKER_OUT_OF_MEMORY"):
   //      per-attempt strike counter in Redis with 24h TTL. Two strikes →
   //      permanent fail. One strike → rethrow original so BullMQ retries.
@@ -522,8 +524,14 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    // Branch A: oversized submission — never retryable.
-    if (errorName === "OversizedSubmissionError") {
+    // Branch A: oversized submission — never retryable. The UnrecoverableError
+    // message is what markAttemptGradingFailed pipes to the learner's grading
+    // modal, so use the learner-facing wording when the typed error survived;
+    // the technical reason stays in the structured log.
+    if (
+      error instanceof OversizedSubmissionError ||
+      errorName === "OversizedSubmissionError"
+    ) {
       this.structuredLogger.error("attempt.grade.oversized", {
         attemptId,
         assignmentId,
@@ -532,7 +540,11 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         jobId: job.id,
         jobName: job.name,
       });
-      throw new UnrecoverableError(`OversizedSubmissionError: ${reason}`);
+      throw new UnrecoverableError(
+        error instanceof OversizedSubmissionError
+          ? error.learnerMessage
+          : `OversizedSubmissionError: ${reason}`,
+      );
     }
 
     // Branch B: V8 heap exhaustion or Node worker OOM. Single narrow cast

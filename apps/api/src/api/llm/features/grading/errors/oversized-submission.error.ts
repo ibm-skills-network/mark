@@ -37,4 +37,16 @@ export class OversizedSubmissionError extends Error {
     // `instanceof` works correctly under the project's TypeScript target.
     Object.setPrototypeOf(this, OversizedSubmissionError.prototype);
   }
+
+  /**
+   * Message safe to show a learner in the grading modal/toast. Deliberately
+   * omits block counts and caps — those are operator details that live in
+   * `message` and the structured logs.
+   */
+  get learnerMessage(): string {
+    const subject = this.filename
+      ? `"${this.filename}" is`
+      : "Your submission is";
+    return `${subject} too large for automatic grading. Try reducing its length (fewer pages, rows, or sheets) and submit it again.`;
+  }
 }

@@ -4,6 +4,7 @@ import IORedis from "ioredis";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
+import { OversizedSubmissionError } from "../../api/src/api/llm/features/grading/errors/oversized-submission.error";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import {
@@ -1296,6 +1297,52 @@ describe("JobWorkerService", () => {
           errorClass: "OversizedSubmissionError",
         }),
       );
+    });
+
+    it("surfaces learnerMessage when a typed OversizedSubmissionError survives", async () => {
+      const oversized = new OversizedSubmissionError({
+        blockCount: 60_000,
+        cap: 50_000,
+        filename: "huge.xlsx",
+      });
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(oversized);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect((thrown as Error).name).toBe("UnrecoverableError");
+      expect((thrown as Error).message).toBe(oversized.learnerMessage);
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "attempt.grade.oversized",
+        expect.objectContaining({
+          attemptId: 861298,
+          assignmentId: 2537,
+          errorClass: "OversizedSubmissionError",
+        }),
+      );
+    });
+
+    it("keeps name-only OversizedSubmissionError terminal with the technical reason", async () => {
+      const nameOnly = new Error("Submission would produce 60000 blocks");
+      nameOnly.name = "OversizedSubmissionError";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(nameOnly);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect((thrown as Error).message).toMatch(/^OversizedSubmissionError: /);
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
     });
 
     it("rethrows original error on the first OOM strike and records INCR+EXPIRE", async () => {

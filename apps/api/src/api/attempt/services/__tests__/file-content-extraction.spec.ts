@@ -1,6 +1,7 @@
 /* eslint-disable  */
 import { Logger } from "@nestjs/common";
 import { S3Service } from "src/api/files/services/s3.service";
+import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
 import { FileContentExtractionService } from "../file-content-extraction";
 import { PdfStructureExtractorService } from "../pdf-structure-extractor.service";
 
@@ -580,5 +581,93 @@ describe("FileContentExtractionService.shouldUseStructuredExtraction", () => {
     expect((service as any).shouldUseStructuredExtraction(false, false)).toBe(
       false,
     );
+  });
+});
+
+describe("FileContentExtractionService - oversized submissions fail extraction", () => {
+  let service: FileContentExtractionService;
+  const original = process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+
+  beforeEach(() => {
+    // Force the structured-extraction branch on deterministically.
+    delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    service = createService();
+  });
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    } else {
+      process.env.ENABLE_PDF_STRUCTURED_EXTRACTION = original;
+    }
+  });
+
+  const pdfFile = {
+    filename: "huge.pdf",
+    fileType: "application/pdf",
+    bucket: "bucket",
+    key: "key",
+    content: "InCos",
+  };
+
+  it("restamps the surfaced error with the upload filename, not the internal submission id", async () => {
+    jest
+      .spyOn(service as any, "downloadFileFromCOS")
+      .mockResolvedValue(Buffer.from("pdf"));
+    // The extractor only knows the prefixed internal submission id. The
+    // catch must restamp the surfaced error with the learner's real filename.
+    const oversized = new OversizedSubmissionError({
+      blockCount: 60_000,
+      cap: 50_000,
+      filename: "123_huge.pdf",
+    });
+    (service as any).pdfStructureExtractor = {
+      extractStructuredContent: jest.fn().mockRejectedValue(oversized),
+    };
+
+    const promise = (service as any).extractContentFromFiles([pdfFile], {
+      useStructuredExtraction: true,
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      name: "OversizedSubmissionError",
+      filename: "huge.pdf",
+      blockCount: 60_000,
+      cap: 50_000,
+    });
+
+    // Restamping creates a copy, so it is no longer the same instance, but it
+    // must remain an OversizedSubmissionError so downstream type checks hold.
+    let caught: unknown;
+    try {
+      await (service as any).extractContentFromFiles([pdfFile], {
+        useStructuredExtraction: true,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(OversizedSubmissionError);
+    expect(caught).not.toBe(oversized);
+  });
+
+  it("still falls back to simple extraction for generic structured-extraction failures", async () => {
+    jest
+      .spyOn(service as any, "downloadFileFromCOS")
+      .mockResolvedValue(Buffer.from("plain text content"));
+    (service as any).pdfStructureExtractor = {
+      extractStructuredContent: jest
+        .fn()
+        .mockRejectedValue(new Error("parser exploded")),
+    };
+
+    const results = await (service as any).extractContentFromFiles([pdfFile], {
+      useStructuredExtraction: true,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].filename).toBe("huge.pdf");
+    // The fallback must produce a real simple-extraction result, not an
+    // outer-catch "[ERROR extracting...]" blob (which would carry `error`).
+    expect(results[0].error).toBeUndefined();
   });
 });

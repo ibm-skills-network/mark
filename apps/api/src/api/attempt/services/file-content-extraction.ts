@@ -10,6 +10,7 @@ import { S3Service } from "src/api/files/services/s3.service";
 import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
+import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
 
 import { CanonicalSubmission } from "./structured-content.models";
@@ -180,6 +181,9 @@ export class FileContentExtractionService {
 
           return result;
         } catch (error) {
+          if (error instanceof OversizedSubmissionError) {
+            throw error;
+          }
           this.logger.error(
             `Failed to extract content from ${file.filename}:`,
             error,
@@ -325,6 +329,19 @@ export class FileContentExtractionService {
           },
         };
       } catch (error) {
+        // An oversized submission must fail extraction with a clear error,
+        // not silently degrade to truncated simple extraction. The extractor
+        // only knows the internal submission id, so restamp the error with
+        // the learner's actual filename before it surfaces.
+        if (error instanceof OversizedSubmissionError) {
+          throw new OversizedSubmissionError({
+            blockCount: error.blockCount,
+            cap: error.cap,
+            filename: file.filename,
+            questionId: error.questionId,
+            attemptId: error.attemptId,
+          });
+        }
         this.logger.warn(
           `Structured extraction failed for ${file.filename}, falling back to simple extraction: ${error instanceof Error ? error.message : String(error)}`,
         );
