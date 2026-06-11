@@ -5,6 +5,27 @@ import Papa, { ParseResult } from "papaparse";
 import pdfToText from "react-pdftotext";
 import { remark } from "remark";
 import * as XLSX from "xlsx";
+import { clampWorkbookToUsedRanges } from "./spreadsheetUsedRange";
+
+/**
+ * Convert a parsed workbook into per-sheet row arrays, clamping each sheet
+ * to its real used range first so the output is bounded by actual data.
+ */
+export const workbookToSheetData = (
+  workbook: XLSX.WorkBook,
+): { sheetName: string; data: unknown[][] }[] => {
+  clampWorkbookToUsedRanges(workbook);
+  return workbook.SheetNames.map((sheetName) => {
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+    }) as unknown[][];
+    return {
+      sheetName,
+      data: jsonData,
+    };
+  });
+};
 
 /**
  * Reads an Excel file (XLSX or XLS) using SheetJS.
@@ -17,22 +38,18 @@ export const readExcel = (
     const reader = new FileReader();
     reader.onload = async () => {
       try {
+        // sheetStubs stays OFF: stubs materialize a placeholder object for
+        // every cell inside the declared !ref, which on workbooks saved with
+        // a full-sheet formal dimension (A1:XFD1048576) explodes into
+        // millions of rows of submitted content.
         const workbook = XLSX.read(reader.result, {
           type: "array",
           cellStyles: true,
           cellFormula: true,
           cellDates: true,
           cellNF: true,
-          sheetStubs: true,
         });
-        const result = workbook.SheetNames.map((sheetName) => {
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          return {
-            sheetName,
-            data: jsonData,
-          };
-        });
+        const result = workbookToSheetData(workbook);
 
         const content = JSON.stringify(result);
         const sanitized = sanitizeContent(
