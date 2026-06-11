@@ -72,6 +72,28 @@ describe("OversizedSubmissionError class", () => {
       expect(caught).toBeInstanceOf(Error);
     }
   });
+
+  it("exposes a learner-facing message naming the file when known", () => {
+    const err = new OversizedSubmissionError({
+      blockCount: 60_000,
+      cap: 50_000,
+      filename: "thesis.pdf",
+    });
+
+    expect(err.learnerMessage).toBe(
+      '"thesis.pdf" is too large for automatic grading. Try reducing its length (fewer pages, rows, or sheets) and submit it again.',
+    );
+    // No internal jargon leaks to learners.
+    expect(err.learnerMessage).not.toMatch(/block|cap/i);
+  });
+
+  it("exposes a generic learner-facing message when the filename is unknown", () => {
+    const err = new OversizedSubmissionError({ blockCount: 2, cap: 1 });
+
+    expect(err.learnerMessage).toBe(
+      "Your submission is too large for automatic grading. Try reducing its length (fewer pages, rows, or sheets) and submit it again.",
+    );
+  });
 });
 
 describe("FileGradingService.splitTextIntoEvidenceBlocks cap enforcement", () => {

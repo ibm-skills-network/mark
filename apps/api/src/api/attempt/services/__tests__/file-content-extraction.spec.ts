@@ -1,6 +1,7 @@
 /* eslint-disable  */
 import { Logger } from "@nestjs/common";
 import { S3Service } from "src/api/files/services/s3.service";
+import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
 import { FileContentExtractionService } from "../file-content-extraction";
 import { PdfStructureExtractorService } from "../pdf-structure-extractor.service";
 
@@ -580,5 +581,70 @@ describe("FileContentExtractionService.shouldUseStructuredExtraction", () => {
     expect((service as any).shouldUseStructuredExtraction(false, false)).toBe(
       false,
     );
+  });
+});
+
+describe("FileContentExtractionService - oversized submissions fail extraction", () => {
+  let service: FileContentExtractionService;
+  const original = process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+
+  beforeEach(() => {
+    // Force the structured-extraction branch on deterministically.
+    delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    service = createService();
+  });
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
+    } else {
+      process.env.ENABLE_PDF_STRUCTURED_EXTRACTION = original;
+    }
+  });
+
+  const pdfFile = {
+    filename: "huge.pdf",
+    fileType: "application/pdf",
+    bucket: "bucket",
+    key: "key",
+    content: "InCos",
+  };
+
+  it("propagates OversizedSubmissionError out of extractContentFromFiles", async () => {
+    jest
+      .spyOn(service as any, "downloadFileFromCOS")
+      .mockResolvedValue(Buffer.from("pdf"));
+    const oversized = new OversizedSubmissionError({
+      blockCount: 60_000,
+      cap: 50_000,
+      filename: "huge.pdf",
+    });
+    (service as any).pdfStructureExtractor = {
+      extractStructuredContent: jest.fn().mockRejectedValue(oversized),
+    };
+
+    await expect(
+      (service as any).extractContentFromFiles([pdfFile], {
+        useStructuredExtraction: true,
+      }),
+    ).rejects.toBe(oversized);
+  });
+
+  it("still falls back to simple extraction for generic structured-extraction failures", async () => {
+    jest
+      .spyOn(service as any, "downloadFileFromCOS")
+      .mockResolvedValue(Buffer.from("plain text content"));
+    (service as any).pdfStructureExtractor = {
+      extractStructuredContent: jest
+        .fn()
+        .mockRejectedValue(new Error("parser exploded")),
+    };
+
+    const results = await (service as any).extractContentFromFiles([pdfFile], {
+      useStructuredExtraction: true,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].filename).toBe("huge.pdf");
   });
 });
