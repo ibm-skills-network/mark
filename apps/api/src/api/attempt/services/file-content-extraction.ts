@@ -329,10 +329,18 @@ export class FileContentExtractionService {
           },
         };
       } catch (error) {
-        // An oversized submission must fail the attempt with a clear error,
-        // not silently degrade to truncated simple extraction.
+        // An oversized submission must fail extraction with a clear error,
+        // not silently degrade to truncated simple extraction. The extractor
+        // only knows the internal submission id, so restamp the error with
+        // the learner's actual filename before it surfaces.
         if (error instanceof OversizedSubmissionError) {
-          throw error;
+          throw new OversizedSubmissionError({
+            blockCount: error.blockCount,
+            cap: error.cap,
+            filename: file.filename,
+            questionId: error.questionId,
+            attemptId: error.attemptId,
+          });
         }
         this.logger.warn(
           `Structured extraction failed for ${file.filename}, falling back to simple extraction: ${error instanceof Error ? error.message : String(error)}`,

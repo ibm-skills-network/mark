@@ -11,6 +11,7 @@ import {
 } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
 import { UploadType } from "src/api/files/dto/upload.dto";
 import { FilesService } from "src/api/files/services/files.service";
 import { S3Service } from "src/api/files/services/s3.service";
@@ -254,17 +255,39 @@ export class AssignmentFileService {
         Key: file.storageKey,
       });
       const buffer = await this.collectBodyToBuffer(object.Body);
-      [extractedFile] =
-        await this.fileContentExtractionService.extractContentFromFiles([
-          {
-            filename: file.filename,
-            content: "InCos",
-            fileType: file.mimeType || "application/octet-stream",
-            bucket: file.storageBucket,
-            key: file.storageKey,
-            buffer,
-          },
-        ]);
+      const extractionInput = [
+        {
+          filename: file.filename,
+          content: "InCos",
+          fileType: file.mimeType || "application/octet-stream",
+          bucket: file.storageBucket,
+          key: file.storageKey,
+          buffer,
+        },
+      ];
+
+      try {
+        [extractedFile] =
+          await this.fileContentExtractionService.extractContentFromFiles(
+            extractionInput,
+          );
+      } catch (error) {
+        if (!(error instanceof OversizedSubmissionError)) {
+          throw error;
+        }
+        // Author reference material is context, not graded work: an over-cap
+        // PDF should degrade to truncated simple extraction (pre-existing
+        // behavior) rather than fail the upload. The evidence-block cap is a
+        // grading concern that does not apply here.
+        this.logger.warn(
+          `completeAssignmentFileUpload: oversized reference file ${file.filename} (blockCount=${error.blockCount} cap=${error.cap}); retrying with structured extraction disabled`,
+        );
+        [extractedFile] =
+          await this.fileContentExtractionService.extractContentFromFiles(
+            extractionInput,
+            { useStructuredExtraction: false },
+          );
+      }
     } catch (extractionError) {
       const message =
         extractionError instanceof Error
