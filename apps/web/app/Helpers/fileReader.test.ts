@@ -44,6 +44,21 @@ describe("workbookToSheetData", () => {
 
     expect(result[0].data).toEqual([]);
   });
+
+  it("bounds output when a styled-empty cell sits far below the data", () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Name", "Score"],
+      ["Alice", 90],
+    ]);
+    ws["J5000"] = { t: "z", z: "0.00" };
+    ws["!ref"] = "A1:J5000";
+    XLSX.utils.book_append_sheet(wb, ws, "Results");
+
+    const result = workbookToSheetData(wb);
+
+    expect(result[0].data).toHaveLength(2);
+  });
 });
 
 describe("readExcel", () => {

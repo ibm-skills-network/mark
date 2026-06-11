@@ -22,6 +22,22 @@ describe("computeUsedRange", () => {
 
     expect(computeUsedRange(ws)).toBeNull();
   });
+
+  it("ignores style-only placeholder cells when computing the range", () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Name", "Score"],
+      ["Alice", 90],
+    ]);
+    // Direct-formatting an empty cell far below the data is a common
+    // real-world pattern; with cellStyles on it parses as a t:"z" stub
+    // even when sheetStubs is off.
+    ws["J5000"] = { t: "z", z: "0.00" };
+    ws["!ref"] = "A1:J5000";
+
+    const range = computeUsedRange(ws);
+
+    expect(range).toEqual({ s: { r: 0, c: 0 }, e: { r: 1, c: 1 } });
+  });
 });
 
 describe("clampWorkbookToUsedRanges", () => {

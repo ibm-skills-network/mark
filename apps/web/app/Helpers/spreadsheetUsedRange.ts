@@ -9,9 +9,7 @@ import * as XLSX from "xlsx";
  * `sheet_to_json` to materialize a row for every virtual row in the sheet.
  * Returns null when the worksheet contains no real cells.
  */
-export function computeUsedRange(
-  worksheet: XLSX.WorkSheet,
-): XLSX.Range | null {
+export function computeUsedRange(worksheet: XLSX.WorkSheet): XLSX.Range | null {
   let minRow = Number.POSITIVE_INFINITY;
   let minCol = Number.POSITIVE_INFINITY;
   let maxRow = Number.NEGATIVE_INFINITY;
@@ -20,6 +18,8 @@ export function computeUsedRange(
 
   for (const key in worksheet) {
     if (key.codePointAt(0) === 33) continue; // '!' meta key
+    const cell = worksheet[key] as XLSX.CellObject;
+    if (cell.t === "z") continue; // style-only placeholder, carries no value
     const addr = XLSX.utils.decode_cell(key);
     if (
       !Number.isFinite(addr.r) ||

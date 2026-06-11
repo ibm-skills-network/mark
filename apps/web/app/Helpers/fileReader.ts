@@ -39,10 +39,10 @@ export const readExcel = (
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        // sheetStubs stays OFF: stubs materialize a placeholder object for
-        // every cell inside the declared !ref, which on workbooks saved with
-        // a full-sheet formal dimension (A1:XFD1048576) explodes into
-        // millions of rows of submitted content.
+        // sheetStubs stays OFF so style-only cells can't bloat the parsed
+        // cell map; the declared-dimension explosion itself is prevented by
+        // workbookToSheetData clamping each sheet's !ref to real data before
+        // sheet_to_json walks it.
         const workbook = XLSX.read(reader.result, {
           type: "array",
           cellStyles: true,
