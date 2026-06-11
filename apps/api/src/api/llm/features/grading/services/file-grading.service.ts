@@ -28,6 +28,7 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
@@ -539,6 +540,19 @@ export class FileGradingService implements IFileGradingService {
           `Invalid LLM response: ${response?.slice(0, 100)}`,
         );
       } catch (error) {
+        // A context_length_exceeded 400 is deterministic for a given prompt:
+        // neither a same-model retry nor the fallback-model resend below can
+        // ever succeed, so propagate it immediately instead of burning the
+        // remaining ladder on an identical request.
+        if (isContextLengthExceededError(error)) {
+          this.logger.error("file.grading.context.length.exceeded", {
+            assignmentId,
+            attempt,
+            primaryModel,
+          });
+          throw error;
+        }
+
         lastError = error instanceof Error ? error : new Error(String(error));
         this.logger.warn(
           `LLM attempt ${attempt}/${maxRetries} failed with model ${primaryModel}: ${lastError.message}`,
@@ -2365,7 +2379,11 @@ export class FileGradingService implements IFileGradingService {
             }`,
           );
           chunkSummaries.push(
-            this.contentSummarization.truncateToTokenLimit(chunk, 1200, modelKey),
+            this.contentSummarization.truncateToTokenLimit(
+              chunk,
+              1200,
+              modelKey,
+            ),
           );
         }
       }

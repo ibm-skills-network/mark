@@ -26,6 +26,7 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   ANSWER_NORMALIZATION_SERVICE,
   GRADING_CACHE_SERVICE,
@@ -308,6 +309,17 @@ export class TextGradingService implements ITextGradingService {
             language,
           );
         } catch (error) {
+          // A context_length_exceeded 400 is deterministic for a given prompt:
+          // resending the identical request can never succeed, so stop the
+          // retry loop immediately and let the post-loop failure throw fire.
+          if (isContextLengthExceededError(error)) {
+            this.logger.error("text.grading.context.length.exceeded", {
+              assignmentId,
+              attempt: attemptCount,
+            });
+            break;
+          }
+
           this.logger.error(
             `Error in grading attempt ${attemptCount}: ${
               error instanceof Error ? error.message : "Unknown error"
@@ -601,7 +613,8 @@ export class TextGradingService implements ITextGradingService {
           overheadTokens,
         });
         previousQaJson = "[]";
-        previousQaTokens = this.contentSummarization.countTokens(previousQaJson);
+        previousQaTokens =
+          this.contentSummarization.countTokens(previousQaJson);
       }
 
       // Reduction 2: if still over budget, chunk-summarize the learner response

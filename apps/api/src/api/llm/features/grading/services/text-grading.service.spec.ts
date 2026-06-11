@@ -192,3 +192,92 @@ describe("TextGradingService.generateGrading token budget gate", () => {
     );
   });
 });
+
+/**
+ * The Path B retry loop in gradeTextBasedQuestion must not resend an identical
+ * prompt after a context_length_exceeded 400 — that error is deterministic, so
+ * the loop has to break immediately and let the post-loop failure throw fire.
+ *
+ * NOTE on call counts: the loop is `while (!gradingAttempt && attemptCount <
+ * this.maxRetries)` with `this.maxRetries = 1`, so generateGrading (and the
+ * single processPromptForFeature inside it) is invoked exactly ONCE per grade
+ * even on a generic error. The context-length fail-fast therefore does not
+ * reduce the invoke count here; what it adds is the structured error log and an
+ * immediate break (so no backoff and no re-entry if maxRetries were raised).
+ * Both tests assert exactly one invoke and a rejection; they differ on whether
+ * the context-length event log fires.
+ */
+describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", () => {
+  function buildGradeService(processPromptForFeature: jest.Mock) {
+    const { service, mockLogger } = buildService();
+    // Object.create skips class field initializers, so restore the retry
+    // configuration the loop reads.
+    service.maxRetries = 1;
+    service.retryDelay = 1000;
+    service.promptProcessor = { processPromptForFeature };
+    service.moderationService = {
+      validateContent: jest.fn().mockResolvedValue(true),
+    };
+    // No normalization / cache / judge needed to reach the loop, but the judge
+    // is referenced after a successful grade; these paths are never hit here
+    // because generateGrading always rejects.
+    service.gradingJudgeService = { validateGrading: jest.fn() };
+    return { service, mockLogger };
+  }
+
+  function gradeModel(learnerResponse: string) {
+    return {
+      question: "What is React?",
+      learnerResponse,
+      totalPoints: 4,
+      scoringCriteriaType: "OTHER",
+      scoringCriteria: { rubrics: [] },
+      previousQuestionsAnswersContext: [],
+      assignmentInstrctions: "Follow the rubric.",
+      responseType: "OTHER",
+      questionId: 7,
+    };
+  }
+
+  it("does not re-enter the loop on a context-length error and rejects", async () => {
+    const contextError = new Error(
+      "This model's maximum context length is 128000 tokens. " +
+        "However, your messages resulted in 159000 tokens.",
+    );
+    const processPromptForFeature = jest.fn().mockRejectedValue(contextError);
+    const { service, mockLogger } = buildGradeService(processPromptForFeature);
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel("a short answer"), 42),
+    ).rejects.toThrow();
+
+    // The loop did not re-enter: exactly one underlying LLM call.
+    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+
+    // The fail-fast structured error log fired with the event name.
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "text.grading.context.length.exceeded",
+      expect.objectContaining({ assignmentId: 42, attempt: 1 }),
+    );
+  });
+
+  it("uses the normal retry budget for a generic error (no context-length log)", async () => {
+    const processPromptForFeature = jest
+      .fn()
+      .mockRejectedValue(new Error("Rate limit reached for gpt-4o-mini"));
+    const { service, mockLogger } = buildGradeService(processPromptForFeature);
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel("a short answer"), 42),
+    ).rejects.toThrow();
+
+    // maxRetries = 1 -> the loop runs exactly once even on a generic error.
+    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+
+    // No context-length event log for a non-context-length error.
+    expect(mockLogger.error).not.toHaveBeenCalledWith(
+      "text.grading.context.length.exceeded",
+      expect.anything(),
+    );
+  });
+});
