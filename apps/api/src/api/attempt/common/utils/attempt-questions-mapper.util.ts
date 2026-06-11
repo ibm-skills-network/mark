@@ -446,7 +446,7 @@ export class AttemptQuestionsMapper {
           learnerResponse: response.learnerResponse,
           points: response.points,
           feedback: response.feedback,
-          metadata: {},
+          metadata: this.normalizeResponseMetadata(response.metadata),
           gradedAt: null,
         }));
 
@@ -470,6 +470,16 @@ export class AttemptQuestionsMapper {
           : undefined,
       } as AssignmentAttemptQuestions;
     });
+  }
+
+  private static normalizeResponseMetadata(
+    metadata: JsonValue,
+  ): Record<string, any> {
+    if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+      return metadata as Record<string, any>;
+    }
+
+    return {};
   }
 
   /**
