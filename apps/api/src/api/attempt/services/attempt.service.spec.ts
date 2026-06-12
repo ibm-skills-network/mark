@@ -2,6 +2,7 @@ import { AttemptServiceV2 } from "./attempt.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { GradingProgressService } from "./grading-progress.service";
 import {
@@ -347,6 +348,49 @@ describe("AttemptServiceV2", () => {
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         oversized.learnerMessage,
+      );
+    });
+
+    it("reports the learner-facing message and rethrows for an unsupported image format", async () => {
+      const unsupported = new UnsupportedImageFormatError({
+        filename: "photo.heic",
+        detectedFormat: "image/heic",
+        reason: "unsupported format detected at submission",
+      });
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(
+        unsupported,
+      );
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-unsupported",
+          42,
+          5,
+          {} as any,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(unsupported);
+
+      expect(updateStatusSpy).toHaveBeenCalledWith("job-unsupported", {
+        status: "Failed",
+        progress: unsupported.learnerMessage,
+        percentage: 0,
+      });
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        42,
+        unsupported.learnerMessage,
       );
     });
 

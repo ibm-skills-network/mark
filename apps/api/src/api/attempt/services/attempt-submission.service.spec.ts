@@ -11,6 +11,7 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptQuestionsMapper } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
@@ -504,6 +505,32 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(rejection).toBeInstanceOf(BadRequestException);
       expect((rejection as BadRequestException).message).toBe(
         oversized.learnerMessage,
+      );
+      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("translates an UnsupportedImageFormatError into a BadRequestException carrying the learner message", async () => {
+      const unsupported = new UnsupportedImageFormatError({
+        filename: "photo.heic",
+        detectedFormat: "image/heic",
+        reason: "unsupported format detected at submission",
+      });
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        unsupported,
+      );
+
+      const rejection = await service
+        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
+        .then(
+          () => {
+            throw new Error("expected autoSaveQuestionResponse to reject");
+          },
+          (error: unknown) => error,
+        );
+
+      expect(rejection).toBeInstanceOf(BadRequestException);
+      expect((rejection as BadRequestException).message).toBe(
+        unsupported.learnerMessage,
       );
       expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
     });

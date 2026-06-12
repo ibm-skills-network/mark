@@ -32,7 +32,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
-import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
+import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
@@ -937,10 +937,11 @@ export class QuestionResponseService {
         });
       }
     } catch (error: unknown) {
-      // Typed terminal errors must keep their identity: the job worker
-      // classifies oversized submissions by error name to fail the attempt
-      // without retries. Wrapping them in BadRequestException erased that.
-      if (error instanceof OversizedSubmissionError) {
+      // Typed learner-facing terminal errors must keep their identity: the
+      // job worker classifies them by class/name to fail the attempt without
+      // retries and surface their learner-facing message. Wrapping them in
+      // BadRequestException erased that.
+      if (error instanceof LearnerFacingGradingError) {
         throw error;
       }
 

@@ -11,6 +11,7 @@ import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
 import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../../llm/features/grading/errors/unsupported-image-format.error";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
@@ -751,6 +752,17 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
     mockStrategy.gradeResponse.mockRejectedValue(oversized);
 
     await expect(callGradeQuestionNoSave()).rejects.toBe(oversized);
+  });
+
+  it("rethrows UnsupportedImageFormatError unchanged (same instance)", async () => {
+    const unsupported = new UnsupportedImageFormatError({
+      filename: "photo.heic",
+      detectedFormat: "image/heic",
+      reason: "unsupported format detected at submission",
+    });
+    mockStrategy.gradeResponse.mockRejectedValue(unsupported);
+
+    await expect(callGradeQuestionNoSave()).rejects.toBe(unsupported);
   });
 
   it("wraps a generic Error in BadRequestException with the technical message", async () => {

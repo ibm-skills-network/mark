@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
+import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../../attempt.constants";
 import { GradingContext } from "../../interfaces/grading-context.interface";
@@ -282,6 +283,132 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         imageUrl: "",
         imageData: "",
       });
+    });
+  });
+
+  describe("SVG is no longer an accepted image format", () => {
+    it("rejects an .svg filename during validation", () => {
+      // isValidImageFormat is private; exercise it through validateResponse
+      // path by asserting the format check directly.
+      expect((strategy as any).isValidImageFormat("drawing.svg")).toBe(false);
+    });
+
+    it("does not map .svg to a MIME type", () => {
+      // getMimeTypeFromFilename falls back to the jpeg default for unknown
+      // extensions; svg must no longer be explicitly mapped to image/svg+xml.
+      expect((strategy as any).getMimeTypeFromFilename("drawing.svg")).not.toBe(
+        "image/svg+xml",
+      );
+    });
+
+    it("still accepts and maps bmp and tiff (now convertible downstream)", () => {
+      expect((strategy as any).isValidImageFormat("scan.bmp")).toBe(true);
+      expect((strategy as any).isValidImageFormat("scan.tiff")).toBe(true);
+      expect((strategy as any).getMimeTypeFromFilename("scan.bmp")).toBe(
+        "image/bmp",
+      );
+      expect((strategy as any).getMimeTypeFromFilename("scan.tiff")).toBe(
+        "image/tiff",
+      );
+    });
+  });
+
+  describe("validateResponse - base64 magic-byte sniffing", () => {
+    const mockQuestion: QuestionDto = {
+      id: 1,
+      question: "Upload an image",
+      type: "IMAGE" as any,
+      totalPoints: 10,
+      assignmentId: 1,
+      gradingContextQuestionIds: [],
+    } as any;
+
+    // Helper: build an inline data URL from raw magic bytes so the strategy's
+    // sniffer sees real signature bytes after the `;base64,` marker.
+    const dataUrl = (mime: string, bytes: number[]): string =>
+      `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
+
+    const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    // ISO-BMFF box: 12-byte "ftypheic" prefix (size + "ftyp" + "heic" brand).
+    const HEIC_PREFIX = [
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
+    ];
+    const TIFF_SIGNATURE = [0x49, 0x49, 0x2a, 0x00];
+
+    it("accepts a base64 PNG data URL", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "diagram.png",
+            imageData: dataUrl("image/png", PNG_SIGNATURE),
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).resolves.toBe(true);
+    });
+
+    it("rejects a base64 HEIC data URL with the typed learner-facing error", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "photo.png",
+            imageData: dataUrl("image/png", HEIC_PREFIX),
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      // Must be the typed learner-facing error (not a BadRequestException) so
+      // the grade-time path (validateResponse runs inside gradeQuestionNoSave)
+      // fails terminally with the learner message instead of being wrapped and
+      // retried. The learner-facing copy lives on `.learnerMessage`; `.message`
+      // carries the operator detail (detected format + reason).
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toBeInstanceOf(UnsupportedImageFormatError);
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toMatchObject({
+        learnerMessage: expect.stringMatching(/not a supported image format/i),
+      });
+    });
+
+    it("accepts a base64 TIFF data URL (convertible downstream)", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "scan.tiff",
+            imageData: dataUrl("image/tiff", TIFF_SIGNATURE),
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).resolves.toBe(true);
+    });
+
+    it("skips the byte check for an InCos placeholder (no inline base64)", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "stored.png",
+            imageData: "InCos",
+            imageKey: "cos/key",
+            imageBucket: "bucket",
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).resolves.toBe(true);
     });
   });
 
