@@ -45,7 +45,7 @@ describe("preflightImageBuffer - real sharp conversion", () => {
       .toBuffer();
 
     // Sanity: the crafted buffer really is a TIFF by magic bytes.
-    expect(service.detectImageMimeType(tiff)).toBe("image/tiff");
+    expect(service.detectMimeFromBytes(tiff)).toBe("image/tiff");
 
     const result = await service.preflightImageBuffer(tiff, "fixture.tiff");
 
@@ -61,5 +61,33 @@ describe("preflightImageBuffer - real sharp conversion", () => {
         "mystery.bin",
       ),
     ).rejects.toBeInstanceOf(UnsupportedImageFormatError);
+  });
+
+  it("rejects a corrupted-but-sniffable TIFF with a typed decode error, not a raw sharp throw", async () => {
+    const { service, mockLogger } = buildService();
+
+    // A valid little-endian TIFF header followed by garbage: sniffs as TIFF
+    // (so it enters the convert branch) but sharp cannot decode it.
+    const corruptTiff = Buffer.concat([
+      Buffer.from([0x49, 0x49, 0x2a, 0x00]),
+      Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x11, 0x22, 0x33]),
+    ]);
+    expect(service.detectMimeFromBytes(corruptTiff)).toBe("image/tiff");
+
+    let thrown: unknown;
+    try {
+      await service.preflightImageBuffer(corruptTiff, "broken.tiff");
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(UnsupportedImageFormatError);
+    const e = thrown as UnsupportedImageFormatError;
+    expect(e.detectedFormat).toBe("image/tiff");
+    expect(e.reason).toBe("image data could not be decoded for conversion");
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "image.grading.convert.failed",
+      expect.objectContaining({ detectedFormat: "image/tiff" }),
+    );
   });
 });

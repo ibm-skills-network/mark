@@ -62,41 +62,26 @@ const SVG_XML = Buffer.from(
 );
 const GARBAGE = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]);
 
-describe("ImageGradingService.detectImageMimeType - bytes-first", () => {
-  it("detects each format from magic bytes regardless of a misleading filename", () => {
+describe("ImageGradingService.detectMimeFromBytes - magic-byte sniffing", () => {
+  it("detects each format from its magic bytes", () => {
     const { service } = buildService();
 
-    expect(service.detectImageMimeType(PNG, "photo.tiff")).toBe("image/png");
-    expect(service.detectImageMimeType(JPEG, "photo.png")).toBe("image/jpeg");
-    expect(service.detectImageMimeType(GIF, "photo.png")).toBe("image/gif");
-    expect(service.detectImageMimeType(WEBP, "photo.png")).toBe("image/webp");
-    expect(service.detectImageMimeType(BMP, "photo.png")).toBe("image/bmp");
-    expect(service.detectImageMimeType(TIFF_LE, "photo.png")).toBe(
-      "image/tiff",
-    );
-    expect(service.detectImageMimeType(TIFF_BE, "photo.png")).toBe(
-      "image/tiff",
-    );
-    expect(service.detectImageMimeType(HEIC, "photo.png")).toBe("image/heic");
-    expect(service.detectImageMimeType(AVIF, "photo.png")).toBe("image/avif");
-    expect(service.detectImageMimeType(SVG, "photo.png")).toBe("image/svg+xml");
-    expect(service.detectImageMimeType(SVG_XML, "photo.png")).toBe(
-      "image/svg+xml",
-    );
+    expect(service.detectMimeFromBytes(PNG)).toBe("image/png");
+    expect(service.detectMimeFromBytes(JPEG)).toBe("image/jpeg");
+    expect(service.detectMimeFromBytes(GIF)).toBe("image/gif");
+    expect(service.detectMimeFromBytes(WEBP)).toBe("image/webp");
+    expect(service.detectMimeFromBytes(BMP)).toBe("image/bmp");
+    expect(service.detectMimeFromBytes(TIFF_LE)).toBe("image/tiff");
+    expect(service.detectMimeFromBytes(TIFF_BE)).toBe("image/tiff");
+    expect(service.detectMimeFromBytes(HEIC)).toBe("image/heic");
+    expect(service.detectMimeFromBytes(AVIF)).toBe("image/avif");
+    expect(service.detectMimeFromBytes(SVG)).toBe("image/svg+xml");
+    expect(service.detectMimeFromBytes(SVG_XML)).toBe("image/svg+xml");
   });
 
-  it("falls back to the filename extension only when bytes are inconclusive", () => {
+  it("returns null when the bytes match no known image signature", () => {
     const { service } = buildService();
-    expect(service.detectImageMimeType(GARBAGE, "photo.png")).toBe("image/png");
-    expect(service.detectImageMimeType(GARBAGE, "photo.jpg")).toBe(
-      "image/jpeg",
-    );
-  });
-
-  it("returns null when both bytes and filename are inconclusive", () => {
-    const { service } = buildService();
-    expect(service.detectImageMimeType(GARBAGE)).toBeNull();
-    expect(service.detectImageMimeType(GARBAGE, "photo.xyz")).toBeNull();
+    expect(service.detectMimeFromBytes(GARBAGE)).toBeNull();
   });
 });
 
@@ -190,6 +175,60 @@ describe("ImageGradingService.preflightImageBuffer - convert or reject (mocked s
     expect((thrown as UnsupportedImageFormatError).learnerMessage).toBe(
       '"mystery.bin" is not a supported image format. Please upload a PNG, JPEG, GIF, or WebP image.',
     );
+  });
+
+  it("rejects a convertible buffer over the size cap before invoking sharp", async () => {
+    const { service, mockLogger } = buildService();
+
+    // Valid TIFF header + enough padding to exceed the 50MB convert cap.
+    const oversized = Buffer.concat([
+      TIFF_LE,
+      Buffer.alloc(51 * 1024 * 1024),
+    ]);
+
+    let thrown: unknown;
+    try {
+      await service.preflightImageBuffer(oversized, "huge.tiff");
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(UnsupportedImageFormatError);
+    const e = thrown as UnsupportedImageFormatError;
+    expect(e.detectedFormat).toBe("image/tiff");
+    expect(e.reason).toBe("image too large to convert");
+    // sharp must never be touched for an over-cap buffer.
+    expect(sharp).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "image.grading.convert.too.large",
+      expect.objectContaining({ detectedFormat: "image/tiff" }),
+    );
+  });
+});
+
+describe("ImageGradingService.processDirectImageData - malformed data URLs", () => {
+  it("rejects a data URL with no comma as a typed format error, not a TypeError", async () => {
+    const { service } = buildService();
+    let thrown: unknown;
+    try {
+      // No comma → the base64 segment is absent; must coalesce to "" and route
+      // into the typed rejection rather than Buffer.from(undefined) throwing.
+      await service.processDirectImageData("data:image/png;base64");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(UnsupportedImageFormatError);
+  });
+
+  it("rejects an empty data URL payload as a typed format error", async () => {
+    const { service } = buildService();
+    let thrown: unknown;
+    try {
+      await service.processDirectImageData("data:image/png;base64,");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(UnsupportedImageFormatError);
   });
 });
 

@@ -41,6 +41,11 @@ interface ProcessedImageData {
 export class ImageGradingService implements IImageGradingService {
   private readonly logger: Logger;
 
+  // Upper bound on the bytes handed to sharp for format conversion. Convertible
+  // formats (bmp/tiff/avif) above this are rejected rather than decoded, so a
+  // hostile or accidental large file cannot drive unbounded decoder allocation.
+  private static readonly MAX_CONVERTIBLE_IMAGE_BYTES = 50 * 1024 * 1024;
+
   constructor(
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
@@ -90,13 +95,6 @@ export class ImageGradingService implements IImageGradingService {
 
     await this.moderateContent(learnerResponse);
 
-    const primaryImage = await this.getPrimaryImageForGrading(
-      topImageData,
-      topBucket,
-      topKey,
-      learnerImages,
-    );
-
     const maxTotalPoints = this.calculateMaxPoints(
       scoringCriteria,
       totalPoints,
@@ -107,6 +105,10 @@ export class ImageGradingService implements IImageGradingService {
 
     const rubricCriteria = this.convertToRubricCriteria(scoringCriteria);
 
+    // Criteria-based grading scores against OCR evidence extracted from the
+    // learner's images, not the image bytes — so it must not fetch or preflight
+    // the primary image. Resolving (and preflighting) the image is deferred
+    // below this branch so a COS-stored HEIC still grades here off its text.
     if (scoringCriteriaType === "CRITERIA_BASED" && rubricCriteria.length > 0) {
       const chunks = this.chunkingService.extractFromImages(learnerImages);
 
@@ -129,6 +131,13 @@ export class ImageGradingService implements IImageGradingService {
         maxTotalPoints,
       );
     }
+
+    const primaryImage = await this.getPrimaryImageForGrading(
+      topImageData,
+      topBucket,
+      topKey,
+      learnerImages,
+    );
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -290,13 +299,34 @@ Respond with a JSON object containing:
         `Using model ${modelKey} for image_grading feature (assignment ${assignmentId})`,
       );
 
-      const llmOut = await this.promptProcessor.processPromptWithImage(
-        gradingPrompt,
-        primaryImage.base64,
-        assignmentId,
-        AIUsageType.ASSIGNMENT_GRADING,
-        modelKey,
-      );
+      let llmOut: string;
+      try {
+        llmOut = await this.promptProcessor.processPromptWithImage(
+          gradingPrompt,
+          primaryImage.base64,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          modelKey,
+        );
+      } catch (visionError) {
+        // Only the vision call's own errors can mean the provider rejected the
+        // image. Scope the unsupported-format remap to here so a downstream
+        // parser exception that merely embeds the words "unsupported image" in
+        // echoed LLM output cannot be mistaken for a format rejection.
+        if (
+          visionError instanceof Error &&
+          /unsupported image|invalid_image_format/i.test(visionError.message)
+        ) {
+          this.logger.warn("image.grading.vision.unsupported", {
+            error: visionError.message,
+            stack: visionError.stack,
+          });
+          throw new UnsupportedImageFormatError({
+            reason: visionError.message.slice(0, 200),
+          });
+        }
+        throw visionError;
+      }
 
       const parsed = await parser.parse(llmOut);
 
@@ -345,18 +375,6 @@ ${parsed.guidance}
       // learner-facing message instead of a generic 500.
       if (error instanceof UnsupportedImageFormatError) {
         throw error;
-      }
-
-      // Belt-and-braces: if the vision provider itself rejects the image as
-      // an unsupported/invalid format (anything the preflight missed), map it
-      // to the same typed error rather than collapsing it into a 500.
-      if (
-        error instanceof Error &&
-        /unsupported image|invalid_image_format/i.test(error.message)
-      ) {
-        throw new UnsupportedImageFormatError({
-          reason: error.message.slice(0, 200),
-        });
       }
 
       this.logger.error(
@@ -506,6 +524,7 @@ ${parsed.guidance}
         return await this.fetchImageFromStorage(
           firstImage.imageBucket,
           firstImage.imageKey,
+          firstImage.filename || undefined,
         );
       }
 
@@ -528,6 +547,7 @@ ${parsed.guidance}
   private async fetchImageFromStorage(
     bucket: string,
     key: string,
+    filename?: string,
   ): Promise<ProcessedImageData> {
     try {
       this.logger.debug(`Fetching image from storage: ${bucket}/${key}`);
@@ -543,9 +563,11 @@ ${parsed.guidance}
 
       // Convert or reject based on the real bytes before encoding, so the
       // data URL sent to the vision model carries a correct, accepted mime.
+      // The learner's upload filename (never the opaque storage key) is passed
+      // through so a format rejection names a file the learner recognizes.
       const { buffer, mimeType } = await this.preflightImageBuffer(
         rawBuffer,
-        key,
+        filename,
       );
       const base64 = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
@@ -577,11 +599,14 @@ ${parsed.guidance}
       );
     }
 
-    // Decode to the raw bytes regardless of how the data arrived.
+    // Decode to the raw bytes regardless of how the data arrived. A malformed
+    // data URL with no comma yields no base64 segment; coalesce to "" so the
+    // empty buffer routes into the typed rejection below instead of throwing a
+    // TypeError from Buffer.from(undefined).
     let rawBuffer: Buffer;
     if (typeof imageData === "string") {
       const base64Data = imageData.startsWith("data:")
-        ? imageData.split(",")[1]
+        ? (imageData.split(",")[1] ?? "")
         : imageData;
       rawBuffer = Buffer.from(base64Data, "base64");
     } else {
@@ -589,11 +614,9 @@ ${parsed.guidance}
     }
 
     // Convert or reject from the real bytes, then re-encode the (possibly
-    // converted) buffer so the data URL carries the post-preflight mime.
-    const { buffer, mimeType } = await this.preflightImageBuffer(
-      rawBuffer,
-      "",
-    );
+    // converted) buffer so the data URL carries the post-preflight mime. No
+    // learner filename is available on the direct-data path.
+    const { buffer, mimeType } = await this.preflightImageBuffer(rawBuffer);
     const base64 = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
     return { buffer, mimeType, size: buffer.length, base64 };
@@ -608,44 +631,6 @@ ${parsed.guidance}
       stream.on("end", () => resolve(Buffer.concat(chunks)));
       stream.on("error", reject);
     });
-  }
-
-  /**
-   * Determines an image's MIME type from its CONTENT first, falling back to
-   * the filename extension only when the bytes are inconclusive. A learner
-   * photo in an unsupported format renamed to ".png" must be detected by its
-   * real signature so it is converted or rejected before grading rather than
-   * sent to the vision model mislabeled. Returns null when neither the bytes
-   * nor the filename identify a known image format.
-   */
-  private detectImageMimeType(
-    buffer: Buffer,
-    filename?: string,
-  ): string | null {
-    const fromBytes = this.detectMimeFromBytes(buffer);
-    if (fromBytes) {
-      return fromBytes;
-    }
-
-    if (filename) {
-      const extension = filename.split(".").pop()?.toLowerCase();
-      const extensionToMime: Record<string, string> = {
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        png: "image/png",
-        gif: "image/gif",
-        bmp: "image/bmp",
-        webp: "image/webp",
-        tiff: "image/tiff",
-        svg: "image/svg+xml",
-      };
-
-      if (extension && extensionToMime[extension]) {
-        return extensionToMime[extension];
-      }
-    }
-
-    return null;
   }
 
   /**
@@ -679,8 +664,9 @@ ${parsed.guidance}
       return "image/gif";
     }
 
-    // WEBP must be checked before BMP/TIFF as it shares no prefix but is a
-    // RIFF container; checked early to keep the raster branches grouped.
+    // WEBP is a RIFF container: "RIFF" at offset 0 and "WEBP" at offset 8.
+    // Its full signature is disjoint from the BMP/TIFF prefixes, so the order
+    // relative to them carries no correctness constraint.
     if (
       firstBytes[0] === 0x52 &&
       firstBytes[1] === 0x49 &&
@@ -768,7 +754,7 @@ ${parsed.guidance}
    */
   private async preflightImageBuffer(
     buffer: Buffer,
-    filename: string,
+    filename?: string,
   ): Promise<{ buffer: Buffer; mimeType: string }> {
     const detected = this.detectMimeFromBytes(buffer);
 
@@ -786,7 +772,43 @@ ${parsed.guidance}
       detected === "image/tiff" ||
       detected === "image/avif"
     ) {
-      const converted = await sharp(buffer).png().toBuffer();
+      // Cap the bytes handed to sharp: a convertible format that is also huge
+      // would otherwise let the decoder allocate unbounded memory. Pass-through
+      // formats are not capped here — upstream upload limits own those.
+      if (buffer.length > ImageGradingService.MAX_CONVERTIBLE_IMAGE_BYTES) {
+        this.logger.warn("image.grading.convert.too.large", {
+          filename,
+          detectedFormat: detected,
+          bytes: buffer.length,
+        });
+        throw new UnsupportedImageFormatError({
+          filename,
+          detectedFormat: detected,
+          reason: "image too large to convert",
+        });
+      }
+
+      let converted: Buffer;
+      try {
+        converted = await sharp(buffer).png().toBuffer();
+      } catch (error) {
+        // A file whose first bytes sniff as a convertible format but whose
+        // body is corrupt/truncated makes sharp throw a raw error (also its
+        // pixel-limit rejection). Translate it into the same typed, logged,
+        // learner-facing failure instead of letting it escape as a 500.
+        this.logger.error("image.grading.convert.failed", {
+          filename,
+          detectedFormat: detected,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        throw new UnsupportedImageFormatError({
+          filename,
+          detectedFormat: detected,
+          reason: "image data could not be decoded for conversion",
+        });
+      }
+
       this.logger.info("image.grading.converted", {
         filename,
         detectedFormat: detected,
