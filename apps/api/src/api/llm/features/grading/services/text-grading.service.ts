@@ -26,6 +26,7 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   ANSWER_NORMALIZATION_SERVICE,
   GRADING_CACHE_SERVICE,
@@ -48,6 +49,7 @@ import {
   JudgeCritique,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { ContentSummarizationService } from "./content-summarization.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 
@@ -123,6 +125,7 @@ export class TextGradingService implements ITextGradingService {
     private readonly moderationService: IModerationService,
     private readonly chunkingService: EvidenceChunkingService,
     private readonly evidencePipeline: CriterionEvidencePipelineService,
+    private readonly contentSummarization: ContentSummarizationService,
     @Inject(GRADING_JUDGE_SERVICE)
     private readonly gradingJudgeService: IGradingJudgeService,
     @Optional()
@@ -306,6 +309,19 @@ export class TextGradingService implements ITextGradingService {
             language,
           );
         } catch (error) {
+          // A context_length_exceeded 400 is deterministic for a given prompt:
+          // resending the identical request can never succeed, so stop the
+          // retry loop immediately and let the post-loop failure throw fire.
+          if (isContextLengthExceededError(error)) {
+            this.logger.error("text.grading.context.length.exceeded", {
+              assignmentId,
+              questionId,
+              attempt: attemptCount,
+              message: error instanceof Error ? error.message : String(error),
+            });
+            break;
+          }
+
           this.logger.error(
             `Error in grading attempt ${attemptCount}: ${
               error instanceof Error ? error.message : "Unknown error"
@@ -555,6 +571,83 @@ export class TextGradingService implements ITextGradingService {
 
     const template = this.loadEnhancedTextGradingTemplate();
 
+    const rubricJson = JSON.stringify(scoringCriteria);
+    const judgeFeedbackText = previousJudgeFeedback || "No previous feedback";
+
+    // Budget the prompt against the model's safe context window. Compute the
+    // fixed overhead first, then reduce the variable parts (context, then
+    // response) only when over budget.
+    //
+    // The "gpt-4o-mini" key here pins the limit to a >=128k context window. This
+    // assumes every model assignable to text_grading has at least that window;
+    // models absent from the registry fall back to a 32k default. If a
+    // smaller-context model is ever made assignable, replace this pin by
+    // resolving the feature's actual model key.
+    const safeLimit =
+      this.contentSummarization.getSafeContextLimit("gpt-4o-mini");
+
+    const overheadText = [
+      template,
+      question,
+      assignmentInstrctions ?? "",
+      responseSpecificInstruction,
+      rubricJson,
+      formatInstructions,
+      judgeFeedbackText,
+    ].join("\n");
+    const overheadTokens = this.contentSummarization.countTokens(overheadText);
+
+    let previousQaJson = JSON.stringify(previousQuestionsAnswersContext ?? []);
+    let previousQaTokens =
+      this.contentSummarization.countTokens(previousQaJson);
+    let responseText = learnerResponse;
+    let responseTokens = this.contentSummarization.countTokens(responseText);
+    let summaryNote = "";
+
+    if (overheadTokens + previousQaTokens + responseTokens > safeLimit) {
+      // Over budget: drop previous-Q&A context first — it is supporting
+      // context, the learner's own answer takes priority.
+      this.logger.info("text.grading.context.dropped", {
+        assignmentId,
+        prevQaTokens: previousQaTokens,
+        responseTokens,
+        overheadTokens,
+      });
+      previousQaJson = "[]";
+      previousQaTokens = this.contentSummarization.countTokens(previousQaJson);
+
+      // Reduction 2: if still over budget, chunk-summarize the learner response
+      // down to whatever room remains and disclose the reduction to the model.
+      if (overheadTokens + previousQaTokens + responseTokens > safeLimit) {
+        const targetTokens = safeLimit - overheadTokens - previousQaTokens;
+        const reduction = await this.contentSummarization.summarizeTextToBudget(
+          {
+            text: learnerResponse,
+            label: "learner response",
+            questionText: question,
+            modelKey: "gpt-4o-mini",
+            assignmentId,
+            usageType: AIUsageType.ASSIGNMENT_GRADING,
+            feature: "text_grading",
+            targetTokens,
+          },
+        );
+
+        if (reduction.summarized) {
+          this.logger.warn("text.grading.response.summarized", {
+            assignmentId,
+            originalTokens: reduction.originalTokens,
+            finalTokens: reduction.finalTokens,
+          });
+          summaryNote =
+            "NOTE: The learner submission below is a summarized extract of an oversized response. If details are missing, be conservative and state what evidence is insufficient rather than guessing.";
+        }
+
+        responseText = reduction.text;
+        responseTokens = reduction.finalTokens;
+      }
+    }
+
     this.logger.info("Rubric data being passed to LLM", {
       assignmentId,
       scoringCriteriaType,
@@ -580,17 +673,17 @@ export class TextGradingService implements ITextGradingService {
         question: () => question,
         assignment_instructions: () => assignmentInstrctions ?? "",
         responseSpecificInstruction: () => responseSpecificInstruction,
-        previous_questions_and_answers: () =>
-          JSON.stringify(previousQuestionsAnswersContext ?? []),
-        learner_response: () => learnerResponse,
+        previous_questions_and_answers: () => previousQaJson,
+        learner_response: () => responseText,
+        summary_note: () => summaryNote,
         total_points: () => maxPossiblePoints.toString(),
         scoring_type: () => scoringCriteriaType,
-        scoring_criteria: () => JSON.stringify(scoringCriteria),
+        scoring_criteria: () => rubricJson,
         format_instructions: () => formatInstructions,
         grading_type: () => responseType,
         language: () => language ?? "en",
         content_hash: () => contentHash,
-        judge_feedback: () => previousJudgeFeedback || "No previous feedback",
+        judge_feedback: () => judgeFeedbackText,
       },
     });
 
@@ -600,7 +693,7 @@ export class TextGradingService implements ITextGradingService {
       AIUsageType.ASSIGNMENT_GRADING,
       "text_grading",
       "gpt-4o-mini",
-      { temperature: 0, top_p: 0 },
+      { temperature: 0, top_p: 0, maxRetries: 1 },
     );
 
     const parsedResponse = GradingAttemptSchema.parse(
@@ -1058,6 +1151,7 @@ PREVIOUS JUDGE FEEDBACK (if any): {judge_feedback}
 
 Maximum Points: {total_points}
 
+{summary_note}
 ### Learner Submission
 {learner_response}
 
