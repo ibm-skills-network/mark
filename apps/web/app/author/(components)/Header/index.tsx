@@ -117,18 +117,16 @@ function AuthorHeader() {
     setActiveAssignmentId,
     questions,
     setPageState,
-    setAuthorStore,
     activeAssignmentId,
     name,
-    setQuestionOrder,
+    hydrateAuthorStore,
   ] = useAuthorStore((state) => [
     state.setActiveAssignmentId,
     state.questions,
     state.setPageState,
-    state.setAuthorStore,
     state.activeAssignmentId,
     state.name,
-    state.setQuestionOrder,
+    state.hydrateAuthorStore,
   ]);
 
   const loadVersions = useAuthorStore((state) => state.loadVersions);
@@ -292,18 +290,20 @@ function AuthorHeader() {
 
       newAssignment.questions = questions;
 
-      useAuthorStore.getState().setOriginalAssignment(newAssignment);
       const authorSafeAssignment = {
         ...newAssignment,
         currentVersion: undefined,
       };
-      useAuthorStore.getState().setAuthorStore(authorSafeAssignment);
-      setQuestions(questions);
-      if (newAssignment.questionOrder) {
-        setQuestionOrder(newAssignment.questionOrder);
-      } else {
-        setQuestionOrder(questions.map((question) => question.id));
-      }
+      hydrateAuthorStore({
+        ...authorSafeAssignment,
+        originalAssignment: newAssignment,
+        questions,
+        questionOrder:
+          newAssignment.questionOrder ??
+          questions.map((question) => question.id),
+        activeAssignmentId: newAssignment.id,
+        name: newAssignment.name,
+      });
 
       useAssignmentConfig.getState().setAssignmentConfigStore({
         ...getAssignmentConfigHydration(newAssignment),
@@ -318,9 +318,6 @@ function AuthorHeader() {
       useAssignmentFeedbackConfig.getState().setAssignmentFeedbackConfigStore({
         ...getAssignmentFeedbackHydration(newAssignment),
       });
-
-      useAuthorStore.getState().setName(newAssignment.name);
-      useAuthorStore.getState().setActiveAssignmentId(newAssignment.id);
 
       setPageState("success");
     } catch (error) {
@@ -357,25 +354,24 @@ function AuthorHeader() {
     if (assignment) {
       const newAssignment = normalizeAssignment({ ...assignment });
 
-      useAuthorStore.getState().setOriginalAssignment(newAssignment);
-
       const authorSafeAssignment = {
         ...newAssignment,
         currentVersion: undefined,
       };
       const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
-      setAuthorStore({
-        ...cleanedAuthorData,
-      });
       const fetchedQuestions = (newAssignment.questions ??
         []) as QuestionAuthorStore[];
-      setQuestions(fetchedQuestions);
-      if (newAssignment.questionOrder) {
-        setQuestionOrder(newAssignment.questionOrder);
-      } else {
-        setQuestionOrder(fetchedQuestions.map((question) => question.id));
-      }
+      hydrateAuthorStore({
+        ...cleanedAuthorData,
+        originalAssignment: newAssignment,
+        questions: fetchedQuestions,
+        questionOrder:
+          newAssignment.questionOrder ??
+          fetchedQuestions.map((question) => question.id),
+        activeAssignmentId: newAssignment.id,
+        name: newAssignment.name,
+      });
 
       if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
@@ -390,7 +386,6 @@ function AuthorHeader() {
         ...getAssignmentFeedbackHydration(newAssignment),
       });
 
-      useAuthorStore.getState().setName(newAssignment.name);
       setPageState("success");
     } else {
       setPageState("error");
@@ -473,8 +468,9 @@ function AuthorHeader() {
       const originalAfterPublish = afterPublish;
 
       handlePublishButton(description, publishImmediately)
-        .then(() => {
+        .then((publishSucceeded) => {
           if (
+            publishSucceeded &&
             originalAfterPublish &&
             typeof originalAfterPublish === "function"
           ) {
@@ -517,7 +513,7 @@ function AuthorHeader() {
     description?: string,
     publishImmediately = true,
     versionNumber?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     setSubmitting(true);
     setJobProgress(0);
     setProgressStatus("In Progress");
@@ -530,7 +526,7 @@ function AuthorHeader() {
         "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
       );
       setSubmitting(false);
-      return;
+      return false;
     }
 
     let clonedCurrentQuestions = JSON.parse(
@@ -610,7 +606,7 @@ function AuthorHeader() {
           : "Introduction is required to create a version.",
       );
       setSubmitting(false);
-      return;
+      return false;
     }
     try {
       const response = await publishAssignment(
@@ -667,6 +663,7 @@ function AuthorHeader() {
             "Failed to refresh versions after publishing. Please refresh the page.",
           );
         }
+        return publishSucceeded;
       } else {
         toast.error(
           publishImmediately
@@ -674,6 +671,7 @@ function AuthorHeader() {
             : "Failed to create version. Please try again.",
         );
         setProgressStatus("Failed");
+        return false;
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
@@ -690,6 +688,7 @@ function AuthorHeader() {
         );
       }
       setProgressStatus("Failed");
+      return false;
     } finally {
       setSubmitting(false);
     }

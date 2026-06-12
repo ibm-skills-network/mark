@@ -95,6 +95,10 @@ export type OptionalQuestion = {
   [K in keyof QuestionAuthorStore]?: QuestionAuthorStore[K];
 };
 
+type AuthorHydrationState = Omit<Partial<AuthorState>, "originalAssignment"> & {
+  originalAssignment?: any;
+};
+
 export type AuthorActions = {
   parseJsonField: (field: any, fieldName: string, defaultValue?: any) => any;
   updateConfigStores: (versionData: any) => Promise<void>;
@@ -239,6 +243,7 @@ export type AuthorActions = {
   deleteVariant: (questionId: number, variantId: number) => void;
   setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
+  hydrateAuthorStore: (state: AuthorHydrationState) => void;
   setDataFromBackend: (data: Partial<AuthorAssignmentState>) => void;
   validate: () => boolean;
   deleteStore: () => void;
@@ -1722,6 +1727,29 @@ export const useAuthorStore = createWithEqualityFn<
             questions: currentState.questions.length
               ? currentState.questions
               : state.questions || [],
+          }));
+        },
+        hydrateAuthorStore: (state) => {
+          const currentState = get();
+          const {
+            questions: nextQuestionsInput,
+            questionOrder: nextQuestionOrderInput,
+            ...nextState
+          } = state;
+          const nextQuestions = nextQuestionsInput ?? currentState.questions;
+          const { questionOrder, questions } = nextQuestionOrderInput?.length
+            ? applyQuestionOrder(nextQuestions, nextQuestionOrderInput)
+            : {
+                questionOrder: nextQuestions.map((question) => question.id),
+                questions: nextQuestions,
+              };
+
+          set((prev) => ({
+            ...prev,
+            ...nextState,
+            questions,
+            questionOrder,
+            hasUnsavedChanges: false,
           }));
         },
 

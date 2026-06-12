@@ -1,6 +1,7 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
+import ErrorPage from "@/components/ErrorPage";
 import Loading from "@/components/Loading";
 import type { QuestionStore } from "@/config/types";
 import { getAssignment } from "@/lib/talkToBackend";
@@ -31,24 +32,40 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     useState<AuthorPreviewPayload | null>(() =>
       readAuthorPreviewPayload(assignmentId),
     );
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     setRole(role || "learner");
-  }, [role]);
+  }, [role, setRole]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPreviewPayload() {
+      setPreviewError(null);
       const storedPayload = readAuthorPreviewPayload(assignmentId);
       if (storedPayload) {
-        setPreviewPayload(storedPayload);
+        if (!cancelled) {
+          setPreviewPayload(storedPayload);
+        }
         return;
       }
 
-      const assignment = await getAssignment(assignmentId);
-      if (!cancelled && assignment) {
-        setPreviewPayload(buildAuthorPreviewPayload(assignment));
+      setPreviewPayload(null);
+
+      try {
+        const assignment = await getAssignment(assignmentId);
+        if (cancelled) return;
+
+        if (assignment) {
+          setPreviewPayload(buildAuthorPreviewPayload(assignment));
+        } else {
+          setPreviewError("Assignment could not be loaded for preview.");
+        }
+      } catch {
+        if (!cancelled) {
+          setPreviewError("Assignment could not be loaded for preview.");
+        }
       }
     }
 
@@ -106,6 +123,10 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       questionControls: assignmentDetails.questionControls,
     });
   }, [assignmentDetails, setAssignmentDetails]);
+
+  if (previewError) {
+    return <ErrorPage error={previewError} statusCode={500} />;
+  }
 
   if (!previewPayload || !assignmentDetails) {
     return <Loading animationData={animationData} />;

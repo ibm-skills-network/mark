@@ -17,19 +17,13 @@ import { useEffect, useState } from "react";
 
 function SuccessPage() {
   const pathname = usePathname();
-  const [
-    setPageState,
-    setAuthorStore,
-    activeAssignmentId,
-    setQuestionOrder,
-    setQuestions,
-  ] = useAuthorStore((state) => [
-    state.setPageState,
-    state.setAuthorStore,
-    state.activeAssignmentId,
-    state.setQuestionOrder,
-    state.setQuestions,
-  ]);
+  const [setPageState, activeAssignmentId, hydrateAuthorStore] = useAuthorStore(
+    (state) => [
+      state.setPageState,
+      state.activeAssignmentId,
+      state.hydrateAuthorStore,
+    ],
+  );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
@@ -58,11 +52,12 @@ function SuccessPage() {
       extractAssignmentId(pathname) ?? "",
       10,
     );
-    const resolvedAssignmentId =
-      typeof activeAssignmentId === "number" &&
-      Number.isFinite(activeAssignmentId)
+    const resolvedAssignmentId = Number.isFinite(routeAssignmentId)
+      ? routeAssignmentId
+      : typeof activeAssignmentId === "number" &&
+          Number.isFinite(activeAssignmentId)
         ? activeAssignmentId
-        : routeAssignmentId;
+        : Number.NaN;
 
     if (!Number.isFinite(resolvedAssignmentId)) {
       setPageState("error");
@@ -71,26 +66,24 @@ function SuccessPage() {
 
     const assignment = await getAssignment(resolvedAssignmentId);
     if (assignment) {
-      useAuthorStore.getState().setOriginalAssignment(assignment);
-      useAuthorStore.getState().setActiveAssignmentId(assignment.id);
-
       const authorSafeAssignment = {
         ...assignment,
         currentVersion: undefined,
       };
       const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
-      setAuthorStore({
-        ...cleanedAuthorData,
-      });
       const fetchedQuestions = (assignment.questions ??
         []) as QuestionAuthorStore[];
-      setQuestions(fetchedQuestions);
-      if (assignment.questionOrder) {
-        setQuestionOrder(assignment.questionOrder);
-      } else {
-        setQuestionOrder(fetchedQuestions.map((question) => question.id));
-      }
+      hydrateAuthorStore({
+        ...cleanedAuthorData,
+        originalAssignment: assignment,
+        questions: fetchedQuestions,
+        questionOrder:
+          assignment.questionOrder ??
+          fetchedQuestions.map((question) => question.id),
+        activeAssignmentId: assignment.id,
+        name: assignment.name,
+      });
       if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: assignment.questionVariationNumber,
@@ -104,7 +97,6 @@ function SuccessPage() {
         ...getAssignmentFeedbackHydration(assignment),
       });
 
-      useAuthorStore.getState().setName(assignment.name);
       setPageState("success");
     } else {
       setPageState("error");

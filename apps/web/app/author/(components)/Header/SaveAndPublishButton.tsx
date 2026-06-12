@@ -36,7 +36,7 @@ interface Props {
     description?: string,
     publishImmediately?: boolean,
     versionNumber?: string,
-  ) => void;
+  ) => Promise<boolean>;
   currentStepId?: number;
 }
 
@@ -57,16 +57,9 @@ const SaveAndPublishButton: FC<Props> = ({
     description: string;
     isDraft: boolean;
   } | null>(null);
-  const [
-    setAuthorStore,
-    activeAssignmentId,
-    setQuestionOrder,
-    setQuestions,
-  ] = useAuthorStore((state) => [
-    state.setAuthorStore,
+  const [activeAssignmentId, hydrateAuthorStore] = useAuthorStore((state) => [
     state.activeAssignmentId,
-    state.setQuestionOrder,
-    state.setQuestions,
+    state.hydrateAuthorStore,
   ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
@@ -92,25 +85,24 @@ const SaveAndPublishButton: FC<Props> = ({
 
     const assignment = await getAssignment(activeAssignmentId);
     if (assignment) {
-      useAuthorStore.getState().setOriginalAssignment(assignment);
-
       const authorSafeAssignment = {
         ...assignment,
         currentVersion: undefined,
       };
       const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
-      setAuthorStore({
-        ...cleanedAuthorData,
-      });
       const fetchedQuestions = (assignment.questions ??
         []) as QuestionAuthorStore[];
-      setQuestions(fetchedQuestions);
-      if (assignment.questionOrder) {
-        setQuestionOrder(assignment.questionOrder);
-      } else {
-        setQuestionOrder(fetchedQuestions.map((question) => question.id));
-      }
+      hydrateAuthorStore({
+        ...cleanedAuthorData,
+        originalAssignment: assignment,
+        questions: fetchedQuestions,
+        questionOrder:
+          assignment.questionOrder ??
+          fetchedQuestions.map((question) => question.id),
+        activeAssignmentId: assignment.id,
+        name: assignment.name,
+      });
       if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: assignment.questionVariationNumber,
@@ -124,7 +116,6 @@ const SaveAndPublishButton: FC<Props> = ({
         ...getAssignmentFeedbackHydration(assignment),
       });
 
-      useAuthorStore.getState().setName(assignment.name);
     }
   };
 
@@ -390,7 +381,14 @@ const SaveAndPublishButton: FC<Props> = ({
         }
       } else {
         setShowPublishModal(false);
-        void handlePublishButton(description, true, versionNumber);
+        const publishSucceeded = await handlePublishButton(
+          description,
+          true,
+          versionNumber,
+        );
+        if (!publishSucceeded) {
+          return;
+        }
         await fetchAssignment();
         router.push(`/author/${assignmentId}/version-tree`);
       }
@@ -419,11 +417,14 @@ const SaveAndPublishButton: FC<Props> = ({
     if (!conflictDetails) return;
 
     try {
-      void handlePublishButton(
+      const publishSucceeded = await handlePublishButton(
         conflictDetails.description,
         true,
         conflictDetails.requestedVersion,
       );
+      if (!publishSucceeded) {
+        return;
+      }
 
       setShowConflictModal(false);
       setConflictDetails(null);
