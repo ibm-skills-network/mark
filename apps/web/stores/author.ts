@@ -17,7 +17,7 @@ import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { applyQuestionOrder } from "./utils/question-order";
 import { DraftSummary, VersionSummary } from "@/lib/author";
-import { createSafeStorage } from "@/lib/safe-storage";
+import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   "versions",
   "currentVersion",
@@ -2722,7 +2722,9 @@ export const useAuthorStore = createWithEqualityFn<
     ),
     {
       name: getAuthorStoreName(),
-      storage: createJSONStorage(() => createSafeStorage()),
+      storage: createJSONStorage(() =>
+        createAssignmentScopedStorage("author", getAuthorStoreName()),
+      ),
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(

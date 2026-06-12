@@ -1,11 +1,16 @@
 "use client";
 
+import {
+  getAssignmentConfigHydration,
+  getAssignmentFeedbackHydration,
+} from "@/app/author/utils/assignmentHydration";
 import ExitIcon from "@/components/svgs/ExitIcon";
 import { getAssignment, getUser } from "@/lib/talkToBackend";
-import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
+import type { QuestionAuthorStore } from "@/config/types";
+import { extractAssignmentId } from "@/lib/strings";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,17 +18,17 @@ import { useEffect, useState } from "react";
 function SuccessPage() {
   const pathname = usePathname();
   const [
-    questions,
     setPageState,
     setAuthorStore,
     activeAssignmentId,
     setQuestionOrder,
+    setQuestions,
   ] = useAuthorStore((state) => [
-    state.questions,
     state.setPageState,
     state.setAuthorStore,
     state.activeAssignmentId,
     state.setQuestionOrder,
+    state.setQuestions,
   ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
@@ -49,57 +54,54 @@ function SuccessPage() {
       }
     }
 
-    const assignment = await getAssignment(activeAssignmentId);
+    const routeAssignmentId = Number.parseInt(
+      extractAssignmentId(pathname) ?? "",
+      10,
+    );
+    const resolvedAssignmentId =
+      typeof activeAssignmentId === "number" &&
+      Number.isFinite(activeAssignmentId)
+        ? activeAssignmentId
+        : routeAssignmentId;
+
+    if (!Number.isFinite(resolvedAssignmentId)) {
+      setPageState("error");
+      return;
+    }
+
+    const assignment = await getAssignment(resolvedAssignmentId);
     if (assignment) {
       useAuthorStore.getState().setOriginalAssignment(assignment);
+      useAuthorStore.getState().setActiveAssignmentId(assignment.id);
 
       const authorSafeAssignment = {
         ...assignment,
         currentVersion: undefined,
       };
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        authorSafeAssignment,
-      );
-      const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
+      const fetchedQuestions = (assignment.questions ??
+        []) as QuestionAuthorStore[];
+      setQuestions(fetchedQuestions);
       if (assignment.questionOrder) {
         setQuestionOrder(assignment.questionOrder);
       } else {
-        setQuestionOrder(questions.map((question) => question.id));
+        setQuestionOrder(fetchedQuestions.map((question) => question.id));
       }
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        assignment,
-      );
       if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: assignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...getAssignmentConfigHydration(assignment),
       });
 
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        assignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...getAssignmentFeedbackHydration(assignment),
       });
 
       useAuthorStore.getState().setName(assignment.name);

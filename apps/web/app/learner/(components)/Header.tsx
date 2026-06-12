@@ -3,13 +3,12 @@
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { MarkChatToggleButton } from "@/components/MarkChatToggleButton";
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
+import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import Dropdown from "@/components/Dropdown";
 import Spinner from "@/components/svgs/Spinner";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   QuestionAttemptRequestWithId,
-  QuestionStore,
   ReplaceAssignmentRequest,
   SubmitAssignmentResponse,
 } from "@/config/types";
@@ -81,7 +80,6 @@ function LearnerHeader() {
     setUserRole("learner");
   }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
@@ -98,22 +96,20 @@ function LearnerHeader() {
     assignmentDetails?.optionalQuestionIds,
   );
 
-  const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
-    "assignmentConfig",
-    {
-      introduction: "",
-      graded: false,
-      passingGrade: 0,
-      published: false,
-      questionOrder: [],
-      updatedAt: 0,
-    },
-  );
   const [returnUrl, setReturnUrl] = useState<string>("");
   // The URL is authoritative for the assignment id. Reading it from a store
   // populated only on the overview route leaves deep links / hard refreshes
   // with a null id and silently drops the submit.
   const { assignmentId, assignmentIdParam } = useAssignmentId();
+  const authorPreviewPayload = assignmentId
+    ? readAuthorPreviewPayload(assignmentId)
+    : null;
+  const authorQuestions = authorPreviewPayload?.questions ?? questions;
+  const authorAssignmentDetails =
+    authorPreviewPayload?.assignmentDetails ??
+    (assignmentDetails
+      ? (assignmentDetails as ReplaceAssignmentRequest)
+      : undefined);
   // Guards re-entrancy: submit can be triggered by the button AND by a window
   // "triggerAssignmentSubmission" event, so a ref (not the async-stale
   // `submitting` state) prevents a double submission of the same attempt.

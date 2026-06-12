@@ -1,13 +1,16 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
+import {
+  buildAuthorPreviewPayload,
+  readAuthorPreviewPayload,
+} from "@/app/learner/utils/authorPreview";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
@@ -90,12 +93,23 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           }
         }
       } else if (role === "author") {
-        const assignmentDetails = getStoredData(
-          "assignmentConfig",
-          {},
-        ) as Assignment;
+        const previewPayload = readAuthorPreviewPayload(assignmentId);
+        const backendAssignment = previewPayload
+          ? null
+          : await getAssignment(assignmentId, userPreferedLanguage, cookie);
+        if (!previewPayload && !backendAssignment) {
+          throw new Error("Failed to fetch assignment.");
+        }
+        let assignmentDetails = previewPayload?.assignmentDetails;
+        if (!assignmentDetails) {
+          if (!backendAssignment) {
+            throw new Error("Failed to fetch assignment.");
+          }
+          assignmentDetails =
+            buildAuthorPreviewPayload(backendAssignment).assignmentDetails;
+        }
         if (isMounted) {
-          setAssignment(assignmentDetails);
+          setAssignment(assignmentDetails as unknown as Assignment);
         }
       }
     } catch (error) {

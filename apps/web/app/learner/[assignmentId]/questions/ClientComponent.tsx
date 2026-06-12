@@ -1,11 +1,18 @@
 "use client";
 
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
-import type { AssignmentDetails, QuestionStore } from "@/config/types";
+import animationData from "@/animations/LoadSN.json";
+import Loading from "@/components/Loading";
+import type { QuestionStore } from "@/config/types";
+import { getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
+import {
+  buildAuthorPreviewPayload,
+  readAuthorPreviewPayload,
+  type AuthorPreviewPayload,
+} from "@/app/learner/utils/authorPreview";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface ClientLearnerLayoutProps {
   assignmentId: number;
@@ -20,14 +27,40 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     (state) => state.setAssignmentDetails,
   );
   const setRole = useLearnerStore((state) => state.setRole);
+  const [previewPayload, setPreviewPayload] =
+    useState<AuthorPreviewPayload | null>(() =>
+      readAuthorPreviewPayload(assignmentId),
+    );
+
   useEffect(() => {
     setRole(role || "learner");
   }, [role]);
-  const assignmentDetails = getStoredData(
-    "assignmentConfig",
-    {},
-  ) as AssignmentDetails;
-  const allQuestions = getStoredData("questions", []) as QuestionStore[];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreviewPayload() {
+      const storedPayload = readAuthorPreviewPayload(assignmentId);
+      if (storedPayload) {
+        setPreviewPayload(storedPayload);
+        return;
+      }
+
+      const assignment = await getAssignment(assignmentId);
+      if (!cancelled && assignment) {
+        setPreviewPayload(buildAuthorPreviewPayload(assignment));
+      }
+    }
+
+    void loadPreviewPayload();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId]);
+
+  const assignmentDetails = previewPayload?.assignmentDetails;
+  const allQuestions = previewPayload?.questions ?? [];
   const numberOfQuestionsPerAttempt =
     assignmentDetails?.numberOfQuestionsPerAttempt || null;
   const displayOrder = assignmentDetails?.displayOrder;
@@ -53,6 +86,8 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       : pool;
   }, [questionIdsKey, displayOrder, numberOfQuestionsPerAttempt]);
   useEffect(() => {
+    if (!assignmentDetails) return;
+
     setAssignmentDetails({
       ...assignmentDetails,
       showQuestions: assignmentDetails.showQuestions || false,
@@ -71,6 +106,10 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       questionControls: assignmentDetails.questionControls,
     });
   }, [assignmentDetails, setAssignmentDetails]);
+
+  if (!previewPayload || !assignmentDetails) {
+    return <Loading animationData={animationData} />;
+  }
 
   return (
     <main className="flex flex-col h-[calc(100vh-100px)]">

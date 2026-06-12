@@ -2,6 +2,10 @@
 
 import TooltipMessage from "@/app/components/ToolTipMessage";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
+import {
+  getAssignmentConfigHydration,
+  getAssignmentFeedbackHydration,
+} from "@/app/author/utils/assignmentHydration";
 import Spinner from "@/components/svgs/Spinner";
 import { useAuthorStore } from "@/stores/author";
 import { useRouter } from "next/navigation";
@@ -17,8 +21,8 @@ import { useVersionControl } from "@/hooks/useVersionControl";
 import { VersionComparison } from "@/types/version-types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { getAssignment } from "@/lib/shared";
-import { mergeData } from "@/lib/utils";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
+import type { QuestionAuthorStore } from "@/config/types";
 
 interface Props {
   submitting: boolean;
@@ -53,13 +57,17 @@ const SaveAndPublishButton: FC<Props> = ({
     description: string;
     isDraft: boolean;
   } | null>(null);
-  const [setAuthorStore, activeAssignmentId, setQuestionOrder] = useAuthorStore(
-    (state) => [
-      state.setAuthorStore,
-      state.activeAssignmentId,
-      state.setQuestionOrder,
-    ],
-  );
+  const [
+    setAuthorStore,
+    activeAssignmentId,
+    setQuestionOrder,
+    setQuestions,
+  ] = useAuthorStore((state) => [
+    state.setAuthorStore,
+    state.activeAssignmentId,
+    state.setQuestionOrder,
+    state.setQuestions,
+  ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
@@ -90,49 +98,30 @@ const SaveAndPublishButton: FC<Props> = ({
         ...assignment,
         currentVersion: undefined,
       };
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        authorSafeAssignment,
-      );
-      const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
+      const fetchedQuestions = (assignment.questions ??
+        []) as QuestionAuthorStore[];
+      setQuestions(fetchedQuestions);
       if (assignment.questionOrder) {
         setQuestionOrder(assignment.questionOrder);
       } else {
-        setQuestionOrder(questions.map((question) => question.id));
+        setQuestionOrder(fetchedQuestions.map((question) => question.id));
       }
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        assignment,
-      );
       if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: assignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...getAssignmentConfigHydration(assignment),
       });
 
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        assignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...getAssignmentFeedbackHydration(assignment),
       });
 
       useAuthorStore.getState().setName(assignment.name);

@@ -1,6 +1,10 @@
 "use client";
 
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
+import {
+  getAssignmentConfigHydration,
+  getAssignmentFeedbackHydration,
+} from "@/app/author/utils/assignmentHydration";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChatbot } from "@/hooks/useChatbot";
 import { encodeFields } from "@/app/Helpers/encoder";
@@ -33,7 +37,6 @@ import {
   retryFailedTranslations,
   subscribeToJobStatus,
 } from "@/lib/talkToBackend";
-import { mergeData } from "@/lib/utils";
 import languages from "@/public/languages.json";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -117,6 +120,7 @@ function AuthorHeader() {
     setAuthorStore,
     activeAssignmentId,
     name,
+    setQuestionOrder,
   ] = useAuthorStore((state) => [
     state.setActiveAssignmentId,
     state.questions,
@@ -124,6 +128,7 @@ function AuthorHeader() {
     state.setAuthorStore,
     state.activeAssignmentId,
     state.name,
+    state.setQuestionOrder,
   ]);
 
   const loadVersions = useAuthorStore((state) => state.loadVersions);
@@ -293,23 +298,15 @@ function AuthorHeader() {
         currentVersion: undefined,
       };
       useAuthorStore.getState().setAuthorStore(authorSafeAssignment);
+      setQuestions(questions);
+      if (newAssignment.questionOrder) {
+        setQuestionOrder(newAssignment.questionOrder);
+      } else {
+        setQuestionOrder(questions.map((question) => question.id));
+      }
 
       useAssignmentConfig.getState().setAssignmentConfigStore({
-        numAttempts: newAssignment.numAttempts,
-        retakeAttemptCoolDownMinutes:
-          newAssignment.retakeAttemptCoolDownMinutes,
-        attemptsBeforeCoolDown: newAssignment.attemptsBeforeCoolDown,
-        passingGrade: newAssignment.passingGrade,
-        displayOrder: newAssignment.displayOrder,
-        graded: newAssignment.graded,
-        questionDisplay: newAssignment.questionDisplay,
-        timeEstimateMinutes: newAssignment.timeEstimateMinutes,
-        allotedTimeMinutes: newAssignment.allotedTimeMinutes,
-        updatedAt: newAssignment.updatedAt,
-        showQuestions: newAssignment.showQuestions,
-        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
-        requireAllQuestions: newAssignment.requireAllQuestions,
-        optionalQuestionIds: newAssignment.optionalQuestionIds,
+        ...getAssignmentConfigHydration(newAssignment),
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
@@ -319,10 +316,7 @@ function AuthorHeader() {
       }
 
       useAssignmentFeedbackConfig.getState().setAssignmentFeedbackConfigStore({
-        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
-        showQuestionScore: newAssignment.showQuestionScore,
-        showAssignmentScore: newAssignment.showAssignmentScore,
-        correctAnswerVisibility: newAssignment.correctAnswerVisibility,
+        ...getAssignmentFeedbackHydration(newAssignment),
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
@@ -369,45 +363,31 @@ function AuthorHeader() {
         ...newAssignment,
         currentVersion: undefined,
       };
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        authorSafeAssignment,
-      );
-      const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
       setAuthorStore({
         ...cleanedAuthorData,
       });
+      const fetchedQuestions = (newAssignment.questions ??
+        []) as QuestionAuthorStore[];
+      setQuestions(fetchedQuestions);
+      if (newAssignment.questionOrder) {
+        setQuestionOrder(newAssignment.questionOrder);
+      } else {
+        setQuestionOrder(fetchedQuestions.map((question) => question.id));
+      }
 
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        newAssignment,
-      );
       if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: newAssignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...getAssignmentConfigHydration(newAssignment),
       });
 
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        newAssignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...getAssignmentFeedbackHydration(newAssignment),
       });
 
       useAuthorStore.getState().setName(newAssignment.name);
