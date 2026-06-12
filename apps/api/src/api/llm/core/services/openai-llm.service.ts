@@ -33,6 +33,11 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       topP: options?.topP ?? options?.top_p ?? 1,
       modelName: options?.modelName ?? OpenAiLlmService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens,
+      // Both fall back to SDK defaults when undefined. Without a caller
+      // timeout, a stalled connection sits on the SDK's 10-minute default
+      // and outlives every caller-side deadline.
+      timeout: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
     });
   }
 

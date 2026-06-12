@@ -163,14 +163,27 @@ export class TranslationService implements OnModuleDestroy {
   // back of the Bottleneck queue under worker-pool concurrency: each question
   // produces ~2 ops per language × 23 languages, and with 8 workers all calling
   // simultaneously the limiter queue grows past 30s of LLM round-trip latency.
-  // Worst-case time per language with the retry layer: 3 × 90s + 2 × 5s ≈ 280s.
-  // That exceeds the 120s BullMQ lockDuration on the translations queue; in
-  // the pathological all-timeouts case the worker will lose its lock and the
-  // job will be redelivered. The redelivered worker runs with
-  // forceRetranslation: false, so any languages that DID succeed are skipped
-  // and only the still-missing ones are re-attempted — self-healing, not
-  // destructive.
   private readonly OPERATION_TIMEOUT = 90_000;
+  // Limiter expiration for one scheduled fan-out operation. The scheduled
+  // operation wraps the WHOLE per-language retry loop — MAX_RETRY_ATTEMPTS
+  // attempts of up to OPERATION_TIMEOUT each, plus the doubled inter-attempt
+  // pauses for timeouts — so the expiration must cover that full budget
+  // (~300s), plus slack for jitter. When this matched a single attempt
+  // (90s), the first slow LLM call burned the entire window, Bottleneck
+  // rejected the operation, and the retries never ran: every publish with
+  // enough concurrent calls lost 1-2 languages at exactly the 90s mark.
+  // Worst-case per-language time exceeds the 120s BullMQ lockDuration on
+  // the translations queue; that is fine while the event loop stays
+  // responsive, because the worker auto-renews its lock every
+  // lockDuration/2. If the event loop stalls past the lock window the job
+  // fails permanently — the translations queue runs maxStalledCount=0, so
+  // there is NO stall redelivery — and recovery is the author-facing
+  // Retry, which re-runs with forceRetranslation: false and fills only
+  // the missing languages.
+  // Assigned in the constructor rather than via a field initializer: an
+  // initializer reading sibling fields silently evaluates to NaN if the
+  // constant declarations above are ever reordered below this one.
+  private readonly FANOUT_OPERATION_EXPIRATION: number;
   private readonly JOB_TIMEOUT = 600_000;
   private readonly MAX_STUCK_OPERATIONS = 15;
 
@@ -200,6 +213,11 @@ export class TranslationService implements OnModuleDestroy {
   ) {
     this._languageTranslation =
       process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";
+
+    this.FANOUT_OPERATION_EXPIRATION =
+      this.OPERATION_TIMEOUT * this.MAX_RETRY_ATTEMPTS +
+      this.RETRY_DELAY_BASE * 2 * (this.MAX_RETRY_ATTEMPTS - 1) +
+      10_000;
 
     this.limiter = this.createDefaultLimiter();
     this.watsonxLimiter = this.createWatsonxLimiter();
@@ -348,6 +366,21 @@ export class TranslationService implements OnModuleDestroy {
     const codes = getAllLanguageCodes();
     if (codes.length === 0) return;
     await this.releaseInflightLanguages(assignmentId, codes);
+  }
+
+  /**
+   * Terminal status for a publish-hash entry after a fan-out run.
+   * While BullMQ attempts remain the executor rethrows on partial failure
+   * and a retry will fill the missing languages, so the entry stays
+   * in_progress — "failed" is reserved for the final attempt
+   * (markTerminalFailure), where it is what the author actually sees.
+   */
+  private terminalEntryStatus(
+    failed: number,
+    markTerminalFailure: boolean,
+  ): PerJobTranslationEntry["status"] {
+    if (failed === 0) return "completed";
+    return markTerminalFailure ? "failed" : "in_progress";
   }
 
   private async markPublishTranslationCompleted(
@@ -500,14 +533,16 @@ export class TranslationService implements OnModuleDestroy {
     operationName: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    // Per-job expiration must accommodate the 90s LLM call ceiling plus
-    // queue-wait under heavy load. The previous 15s was the proximate
-    // cause of silent translation failures: at 22 langs × multi-op
-    // fan-out × 8 workers the tail of the Bottleneck queue routinely
-    // exceeded 15s, Bottleneck rejected the job with "timed out", the
-    // underlying LLM call was orphaned, and the failure was counted but
-    // never logged.
-    const scheduleOptions = { expiration: 90_000, priority: 5 } as const;
+    // Per-job expiration must accommodate the FULL retry budget of the
+    // scheduled operation, not a single attempt — see the comment on
+    // FANOUT_OPERATION_EXPIRATION. Two prior incarnations of this bug:
+    // 15s expired ops still in the Bottleneck queue under load, and 90s
+    // (== one attempt's timeout) killed the operation the moment its first
+    // attempt ran long, so the retry layer never executed.
+    const scheduleOptions = {
+      expiration: this.FANOUT_OPERATION_EXPIRATION,
+      priority: 5,
+    } as const;
 
     try {
       return await this.getActiveLimiter().schedule(scheduleOptions, operation);
@@ -1443,7 +1478,10 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "meta",
             id: assignmentId,
-            status: outcome.failed > 0 ? "failed" : "completed",
+            status: this.terminalEntryStatus(
+              outcome.failed,
+              markTerminalFailure,
+            ),
             languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
@@ -1759,7 +1797,10 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "question",
             id: questionId,
-            status: outcome.failed > 0 ? "failed" : "completed",
+            status: this.terminalEntryStatus(
+              outcome.failed,
+              markTerminalFailure,
+            ),
             languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),
@@ -2063,7 +2104,10 @@ export class TranslationService implements OnModuleDestroy {
           JSON.stringify({
             kind: "variant",
             id: variantId,
-            status: outcome.failed > 0 ? "failed" : "completed",
+            status: this.terminalEntryStatus(
+              outcome.failed,
+              markTerminalFailure,
+            ),
             languagesCompleted: outcome.inserted + outcome.skipped,
             languagesTotal: getSupportedLanguageCount(),
           } satisfies PerJobTranslationEntry),

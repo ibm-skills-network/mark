@@ -34,6 +34,8 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       temperature: options?.temperature ?? 0,
       modelName: options?.modelName ?? OpenAiLlmMiniService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens,
+      timeout: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
     });
   }
 
