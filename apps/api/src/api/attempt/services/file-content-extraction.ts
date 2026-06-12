@@ -160,7 +160,11 @@ export class FileContentExtractionService {
 
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
-    options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
+    options?: {
+      useVisionForPDFs?: boolean;
+      useStructuredExtraction?: boolean;
+      provenanceShadow?: boolean;
+    },
   ): Promise<ExtractedFileContent[]> {
     this.logger.debug(`Starting extraction for ${learnerFiles.length} files`);
 
@@ -231,13 +235,18 @@ export class FileContentExtractionService {
   }
 
   /**
-   * Whether content-provenance shadow instrumentation should run. Gated by
-   * ENABLE_CONTENT_PROVENANCE_SHADOW so the telemetry + re-extraction +
-   * artifact persistence can be disabled via config without a code change —
-   * set it to the string "false" to turn the shadow path off entirely.
-   * Defaults to enabled.
+   * Whether content-provenance shadow instrumentation should run for this
+   * call. Shadow work is opt-in per call site: only the grading path requests
+   * it (`provenanceShadow: true`). Chat uploads, author reference material and
+   * legacy callers pass nothing, so they never join the measurement or write
+   * artifacts into their own buckets.
+   *
+   * On top of the per-call opt-in, the ENABLE_CONTENT_PROVENANCE_SHADOW env
+   * flag is a global kill switch: set it to the string "false" to turn the
+   * shadow path off everywhere without a code change. Defaults to enabled.
    */
-  private isProvenanceShadowEnabled(): boolean {
+  private isProvenanceShadowEnabled(optedIn: boolean | undefined): boolean {
+    if (optedIn !== true) return false;
     return process.env.ENABLE_CONTENT_PROVENANCE_SHADOW !== "false";
   }
 
@@ -271,13 +280,16 @@ export class FileContentExtractionService {
   private async recordClientContentUse(
     file: LearnerFileUpload,
     clientContent: string,
+    shadowEnabled: boolean,
   ): Promise<void> {
-    if (!this.isProvenanceShadowEnabled()) return;
+    if (!shadowEnabled) return;
 
     try {
       const clientSha16 = this.provenanceSha16(clientContent);
 
-      this.logger.warn(
+      // Steady-state measurement telemetry: info, not warn (warn is reserved
+      // for actual anomalies like a real divergence).
+      this.logger.log(
         `provenance.trust.client.content ${JSON.stringify({
           questionId: file.questionId,
           recordId: file.recordId,
@@ -290,77 +302,98 @@ export class FileContentExtractionService {
         })}`,
       );
 
-      if (file.bucket && file.key) {
-        const fileContent = await this.downloadFileFromCOS(
+      // Only when the submission also carries storage coordinates can we
+      // re-extract the file server-side and measure divergence. Without them
+      // the telemetry above is all we can capture — and we never persist the
+      // client-supplied content (the divergence artifact persists SERVER text
+      // only, so attacker-controlled text never lands in storage).
+      if (!file.bucket || !file.key) return;
+
+      let serverContent: string;
+      let fileContent: Buffer;
+      let extracted: Awaited<ReturnType<typeof this.extractTextFromBuffer>>;
+      try {
+        fileContent = await this.downloadFileFromCOS(
           file.bucket,
           file.key,
           file.buffer,
         );
-        const extracted = await this.extractTextFromBuffer(
+        extracted = await this.extractTextFromBuffer(
           fileContent,
           file.filename,
           file.fileType,
         );
-        const serverContent = extracted.text;
-        const serverSha16 = this.provenanceSha16(serverContent);
-
-        this.logger.warn(
-          `provenance.divergence ${JSON.stringify({
-            questionId: file.questionId,
-            recordId: file.recordId,
-            filename: file.filename,
-            diverged: clientSha16 !== serverSha16,
-            clientSha16,
-            serverSha16,
-            clientLength: clientContent.length,
-            serverLength: serverContent.length,
-          })}`,
-        );
-
-        await this.persistProvenanceArtifact(file, {
-          schemaVersion: 1,
-          provenance: "server",
-          recordId: file.recordId,
-          questionId: file.questionId,
-          filename: file.filename,
-          fileType: file.fileType,
-          sha16: serverSha16,
-          contentLength: serverContent.length,
-          byteLength: fileContent.length,
-          metrics: extracted.additionalMetadata ?? null,
-          content: serverContent,
-          clientSha16,
-          clientLength: clientContent.length,
-          diverged: clientSha16 !== serverSha16,
-          extractedAt: new Date().toISOString(),
-        });
-      } else {
-        // No storage coordinates: there is no bucket to write to, so the
-        // artifact cannot be persisted. The telemetry warn above already
-        // captured this population — persistence is skipped inside
-        // persistProvenanceArtifact when no bucket is present.
-        await this.persistProvenanceArtifact(file, {
-          schemaVersion: 1,
-          provenance: "client",
-          recordId: file.recordId,
-          questionId: file.questionId,
-          filename: file.filename,
-          fileType: file.fileType,
-          sha16: clientSha16,
-          contentLength: clientContent.length,
-          content: clientContent,
-          extractedAt: new Date().toISOString(),
-        });
+        // Normalize the server text with the SAME pipeline grading applies to
+        // the client content (sanitizeAndTruncate). Hashing raw server text
+        // against sanitized client text produced systematic false divergence
+        // (CRLF / whitespace / truncation), wasting the measurement.
+        serverContent = this.sanitizeAndTruncate(extracted.text);
+      } catch (error) {
+        this.logShadowFailure(file, "reextract", error);
+        return;
       }
+
+      const serverSha16 = this.provenanceSha16(serverContent);
+      const diverged = clientSha16 !== serverSha16;
+
+      const divergenceLine = `provenance.divergence ${JSON.stringify({
+        questionId: file.questionId,
+        recordId: file.recordId,
+        filename: file.filename,
+        diverged,
+        clientSha16,
+        serverSha16,
+        clientLength: clientContent.length,
+        serverLength: serverContent.length,
+      })}`;
+      // A real divergence is a recoverable anomaly worth a warn; the expected
+      // matching case is routine measurement and logs at info.
+      if (diverged) {
+        this.logger.warn(divergenceLine);
+      } else {
+        this.logger.log(divergenceLine);
+      }
+
+      this.persistProvenanceArtifact(file, {
+        schemaVersion: 1,
+        provenance: "server",
+        recordId: file.recordId,
+        questionId: file.questionId,
+        filename: file.filename,
+        fileType: file.fileType,
+        sha16: serverSha16,
+        contentLength: serverContent.length,
+        byteLength: fileContent.length,
+        metrics: extracted.additionalMetadata ?? null,
+        content: serverContent,
+        clientSha16,
+        clientLength: clientContent.length,
+        diverged,
+        extractedAt: new Date().toISOString(),
+      });
     } catch (error) {
-      this.logger.warn(
-        `provenance.shadow.failed ${JSON.stringify({
-          filename: file.filename,
-          questionId: file.questionId,
-          error: error instanceof Error ? error.message : String(error),
-        })}`,
-      );
+      this.logShadowFailure(file, "telemetry", error);
     }
+  }
+
+  /**
+   * Emit the structured `provenance.shadow.failed` warn. The stage names where
+   * in the shadow path the failure occurred ("telemetry" | "reextract" |
+   * "persist") so failures can be attributed without reading the stack.
+   */
+  private logShadowFailure(
+    file: LearnerFileUpload,
+    stage: "telemetry" | "reextract" | "persist",
+    error: unknown,
+  ): void {
+    this.logger.warn(
+      `provenance.shadow.failed ${JSON.stringify({
+        filename: file.filename,
+        questionId: file.questionId,
+        stage,
+        error: error instanceof Error ? error.message : String(error),
+      })}`,
+    );
   }
 
   /**
@@ -379,8 +412,9 @@ export class FileContentExtractionService {
   private async recordServerExtractionArtifact(
     file: LearnerFileUpload,
     extracted: { content: string; metadata?: Record<string, unknown> },
+    shadowEnabled: boolean,
   ): Promise<void> {
-    if (!this.isProvenanceShadowEnabled()) return;
+    if (!shadowEnabled) return;
 
     try {
       const byteLength =
@@ -388,7 +422,7 @@ export class FileContentExtractionService {
           ? (extracted.metadata.byteLength as number)
           : undefined;
 
-      await this.persistProvenanceArtifact(file, {
+      this.persistProvenanceArtifact(file, {
         schemaVersion: 1,
         provenance: "server",
         recordId: file.recordId,
@@ -403,35 +437,83 @@ export class FileContentExtractionService {
         extractedAt: new Date().toISOString(),
       });
     } catch (error) {
-      this.logger.warn(
-        `provenance.shadow.failed ${JSON.stringify({
-          filename: file.filename,
-          questionId: file.questionId,
-          error: error instanceof Error ? error.message : String(error),
-        })}`,
-      );
+      this.logShadowFailure(file, "telemetry", error);
     }
   }
 
   /**
-   * Persist a provenance artifact at a deterministic storage key. The content
-   * is capped: oversized text is dropped in favour of a flag so the artifact
-   * stays small. A bucket is required to write — files without storage
-   * coordinates are captured by telemetry only and skipped here.
-   *
-   * Depends only on the artifact store (s3Service.putObject) and the
-   * deterministic key derivation, never on any grading context, so this seam
-   * can move to a dedicated worker unchanged.
+   * Allowed destination buckets for provenance artifacts. Resolved lazily once
+   * from the configured learner upload buckets so a hostile, client-supplied
+   * `file.bucket` cannot redirect a write to an arbitrary reachable bucket
+   * (confused-deputy). Memoized because the env-derived names are stable for
+   * the process lifetime.
    */
-  private async persistProvenanceArtifact(
+  private allowedArtifactBuckets?: Set<string>;
+
+  private getAllowedArtifactBuckets(): Set<string> {
+    if (!this.allowedArtifactBuckets) {
+      this.allowedArtifactBuckets = new Set(
+        ["learner", "learner-prod"]
+          .map((uploadType) => {
+            try {
+              return this.s3Service.getBucketName(uploadType);
+            } catch {
+              // A bucket env var may be unset in some environments; that
+              // upload type simply contributes nothing to the allowlist.
+              return undefined;
+            }
+          })
+          .filter((name): name is string => Boolean(name)),
+      );
+    }
+    return this.allowedArtifactBuckets;
+  }
+
+  /**
+   * Persist a provenance artifact at a learner-scoped storage key derived from
+   * the source object's own key. The content is capped: oversized text is
+   * dropped in favour of a flag so the artifact stays small.
+   *
+   * Both storage coordinates are required to write: `file.key` (the key the
+   * artifact key derives from — without it the key would collide globally) and
+   * `file.bucket`, which must be one of the known learner buckets. A
+   * client-supplied bucket that is not on the allowlist is rejected before any
+   * S3 call so a hostile DTO cannot redirect the write (confused-deputy).
+   *
+   * The actual PUT is fire-and-forget: it is never awaited, so the extraction
+   * hot path is not blocked on object storage. A catch is attached
+   * synchronously so a rejected PUT can never surface as an unhandled
+   * rejection.
+   *
+   * Depends only on the artifact store (s3Service.putObject), the bucket
+   * allowlist and the deterministic key derivation, never on any grading
+   * context, so this seam can move to a dedicated worker unchanged.
+   */
+  private persistProvenanceArtifact(
     file: LearnerFileUpload,
     artifact: Record<string, unknown> & { content?: string | null },
-  ): Promise<void> {
-    if (!file.bucket) {
+  ): void {
+    // No source key → the artifact key cannot be learner-scoped; skip.
+    if (!file.key) {
       this.logger.debug(
-        `provenance.artifact.skipped.no.bucket ${JSON.stringify({
+        `provenance.artifact.skipped.no.key ${JSON.stringify({
           filename: file.filename,
           questionId: file.questionId,
+        })}`,
+      );
+      return;
+    }
+
+    if (!file.bucket || !this.getAllowedArtifactBuckets().has(file.bucket)) {
+      // Never log the raw client-supplied bucket name at info+: a short hash
+      // is enough to correlate without echoing attacker-chosen input.
+      this.logger.debug(
+        `provenance.artifact.skipped.unknown.bucket ${JSON.stringify({
+          filename: file.filename,
+          questionId: file.questionId,
+          bucketHash: file.bucket
+            ? this.provenanceSha16(file.bucket)
+            : undefined,
         })}`,
       );
       return;
@@ -446,27 +528,39 @@ export class FileContentExtractionService {
       stored.contentOmitted = true;
     }
 
-    const key = provenanceArtifactKey(file);
-    await this.s3Service.putObject({
-      Bucket: file.bucket,
-      Key: key,
-      Body: JSON.stringify(stored),
-      ContentType: "application/json",
-    });
-
-    this.logger.debug(
-      `provenance.artifact.stored ${JSON.stringify({
-        key,
-        contentLength:
-          typeof stored.content === "string" ? stored.content.length : null,
-      })}`,
-    );
+    const key = provenanceArtifactKey({ key: file.key });
+    void this.s3Service
+      .putObject({
+        Bucket: file.bucket,
+        Key: key,
+        Body: JSON.stringify(stored),
+        ContentType: "application/json",
+      })
+      .then(() => {
+        this.logger.debug(
+          `provenance.artifact.stored ${JSON.stringify({
+            key,
+            contentLength:
+              typeof stored.content === "string" ? stored.content.length : null,
+          })}`,
+        );
+      })
+      .catch((error) => {
+        this.logShadowFailure(file, "persist", error);
+      });
   }
 
   private async extractSingleFileContent(
     file: LearnerFileUpload,
-    options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
+    options?: {
+      useVisionForPDFs?: boolean;
+      useStructuredExtraction?: boolean;
+      provenanceShadow?: boolean;
+    },
   ): Promise<ExtractedFileContent> {
+    const shadowEnabled = this.isProvenanceShadowEnabled(
+      options?.provenanceShadow,
+    );
     const isPDF =
       file.filename.toLowerCase().endsWith(".pdf") ||
       file.fileType === "application/pdf";
@@ -601,7 +695,7 @@ export class FileContentExtractionService {
         );
 
         const notebookContent = this.sanitizeAndTruncate(extractedNotebook.text);
-        await this.recordClientContentUse(file, notebookContent);
+        await this.recordClientContentUse(file, notebookContent, shadowEnabled);
 
         return {
           filename: file.filename,
@@ -619,7 +713,7 @@ export class FileContentExtractionService {
 
       this.logger.debug(`Using existing content for ${file.filename}`);
       const trustedContent = this.sanitizeAndTruncate(file.content);
-      await this.recordClientContentUse(file, trustedContent);
+      await this.recordClientContentUse(file, trustedContent, shadowEnabled);
 
       return {
         filename: file.filename,
@@ -657,16 +751,20 @@ export class FileContentExtractionService {
     // The artifact stores the full extracted text (not grading's truncated
     // view) so it stays a faithful canonical record; its own size cap guards
     // against unbounded payloads.
-    await this.recordServerExtractionArtifact(file, {
-      content: extractedContent.text,
-      metadata: {
-        size: fileContent.length,
-        byteLength: fileContent.length,
-        encoding: extractedContent.encoding,
-        language: extractedContent.detectedLanguage,
-        ...extractedContent.additionalMetadata,
+    await this.recordServerExtractionArtifact(
+      file,
+      {
+        content: extractedContent.text,
+        metadata: {
+          size: fileContent.length,
+          byteLength: fileContent.length,
+          encoding: extractedContent.encoding,
+          language: extractedContent.detectedLanguage,
+          ...extractedContent.additionalMetadata,
+        },
       },
-    });
+      shadowEnabled,
+    );
 
     return {
       filename: file.filename,

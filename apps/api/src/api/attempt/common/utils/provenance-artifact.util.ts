@@ -1,22 +1,21 @@
-import * as crypto from "node:crypto";
-
 /**
  * Deterministic storage key for a submission file's extraction artifact.
- * Derivable from fields that survive in a slimmed job payload, so payload
- * consumers can resolve the artifact without re-deriving extraction. The
- * filename is hashed: storage keys must not embed learner-supplied names.
+ *
+ * Derived from the source object's own storage key, which is already
+ * learner-scoped (`${assignmentId}/${userId}/${questionId}/...`). Deriving
+ * from learner-supplied ids instead collapses the key to a single global
+ * entry per filename in real payloads — those carry neither recordId nor
+ * questionId on the file object — so artifacts overwrite each other across
+ * learners in the shared bucket. The source key, by contrast, is unique per
+ * learner submission.
+ *
+ * Callers must guard against a missing/empty key before persisting; this
+ * throws on an empty key as defense-in-depth so a bad key can never silently
+ * produce a colliding `provenance/.json` artifact.
  */
-export function provenanceArtifactKey(file: {
-  recordId?: number | string;
-  questionId?: number;
-  filename: string;
-}): string {
-  const prefix = file.recordId ?? file.questionId ?? "unknown";
-  const question = file.questionId ?? "na";
-  const filenameHash = crypto
-    .createHash("sha256")
-    .update(file.filename)
-    .digest("hex")
-    .slice(0, 32);
-  return `provenance/${prefix}/${question}/${filenameHash}.json`;
+export function provenanceArtifactKey(file: { key: string }): string {
+  if (!file.key) {
+    throw new Error("provenanceArtifactKey requires a non-empty source key");
+  }
+  return `provenance/${file.key}.json`;
 }
