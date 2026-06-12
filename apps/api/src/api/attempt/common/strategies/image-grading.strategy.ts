@@ -415,7 +415,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       bmp: "image/bmp",
       webp: "image/webp",
       tiff: "image/tiff",
-      svg: "image/svg+xml",
     };
 
     return mimeMap[extension] || "image/jpeg";

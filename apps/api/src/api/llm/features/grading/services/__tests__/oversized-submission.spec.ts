@@ -9,6 +9,7 @@
  *  - Non-tabular paragraph text is unaffected.
  */
 
+import { LearnerFacingGradingError } from "../../errors/learner-facing-grading.error";
 import { OversizedSubmissionError } from "../../errors/oversized-submission.error";
 
 function buildService() {
@@ -61,6 +62,13 @@ describe("OversizedSubmissionError class", () => {
     expect(err.questionId).toBe(42);
     expect(err.attemptId).toBe(7);
     expect(err.message).toMatch(/60000/);
+  });
+
+  it("is an instance of the LearnerFacingGradingError base class", () => {
+    const err = new OversizedSubmissionError({ blockCount: 1, cap: 1 });
+    expect(err).toBeInstanceOf(LearnerFacingGradingError);
+    expect(err).toBeInstanceOf(OversizedSubmissionError);
+    expect(err.name).toBe("OversizedSubmissionError");
   });
 
   it("preserves instanceof across re-throw boundaries", () => {

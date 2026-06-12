@@ -285,6 +285,33 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
     });
   });
 
+  describe("SVG is no longer an accepted image format", () => {
+    it("rejects an .svg filename during validation", () => {
+      // isValidImageFormat is private; exercise it through validateResponse
+      // path by asserting the format check directly.
+      expect((strategy as any).isValidImageFormat("drawing.svg")).toBe(false);
+    });
+
+    it("does not map .svg to a MIME type", () => {
+      // getMimeTypeFromFilename falls back to the jpeg default for unknown
+      // extensions; svg must no longer be explicitly mapped to image/svg+xml.
+      expect((strategy as any).getMimeTypeFromFilename("drawing.svg")).not.toBe(
+        "image/svg+xml",
+      );
+    });
+
+    it("still accepts and maps bmp and tiff (now convertible downstream)", () => {
+      expect((strategy as any).isValidImageFormat("scan.bmp")).toBe(true);
+      expect((strategy as any).isValidImageFormat("scan.tiff")).toBe(true);
+      expect((strategy as any).getMimeTypeFromFilename("scan.bmp")).toBe(
+        "image/bmp",
+      );
+      expect((strategy as any).getMimeTypeFromFilename("scan.tiff")).toBe(
+        "image/tiff",
+      );
+    });
+  });
+
   describe("gradeResponse - Type Safety", () => {
     const mockContext: GradingContext = {
       assignmentInstructions: "",

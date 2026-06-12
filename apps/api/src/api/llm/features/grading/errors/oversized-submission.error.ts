@@ -7,6 +7,8 @@
  * The fields are exposed as own enumerable properties so the project logger
  * can serialize them as structured context without leaking the message.
  */
+import { LearnerFacingGradingError } from "./learner-facing-grading.error";
+
 export interface OversizedSubmissionErrorFields {
   blockCount: number;
   cap: number;
@@ -15,7 +17,7 @@ export interface OversizedSubmissionErrorFields {
   attemptId?: number;
 }
 
-export class OversizedSubmissionError extends Error {
+export class OversizedSubmissionError extends LearnerFacingGradingError {
   public readonly blockCount: number;
   public readonly cap: number;
   public readonly filename?: string;

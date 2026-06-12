@@ -4,6 +4,7 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
+import sharp from "sharp";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
@@ -23,6 +24,7 @@ import {
   PROMPT_PROCESSOR,
 } from "../../../llm.constants";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { UnsupportedImageFormatError } from "../errors/unsupported-image-format.error";
 import { IImageGradingService } from "../interfaces/image-grading.interface";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
@@ -338,6 +340,25 @@ ${parsed.guidance}
         feedback: aeegFeedback,
       } as ImageBasedQuestionResponseModel;
     } catch (error) {
+      // A format rejection is the learner's to fix, not a system fault:
+      // surface it intact so the worker can fail terminally and show the
+      // learner-facing message instead of a generic 500.
+      if (error instanceof UnsupportedImageFormatError) {
+        throw error;
+      }
+
+      // Belt-and-braces: if the vision provider itself rejects the image as
+      // an unsupported/invalid format (anything the preflight missed), map it
+      // to the same typed error rather than collapsing it into a 500.
+      if (
+        error instanceof Error &&
+        /unsupported image|invalid_image_format/i.test(error.message)
+      ) {
+        throw new UnsupportedImageFormatError({
+          reason: error.message.slice(0, 200),
+        });
+      }
+
       this.logger.error(
         `Error processing image grading: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -516,16 +537,25 @@ ${parsed.guidance}
         Key: key,
       });
 
-      const buffer = Buffer.isBuffer(object.Body)
+      const rawBuffer = Buffer.isBuffer(object.Body)
         ? object.Body
         : await this.streamToBuffer(object.Body as NodeJS.ReadableStream);
 
-      const mimeType =
-        this.detectImageMimeType(buffer, key) ?? "application/octet-stream";
+      // Convert or reject based on the real bytes before encoding, so the
+      // data URL sent to the vision model carries a correct, accepted mime.
+      const { buffer, mimeType } = await this.preflightImageBuffer(
+        rawBuffer,
+        key,
+      );
       const base64 = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
       return { buffer, mimeType, size: buffer.length, base64 };
     } catch (error) {
+      // Format rejection is the learner's to fix; surface it intact so the
+      // caller can translate it into a learner-facing terminal failure.
+      if (error instanceof UnsupportedImageFormatError) {
+        throw error;
+      }
       this.logger.error(`Failed to fetch image: ${bucket}/${key}`, error);
       throw new HttpException(
         `Could not retrieve image: ${key}`,
@@ -547,34 +577,24 @@ ${parsed.guidance}
       );
     }
 
-    let buffer: Buffer;
-    let base64: string;
-
+    // Decode to the raw bytes regardless of how the data arrived.
+    let rawBuffer: Buffer;
     if (typeof imageData === "string") {
-      if (imageData.startsWith("data:")) {
-        base64 = imageData;
-        const base64Data = imageData.split(",")[1];
-        buffer = Buffer.from(base64Data, "base64");
-      } else {
-        buffer = Buffer.from(imageData, "base64");
-        const mimeType = this.detectImageMimeType(buffer);
-        base64 = `data:${mimeType || "image/jpeg"};base64,${imageData}`;
-      }
+      const base64Data = imageData.startsWith("data:")
+        ? imageData.split(",")[1]
+        : imageData;
+      rawBuffer = Buffer.from(base64Data, "base64");
     } else {
-      buffer = imageData;
-      const mimeType = this.detectImageMimeType(buffer);
-      base64 = `data:${mimeType || "image/jpeg"};base64,${buffer.toString(
-        "base64",
-      )}`;
+      rawBuffer = imageData;
     }
 
-    const mimeType = this.detectImageMimeType(buffer);
-    if (!mimeType) {
-      throw new HttpException(
-        "Invalid image format provided",
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    // Convert or reject from the real bytes, then re-encode the (possibly
+    // converted) buffer so the data URL carries the post-preflight mime.
+    const { buffer, mimeType } = await this.preflightImageBuffer(
+      rawBuffer,
+      "",
+    );
+    const base64 = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
     return { buffer, mimeType, size: buffer.length, base64 };
   }
@@ -590,10 +610,23 @@ ${parsed.guidance}
     });
   }
 
+  /**
+   * Determines an image's MIME type from its CONTENT first, falling back to
+   * the filename extension only when the bytes are inconclusive. A learner
+   * photo in an unsupported format renamed to ".png" must be detected by its
+   * real signature so it is converted or rejected before grading rather than
+   * sent to the vision model mislabeled. Returns null when neither the bytes
+   * nor the filename identify a known image format.
+   */
   private detectImageMimeType(
     buffer: Buffer,
     filename?: string,
   ): string | null {
+    const fromBytes = this.detectMimeFromBytes(buffer);
+    if (fromBytes) {
+      return fromBytes;
+    }
+
     if (filename) {
       const extension = filename.split(".").pop()?.toLowerCase();
       const extensionToMime: Record<string, string> = {
@@ -612,6 +645,15 @@ ${parsed.guidance}
       }
     }
 
+    return null;
+  }
+
+  /**
+   * Magic-byte sniffing only — no filename input. Recognizes the raster
+   * formats the grading pipeline can either pass through (jpeg/png/gif/webp)
+   * or convert (bmp/tiff/avif), plus the ones it must reject (heic/svg).
+   */
+  private detectMimeFromBytes(buffer: Buffer): string | null {
     if (buffer.length < 4) return null;
 
     const firstBytes = buffer.subarray(0, 12);
@@ -637,10 +679,8 @@ ${parsed.guidance}
       return "image/gif";
     }
 
-    if (firstBytes[0] === 0x42 && firstBytes[1] === 0x4d) {
-      return "image/bmp";
-    }
-
+    // WEBP must be checked before BMP/TIFF as it shares no prefix but is a
+    // RIFF container; checked early to keep the raster branches grouped.
     if (
       firstBytes[0] === 0x52 &&
       firstBytes[1] === 0x49 &&
@@ -654,7 +694,121 @@ ${parsed.guidance}
       return "image/webp";
     }
 
+    if (firstBytes[0] === 0x42 && firstBytes[1] === 0x4d) {
+      return "image/bmp";
+    }
+
+    // TIFF: little-endian "II*\0" or big-endian "MM\0*".
+    if (
+      (firstBytes[0] === 0x49 &&
+        firstBytes[1] === 0x49 &&
+        firstBytes[2] === 0x2a &&
+        firstBytes[3] === 0x00) ||
+      (firstBytes[0] === 0x4d &&
+        firstBytes[1] === 0x4d &&
+        firstBytes[2] === 0x00 &&
+        firstBytes[3] === 0x2a)
+    ) {
+      return "image/tiff";
+    }
+
+    // ISO-BMFF (HEIC/AVIF): "ftyp" box at offset 4, brand at offset 8.
+    if (
+      firstBytes[4] === 0x66 &&
+      firstBytes[5] === 0x74 &&
+      firstBytes[6] === 0x79 &&
+      firstBytes[7] === 0x70
+    ) {
+      const brand = buffer.subarray(8, 12).toString("ascii").toLowerCase();
+      if (
+        brand.includes("heic") ||
+        brand.includes("heix") ||
+        brand.includes("hevc") ||
+        brand.includes("mif1") ||
+        brand.includes("msf1")
+      ) {
+        return "image/heic";
+      }
+      if (brand.includes("avif") || brand.includes("avis")) {
+        return "image/avif";
+      }
+    }
+
+    // SVG: leading whitespace, an optional XML prolog, then an "<svg" tag.
+    if (this.looksLikeSvg(buffer)) {
+      return "image/svg+xml";
+    }
+
     return null;
+  }
+
+  private looksLikeSvg(buffer: Buffer): boolean {
+    // Inspect only the leading bytes; an SVG root tag appears very early.
+    // Strip a leading UTF-8 BOM (U+FEFF), then leading whitespace. trimStart
+    // alone treats U+FEFF as whitespace, but the explicit strip documents it.
+    const head = buffer
+      .subarray(0, 512)
+      .toString("utf8")
+      .replace(/^\uFEFF/, "")
+      .trimStart();
+    const withoutProlog = head.startsWith("<?xml")
+      ? head.slice(head.indexOf("?>") + 2).trimStart()
+      : head;
+    return /^<svg[\s>]/i.test(withoutProlog) || withoutProlog.startsWith("<svg");
+  }
+
+  /**
+   * Validates and normalizes an image buffer before it is sent to the vision
+   * model. The model accepts only png/jpeg/gif/webp; bmp/tiff/avif are
+   * transcoded to PNG, and heic/svg/unrecognizable data are rejected with a
+   * typed, learner-facing error (HEIC is rejected rather than converted
+   * because the prebuilt sharp binary ships without libheif HEIC decode).
+   * Returns the (possibly converted) buffer alongside its post-preflight MIME
+   * type so callers can build a correctly-labeled data URL.
+   */
+  private async preflightImageBuffer(
+    buffer: Buffer,
+    filename: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    const detected = this.detectMimeFromBytes(buffer);
+
+    if (
+      detected === "image/png" ||
+      detected === "image/jpeg" ||
+      detected === "image/gif" ||
+      detected === "image/webp"
+    ) {
+      return { buffer, mimeType: detected };
+    }
+
+    if (
+      detected === "image/bmp" ||
+      detected === "image/tiff" ||
+      detected === "image/avif"
+    ) {
+      const converted = await sharp(buffer).png().toBuffer();
+      this.logger.info("image.grading.converted", {
+        filename,
+        detectedFormat: detected,
+      });
+      return { buffer: converted, mimeType: "image/png" };
+    }
+
+    const detectedFormat = detected ?? "unknown";
+    this.logger.warn("image.grading.unsupported", {
+      filename,
+      detectedFormat,
+    });
+    throw new UnsupportedImageFormatError({
+      filename,
+      detectedFormat,
+      reason:
+        detected === "image/heic"
+          ? "HEIC images cannot be graded by the vision model"
+          : detected === "image/svg+xml"
+            ? "SVG images cannot be graded by the vision model"
+            : "Unrecognized image data",
+    });
   }
 
   private convertToRubricCriteria(
