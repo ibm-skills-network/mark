@@ -510,7 +510,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
     it("lets non-oversized errors pass through unchanged", async () => {
       const boom = new Error("boom");
-      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(boom);
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        boom,
+      );
 
       await expect(
         service.autoSaveQuestionResponse(

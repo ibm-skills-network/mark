@@ -66,7 +66,9 @@ export class ContentSummarizationService {
    * safety ratio to leave room for the model's own response.
    */
   getSafeContextLimit(modelKey: string): number {
-    return Math.floor(this.getContextWindow(modelKey) * this.contextSafetyRatio);
+    return Math.floor(
+      this.getContextWindow(modelKey) * this.contextSafetyRatio,
+    );
   }
 
   /**
