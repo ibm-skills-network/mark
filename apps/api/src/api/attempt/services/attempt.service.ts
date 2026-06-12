@@ -35,7 +35,7 @@ import {
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
-import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -415,7 +415,7 @@ export class AttemptServiceV2 {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       const learnerReason =
-        error instanceof OversizedSubmissionError
+        error instanceof LearnerFacingGradingError
           ? error.learnerMessage
           : `Grading failed: ${errorMessage}`;
       await this.updateGradingJobStatus(gradingJobId, {
@@ -430,7 +430,7 @@ export class AttemptServiceV2 {
         if (attemptId > 0) {
           await this.gradingProgressService.markFailed(
             attemptId,
-            error instanceof OversizedSubmissionError
+            error instanceof LearnerFacingGradingError
               ? error.learnerMessage
               : errorMessage,
           );

@@ -5,6 +5,7 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { OversizedSubmissionError } from "../../api/src/api/llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../api/src/api/llm/features/grading/errors/unsupported-image-format.error";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import {
@@ -1342,6 +1343,54 @@ describe("JobWorkerService", () => {
 
       expect(thrown).toBeInstanceOf(UnrecoverableError);
       expect((thrown as Error).message).toMatch(/^OversizedSubmissionError: /);
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+    });
+
+    it("surfaces learnerMessage when a typed UnsupportedImageFormatError survives", async () => {
+      const unsupported = new UnsupportedImageFormatError({
+        filename: "photo.heic",
+        detectedFormat: "image/heic",
+        reason: "unsupported format detected at grade time",
+      });
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(unsupported);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect((thrown as Error).name).toBe("UnrecoverableError");
+      expect((thrown as Error).message).toBe(unsupported.learnerMessage);
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "attempt.grade.oversized",
+        expect.objectContaining({
+          attemptId: 861298,
+          assignmentId: 2537,
+          errorClass: "UnsupportedImageFormatError",
+        }),
+      );
+    });
+
+    it("keeps name-only UnsupportedImageFormatError terminal with the technical reason", async () => {
+      const nameOnly = new Error("Unsupported image format (image/heic)");
+      nameOnly.name = "UnsupportedImageFormatError";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(nameOnly);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(UnrecoverableError);
+      expect((thrown as Error).message).toMatch(
+        /^UnsupportedImageFormatError: /,
+      );
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
     });
 

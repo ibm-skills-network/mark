@@ -312,6 +312,95 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
     });
   });
 
+  describe("validateResponse - base64 magic-byte sniffing", () => {
+    const mockQuestion: QuestionDto = {
+      id: 1,
+      question: "Upload an image",
+      type: "IMAGE" as any,
+      totalPoints: 10,
+      assignmentId: 1,
+      gradingContextQuestionIds: [],
+    } as any;
+
+    // Helper: build an inline data URL from raw magic bytes so the strategy's
+    // sniffer sees real signature bytes after the `;base64,` marker.
+    const dataUrl = (mime: string, bytes: number[]): string =>
+      `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
+
+    const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    // ISO-BMFF box: 12-byte "ftypheic" prefix (size + "ftyp" + "heic" brand).
+    const HEIC_PREFIX = [
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
+    ];
+    const TIFF_SIGNATURE = [0x49, 0x49, 0x2a, 0x00];
+
+    it("accepts a base64 PNG data URL", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "diagram.png",
+            imageData: dataUrl("image/png", PNG_SIGNATURE),
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).resolves.toBe(true);
+    });
+
+    it("rejects a base64 HEIC data URL with the learner-facing message", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "photo.png",
+            imageData: dataUrl("image/png", HEIC_PREFIX),
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toThrow(/not a supported image format/i);
+    });
+
+    it("accepts a base64 TIFF data URL (convertible downstream)", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "scan.tiff",
+            imageData: dataUrl("image/tiff", TIFF_SIGNATURE),
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).resolves.toBe(true);
+    });
+
+    it("skips the byte check for an InCos placeholder (no inline base64)", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "stored.png",
+            imageData: "InCos",
+            imageKey: "cos/key",
+            imageBucket: "bucket",
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).resolves.toBe(true);
+    });
+  });
+
   describe("gradeResponse - Type Safety", () => {
     const mockContext: GradingContext = {
       assignmentInstructions: "",

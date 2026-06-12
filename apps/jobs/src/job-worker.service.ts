@@ -29,7 +29,7 @@ import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
-import { OversizedSubmissionError } from "../../api/src/api/llm/features/grading/errors/oversized-submission.error";
+import { LearnerFacingGradingError } from "../../api/src/api/llm/features/grading/errors/learner-facing-grading.error";
 
 // Allowed-fields-only shape carried in translation-job payloads. Restricted
 // to identifiers; the LLM-produced translatedText/translatedChoices that
@@ -492,10 +492,12 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Per-attempt failure classifier. Three branches:
-  //   A. OversizedSubmissionError (instanceof, with a name-match fallback for
-  //      the error class that lives in apps/api): always permanent. Log and
-  //      rewrap as UnrecoverableError so BullMQ skips remaining retries; the
-  //      learner-facing message rides along when the typed error survives.
+  //   A. Learner-facing grading error (instanceof the shared base class, with
+  //      a name-match fallback for the concrete classes that live in apps/api):
+  //      always permanent. Covers oversized submissions and unsupported image
+  //      formats. Log and rewrap as UnrecoverableError so BullMQ skips
+  //      remaining retries; the learner-facing message rides along when the
+  //      typed error survives.
   //   B. V8 OOM / worker OOM (message regex + code === "ERR_WORKER_OUT_OF_MEMORY"):
   //      per-attempt strike counter in Redis with 24h TTL. Two strikes →
   //      permanent fail. One strike → rethrow original so BullMQ retries.
@@ -524,26 +526,26 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    // Branch A: oversized submission — never retryable. The UnrecoverableError
-    // message is what markAttemptGradingFailed pipes to the learner's grading
-    // modal, so use the learner-facing wording when the typed error survived;
-    // the technical reason stays in the structured log.
+    // Branch A: learner-facing grading error — never retryable. The
+    // UnrecoverableError message is what markAttemptGradingFailed pipes to the
+    // learner's grading modal, so use the learner-facing wording when the typed
+    // error survived; the technical reason stays in the structured log.
     if (
-      error instanceof OversizedSubmissionError ||
-      errorName === "OversizedSubmissionError"
+      error instanceof LearnerFacingGradingError ||
+      JobWorkerService.TERMINAL_GRADING_ERROR_NAMES.has(errorName ?? "")
     ) {
       this.structuredLogger.error("attempt.grade.oversized", {
         attemptId,
         assignmentId,
-        errorClass: "OversizedSubmissionError",
+        errorClass: errorName ?? "LearnerFacingGradingError",
         reason,
         jobId: job.id,
         jobName: job.name,
       });
       throw new UnrecoverableError(
-        error instanceof OversizedSubmissionError
+        error instanceof LearnerFacingGradingError
           ? error.learnerMessage
-          : `OversizedSubmissionError: ${reason}`,
+          : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
       );
     }
 
@@ -620,7 +622,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // which satisfies eslint no-misused-promises without an inline IIFE.
   //
   // A failure is terminal when any of these hold:
-  //   - UnrecoverableError / OversizedSubmissionError rewrap — no more
+  //   - UnrecoverableError / learner-facing grading error rewrap — no more
   //     retries regardless of attemptsMade.
   //   - attemptsMade has exhausted the configured attempts.
   //   - the failure is a stalled-job failure (the worker died mid-job and
@@ -641,7 +643,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const errorName = error instanceof Error ? error.name : undefined;
     const isUnrecoverable =
       errorName === "UnrecoverableError" ||
-      errorName === "OversizedSubmissionError";
+      JobWorkerService.TERMINAL_GRADING_ERROR_NAMES.has(errorName ?? "");
     const isStalledFailure = JobWorkerService.STALLED_MESSAGE_RE.test(
       this.messageOf(error),
     );
@@ -738,6 +740,16 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // with no retry, so this signals a terminal failure even when attemptsMade
   // has not yet exhausted.
   private static readonly STALLED_MESSAGE_RE = /stalled/i;
+
+  // Concrete learner-facing grading error class names. The shared base class
+  // (LearnerFacingGradingError) lives in apps/api and is matched by instanceof
+  // when the typed error survives in-process; this set is the name-only
+  // fallback for the same failures crossing the executor boundary as plain
+  // Error objects carrying only the original `name`.
+  private static readonly TERMINAL_GRADING_ERROR_NAMES = new Set([
+    "OversizedSubmissionError",
+    "UnsupportedImageFormatError",
+  ]);
 
   // Single source for "extract a printable message from an unknown thrown
   // value." Mirrors the pattern at handleTranslationJob's catch block but
