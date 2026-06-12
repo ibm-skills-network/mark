@@ -128,6 +128,7 @@ function SuccessPage() {
     );
     const fetchData = async () => {
       const user = await getUser();
+      if (cancelled) return;
       setRole(user.role);
       setUserId(user.userId);
       logState("User loaded", `Role: ${user.role}`);
@@ -290,7 +291,11 @@ function SuccessPage() {
         setLoading(false);
       }
     };
+    let cancelled = false;
     void fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [
     assignmentId,
     attemptId,

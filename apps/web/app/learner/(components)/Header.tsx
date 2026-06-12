@@ -129,17 +129,21 @@ function LearnerHeader() {
   const isAuthorPreview = searchParams.get("authorMode") === "true";
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchData() {
       if (!assignmentId) return;
 
       try {
         const supportedLanguages = await getSupportedLanguages(assignmentId);
+        if (cancelled) return;
         const sortedLanguages = [...supportedLanguages].sort((a, b) =>
           getLanguageName(a).localeCompare(getLanguageName(b)),
         );
         setLanguages(sortedLanguages);
 
         const user = await getUser();
+        if (cancelled) return;
         if (user) {
           setRole(user.role);
           setReturnUrl(user.returnUrl || "");
@@ -147,6 +151,7 @@ function LearnerHeader() {
 
         const userPreferedLanguageFromLTI =
           await getUserPreferedLanguageFromLTI();
+        if (cancelled) return;
         if (
           userPreferedLanguageFromLTI &&
           supportedLanguages.length > 0 &&
@@ -160,6 +165,9 @@ function LearnerHeader() {
     }
 
     void fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [assignmentId]);
 
   const handleChangeLanguage = (selectedLanguage: string) => {

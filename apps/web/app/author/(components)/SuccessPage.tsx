@@ -104,10 +104,11 @@ function SuccessPage() {
   };
   const [returnUrl, setReturnUrl] = useState<string>("");
   useEffect(() => {
+    let cancelled = false;
     const fetchUser = async () => {
       try {
         const user = await getUser();
-        setReturnUrl(user.returnUrl || "");
+        if (!cancelled) setReturnUrl(user.returnUrl || "");
       } catch (err) {
         console.error("Failed to fetch user data", err);
       }
@@ -115,6 +116,9 @@ function SuccessPage() {
 
     void fetchUser();
     void fetchAssignment();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

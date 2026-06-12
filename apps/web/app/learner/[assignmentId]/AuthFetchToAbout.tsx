@@ -43,12 +43,11 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   );
   const userPreferedLanguage = useSearchParams().get("lang") || "en";
   const isQuestionPage = useSearchParams().get("question") === "true";
-  const isMounted = true;
   const [error, setError] = useState<{
     code: number;
     message: string;
   } | null>(null);
-  const fetchData = async () => {
+  const fetchData = async (signal?: { cancelled: boolean }) => {
     setIsLoading(true);
     try {
       if (role === "learner") {
@@ -61,7 +60,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
 
           const attemptsData = await getAttempts(assignmentId, cookie);
 
-          if (isMounted && assignmentData) {
+          if (!signal?.cancelled && assignmentData) {
             const normalizedAttempts = (attemptsData ?? []).map((attempt) =>
               normalizeAttemptTimestamps(
                 attempt,
@@ -88,7 +87,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
                 ? "You are not authorized to view this page"
                 : "We couldn't load this assignment.",
           });
-          if (isMounted) {
+          if (!signal?.cancelled) {
             setAssignment(null);
           }
         }
@@ -108,23 +107,29 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           assignmentDetails =
             buildAuthorPreviewPayload(backendAssignment).assignmentDetails;
         }
-        if (isMounted) {
+        if (!signal?.cancelled) {
           setAssignment(assignmentDetails as unknown as Assignment);
         }
       }
     } catch (error) {
-      if (isMounted) {
+      if (!signal?.cancelled) {
         setAssignment(null);
       }
     } finally {
-      setIsLoading(false);
+      if (!signal?.cancelled) {
+        setIsLoading(false);
+      }
     }
   };
   useEffect(() => {
     setAssignmentId(assignmentId);
 
     if (!isQuestionPage) {
-      void fetchData();
+      const signal = { cancelled: false };
+      void fetchData(signal);
+      return () => {
+        signal.cancelled = true;
+      };
     }
   }, [
     assignmentId,

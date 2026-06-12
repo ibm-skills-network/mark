@@ -401,9 +401,11 @@ function AuthorHeader() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
       setActiveAssignmentId(~~assignmentId);
       const role = await getUserRole();
+      if (cancelled) return;
       if (role === "author") {
         void fetchAssignment();
       } else {
@@ -414,6 +416,9 @@ function AuthorHeader() {
     };
 
     void fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [assignmentId, router]);
 
   // Reconnect to an in-flight publish after a page refresh. The job
