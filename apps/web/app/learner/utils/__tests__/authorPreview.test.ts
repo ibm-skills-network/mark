@@ -48,9 +48,12 @@ describe("readAuthorPreviewPayload", () => {
     expect(readAuthorPreviewPayload(1)).toBeNull();
   });
 
-  it("returns null when questions array is empty", () => {
+  it("returns payload even when questions array is empty (no-question assignments)", () => {
     mockGetStoredData.mockReturnValueOnce(VALID_DETAILS).mockReturnValueOnce([]);
-    expect(readAuthorPreviewPayload(1)).toBeNull();
+    expect(readAuthorPreviewPayload(1)).toEqual({
+      assignmentDetails: VALID_DETAILS,
+      questions: [],
+    });
   });
 
   it("returns null when questions is not an array", () => {

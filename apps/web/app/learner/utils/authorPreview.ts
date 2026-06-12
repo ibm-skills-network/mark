@@ -31,8 +31,7 @@ export function readAuthorPreviewPayload(
 
   if (
     !isMatchingAssignment(assignmentDetails, assignmentId) ||
-    !Array.isArray(questions) ||
-    questions.length === 0
+    !Array.isArray(questions)
   ) {
     return null;
   }
