@@ -671,3 +671,364 @@ describe("FileContentExtractionService - oversized submissions fail extraction",
     expect(results[0].error).toBeUndefined();
   });
 });
+
+// ─── Content provenance shadow mode ───────────────────────────────────────
+
+import * as crypto from "node:crypto";
+import { provenanceArtifactKey } from "../../common/utils/provenance-artifact.util";
+
+function sha16(value: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(value)
+    .digest("hex")
+    .substring(0, 16);
+}
+
+function buildProvenanceService(): {
+  service: FileContentExtractionService;
+  putObject: jest.Mock;
+  logs: { warn: jest.Mock; debug: jest.Mock; log: jest.Mock; error: jest.Mock };
+} {
+  const service = createService();
+  const putObject = jest.fn().mockResolvedValue({});
+  (service as any).s3Service = { putObject };
+  const warn = jest.fn();
+  const debug = jest.fn();
+  const log = jest.fn();
+  const error = jest.fn();
+  (service as any).logger = { warn, debug, log, error };
+  return { service, putObject, logs: { warn, debug, log, error } };
+}
+
+function provenanceWarn(warn: jest.Mock, prefix: string): any {
+  const call = warn.mock.calls.find(
+    (c) => typeof c[0] === "string" && c[0].startsWith(prefix),
+  );
+  if (!call) return undefined;
+  return JSON.parse((call[0] as string).slice(prefix.length).trim());
+}
+
+function lastPutBody(putObject: jest.Mock): any {
+  const call = putObject.mock.calls[putObject.mock.calls.length - 1];
+  return JSON.parse(call[0].Body);
+}
+
+describe("FileContentExtractionService - content provenance shadow mode", () => {
+  const original = process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+    } else {
+      process.env.ENABLE_CONTENT_PROVENANCE_SHADOW = original;
+    }
+  });
+
+  describe("trust-branch telemetry", () => {
+    it("logs provenance.trust.client.content with correct length/sha16/hasCosCoordinates and leaves the result unchanged", async () => {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const clientContent = "the client supplied this exact text";
+      const file = {
+        filename: "answer.txt",
+        content: clientContent,
+        fileType: "text/plain",
+        questionId: 11,
+        recordId: 99,
+      };
+
+      // Flag-off control run for deep-equal comparison.
+      process.env.ENABLE_CONTENT_PROVENANCE_SHADOW = "false";
+      const control = createService();
+      const controlResult = await (control as any).extractSingleFileContent({
+        ...file,
+      });
+
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const { service, putObject, logs } = buildProvenanceService();
+      const result = await (service as any).extractSingleFileContent({
+        ...file,
+      });
+
+      // Zero behavior change: identical extraction result.
+      expect(result).toEqual(controlResult);
+
+      const payload = provenanceWarn(logs.warn, "provenance.trust.client.content");
+      expect(payload).toMatchObject({
+        questionId: 11,
+        recordId: 99,
+        filename: "answer.txt",
+        fileType: "text/plain",
+        contentLength: clientContent.length,
+        contentSha16: sha16(clientContent),
+        hasCosCoordinates: false,
+        hasGithubUrl: false,
+      });
+
+      // No bucket → telemetry only, nothing persisted.
+      expect(putObject).not.toHaveBeenCalled();
+    });
+
+    it("hashes the same string grading receives (sanitized/truncated content)", async () => {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const clientContent = "plain answer text";
+      const { service, logs } = buildProvenanceService();
+      const result = await (service as any).extractSingleFileContent({
+        filename: "answer.txt",
+        content: clientContent,
+        fileType: "text/plain",
+        questionId: 1,
+        recordId: 2,
+      });
+      const payload = provenanceWarn(
+        logs.warn,
+        "provenance.trust.client.content",
+      );
+      // The hashed string must equal the returned `content` exactly.
+      expect(payload.contentSha16).toBe(sha16(result.content));
+      expect(payload.contentLength).toBe(result.content.length);
+    });
+  });
+
+  describe("divergence comparison (trusted file also has COS coordinates)", () => {
+    const buildFile = () => ({
+      filename: "data.txt",
+      content: "client text",
+      fileType: "text/plain",
+      questionId: 5,
+      recordId: 17,
+      bucket: "learner-bucket",
+      key: "uploads/data.txt",
+    });
+
+    it("reports diverged:false and persists a server artifact when re-extraction matches", async () => {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const file = buildFile();
+      const { service, putObject, logs } = buildProvenanceService();
+
+      jest
+        .spyOn(service as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("client text"));
+      jest
+        .spyOn(service as any, "extractTextFromBuffer")
+        .mockResolvedValue({ text: "client text" });
+
+      await (service as any).extractSingleFileContent(file);
+
+      const divergence = provenanceWarn(logs.warn, "provenance.divergence");
+      expect(divergence).toMatchObject({
+        questionId: 5,
+        recordId: 17,
+        filename: "data.txt",
+        diverged: false,
+        clientSha16: sha16("client text"),
+        serverSha16: sha16("client text"),
+        clientLength: "client text".length,
+        serverLength: "client text".length,
+      });
+
+      expect(putObject).toHaveBeenCalledTimes(1);
+      const putCall = putObject.mock.calls[0][0];
+      expect(putCall.Key).toBe(provenanceArtifactKey(file));
+      expect(putCall.Bucket).toBe("learner-bucket");
+      const body = JSON.parse(putCall.Body);
+      expect(body).toMatchObject({
+        provenance: "server",
+        clientSha16: sha16("client text"),
+        // The artifact's own canonical checksum is the server-extracted text.
+        sha16: sha16("client text"),
+        diverged: false,
+      });
+    });
+
+    it("reports diverged:true when server re-extraction differs, persisting both checksums", async () => {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const file = buildFile();
+      const { service, putObject, logs } = buildProvenanceService();
+
+      jest
+        .spyOn(service as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("server bytes"));
+      jest
+        .spyOn(service as any, "extractTextFromBuffer")
+        .mockResolvedValue({ text: "server extracted text DIFFERENT" });
+
+      await (service as any).extractSingleFileContent(file);
+
+      const divergence = provenanceWarn(logs.warn, "provenance.divergence");
+      expect(divergence.diverged).toBe(true);
+      expect(divergence.clientSha16).toBe(sha16("client text"));
+      expect(divergence.serverSha16).toBe(
+        sha16("server extracted text DIFFERENT"),
+      );
+
+      const body = JSON.parse(putObject.mock.calls[0][0].Body);
+      expect(body.diverged).toBe(true);
+      expect(body.clientSha16).toBe(sha16("client text"));
+      // The artifact's own canonical checksum is the server-extracted text.
+      expect(body.sha16).toBe(sha16("server extracted text DIFFERENT"));
+    });
+  });
+
+  describe("download-branch server artifact", () => {
+    it("persists a server-provenance artifact once with content and metrics; result unchanged vs flag-off control", async () => {
+      const file = {
+        filename: "report.pdf",
+        content: "InCos",
+        fileType: "application/pdf",
+        questionId: 3,
+        recordId: 8,
+        bucket: "learner-bucket",
+        key: "uploads/report.pdf",
+      };
+
+      // Flag-off control.
+      process.env.ENABLE_CONTENT_PROVENANCE_SHADOW = "false";
+      const control = createService();
+      jest
+        .spyOn(control as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("pdf bytes"));
+      jest.spyOn(control as any, "extractTextFromBuffer").mockResolvedValue({
+        text: "extracted report body",
+        additionalMetadata: { pageCount: 2 },
+      });
+      const controlResult = await (control as any).extractSingleFileContent({
+        ...file,
+      });
+
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const { service, putObject } = buildProvenanceService();
+      jest
+        .spyOn(service as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("pdf bytes"));
+      jest.spyOn(service as any, "extractTextFromBuffer").mockResolvedValue({
+        text: "extracted report body",
+        additionalMetadata: { pageCount: 2 },
+      });
+      const result = await (service as any).extractSingleFileContent({
+        ...file,
+      });
+
+      expect(result).toEqual(controlResult);
+
+      expect(putObject).toHaveBeenCalledTimes(1);
+      const putCall = putObject.mock.calls[0][0];
+      expect(putCall.Key).toBe(provenanceArtifactKey(file));
+      expect(putCall.ContentType).toBe("application/json");
+      const body = JSON.parse(putCall.Body);
+      expect(body).toMatchObject({
+        schemaVersion: 1,
+        provenance: "server",
+        recordId: 8,
+        questionId: 3,
+        filename: "report.pdf",
+        fileType: "application/pdf",
+        sha16: sha16("extracted report body"),
+        contentLength: "extracted report body".length,
+        content: "extracted report body",
+      });
+      expect(body.metrics).toMatchObject({ pageCount: 2 });
+      expect(typeof body.extractedAt).toBe("string");
+    });
+  });
+
+  describe("kill switch", () => {
+    it("does nothing when ENABLE_CONTENT_PROVENANCE_SHADOW=false: zero putObject, zero provenance logs", async () => {
+      process.env.ENABLE_CONTENT_PROVENANCE_SHADOW = "false";
+      const { service, putObject, logs } = buildProvenanceService();
+
+      jest
+        .spyOn(service as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("pdf bytes"));
+      jest
+        .spyOn(service as any, "extractTextFromBuffer")
+        .mockResolvedValue({ text: "extracted report body" });
+
+      // Trust-branch file with coords.
+      await (service as any).extractSingleFileContent({
+        filename: "data.txt",
+        content: "client text",
+        fileType: "text/plain",
+        questionId: 5,
+        recordId: 17,
+        bucket: "learner-bucket",
+        key: "uploads/data.txt",
+      });
+      // Download-branch file.
+      await (service as any).extractSingleFileContent({
+        filename: "report.pdf",
+        content: "InCos",
+        fileType: "application/pdf",
+        questionId: 3,
+        recordId: 8,
+        bucket: "learner-bucket",
+        key: "uploads/report.pdf",
+      });
+
+      expect(putObject).not.toHaveBeenCalled();
+      const provenanceLogs = logs.warn.mock.calls.filter(
+        (c) => typeof c[0] === "string" && c[0].startsWith("provenance."),
+      );
+      expect(provenanceLogs).toHaveLength(0);
+    });
+  });
+
+  describe("tolerance", () => {
+    it("logs provenance.shadow.failed and resolves extraction normally when putObject rejects", async () => {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const { service, putObject, logs } = buildProvenanceService();
+      putObject.mockRejectedValue(new Error("S3 down"));
+
+      jest
+        .spyOn(service as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("pdf bytes"));
+      jest
+        .spyOn(service as any, "extractTextFromBuffer")
+        .mockResolvedValue({ text: "extracted body" });
+
+      const result = await (service as any).extractSingleFileContent({
+        filename: "report.pdf",
+        content: "InCos",
+        fileType: "application/pdf",
+        questionId: 3,
+        recordId: 8,
+        bucket: "learner-bucket",
+        key: "uploads/report.pdf",
+      });
+
+      // Extraction succeeds despite the persistence failure.
+      expect(result.content).toContain("extracted body");
+      const failed = provenanceWarn(logs.warn, "provenance.shadow.failed");
+      expect(failed).toMatchObject({ filename: "report.pdf" });
+    });
+  });
+
+  describe("oversized artifact", () => {
+    it("omits content and sets contentOmitted when content exceeds the cap", async () => {
+      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
+      const big = "x".repeat(600_001);
+      const { service, putObject } = buildProvenanceService();
+
+      jest
+        .spyOn(service as any, "downloadFileFromCOS")
+        .mockResolvedValue(Buffer.from("pdf bytes"));
+      jest
+        .spyOn(service as any, "extractTextFromBuffer")
+        .mockResolvedValue({ text: big });
+
+      await (service as any).extractSingleFileContent({
+        filename: "report.pdf",
+        content: "InCos",
+        fileType: "application/pdf",
+        questionId: 3,
+        recordId: 8,
+        bucket: "learner-bucket",
+        key: "uploads/report.pdf",
+      });
+
+      const body = lastPutBody(putObject);
+      expect(body.content).toBeNull();
+      expect(body.contentOmitted).toBe(true);
+    });
+  });
+});
