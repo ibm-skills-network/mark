@@ -306,7 +306,10 @@ export class SubmissionQualityService {
       reasons.push("too_short");
     }
 
-    if (reasons.length === 0 && questionTokens.size > 0) {
+    if (
+      reasons.length === 0 &&
+      questionTokens.size >= GRADING_QUALITY.PROMPT_COPY_MIN_TOKENS
+    ) {
       const chunkTokens = this.tokenize(normalizedText);
       const sim = this.jaccardSimilarity(chunkTokens, questionTokens);
       if (sim >= GRADING_QUALITY.PROMPT_COPY_SIMILARITY_THRESHOLD) {
@@ -314,7 +317,10 @@ export class SubmissionQualityService {
       }
     }
 
-    if (reasons.length === 0 && rubricTokens.size > 0) {
+    if (
+      reasons.length === 0 &&
+      rubricTokens.size >= GRADING_QUALITY.RUBRIC_COPY_MIN_TOKENS
+    ) {
       const chunkTokens = this.tokenize(normalizedText);
       const sim = this.jaccardSimilarity(chunkTokens, rubricTokens);
       if (sim >= GRADING_QUALITY.RUBRIC_COPY_SIMILARITY_THRESHOLD) {
@@ -432,7 +438,7 @@ export class SubmissionQualityService {
       }
     }
     for (const [text, count] of textRepeatCounts) {
-      if (count >= GRADING_QUALITY.BOILERPLATE_REPEAT_MIN_PAGES) {
+      if (count >= GRADING_QUALITY.BOILERPLATE_REPEAT_MIN_TEXT) {
         boilerplate.add(text);
       }
     }
@@ -488,18 +494,14 @@ export class SubmissionQualityService {
     // When eligible chunks exist, grading proceeds and the classification is "clean"
     // regardless of boilerplate ratio — quality signal is surfaced via qualityWarnings.
     if (parameters.eligibleCount === 0) {
-      if (
-        parameters.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL &&
-        (parameters.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
-      ) {
+      if (parameters.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL) {
         return "boilerplate_many_pages";
       }
 
       if (
         parameters.avgSubstantiveTokensPerPage !== undefined &&
         parameters.avgSubstantiveTokensPerPage <
-          GRADING_QUALITY.LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE &&
-        (parameters.pageCount ?? 0) >= GRADING_QUALITY.MANY_PAGE_THRESHOLD
+          GRADING_QUALITY.LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE
       ) {
         return "low_information";
       }

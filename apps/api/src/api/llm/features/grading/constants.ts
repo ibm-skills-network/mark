@@ -1,10 +1,16 @@
 export const GRADING_QUALITY = {
   MIN_SUBSTANTIVE_TOKENS: 6,
   MIN_FULL_CREDIT_EVIDENCE_TOKENS: 10,
+  /** Minimum distinct pages a chunk must repeat across to be flagged boilerplate (file/PDF sources). */
   BOILERPLATE_REPEAT_MIN_PAGES: 5,
+  /** Minimum raw occurrences for boilerplate detection in text/url sources (no pages to spread across). */
+  BOILERPLATE_REPEAT_MIN_TEXT: 3,
   BOILERPLATE_RATIO_FAIL: 0.8,
   LOW_INFORMATION_AVG_SUBSTANTIVE_TOKENS_PER_PAGE: 3,
-  MANY_PAGE_THRESHOLD: 25,
+  /** Minimum tokens the question must have before Jaccard prompt-copy check fires. */
+  PROMPT_COPY_MIN_TOKENS: 5,
+  /** Minimum tokens the rubric must have before Jaccard rubric-copy check fires. */
+  RUBRIC_COPY_MIN_TOKENS: 5,
   PROMPT_COPY_SIMILARITY_THRESHOLD: 0.85,
   RUBRIC_COPY_SIMILARITY_THRESHOLD: 0.85,
 } as const;
