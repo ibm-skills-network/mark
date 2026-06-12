@@ -375,13 +375,18 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     if (imageData && imageData !== "InCos") {
       const detectedFormat = this.sniffRejectedFormat(imageData);
       if (detectedFormat) {
-        throw new BadRequestException(
-          new UnsupportedImageFormatError({
-            filename: image.filename,
-            detectedFormat,
-            reason: "unsupported format detected at submission",
-          }).learnerMessage,
-        );
+        // Throw the typed learner-facing error, not a BadRequestException.
+        // validateResponse also runs at grade time (inside
+        // gradeQuestionNoSave); a BadRequestException there is not a
+        // LearnerFacingGradingError, so it gets wrapped and retried instead of
+        // failing terminally with the learner message. Every boundary
+        // (autosave 400, gradeQuestionNoSave passthrough, worker terminal
+        // no-retry) already translates this typed error correctly.
+        throw new UnsupportedImageFormatError({
+          filename: image.filename,
+          detectedFormat,
+          reason: "unsupported format detected at submission",
+        });
       }
     }
   }

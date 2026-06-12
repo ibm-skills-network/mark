@@ -3,6 +3,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
+import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../../attempt.constants";
 import { GradingContext } from "../../interfaces/grading-context.interface";
@@ -350,7 +351,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
       ).resolves.toBe(true);
     });
 
-    it("rejects a base64 HEIC data URL with the learner-facing message", async () => {
+    it("rejects a base64 HEIC data URL with the typed learner-facing error", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
@@ -361,9 +362,19 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         language: "en",
       } as any as CreateQuestionResponseAttemptRequestDto;
 
+      // Must be the typed learner-facing error (not a BadRequestException) so
+      // the grade-time path (validateResponse runs inside gradeQuestionNoSave)
+      // fails terminally with the learner message instead of being wrapped and
+      // retried. The learner-facing copy lives on `.learnerMessage`; `.message`
+      // carries the operator detail (detected format + reason).
       await expect(
         strategy.validateResponse(mockQuestion, requestDto),
-      ).rejects.toThrow(/not a supported image format/i);
+      ).rejects.toBeInstanceOf(UnsupportedImageFormatError);
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toMatchObject({
+        learnerMessage: expect.stringMatching(/not a supported image format/i),
+      });
     });
 
     it("accepts a base64 TIFF data URL (convertible downstream)", async () => {

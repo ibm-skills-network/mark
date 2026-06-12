@@ -534,7 +534,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       error instanceof LearnerFacingGradingError ||
       JobWorkerService.TERMINAL_GRADING_ERROR_NAMES.has(errorName ?? "")
     ) {
-      this.structuredLogger.error("attempt.grade.oversized", {
+      this.structuredLogger.error("attempt.grade.learner.terminal", {
         attemptId,
         assignmentId,
         errorClass: errorName ?? "LearnerFacingGradingError",

@@ -1291,7 +1291,7 @@ describe("JobWorkerService", () => {
       expect((thrown as Error).message).toMatch(/OversizedSubmissionError/);
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
       expect(mockStructuredLogger.error).toHaveBeenCalledWith(
-        "attempt.grade.oversized",
+        "attempt.grade.learner.terminal",
         expect.objectContaining({
           attemptId: 861298,
           assignmentId: 2537,
@@ -1320,7 +1320,7 @@ describe("JobWorkerService", () => {
       expect((thrown as Error).message).toBe(oversized.learnerMessage);
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
       expect(mockStructuredLogger.error).toHaveBeenCalledWith(
-        "attempt.grade.oversized",
+        "attempt.grade.learner.terminal",
         expect.objectContaining({
           attemptId: 861298,
           assignmentId: 2537,
@@ -1366,7 +1366,7 @@ describe("JobWorkerService", () => {
       expect((thrown as Error).message).toBe(unsupported.learnerMessage);
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
       expect(mockStructuredLogger.error).toHaveBeenCalledWith(
-        "attempt.grade.oversized",
+        "attempt.grade.learner.terminal",
         expect.objectContaining({
           attemptId: 861298,
           assignmentId: 2537,
