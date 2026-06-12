@@ -67,11 +67,12 @@ function Timer(props: Props) {
     ? readAuthorPreviewPayload(assignmentId)
     : null;
   const authorQuestions = authorPreviewPayload?.questions ?? questions;
-  const authorAssignmentDetails =
-    authorPreviewPayload?.assignmentDetails ??
-    (assignmentDetails
-      ? (assignmentDetails as ReplaceAssignmentRequest)
-      : undefined);
+  const authorAssignmentDetails: ReplaceAssignmentRequest | undefined =
+    authorPreviewPayload?.assignmentDetails
+      ? (authorPreviewPayload.assignmentDetails as ReplaceAssignmentRequest)
+      : assignmentDetails
+        ? (assignmentDetails as ReplaceAssignmentRequest)
+        : undefined;
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const hasCountdown = typeof countdown === "number";
   const safeCountdown = hasCountdown ? countdown : 0;

@@ -105,11 +105,12 @@ function LearnerHeader() {
     ? readAuthorPreviewPayload(assignmentId)
     : null;
   const authorQuestions = authorPreviewPayload?.questions ?? questions;
-  const authorAssignmentDetails =
-    authorPreviewPayload?.assignmentDetails ??
-    (assignmentDetails
-      ? (assignmentDetails as ReplaceAssignmentRequest)
-      : undefined);
+  const authorAssignmentDetails: ReplaceAssignmentRequest | undefined =
+    authorPreviewPayload?.assignmentDetails
+      ? (authorPreviewPayload.assignmentDetails as ReplaceAssignmentRequest)
+      : assignmentDetails
+        ? (assignmentDetails as ReplaceAssignmentRequest)
+        : undefined;
   // Guards re-entrancy: submit can be triggered by the button AND by a window
   // "triggerAssignmentSubmission" event, so a ref (not the async-stale
   // `submitting` state) prevents a double submission of the same attempt.

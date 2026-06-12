@@ -45,7 +45,7 @@ export function buildAuthorPreviewPayload(
 ): AuthorPreviewPayload {
   const processedQuestions = processQuestions(
     (assignment.questions ?? []) as QuestionAuthorStore[],
-  ) as QuestionStore[];
+  ) as unknown as QuestionStore[];
 
   return {
     assignmentDetails: {
