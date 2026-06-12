@@ -315,7 +315,9 @@ export class TextGradingService implements ITextGradingService {
           if (isContextLengthExceededError(error)) {
             this.logger.error("text.grading.context.length.exceeded", {
               assignmentId,
+              questionId,
               attempt: attemptCount,
+              message: error instanceof Error ? error.message : String(error),
             });
             break;
           }
@@ -572,11 +574,15 @@ export class TextGradingService implements ITextGradingService {
     const rubricJson = JSON.stringify(scoringCriteria);
     const judgeFeedbackText = previousJudgeFeedback || "No previous feedback";
 
-    // Budget the prompt against the model's safe context window. The grader
-    // previously injected the raw learner response, unbounded previous-Q&A
-    // context, and rubric JSON with no token check, which produced prompts far
-    // over the model's context limit. Compute the fixed overhead first, then
-    // reduce the variable parts (context, then response) only when over budget.
+    // Budget the prompt against the model's safe context window. Compute the
+    // fixed overhead first, then reduce the variable parts (context, then
+    // response) only when over budget.
+    //
+    // The "gpt-4o-mini" key here pins the limit to a >=128k context window. This
+    // assumes every model assignable to text_grading has at least that window;
+    // models absent from the registry fall back to a 32k default. If a
+    // smaller-context model is ever made assignable, replace this pin by
+    // resolving the feature's actual model key.
     const safeLimit =
       this.contentSummarization.getSafeContextLimit("gpt-4o-mini");
 
@@ -599,23 +605,16 @@ export class TextGradingService implements ITextGradingService {
     let summaryNote = "";
 
     if (overheadTokens + previousQaTokens + responseTokens > safeLimit) {
-      // Reduction 1: drop oversized previous-Q&A context. It is supplementary,
-      // so it goes first. Drop when it is large on its own or when the total is
-      // over budget.
-      if (
-        previousQaTokens > 8000 ||
-        overheadTokens + previousQaTokens + responseTokens > safeLimit
-      ) {
-        this.logger.info("text.grading.context.dropped", {
-          assignmentId,
-          prevQaTokens: previousQaTokens,
-          responseTokens,
-          overheadTokens,
-        });
-        previousQaJson = "[]";
-        previousQaTokens =
-          this.contentSummarization.countTokens(previousQaJson);
-      }
+      // Over budget: drop previous-Q&A context first — it is supporting
+      // context, the learner's own answer takes priority.
+      this.logger.info("text.grading.context.dropped", {
+        assignmentId,
+        prevQaTokens: previousQaTokens,
+        responseTokens,
+        overheadTokens,
+      });
+      previousQaJson = "[]";
+      previousQaTokens = this.contentSummarization.countTokens(previousQaJson);
 
       // Reduction 2: if still over budget, chunk-summarize the learner response
       // down to whatever room remains and disclose the reduction to the model.

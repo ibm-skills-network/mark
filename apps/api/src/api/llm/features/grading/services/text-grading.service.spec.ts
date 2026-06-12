@@ -53,7 +53,7 @@ function buildService() {
     processPromptForFeature: jest.fn().mockResolvedValue("LLM_RAW_RESPONSE"),
   };
 
-  // Char/4 token heuristic mirrors the harness contract in the task spec.
+  // Char/4 heuristic approximates the tokenizer for budget math.
   service.contentSummarization = {
     getSafeContextLimit: jest.fn(() => 102_400),
     countTokens: jest.fn((t: string) => Math.ceil((t ?? "").length / 4)),
@@ -279,5 +279,45 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
       "text.grading.context.length.exceeded",
       expect.anything(),
     );
+  });
+
+  // With maxRetries = 1 the loop runs once regardless, so the break is invisible
+  // at the shipped ceiling. Raise the ceiling to expose the break: a
+  // context-length error must short-circuit to a single call, while a generic
+  // error exhausts the full budget of three. This pins the break against
+  // regression if the ceiling is ever raised.
+  it("breaks the retry loop on a context-length error even when the ceiling is raised", async () => {
+    const contextError = new Error(
+      "This model's maximum context length is 128000 tokens. " +
+        "However, your messages resulted in 159000 tokens.",
+    );
+    const processPromptForFeature = jest.fn().mockRejectedValue(contextError);
+    const { service } = buildGradeService(processPromptForFeature);
+    service.maxRetries = 3;
+    service.retryDelay = 0;
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel("a short answer"), 42),
+    ).rejects.toThrow();
+
+    // Context-length errors are deterministic: the break stops re-entry, so the
+    // raised ceiling never produces a second call.
+    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+  });
+
+  it("exhausts the raised retry budget for a generic error (control)", async () => {
+    const processPromptForFeature = jest
+      .fn()
+      .mockRejectedValue(new Error("Rate limit reached for gpt-4o-mini"));
+    const { service } = buildGradeService(processPromptForFeature);
+    service.maxRetries = 3;
+    service.retryDelay = 0;
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel("a short answer"), 42),
+    ).rejects.toThrow();
+
+    // A generic error keeps retrying, so the loop uses the full raised budget.
+    expect(processPromptForFeature).toHaveBeenCalledTimes(3);
   });
 });
