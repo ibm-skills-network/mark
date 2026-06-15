@@ -13855,9 +13855,9 @@ react-confetti@^6.1.0:
     tween-functions "^1.2.0"
 
 react-data-table-component@^7.6.2:
-  version "7.7.0"
-  resolved "https://registry.yarnpkg.com/react-data-table-component/-/react-data-table-component-7.7.0.tgz#69d0eeace77cd2895792f99e23f99800ba45de1f"
-  integrity sha512-5knL6zMSKlbvzu9P04KM5Lx8/EyQujb4I9z3rWeoVX++IDJadQ7aR4X5J6EeS90wjK0Xoa6btaVeglnCAqD2ag==
+  version "7.7.1"
+  resolved "https://registry.yarnpkg.com/react-data-table-component/-/react-data-table-component-7.7.1.tgz#103ede17c515f114a36c4054a4d1e8636fc28917"
+  integrity sha512-F1qciUONe0EiItxd+LZg9K7UXxvilSQH8WvUoSnPnAVZ/PK2x4Djr3nzkuCqCIfiMuU3imI+8gI7nYRIW2Kfxw==
   dependencies:
     deepmerge "^4.3.1"
 
