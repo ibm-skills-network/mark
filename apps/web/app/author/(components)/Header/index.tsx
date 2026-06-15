@@ -117,6 +117,7 @@ function AuthorHeader() {
     setActiveAssignmentId,
     questions,
     setPageState,
+    pageState,
     activeAssignmentId,
     name,
     hydrateAuthorStore,
@@ -124,6 +125,7 @@ function AuthorHeader() {
     state.setActiveAssignmentId,
     state.questions,
     state.setPageState,
+    state.pageState,
     state.activeAssignmentId,
     state.name,
     state.hydrateAuthorStore,
@@ -402,6 +404,7 @@ function AuthorHeader() {
 
   useEffect(() => {
     let cancelled = false;
+    setPageState("loading");
     const fetchData = async () => {
       setActiveAssignmentId(~~assignmentId);
       const role = await getUserRole();
@@ -844,7 +847,11 @@ function AuthorHeader() {
                   Auto-Graded Assignment Creator
                 </Title>
                 <div className="text-gray-500 font-medium text-sm leading-5 truncate max-w-[200px] sm:max-w-none">
-                  {name || "Untitled Assignment"}
+                  {pageState === "loading" ? (
+                    <div className="h-4 w-32 bg-gray-200 animate-pulse rounded" />
+                  ) : (
+                    name || "Untitled Assignment"
+                  )}
                 </div>
               </div>
             </div>
