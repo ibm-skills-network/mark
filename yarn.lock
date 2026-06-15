@@ -17,14 +17,14 @@
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
-  version "2.0.91"
-  resolved "https://registry.npmjs.org/@ai-sdk/openai/-/openai-2.0.91.tgz#1c615ee29db62355be261c2da324b5a85169798f"
-  integrity sha512-lozfRHfSTHg5/UliQjTDcOtISYGbEpt4FS/6QM5PcLmhdT0HmROllaBmG7+JaK+uqFtDXZGgMIpz3bqB9nzqCQ==
+  version "2.0.107"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.107.tgz#35637ad0e87856444e3b1de70bc0008ff0b1c246"
+  integrity sha512-cWU7w1c0FhDiZBFfi0rZO+5qYlD+rCDE8Il1X0P6E7wejtghgyW2I6ihPNTXfrLT2J8DVeXnrwQMFfxfVNzstA==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "2.0.3"
+    "@ai-sdk/provider-utils" "3.0.26"
 
-"@ai-sdk/provider-utils@3.0.21", "@ai-sdk/provider-utils@^3.0.26":
+"@ai-sdk/provider-utils@3.0.21", "@ai-sdk/provider-utils@3.0.26", "@ai-sdk/provider-utils@^3.0.26":
   version "3.0.26"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.26.tgz#7938bccd49eed3e79827c84f75fd7d43d329bea7"
   integrity sha512-dNciNI4knep6z3cqDNng7yORCcBnEDBHZYj8rJLcLn9pLzEtNVkf6WLg9HR6AnVDDRxHsUeGAEqyF8M+FAtRgg==
