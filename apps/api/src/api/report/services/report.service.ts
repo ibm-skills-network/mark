@@ -2839,7 +2839,10 @@ ${description}
       );
     }
 
-    const email = dto.userEmail || report.reporterId;
+    // Always send to the report's own reporter. The recipient is intentionally
+    // not caller-overridable so an admin/CI token can't direct Mark-branded
+    // mail at arbitrary addresses.
+    const email = report.reporterId;
     if (!email) {
       throw new BadRequestException("Reporter email is missing");
     }

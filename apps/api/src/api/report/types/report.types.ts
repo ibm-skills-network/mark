@@ -1,4 +1,4 @@
-import { IsEmail, IsInt, IsOptional, IsString } from "class-validator";
+import { IsInt, IsOptional, IsString } from "class-validator";
 
 export class ReportIssueDto {
   issueType: string;
@@ -44,10 +44,6 @@ export class BugRenewalEmailDto {
   @IsOptional()
   @IsString()
   reportedAt?: string;
-
-  @IsOptional()
-  @IsEmail()
-  userEmail?: string;
 }
 
 export type IssueSeverity = "info" | "warning" | "error" | "critical";
