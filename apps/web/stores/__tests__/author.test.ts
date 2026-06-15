@@ -75,3 +75,76 @@ describe("useAuthorStore question order syncing", () => {
     expect(useAuthorStore.getState().questionOrder).toEqual([1, 2]);
   });
 });
+
+describe("hydrateAuthorStore", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAuthorStore.getState().deleteStore();
+  });
+
+  it("does not set hasUnsavedChanges", () => {
+    useAuthorStore.getState().hydrateAuthorStore({
+      name: "Assignment X",
+      activeAssignmentId: 42,
+      questions: [makeQuestion(1, 1)],
+    });
+    expect(useAuthorStore.getState().hasUnsavedChanges).toBe(false);
+  });
+
+  it("clears hasUnsavedChanges even when the store was dirty before", () => {
+    useAuthorStore.getState().setDataFromBackend({ name: "Dirty" });
+    expect(useAuthorStore.getState().hasUnsavedChanges).toBe(true);
+
+    useAuthorStore.getState().hydrateAuthorStore({
+      name: "Clean",
+      activeAssignmentId: 1,
+      questions: [makeQuestion(1, 1)],
+    });
+    expect(useAuthorStore.getState().hasUnsavedChanges).toBe(false);
+  });
+
+  it("updates name and activeAssignmentId", () => {
+    useAuthorStore.getState().hydrateAuthorStore({
+      name: "My Assignment",
+      activeAssignmentId: 99,
+      questions: [],
+    });
+    const state = useAuthorStore.getState();
+    expect(state.name).toBe("My Assignment");
+    expect(state.activeAssignmentId).toBe(99);
+  });
+
+  it("applies the provided question order", () => {
+    const questions = [
+      makeQuestion(1, 1),
+      makeQuestion(2, 2),
+      makeQuestion(3, 3),
+    ];
+    useAuthorStore.getState().hydrateAuthorStore({
+      questions,
+      questionOrder: [3, 1, 2],
+    });
+    expect(useAuthorStore.getState().questionOrder).toEqual([3, 1, 2]);
+  });
+
+  it("derives question order from ids when none is provided", () => {
+    useAuthorStore.getState().hydrateAuthorStore({
+      questions: [makeQuestion(10, 1), makeQuestion(20, 2)],
+    });
+    expect(useAuthorStore.getState().questionOrder).toEqual([10, 20]);
+  });
+
+  it("falls back to existing questions when none are passed", () => {
+    useAuthorStore.getState().hydrateAuthorStore({
+      questions: [makeQuestion(10, 1)],
+      questionOrder: [10],
+    });
+
+    useAuthorStore.getState().hydrateAuthorStore({ name: "Updated" });
+
+    const state = useAuthorStore.getState();
+    expect(state.questions).toHaveLength(1);
+    expect(state.questions[0].id).toBe(10);
+    expect(state.hasUnsavedChanges).toBe(false);
+  });
+});

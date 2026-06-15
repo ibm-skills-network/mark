@@ -252,9 +252,11 @@ const AuthorQuestionsPage: FC<Props> = ({
 
   useEffect(() => {
     if (assignmentId !== activeAssignmentId) {
+      let cancelled = false;
       const fetchAssignment = async () => {
         try {
           const assignment = await getAssignment(assignmentId);
+          if (cancelled) return;
           if (assignment) {
             setActiveAssignmentId(assignmentId);
             setName(assignment.name || "Untitled Assignment");
@@ -432,6 +434,9 @@ const AuthorQuestionsPage: FC<Props> = ({
       };
 
       void fetchAssignment();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [
     assignmentId,

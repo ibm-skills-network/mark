@@ -67,12 +67,21 @@ export const PROMO_PRE_START: PromoItem[] = [
   },
   {
     id: "prestart-watsonx-orchestrate",
-    title: "watsonx Orchestrate",
+    title: "watsonx.orchestrate",
     blurb: "Put AI to work for your business. Build your own AI assistants and agents with watsonx Orchestrate.",
     ctaText: "Explore",
     href: "https://product-link.skills.network/r/franavnoazad-12",
     imgSrc: "/promo/watsonX-Orchestrate.svg",
     imgAlt: "watsonx Orchestrate",
+  },
+  {
+    id: "prestart-watsonx-data",
+    title: "watsonx.data",
+    blurb: "Make your data AI-ready—connected, governed, and context-rich.",
+    ctaText: "Explore",
+    href: "https://product-link.skills.network/r/franavnoazad-17",
+    imgSrc: "/promo/watsonX-Data.svg",
+    imgAlt: "watsonx.data",
   },
 ];
 
@@ -114,6 +123,15 @@ export const PROMO_COMPLETION: PromoItem[] = [
     href: "https://product-link.skills.network/r/franavnoazad-13",
     imgSrc: "/promo/watsonX-Orchestrate.svg",
     imgAlt: "watsonx Orchestrate",
+  },
+    {
+    id: "completion-watsonx-data",
+    title: "watsonx.data",
+    blurb: "Make your data AI-ready—connected, governed, and context-rich.",
+    ctaText: "Explore",
+    href: "https://product-link.skills.network/r/franavnoazad-18",
+    imgSrc: "/promo/watsonX-Data.svg",
+    imgAlt: "watsonx.data",
   },
 ];
 

@@ -2,6 +2,10 @@
 
 import TooltipMessage from "@/app/components/ToolTipMessage";
 import { useChangesSummary } from "@/app/Helpers/checkDiff";
+import {
+  getAssignmentConfigHydration,
+  getAssignmentFeedbackHydration,
+} from "@/app/author/utils/assignmentHydration";
 import Spinner from "@/components/svgs/Spinner";
 import { useAuthorStore } from "@/stores/author";
 import { useRouter } from "next/navigation";
@@ -17,8 +21,8 @@ import { useVersionControl } from "@/hooks/useVersionControl";
 import { VersionComparison } from "@/types/version-types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { getAssignment } from "@/lib/shared";
-import { mergeData } from "@/lib/utils";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
+import type { QuestionAuthorStore } from "@/config/types";
 
 interface Props {
   submitting: boolean;
@@ -32,7 +36,7 @@ interface Props {
     description?: string,
     publishImmediately?: boolean,
     versionNumber?: string,
-  ) => void;
+  ) => Promise<boolean>;
   currentStepId?: number;
 }
 
@@ -53,13 +57,10 @@ const SaveAndPublishButton: FC<Props> = ({
     description: string;
     isDraft: boolean;
   } | null>(null);
-  const [setAuthorStore, activeAssignmentId, setQuestionOrder] = useAuthorStore(
-    (state) => [
-      state.setAuthorStore,
-      state.activeAssignmentId,
-      state.setQuestionOrder,
-    ],
-  );
+  const [activeAssignmentId, hydrateAuthorStore] = useAuthorStore((state) => [
+    state.activeAssignmentId,
+    state.hydrateAuthorStore,
+  ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
@@ -84,58 +85,37 @@ const SaveAndPublishButton: FC<Props> = ({
 
     const assignment = await getAssignment(activeAssignmentId);
     if (assignment) {
-      useAuthorStore.getState().setOriginalAssignment(assignment);
-
       const authorSafeAssignment = {
         ...assignment,
         currentVersion: undefined,
       };
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        authorSafeAssignment,
-      );
-      const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
-      setAuthorStore({
+      const fetchedQuestions = (assignment.questions ??
+        []) as QuestionAuthorStore[];
+      hydrateAuthorStore({
         ...cleanedAuthorData,
+        originalAssignment: assignment,
+        questions: fetchedQuestions,
+        questionOrder:
+          assignment.questionOrder ??
+          fetchedQuestions.map((question) => question.id),
+        activeAssignmentId: assignment.id,
+        name: assignment.name,
       });
-      if (assignment.questionOrder) {
-        setQuestionOrder(assignment.questionOrder);
-      } else {
-        setQuestionOrder(questions.map((question) => question.id));
-      }
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        assignment,
-      );
       if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: assignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...getAssignmentConfigHydration(assignment),
       });
 
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        assignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...getAssignmentFeedbackHydration(assignment),
       });
 
-      useAuthorStore.getState().setName(assignment.name);
     }
   };
 
@@ -401,7 +381,14 @@ const SaveAndPublishButton: FC<Props> = ({
         }
       } else {
         setShowPublishModal(false);
-        void handlePublishButton(description, true, versionNumber);
+        const publishSucceeded = await handlePublishButton(
+          description,
+          true,
+          versionNumber,
+        );
+        if (!publishSucceeded) {
+          return;
+        }
         await fetchAssignment();
         router.push(`/author/${assignmentId}/version-tree`);
       }
@@ -430,11 +417,14 @@ const SaveAndPublishButton: FC<Props> = ({
     if (!conflictDetails) return;
 
     try {
-      void handlePublishButton(
+      const publishSucceeded = await handlePublishButton(
         conflictDetails.description,
         true,
         conflictDetails.requestedVersion,
       );
+      if (!publishSucceeded) {
+        return;
+      }
 
       setShowConflictModal(false);
       setConflictDetails(null);
