@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { Job, UnrecoverableError, Worker } from "bullmq";
+import { writeFile } from "node:fs/promises";
 import IORedis from "ioredis";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
@@ -109,6 +110,10 @@ jest.mock("bullmq", () => {
 
 jest.mock("./redis.connection", () => ({
   createRedisConnection: jest.fn(),
+}));
+
+jest.mock("node:fs/promises", () => ({
+  writeFile: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the cross-package JobExecutorService module at the boundary. apps/api
@@ -288,6 +293,18 @@ describe("JobWorkerService", () => {
     ] as [string, RequestInit];
     expect(JSON.parse(requestInit.body as string)).toEqual(expected);
   }
+
+  it("writes the local liveness file the exec probe checks when the heartbeat starts", async () => {
+    await service.onModuleInit();
+
+    // The livenessProbe in helm-chart/mark-jobs is an exec check on this path;
+    // the worker must rewrite it as soon as the heartbeat starts so the file
+    // exists before the probe's initial delay elapses.
+    expect(writeFile).toHaveBeenCalledWith(
+      "/tmp/mark-jobs-worker.heartbeat",
+      expect.any(String),
+    );
+  });
 
   it("creates one worker per queue with the expected concurrency and lifecycle hooks", async () => {
     await service.onModuleInit();

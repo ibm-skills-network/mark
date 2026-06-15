@@ -9,6 +9,7 @@ import { Job, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { Agent as UndiciAgent } from "undici";
 import { Logger as WinstonLogger } from "winston";
@@ -21,6 +22,7 @@ import {
 import {
   DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS,
   DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS,
+  DEFAULT_JOB_WORKER_LIVENESS_FILE,
   JOB_WORKER_HEARTBEAT_KEY_PREFIX,
 } from "./job-worker-heartbeat.constants";
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
@@ -324,13 +326,43 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private startHeartbeat(): void {
+    // Write the local liveness marker once up front so the file exists before
+    // the first interval fires (and before the probe's initial delay elapses).
+    this.touchLivenessFile();
     this.heartbeatInterval = setInterval(() => {
+      // The local liveness file is rewritten independently of the Redis
+      // heartbeat: the exec livenessProbe checks only this file's age, so a
+      // transient Redis outage must not look like a dead worker. Only a
+      // wedged event loop or a dead process lets the file age out.
+      this.touchLivenessFile();
       void this.writeHeartbeat().catch((error: Error) => {
         this.logger.warn(
           `Failed to write jobs worker heartbeat: ${error.message}`,
         );
       });
     }, this.getHeartbeatIntervalMs());
+  }
+
+  // Rewrite the local liveness file the Kubernetes exec livenessProbe checks.
+  // Fire-and-forget and never throws: a failed write logs a warning and lets
+  // the file age out, which is the correct signal if the filesystem is broken.
+  private touchLivenessFile(): void {
+    void writeFile(
+      this.getLivenessFilePath(),
+      new Date().toISOString(),
+    ).catch((error: unknown) => {
+      this.logger.warn(
+        `Failed to write jobs worker liveness file: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+
+  private getLivenessFilePath(): string {
+    return (
+      process.env.JOB_WORKER_LIVENESS_FILE ?? DEFAULT_JOB_WORKER_LIVENESS_FILE
+    );
   }
 
   private async writeHeartbeat(): Promise<void> {
