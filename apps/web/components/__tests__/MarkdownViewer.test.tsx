@@ -57,4 +57,21 @@ describe("MarkdownViewer", () => {
       expect(quillInstance.root.innerHTML).toBe("second");
     });
   });
+
+  it("strips active content before writing untrusted HTML to the DOM", async () => {
+    render(
+      <MarkdownViewer>
+        {'<p>safe</p><img src="x" onerror="alert(1)"><script>alert(2)</script>'}
+      </MarkdownViewer>,
+    );
+
+    await waitFor(() => {
+      expect(mockQuillConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    const html = mockQuillConstructor.mock.results[0]?.value.root.innerHTML;
+    expect(html).toContain("safe");
+    expect(html).not.toMatch(/onerror/i);
+    expect(html).not.toMatch(/<script/i);
+  });
 });
