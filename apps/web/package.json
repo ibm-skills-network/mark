@@ -67,7 +67,7 @@
     "openai": "^4.91.1",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "^5.4.530",
-    "quill": "2.0.2",
+    "quill": "2.0.3",
     "quill-better-table": "^1.2.10",
     "quill-cursors": "^4.0.3",
     "quill-delta-to-html": "^0.12.1",
