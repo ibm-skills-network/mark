@@ -10,6 +10,17 @@ export interface LlmRequestOptions {
   maxTokens?: number;
   modelName?: string;
   imageDetail?: "auto" | "low" | "high";
+  /**
+   * Per-request HTTP timeout in milliseconds. Without it a stalled
+   * connection waits on the SDK default (10 minutes for OpenAI), far past
+   * any caller-side deadline.
+   */
+  timeoutMs?: number;
+  /**
+   * Provider-SDK-level retry count. Callers that run their own retry loop
+   * should set this low so attempts do not multiply.
+   */
+  maxRetries?: number;
 }
 
 export interface LlmResponse {
