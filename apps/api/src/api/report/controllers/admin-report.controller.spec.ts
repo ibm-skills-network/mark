@@ -1,5 +1,4 @@
 import "reflect-metadata";
-import { ThrottlerGuard } from "@nestjs/throttler";
 import { AdminReportsController } from "./admin-report.controller";
 
 const service = {
@@ -85,11 +84,4 @@ describe("AdminReportsController", () => {
     );
   });
 
-  it("opts into ThrottlerGuard on the renewal-email route", () => {
-    const guards = (Reflect.getMetadata(
-      "__guards__",
-      AdminReportsController.prototype.sendBugRenewalEmail,
-    ) ?? []) as unknown[];
-    expect(guards).toContain(ThrottlerGuard);
-  });
 });

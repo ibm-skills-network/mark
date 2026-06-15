@@ -73,6 +73,20 @@ describe("ReportsService.sendBugRenewalEmail", () => {
     expect(adminEmailService.sendBugRenewalEmail).not.toHaveBeenCalled();
   });
 
+  it("re-sends when renewalEmailSentAt is older than the 7-day TTL", async () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    prisma.report.findFirst.mockResolvedValue({
+      ...baseReport,
+      renewalEmailSentAt: eightDaysAgo,
+    });
+
+    const result = await make().sendBugRenewalEmail({ issueNumber: 1639 });
+
+    expect(adminEmailService.sendBugRenewalEmail).toHaveBeenCalledTimes(1);
+    expect(result.skipped).toBeFalsy();
+    expect(result.success).toBe(true);
+  });
+
   it("throws NotFound when the report does not exist", async () => {
     prisma.report.findFirst.mockResolvedValue(null);
     await expect(

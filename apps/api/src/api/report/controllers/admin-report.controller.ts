@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Inject,
-  Injectable,
   Post,
   Req,
   UseGuards,
@@ -25,7 +24,6 @@ import { BugRenewalEmailDto } from "../types/report.types";
  */
 @ApiTags("Reports")
 @ApiBearerAuth()
-@Injectable()
 @Controller({
   path: "admin/reports",
   version: "1",
