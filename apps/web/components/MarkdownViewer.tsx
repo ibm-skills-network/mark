@@ -5,6 +5,7 @@ import "quill/dist/quill.snow.css";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import { cn } from "@/lib/strings";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 declare global {
   interface Window {
@@ -63,7 +64,7 @@ const MarkdownViewer: FC<Props> = (props) => {
         },
       });
 
-      quill.root.innerHTML = String(latestChildrenRef.current) || "";
+      quill.root.innerHTML = sanitizeHtml(String(latestChildrenRef.current) || "");
       quill.disable();
       quillInstanceRef.current = quill;
     });
@@ -84,7 +85,7 @@ const MarkdownViewer: FC<Props> = (props) => {
 
   useEffect(() => {
     if (quillInstanceRef.current) {
-      quillInstanceRef.current.root.innerHTML = String(children) || "";
+      quillInstanceRef.current.root.innerHTML = sanitizeHtml(String(children) || "");
     }
   }, [children]);
 
