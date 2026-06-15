@@ -36,6 +36,8 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
     return new ChatOpenAI({
       modelName: options?.modelName ?? Gpt5MiniLlmService.DEFAULT_MODEL,
       maxCompletionTokens: options?.maxTokens ?? 4096,
+      timeout: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
     });
   }
 

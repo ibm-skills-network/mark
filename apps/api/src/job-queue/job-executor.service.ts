@@ -239,6 +239,10 @@ export class JobExecutorService {
     switch (jobName) {
       case JOB_NAMES.TRANSLATE_QUESTION: {
         const jobPayload = payload as TranslateQuestionJobPayload;
+        const forceRetranslation = this.resolveForceRetranslation(
+          jobPayload.forceRetranslation,
+          attemptsMade,
+        );
         try {
           const { inserted, skipped, failed } =
             await this.translationService.translateQuestion(
@@ -246,9 +250,17 @@ export class JobExecutorService {
               jobPayload.questionId,
               jobPayload.question,
               jobPayload.parentJobId,
-              jobPayload.forceRetranslation ?? true,
+              forceRetranslation,
               isFinalAttempt,
             );
+          this.throwIfRetryableLanguageFailures(failed, isFinalAttempt, {
+            assignmentId: jobPayload.assignmentId,
+            kind: "question",
+            id: jobPayload.questionId,
+            jobId: jobPayload.parentJobId,
+            attemptsMade,
+            maxAttempts,
+          });
           this.logger.info("publish.translation.job.executor.complete", {
             assignmentId: jobPayload.assignmentId,
             kind: "question",
@@ -278,6 +290,10 @@ export class JobExecutorService {
       }
       case JOB_NAMES.TRANSLATE_VARIANT: {
         const jobPayload = payload as TranslateVariantJobPayload;
+        const forceRetranslation = this.resolveForceRetranslation(
+          jobPayload.forceRetranslation,
+          attemptsMade,
+        );
         try {
           const { inserted, skipped, failed } =
             await this.translationService.translateVariant(
@@ -286,9 +302,17 @@ export class JobExecutorService {
               jobPayload.variantId,
               jobPayload.variant,
               jobPayload.parentJobId,
-              jobPayload.forceRetranslation ?? true,
+              forceRetranslation,
               isFinalAttempt,
             );
+          this.throwIfRetryableLanguageFailures(failed, isFinalAttempt, {
+            assignmentId: jobPayload.assignmentId,
+            kind: "variant",
+            id: jobPayload.variantId,
+            jobId: jobPayload.parentJobId,
+            attemptsMade,
+            maxAttempts,
+          });
           this.logger.info("publish.translation.job.executor.complete", {
             assignmentId: jobPayload.assignmentId,
             kind: "variant",
@@ -326,6 +350,14 @@ export class JobExecutorService {
               undefined,
               isFinalAttempt,
             );
+          this.throwIfRetryableLanguageFailures(failed, isFinalAttempt, {
+            assignmentId: jobPayload.assignmentId,
+            kind: "meta",
+            id: jobPayload.assignmentId,
+            jobId: jobPayload.parentJobId,
+            attemptsMade,
+            maxAttempts,
+          });
           this.logger.info("publish.translation.job.executor.complete", {
             assignmentId: jobPayload.assignmentId,
             kind: "meta",
@@ -359,5 +391,55 @@ export class JobExecutorService {
         );
       }
     }
+  }
+
+  /**
+   * Retry attempts must not force-retranslate: the first attempt already
+   * wrote every language that succeeded, and forcing would delete those
+   * rows and redo all of them. forceRetranslation: false fills only the
+   * still-missing languages.
+   */
+  private resolveForceRetranslation(
+    requested: boolean | undefined,
+    attemptsMade: number,
+  ): boolean {
+    return (requested ?? true) && attemptsMade === 0;
+  }
+
+  /**
+   * A translation run that completes with failed languages returns a
+   * normal outcome instead of throwing, so without this check the BullMQ
+   * job would be marked successful and its remaining attempts would never
+   * run — the user would have to press "Retry" by hand. Throwing here
+   * hands the job back to BullMQ; the retry attempt runs with
+   * forceRetranslation: false and fills only the missing languages.
+   * On the final attempt the partial outcome stands and the run's own
+   * terminal status (failed) is what the user sees.
+   */
+  private throwIfRetryableLanguageFailures(
+    failed: number,
+    isFinalAttempt: boolean,
+    context: {
+      assignmentId: number;
+      kind: "question" | "variant" | "meta";
+      id: number;
+      jobId: string | undefined;
+      attemptsMade: number;
+      maxAttempts: number;
+    },
+  ): void {
+    if (failed === 0 || isFinalAttempt) return;
+    this.logger.warn("publish.translation.job.executor.partial-failure", {
+      assignmentId: context.assignmentId,
+      kind: context.kind,
+      id: context.id,
+      jobId: context.jobId,
+      failed,
+      attempt: context.attemptsMade + 1,
+      maxAttempts: context.maxAttempts,
+    });
+    throw new Error(
+      `Translation for ${context.kind} ${context.id} left ${failed} language(s) untranslated; handing back to BullMQ for retry`,
+    );
   }
 }

@@ -40,6 +40,8 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import ErrorModal from "@/components/ErrorModal";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
+import PromoBanner from "@/components/promo/PromoBanner";
+import { PROMO_COMPLETION_MIN_SCORE } from "@/config/promo";
 
 const DynamicConfetti = dynamic(() => import("react-confetti"), {
   ssr: false,
@@ -703,6 +705,14 @@ function SuccessPage() {
             </button>
           </motion.div>
         )}
+
+        {role === "learner" &&
+          grade >= passingGrade &&
+          grade > PROMO_COMPLETION_MIN_SCORE && (
+            <div className="w-full mt-4">
+              <PromoBanner placement="completion" />
+            </div>
+          )}
 
         {role === "learner" && (
           <div className="flex flex-col sm:flex-row items-center gap-y-4 sm:gap-y-0 gap-x-4 justify-center p-4">
