@@ -84,7 +84,7 @@
     "@tsparticles/react": "^3.0.0",
     "@types/papaparse": "^5.3.15",
     "@types/pdf-parse": "^1.1.4",
-    "axios": "^1.16.0",
+    "axios": "^1.18.0",
     "cookie": "^0.7.0",
     "express": "^5.1.0",
     "framer-motion": "^11.8.0",
@@ -125,7 +125,7 @@
     "patch-package": "^8.0.1",
     "prettier": "^3.5.3",
     "prettier-plugin-sh": "^0.17.4",
-    "turbo": "^2.0.3",
+    "turbo": "^2.9.14",
     "yarn": "^1.22.22"
   },
   "resolutions": {
