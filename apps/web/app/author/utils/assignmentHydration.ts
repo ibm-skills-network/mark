@@ -1,5 +1,9 @@
 import type { Assignment, FeedbackData, GradingData } from "@/config/types";
 
+// `showQuestions` / `showSubmissionFeedback` are intentionally emitted by both
+// helpers below: the config store and the feedback store each own their own
+// copy of these flags, so hydrating one must not leave the other stale. This is
+// not a duplicate to be deduped away.
 export function getAssignmentConfigHydration(
   assignment: Assignment,
 ): Partial<GradingData> & Pick<Assignment, "questionControls"> {
