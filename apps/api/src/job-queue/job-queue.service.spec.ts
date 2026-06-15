@@ -77,8 +77,8 @@ describe("JobQueueService", () => {
       connection: mockConnection,
       defaultJobOptions: {
         attempts: 3,
-        removeOnComplete: 1000,
-        removeOnFail: 1000,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 100 },
       },
     });
     expect(queueAdd).toHaveBeenCalledWith(
