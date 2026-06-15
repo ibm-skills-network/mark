@@ -11,6 +11,7 @@ import "quill/dist/quill.snow.css";
 import "highlight.js/styles/vs2015.css";
 
 import { cn } from "@/lib/strings";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import hljs from "highlight.js";
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
@@ -107,7 +108,7 @@ const MarkdownEditor: React.FC<Props> = ({
           }
         });
 
-        quill.root.innerHTML = value;
+        quill.root.innerHTML = sanitizeHtml(value);
         setQuillInstance(quill);
       }
     };
@@ -128,7 +129,7 @@ const MarkdownEditor: React.FC<Props> = ({
     if (quillInstance) {
       const currentHTML = quillInstance.root.innerHTML;
       if (currentHTML !== value && !quillInstance.hasFocus()) {
-        quillInstance.root.innerHTML = value;
+        quillInstance.root.innerHTML = sanitizeHtml(value);
       }
     }
   }, [quillInstance, value]);
