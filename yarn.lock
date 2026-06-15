@@ -7,13 +7,13 @@
   resolved "https://registry.yarnpkg.com/@adobe/css-tools/-/css-tools-4.4.4.tgz#2856c55443d3d461693f32d2b96fb6ea92e1ffa9"
   integrity sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==
 
-"@ai-sdk/gateway@2.0.43":
-  version "2.0.43"
-  resolved "https://registry.npmjs.org/@ai-sdk/gateway/-/gateway-2.0.43.tgz#89ba930301be820faed8abbc2d875e983b755703"
-  integrity sha512-wVrXKw0ldcU04Y8EY3vR+qPdogZCZEj8pnkpRNRF552jqYPPVY88atPiC9s6XOyE+k6Y1YnusYXqwp6KKaBGAA==
+"@ai-sdk/gateway@2.0.102":
+  version "2.0.102"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.102.tgz#0792035130177378bfc3c83ac67a0fc6599cce9d"
+  integrity sha512-5OxMbtF4AFeyHjKS2smzCYDvjkE+nWktLCS0xsWNnI71cP0mTKXqkygta5lq1WTytVVkonLMP9J0OqEbteBzfQ==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "2.0.3"
+    "@ai-sdk/provider-utils" "3.0.26"
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
@@ -24,7 +24,7 @@
     "@ai-sdk/provider" "2.0.1"
     "@ai-sdk/provider-utils" "3.0.21"
 
-"@ai-sdk/provider-utils@3.0.21", "@ai-sdk/provider-utils@^3.0.26":
+"@ai-sdk/provider-utils@3.0.21", "@ai-sdk/provider-utils@3.0.26", "@ai-sdk/provider-utils@^3.0.26":
   version "3.0.26"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.26.tgz#7938bccd49eed3e79827c84f75fd7d43d329bea7"
   integrity sha512-dNciNI4knep6z3cqDNng7yORCcBnEDBHZYj8rJLcLn9pLzEtNVkf6WLg9HR6AnVDDRxHsUeGAEqyF8M+FAtRgg==
@@ -6297,13 +6297,13 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^5.0.52:
-  version "5.0.137"
-  resolved "https://registry.npmjs.org/ai/-/ai-5.0.137.tgz#d25e7b6ff901c946980b875925d2f52df39f8e47"
-  integrity sha512-ZPqvIG5HlTEaTsf91p5CvOMWYoTxsGpHckgc8qk7FNVM9O375A1A5cvLq6CpkCdTWrdyNZMMs3brnfUIlJP20g==
+  version "5.0.203"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.203.tgz#0cead30223cab079dba42c79391bb9751a3830d9"
+  integrity sha512-U50l+Np0IDzkUJ59QOBb80y3x1QH8+XJqzoIIxkO756mPlOuoRfj80CFIBKtaHmDSTJoEAMdt0iaaDOqMCGZkQ==
   dependencies:
-    "@ai-sdk/gateway" "2.0.43"
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/gateway" "2.0.102"
+    "@ai-sdk/provider" "2.0.3"
+    "@ai-sdk/provider-utils" "3.0.26"
     "@opentelemetry/api" "1.9.0"
 
 ajv-formats@3.0.1:
