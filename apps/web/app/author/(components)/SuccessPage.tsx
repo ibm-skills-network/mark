@@ -1,30 +1,29 @@
 "use client";
 
+import {
+  getAssignmentConfigHydration,
+  getAssignmentFeedbackHydration,
+} from "@/app/author/utils/assignmentHydration";
 import ExitIcon from "@/components/svgs/ExitIcon";
 import { getAssignment, getUser } from "@/lib/talkToBackend";
-import { mergeData } from "@/lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
+import type { QuestionAuthorStore } from "@/config/types";
+import { extractAssignmentId } from "@/lib/strings";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 function SuccessPage() {
   const pathname = usePathname();
-  const [
-    questions,
-    setPageState,
-    setAuthorStore,
-    activeAssignmentId,
-    setQuestionOrder,
-  ] = useAuthorStore((state) => [
-    state.questions,
-    state.setPageState,
-    state.setAuthorStore,
-    state.activeAssignmentId,
-    state.setQuestionOrder,
-  ]);
+  const [setPageState, activeAssignmentId, hydrateAuthorStore] = useAuthorStore(
+    (state) => [
+      state.setPageState,
+      state.activeAssignmentId,
+      state.hydrateAuthorStore,
+    ],
+  );
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
   ]);
@@ -49,60 +48,55 @@ function SuccessPage() {
       }
     }
 
-    const assignment = await getAssignment(activeAssignmentId);
-    if (assignment) {
-      useAuthorStore.getState().setOriginalAssignment(assignment);
+    const routeAssignmentId = Number.parseInt(
+      extractAssignmentId(pathname) ?? "",
+      10,
+    );
+    const resolvedAssignmentId = Number.isFinite(routeAssignmentId)
+      ? routeAssignmentId
+      : typeof activeAssignmentId === "number" &&
+          Number.isFinite(activeAssignmentId)
+        ? activeAssignmentId
+        : Number.NaN;
 
+    if (!Number.isFinite(resolvedAssignmentId)) {
+      setPageState("error");
+      return;
+    }
+
+    const assignment = await getAssignment(resolvedAssignmentId);
+    if (assignment) {
       const authorSafeAssignment = {
         ...assignment,
         currentVersion: undefined,
       };
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        authorSafeAssignment,
-      );
-      const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
-      setAuthorStore({
+      const fetchedQuestions = (assignment.questions ??
+        []) as QuestionAuthorStore[];
+      hydrateAuthorStore({
         ...cleanedAuthorData,
+        originalAssignment: assignment,
+        questions: fetchedQuestions,
+        questionOrder:
+          assignment.questionOrder ??
+          fetchedQuestions.map((question) => question.id),
+        activeAssignmentId: assignment.id,
+        name: assignment.name,
       });
-      if (assignment.questionOrder) {
-        setQuestionOrder(assignment.questionOrder);
-      } else {
-        setQuestionOrder(questions.map((question) => question.id));
-      }
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        assignment,
-      );
       if (assignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: assignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...getAssignmentConfigHydration(assignment),
       });
 
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        assignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...getAssignmentFeedbackHydration(assignment),
       });
 
-      useAuthorStore.getState().setName(assignment.name);
       setPageState("success");
     } else {
       setPageState("error");
@@ -110,10 +104,11 @@ function SuccessPage() {
   };
   const [returnUrl, setReturnUrl] = useState<string>("");
   useEffect(() => {
+    let cancelled = false;
     const fetchUser = async () => {
       try {
         const user = await getUser();
-        setReturnUrl(user.returnUrl || "");
+        if (!cancelled) setReturnUrl(user.returnUrl || "");
       } catch (err) {
         console.error("Failed to fetch user data", err);
       }
@@ -121,6 +116,9 @@ function SuccessPage() {
 
     void fetchUser();
     void fetchAssignment();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

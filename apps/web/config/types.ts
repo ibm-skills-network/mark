@@ -701,7 +701,7 @@ export type AssignmentAttempt = {
 
 export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questions: QuestionStore[];
-  assignmentDetails: AssignmentDetails;
+  assignmentDetails?: AssignmentDetails;
   assignmentVersion?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
     Record<string, unknown>;
   assignment?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
@@ -719,6 +719,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   showQuestions?: boolean;
   showQuestionScore?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
+  questionControls?: QuestionControls;
   comments?: string;
   preferredLanguage?: string;
   questionResponses?: Array<{ questionId: number }>;
@@ -733,27 +734,30 @@ export interface QuestionControls {
 }
 
 export interface AssignmentDetails {
-  allotedTimeMinutes?: number;
-  numAttempts?: number;
-  attemptsBeforeCoolDown?: number;
-  retakeAttemptCoolDownMinutes?: number;
-  passingGrade?: number;
+  allotedTimeMinutes?: number | null;
+  numAttempts?: number | null;
+  attemptsBeforeCoolDown?: number | null;
+  retakeAttemptCoolDownMinutes?: number | null;
+  passingGrade?: number | null;
   name: string;
-  questionDisplay?: QuestionDisplayType;
-  displayOrder?: "DEFINED" | "RANDOM";
+  questionDisplay?: QuestionDisplayType | null;
+  displayOrder?: "DEFINED" | "RANDOM" | null;
   id: number;
   strictTimeLimit?: boolean;
-  introduction?: string;
+  introduction?: string | null;
+  instructions?: string | null;
+  gradingCriteriaOverview?: string | null;
+  timeEstimateMinutes?: number | null;
   graded?: boolean;
   published?: boolean;
   questionOrder?: number[];
-  updatedAt?: number;
+  updatedAt?: number | string;
   showQuestions?: boolean;
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
-  numberOfQuestionsPerAttempt?: number;
+  numberOfQuestionsPerAttempt?: number | null;
   questionControls?: QuestionControls;
   requireAllQuestions?: boolean;
   optionalQuestionIds?: number[];

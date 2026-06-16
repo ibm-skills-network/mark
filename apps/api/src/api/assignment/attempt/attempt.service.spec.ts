@@ -1,6 +1,6 @@
 /* eslint-disable */
 import { HttpService } from "@nestjs/axios";
-import { UnprocessableEntityException } from "@nestjs/common";
+import { NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { LtiSyncStatus } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -31,6 +31,9 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       findMany: jest.fn(),
     },
     questionResponse: {
+      findMany: jest.fn(),
+    },
+    translation: {
       findMany: jest.fn(),
     },
     ltiGradeSync: {
@@ -564,6 +567,88 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
           "auth-cookie",
         ),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe("getAssignmentAttempt - assignment hydration", () => {
+    const baseAttempt = {
+      id: 555,
+      assignmentId: 42,
+      grade: 0.9,
+      questionOrder: [],
+      questionResponses: [],
+      questionVariants: [],
+    };
+
+    const baseAssignment = {
+      id: 42,
+      name: "Hydration Assignment",
+      introduction: "intro",
+      instructions: "do the thing",
+      gradingCriteriaOverview: "criteria",
+      timeEstimateMinutes: 30,
+      attemptsBeforeCoolDown: 2,
+      retakeAttemptCoolDownMinutes: 10,
+      type: "AI_GRADED",
+      graded: true,
+      numAttempts: 3,
+      allotedTimeMinutes: 60,
+      requireAllQuestions: true,
+      optionalQuestionIds: [],
+      questions: [],
+      questionOrder: [],
+      displayOrder: "DEFINED",
+      passingGrade: 70,
+      questionDisplay: "ONE_PER_PAGE",
+      numberOfQuestionsPerAttempt: 5,
+      published: true,
+      showAssignmentScore: true,
+      showSubmissionFeedback: true,
+      showQuestionScore: true,
+      showQuestions: true,
+      questionControls: null,
+      updatedAt: new Date("2024-01-01T00:00:00Z"),
+      currentVersion: {
+        correctAnswerVisibility: "ON_PASS",
+        questionControls: { disableCopy: true },
+      },
+    };
+
+    it("populates assignmentDetails from the loaded assignment", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue(baseAssignment);
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.assignmentDetails).toEqual(
+        expect.objectContaining({
+          id: 42,
+          name: "Hydration Assignment",
+          passingGrade: 70,
+          // derived from currentVersion, not the assignment row
+          correctAnswerVisibility: "ON_PASS",
+          questionControls: { disableCopy: true },
+          updatedAt: baseAssignment.updatedAt,
+        }),
+      );
+      // top-level fields stay in sync with the embedded details
+      expect(result.correctAnswerVisibility).toBe("ON_PASS");
+      expect(result.questionControls).toEqual({ disableCopy: true });
+    });
+
+    it("throws NotFoundException when the assignment is missing", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue(null);
+
+      await expect(service.getAssignmentAttempt(555, "en")).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

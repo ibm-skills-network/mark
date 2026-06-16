@@ -17,7 +17,7 @@ import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { applyQuestionOrder } from "./utils/question-order";
 import { DraftSummary, VersionSummary } from "@/lib/author";
-import { createSafeStorage } from "@/lib/safe-storage";
+import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   "versions",
   "currentVersion",
@@ -93,6 +93,10 @@ export type AuthorState = {
 
 export type OptionalQuestion = {
   [K in keyof QuestionAuthorStore]?: QuestionAuthorStore[K];
+};
+
+type AuthorHydrationState = Omit<Partial<AuthorState>, "originalAssignment"> & {
+  originalAssignment?: any;
 };
 
 export type AuthorActions = {
@@ -239,6 +243,7 @@ export type AuthorActions = {
   deleteVariant: (questionId: number, variantId: number) => void;
   setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
+  hydrateAuthorStore: (state: AuthorHydrationState) => void;
   setDataFromBackend: (data: Partial<AuthorAssignmentState>) => void;
   validate: () => boolean;
   deleteStore: () => void;
@@ -1724,6 +1729,29 @@ export const useAuthorStore = createWithEqualityFn<
               : state.questions || [],
           }));
         },
+        hydrateAuthorStore: (state) => {
+          const currentState = get();
+          const {
+            questions: nextQuestionsInput,
+            questionOrder: nextQuestionOrderInput,
+            ...nextState
+          } = state;
+          const nextQuestions = nextQuestionsInput ?? currentState.questions;
+          const { questionOrder, questions } = nextQuestionOrderInput?.length
+            ? applyQuestionOrder(nextQuestions, nextQuestionOrderInput)
+            : {
+                questionOrder: nextQuestions.map((question) => question.id),
+                questions: nextQuestions,
+              };
+
+          set((prev) => ({
+            ...prev,
+            ...nextState,
+            questions,
+            questionOrder,
+            hasUnsavedChanges: false,
+          }));
+        },
 
         setDataFromBackend: (data: Partial<AuthorAssignmentState>) => {
           set({ ...data, hasUnsavedChanges: true });
@@ -2722,7 +2750,9 @@ export const useAuthorStore = createWithEqualityFn<
     ),
     {
       name: getAuthorStoreName(),
-      storage: createJSONStorage(() => createSafeStorage()),
+      storage: createJSONStorage(() =>
+        createAssignmentScopedStorage("author", getAuthorStoreName()),
+      ),
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(

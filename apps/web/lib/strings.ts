@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const extractAssignmentId = (url: string): string | null => {
-  const match = url.match(/\/author\/(\d+)/);
+  const match = url.match(/\/(?:author|learner)\/(\d+)/);
   if (!match || match.length < 2) {
     return null;
   }

@@ -128,6 +128,7 @@ function SuccessPage() {
     );
     const fetchData = async () => {
       const user = await getUser();
+      if (cancelled) return;
       setRole(user.role);
       setUserId(user.userId);
       logState("User loaded", `Role: ${user.role}`);
@@ -223,24 +224,78 @@ function SuccessPage() {
         }
       } else if (user.role === "author") {
         logState("Author mode load");
-        setShowSubmissionFeedback(zustandShowSubmissionFeedback);
-        setQuestions(zustandQuestions);
-        setShowQuestions(zustandShowQuestions);
-        setGrade(zustandGrade);
-        setTotalPointsEarned(zustandTotalPointsEarned);
-        setTotalPoints(zustandTotalPoints);
-        setAssignmentDetails(zustandAssignmentDetails);
-        setCorrectAnswerVisibility(
-          zustandAssignmentDetails?.correctAnswerVisibility ?? "ALWAYS",
+        const submissionDetails = await getCompletedAttempt(
+          assignmentId,
+          attemptId,
         );
-        logState("Loaded from author store");
+
+        if (submissionDetails) {
+          setQuestions(submissionDetails.questions);
+          setBackendComments(submissionDetails.comments || "");
+          setShowSubmissionFeedback(
+            submissionDetails.showSubmissionFeedback || false,
+          );
+          setCorrectAnswerVisibility(
+            submissionDetails.correctAnswerVisibility ?? "ALWAYS",
+          );
+          setShowQuestions(submissionDetails.showQuestions);
+
+          if (submissionDetails.showAssignmentScore === false) {
+            setGrade(Number.NaN);
+            setTotalPoints(0);
+            setTotalPointsEarned(0);
+          } else {
+            const rawGrade = submissionDetails.grade;
+            const possible =
+              typeof submissionDetails.totalPossiblePoints === "number"
+                ? submissionDetails.totalPossiblePoints
+                : submissionDetails.questions.reduce(
+                    (acc, question) => acc + (question.totalPoints ?? 0),
+                    0,
+                  );
+            const earned =
+              typeof submissionDetails.totalPointsEarned === "number"
+                ? submissionDetails.totalPointsEarned
+                : typeof rawGrade === "number"
+                  ? possible * rawGrade
+                  : 0;
+
+            setGrade(
+              typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
+            );
+            setTotalPoints(possible);
+            setTotalPointsEarned(earned);
+          }
+          setAssignmentDetails({
+            passingGrade: submissionDetails.passingGrade,
+            id: assignmentId,
+            name: submissionDetails.name ?? "Assignment",
+          });
+          logState("Loaded author success data from backend");
+        } else {
+          setShowSubmissionFeedback(zustandShowSubmissionFeedback);
+          setQuestions(zustandQuestions);
+          setShowQuestions(zustandShowQuestions);
+          setGrade(zustandGrade);
+          setTotalPointsEarned(zustandTotalPointsEarned);
+          setTotalPoints(zustandTotalPoints);
+          setAssignmentDetails(zustandAssignmentDetails);
+          setCorrectAnswerVisibility(
+            zustandAssignmentDetails?.correctAnswerVisibility ?? "ALWAYS",
+          );
+          logState("Loaded from author store");
+        }
         setLoading(false);
       } else {
         logState("Unknown role", user.role);
         setLoading(false);
       }
     };
+    let cancelled = false;
     void fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [
     assignmentId,
     attemptId,
