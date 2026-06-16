@@ -22,7 +22,7 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   maxWords?: number | null;
   maxCharacters?: number | null;
   allowCopy?: boolean;
-  toolbarMode?: "full" | "learner" | "title";
+  toolbarMode?: "full" | "learner";
 }
 
 const fullToolbarOptions = [
@@ -47,16 +47,9 @@ const learnerToolbarOptions = [
   ["clean"],
 ];
 
-const titleToolbarOptions = [
-  ["bold", "italic", "underline"],
-  ["link"],
-  ["clean"],
-];
-
 const toolbarOptionsByMode = {
   full: fullToolbarOptions,
   learner: learnerToolbarOptions,
-  title: titleToolbarOptions,
 };
 
 const MarkdownEditor: React.FC<Props> = ({

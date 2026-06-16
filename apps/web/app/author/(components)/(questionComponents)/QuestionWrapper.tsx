@@ -824,7 +824,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             value={localQuestionTitle}
             setValue={(value) => setLocalQuestionTitle(value?.trim())}
             placeholder="Enter your question here..."
-            toolbarMode="title"
+            toolbarMode="learner"
             onBlur={() => {
               setToggleTitle(
                 questionId,
