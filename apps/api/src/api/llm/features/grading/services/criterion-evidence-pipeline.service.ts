@@ -9,6 +9,7 @@ import {
   GradeSummary,
   JudgeCritique,
   RubricCriterion,
+  SubmissionQualityMetadata,
 } from "../types/criterion-evidence.types";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
@@ -95,17 +96,18 @@ export class CriterionEvidencePipelineService {
   async gradeWithEvidence(request: PipelineRequest): Promise<PipelineResult> {
     const auditCollector = new AuditCollector();
 
-    const rubricText = request.criteria
-      .map(
-        (c) =>
-          `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`,
-      )
-      .join(" ");
+    // Per-criterion texts so rubric_copy Jaccard is checked against each criterion
+    // individually — concatenating all criteria into one token set inflates the
+    // denominator and makes the threshold unreachable for multi-criterion rubrics.
+    const rubricTexts = request.criteria.map(
+      (c) =>
+        `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`,
+    );
 
     const { chunks: qualifiedChunks, quality: submissionQuality } =
       this.qualityService.classifyChunks(request.chunks, {
         question: request.question,
-        rubricText,
+        rubricTexts,
       });
 
     const index = new ChunkIndex(qualifiedChunks);
@@ -162,12 +164,13 @@ export class CriterionEvidencePipelineService {
         createdAt: new Date().toISOString(),
       };
 
+      const gatedQuality: SubmissionQualityMetadata = { ...submissionQuality, gated: true };
       return {
         grades,
         evidence: [],
         judgeCritiques: [],
         summary,
-        audit: { ...audit, submissionQuality: { ...submissionQuality, gated: true } },
+        audit: { ...audit, submissionQuality: gatedQuality },
       };
     }
 

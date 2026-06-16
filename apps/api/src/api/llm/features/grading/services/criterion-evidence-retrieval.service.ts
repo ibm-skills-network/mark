@@ -111,9 +111,7 @@ export class CriterionEvidenceRetrievalService {
         .slice(0, maxEvidence);
     }
 
-    let usedFallback = false;
     if (reranked.length === 0) {
-      usedFallback = true;
       const allChunks = index.getAllChunks();
       const scored = allChunks.map((chunk) => ({
         chunk,
@@ -127,7 +125,8 @@ export class CriterionEvidenceRetrievalService {
         .sort((a, b) => b.combined - a.combined)
         .slice(0, maxEvidence);
 
-      reranked = aboveThreshold.length > 0 ? aboveThreshold : scored;
+      // Cap fallback length so LLM validation always runs on a bounded candidate set.
+      reranked = aboveThreshold.length > 0 ? aboveThreshold : scored.slice(0, maxEvidence);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
@@ -138,35 +137,39 @@ export class CriterionEvidenceRetrievalService {
 
     let evidence: CriterionEvidence[] = [];
     let validatedCount = 0;
+    // True when validation ran AND the LLM returned evidence items but they were
+    // all classified as restatement_only/boilerplate_only (filtered by score).
+    // In that case we must not rescue with the keyword fallback.
+    let definitivelyRejected = false;
 
-    const skipValidation = usedFallback && reranked.length > maxEvidence;
-
-    if (
-      !skipValidation &&
-      (strategy === "llm" || this.config.enableLlmValidation)
-    ) {
-      const validation = await this.validateWithLlm(
+    if (strategy === "llm" || this.config.enableLlmValidation) {
+      const outcome = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
         recorder,
       );
 
-      if (validation.length > 0) {
-        validatedCount = validation.length;
-        evidence = validation.map((item) => ({
-          chunkId: item.chunk.chunkId,
-          quote: item.chunk.text.slice(0, 220),
-          anchor: item.chunk.anchor,
-          sourceType: item.chunk.sourceType,
-          sourceId: item.chunk.sourceId,
-          relevanceScore: item.relevanceScore,
-          searchScore: item.searchScore,
-          contradiction: item.contradiction,
-        }));
+      if (outcome !== null) {
+        definitivelyRejected = outcome.definitivelyRejected;
+        if (outcome.evidence.length > 0) {
+          validatedCount = outcome.evidence.length;
+          evidence = outcome.evidence.map((item) => ({
+            chunkId: item.chunk.chunkId,
+            quote: item.chunk.text.slice(0, 220),
+            anchor: item.chunk.anchor,
+            sourceType: item.chunk.sourceType,
+            sourceId: item.chunk.sourceId,
+            relevanceScore: item.relevanceScore,
+            searchScore: item.searchScore,
+            contradiction: item.contradiction,
+          }));
+        }
       }
     }
 
-    if (evidence.length === 0) {
+    // Keyword fallback: only when validation didn't produce evidence AND the LLM
+    // did not explicitly mark everything as restatement/boilerplate.
+    if (evidence.length === 0 && !definitivelyRejected) {
       evidence = reranked.map((item) => ({
         chunkId: item.chunk.chunkId,
         quote: item.chunk.text.slice(0, 220),
@@ -274,17 +277,27 @@ export class CriterionEvidenceRetrievalService {
     );
   }
 
+  /**
+   * Returns null on parse failure (caller should fall back to keyword results).
+   * Returns an object with:
+   * - evidence: items the LLM considered relevant (may be empty)
+   * - definitivelyRejected: true when the LLM returned items but all were
+   *   classified restatement_only/boilerplate_only — caller must NOT fall back.
+   */
   private async validateWithLlm(
     request: CriterionEvidenceRequest,
     chunks: ExtractedChunk[],
     recorder?: LlmCallRecorder,
-  ): Promise<Array<{
-    chunk: ExtractedChunk;
-    relevanceScore: number;
-    searchScore: number;
-    contradiction: boolean;
-  }>> {
-    if (chunks.length === 0) return [];
+  ): Promise<{
+    evidence: Array<{
+      chunk: ExtractedChunk;
+      relevanceScore: number;
+      searchScore: number;
+      contradiction: boolean;
+    }>;
+    definitivelyRejected: boolean;
+  } | null> {
+    if (chunks.length === 0) return { evidence: [], definitivelyRejected: false };
 
     const parser = StructuredOutputParser.fromZodSchema(
       EvidenceValidationSchema,
@@ -342,18 +355,24 @@ export class CriterionEvidenceRetrievalService {
 
     for (const candidate of candidates) {
       try {
-        return this.mapParsedSelections(
-          await parser.parse(candidate),
+        const parsed = await parser.parse(candidate);
+        const rawItemCount = (parsed.evidence || []).length;
+        const evidence = this.mapParsedSelections(
+          parsed,
           chunks,
           request.maxEvidence ?? this.config.maxEvidence,
         );
+        // If the LLM returned items but all were filtered as restatement/boilerplate,
+        // signal a definitive rejection so the caller does not rescue with keywords.
+        const definitivelyRejected = rawItemCount > 0 && evidence.length === 0;
+        return { evidence, definitivelyRejected };
       } catch {
         this.logger.warn("Evidence validation parse failed");
       }
     }
 
     this.logger.warn("Evidence validation parse failed for all candidates");
-    return [];
+    return null;
   }
 
   private mapParsedSelections(

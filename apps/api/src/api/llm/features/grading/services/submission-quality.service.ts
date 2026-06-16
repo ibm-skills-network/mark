@@ -11,7 +11,10 @@ import {
 
 interface QualityContext {
   question?: string;
+  /** Single concatenated rubric string — use rubricTexts instead for multi-criterion rubrics. */
   rubricText?: string;
+  /** Per-criterion rubric texts — Jaccard is checked against each criterion individually. */
+  rubricTexts?: string[];
 }
 
 interface ClassifyChunksResult {
@@ -103,6 +106,18 @@ const METADATA_BANNER_PREFIXES = [
 
 const METADATA_KEY_PATTERN = /^(pages|title|creator|author|subject|keywords)\s*:/i;
 
+// "unknown" is included so unrecognised block types don't falsely trigger heading-only detection.
+const SUBSTANTIVE_BLOCK_TYPES = new Set([
+  "paragraph",
+  "table",
+  "code",
+  "list",
+  "equation",
+  "quote",
+  "image",
+  "unknown",
+]);
+
 @Injectable()
 export class SubmissionQualityService {
   classifyChunks(
@@ -128,9 +143,14 @@ export class SubmissionQualityService {
     const questionTokens = context?.question
       ? this.tokenize(context.question)
       : new Set<string>();
-    const rubricTokens = context?.rubricText
-      ? this.tokenize(context.rubricText)
-      : new Set<string>();
+
+    // Build per-criterion token sets for rubric_copy detection. Checking each criterion
+    // independently prevents the union-set denominator from growing so large that no
+    // realistic learner answer can reach the 0.85 Jaccard threshold.
+    const rubricTextsSource = context?.rubricTexts ?? (context?.rubricText ? [context.rubricText] : []);
+    const perCriterionRubricTokenSets: Set<string>[] = rubricTextsSource
+      .map((t) => this.tokenize(t))
+      .filter((s) => s.size >= GRADING_QUALITY.RUBRIC_COPY_MIN_TOKENS);
 
     const pageTextCounts = this.buildPageTextCounts(chunks);
     const textRepeatCounts = this.buildTextRepeatCounts(chunks);
@@ -141,7 +161,7 @@ export class SubmissionQualityService {
         chunk,
         boilerplateTexts,
         questionTokens,
-        rubricTokens,
+        perCriterionRubricTokenSets,
       );
       return { ...chunk, quality };
     });
@@ -191,13 +211,16 @@ export class SubmissionQualityService {
     const allPageNumbers = this.extractPageNumbers(chunks);
     const pageCount = allPageNumbers.size > 0 ? allPageNumbers.size : undefined;
 
-    // Avg tokens per page uses only eligible-chunk pages so boilerplate pages
-    // don't dilute the density signal for real learner content.
+    // Avg tokens per page: prefer eligible-chunk pages for the density signal.
+    // When all chunks are ineligible (eligibleCount === 0), fall back to all chunks
+    // so the low_information classifier can still fire — otherwise it is dead code.
     const eligiblePageNumbers = this.extractPageNumbers(eligibleChunks);
     const avgSubstantiveTokensPerPage =
       eligiblePageNumbers.size > 0
         ? this.computeAvgSubstantiveTokensPerPage(eligibleChunks, eligiblePageNumbers)
-        : undefined;
+        : allPageNumbers.size > 0
+          ? this.computeAvgSubstantiveTokensPerPage(annotated, allPageNumbers)
+          : undefined;
 
     const classification = this.classifySubmission({
       eligibleCount: eligibleChunks.length,
@@ -278,7 +301,7 @@ export class SubmissionQualityService {
     chunk: ExtractedChunk,
     boilerplateTexts: Set<string>,
     questionTokens: Set<string>,
-    rubricTokens: Set<string>,
+    perCriterionRubricTokenSets: Set<string>[],
   ): ChunkQuality {
     const reasons: ChunkIneligibleReason[] = [];
     const normalizedText = chunk.text.trim();
@@ -296,8 +319,7 @@ export class SubmissionQualityService {
       reasons.push("boilerplate");
     }
 
-    const substantiveTokens = this.getSubstantiveTokens(normalizedText);
-    const substantiveTokenCount = substantiveTokens.size;
+    const substantiveTokenCount = this.getSubstantiveTokens(normalizedText).size;
 
     if (
       reasons.length === 0 &&
@@ -306,26 +328,30 @@ export class SubmissionQualityService {
       reasons.push("too_short");
     }
 
+    // Lazily compute chunkTokens — used by both prompt_copy and rubric_copy checks.
+    let chunkTokens: Set<string> | undefined;
+
     if (
       reasons.length === 0 &&
       questionTokens.size >= GRADING_QUALITY.PROMPT_COPY_MIN_TOKENS
     ) {
-      const chunkTokens = this.tokenize(normalizedText);
+      chunkTokens = this.tokenize(normalizedText);
       const sim = this.jaccardSimilarity(chunkTokens, questionTokens);
       if (sim >= GRADING_QUALITY.PROMPT_COPY_SIMILARITY_THRESHOLD) {
         reasons.push("prompt_copy");
       }
     }
 
-    if (
-      reasons.length === 0 &&
-      rubricTokens.size >= GRADING_QUALITY.RUBRIC_COPY_MIN_TOKENS
-    ) {
-      const chunkTokens = this.tokenize(normalizedText);
-      const sim = this.jaccardSimilarity(chunkTokens, rubricTokens);
-      if (sim >= GRADING_QUALITY.RUBRIC_COPY_SIMILARITY_THRESHOLD) {
-        reasons.push("rubric_copy");
-      }
+    if (reasons.length === 0 && perCriterionRubricTokenSets.length > 0) {
+      chunkTokens ??= this.tokenize(normalizedText);
+      // Flag rubric_copy if the chunk is too similar to ANY individual criterion —
+      // not the union of all criteria, which would inflate the denominator.
+      const isRubricCopy = perCriterionRubricTokenSets.some(
+        (criterionTokens) =>
+          this.jaccardSimilarity(chunkTokens!, criterionTokens) >=
+          GRADING_QUALITY.RUBRIC_COPY_SIMILARITY_THRESHOLD,
+      );
+      if (isRubricCopy) reasons.push("rubric_copy");
     }
 
     const eligibility: ChunkEligibility =
@@ -358,15 +384,6 @@ export class SubmissionQualityService {
   // chunks without blockType (text/url sources) are skipped so they never
   // trigger false heading-only flags.
   private detectHeadingOnlyPages(chunks: ExtractedChunk[]): Set<number> {
-    const SUBSTANTIVE_BLOCK_TYPES = new Set([
-      "paragraph",
-      "table",
-      "code",
-      "list",
-      "equation",
-      "quote",
-      "image", // image-only slides (diagrams, infographics) are substantive
-    ]);
 
     const pageHasSubstantive = new Map<number, boolean>();
     const pageHasKnownBlock = new Map<number, boolean>();
@@ -473,7 +490,8 @@ export class SubmissionQualityService {
     for (const chunk of chunks) {
       const page = this.getChunkPage(chunk);
       if (page === null || !tokensByPage.has(page)) continue;
-      const tokens = this.getSubstantiveTokens(chunk.text).size;
+      // Reuse already-computed count from classifyChunk to avoid a second tokenization pass.
+      const tokens = chunk.quality?.substantiveTokenCount ?? this.getSubstantiveTokens(chunk.text).size;
       tokensByPage.set(page, (tokensByPage.get(page) ?? 0) + tokens);
     }
 
