@@ -82,7 +82,7 @@ const guardedLookup = ((hostname, options, callback) => {
       const resolved = Array.isArray(address)
         ? address.map((entry) => entry.address)
         : [address];
-      if (resolved.some(isBlockedAddress)) {
+      if (resolved.some((entry) => isBlockedAddress(entry))) {
         callback(
           Object.assign(
             new Error("Refused to connect to a non-public address"),
@@ -125,7 +125,7 @@ export function assertFetchableUrl(rawUrl: string): URL {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new BlockedUrlError("Only http(s) URLs may be fetched");
   }
-  const host = parsed.hostname.replace(/^\[/, "").replace(/\]$/, "");
+  const host = parsed.hostname.replace(/^\[/, "").replace(/]$/, "");
   if (isIP(host) && isBlockedAddress(host)) {
     throw new BlockedUrlError("Refused to fetch a non-public address");
   }
