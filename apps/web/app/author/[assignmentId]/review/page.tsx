@@ -913,11 +913,13 @@ function Component() {
       : "Default order";
   };
 
-  // convert to plain text
+  // convert to plain text. Parse into an inert document rather than assigning
+  // to a live element's innerHTML, so untrusted markup never reaches a node
+  // that could load resources or run script.
   const stripHtmlTags = (html: string): string => {
-    const tmp = document.createElement("div");
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || "";
+    return (
+      new DOMParser().parseFromString(html, "text/html").body.textContent || ""
+    );
   };
 
   const getQuestionTitle = (

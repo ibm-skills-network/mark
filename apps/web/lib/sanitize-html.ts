@@ -12,6 +12,6 @@ import DOMPurify from "dompurify";
  *
  * Call this in the browser only (e.g. inside an effect): DOMPurify needs a DOM.
  */
-export function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html);
+export function sanitizeHtml(html: string | null | undefined): string {
+  return DOMPurify.sanitize(html ?? "");
 }
