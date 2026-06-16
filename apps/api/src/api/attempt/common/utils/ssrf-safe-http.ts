@@ -75,30 +75,31 @@ const guardedLookup = ((hostname, options, callback) => {
       address: string | LookupAddress[],
       family?: number,
     ) => {
-      // Normalise to a single string regardless of whether dnsLookup was
-      // called with { all: true } (LookupAddress[]) or without (string).
-      const firstAddress = Array.isArray(address)
-        ? (address[0]?.address ?? "")
-        : address;
       if (error) {
-        callback(error, firstAddress, family ?? 0);
+        callback(error, address, family);
         return;
       }
+      // dnsLookup mirrors the options it was handed: an array of addresses when
+      // called with { all: true } — which Node's default autoSelectFamily /
+      // happy-eyeballs path does — and a single address otherwise. Re-check
+      // every resolved address, then hand the result back in the SAME shape the
+      // socket layer asked for. Collapsing the array to a single string breaks
+      // the autoSelectFamily contract and fails every connection.
       const resolved = Array.isArray(address)
-        ? address.map((entry) => entry.address)
-        : [address];
-      if (resolved.some((entry) => isBlockedAddress(entry))) {
+        ? address
+        : [{ address, family: family ?? 0 }];
+      if (resolved.some((entry) => isBlockedAddress(entry.address))) {
         callback(
           Object.assign(
             new Error("Refused to connect to a non-public address"),
             { code: "ERR_BLOCKED_ADDRESS" },
           ),
-          firstAddress,
-          family ?? 0,
+          address,
+          family,
         );
         return;
       }
-      callback(null, firstAddress, family ?? 0);
+      callback(null, address, family);
     },
   );
 }) as LookupFunction;
@@ -154,5 +155,9 @@ export async function safeGet<T = unknown>(
     maxRedirects: 5,
     httpAgent,
     httpsAgent,
+    // Never tunnel through an ambient HTTP(S)_PROXY: a proxy connects on our
+    // behalf, so the guarded lookup would only vet the proxy's address and the
+    // SSRF check would be silently bypassed.
+    proxy: false,
   });
 }
