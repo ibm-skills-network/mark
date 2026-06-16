@@ -25,6 +25,16 @@ import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
 import { sanitizeForLog } from "../logger/sanitize";
 
+// Headers whose values are secrets/PII and must never be logged. Compared
+// case-insensitively. Hoisted to module scope so it isn't rebuilt per request.
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "cookie",
+  "user-session",
+  "x-admin-token",
+  "admin-token",
+]);
+
 @Injectable()
 export class ApiService {
   private readonly logger: Logger;
@@ -482,7 +492,19 @@ export class ApiService {
         },
       };
 
-      this.logger.info("Forwarding request: ", config);
+      const safeHeaders = Object.fromEntries(
+        Object.entries((config.headers ?? {}) as Record<string, unknown>).map(
+          ([key, value]) =>
+            SENSITIVE_HEADERS.has(key.toLowerCase())
+              ? [key, "[redacted]"]
+              : [key, sanitizeForLog(value)],
+        ),
+      );
+      this.logger.debug("Forwarding request", {
+        method: config.method,
+        url: config.url,
+        headers: safeHeaders,
+      });
       const response = await axios.request(config);
       return { data: response.data as string, status: response.status };
     } catch (error) {
