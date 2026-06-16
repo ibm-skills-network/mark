@@ -10,8 +10,17 @@ import DOMPurify from "dompurify";
  * formatting tags, classes, and data-attributes Quill emits while removing
  * `<script>`, inline event handlers, and `javascript:`-style URLs.
  *
- * Call this in the browser only (e.g. inside an effect): DOMPurify needs a DOM.
+ * Safe to call during SSR: falls back to stripping all tags when the DOM is
+ * unavailable so active content never appears in the initial HTML payload.
+ * Components that call this directly in JSX (not inside a useEffect) should
+ * add suppressHydrationWarning on the target element to silence the expected
+ * server/client text-vs-html difference.
  */
 export function sanitizeHtml(html: string | null | undefined): string {
-  return DOMPurify.sanitize(html ?? "");
+  const raw = html ?? "";
+  if (typeof window === "undefined") {
+    // No DOM on the server: strip all tags as a safe fallback.
+    return raw.replace(/<[^>]*>/g, "");
+  }
+  return DOMPurify.sanitize(raw);
 }

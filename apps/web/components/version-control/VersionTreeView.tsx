@@ -1176,6 +1176,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                           <div className="bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
                             <div
                               className="text-gray-900 prose prose-sm max-w-none"
+                              suppressHydrationWarning
                               dangerouslySetInnerHTML={{
                                 __html: sanitizeHtml(
                                   (selectedVersionDetails || selectedVersion)
@@ -1194,6 +1195,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                           <div className="bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
                             <div
                               className="text-gray-900 prose prose-sm max-w-none"
+                              suppressHydrationWarning
                               dangerouslySetInnerHTML={{
                                 __html: sanitizeHtml(
                                   (selectedVersionDetails || selectedVersion)
@@ -1214,6 +1216,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <div className="bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
                               <div
                                 className="text-gray-900 prose prose-sm max-w-none"
+                                suppressHydrationWarning
                                 dangerouslySetInnerHTML={{
                                   __html: sanitizeHtml(
                                     (selectedVersionDetails || selectedVersion)

@@ -75,8 +75,13 @@ const guardedLookup = ((hostname, options, callback) => {
       address: string | LookupAddress[],
       family?: number,
     ) => {
+      // Normalise to a single string regardless of whether dnsLookup was
+      // called with { all: true } (LookupAddress[]) or without (string).
+      const firstAddress = Array.isArray(address)
+        ? (address[0]?.address ?? "")
+        : address;
       if (error) {
-        callback(error, address as string, family ?? 0);
+        callback(error, firstAddress, family ?? 0);
         return;
       }
       const resolved = Array.isArray(address)
@@ -88,12 +93,12 @@ const guardedLookup = ((hostname, options, callback) => {
             new Error("Refused to connect to a non-public address"),
             { code: "ERR_BLOCKED_ADDRESS" },
           ),
-          address as string,
+          firstAddress,
           family ?? 0,
         );
         return;
       }
-      callback(null, address as string, family ?? 0);
+      callback(null, firstAddress, family ?? 0);
     },
   );
 }) as LookupFunction;
@@ -142,10 +147,11 @@ export async function safeGet<T = unknown>(
 ): Promise<AxiosResponse<T>> {
   assertFetchableUrl(url);
   return axios.get<T>(url, {
+    ...config,
+    // Security limits are applied last so callers cannot override them.
     timeout: 10_000,
     maxContentLength: 10 * 1024 * 1024,
     maxRedirects: 5,
-    ...config,
     httpAgent,
     httpsAgent,
   });
