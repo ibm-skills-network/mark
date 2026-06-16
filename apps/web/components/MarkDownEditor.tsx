@@ -42,7 +42,6 @@ const fullToolbarOptions = [
 const learnerToolbarOptions = [
   ["bold", "italic", "underline"],
   [{ list: "ordered" }, { list: "bullet" }],
-  ["blockquote", "code-block"],
   ["link"],
   ["clean"],
 ];
