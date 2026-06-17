@@ -73,4 +73,15 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
   })
   @IsOptional()
   message?: string;
+
+  @ApiProperty({
+    description:
+      "Set when AI feedback generation failed for a deterministic-only assignment. " +
+      "The attempt was saved successfully; feedback can be retried via the rerun endpoint.",
+    type: String,
+    nullable: true,
+    required: false,
+  })
+  @IsOptional()
+  aiFeedbackError?: string | null;
 }

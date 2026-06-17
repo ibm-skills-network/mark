@@ -10,6 +10,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import * as cheerio from "cheerio";
@@ -38,6 +39,7 @@ import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import { LocalizationService } from "../../common/utils/localization.service";
+import { GRADING_PROGRESS_SERVICE } from "../../attempt.constants";
 import { GradingFactoryService } from "../grading-factory.service";
 import {
   newJobScopedCache,
@@ -76,7 +78,8 @@ export class QuestionResponseService {
     private readonly gradingFactoryService: GradingFactoryService,
     private readonly rateLimiter: GradingRateLimiterService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
-    @Inject("GradingProgressService")
+    @Optional()
+    @Inject(GRADING_PROGRESS_SERVICE)
     private readonly progressService?: GradingProgressService,
   ) {
     this.logger = parentLogger.child({
@@ -402,10 +405,10 @@ export class QuestionResponseService {
       },
     });
 
-    if (this.progressService) {
-      await this.progressService.markComplete(assignmentAttemptId);
-    }
-
+    // markComplete is deliberately NOT called here. The caller
+    // (updateAssignmentAttempt) owns the terminal progress state and calls
+    // markComplete / markCompleteWithAiFeedbackError after the optional AI
+    // feedback step that follows.
     return gradedItems;
   }
 

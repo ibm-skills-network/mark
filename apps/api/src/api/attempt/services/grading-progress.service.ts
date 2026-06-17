@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import { GradingStatus } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
 import { AdminEmailService } from "../../../auth/services/admin-email.service";
@@ -58,6 +59,7 @@ export type ProgressUpdateCallback = (
 @Injectable()
 export class GradingProgressService {
   private readonly logger = new Logger(GradingProgressService.name);
+  private isCleaningStaleAiFeedbackReruns = false;
   private progressCallbacks = new Map<number, ProgressUpdateCallback>();
   private perQuestionState = new Map<
     number,
@@ -68,6 +70,64 @@ export class GradingProgressService {
     private readonly prisma: PrismaService,
     private readonly emailService: AdminEmailService,
   ) {}
+
+  private areSchedulersEnabled(): boolean {
+    return process.env.ENABLE_JOB_SCHEDULERS === "true";
+  }
+
+  private getStaleAiFeedbackRerunCutoff(): Date {
+    const rawMinutes = process.env.AI_FEEDBACK_RERUN_STALE_PROCESSING_MINUTES;
+    const parsed = rawMinutes ? Number(rawMinutes) : 30;
+    const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+    return new Date(Date.now() - minutes * 60_000);
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async cleanupStaleAiFeedbackReruns(): Promise<number> {
+    if (!this.areSchedulersEnabled()) {
+      return 0;
+    }
+
+    if (this.isCleaningStaleAiFeedbackReruns) {
+      this.logger.warn(
+        "Skipping stale AI feedback rerun cleanup - previous run still in progress",
+      );
+      return 0;
+    }
+
+    this.isCleaningStaleAiFeedbackReruns = true;
+    try {
+      const cutoff = this.getStaleAiFeedbackRerunCutoff();
+      const result = await this.prisma.gradingProgress.updateMany({
+        where: {
+          status: GradingStatus.PROCESSING,
+          error: { not: null },
+          updatedAt: { lt: cutoff },
+        },
+        data: {
+          status: GradingStatus.COMPLETED,
+          progress: 100,
+          currentStage: "Grading complete!",
+        },
+      });
+
+      if (result.count > 0) {
+        this.logger.warn(
+          `Restored ${result.count} stale AI feedback rerun lock(s) to retryable state`,
+        );
+      }
+
+      return result.count;
+    } catch (error) {
+      this.logger.error(
+        "Failed to clean up stale AI feedback rerun locks",
+        error,
+      );
+      return 0;
+    } finally {
+      this.isCleaningStaleAiFeedbackReruns = false;
+    }
+  }
 
   /**
    * Register a callback for progress updates
@@ -256,37 +316,7 @@ export class GradingProgressService {
           },
         });
 
-        if (
-          gradingProgress?.notifyOnComplete &&
-          gradingProgress.notificationEmail
-        ) {
-          this.logger.log(
-            `Sending grading completion email for attempt ${attemptId} to ${gradingProgress.notificationEmail}`,
-          );
-
-          try {
-            const assignmentId = gradingProgress.attempt.assignmentId;
-            const grade = gradingProgress.attempt.grade
-              ? gradingProgress.attempt.grade * 100
-              : undefined;
-
-            await this.emailService.sendGradingCompletionEmail(
-              gradingProgress.notificationEmail,
-              assignmentId,
-              attemptId,
-              grade,
-            );
-
-            this.logger.log(
-              `Successfully sent grading completion email for attempt ${attemptId}`,
-            );
-          } catch (emailError) {
-            this.logger.error(
-              `Failed to send grading completion email for attempt ${attemptId}`,
-              emailError,
-            );
-          }
-        }
+        await this.maybeSendCompletionEmail(attemptId, gradingProgress);
       }
 
       this.removeProgressCallback(attemptId);
@@ -295,6 +325,63 @@ export class GradingProgressService {
         `Failed to mark grading complete for attempt ${attemptId}`,
         error,
       );
+    }
+  }
+
+  /**
+   * Mark grading as complete but record that the optional AI feedback step
+   * failed. The attempt itself was saved successfully — only the AI feedback
+   * portion needs to be retried. Consumers can distinguish this from a hard
+   * failure by checking status === COMPLETED with a non-null error.
+   */
+  async markCompleteWithAiFeedbackError(
+    attemptId: number,
+    aiFeedbackError: string,
+  ): Promise<void> {
+    try {
+      const gradingProgress = await this.prisma.gradingProgress.findUnique({
+        where: { attemptId },
+        include: { attempt: true },
+      });
+
+      await this.prisma.gradingProgress.update({
+        where: { attemptId },
+        data: {
+          status: GradingStatus.COMPLETED,
+          progress: 100,
+          currentStage: "Grading complete!",
+          completedAt: new Date(),
+          error: aiFeedbackError,
+        },
+      });
+      this.removeProgressCallback(attemptId);
+      await this.maybeSendCompletionEmail(attemptId, gradingProgress);
+    } catch (updateError) {
+      this.logger.error(
+        `Failed to persist AI feedback error for attempt ${attemptId}`,
+        updateError,
+      );
+      throw updateError;
+    }
+  }
+
+  /**
+   * Clear a previously recorded AI feedback error after a successful rerun.
+   * Also restores status to COMPLETED because the rerun guard set it to
+   * PROCESSING to prevent concurrent reruns.
+   */
+  async clearAiFeedbackError(attemptId: number): Promise<void> {
+    try {
+      await this.prisma.gradingProgress.update({
+        where: { attemptId },
+        data: { status: GradingStatus.COMPLETED, error: null },
+      });
+    } catch (updateError) {
+      this.logger.error(
+        `Failed to clear AI feedback error for attempt ${attemptId}`,
+        updateError,
+      );
+      throw updateError;
     }
   }
 
@@ -317,6 +404,48 @@ export class GradingProgressService {
       this.logger.error(
         `Failed to mark grading as failed for attempt ${attemptId}`,
         error_,
+      );
+    }
+  }
+
+  private async maybeSendCompletionEmail(
+    attemptId: number,
+    gradingProgress: {
+      notifyOnComplete: boolean;
+      notificationEmail: string | null;
+      attempt: { assignmentId: number; grade: number | null };
+    } | null,
+  ): Promise<void> {
+    if (
+      !gradingProgress?.notifyOnComplete ||
+      !gradingProgress.notificationEmail
+    ) {
+      return;
+    }
+
+    this.logger.log(
+      `Sending grading completion email for attempt ${attemptId} to ${gradingProgress.notificationEmail}`,
+    );
+
+    try {
+      const grade = gradingProgress.attempt.grade
+        ? gradingProgress.attempt.grade * 100
+        : undefined;
+
+      await this.emailService.sendGradingCompletionEmail(
+        gradingProgress.notificationEmail,
+        gradingProgress.attempt.assignmentId,
+        attemptId,
+        grade,
+      );
+
+      this.logger.log(
+        `Successfully sent grading completion email for attempt ${attemptId}`,
+      );
+    } catch (emailError) {
+      this.logger.error(
+        `Failed to send grading completion email for attempt ${attemptId}`,
+        emailError,
       );
     }
   }
@@ -437,7 +566,14 @@ export class GradingProgressService {
     if (!callback) return;
     const details = this.snapshot(attemptId);
     try {
-      await callback(status, progress, percentage, details, currentQuestion, totalQuestions);
+      await callback(
+        status,
+        progress,
+        percentage,
+        details,
+        currentQuestion,
+        totalQuestions,
+      );
     } catch (error) {
       this.logger.warn(
         `progress.callback.threw attempt=${attemptId} error=${

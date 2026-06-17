@@ -51,6 +51,11 @@ interface Props {
 
 interface HighestScoreResponseType {
   points: number;
+  metadata?: {
+    aiFeedback?: string;
+    deterministicFeedback?: unknown;
+    [key: string]: unknown;
+  } | null;
   feedback: {
     feedback: string;
     structuredFeedback?: StructuredFeedbackData;
@@ -514,11 +519,13 @@ const Question: FC<Props> = ({
   }>(() => {
     const feedbackEntry = highestScoreResponse?.feedback?.[0];
     let feedbackText =
-      typeof feedbackEntry?.feedback === "string"
-        ? feedbackEntry.feedback
-        : feedbackEntry?.feedback
-          ? String(feedbackEntry.feedback)
-          : "";
+      typeof highestScoreResponse?.metadata?.aiFeedback === "string"
+        ? highestScoreResponse.metadata.aiFeedback
+        : typeof feedbackEntry?.feedback === "string"
+          ? feedbackEntry.feedback
+          : feedbackEntry?.feedback
+            ? String(feedbackEntry.feedback)
+            : "";
     let structuredFeedback: StructuredFeedbackData | undefined = undefined;
     let highlighting = feedbackEntry?.highlighting;
     let annotatedPdfUrl = feedbackEntry?.annotatedPdfUrl;

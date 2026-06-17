@@ -453,6 +453,11 @@ export type QuestionResponse = {
   learnerResponse: string;
   points: number;
   feedback: Feedback[];
+  metadata?: {
+    aiFeedback?: string;
+    deterministicFeedback?: Feedback[] | unknown;
+    [key: string]: unknown;
+  } | null;
   learnerAnswerChoice?: boolean;
 };
 export interface BaseQuestion {
@@ -463,6 +468,7 @@ export interface BaseQuestion {
   question: string;
   questionResponses?: QuestionResponse[];
   responseType?: ResponseType;
+  gradingContextQuestionIds?: number[];
 }
 
 export interface LearnerGetQuestionResponse extends BaseQuestion {
@@ -722,6 +728,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questionControls?: QuestionControls;
   comments?: string;
   preferredLanguage?: string;
+  aiFeedbackError?: string | null;
   questionResponses?: Array<{ questionId: number }>;
 }
 
@@ -792,6 +799,7 @@ export interface SubmitAssignmentResponse extends BaseBackendResponse {
   totalPointsEarned: number;
   totalPossiblePoints: number;
   gradingJobId?: string;
+  aiFeedbackError?: string | null;
 }
 
 export type LearnerAssignmentState =

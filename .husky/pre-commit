@@ -1,3 +1,12 @@
+if command -v brew >/dev/null 2>&1; then
+  ASDF_PREFIX="$(brew --prefix asdf 2>/dev/null || true)"
+  if [ -n "$ASDF_PREFIX" ] && [ -f "$ASDF_PREFIX/libexec/asdf.sh" ]; then
+    . "$ASDF_PREFIX/libexec/asdf.sh"
+  fi
+fi
+
+export PATH="$HOME/.asdf/shims:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 echo "Running yarn lint..."
 yarn lint
 

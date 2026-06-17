@@ -5,6 +5,7 @@ import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
+import { GRADING_PROGRESS_SERVICE } from "../../attempt.constants";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
@@ -52,7 +53,7 @@ describe("QuestionResponseService", () => {
         { provide: GradingFactoryService, useValue: mockGradingFactoryService },
         { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: undefined },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: undefined },
       ],
     }).compile();
 
@@ -178,7 +179,7 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
         { provide: GradingFactoryService, useValue: {} },
         { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: mockProgressService },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: mockProgressService },
       ],
     }).compile();
 
@@ -309,7 +310,7 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
       1,
       "Grading question 1 of 1...",
     );
-    expect(mockProgressService.markComplete).toHaveBeenCalledWith(20);
+    expect(mockProgressService.markComplete).not.toHaveBeenCalled();
   });
 
   it("stores context responses in-memory so subsequent questions can reference them without a DB call", async () => {
@@ -427,7 +428,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
         { provide: GradingFactoryService, useValue: {} },
         { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: undefined },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: undefined },
       ],
     }).compile();
 
@@ -558,7 +559,7 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
         { provide: GradingFactoryService, useValue: {} },
         { provide: GradingRateLimiterService, useValue: mockRateLimiter },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        { provide: "GradingProgressService", useValue: undefined },
+        { provide: GRADING_PROGRESS_SERVICE, useValue: undefined },
       ],
     }).compile();
 

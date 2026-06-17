@@ -130,6 +130,18 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
 
   @ApiPropertyOptional({
     description:
+      "Set when the grading job completed but AI feedback generation failed for " +
+      "a deterministic-only assignment. Null once feedback has been successfully " +
+      "generated or no error occurred.",
+    type: String,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  aiFeedbackError?: string | null;
+
+  @ApiPropertyOptional({
+    description:
       "Sum of totalPoints across all questions, computed before any visibility filtering. Frontend uses this to render the score line when showQuestions=false strips the questions array.",
     type: Number,
     required: false,

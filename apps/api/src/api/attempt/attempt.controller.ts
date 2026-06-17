@@ -54,7 +54,10 @@ import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/p
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { CreateQuestionResponseAttemptRequestDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { GRADING_AUDIT_SERVICE } from "./attempt.constants";
+import {
+  GRADING_AUDIT_SERVICE,
+  GRADING_PROGRESS_SERVICE,
+} from "./attempt.constants";
 import { AttemptServiceV2 } from "./services/attempt.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -73,11 +76,15 @@ export class AttemptControllerV2 {
     private readonly attemptService: AttemptServiceV2,
     @Inject(GRADING_AUDIT_SERVICE)
     private readonly gradingAuditService: GradingAuditService,
-    @Inject("GradingProgressService")
+    @Inject(GRADING_PROGRESS_SERVICE)
     private readonly gradingProgressService: GradingProgressService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {
     this.logger = parentLogger.child({ context: AttemptControllerV2.name });
+  }
+
+  private isParallelGradingEnabled(): boolean {
+    return process.env.ENABLE_PARALLEL_GRADING === "true";
   }
 
   @Post()
@@ -264,7 +271,7 @@ export class AttemptControllerV2 {
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
 
-    const needsLongRunningGrading = true;
+    const needsLongRunningGrading = this.isParallelGradingEnabled();
     const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
 
     if (needsLongRunningGrading && !isAuthorMode) {
@@ -428,6 +435,32 @@ export class AttemptControllerV2 {
       Number(assignmentId),
       Number(attemptId),
       request.userSession,
+    );
+  }
+
+  @Post(":attemptId/rerun-ai-feedback")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Re-run the AI feedback step for a submitted attempt that previously had AI feedback generation fail.",
+  })
+  @ApiResponse({
+    status: 201,
+    schema: { type: "object", properties: { success: { type: "boolean" } } },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "No pending AI feedback error, or feedback is disabled.",
+  })
+  @ApiResponse({ status: 403 })
+  rerunAiFeedback(
+    @Param("attemptId") attemptId: number,
+    @Param("assignmentId") assignmentId: number,
+  ): Promise<{ success: boolean }> {
+    return this.attemptService.rerunAiFeedbackForDeterministicAttempt(
+      Number(attemptId),
+      Number(assignmentId),
     );
   }
 

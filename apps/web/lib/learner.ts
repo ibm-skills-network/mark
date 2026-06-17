@@ -263,7 +263,6 @@ export async function getLiveRecordingFeedback(
   }
 }
 
-
 export type QuestionGradingStatus =
   | "pending"
   | "in_progress"
@@ -381,7 +380,12 @@ export async function submitAssignment(
     const { gradingJobId, message } = responseData;
 
     if (!gradingJobId) {
-      throw new Error("No grading job ID returned");
+      onProgress?.(
+        "completed",
+        100,
+        message || "Submission graded successfully.",
+      );
+      return responseData;
     }
 
     onGradingJobCreated?.(gradingJobId);
@@ -473,16 +477,11 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.(
-                "processing",
-                percentage,
-                progress,
-                {
-                  currentQuestion: data.currentQuestion,
-                  totalQuestions: data.totalQuestions,
-                  gradingState: parseGradingState(data.result),
-                },
-              );
+              onProgress?.("processing", percentage, progress, {
+                currentQuestion: data.currentQuestion,
+                totalQuestions: data.totalQuestions,
+                gradingState: parseGradingState(data.result),
+              });
             } else if (data.status === "Completed" && !isCompleted) {
               isCompleted = true;
               onProgress?.("completed", 100, "Grading completed successfully!");
@@ -504,6 +503,7 @@ export async function submitAssignment(
               resolve(result);
             } else if (data.status === "Failed" && !isCompleted) {
               isCompleted = true;
+
               onProgress?.("failed", 0, data.progress || "Grading failed");
 
               eventSource.close();
@@ -530,16 +530,11 @@ export async function submitAssignment(
               }
 
               if (data.progress && data.percentage !== undefined) {
-                onProgress?.(
-                  "processing",
-                  data.percentage,
-                  data.progress,
-                  {
-                    currentQuestion: data.currentQuestion,
-                    totalQuestions: data.totalQuestions,
-                    gradingState: parseGradingState(data.result),
-                  },
-                );
+                onProgress?.("processing", data.percentage, data.progress, {
+                  currentQuestion: data.currentQuestion,
+                  totalQuestions: data.totalQuestions,
+                  gradingState: parseGradingState(data.result),
+                });
               }
             } catch (error) {
               console.warn("SSE update event parse failed:", error);
@@ -632,6 +627,7 @@ export async function submitAssignment(
 
               if (data?.status === "Failed") {
                 isCompleted = true;
+
                 const errorMessage =
                   data.progress || data.error || "Grading failed";
                 onProgress?.("failed", 0, errorMessage);
@@ -931,6 +927,19 @@ export async function getGradingProgress(
   } catch (err) {
     return null;
   }
+}
+
+/**
+ * Re-run AI feedback for a submitted deterministic-only attempt that had an
+ * AI feedback failure. Clears the error once feedback succeeds.
+ */
+export async function rerunAiFeedback(
+  assignmentId: number,
+  attemptId: number,
+): Promise<{ success: boolean }> {
+  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/rerun-ai-feedback`;
+  const response = await apiClient.post<{ success: boolean }>(endpointURL, {});
+  return response;
 }
 
 /**

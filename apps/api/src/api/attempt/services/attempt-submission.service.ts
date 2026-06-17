@@ -1,22 +1,30 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import {
+  BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { PromptTemplate } from "@langchain/core/prompts";
 import {
+  AIUsageType,
   AssignmentAttempt,
   AssignmentQuestionDisplayOrder,
   CorrectAnswerVisibility,
+  GradingStatus,
   Question,
   QuestionType,
   QuestionVariant,
   ResponseType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import { IPromptProcessor } from "src/api/llm/core/interfaces/prompt-processor.interface";
+import { PROMPT_PROCESSOR } from "src/api/llm/llm.constants";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -57,7 +65,11 @@ import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
-import { type GradingProgressDetails } from "./grading-progress.service";
+import { GRADING_PROGRESS_SERVICE } from "../attempt.constants";
+import {
+  GradingProgressService,
+  type GradingProgressDetails,
+} from "./grading-progress.service";
 import {
   newJobScopedCache,
   type JobScopedCache,
@@ -73,9 +85,48 @@ type QuestionPointsSource =
   | Pick<Question, "id" | "totalPoints">
   | Pick<QuestionDto, "id" | "totalPoints">;
 
+type PersistedDeterministicAttempt = {
+  gradedItems: GradedItem[];
+  language: string;
+};
+
+type DeterministicFeedbackQuestion = Pick<
+  Question,
+  "id" | "question" | "type" | "totalPoints" | "choices" | "answer"
+>;
+
+type DeterministicAiFeedbackPayload = {
+  feedback: Array<{
+    questionId: number;
+    feedback: string;
+  }>;
+};
+
+type DeterministicAiFeedbackMetadata = Record<string, any> & {
+  aiFeedback?: string;
+  deterministicFeedback?: unknown;
+  deterministicAiFeedbackGeneratedAt?: string;
+};
+
 @Injectable()
 export class AttemptSubmissionService {
   private readonly logger = new Logger(AttemptSubmissionService.name);
+
+  // User-facing message for AI feedback failures. The raw internal error is
+  // logged but never sent to the client to avoid leaking service internals.
+  private static readonly AI_FEEDBACK_USER_ERROR =
+    "AI feedback generation failed. Your result has been saved and you can retry feedback generation.";
+
+  // gpt-4o-mini: cost-effective, fast, sufficient for short structured JSON output.
+  // Update this if the deployment moves to a different OpenAI-compatible endpoint.
+  private static readonly DETERMINISTIC_FEEDBACK_MODEL = "gpt-4o-mini";
+
+  private static readonly DETERMINISTIC_FEEDBACK_QUESTION_TYPES =
+    new Set<QuestionType>([
+      QuestionType.SINGLE_CORRECT,
+      QuestionType.MULTIPLE_CORRECT,
+      QuestionType.TRUE_FALSE,
+    ]);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -86,6 +137,12 @@ export class AttemptSubmissionService {
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
+    @Optional()
+    @Inject(GRADING_PROGRESS_SERVICE)
+    private readonly progressService?: GradingProgressService,
+    @Optional()
+    @Inject(PROMPT_PROCESSOR)
+    private readonly promptProcessor?: IPromptProcessor,
   ) {}
 
   async autoSaveQuestionResponse(
@@ -520,6 +577,9 @@ export class AttemptSubmissionService {
             questionVersions: true,
           },
         },
+        gradingProgress: {
+          select: { status: true, error: true },
+        },
       },
     });
 
@@ -629,6 +689,17 @@ export class AttemptSubmissionService {
 
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
+    // Expose a pending AI feedback error so the success page can show the
+    // rerun banner even after a page reload. Only present when the grading job
+    // completed (attempt saved) but the AI feedback step failed, and only when
+    // feedback display is enabled (otherwise the banner is never shown anyway).
+    const aiFeedbackError =
+      assignment.showSubmissionFeedback &&
+      assignmentAttempt.gradingProgress?.status === GradingStatus.COMPLETED &&
+      assignmentAttempt.gradingProgress.error
+        ? assignmentAttempt.gradingProgress.error
+        : null;
+
     return {
       ...assignmentAttempt,
       questions: finalQuestions,
@@ -645,7 +716,111 @@ export class AttemptSubmissionService {
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
+      aiFeedbackError,
     };
+  }
+
+  /**
+   * Re-runs the AI feedback step for a submitted deterministic-only attempt
+   * that previously had AI feedback generation fail. On success the error
+   * marker on GradingProgress is cleared; the attempt itself is not touched.
+   */
+  async rerunAiFeedbackForDeterministicAttempt(
+    attemptId: number,
+    assignmentId: number,
+  ): Promise<{ success: boolean }> {
+    // Atomic check-and-lock: only succeeds if the attempt is in the
+    // COMPLETED+error state. A second concurrent request will find 0 rows
+    // (status is now PROCESSING) and fail fast, preventing double LLM calls.
+    const { count } = await this.prisma.gradingProgress.updateMany({
+      where: {
+        attemptId,
+        status: GradingStatus.COMPLETED,
+        error: { not: null },
+      },
+      data: { status: GradingStatus.PROCESSING },
+    });
+
+    if (count === 0) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} does not have a pending AI feedback error, or a rerun is already in progress.`,
+      );
+    }
+
+    // Validate and generate feedback. Any exception after the atomic lock must
+    // restore GradingProgress to COMPLETED+error so the learner can retry.
+    try {
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { showSubmissionFeedback: true },
+      });
+
+      if (!assignment) {
+        throw new NotFoundException(`Assignment ${assignmentId} not found.`);
+      }
+
+      if (!assignment.showSubmissionFeedback) {
+        throw new BadRequestException(
+          `Feedback is not enabled for assignment ${assignmentId}.`,
+        );
+      }
+
+      const persistedAttempt =
+        await this.loadPersistedGradedItemsForDeterministicAttempt(
+          attemptId,
+          assignmentId,
+        );
+
+      await this.generateAiFeedbackForDeterministicAttempt(
+        persistedAttempt.gradedItems,
+        assignmentId,
+        attemptId,
+        persistedAttempt.language,
+      );
+
+      if (!this.progressService) {
+        throw new InternalServerErrorException(
+          "Grading progress service is not configured.",
+        );
+      }
+
+      await this.progressService.clearAiFeedbackError(attemptId);
+    } catch (rerunError) {
+      const internalError =
+        rerunError instanceof Error ? rerunError.message : String(rerunError);
+      this.logger.warn("AI feedback rerun failed", {
+        attemptId,
+        assignmentId,
+        error: internalError,
+      });
+      // Restore the row to COMPLETED+error so the learner can retry. Do this
+      // directly instead of calling markCompleteWithAiFeedbackError: the
+      // attempt was already completed, and rerun failures must not re-send
+      // grading completion notifications.
+      await this.prisma.gradingProgress
+        .update({
+          where: { attemptId },
+          data: {
+            status: GradingStatus.COMPLETED,
+            error: AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+          },
+        })
+        .catch((error: unknown) =>
+          this.logger.error(
+            "Failed to restore GradingProgress after rerun failure — row may be stuck in PROCESSING",
+            { attemptId, assignmentId, error: String(error) },
+          ),
+        );
+      throw rerunError instanceof InternalServerErrorException ||
+        rerunError instanceof BadRequestException ||
+        rerunError instanceof NotFoundException
+        ? rerunError
+        : new InternalServerErrorException(
+            AttemptSubmissionService.AI_FEEDBACK_USER_ERROR,
+          );
+    }
+
+    return { success: true };
   }
 
   /**
@@ -1020,30 +1195,93 @@ export class AttemptSubmissionService {
       }
 
       // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
-      const result =
-        await this.questionResponseService.commitAttemptWithResponses(
-          attemptId,
-          gradedItems,
-          grade,
-          updateDto,
-        );
+      await this.questionResponseService.commitAttemptWithResponses(
+        attemptId,
+        gradedItems,
+        grade,
+        updateDto,
+      );
 
       await this.pruneAutoSavedResponses(
         attemptId,
         successfulQuestionResponses,
       );
 
+      // ── Optional AI feedback for visible deterministic feedback ──────────────
+      // Scoring is already committed. Only runs when the prompt processor is
+      // configured and feedback is visible. Failure sets an error marker so the
+      // learner can rerun without losing their saved grade. Skipped entirely
+      // when promptProcessor is absent to avoid a permanently broken rerun banner.
+      let aiFeedbackError: string | null = null;
+      if (
+        assignment.showSubmissionFeedback &&
+        this.promptProcessor &&
+        this.areAllGradedItemsDeterministic(gradedItems, assignment.questions)
+      ) {
+        try {
+          await this.generateAiFeedbackForDeterministicAttempt(
+            gradedItems,
+            assignmentId,
+            attemptId,
+            updateDto.language,
+          );
+        } catch (feedbackError) {
+          const internalError =
+            feedbackError instanceof Error
+              ? feedbackError.message
+              : String(feedbackError);
+
+          this.logger.warn(
+            "AI feedback generation failed for deterministic attempt; attempt saved, feedback can be retried",
+            { attemptId, assignmentId, error: internalError },
+          );
+          aiFeedbackError = AttemptSubmissionService.AI_FEEDBACK_USER_ERROR;
+        }
+      }
+
       if (progressCallback) {
         await progressCallback("Grading completed!", 100);
       }
 
+      if (aiFeedbackError && this.progressService) {
+        try {
+          await this.progressService.markCompleteWithAiFeedbackError(
+            attemptId,
+            aiFeedbackError,
+          );
+        } catch (progressError) {
+          this.logger.error(
+            "AI feedback failed but retry state could not be persisted; completing attempt without retry marker",
+            {
+              attemptId,
+              assignmentId,
+              error:
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError),
+            },
+          );
+          aiFeedbackError = null;
+          await this.progressService.markComplete(attemptId);
+        }
+      } else {
+        if (aiFeedbackError) {
+          this.logger.warn(
+            "AI feedback failed but GradingProgressService is unavailable; completing attempt without retry marker",
+            { attemptId, assignmentId },
+          );
+          aiFeedbackError = null;
+        }
+        await this.progressService?.markComplete(attemptId);
+      }
+
       return {
-        id: result.id,
-        submitted: result.submitted,
+        id: attemptId,
+        submitted: true,
         success: true,
         totalPointsEarned,
         totalPossiblePoints,
-        grade: assignment.showAssignmentScore ? result.grade : undefined,
+        grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
@@ -1053,11 +1291,15 @@ export class AttemptSubmissionService {
             successfulQuestionResponses,
             assignment,
           ),
+        aiFeedbackError,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      await this.progressService?.markFailed(attemptId, errorMessage);
+
       if (progressCallback) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
         await progressCallback(`Error: ${errorMessage}`, 0);
       }
       throw error;
@@ -1837,6 +2079,422 @@ export class AttemptSubmissionService {
       return "en";
     }
     return language.toLowerCase().split("-")[0];
+  }
+
+  private async loadPersistedGradedItemsForDeterministicAttempt(
+    attemptId: number,
+    assignmentId: number,
+  ): Promise<PersistedDeterministicAttempt> {
+    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: {
+        assignmentId: true,
+        submitted: true,
+        preferredLanguage: true,
+        questionVariants: {
+          select: {
+            questionId: true,
+            questionVariant: { select: { variantContent: true } },
+          },
+        },
+      },
+    });
+
+    if (!assignmentAttempt) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${attemptId} not found.`,
+      );
+    }
+
+    if (assignmentAttempt.assignmentId !== assignmentId) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} does not belong to assignment ${assignmentId}.`,
+      );
+    }
+
+    if (!assignmentAttempt.submitted) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} has not been submitted.`,
+      );
+    }
+
+    const responses = await this.prisma.questionResponse.findMany({
+      where: { assignmentAttemptId: attemptId },
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        questionId: true,
+        learnerResponse: true,
+        points: true,
+        feedback: true,
+        metadata: true,
+      },
+    });
+
+    if (responses.length === 0) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} has no persisted question responses to regenerate feedback from.`,
+      );
+    }
+
+    const questionIds = [...new Set(responses.map((r) => r.questionId))];
+    const questions = await this.prisma.question.findMany({
+      where: { id: { in: questionIds } },
+      select: {
+        id: true,
+        question: true,
+        type: true,
+        totalPoints: true,
+        choices: true,
+        answer: true,
+      },
+    });
+
+    const questionById = new Map(questions.map((q) => [q.id, q]));
+
+    if (!this.areAllResponsesDeterministic(responses, questionById)) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} contains non-deterministic questions and cannot rerun deterministic AI feedback.`,
+      );
+    }
+
+    const variantTextByQuestionId = new Map(
+      assignmentAttempt.questionVariants
+        .filter((qv) => qv.questionVariant?.variantContent)
+        .map((qv) => [qv.questionId, qv.questionVariant.variantContent]),
+    );
+
+    return {
+      language: assignmentAttempt.preferredLanguage ?? "en",
+      gradedItems: responses.map((response) => {
+        const question = questionById.get(response.questionId);
+        return {
+          questionId: response.questionId,
+          learnerResponse: this.parseStoredLearnerResponse(
+            response.learnerResponse,
+          ),
+          responseDto: {
+            id: response.id,
+            questionId: response.questionId,
+            question:
+              variantTextByQuestionId.get(response.questionId) ??
+              question?.question ??
+              `Question ${response.questionId}`,
+            totalPoints: response.points,
+            points: response.points,
+            feedback: this.toFeedbackArray(response.feedback),
+            metadata: this.toMetadataRecord(response.metadata),
+          },
+        };
+      }),
+    };
+  }
+
+  /**
+   * Optional post-scoring step that generates AI-enriched feedback for
+   * deterministic questions. Scoring has already been committed; this method
+   * only rewrites the feedback JSON for the saved QuestionResponse rows.
+   */
+  private async generateAiFeedbackForDeterministicAttempt(
+    gradedItems: GradedItem[],
+    assignmentId: number,
+    attemptId: number,
+    language = "en",
+  ): Promise<void> {
+    if (!this.promptProcessor) {
+      throw new InternalServerErrorException(
+        "AI feedback generation is not configured.",
+      );
+    }
+
+    if (gradedItems.length === 0) {
+      throw new BadRequestException(
+        `Attempt ${attemptId} has no graded items for AI feedback generation.`,
+      );
+    }
+
+    const questionIds = [...new Set(gradedItems.map((g) => g.questionId))];
+    const questions = await this.prisma.question.findMany({
+      where: { id: { in: questionIds } },
+      select: {
+        id: true,
+        question: true,
+        type: true,
+        totalPoints: true,
+        choices: true,
+        answer: true,
+      },
+    });
+    const questionById = new Map(questions.map((q) => [q.id, q]));
+
+    const promptItems = gradedItems.map((item) =>
+      this.toDeterministicFeedbackPromptItem(
+        item,
+        questionById.get(item.questionId),
+      ),
+    );
+
+    const prompt = new PromptTemplate({
+      template: `You generate learner-facing feedback for deterministic quiz questions after scoring is complete.
+
+Rules:
+- Do not change points, grades, or correctness.
+- Write concise, constructive feedback in the learner's language: {language}.
+- Use the existing deterministic feedback and scoring facts as the source of truth.
+- Do not introduce the correct answer unless it is already present in the existing feedback.
+- Return only valid JSON with this exact shape:
+{{"feedback":[{{"questionId":123,"feedback":"1-3 concise sentences for the learner"}}]}}
+
+Questions:
+{questions}`,
+      inputVariables: [],
+      partialVariables: {
+        language: () => language || "en",
+        questions: () => JSON.stringify(promptItems),
+      },
+    });
+
+    const rawResponse = await this.promptProcessor.processPromptForFeature(
+      prompt,
+      assignmentId,
+      AIUsageType.ASSIGNMENT_GRADING,
+      "deterministic_ai_feedback",
+      AttemptSubmissionService.DETERMINISTIC_FEEDBACK_MODEL,
+      {
+        temperature: 0.2,
+        top_p: 1,
+        // 180 tokens/question: ~50 tokens prompt + ~130 tokens feedback per item.
+        // Floor 800 for small assignments; ceiling 4000 to cap cost (gpt-4o-mini
+        // supports 16k output but a structured JSON feedback array never needs more).
+        maxTokens: Math.min(4000, Math.max(800, promptItems.length * 180)),
+      },
+    );
+
+    const feedbackByQuestionId =
+      this.parseDeterministicAiFeedbackResponse(rawResponse);
+
+    // Validate all items before touching the DB.
+    const updates: Array<{
+      id: number;
+      metadataPayload: DeterministicAiFeedbackMetadata;
+      item: GradedItem;
+    }> = [];
+    for (const item of gradedItems) {
+      if (typeof item.responseDto.id !== "number") {
+        throw new InternalServerErrorException(
+          `Question response for question ${item.questionId} has not been persisted.`,
+        );
+      }
+
+      const feedback = feedbackByQuestionId.get(item.questionId);
+      if (!feedback) {
+        throw new InternalServerErrorException(
+          `AI feedback response did not include question ${item.questionId}.`,
+        );
+      }
+
+      updates.push({
+        id: item.responseDto.id,
+        metadataPayload: Object.assign({}, item.responseDto.metadata, {
+          aiFeedback: feedback,
+          deterministicFeedback: item.responseDto.feedback ?? [],
+          deterministicAiFeedbackGeneratedAt: new Date().toISOString(),
+        }),
+        item,
+      });
+    }
+
+    // Batch all updates in a single transaction instead of N sequential writes.
+    await this.prisma.$transaction(
+      updates.map(({ id, metadataPayload }) =>
+        this.prisma.questionResponse.update({
+          where: { id },
+          data: { metadata: metadataPayload },
+        }),
+      ),
+    );
+
+    // Update in-memory items so callers see the AI feedback without a DB reload,
+    // while leaving deterministic feedback in the original feedback field.
+    for (const { metadataPayload, item } of updates) {
+      item.responseDto.metadata = metadataPayload;
+    }
+  }
+
+  private toDeterministicFeedbackPromptItem(
+    item: GradedItem,
+    question?: DeterministicFeedbackQuestion,
+  ) {
+    const metadata = item.responseDto.metadata ?? {};
+    const maxPoints =
+      typeof metadata.maxPossiblePoints === "number"
+        ? metadata.maxPossiblePoints
+        : (question?.totalPoints ?? item.responseDto.totalPoints ?? 0);
+
+    return {
+      questionId: item.questionId,
+      questionType: question?.type ?? "UNKNOWN",
+      question: this.truncateForPrompt(
+        item.responseDto.question || question?.question || "",
+        1600,
+      ),
+      learnerResponse: this.truncateForPrompt(
+        this.stringifyForPrompt(item.learnerResponse),
+        1000,
+      ),
+      pointsEarned: item.responseDto.totalPoints ?? 0,
+      maxPoints,
+      isCorrect:
+        typeof metadata.isCorrect === "boolean" ? metadata.isCorrect : null,
+      existingFeedback: this.truncateForPrompt(
+        this.feedbackToText(item.responseDto.feedback),
+        1200,
+      ),
+    };
+  }
+
+  private areAllGradedItemsDeterministic(
+    gradedItems: GradedItem[],
+    questions: Array<Pick<Question, "id" | "type">>,
+  ): boolean {
+    if (gradedItems.length === 0) {
+      return false;
+    }
+
+    const questionById = new Map(questions.map((q) => [q.id, q]));
+    return gradedItems.every((item) => {
+      const questionType = questionById.get(item.questionId)?.type;
+      return this.isDeterministicFeedbackQuestionType(questionType);
+    });
+  }
+
+  private areAllResponsesDeterministic(
+    responses: Array<Pick<GradedItem, "questionId">>,
+    questionById: Map<number, Pick<Question, "type">>,
+  ): boolean {
+    return responses.every((response) =>
+      this.isDeterministicFeedbackQuestionType(
+        questionById.get(response.questionId)?.type,
+      ),
+    );
+  }
+
+  private isDeterministicFeedbackQuestionType(
+    questionType?: QuestionType,
+  ): boolean {
+    return (
+      questionType !== undefined &&
+      AttemptSubmissionService.DETERMINISTIC_FEEDBACK_QUESTION_TYPES.has(
+        questionType,
+      )
+    );
+  }
+
+  private parseDeterministicAiFeedbackResponse(
+    rawResponse: string,
+  ): Map<number, string> {
+    let parsed: DeterministicAiFeedbackPayload;
+    try {
+      parsed = JSON.parse(
+        this.extractJsonObject(rawResponse),
+      ) as DeterministicAiFeedbackPayload;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Failed to parse AI feedback response: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    if (!Array.isArray(parsed.feedback)) {
+      throw new InternalServerErrorException(
+        "AI feedback response did not contain a feedback array.",
+      );
+    }
+
+    const feedbackByQuestionId = new Map<number, string>();
+    for (const item of parsed.feedback) {
+      if (
+        typeof item.questionId !== "number" ||
+        typeof item.feedback !== "string" ||
+        item.feedback.trim().length === 0
+      ) {
+        throw new InternalServerErrorException(
+          "AI feedback response contained an invalid feedback item.",
+        );
+      }
+      feedbackByQuestionId.set(item.questionId, item.feedback.trim());
+    }
+
+    return feedbackByQuestionId;
+  }
+
+  private extractJsonObject(rawResponse: string): string {
+    const trimmed = rawResponse.trim();
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("No JSON object found in response.");
+    }
+    return trimmed.slice(start, end + 1);
+  }
+
+  private parseStoredLearnerResponse(value: string): unknown {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+
+  private toFeedbackArray(value: JsonValue): any[] {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (value === null || value === undefined) {
+      return [];
+    }
+    return [value];
+  }
+
+  private toMetadataRecord(value: JsonValue): Record<string, any> | undefined {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, any>;
+    }
+    return undefined;
+  }
+
+  private feedbackToText(feedback: unknown): string {
+    if (!Array.isArray(feedback)) {
+      return "";
+    }
+    return feedback
+      .map((entry) => {
+        if (entry && typeof entry === "object" && "feedback" in entry) {
+          return String((entry as { feedback?: unknown }).feedback ?? "");
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  private stringifyForPrompt(value: unknown): string {
+    if (typeof value === "string") {
+      return value;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  private truncateForPrompt(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+      return value;
+    }
+    return `${value.slice(0, maxLength)}...`;
   }
 
   /**

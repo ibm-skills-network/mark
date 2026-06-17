@@ -20,6 +20,7 @@ import {
   FILE_CONTENT_EXTRACTION_SERVICE,
   GRADING_AUDIT_SERVICE,
   GRADING_CONSISTENCY_SERVICE,
+  GRADING_PROGRESS_SERVICE,
 } from "./attempt.constants";
 import { AttemptControllerV2 } from "./attempt.controller";
 import { ChoiceGradingStrategy } from "./common/strategies/choice-grading.strategy";
@@ -78,8 +79,12 @@ import { TranslationService } from "./services/translation/translation.service";
     ChoiceGradingStrategy,
     TrueFalseGradingStrategy,
     {
-      provide: "GradingProgressService",
+      provide: GRADING_PROGRESS_SERVICE,
       useClass: GradingProgressService,
+    },
+    {
+      provide: "GradingProgressService",
+      useExisting: GRADING_PROGRESS_SERVICE,
     },
     GradingRateLimiterService,
     {
@@ -121,10 +126,13 @@ import { TranslationService } from "./services/translation/translation.service";
     AttemptRegradingService,
     AttemptReportingService,
     QuestionResponseService,
+    GRADING_PROGRESS_SERVICE,
     // Exported so apps/jobs JobWorkerService can call markFailed when a
     // grading BullMQ job permanent-fails — keeps GradingProgress.status
     // in sync with the worker's terminal state instead of leaving rows
-    // stuck at PROCESSING when the UI's SSE stream goes silent.
+    // stuck at PROCESSING when the UI's SSE stream goes silent. Keep the
+    // legacy string token as an alias while new code injects
+    // GRADING_PROGRESS_SERVICE.
     "GradingProgressService",
   ],
 })

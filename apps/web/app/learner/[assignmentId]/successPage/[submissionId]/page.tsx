@@ -14,6 +14,7 @@ import {
   getAttempts,
   getUser,
   submitFeedback,
+  rerunAiFeedback,
 } from "@/lib/talkToBackend";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -113,12 +114,56 @@ function SuccessPage() {
   >([]);
 
   const [userPreferredLanguage, setUserPreferredLanguage] = useState("en");
+  const [aiFeedbackError, setAiFeedbackError] = useState<string | null>(null);
+  const [isRerunningAiFeedback, setIsRerunningAiFeedback] = useState(false);
 
   const logState = (step: string, detail?: string) => {
     setStateTimeline((prev) => [
       ...prev,
       { step, detail, timestamp: new Date().toISOString() },
     ]);
+  };
+
+  const applyAttemptToState = (data: AssignmentAttemptWithQuestions) => {
+    const questions = data.questions ?? [];
+    setQuestions(questions);
+    setBackendComments(data.comments || "");
+    setShowSubmissionFeedback(data.showSubmissionFeedback || false);
+    setCorrectAnswerVisibility(data.correctAnswerVisibility ?? "ALWAYS");
+    setShowQuestions(data.showQuestions);
+    setUserPreferredLanguage(data.preferredLanguage ?? "en");
+    setAiFeedbackError(data.aiFeedbackError ?? null);
+
+    if (data.showAssignmentScore === false) {
+      setGrade(Number.NaN);
+      setTotalPoints(0);
+      setTotalPointsEarned(0);
+    } else {
+      const rawGrade = data.grade;
+      const possiblePoints =
+        typeof data.totalPossiblePoints === "number"
+          ? data.totalPossiblePoints
+          : questions.reduce(
+              (acc, question) => acc + (question.totalPoints ?? 0),
+              0,
+            );
+      const earnedPoints =
+        typeof data.totalPointsEarned === "number"
+          ? data.totalPointsEarned
+          : typeof rawGrade === "number"
+            ? possiblePoints * rawGrade
+            : 0;
+
+      setGrade(typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN);
+      setTotalPoints(possiblePoints);
+      setTotalPointsEarned(earnedPoints);
+    }
+
+    setAssignmentDetails({
+      passingGrade: data.passingGrade,
+      id: data.id,
+      name: data.name,
+    });
   };
 
   useEffect(() => {
@@ -166,50 +211,7 @@ function SuccessPage() {
             return;
           }
           logState("Attempt fetched", `Attempt ${submissionDetails.id}`);
-          setQuestions(submissionDetails.questions);
-          setBackendComments(submissionDetails.comments || "");
-          setShowSubmissionFeedback(
-            submissionDetails.showSubmissionFeedback || false,
-          );
-          setCorrectAnswerVisibility(
-            submissionDetails.correctAnswerVisibility ?? "ALWAYS",
-          );
-          setShowQuestions(submissionDetails.showQuestions);
-          setUserPreferredLanguage(submissionDetails.preferredLanguage);
-
-          if (submissionDetails.showAssignmentScore === false) {
-            setGrade(Number.NaN);
-            setTotalPoints(0);
-            setTotalPointsEarned(0);
-          } else {
-            const rawGrade = submissionDetails.grade;
-            // Prefer the server-computed totals: when showQuestions=false the
-            // questions array is stripped, and reducing it yields 0 / 0.
-            const possible =
-              typeof submissionDetails.totalPossiblePoints === "number"
-                ? submissionDetails.totalPossiblePoints
-                : submissionDetails.questions.reduce(
-                    (acc, question) => acc + (question.totalPoints ?? 0),
-                    0,
-                  );
-            const earned =
-              typeof submissionDetails.totalPointsEarned === "number"
-                ? submissionDetails.totalPointsEarned
-                : typeof rawGrade === "number"
-                  ? possible * rawGrade
-                  : 0;
-
-            setGrade(
-              typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
-            );
-            setTotalPoints(possible);
-            setTotalPointsEarned(earned);
-          }
-          setAssignmentDetails({
-            passingGrade: submissionDetails.passingGrade,
-            id: submissionDetails.id,
-            name: submissionDetails.name,
-          });
+          applyAttemptToState(submissionDetails);
           const response = await getFeedback(assignmentId, attemptId);
           if (response) {
             logState("Feedback loaded");
@@ -488,6 +490,29 @@ function SuccessPage() {
     return "Keep Pushing Forward!";
   };
 
+  const refreshAttemptData = async () => {
+    const data: AssignmentAttemptWithQuestions = await getCompletedAttempt(
+      assignmentId,
+      attemptId,
+    );
+    if (!data) return;
+    applyAttemptToState(data);
+  };
+
+  const handleRerunAiFeedback = async () => {
+    setIsRerunningAiFeedback(true);
+    try {
+      await rerunAiFeedback(assignmentId, attemptId);
+      await refreshAttemptData();
+      toast.success("AI feedback regenerated successfully.");
+    } catch (err) {
+      console.error("AI feedback rerun failed", err);
+      toast.error("AI feedback rerun failed. Please try again.");
+    } finally {
+      setIsRerunningAiFeedback(false);
+    }
+  };
+
   const handleSubmitFeedback = async () => {
     if (assignmentId === null || attemptId === null) {
       return;
@@ -712,6 +737,27 @@ function SuccessPage() {
               attemptId={attemptId}
               assignmentId={assignmentId}
             />
+          </motion.div>
+        )}
+
+        {role === "learner" && aiFeedbackError && showSubmissionFeedback && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
+          >
+            <p className="text-sm text-amber-800">
+              Your answers were marked successfully. AI feedback generation
+              failed — your score is not affected. You can regenerate the
+              feedback below.
+            </p>
+            <button
+              onClick={handleRerunAiFeedback}
+              disabled={isRerunningAiFeedback}
+              className="shrink-0 px-4 py-2 text-sm font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-md transition"
+            >
+              {isRerunningAiFeedback ? "Rerunning…" : "Rerun AI Feedback"}
+            </button>
           </motion.div>
         )}
 
