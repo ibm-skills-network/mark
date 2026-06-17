@@ -1,7 +1,11 @@
 /* eslint-disable  */
 import * as http from "node:http";
 import * as https from "node:https";
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import axios from "axios";
@@ -106,19 +110,30 @@ describe("ApiService - Comprehensive Stress Tests", () => {
         ).toThrow(UnauthorizedException);
       });
 
-      it("should handle missing MARK_API_ENDPOINT gracefully", () => {
+      it("throws when MARK_API_ENDPOINT is not configured", () => {
         delete process.env.MARK_API_ENDPOINT;
         const mockRequest = {
           originalUrl: "/api/v1/test",
           user: { userId: "test-user" },
         } as UserSessionRequest;
 
-        const result = service.getForwardingDetails(
-          DownstreamService.MARK_API,
-          mockRequest,
-        );
+        // A missing downstream endpoint is a server misconfiguration; the
+        // forward must fail closed rather than emit a hostless relative URL.
+        expect(() =>
+          service.getForwardingDetails(DownstreamService.MARK_API, mockRequest),
+        ).toThrow(InternalServerErrorException);
+      });
 
-        expect(result.endpoint).toBe("/api/v1/test");
+      it("rejects a request target that escapes the configured origin", () => {
+        process.env.MARK_API_ENDPOINT = "http://mark-api:3000";
+        const mockRequest = {
+          originalUrl: "@evil.example.com/",
+          user: { userId: "test-user" },
+        } as UserSessionRequest;
+
+        expect(() =>
+          service.getForwardingDetails(DownstreamService.MARK_API, mockRequest),
+        ).toThrow(BadRequestException);
       });
     });
 
