@@ -3,13 +3,16 @@ import { ChatOpenAI } from "@langchain/openai";
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import type { ZodTypeAny } from "zod";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import {
   IMultimodalLlmProvider,
   LlmRequestOptions,
   LlmResponse,
+  LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { invokeStructuredChatModel } from "./structured-output.util";
 
 @Injectable()
 export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
@@ -89,6 +92,21 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
         output: outputTokens,
       },
     };
+  }
+
+  async invokeStructured<T>(
+    messages: HumanMessage[],
+    schema: ZodTypeAny,
+    options?: LlmRequestOptions,
+  ): Promise<LlmStructuredResponse<T>> {
+    return invokeStructuredChatModel<T>(
+      this.createChatModel(options),
+      messages,
+      schema,
+      this.tokenCounter,
+      this.logger,
+      options?.modelName ?? this.key,
+    );
   }
 
   /**
