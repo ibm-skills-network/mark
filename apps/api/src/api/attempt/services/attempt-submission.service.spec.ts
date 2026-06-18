@@ -1186,4 +1186,44 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(question.scoring?.rubrics).toBe(rubrics);
     });
   });
+
+  describe("updateLearnerAttempt - already-submitted short-circuit", () => {
+    it("throws ConflictException before grading when the attempt is already submitted", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 555,
+        submitted: true,
+        expiresAt: new Date(Date.now() + 60_000),
+        questionVariants: [],
+      });
+      mockValidationService.isAttemptExpired.mockReturnValue(false);
+
+      const updateDto = {
+        responsesForQuestions: [],
+        language: "en",
+      } as never;
+      const request = {
+        userSession: { userId: "learner@example.com", role: "Learner" },
+      } as never;
+
+      await expect(
+        (
+          service as unknown as {
+            updateLearnerAttempt: (
+              attemptId: number,
+              assignmentId: number,
+              updateDto: unknown,
+              authCookie: string,
+              gradingCallbackRequired: boolean,
+              request: unknown,
+            ) => Promise<unknown>;
+          }
+        ).updateLearnerAttempt(555, 2580, updateDto, "cookie", false, request),
+      ).rejects.toMatchObject({ name: "ConflictException" });
+
+      // Short-circuited before the expensive grading pipeline ran.
+      expect(
+        mockTranslationService.preTranslateQuestions,
+      ).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -49,8 +49,12 @@ function buildService() {
   const service = Object.create(TextGradingService.prototype);
   service.logger = mockLogger;
 
+  // Native structured output returns the validated grading object directly,
+  // so the mock resolves to the object the schema would produce.
   service.promptProcessor = {
-    processPromptForFeature: jest.fn().mockResolvedValue("LLM_RAW_RESPONSE"),
+    processStructuredPromptForFeature: jest
+      .fn()
+      .mockResolvedValue(validGrading),
   };
 
   // Char/4 heuristic approximates the tokenizer for budget math.
@@ -84,11 +88,73 @@ function baseModel(overrides: Record<string, unknown> = {}) {
 }
 
 async function renderCapturedPrompt(
-  processPromptForFeature: jest.Mock,
+  processStructuredPromptForFeature: jest.Mock,
 ): Promise<string> {
-  const capturedPrompt = processPromptForFeature.mock.calls[0][0];
+  const capturedPrompt = processStructuredPromptForFeature.mock.calls[0][0];
   return capturedPrompt.format({});
 }
+
+describe("TextGradingService.generateGrading structured output", () => {
+  it("returns the validated grading object from native structured output", async () => {
+    const validGrading = {
+      totalScore: 4,
+      maxScore: 4,
+      criteria: [
+        {
+          criterionId: "c1",
+          pointsAwarded: 4,
+          maxPoints: 4,
+          evidence: "some evidence",
+          feedback: "met",
+        },
+      ],
+      overallFeedback: "ok",
+    };
+
+    const mockLogger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+      child: jest.fn().mockReturnThis(),
+    };
+    const service: any = Object.create(TextGradingService.prototype);
+    service.logger = mockLogger;
+
+    const processStructuredPromptForFeature = jest
+      .fn()
+      .mockResolvedValue(validGrading);
+    service.promptProcessor = { processStructuredPromptForFeature };
+    service.contentSummarization = {
+      getSafeContextLimit: jest.fn(() => 102_400),
+      countTokens: jest.fn((t: string) => Math.ceil((t ?? "").length / 4)),
+      summarizeTextToBudget: jest.fn(),
+    };
+    service.getOrCreateParser = jest.fn(() => ({
+      getFormatInstructions: () => "FORMAT_INSTRUCTIONS",
+      parse: jest.fn(),
+    }));
+
+    // A code answer containing raw JSON with unescaped quotes — the exact shape
+    // that broke the old free-form-JSON parse. With structured output the model
+    // returns a validated object, so this can no longer fail to parse.
+    const model = baseModel({
+      learnerResponse: 'curl http://x/title/Foo\n[{"author":"Unknown"}]',
+      responseType: "CODE",
+    });
+
+    const result = await service.generateGrading(model, 4, "hash", 1);
+
+    expect(result).toEqual(validGrading);
+    expect(processStructuredPromptForFeature).toHaveBeenCalledTimes(1);
+    const call = processStructuredPromptForFeature.mock.calls[0];
+    expect(call[3]).toBe("text_grading"); // featureKey
+    expect(call[4]).toBeDefined(); // schema
+    expect(call[6]).toEqual(
+      expect.objectContaining({ temperature: 0, top_p: 0, maxRetries: 1 }),
+    ); // invoke options
+  });
+});
 
 describe("TextGradingService.generateGrading token budget gate", () => {
   it("renders the full learner response, skips summarization, and pins maxRetries when under budget", async () => {
@@ -101,7 +167,7 @@ describe("TextGradingService.generateGrading token budget gate", () => {
     await (service as any).generateGrading(model, 4, "hash", 1);
 
     const rendered = await renderCapturedPrompt(
-      service.promptProcessor.processPromptForFeature,
+      service.promptProcessor.processStructuredPromptForFeature,
     );
 
     // Full response is present verbatim.
@@ -113,9 +179,11 @@ describe("TextGradingService.generateGrading token budget gate", () => {
     // No disclosure note for the model.
     expect(rendered).not.toContain("summarized extract");
 
-    // maxRetries pinned on the invoke options (6th arg).
-    const call = service.promptProcessor.processPromptForFeature.mock.calls[0];
-    expect(call[5]).toEqual(
+    // maxRetries pinned on the invoke options (7th arg: prompt, assignmentId,
+    // usageType, featureKey, schema, fallbackModel, options).
+    const call =
+      service.promptProcessor.processStructuredPromptForFeature.mock.calls[0];
+    expect(call[6]).toEqual(
       expect.objectContaining({ temperature: 0, top_p: 0, maxRetries: 1 }),
     );
   });
@@ -146,7 +214,7 @@ describe("TextGradingService.generateGrading token budget gate", () => {
     expect(args.text).toBe(hugeResponse);
 
     const rendered = await renderCapturedPrompt(
-      service.promptProcessor.processPromptForFeature,
+      service.promptProcessor.processStructuredPromptForFeature,
     );
 
     // The summary is rendered, the raw text is not.
@@ -173,7 +241,7 @@ describe("TextGradingService.generateGrading token budget gate", () => {
     await (service as any).generateGrading(model, 4, "hash", 1);
 
     const rendered = await renderCapturedPrompt(
-      service.promptProcessor.processPromptForFeature,
+      service.promptProcessor.processStructuredPromptForFeature,
     );
 
     // Previous-Q&A context was dropped to an empty array in the prompt.
@@ -200,7 +268,7 @@ describe("TextGradingService.generateGrading token budget gate", () => {
  *
  * NOTE on call counts: the loop is `while (!gradingAttempt && attemptCount <
  * this.maxRetries)` with `this.maxRetries = 1`, so generateGrading (and the
- * single processPromptForFeature inside it) is invoked exactly ONCE per grade
+ * single processStructured inside it) is invoked exactly ONCE per grade
  * even on a generic error. The context-length fail-fast therefore does not
  * reduce the invoke count here; what it adds is the structured error log and an
  * immediate break (so no backoff and no re-entry if maxRetries were raised).
@@ -208,13 +276,15 @@ describe("TextGradingService.generateGrading token budget gate", () => {
  * the context-length event log fires.
  */
 describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", () => {
-  function buildGradeService(processPromptForFeature: jest.Mock) {
+  function buildGradeService(processStructured: jest.Mock) {
     const { service, mockLogger } = buildService();
     // Object.create skips class field initializers, so restore the retry
     // configuration the loop reads.
     service.maxRetries = 1;
     service.retryDelay = 1000;
-    service.promptProcessor = { processPromptForFeature };
+    service.promptProcessor = {
+      processStructuredPromptForFeature: processStructured,
+    };
     service.moderationService = {
       validateContent: jest.fn().mockResolvedValue(true),
     };
@@ -244,15 +314,15 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
       "This model's maximum context length is 128000 tokens. " +
         "However, your messages resulted in 159000 tokens.",
     );
-    const processPromptForFeature = jest.fn().mockRejectedValue(contextError);
-    const { service, mockLogger } = buildGradeService(processPromptForFeature);
+    const processStructured = jest.fn().mockRejectedValue(contextError);
+    const { service, mockLogger } = buildGradeService(processStructured);
 
     await expect(
       (service as any).gradeTextBasedQuestion(gradeModel("a short answer"), 42),
     ).rejects.toThrow();
 
     // The loop did not re-enter: exactly one underlying LLM call.
-    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+    expect(processStructured).toHaveBeenCalledTimes(1);
 
     // The fail-fast structured error log fired with the event name.
     expect(mockLogger.error).toHaveBeenCalledWith(
@@ -262,17 +332,17 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
   });
 
   it("uses the normal retry budget for a generic error (no context-length log)", async () => {
-    const processPromptForFeature = jest
+    const processStructured = jest
       .fn()
       .mockRejectedValue(new Error("Rate limit reached for gpt-4o-mini"));
-    const { service, mockLogger } = buildGradeService(processPromptForFeature);
+    const { service, mockLogger } = buildGradeService(processStructured);
 
     await expect(
       (service as any).gradeTextBasedQuestion(gradeModel("a short answer"), 42),
     ).rejects.toThrow();
 
     // maxRetries = 1 -> the loop runs exactly once even on a generic error.
-    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+    expect(processStructured).toHaveBeenCalledTimes(1);
 
     // No context-length event log for a non-context-length error.
     expect(mockLogger.error).not.toHaveBeenCalledWith(
@@ -291,8 +361,8 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
       "This model's maximum context length is 128000 tokens. " +
         "However, your messages resulted in 159000 tokens.",
     );
-    const processPromptForFeature = jest.fn().mockRejectedValue(contextError);
-    const { service } = buildGradeService(processPromptForFeature);
+    const processStructured = jest.fn().mockRejectedValue(contextError);
+    const { service } = buildGradeService(processStructured);
     service.maxRetries = 3;
     service.retryDelay = 0;
 
@@ -302,14 +372,14 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
 
     // Context-length errors are deterministic: the break stops re-entry, so the
     // raised ceiling never produces a second call.
-    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+    expect(processStructured).toHaveBeenCalledTimes(1);
   });
 
   it("exhausts the raised retry budget for a generic error (control)", async () => {
-    const processPromptForFeature = jest
+    const processStructured = jest
       .fn()
       .mockRejectedValue(new Error("Rate limit reached for gpt-4o-mini"));
-    const { service } = buildGradeService(processPromptForFeature);
+    const { service } = buildGradeService(processStructured);
     service.maxRetries = 3;
     service.retryDelay = 0;
 
@@ -318,6 +388,6 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
     ).rejects.toThrow();
 
     // A generic error keeps retrying, so the loop uses the full raised budget.
-    expect(processPromptForFeature).toHaveBeenCalledTimes(3);
+    expect(processStructured).toHaveBeenCalledTimes(3);
   });
 });

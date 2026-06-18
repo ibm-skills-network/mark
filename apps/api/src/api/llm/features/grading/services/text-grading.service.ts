@@ -687,18 +687,20 @@ export class TextGradingService implements ITextGradingService {
       },
     });
 
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "text_grading",
-      "gpt-4o-mini",
-      { temperature: 0, top_p: 0, maxRetries: 1 },
-    );
-
-    const parsedResponse = GradingAttemptSchema.parse(
-      (await parser.parse(response)) as unknown,
-    );
+    // Native structured output: the provider returns an object already
+    // validated against GradingAttemptSchema. This replaces the old "ask for
+    // JSON text, then JSON.parse it" path, which failed whenever gpt-4o-mini
+    // embedded code/quotes into a string field without escaping them.
+    const parsedResponse =
+      await this.promptProcessor.processStructuredPromptForFeature<GradingAttempt>(
+        prompt,
+        assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "text_grading",
+        GradingAttemptSchema,
+        "gpt-4o-mini",
+        { temperature: 0, top_p: 0, maxRetries: 1 },
+      );
 
     this.logger.info(
       `LLM grading result - Points: ${parsedResponse.totalScore}/${maxPossiblePoints}, ` +

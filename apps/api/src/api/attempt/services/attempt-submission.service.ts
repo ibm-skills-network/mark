@@ -2,6 +2,7 @@
 /* eslint-disable unicorn/no-null */
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -881,6 +882,22 @@ export class AttemptSubmissionService {
       if (!assignmentAttempt) {
         throw new NotFoundException(
           `AssignmentAttempt with Id ${attemptId} not found.`,
+        );
+      }
+
+      // Short-circuit a duplicate submit before the expensive grading pipeline.
+      // commitAttemptWithResponses re-checks this atomically, but that check
+      // only fires AFTER grading — so a duplicate job would otherwise re-run the
+      // full LLM grade (tens of seconds, real cost) just to be rejected at
+      // commit. Bailing here turns the common "submitted twice" case into a
+      // sub-second conflict; the worker treats this ConflictException as a
+      // successful idempotent no-op.
+      if (assignmentAttempt.submitted) {
+        this.logger.warn(
+          `updateLearnerAttempt: attempt ${attemptId} already submitted; skipping re-grade`,
+        );
+        throw new ConflictException(
+          `Attempt ${attemptId} has already been submitted.`,
         );
       }
 

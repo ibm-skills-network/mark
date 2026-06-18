@@ -1469,6 +1469,55 @@ describe("JobWorkerService", () => {
         }),
       );
     });
+
+    it("treats an already-submitted ConflictException as a successful no-op", async () => {
+      // A duplicate grade job whose attempt was already submitted by the
+      // winning job. The work is done; this must NOT throw (so BullMQ records
+      // success and does not retry, and the Instana span is success, not error)
+      // and must NOT be logged as an error.
+      const conflict = new Error("Attempt 861298 has already been submitted.");
+      conflict.name = "ConflictException";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(conflict);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeUndefined();
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "attempt.grade.already.submitted",
+        expect.objectContaining({ attemptId: 861298, assignmentId: 2537 }),
+      );
+      expect(mockStructuredLogger.error).not.toHaveBeenCalledWith(
+        "attempt.grade.learner.terminal",
+        expect.anything(),
+      );
+    });
+
+    it("treats a concurrently-submitted ConflictException as a successful no-op", async () => {
+      const conflict = new Error(
+        "Attempt 861298 was concurrently submitted. Grading results were discarded to prevent duplicate submission.",
+      );
+      conflict.name = "ConflictException";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(conflict);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeUndefined();
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "attempt.grade.already.submitted",
+        expect.objectContaining({ attemptId: 861298, assignmentId: 2537 }),
+      );
+    });
   });
 
   describe("ATTEMPT worker terminal-failure notification", () => {

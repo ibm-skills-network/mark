@@ -1,5 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { AIUsageType } from "@prisma/client";
+import type { ZodTypeAny } from "zod";
 import { LlmRequestOptions } from "./llm-provider.interface";
 
 export interface IPromptProcessor {
@@ -14,6 +15,22 @@ export interface IPromptProcessor {
     fallbackModel?: string,
     options?: LlmRequestOptions,
   ): Promise<string>;
+
+  /**
+   * Process a prompt for a feature and return a value validated against
+   * `schema`. Uses the assigned provider's native structured output when
+   * available (guaranteeing schema-valid JSON), and falls back to parsing the
+   * model's text for providers that do not support it.
+   */
+  processStructuredPromptForFeature<T>(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    featureKey: string,
+    schema: ZodTypeAny,
+    fallbackModel?: string,
+    options?: LlmRequestOptions,
+  ): Promise<T>;
 
   /**
    * Process a text prompt and return the LLM response
