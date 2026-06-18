@@ -3348,6 +3348,9 @@ export class FileContentExtractionService {
         },
       };
     } catch (error) {
+      if (error instanceof OversizedSubmissionError) {
+        throw error;
+      }
       const errorMessage =
         typeof error === "object" && error !== null && "message" in error
           ? (error as { message: string }).message

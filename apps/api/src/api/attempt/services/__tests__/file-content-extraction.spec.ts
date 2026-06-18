@@ -579,6 +579,44 @@ describe("FileContentExtractionService.extractExcelText - used-range clamping", 
   });
 });
 
+// ─── extractExcelText – OversizedSubmissionError propagation ─────────────────
+
+describe("FileContentExtractionService.extractExcelText - OversizedSubmissionError propagation", () => {
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  it("re-throws OversizedSubmissionError without wrapping it in a generic Error", async () => {
+    // Build a workbook with a single sheet that is OVER the row budget.
+    // compactWorksheet calls assertSpreadsheetWithinBudget which throws
+    // OversizedSubmissionError when rows.length > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION (50_000).
+    const XLSX = await import("xlsx");
+    const sheet: XLSX.WorkSheet = {};
+    for (let r = 0; r < 60_001; r++) {
+      const key = `A${r + 1}`;
+      sheet[key] = { t: "n", v: r, w: String(r) };
+    }
+    sheet["!ref"] = `A1:A60001`;
+    const wb: XLSX.WorkBook = {
+      SheetNames: ["BigSheet"],
+      Sheets: { BigSheet: sheet },
+    };
+
+    jest
+      .spyOn(service as any, "readExcelWorkbook")
+      .mockReturnValue(wb);
+    jest
+      .spyOn(service as any, "extractExcelChartsAndImages")
+      .mockResolvedValue({ section: "", chartCount: 0, imageCount: 0 });
+
+    await expect(
+      (service as any).extractExcelText(Buffer.from([]), true),
+    ).rejects.toThrow(OversizedSubmissionError);
+  });
+});
+
 describe("FileContentExtractionService.shouldUseStructuredExtraction", () => {
   let service: FileContentExtractionService;
   const original = process.env.ENABLE_PDF_STRUCTURED_EXTRACTION;
