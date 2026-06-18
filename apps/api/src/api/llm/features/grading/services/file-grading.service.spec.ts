@@ -1,4 +1,6 @@
+import * as XLSX from "xlsx";
 import { HighlightLevel } from "../../../model/highlighting.model";
+import { compactWorksheet } from "./spreadsheet-used-range.utils";
 
 describe("FileGradingService.highlighting normalization", () => {
   it("serializes Map-based highlighting into JSON-friendly records", () => {
@@ -74,5 +76,27 @@ describe("FileGradingService.highlighting normalization", () => {
     const json = JSON.stringify(highlighting);
     expect(json).toContain("Hello");
     expect(json).toContain("sample.pdf");
+  });
+});
+
+describe("buildSpreadsheetMetrics compaction regression", () => {
+  it("compaction keeps sheet_to_json bounded for a bottom-outlier sheet", () => {
+    const sheet: XLSX.WorkSheet = {
+      A1: { t: "s", v: "name", w: "name" },
+      B1: { t: "s", v: "qty", w: "qty" },
+      A2: { t: "s", v: "widget", w: "widget" },
+      B2: { t: "n", v: 5, w: "5" },
+      B1048576: { t: "n", v: 5, w: "5" },
+      "!ref": "A1:XFD1048576",
+    };
+    compactWorksheet(sheet);
+    const started = Date.now();
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      blankrows: true,
+      defval: "",
+    });
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(rows.length).toBe(3); // header + data + total, no 1M-row gap
   });
 });
