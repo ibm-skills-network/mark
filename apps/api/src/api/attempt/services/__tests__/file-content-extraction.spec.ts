@@ -537,6 +537,46 @@ describe("FileContentExtractionService.extractExcelText - used-range clamping", 
     );
     expect(payload.totalUsedCells).toBeGreaterThan(0);
   });
+
+  it("extracts a full-grid table sheet from its real data, not the declared grid", async () => {
+    const XLSX = await import("xlsx");
+    const sheet: XLSX.WorkSheet = {
+      A1: { t: "s", v: "name", w: "name" },
+      B1: { t: "s", v: "qty", w: "qty" },
+      ZZ1: { t: "s", v: "autoheader", w: "autoheader" },
+      A2: { t: "s", v: "widget", w: "widget" },
+      B2: { t: "n", v: 5, w: "5" },
+      B1048576: { t: "n", v: 5, w: "5", f: "SUM(B2:B1048575)" },
+      "!ref": "A1:XFD1048576",
+    };
+    const workbook: XLSX.WorkBook = {
+      SheetNames: ["Sheet1"],
+      Sheets: { Sheet1: sheet },
+    };
+    // service is the SUT instance from the existing describe-block setup
+    jest
+      .spyOn(
+        service as unknown as { readExcelWorkbook: () => XLSX.WorkBook },
+        "readExcelWorkbook",
+      )
+      .mockReturnValue(workbook);
+
+    jest
+      .spyOn(service as any, "extractExcelChartsAndImages")
+      .mockResolvedValue({ section: "", chartCount: 0, imageCount: 0 });
+
+    const started = Date.now();
+    const result = await (
+      service as unknown as {
+        extractExcelText: (b: Buffer, x?: boolean) => Promise<{ text: string }>;
+      }
+    ).extractExcelText(Buffer.from("x"), true);
+
+    expect(Date.now() - started).toBeLessThan(2000); // no 1M-row walk
+    expect(result.text).toContain("Range: A1:B3"); // 3 rows × 2 cols
+    expect(result.text).toContain("widget");
+    expect(result.text).not.toContain("autoheader"); // pruned empty column
+  });
 });
 
 describe("FileContentExtractionService.shouldUseStructuredExtraction", () => {
