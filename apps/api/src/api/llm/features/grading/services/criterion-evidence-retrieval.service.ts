@@ -113,12 +113,10 @@ export class CriterionEvidenceRetrievalService {
 
     if (reranked.length === 0) {
       const allChunks = index.getAllChunks();
-      const scored = allChunks.map((chunk) => ({
-        chunk,
-        score: 0,
-        relevance: this.computeRelevanceScore(request.criterion, chunk.text),
-        combined: this.computeRelevanceScore(request.criterion, chunk.text),
-      }));
+      const scored = allChunks.map((chunk) => {
+        const relevance = this.computeRelevanceScore(request.criterion, chunk.text);
+        return { chunk, score: 0, relevance, combined: relevance };
+      });
 
       const aboveThreshold = scored
         .filter((item) => item.relevance >= this.config.minRelevance)
@@ -356,15 +354,20 @@ export class CriterionEvidenceRetrievalService {
     for (const candidate of candidates) {
       try {
         const parsed = await parser.parse(candidate);
-        const rawItemCount = (parsed.evidence || []).length;
         const evidence = this.mapParsedSelections(
           parsed,
           chunks,
           request.maxEvidence ?? this.config.maxEvidence,
         );
-        // If the LLM returned items but all were filtered as restatement/boilerplate,
-        // signal a definitive rejection so the caller does not rescue with keywords.
-        const definitivelyRejected = rawItemCount > 0 && evidence.length === 0;
+        // Only suppress the keyword fallback when the LLM explicitly labelled items
+        // as restatement_only/boilerplate_only — not for "irrelevant" (criterion
+        // mismatch) or hallucinated chunkIds (both should fall back to keyword scoring).
+        const hasBoilerplateRejections = (parsed.evidence || []).some(
+          (item) =>
+            item.relevance === "restatement_only" ||
+            item.relevance === "boilerplate_only",
+        );
+        const definitivelyRejected = hasBoilerplateRejections && evidence.length === 0;
         return { evidence, definitivelyRejected };
       } catch {
         this.logger.warn("Evidence validation parse failed");

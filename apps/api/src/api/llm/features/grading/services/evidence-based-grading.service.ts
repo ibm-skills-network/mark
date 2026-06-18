@@ -34,6 +34,7 @@ import {
 } from "../types/criterion-evidence.types";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
+import { SubmissionQualityService } from "./submission-quality.service";
 import { HighlightingGeneratorService } from "./highlighting-generator.service";
 import { ImageDescriptionService } from "./image-description.service";
 import {
@@ -102,6 +103,7 @@ export class EvidenceBasedGradingService {
     private readonly highlightingGenerator: HighlightingGeneratorService,
     private readonly chunkingService: EvidenceChunkingService,
     private readonly evidencePipeline: CriterionEvidencePipelineService,
+    private readonly qualityService: SubmissionQualityService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({
@@ -197,49 +199,83 @@ export class EvidenceBasedGradingService {
         }`,
       );
 
-      for (const criterion of criteria) {
-        try {
-          this.logger.debug(
-            `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
-          );
+      // Run the quality gate on the fallback path so boilerplate/empty submissions
+      // can't bypass it via a pipeline failure.
+      const fallbackChunks = this.chunkingService.extractFromSubmission(submission);
+      const rubricTexts = criteria.map(
+        (c) =>
+          `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`,
+      );
+      const { quality: fallbackQuality } = this.qualityService.classifyChunks(
+        fallbackChunks,
+        { question: questionText, rubricTexts },
+      );
 
-          const result = await this.gradeOneCriterion(
-            submission,
-            criterion,
-            questionText,
-            assignmentId,
-            language,
-            judgeFeedback,
-          );
-
-          criteriaResults.push(result);
-          totalPoints += result.pointsAwarded;
-          maxPossiblePoints += result.maxPoints;
-        } catch (criterionError) {
-          this.logger.error(
-            `Failed to grade criterion ${criterion.id}: ${
-              criterionError instanceof Error
-                ? criterionError.message
-                : String(criterionError)
-            }`,
-          );
-
+      if (fallbackQuality.eligibleChunkCount === 0) {
+        this.logger.warn(
+          `Quality gate fired on fallback path: classification=${fallbackQuality.classification}`,
+        );
+        for (const criterion of criteria) {
+          const allowedPoints = criterion.criteria.map((l) => l.points);
+          const minPoints = allowedPoints.length > 0 ? Math.min(...allowedPoints) : 0;
           criteriaResults.push({
             criterionId: criterion.id,
             rubricQuestion: criterion.rubricQuestion,
-            pointsAwarded: 0,
+            pointsAwarded: minPoints,
             maxPoints: criterion.maxPoints,
             evidence: [],
-            rationale: `Grading failed: ${
-              criterionError instanceof Error
-                ? criterionError.message
-                : "Unknown error"
-            }`,
+            rationale: "No substantive learner evidence found in the submission.",
             decision: "does_not_meet",
             gradedAt: new Date().toISOString(),
-          });
-
+          } as any);
+          totalPoints += minPoints;
           maxPossiblePoints += criterion.maxPoints;
+        }
+      } else {
+        for (const criterion of criteria) {
+          try {
+            this.logger.debug(
+              `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
+            );
+
+            const result = await this.gradeOneCriterion(
+              submission,
+              criterion,
+              questionText,
+              assignmentId,
+              language,
+              judgeFeedback,
+            );
+
+            criteriaResults.push(result);
+            totalPoints += result.pointsAwarded;
+            maxPossiblePoints += result.maxPoints;
+          } catch (criterionError) {
+            this.logger.error(
+              `Failed to grade criterion ${criterion.id}: ${
+                criterionError instanceof Error
+                  ? criterionError.message
+                  : String(criterionError)
+              }`,
+            );
+
+            criteriaResults.push({
+              criterionId: criterion.id,
+              rubricQuestion: criterion.rubricQuestion,
+              pointsAwarded: 0,
+              maxPoints: criterion.maxPoints,
+              evidence: [],
+              rationale: `Grading failed: ${
+                criterionError instanceof Error
+                  ? criterionError.message
+                  : "Unknown error"
+              }`,
+              decision: "does_not_meet",
+              gradedAt: new Date().toISOString(),
+            });
+
+            maxPossiblePoints += criterion.maxPoints;
+          }
         }
       }
     }

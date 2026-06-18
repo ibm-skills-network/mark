@@ -490,8 +490,12 @@ export class SubmissionQualityService {
     for (const chunk of chunks) {
       const page = this.getChunkPage(chunk);
       if (page === null || !tokensByPage.has(page)) continue;
-      // Reuse already-computed count from classifyChunk to avoid a second tokenization pass.
-      const tokens = chunk.quality?.substantiveTokenCount ?? this.getSubstantiveTokens(chunk.text).size;
+      // Ineligible chunks (including heading-only re-marked ones) contribute 0 tokens
+      // so their preserved substantiveTokenCount doesn't inflate the density average.
+      const tokens =
+        chunk.quality?.eligibility === "ineligible"
+          ? 0
+          : (chunk.quality?.substantiveTokenCount ?? this.getSubstantiveTokens(chunk.text).size);
       tokensByPage.set(page, (tokensByPage.get(page) ?? 0) + tokens);
     }
 
