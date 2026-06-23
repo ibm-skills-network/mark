@@ -5,15 +5,17 @@ import {
   Injectable,
   Logger,
 } from "@nestjs/common";
-import fetch from "node-fetch";
 import { PrismaService } from "src/database/prisma.service";
 
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
-// GitHub's token endpoint occasionally drops the connection mid-response
-// ("Premature close"), which is a transient transport failure rather than a
-// real rejection. Bound the call with a timeout and retry the transport a few
-// times before giving up.
+// Uses the platform's native fetch (Node's global fetch / undici) rather than
+// node-fetch v2: inside the service mesh, node-fetch v2 fails every request to
+// github.com with "Premature close", while native fetch is reliable.
+//
+// The endpoint can still drop a connection mid-response, which is a transient
+// transport failure rather than a real rejection — so bound each call with a
+// timeout and retry the transport a few times before giving up.
 const GITHUB_TOKEN_TIMEOUT_MS = 10_000;
 const GITHUB_TOKEN_MAX_ATTEMPTS = 3;
 const GITHUB_TOKEN_RETRY_DELAY_MS = 250;

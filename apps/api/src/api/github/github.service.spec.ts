@@ -1,15 +1,12 @@
 import "reflect-metadata";
 import { HttpException, HttpStatus, Logger } from "@nestjs/common";
 
-jest.mock("node-fetch", () => ({
-  __esModule: true,
-  default: jest.fn(),
-}));
-
-import fetch from "node-fetch";
 import { GithubService } from "./github.service";
 
-const mockedFetch = fetch as unknown as jest.Mock;
+// The service uses the platform's native global fetch on purpose: node-fetch v2
+// fails against github.com from inside the service mesh ("Premature close"),
+// while native fetch works. Mock the global so we drive the transport here.
+let mockedFetch: jest.SpyInstance;
 
 const prisma = {
   userCredential: {
@@ -21,35 +18,38 @@ const prisma = {
 
 const make = () => new GithubService(prisma as never);
 
-// A node-fetch-shaped response whose body parses cleanly.
-const jsonResponse = (status: number, body: unknown) => ({
-  ok: status >= 200 && status < 300,
-  status,
-  json: jest.fn().mockResolvedValue(body),
-});
+// A fetch Response whose body parses cleanly (partial mock — only what the
+// service touches).
+const jsonResponse = (status: number, body: unknown) =>
+  ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: jest.fn().mockResolvedValue(body),
+  }) as unknown as Response;
 
 // Reproduces the production symptom: the connection drops while the body is
-// being read, so response.json() rejects with a node-fetch "Premature close".
-const prematureCloseResponse = () => ({
-  ok: true,
-  status: 200,
-  json: jest.fn().mockRejectedValue(
-    Object.assign(
-      new Error(
-        "Invalid response body while trying to fetch " +
-          "https://github.com/login/oauth/access_token: Premature close",
+// being read, so response.json() rejects with a "Premature close".
+const prematureCloseResponse = () =>
+  ({
+    ok: true,
+    status: 200,
+    json: jest.fn().mockRejectedValue(
+      Object.assign(
+        new Error(
+          "Invalid response body while trying to fetch " +
+            "https://github.com/login/oauth/access_token: Premature close",
+        ),
+        { name: "FetchError", type: "system" },
       ),
-      { name: "FetchError", type: "system" },
     ),
-  ),
-});
+  }) as unknown as Response;
 
 describe("GithubService.exchangeCodeForToken", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // mockReset (not just clear) drains any queued mockResolvedValueOnce so a
-    // prior test's leftover responses can't leak into the next one.
-    mockedFetch.mockReset();
+    // Fresh spy on the global fetch each test; restoreAllMocks (afterEach) puts
+    // the real one back so nothing leaks between tests.
+    mockedFetch = jest.spyOn(globalThis, "fetch");
     process.env.GITHUB_CLIENT_ID = "client-id";
     process.env.GITHUB_CLIENT_SECRET = "client-secret"; // pragma: allowlist secret
     prisma.userCredential.findUnique.mockResolvedValue(null);
