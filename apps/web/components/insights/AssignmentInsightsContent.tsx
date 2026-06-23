@@ -346,6 +346,9 @@ export function AssignmentInsightsContent({
           : prev,
       );
     } catch {
+      // Leave confirm mode so the row falls back to the default action arm,
+      // which is the only place the "Failed. Try again." message renders.
+      setConfirmingPassId(null);
       setPassError(attemptId);
     } finally {
       setPassingId(null);

@@ -5,6 +5,7 @@ import { AttemptAdminService } from "./attempt-admin.service";
 const prisma = {
   assignmentAttempt: {
     findUnique: jest.fn(),
+    findMany: jest.fn(),
     update: jest.fn(),
   },
   gradingProgress: {
@@ -35,6 +36,7 @@ describe("AttemptAdminService.forcePass", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.assignmentAttempt.findUnique.mockResolvedValue(attempt);
+    prisma.assignmentAttempt.findMany.mockResolvedValue([]);
     prisma.assignmentAttempt.update.mockResolvedValue({});
     prisma.gradingProgress.upsert.mockResolvedValue({});
     prisma.ltiGradeSync.findFirst.mockResolvedValue(null);
@@ -54,8 +56,10 @@ describe("AttemptAdminService.forcePass", () => {
 
     expect(prisma.assignmentAttempt.update).toHaveBeenCalledWith({
       where: { id: 7 },
-      data: { grade: 1, submitted: true },
+      data: { grade: 1, submitted: true, expiresAt: expect.any(Date) },
     });
+    // The grade and grading-progress writes must go through one transaction.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ success: true, grade: 1, submitted: true });
   });
 
@@ -85,7 +89,7 @@ describe("AttemptAdminService.forcePass", () => {
 
     expect(prisma.assignmentAttempt.update).toHaveBeenCalledWith({
       where: { id: 7 },
-      data: { grade: 0.8, submitted: true },
+      data: { grade: 0.8, submitted: true, expiresAt: expect.any(Date) },
     });
   });
 
@@ -100,7 +104,7 @@ describe("AttemptAdminService.forcePass", () => {
   it("re-syncs the grade reusing the latest auth cookie", async () => {
     prisma.ltiGradeSync.findFirst.mockResolvedValue({ authCookie: "cookie-1" });
     ltiGradeSyncService.createAndSync.mockResolvedValue({
-      status: LtiSyncStatus.COMPLETED,
+      status: LtiSyncStatus.SUCCESS,
       message: "ok",
     });
 
@@ -115,8 +119,28 @@ describe("AttemptAdminService.forcePass", () => {
     });
     expect(result.lti).toMatchObject({
       attempted: true,
-      status: LtiSyncStatus.COMPLETED,
+      status: LtiSyncStatus.SUCCESS,
     });
+  });
+
+  it("pushes the highest grade across the learner's attempts, not the raw one", async () => {
+    // A previous attempt already scored higher than this force-pass grade; the
+    // LMS gradebook must not regress to the lower value.
+    prisma.assignmentAttempt.findMany.mockResolvedValue([
+      { grade: 0.9 },
+      { grade: 0.6 },
+    ]);
+    prisma.ltiGradeSync.findFirst.mockResolvedValue({ authCookie: "cookie-1" });
+    ltiGradeSyncService.createAndSync.mockResolvedValue({
+      status: LtiSyncStatus.SUCCESS,
+      message: "ok",
+    });
+
+    await make().forcePass(7, 60, "admin@x");
+
+    expect(ltiGradeSyncService.createAndSync).toHaveBeenCalledWith(
+      expect.objectContaining({ grade: 0.9 }),
+    );
   });
 
   it("still passes the attempt when the LMS sync throws", async () => {

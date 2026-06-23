@@ -72,7 +72,12 @@ export class AttemptAdminService {
     await this.prisma.$transaction([
       this.prisma.assignmentAttempt.update({
         where: { id: attemptId },
-        data: { grade, submitted: true },
+        // expiresAt closes the attempt window, matching every other
+        // finalization path (commit/auto-grade-on-expiry). Without it a
+        // force-passed in-progress timed attempt keeps a future expiresAt,
+        // which the retake-cooldown check keys off and would over-block the
+        // learner from starting a new attempt.
+        data: { grade, submitted: true, expiresAt: new Date() },
       }),
       this.prisma.gradingProgress.upsert({
         where: { attemptId },
@@ -134,12 +139,33 @@ export class AttemptAdminService {
       };
     }
 
+    // The LMS gradebook holds the learner's HIGHEST grade across all their
+    // attempts for this assignment (see attempt-submission.service's normal
+    // sync path). Pushing this attempt's grade raw could regress a
+    // previously-synced better attempt, so push the max instead. The
+    // force-pass grade is already persisted on the attempt before this runs,
+    // so the query includes it; request.grade is folded in explicitly to stay
+    // correct under read-replica lag.
+    const userAttempts = await this.prisma.assignmentAttempt.findMany({
+      where: { userId, assignmentId: request.assignmentId },
+      select: { grade: true },
+    });
+    let highestOverall = 0;
+    for (const userAttempt of userAttempts) {
+      if (userAttempt.grade && userAttempt.grade > highestOverall) {
+        highestOverall = userAttempt.grade;
+      }
+    }
+    if (request.grade > highestOverall) {
+      highestOverall = request.grade;
+    }
+
     try {
       const result = await this.ltiGradeSyncService.createAndSync({
         attemptId: request.attemptId,
         userId,
         assignmentId: request.assignmentId,
-        grade: request.grade,
+        grade: highestOverall,
         authCookie: lastSync.authCookie,
       });
       return {
