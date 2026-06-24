@@ -258,6 +258,10 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         {
           useVisionForPDFs: false,
           useStructuredExtraction: true,
+          // Grading is the only call site that joins the content-provenance
+          // shadow measurement; chat and author uploads pass nothing and stay
+          // out of it.
+          provenanceShadow: true,
         },
       );
 

@@ -1,36 +1,16 @@
-import React, { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useState, useMemo } from "react";
+import { motion, AnimatePresence, useTransform } from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
+import type {
+  GradingProgressDetails,
+  QuestionGradingState,
+  QuestionGradingStatus,
+} from "@/lib/learner";
 import { toast } from "sonner";
-import { getApiRoutes } from "@/config/constants";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
+import { useCreepingProgress } from "./useCreepingProgress";
 
-interface GradingProgressModalProps {
-  isOpen: boolean;
-  assignmentId: number;
-  attemptId: number | null;
-  gradingJobId: string | null;
-}
-
-type QuestionGradingStatus = "pending" | "in_progress" | "completed" | "failed";
-
-interface QuestionGradingState {
-  id: number;
-  displayOrder: number;
-  status: QuestionGradingStatus;
-  slowType?: string;
-}
-
-interface GradingProgressDetails {
-  questions: QuestionGradingState[];
-  total: number;
-  completed: number;
-  inFlight: number;
-  failed: number;
-  hasSlowInFlight: boolean;
-}
-
-interface ProgressState {
+export interface ProgressState {
   status: "processing" | "completed" | "failed" | "idle";
   progress: number;
   currentStage: string;
@@ -102,141 +82,21 @@ function mergeGradingState(
   };
 }
 
+interface GradingProgressModalProps {
+  isOpen: boolean;
+  assignmentId: number;
+  attemptId: number | null;
+  progressData: ProgressState;
+}
+
 export default function GradingProgressModal({
   isOpen,
   assignmentId,
   attemptId,
-  gradingJobId,
+  progressData,
 }: GradingProgressModalProps) {
-  const [progressData, setProgressData] = useState<ProgressState>({
-    status: "idle",
-    progress: 0,
-    currentStage: "Preparing to grade your assignment...",
-  });
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [emailNotified, setEmailNotified] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  useEffect(() => {
-    if (!isOpen || !attemptId || !gradingJobId) return;
-
-    const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
-
-    const eventSource = new EventSource(sseUrl, {
-      withCredentials: true,
-    });
-
-    eventSourceRef.current = eventSource;
-
-    const updateProgress = (data: any) => {
-      const terminalStatus = data?.finalStatus ?? data?.status;
-
-      if (data?.heartbeat) {
-        return;
-      }
-
-      if (data?.message && data?.connectionId) {
-        setProgressData((prev) => ({
-          ...prev,
-          status: "processing",
-          progress: prev.progress ?? 0,
-          currentStage: data.message,
-        }));
-        return;
-      }
-
-      const rawPercentage = data?.percentage;
-      const parsedPercentage =
-        typeof rawPercentage === "number"
-          ? rawPercentage
-          : Number(rawPercentage);
-      const percentage = Number.isFinite(parsedPercentage)
-        ? Math.max(0, Math.min(100, Math.round(parsedPercentage)))
-        : 0;
-
-      const message =
-        data?.progress ||
-        data?.message ||
-        data?.currentStage ||
-        "Processing...";
-
-      const status: ProgressState["status"] =
-        terminalStatus === "Completed"
-          ? "completed"
-          : terminalStatus === "Failed"
-            ? "failed"
-            : "processing";
-
-      let gradingState: GradingProgressDetails | undefined;
-      if (status === "processing" && typeof data?.result === "string") {
-        try {
-          const parsed = JSON.parse(data.result);
-          if (
-            parsed?.gradingState &&
-            Array.isArray(parsed.gradingState.questions)
-          ) {
-            gradingState = parsed.gradingState as GradingProgressDetails;
-          }
-        } catch {
-          // Ignore — older publishes used to put non-JSON in result.
-        }
-      }
-
-      setProgressData((prev) => ({
-        status,
-        progress: status === "completed" ? 100 : percentage,
-        currentStage: status === "completed" ? "Grading complete!" : message,
-        currentQuestion: data?.currentQuestion,
-        totalQuestions: data?.totalQuestions,
-        gradingState: mergeGradingState(prev.gradingState, gradingState),
-      }));
-
-      if (terminalStatus === "Completed" || terminalStatus === "Failed") {
-        eventSource.close();
-      }
-    };
-
-    const handleSseMessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        updateProgress(data);
-      } catch (error) {
-        // Failed to parse SSE message - ignore invalid data
-      }
-    };
-
-    eventSource.onopen = () => {
-      setProgressData({
-        status: "processing",
-        progress: 0,
-        currentStage: "Connected to grading service...",
-      });
-    };
-
-    eventSource.addEventListener("update", handleSseMessage as any);
-    eventSource.addEventListener("finalize", handleSseMessage as any);
-    eventSource.addEventListener("heartbeat", handleSseMessage as any);
-    eventSource.addEventListener("error", (event: any) => {
-      if (event?.data) {
-        handleSseMessage(event as MessageEvent);
-        return;
-      }
-
-      setProgressData((prev) => ({
-        ...prev,
-        status: "failed",
-        currentStage: "Connection to grading service lost",
-      }));
-      eventSource.close();
-    });
-
-    eventSource.onmessage = handleSseMessage;
-
-    return () => {
-      eventSource.close();
-      eventSourceRef.current = null;
-    };
-  }, [isOpen, assignmentId, attemptId, gradingJobId]);
 
   const handleSubscribeToEmail = async () => {
     if (!attemptId) return;
@@ -258,7 +118,52 @@ export default function GradingProgressModal({
     }
   };
 
-  const { status, progress, currentStage: message } = progressData;
+  const { progress, currentStage: message } = progressData;
+
+  // Decouple render status from real status so the wheel can animate to 100%
+  // before the success/failure icon appears. "failed" surfaces immediately;
+  // "completed" waits for the spring to settle first.
+  const [displayStatus, setDisplayStatus] = useState<ProgressState["status"]>(
+    "processing",
+  );
+  useEffect(() => {
+    if (progressData.status === "completed") {
+      setDisplayStatus("processing");
+      const timer = setTimeout(() => setDisplayStatus("completed"), 700);
+      return () => clearTimeout(timer);
+    }
+    setDisplayStatus(progressData.status);
+  }, [progressData.status]);
+  const status = displayStatus;
+
+  const confettiParticles = useMemo(
+    () =>
+      Array.from({ length: 20 }, () => ({
+        x: (Math.random() - 0.5) * 300,
+        y: (Math.random() - 0.5) * 300,
+      })),
+    [],
+  );
+
+  // Raw status (not the delayed displayStatus) so the creep eases to 100 the
+  // moment grading completes, finishing before the 700ms icon swap. `isOpen`
+  // gates the RAF loop so it does no work while the always-mounted modal is
+  // closed.
+  const displayProgress = useCreepingProgress(
+    progress,
+    progressData.gradingState,
+    progressData.status,
+    isOpen,
+  );
+  const strokeDasharrayMotion = useTransform(
+    displayProgress,
+    (v) => `${v * 2.64} 264`,
+  );
+  const displayProgressPercent = useTransform(
+    displayProgress,
+    (v) => `${Math.round(v)}%`,
+  );
+  const barWidth = useTransform(displayProgress, (v) => `${Math.round(v)}%`);
   const getStatusColor = () => {
     switch (status) {
       case "completed":
@@ -445,14 +350,9 @@ export default function GradingProgressModal({
                             fill="none"
                             stroke="url(#progressGradient)"
                             strokeWidth="6"
-                            strokeDasharray={`${progress * 2.64} 264`}
                             strokeLinecap="round"
                             transform="rotate(-90 50 50)"
-                            initial={{ strokeDasharray: "0 264" }}
-                            animate={{
-                              strokeDasharray: `${progress * 2.64} 264`,
-                            }}
-                            transition={{ duration: 0.5, ease: "easeOut" }}
+                            style={{ strokeDasharray: strokeDasharrayMotion }}
                           />
                         </svg>
                       </motion.div>
@@ -460,18 +360,8 @@ export default function GradingProgressModal({
                       {/* Center content with glassmorphism */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-white/80 backdrop-blur-md rounded-full w-24 h-24 shadow-xl flex flex-col items-center justify-center border border-white/50">
-                          <motion.span
-                            key={progress}
-                            initial={{ scale: 1.3, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{
-                              type: "spring",
-                              damping: 20,
-                              stiffness: 300,
-                            }}
-                            className="text-3xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent"
-                          >
-                            {progress}%
+                          <motion.span className="text-3xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                            {displayProgressPercent}
                           </motion.span>
                           {progressData.currentQuestion &&
                             progressData.totalQuestions && (
@@ -535,7 +425,7 @@ export default function GradingProgressModal({
                       {/* Confetti effect for success */}
                       {status === "completed" && (
                         <>
-                          {[...Array(20)].map((_, i) => (
+                          {confettiParticles.map((p, i) => (
                             <motion.div
                               key={i}
                               className="absolute w-2 h-2 rounded-full"
@@ -553,8 +443,8 @@ export default function GradingProgressModal({
                               initial={{ scale: 0, x: 0, y: 0 }}
                               animate={{
                                 scale: [0, 1, 0.5],
-                                x: (Math.random() - 0.5) * 300,
-                                y: (Math.random() - 0.5) * 300,
+                                x: p.x,
+                                y: p.y,
                                 opacity: [1, 1, 0],
                               }}
                               transition={{
@@ -622,11 +512,9 @@ export default function GradingProgressModal({
                     >
                       <div className="relative bg-gray-100 rounded-full h-3 overflow-hidden shadow-inner">
                         <motion.div
-                          initial={{ width: "0%" }}
-                          animate={{ width: `${progress}%` }}
-                          transition={{ duration: 0.5, ease: "easeOut" }}
                           className="h-full rounded-full bg-gradient-to-r from-purple-500 via-blue-500 to-purple-500 relative shadow-lg"
                           style={{
+                            width: barWidth,
                             backgroundSize: "200% 100%",
                           }}
                         >

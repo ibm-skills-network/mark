@@ -1277,10 +1277,20 @@ export interface AssignmentAnalyticsData {
   };
 }
 
+export interface AssignmentAnalyticsAggregates {
+  totalAssignments: number;
+  totalCost: number;
+  totalLearnerAssignmentPairs: number;
+  averageRating: number;
+}
+
 export interface AssignmentAnalyticsResponse {
   data: AssignmentAnalyticsData[];
   pagination: AdminPaginationInfo;
+  aggregates: AssignmentAnalyticsAggregates;
 }
+
+export type AssignmentAnalyticsSortField = "name" | "updatedAt" | "published";
 
 export interface ReportData {
   id: number;
@@ -1425,12 +1435,26 @@ export async function getAssignmentAnalytics(
   page: number = 1,
   limit: number = 10,
   search?: string,
+  options?: {
+    sortBy?: AssignmentAnalyticsSortField;
+    sortOrder?: "asc" | "desc";
+    published?: boolean;
+  },
 ): Promise<AssignmentAnalyticsResponse> {
   const params = new URLSearchParams();
   params.append("page", page.toString());
   params.append("limit", limit.toString());
   if (search) {
     params.append("search", search);
+  }
+  if (options?.sortBy) {
+    params.append("sortBy", options.sortBy);
+  }
+  if (options?.sortOrder) {
+    params.append("sortOrder", options.sortOrder);
+  }
+  if (options?.published !== undefined) {
+    params.append("published", String(options.published));
   }
 
   const url = `${getBaseApiPath("v1")}/admin-dashboard/analytics?${params.toString()}`;
@@ -1943,8 +1967,12 @@ export async function translateQuestion(
 export async function getDetailedAssignmentInsights(
   sessionToken: string,
   assignmentId: number,
+  details?: boolean,
 ) {
-  const url = `${getBaseApiPath("v1")}/admin-dashboard/assignments/${assignmentId}/insights`;
+  const params = new URLSearchParams();
+  if (details) params.append("details", "true");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/assignments/${assignmentId}/insights${query}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -2198,4 +2226,43 @@ export async function removeFailedJob(
       "x-admin-token": sessionToken,
     },
   });
+}
+
+export interface ForcePassResult {
+  success: true;
+  attemptId: number;
+  grade: number;
+  submitted: boolean;
+  lti: {
+    attempted: boolean;
+    status: string | null;
+    message: string;
+  };
+}
+
+/**
+ * Admin action: manually pass a single attempt (set its grade + mark it
+ * submitted, force grading progress to COMPLETED, best-effort re-sync to the
+ * LMS). `gradePercent` is on the 0-100 scale; omit it to pass at 100%.
+ */
+export async function forcePassAttempt(
+  sessionToken: string,
+  attemptId: number,
+  gradePercent?: number,
+): Promise<ForcePassResult> {
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/attempts/${encodeURIComponent(
+    String(attemptId),
+  )}/force-pass`;
+  return apiClient.post(
+    url,
+    gradePercent === undefined ? {} : { gradePercent },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": sessionToken,
+      },
+    },
+  );
 }

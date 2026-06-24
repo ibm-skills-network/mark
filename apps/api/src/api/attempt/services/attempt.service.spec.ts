@@ -1,6 +1,8 @@
 import { AttemptServiceV2 } from "./attempt.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
+import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { GradingProgressService } from "./grading-progress.service";
 import {
@@ -304,6 +306,129 @@ describe("AttemptServiceV2", () => {
 
       // Should not crash when progressService is absent
       expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
+    });
+
+    it("reports the learner-facing message and rethrows when the submission is oversized", async () => {
+      const oversized = new OversizedSubmissionError({
+        blockCount: 60_000,
+        cap: 50_000,
+        filename: "huge.xlsx",
+      });
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(
+        oversized,
+      );
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-oversized",
+          42,
+          5,
+          {} as any,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(oversized);
+
+      expect(updateStatusSpy).toHaveBeenCalledWith("job-oversized", {
+        status: "Failed",
+        progress: oversized.learnerMessage,
+        percentage: 0,
+      });
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        42,
+        oversized.learnerMessage,
+      );
+    });
+
+    it("reports the learner-facing message and rethrows for an unsupported image format", async () => {
+      const unsupported = new UnsupportedImageFormatError({
+        filename: "photo.heic",
+        detectedFormat: "image/heic",
+        reason: "unsupported format detected at submission",
+      });
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(
+        unsupported,
+      );
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-unsupported",
+          42,
+          5,
+          {} as any,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(unsupported);
+
+      expect(updateStatusSpy).toHaveBeenCalledWith("job-unsupported", {
+        status: "Failed",
+        progress: unsupported.learnerMessage,
+        percentage: 0,
+      });
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        42,
+        unsupported.learnerMessage,
+      );
+    });
+
+    it("reports the technical message for a generic grading failure", async () => {
+      const error = new Error("boom");
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(error);
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-generic",
+          42,
+          5,
+          {} as any,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toThrow("boom");
+
+      expect(updateStatusSpy).toHaveBeenCalledWith("job-generic", {
+        status: "Failed",
+        progress: "Grading failed: boom",
+        percentage: 0,
+      });
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        42,
+        "boom",
+      );
     });
   });
 });

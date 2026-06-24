@@ -26,6 +26,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React, { FC, useEffect, useState } from "react";
 import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
+import PromoBanner from "@/components/promo/PromoBanner";
 import {
   getExpiresAtMs,
   getLatestAttempt,
@@ -339,6 +340,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     <>
       <main className="flex-1 py-6 sm:py-12 px-4 sm:px-6 bg-gray-50 overflow-auto">
         <div className="max-w-4xl mx-auto space-y-6">
+          {role === "learner" && <PromoBanner placement="preStart" />}
           <div className="flex flex-col gap-4">
             <div className="flex flex-col">
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 leading-tight">

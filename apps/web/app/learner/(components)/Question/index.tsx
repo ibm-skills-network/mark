@@ -3,6 +3,7 @@
 import animationData from "@/animations/LoadSN.json";
 import Loading from "@/components/Loading";
 import type {
+  Assignment,
   AssignmentAttemptWithQuestions,
   PresentationQuestionResponse,
   QuestionStore,
@@ -236,6 +237,60 @@ const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
   };
 };
 
+const buildAssignmentDetailsFromAttempt = (
+  attempt: AssignmentAttemptWithQuestions,
+): Assignment | undefined => {
+  if (attempt.assignmentDetails?.id && attempt.assignmentDetails.name) {
+    return {
+      ...attempt.assignmentDetails,
+      passingGrade:
+        attempt.assignmentDetails.passingGrade ?? attempt.passingGrade,
+      showSubmissionFeedback:
+        attempt.assignmentDetails.showSubmissionFeedback ??
+        attempt.showSubmissionFeedback,
+      showAssignmentScore:
+        attempt.assignmentDetails.showAssignmentScore ??
+        attempt.showAssignmentScore,
+      showQuestions:
+        attempt.assignmentDetails.showQuestions ?? attempt.showQuestions,
+      showQuestionScore:
+        attempt.assignmentDetails.showQuestionScore ?? attempt.showQuestionScore,
+      correctAnswerVisibility:
+        attempt.assignmentDetails.correctAnswerVisibility ??
+        attempt.correctAnswerVisibility,
+      questionControls:
+        attempt.assignmentDetails.questionControls ?? attempt.questionControls,
+    } as Assignment;
+  }
+
+  if (attempt.name) {
+    return {
+      id: attempt.assignmentId,
+      name: attempt.name,
+      passingGrade: attempt.passingGrade,
+      showSubmissionFeedback: attempt.showSubmissionFeedback,
+      showAssignmentScore: attempt.showAssignmentScore,
+      showQuestions: attempt.showQuestions,
+      showQuestionScore: attempt.showQuestionScore,
+      correctAnswerVisibility: attempt.correctAnswerVisibility,
+      questionControls: attempt.questionControls,
+    } as Assignment;
+  }
+
+  return undefined;
+};
+
+const shouldUpdateAssignmentDetails = (
+  current: Assignment | null,
+  next: Assignment,
+) => {
+  if (!current || current.id !== next.id) {
+    return true;
+  }
+
+  return JSON.stringify(current) !== JSON.stringify(next);
+};
+
 function QuestionPage(props: Props) {
   const { attempt, assignmentId, isNewAttempt } = props;
   const { questions, id, expiresAt } = attempt;
@@ -265,88 +320,78 @@ function QuestionPage(props: Props) {
   }, []);
 
   useEffect(() => {
-    const fetchAssignment = async () => {
-      const assignment = await getAssignment(assignmentId);
-      if (assignment) {
-        if (
-          !assignmentDetails ||
-          assignmentDetails.id !== assignment.id ||
-          JSON.stringify(assignmentDetails) !== JSON.stringify(assignment)
-        ) {
-          setAssignmentDetails({
-            id: assignment.id,
-            name: assignment.name,
-            numAttempts: assignment.numAttempts,
-            passingGrade: assignment.passingGrade,
-            allotedTimeMinutes: assignment.allotedTimeMinutes,
-            questionDisplay: assignment.questionDisplay,
-            introduction: assignment.introduction,
-            instructions: assignment.instructions,
-            gradingCriteriaOverview: assignment.gradingCriteriaOverview,
-            questions: assignment.questions,
-            graded: assignment.graded,
-            published: assignment.published,
-            questionOrder: assignment.questionOrder,
-            updatedAt: assignment.updatedAt,
-            questionControls: assignment.questionControls,
-            requireAllQuestions: assignment.requireAllQuestions,
-            optionalQuestionIds: assignment.optionalQuestionIds ?? [],
-          });
-        }
-      } else {
+    let cancelled = false;
+
+    const hydratePage = async () => {
+      let nextAssignmentDetails = buildAssignmentDetailsFromAttempt(attempt);
+
+      if (!nextAssignmentDetails) {
+        nextAssignmentDetails = await getAssignment(assignmentId);
+      }
+
+      if (!nextAssignmentDetails) {
         router.push(`/learner/${assignmentId}`);
+        return;
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      if (
+        shouldUpdateAssignmentDetails(assignmentDetails, nextAssignmentDetails)
+      ) {
+        setAssignmentDetails(nextAssignmentDetails);
+      }
+
+      const questionsWithStatus = questions.map((question) =>
+        hydrateQuestionResponse({
+          ...question,
+          status: question.status ?? "unedited",
+        }),
+      );
+
+      const expiresAtMs = expiresAt
+        ? typeof expiresAt === "string"
+          ? new Date(expiresAt).getTime()
+          : expiresAt instanceof Date
+            ? expiresAt.getTime()
+            : undefined
+        : undefined;
+      const normalizedExpiresAt =
+        typeof expiresAtMs === "number" && !Number.isNaN(expiresAtMs)
+          ? expiresAtMs
+          : undefined;
+
+      debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
+
+      setQuestions(questionsWithStatus);
+
+      const currentStoreUpdate = {
+        activeAttemptId: id,
+        expiresAt: normalizedExpiresAt,
+      };
+
+      const hasOtherChanges =
+        id !== useLearnerStore.getState().activeAttemptId ||
+        normalizedExpiresAt !== useLearnerStore.getState().expiresAt;
+      if (hasOtherChanges) {
+        setLearnerStore(currentStoreUpdate);
+      }
+      if (questions.length) {
+        setPageState("success");
+      } else {
+        setPageState("no-questions");
       }
     };
 
-    if (
-      !assignmentDetails ||
-      assignmentDetails.id !== assignmentId ||
-      assignmentDetails.questionDisplay === undefined ||
-      assignmentDetails.requireAllQuestions === undefined ||
-      assignmentDetails.optionalQuestionIds === undefined
-    ) {
-      void fetchAssignment();
-    }
-    const questionsWithStatus = questions.map((question) =>
-      hydrateQuestionResponse({
-        ...question,
-        status: question.status ?? "unedited",
-      }),
-    );
+    void hydratePage();
 
-    const expiresAtMs = expiresAt
-      ? typeof expiresAt === "string"
-        ? new Date(expiresAt).getTime()
-        : expiresAt instanceof Date
-          ? expiresAt.getTime()
-          : undefined
-      : undefined;
-    const normalizedExpiresAt =
-      typeof expiresAtMs === "number" && !Number.isNaN(expiresAtMs)
-        ? expiresAtMs
-        : undefined;
-
-    debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
-
-    setQuestions(questionsWithStatus);
-
-    const currentStoreUpdate = {
-      activeAttemptId: id,
-      expiresAt: normalizedExpiresAt,
+    return () => {
+      cancelled = true;
     };
-
-    const hasOtherChanges =
-      id !== useLearnerStore.getState().activeAttemptId ||
-      normalizedExpiresAt !== useLearnerStore.getState().expiresAt;
-    if (hasOtherChanges) {
-      setLearnerStore(currentStoreUpdate);
-    }
-    if (questions.length) {
-      setPageState("success");
-    } else {
-      setPageState("no-questions");
-    }
   }, [
+    attempt,
     assignmentId,
     assignmentDetails,
     questions,

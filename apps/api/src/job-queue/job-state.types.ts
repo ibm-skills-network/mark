@@ -9,6 +9,8 @@ export interface JobStateRecord {
   status: string;
   progress: string;
   percentage?: number;
+  currentQuestion?: number;
+  totalQuestions?: number;
   result?: unknown;
   createdAt: string;
   updatedAt: string;
@@ -34,5 +36,7 @@ export interface JobStatusUpdate {
   status: string;
   progress: string;
   percentage?: number;
+  currentQuestion?: number;
+  totalQuestions?: number;
   result?: unknown;
 }

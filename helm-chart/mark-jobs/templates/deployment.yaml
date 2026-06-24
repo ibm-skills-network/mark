@@ -32,3 +32,20 @@ spec:
                 name: {{ include "mark-jobs.fullname" . }}-config
             - secretRef:
                 name: {{ include "mark-jobs.fullname" . }}-secrets
+          # The jobs app is a context-only BullMQ worker with no HTTP server,
+          # so liveness is an exec check on the local heartbeat file the worker
+          # rewrites every ~10s (DEFAULT_JOB_WORKER_LIVENESS_FILE — keep the
+          # path below in sync). The file is written independently of Redis, so
+          # only a wedged event loop or a dead process lets it age past 2 min
+          # (~12 missed ticks). No readinessProbe: a queue worker pulls its own
+          # work and serves no inbound traffic, so there is nothing to gate.
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test -n "$(find /tmp/mark-jobs-worker.heartbeat -mmin -2 2>/dev/null)"
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3

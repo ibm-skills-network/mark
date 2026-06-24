@@ -14,7 +14,13 @@ interface StoredJobState extends JobStateRecord {
 }
 
 const ACTIVE_JOB_TTL_SECONDS = 24 * 60 * 60;
-const TERMINAL_JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
+// Completed/failed job state is a short-lived convenience cache so the client can
+// read the final status and result immediately after a job finishes; the durable
+// grade and result are persisted in the database. Each terminal hash retains the
+// full serialized result blob, so a multi-day TTL made job state the dominant
+// consumer of the shared Redis instance and forced continuous LRU eviction. Two
+// hours covers the post-completion read window while keeping resident memory low.
+const TERMINAL_JOB_TTL_SECONDS = 2 * 60 * 60;
 const NULL_SENTINEL = "__null__";
 
 @Injectable()
@@ -155,6 +161,10 @@ export class JobStateService implements OnModuleDestroy {
         statusUpdate.percentage === undefined
           ? existingJob.percentage
           : this.normalizePercentage(statusUpdate.percentage),
+      currentQuestion:
+        statusUpdate.currentQuestion ?? existingJob.currentQuestion,
+      totalQuestions:
+        statusUpdate.totalQuestions ?? existingJob.totalQuestions,
       result:
         statusUpdate.result === undefined
           ? existingJob.result
@@ -357,6 +367,14 @@ export class JobStateService implements OnModuleDestroy {
       payload.percentage = String(job.percentage);
     }
 
+    if (job.currentQuestion !== undefined) {
+      payload.currentQuestion = String(job.currentQuestion);
+    }
+
+    if (job.totalQuestions !== undefined) {
+      payload.totalQuestions = String(job.totalQuestions);
+    }
+
     if (job.result !== undefined) {
       payload.result = JSON.stringify(job.result);
     }
@@ -412,6 +430,14 @@ export class JobStateService implements OnModuleDestroy {
       progress: rawJob.progress,
       percentage:
         rawJob.percentage === undefined ? undefined : Number(rawJob.percentage),
+      currentQuestion:
+        rawJob.currentQuestion === undefined
+          ? undefined
+          : Number(rawJob.currentQuestion),
+      totalQuestions:
+        rawJob.totalQuestions === undefined
+          ? undefined
+          : Number(rawJob.totalQuestions),
       result:
         rawJob.result === undefined
           ? undefined
@@ -434,6 +460,8 @@ export class JobStateService implements OnModuleDestroy {
       status: job.status,
       progress: job.progress,
       percentage: job.percentage,
+      currentQuestion: job.currentQuestion,
+      totalQuestions: job.totalQuestions,
       result: job.result,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
@@ -454,6 +482,8 @@ export class JobStateService implements OnModuleDestroy {
         status: job.status,
         progress: job.progress,
         percentage: job.percentage ?? 0,
+        currentQuestion: job.currentQuestion,
+        totalQuestions: job.totalQuestions,
         result:
           job.result === undefined ? undefined : JSON.stringify(job.result),
         done: this.isTerminalStatus(job.status),

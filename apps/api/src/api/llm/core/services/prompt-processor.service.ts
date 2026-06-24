@@ -2,12 +2,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { HumanMessage } from "@langchain/core/messages";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import type { ZodTypeAny } from "zod";
 import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { USAGE_TRACKER } from "../../llm.constants";
 import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
@@ -59,6 +61,63 @@ export class PromptProcessorService implements IPromptProcessor {
       );
       throw error;
     }
+  }
+
+  /**
+   * Process a prompt for a feature and return a value validated against
+   * `schema`, preferring the provider's native structured output.
+   */
+  async processStructuredPromptForFeature<T>(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    featureKey: string,
+    schema: ZodTypeAny,
+    fallbackModel = "gpt-4o-mini",
+    options?: LlmRequestOptions,
+  ): Promise<T> {
+    const llm = await this.router.getForFeatureWithFallback(
+      featureKey,
+      fallbackModel,
+    );
+
+    // Preferred path: provider-native structured output (constrained decoding).
+    // The model fills schema fields and the SDK serializes the JSON, so the
+    // output can never be syntactically invalid JSON — eliminating the
+    // unescaped-quote / control-character parse failures that free-form JSON
+    // generation produces on code-heavy submissions.
+    if (typeof llm.invokeStructured === "function") {
+      const input = await this.formatPromptInput(prompt);
+      const { parsed, tokenUsage } = await llm.invokeStructured<T>(
+        [new HumanMessage(input)],
+        schema,
+        options,
+      );
+      await this.trackUsageSafely(
+        assignmentId,
+        usageType,
+        tokenUsage.input,
+        tokenUsage.output,
+        llm.key,
+      );
+      return parsed;
+    }
+
+    // Fallback for providers without native structured output: parse the
+    // model's free-form text. Brittle by nature, but only reached for
+    // providers we have not wired for structured output.
+    this.logger.warn(
+      `Provider ${llm.key} has no native structured output; falling back to text parsing for feature ${featureKey}`,
+    );
+    const raw = await this._processPromptWithProvider(
+      prompt,
+      assignmentId,
+      usageType,
+      llm,
+      options,
+    );
+    const parser = StructuredOutputParser.fromZodSchema(schema);
+    return (await parser.parse(raw)) as T;
   }
 
   /**
@@ -272,6 +331,18 @@ export class PromptProcessorService implements IPromptProcessor {
             );
       throw error_;
     }
+  }
+
+  /**
+   * Resolve a PromptTemplate to its final input string, mirroring the
+   * formatting the string path performs (template format + optional base64
+   * decode). Grading prompts use function partials, so no string-partial
+   * decoding is required here; the structured-output path sends this as a
+   * single HumanMessage.
+   */
+  private async formatPromptInput(prompt: PromptTemplate): Promise<string> {
+    const input = await prompt.format({});
+    return decodeIfBase64(input) || input;
   }
 
   /**

@@ -8,6 +8,7 @@ import {
   AssignmentFileStatus,
 } from "@prisma/client";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
+import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
 import { FilesService } from "src/api/files/services/files.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
@@ -406,6 +407,66 @@ describe("AssignmentFileService", () => {
       expect(result.status).toBe(AssignmentFileStatus.READY);
       expect(result.extractionStatus).toBe(
         AssignmentFileExtractionStatus.FAILED,
+      );
+    });
+
+    it("retries with structured extraction disabled when an oversized author PDF rejects", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({ filename: "reference.pdf", mimeType: "application/pdf" }),
+      );
+      // First call (structured default ON) rejects with the typed error; the
+      // service must retry once with structured extraction disabled, which
+      // degrades to truncated simple extraction (pre-existing behavior).
+      extractor.extractContentFromFiles
+        .mockRejectedValueOnce(
+          new OversizedSubmissionError({
+            blockCount: 60_000,
+            cap: 50_000,
+            filename: "reference.pdf",
+          }),
+        )
+        .mockResolvedValueOnce([
+          {
+            filename: "reference.pdf",
+            content: "truncated reference text",
+            fileType: "application/pdf",
+            metadata: { size: 100 },
+          },
+        ]);
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          filename: "reference.pdf",
+          mimeType: "application/pdf",
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.READY,
+          extractedText: "truncated reference text",
+          extractedAt: new Date(),
+          uploadId: null,
+        }),
+      );
+
+      const result = await service.completeAssignmentFileUpload(
+        1,
+        1,
+        validDto as any,
+      );
+
+      expect(extractor.extractContentFromFiles).toHaveBeenCalledTimes(2);
+      expect(extractor.extractContentFromFiles.mock.calls[1][1]).toEqual({
+        useStructuredExtraction: false,
+      });
+      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: AssignmentFileStatus.READY,
+            extractionStatus: AssignmentFileExtractionStatus.READY,
+            extractedText: "truncated reference text",
+          }),
+        }),
+      );
+      expect(result.status).toBe(AssignmentFileStatus.READY);
+      expect(result.extractionStatus).toBe(
+        AssignmentFileExtractionStatus.READY,
       );
     });
 

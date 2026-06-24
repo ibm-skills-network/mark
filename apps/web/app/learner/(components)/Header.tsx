@@ -3,13 +3,12 @@
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { MarkChatToggleButton } from "@/components/MarkChatToggleButton";
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
+import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import Dropdown from "@/components/Dropdown";
 import Spinner from "@/components/svgs/Spinner";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   QuestionAttemptRequestWithId,
-  QuestionStore,
   ReplaceAssignmentRequest,
   SubmitAssignmentResponse,
 } from "@/config/types";
@@ -41,7 +40,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
-import GradingProgressModal from "./GradingProgressModal";
+import GradingProgressModal, { type ProgressState } from "./GradingProgressModal";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -53,9 +52,11 @@ function LearnerHeader() {
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
-  const [currentGradingJobId, setCurrentGradingJobId] = useState<string | null>(
-    null,
-  );
+  const [progressData, setProgressData] = useState<ProgressState>({
+    status: "idle",
+    progress: 0,
+    currentStage: "Preparing to grade your assignment...",
+  });
 
   const [
     questions,
@@ -79,7 +80,6 @@ function LearnerHeader() {
     setUserRole("learner");
   }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
   const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
@@ -96,22 +96,21 @@ function LearnerHeader() {
     assignmentDetails?.optionalQuestionIds,
   );
 
-  const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
-    "assignmentConfig",
-    {
-      introduction: "",
-      graded: false,
-      passingGrade: 0,
-      published: false,
-      questionOrder: [],
-      updatedAt: 0,
-    },
-  );
   const [returnUrl, setReturnUrl] = useState<string>("");
   // The URL is authoritative for the assignment id. Reading it from a store
   // populated only on the overview route leaves deep links / hard refreshes
   // with a null id and silently drops the submit.
   const { assignmentId, assignmentIdParam } = useAssignmentId();
+  const authorPreviewPayload = assignmentId
+    ? readAuthorPreviewPayload(assignmentId)
+    : null;
+  const authorQuestions = authorPreviewPayload?.questions ?? questions;
+  const authorAssignmentDetails: ReplaceAssignmentRequest | undefined =
+    authorPreviewPayload?.assignmentDetails
+      ? (authorPreviewPayload.assignmentDetails as ReplaceAssignmentRequest)
+      : assignmentDetails
+        ? (assignmentDetails as ReplaceAssignmentRequest)
+        : undefined;
   // Guards re-entrancy: submit can be triggered by the button AND by a window
   // "triggerAssignmentSubmission" event, so a ref (not the async-stale
   // `submitting` state) prevents a double submission of the same attempt.
@@ -130,17 +129,21 @@ function LearnerHeader() {
   const isAuthorPreview = searchParams.get("authorMode") === "true";
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchData() {
       if (!assignmentId) return;
 
       try {
         const supportedLanguages = await getSupportedLanguages(assignmentId);
+        if (cancelled) return;
         const sortedLanguages = [...supportedLanguages].sort((a, b) =>
           getLanguageName(a).localeCompare(getLanguageName(b)),
         );
         setLanguages(sortedLanguages);
 
         const user = await getUser();
+        if (cancelled) return;
         if (user) {
           setRole(user.role);
           setReturnUrl(user.returnUrl || "");
@@ -148,6 +151,7 @@ function LearnerHeader() {
 
         const userPreferedLanguageFromLTI =
           await getUserPreferedLanguageFromLTI();
+        if (cancelled) return;
         if (
           userPreferedLanguageFromLTI &&
           supportedLanguages.length > 0 &&
@@ -161,6 +165,9 @@ function LearnerHeader() {
     }
 
     void fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [assignmentId]);
 
   const handleChangeLanguage = (selectedLanguage: string) => {
@@ -268,6 +275,11 @@ function LearnerHeader() {
     }
 
     setSubmitting(true);
+    setProgressData({
+      status: "processing",
+      progress: 0,
+      currentStage: "Preparing to grade your assignment...",
+    });
     setShowGradingModal(true);
     setCurrentAttemptId(activeAttemptId);
 
@@ -307,14 +319,17 @@ function LearnerHeader() {
         role === "author" ? authorQuestions : undefined,
         role === "author" ? authorAssignmentDetails : undefined,
         undefined,
-        () => {
-          // Progress callback not used - grading progress shown via modal
+        (status, progress, message, metadata) => {
+          setProgressData({
+            status,
+            progress: status === "completed" ? 100 : progress,
+            currentStage: status === "completed" ? "Grading complete!" : message,
+            currentQuestion: metadata?.currentQuestion,
+            totalQuestions: metadata?.totalQuestions,
+            gradingState: metadata?.gradingState,
+          });
         },
-        (gradingJobId) => {
-          setCurrentGradingJobId(gradingJobId);
-          setCurrentAttemptId(activeAttemptId);
-          setShowGradingModal(true);
-        },
+        undefined,
       );
 
       if (res) {
@@ -360,13 +375,12 @@ function LearnerHeader() {
           clearLearnerAnswers();
         }
         useLearnerStore.getState().setActiveQuestionNumber(null);
-        router.push(`/learner/${assignmentId}/successPage/${res.id}`);
 
         setTimeout(() => {
           setShowGradingModal(false);
           useLearnerStore.getState().setUserPreferedLanguage(null);
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
-        }, 500);
+        }, 1000);
       } else {
         // submitAssignment resolved without a result (e.g. an SSE finalize
         // event carrying no payload). Without this branch submitting/modal stay
@@ -641,7 +655,7 @@ function LearnerHeader() {
         isOpen={showGradingModal}
         assignmentId={assignmentId || 0}
         attemptId={currentAttemptId}
-        gradingJobId={currentGradingJobId}
+        progressData={progressData}
       />
     </>
   );

@@ -4,8 +4,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { BadRequestException, Logger } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-import axios from "axios";
 import * as cheerio from "cheerio";
+import { safeGet } from "../../../attempt/common/utils/ssrf-safe-http";
 import { ChoiceBasedQuestionResponseModel } from "../../../llm/model/choice.based.question.response.model";
 import { FileBasedQuestionResponseModel } from "../../../llm/model/file.based.question.response.model";
 import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
@@ -206,7 +206,7 @@ export const AttemptHelper = {
             return { body: "", isFunctional: false };
           }
 
-          const rawContentResponse = await axios.get<string>(rawUrl);
+          const rawContentResponse = await safeGet<string>(rawUrl);
           if (rawContentResponse.status === 200) {
             let body = rawContentResponse.data;
             if (body.length > MAX_CONTENT_SIZE) {
@@ -224,7 +224,7 @@ export const AttemptHelper = {
 
               const readmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/main/README.md`;
               try {
-                const readmeResponse = await axios.get<string>(readmeUrl);
+                const readmeResponse = await safeGet<string>(readmeUrl);
                 if (readmeResponse.status === 200) {
                   let body = readmeResponse.data;
                   if (body.length > MAX_CONTENT_SIZE) {
@@ -236,7 +236,7 @@ export const AttemptHelper = {
                 try {
                   const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
                   const masterReadmeResponse =
-                    await axios.get<string>(masterReadmeUrl);
+                    await safeGet<string>(masterReadmeUrl);
                   if (masterReadmeResponse.status === 200) {
                     let body = masterReadmeResponse.data;
                     if (body.length > MAX_CONTENT_SIZE) {
@@ -247,7 +247,14 @@ export const AttemptHelper = {
                 } catch {
                   const apiUrl = `https://api.github.com/repos/${user}/${repo}`;
                   try {
-                    const apiResponse = await axios.get(apiUrl);
+                    const apiResponse = await safeGet<{
+                      full_name?: string;
+                      description?: string;
+                      stargazers_count?: number;
+                      forks_count?: number;
+                      language?: string;
+                      updated_at?: string;
+                    }>(apiUrl);
                     if (apiResponse.status === 200) {
                       const repoInfo = apiResponse.data;
                       const body = `Repository: ${
@@ -276,7 +283,7 @@ export const AttemptHelper = {
           }
 
           try {
-            const response = await axios.get<string>(url);
+            const response = await safeGet<string>(url);
             const $ = cheerio.load(response.data);
 
             $(
@@ -325,7 +332,7 @@ export const AttemptHelper = {
 
         return { body: "", isFunctional: false };
       } else {
-        const response = await axios.get<string>(url);
+        const response = await safeGet<string>(url);
         const $ = cheerio.load(response.data);
 
         $("script, style, noscript, iframe, noembed, embed, object").remove();

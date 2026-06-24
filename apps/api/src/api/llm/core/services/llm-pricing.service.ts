@@ -1455,6 +1455,26 @@ export class LLMPricingService {
 
     const upscaling = await this.getCurrentPriceUpscaling();
 
+    return this.applyPricing(
+      modelKey,
+      basePricing,
+      inputTokens,
+      outputTokens,
+      upscaling,
+      usageType,
+    );
+  }
+
+  private applyPricing(
+    modelKey: string,
+    basePricing: ModelPricing,
+    inputTokens: number,
+    outputTokens: number,
+    upscaling: Awaited<
+      ReturnType<LLMPricingService["getCurrentPriceUpscaling"]>
+    >,
+    usageType?: string,
+  ): CostBreakdown {
     let finalInputPrice = basePricing.inputTokenPrice;
     let finalOutputPrice = basePricing.outputTokenPrice;
 
@@ -1493,6 +1513,62 @@ export class LLMPricingService {
       inputTokenPrice: finalInputPrice,
       outputTokenPrice: finalOutputPrice,
     };
+  }
+
+  /**
+   * Batch cost calculation for many usage rows.
+   *
+   * Fetches the active upscaling row once and memoizes getPricingAtDate by
+   * (modelKey, calendar-day). Designed for admin analytics aggregates where
+   * the per-row sequential approach in calculateCostWithUpscaling would issue
+   * thousands of redundant pricing roundtrips.
+   *
+   * Day-level bucketing assumes pricing changes land at date boundaries, not
+   * intra-day. If LLMPricing.effectiveDate ever carries hour-level granularity,
+   * widen the cache key to include the hour or query the boundaries upfront.
+   */
+  async calculateCostBatch(
+    records: Array<{
+      modelKey: string;
+      inputTokens: number;
+      outputTokens: number;
+      usageDate: Date;
+      usageType?: string;
+    }>,
+  ): Promise<Array<CostBreakdown | null>> {
+    if (records.length === 0) return [];
+
+    const upscaling = await this.getCurrentPriceUpscaling();
+
+    const pricingCache = new Map<string, ModelPricing | null>();
+    const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+    const cacheKeyFor = (modelKey: string, date: Date) =>
+      `${modelKey}|${dayKey(date)}`;
+
+    const results: Array<CostBreakdown | null> = new Array(records.length);
+
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      const key = cacheKeyFor(r.modelKey, r.usageDate);
+      let basePricing: ModelPricing | null | undefined = pricingCache.get(key);
+      if (basePricing === undefined) {
+        basePricing = await this.getPricingAtDate(r.modelKey, r.usageDate);
+        pricingCache.set(key, basePricing);
+      }
+
+      results[i] = basePricing
+        ? this.applyPricing(
+            r.modelKey,
+            basePricing,
+            r.inputTokens,
+            r.outputTokens,
+            upscaling,
+            r.usageType,
+          )
+        : null;
+    }
+
+    return results;
   }
 
   /**

@@ -1,5 +1,8 @@
 import { HttpService } from "@nestjs/axios";
-import { InternalServerErrorException } from "@nestjs/common";
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
 import {
@@ -7,6 +10,8 @@ import {
   UserSession,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptQuestionsMapper } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
@@ -35,6 +40,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     question: {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
+    },
+    questionResponse: {
+      deleteMany: jest.fn(),
     },
   };
 
@@ -74,6 +82,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
   const mockQuestionResponseService = {
     submitQuestions: jest.fn(),
+    createQuestionResponse: jest.fn(),
   };
 
   const mockTranslationService = {
@@ -457,6 +466,91 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           questionOrder: [20, 10, 30],
         },
       });
+    });
+  });
+
+  describe("autoSaveQuestionResponse - oversized submission boundary", () => {
+    const learnerSession: UserSession = {
+      userId: "learner-1",
+      role: UserRole.LEARNER,
+      assignmentId: 99,
+      groupId: "group-1",
+    };
+
+    const requestDto = {
+      learnerFileResponse: [],
+    } as unknown as Parameters<
+      AttemptSubmissionService["autoSaveQuestionResponse"]
+    >[3];
+
+    it("translates an OversizedSubmissionError into a BadRequestException carrying the learner message", async () => {
+      const oversized = new OversizedSubmissionError({
+        blockCount: 60_000,
+        cap: 50_000,
+        filename: "huge.xlsx",
+      });
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        oversized,
+      );
+
+      const rejection = await service
+        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
+        .then(
+          () => {
+            throw new Error("expected autoSaveQuestionResponse to reject");
+          },
+          (error: unknown) => error,
+        );
+
+      expect(rejection).toBeInstanceOf(BadRequestException);
+      expect((rejection as BadRequestException).message).toBe(
+        oversized.learnerMessage,
+      );
+      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("translates an UnsupportedImageFormatError into a BadRequestException carrying the learner message", async () => {
+      const unsupported = new UnsupportedImageFormatError({
+        filename: "photo.heic",
+        detectedFormat: "image/heic",
+        reason: "unsupported format detected at submission",
+      });
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        unsupported,
+      );
+
+      const rejection = await service
+        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
+        .then(
+          () => {
+            throw new Error("expected autoSaveQuestionResponse to reject");
+          },
+          (error: unknown) => error,
+        );
+
+      expect(rejection).toBeInstanceOf(BadRequestException);
+      expect((rejection as BadRequestException).message).toBe(
+        unsupported.learnerMessage,
+      );
+      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("lets non-oversized errors pass through unchanged", async () => {
+      const boom = new Error("boom");
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        boom,
+      );
+
+      await expect(
+        service.autoSaveQuestionResponse(
+          71,
+          99,
+          101,
+          requestDto,
+          learnerSession,
+          "en",
+        ),
+      ).rejects.toBe(boom);
     });
   });
 
@@ -1090,6 +1184,46 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       callRemoveSensitiveData([question]);
 
       expect(question.scoring?.rubrics).toBe(rubrics);
+    });
+  });
+
+  describe("updateLearnerAttempt - already-submitted short-circuit", () => {
+    it("throws ConflictException before grading when the attempt is already submitted", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 555,
+        submitted: true,
+        expiresAt: new Date(Date.now() + 60_000),
+        questionVariants: [],
+      });
+      mockValidationService.isAttemptExpired.mockReturnValue(false);
+
+      const updateDto = {
+        responsesForQuestions: [],
+        language: "en",
+      } as never;
+      const request = {
+        userSession: { userId: "learner@example.com", role: "Learner" },
+      } as never;
+
+      await expect(
+        (
+          service as unknown as {
+            updateLearnerAttempt: (
+              attemptId: number,
+              assignmentId: number,
+              updateDto: unknown,
+              authCookie: string,
+              gradingCallbackRequired: boolean,
+              request: unknown,
+            ) => Promise<unknown>;
+          }
+        ).updateLearnerAttempt(555, 2580, updateDto, "cookie", false, request),
+      ).rejects.toMatchObject({ name: "ConflictException" });
+
+      // Short-circuited before the expensive grading pipeline ran.
+      expect(
+        mockTranslationService.preTranslateQuestions,
+      ).not.toHaveBeenCalled();
     });
   });
 });

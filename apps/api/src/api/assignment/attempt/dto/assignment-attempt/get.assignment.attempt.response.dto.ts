@@ -174,6 +174,48 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   @Optional()
   versionMismatch?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Assignment metadata needed by the learner UI while rendering an attempt.",
+    type: Object,
+    required: false,
+  })
+  @Optional()
+  assignmentDetails?: {
+    id: number;
+    name: string;
+    introduction?: string | null;
+    instructions?: string | null;
+    gradingCriteriaOverview?: string | null;
+    timeEstimateMinutes?: number | null;
+    attemptsBeforeCoolDown?: number | null;
+    retakeAttemptCoolDownMinutes?: number | null;
+    type?: string;
+    graded?: boolean | null;
+    numAttempts?: number | null;
+    allotedTimeMinutes?: number | null;
+    requireAllQuestions?: boolean;
+    optionalQuestionIds?: number[];
+    passingGrade?: number | null;
+    displayOrder?: string | null;
+    questionDisplay?: string | null;
+    numberOfQuestionsPerAttempt?: number | null;
+    questionOrder?: number[];
+    published?: boolean;
+    showAssignmentScore?: boolean;
+    showQuestionScore?: boolean;
+    showSubmissionFeedback?: boolean;
+    showQuestions?: boolean;
+    correctAnswerVisibility?: CorrectAnswerVisibility;
+    questionControls?: {
+      disableCopy?: boolean;
+      disablePaste?: boolean;
+      disableRightClick?: boolean;
+      disablePrint?: boolean;
+    } | null;
+    updatedAt?: Date;
+  };
 }
 
 export class AssignmentAttemptQuestions {

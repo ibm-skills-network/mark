@@ -40,11 +40,7 @@ function ConfigGroup({
           )}
         />
       </button>
-      {open && (
-        <div className="flex flex-col gap-y-4 pb-2">
-          {children}
-        </div>
-      )}
+      {open && <div className="flex flex-col gap-y-4 pb-2">{children}</div>}
     </div>
   );
 }

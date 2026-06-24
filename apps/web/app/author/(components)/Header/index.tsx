@@ -1,6 +1,10 @@
 "use client";
 
 import CheckLearnerSideButton from "@/app/author/(components)/Header/CheckLearnerSideButton";
+import {
+  getAssignmentConfigHydration,
+  getAssignmentFeedbackHydration,
+} from "@/app/author/utils/assignmentHydration";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { useChatbot } from "@/hooks/useChatbot";
 import { encodeFields } from "@/app/Helpers/encoder";
@@ -33,7 +37,6 @@ import {
   retryFailedTranslations,
   subscribeToJobStatus,
 } from "@/lib/talkToBackend";
-import { mergeData } from "@/lib/utils";
 import languages from "@/public/languages.json";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -114,16 +117,18 @@ function AuthorHeader() {
     setActiveAssignmentId,
     questions,
     setPageState,
-    setAuthorStore,
+    pageState,
     activeAssignmentId,
     name,
+    hydrateAuthorStore,
   ] = useAuthorStore((state) => [
     state.setActiveAssignmentId,
     state.questions,
     state.setPageState,
-    state.setAuthorStore,
+    state.pageState,
     state.activeAssignmentId,
     state.name,
+    state.hydrateAuthorStore,
   ]);
 
   const loadVersions = useAuthorStore((state) => state.loadVersions);
@@ -287,29 +292,23 @@ function AuthorHeader() {
 
       newAssignment.questions = questions;
 
-      useAuthorStore.getState().setOriginalAssignment(newAssignment);
       const authorSafeAssignment = {
         ...newAssignment,
         currentVersion: undefined,
       };
-      useAuthorStore.getState().setAuthorStore(authorSafeAssignment);
+      hydrateAuthorStore({
+        ...authorSafeAssignment,
+        originalAssignment: newAssignment,
+        questions,
+        questionOrder:
+          newAssignment.questionOrder ??
+          questions.map((question) => question.id),
+        activeAssignmentId: newAssignment.id,
+        name: newAssignment.name,
+      });
 
       useAssignmentConfig.getState().setAssignmentConfigStore({
-        numAttempts: newAssignment.numAttempts,
-        retakeAttemptCoolDownMinutes:
-          newAssignment.retakeAttemptCoolDownMinutes,
-        attemptsBeforeCoolDown: newAssignment.attemptsBeforeCoolDown,
-        passingGrade: newAssignment.passingGrade,
-        displayOrder: newAssignment.displayOrder,
-        graded: newAssignment.graded,
-        questionDisplay: newAssignment.questionDisplay,
-        timeEstimateMinutes: newAssignment.timeEstimateMinutes,
-        allotedTimeMinutes: newAssignment.allotedTimeMinutes,
-        updatedAt: newAssignment.updatedAt,
-        showQuestions: newAssignment.showQuestions,
-        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
-        requireAllQuestions: newAssignment.requireAllQuestions,
-        optionalQuestionIds: newAssignment.optionalQuestionIds,
+        ...getAssignmentConfigHydration(newAssignment),
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
@@ -319,14 +318,8 @@ function AuthorHeader() {
       }
 
       useAssignmentFeedbackConfig.getState().setAssignmentFeedbackConfigStore({
-        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
-        showQuestionScore: newAssignment.showQuestionScore,
-        showAssignmentScore: newAssignment.showAssignmentScore,
-        correctAnswerVisibility: newAssignment.correctAnswerVisibility,
+        ...getAssignmentFeedbackHydration(newAssignment),
       });
-
-      useAuthorStore.getState().setName(newAssignment.name);
-      useAuthorStore.getState().setActiveAssignmentId(newAssignment.id);
 
       setPageState("success");
     } catch (error) {
@@ -363,54 +356,38 @@ function AuthorHeader() {
     if (assignment) {
       const newAssignment = normalizeAssignment({ ...assignment });
 
-      useAuthorStore.getState().setOriginalAssignment(newAssignment);
-
       const authorSafeAssignment = {
         ...newAssignment,
         currentVersion: undefined,
       };
-      const mergedAuthorData = mergeData(
-        useAuthorStore.getState(),
-        authorSafeAssignment,
-      );
-      const { updatedAt, ...cleanedAuthorData } = mergedAuthorData;
+      const { updatedAt, ...cleanedAuthorData } = authorSafeAssignment;
       void updatedAt;
-      setAuthorStore({
+      const fetchedQuestions = (newAssignment.questions ??
+        []) as QuestionAuthorStore[];
+      hydrateAuthorStore({
         ...cleanedAuthorData,
+        originalAssignment: newAssignment,
+        questions: fetchedQuestions,
+        questionOrder:
+          newAssignment.questionOrder ??
+          fetchedQuestions.map((question) => question.id),
+        activeAssignmentId: newAssignment.id,
+        name: newAssignment.name,
       });
 
-      const mergedAssignmentConfigData = mergeData(
-        useAssignmentConfig.getState(),
-        newAssignment,
-      );
       if (newAssignment.questionVariationNumber !== undefined) {
         setAssignmentConfigStore({
           questionVariationNumber: newAssignment.questionVariationNumber,
         });
       }
-      const {
-        updatedAt: authorStoreUpdatedAt,
-        ...cleanedAssignmentConfigData
-      } = mergedAssignmentConfigData;
-      void authorStoreUpdatedAt;
       setAssignmentConfigStore({
-        ...cleanedAssignmentConfigData,
+        ...getAssignmentConfigHydration(newAssignment),
       });
 
-      const mergedAssignmentFeedbackData = mergeData(
-        useAssignmentFeedbackConfig.getState(),
-        newAssignment,
-      );
-      const {
-        updatedAt: assignmentFeedbackUpdatedAt,
-        ...cleanedAssignmentFeedbackData
-      } = mergedAssignmentFeedbackData;
-      void assignmentFeedbackUpdatedAt;
       setAssignmentFeedbackConfigStore({
-        ...cleanedAssignmentFeedbackData,
+        ...getAssignmentFeedbackHydration(newAssignment),
       });
 
-      useAuthorStore.getState().setName(newAssignment.name);
       setPageState("success");
     } else {
       setPageState("error");
@@ -426,9 +403,12 @@ function AuthorHeader() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    setPageState("loading");
     const fetchData = async () => {
       setActiveAssignmentId(~~assignmentId);
       const role = await getUserRole();
+      if (cancelled) return;
       if (role === "author") {
         void fetchAssignment();
       } else {
@@ -439,6 +419,9 @@ function AuthorHeader() {
     };
 
     void fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [assignmentId, router]);
 
   // Reconnect to an in-flight publish after a page refresh. The job
@@ -493,8 +476,9 @@ function AuthorHeader() {
       const originalAfterPublish = afterPublish;
 
       handlePublishButton(description, publishImmediately)
-        .then(() => {
+        .then((publishSucceeded) => {
           if (
+            publishSucceeded &&
             originalAfterPublish &&
             typeof originalAfterPublish === "function"
           ) {
@@ -537,7 +521,7 @@ function AuthorHeader() {
     description?: string,
     publishImmediately = true,
     versionNumber?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     setSubmitting(true);
     setJobProgress(0);
     setProgressStatus("In Progress");
@@ -550,7 +534,7 @@ function AuthorHeader() {
         "You are not in author mode. Please switch to author mode by relaunching the assignment to publish this assignment.",
       );
       setSubmitting(false);
-      return;
+      return false;
     }
 
     let clonedCurrentQuestions = JSON.parse(
@@ -630,7 +614,7 @@ function AuthorHeader() {
           : "Introduction is required to create a version.",
       );
       setSubmitting(false);
-      return;
+      return false;
     }
     try {
       const response = await publishAssignment(
@@ -687,6 +671,7 @@ function AuthorHeader() {
             "Failed to refresh versions after publishing. Please refresh the page.",
           );
         }
+        return publishSucceeded;
       } else {
         toast.error(
           publishImmediately
@@ -694,6 +679,7 @@ function AuthorHeader() {
             : "Failed to create version. Please try again.",
         );
         setProgressStatus("Failed");
+        return false;
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
@@ -710,6 +696,7 @@ function AuthorHeader() {
         );
       }
       setProgressStatus("Failed");
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -860,7 +847,11 @@ function AuthorHeader() {
                   Auto-Graded Assignment Creator
                 </Title>
                 <div className="text-gray-500 font-medium text-sm leading-5 truncate max-w-[200px] sm:max-w-none">
-                  {name || "Untitled Assignment"}
+                  {pageState === "loading" ? (
+                    <div className="h-4 w-32 bg-gray-200 animate-pulse rounded" />
+                  ) : (
+                    name || "Untitled Assignment"
+                  )}
                 </div>
               </div>
             </div>

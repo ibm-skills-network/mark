@@ -7,6 +7,8 @@
  * The fields are exposed as own enumerable properties so the project logger
  * can serialize them as structured context without leaking the message.
  */
+import { LearnerFacingGradingError } from "./learner-facing-grading.error";
+
 export interface OversizedSubmissionErrorFields {
   blockCount: number;
   cap: number;
@@ -15,7 +17,7 @@ export interface OversizedSubmissionErrorFields {
   attemptId?: number;
 }
 
-export class OversizedSubmissionError extends Error {
+export class OversizedSubmissionError extends LearnerFacingGradingError {
   public readonly blockCount: number;
   public readonly cap: number;
   public readonly filename?: string;
@@ -36,5 +38,17 @@ export class OversizedSubmissionError extends Error {
     // Restore the prototype chain when extending built-in Error so that
     // `instanceof` works correctly under the project's TypeScript target.
     Object.setPrototypeOf(this, OversizedSubmissionError.prototype);
+  }
+
+  /**
+   * Message safe to show a learner in the grading modal/toast. Deliberately
+   * omits block counts and caps — those are operator details that live in
+   * `message` and the structured logs.
+   */
+  get learnerMessage(): string {
+    const subject = this.filename
+      ? `"${this.filename}" is`
+      : "Your submission is";
+    return `${subject} too large for automatic grading. Try reducing its length (fewer pages, rows, or sheets) and submit it again.`;
   }
 }
