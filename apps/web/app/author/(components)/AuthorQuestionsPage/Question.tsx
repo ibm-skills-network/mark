@@ -997,7 +997,8 @@ const Question: FC<QuestionProps> = ({
 
               <button
                 className="text-gray-500"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   try {
                     duplicateThisQuestion(question);
                   } catch (error) {
@@ -1010,7 +1011,10 @@ const Question: FC<QuestionProps> = ({
 
               <button
                 className="text-gray-500"
-                onClick={() => setToggleDeleteConfirmation(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToggleDeleteConfirmation(true);
+                }}
               >
                 <TrashIcon width={20} height={20} />
               </button>
