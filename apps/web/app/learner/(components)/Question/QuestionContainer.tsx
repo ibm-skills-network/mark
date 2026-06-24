@@ -260,8 +260,9 @@ function Component(props: Props) {
   return (
     <section
       id={`item-${questionNumber}`}
-      onClick={() => {
+      onClick={(e) => {
         if (questionDisplay === "ALL_PER_PAGE") {
+          if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [role="combobox"], [role="listbox"], [contenteditable]')) return;
           setActiveQuestionNumber(questionNumber);
         }
       }}

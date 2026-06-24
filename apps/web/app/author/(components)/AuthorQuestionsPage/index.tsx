@@ -713,7 +713,10 @@ const AuthorQuestionsPage: FC<Props> = ({
                 ? "border-1 border-violet-600 shadow-md"
                 : "shadow-sm"
             }`}
-            onClick={() => handleFocus(question.id)}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [role="combobox"], [role="listbox"], [contenteditable]')) return;
+              handleFocus(question.id);
+            }}
           >
             <div className="absolute flex self-center max-w-8 w-8 px-2 left-0">
               <div
