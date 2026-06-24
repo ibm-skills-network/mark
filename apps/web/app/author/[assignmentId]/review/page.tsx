@@ -1245,9 +1245,18 @@ function Component() {
 
     if (data.questions) {
       csv += "Questions\n";
-      csv += "Type,Question,Response Type,Total Points\n";
+      csv += "Type,Question,Response Type,Total Points,Answer Choices\n";
       data.questions.forEach((q: any) => {
-        csv += `${q.type},"${q.question?.replace(/"/g, '""') || ""}",${q.responseType},${q.totalPoints}\n`;
+        const choices =
+          q.choices && q.choices.length > 0
+            ? q.choices
+                .map(
+                  (c: any, i: number) =>
+                    `${i + 1}. ${c.choice}${c.isCorrect ? " [Correct]" : ""}`,
+                )
+                .join(" | ")
+            : "";
+        csv += `${q.type},"${q.question?.replace(/"/g, '""') || ""}",${q.responseType},${q.totalPoints},"${choices.replace(/"/g, '""')}"\n`;
       });
     }
 
