@@ -1375,9 +1375,36 @@ const AuthorQuestionsPage: FC<Props> = ({
                     </div>
                   )}
                 </div>
+
+                <button
+                  onClick={() => setFileUploadModalOpen(true)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
+                >
+                  <span className="flex items-center gap-2 text-wrap">
+                    <div className="flex items-center gap-1">
+                      <SparklesIcon className="w-4 h-4 text-violet-600" />
+                    </div>
+                    <span className="text-sm font-medium">
+                      Generate Questions using AI (Beta)
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-sm transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-50 hover:text-violet-600"
+                >
+                  <span className="flex items-center gap-2 text-wrap">
+                    <div className="flex items-center gap-1">
+                      <DocumentArrowDownIcon className="w-4 h-4 text-violet-600" />
+                    </div>
+                    <span className="text-sm font-medium">
+                      Import Questions (Beta)
+                    </span>
+                  </span>
+                </button>
               </>
             )}
-
           </div>
         </div>
       </div>
