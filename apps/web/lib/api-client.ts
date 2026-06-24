@@ -170,7 +170,7 @@ export class APIClient {
             );
           } else if (response.status === 403) {
             toast.error(
-              `You don't have permission to access this. Try logging into AWB again and relaunching the assignment.`,
+              `You don't have permission to access this. Possibly try logging into AWB again and relaunching the assignment.`,
             );
           } else {
             toast.error(
