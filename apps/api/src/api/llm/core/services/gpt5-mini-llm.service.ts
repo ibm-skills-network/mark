@@ -40,7 +40,10 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       modelName: options?.modelName ?? Gpt5MiniLlmService.DEFAULT_MODEL,
       maxCompletionTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,
-      maxRetries: options?.maxRetries,
+      // Default 0: PromptProcessorService owns classification-aware retry, so
+      // the SDK's blind retry (which also retries un-recoverable quota 429s)
+      // would only stack on top of it.
+      maxRetries: options?.maxRetries ?? 0,
     });
   }
 

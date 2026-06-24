@@ -20,6 +20,7 @@ export const getAssignment = apiShared.getAssignment;
 export const getAssignments = apiShared.getAssignments;
 export const getSupportedLanguages = apiShared.getSupportedLanguages;
 export const translateQuestion = apiShared.translateQuestion;
+export const TranslationPausedError = apiShared.TranslationPausedError;
 export const getFileAccess = apiShared.getFileAccess;
 
 // Admin functions

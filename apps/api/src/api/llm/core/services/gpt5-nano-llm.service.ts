@@ -39,7 +39,10 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
     return new ChatOpenAI({
       modelName: options?.modelName ?? Gpt5NanoLlmService.DEFAULT_MODEL,
       timeout: options?.timeoutMs,
-      maxRetries: options?.maxRetries,
+      // Default 0: PromptProcessorService owns classification-aware retry, so
+      // the SDK's blind retry (which also retries un-recoverable quota 429s)
+      // would only stack on top of it.
+      maxRetries: options?.maxRetries ?? 0,
     });
   }
 

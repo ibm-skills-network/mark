@@ -5,7 +5,7 @@ import {
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
-import { translateQuestion } from "@/lib/talkToBackend";
+import { translateQuestion, TranslationPausedError } from "@/lib/talkToBackend";
 import languages from "@/public/languages.json";
 import {
   useAssignmentDetails,
@@ -30,6 +30,13 @@ import ShowHideRubric from "./ShowHideRubric";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
+
+// Module-level pause shared across every QuestionContainer on the page. When
+// the backend reports the translation provider is rate-limited / out of quota
+// (503 + Retry-After), we stop firing translation requests from ALL questions
+// until this timestamp, so a whole-page language switch doesn't re-spam a
+// provider we already know is down. 0 = not paused.
+let translationPausedUntil = 0;
 
 interface Props extends ComponentPropsWithoutRef<"section"> {
   question: QuestionStore;
@@ -170,6 +177,7 @@ function Component(props: Props) {
   ]);
   const [loadingTranslation, setLoadingTranslation] = useState(false);
   const [currentWord, setCurrentWord] = useState(translatingWords[0]);
+  const [translationPaused, setTranslationPaused] = useState(false);
 
   useEffect(() => {
     if (!loadingTranslation) return;
@@ -186,7 +194,14 @@ function Component(props: Props) {
     if (assignmentId == null || questionId == null) {
       return;
     }
+    // Provider is known-down (rate-limited / out of quota). Skip the request
+    // entirely until the cooldown elapses instead of re-spamming it.
+    if (Date.now() < translationPausedUntil) {
+      setTranslationPaused(true);
+      return;
+    }
     try {
+      setTranslationPaused(false);
       setLoadingTranslation(true);
       const translation = await translateQuestion(
         assignmentId,
@@ -207,7 +222,14 @@ function Component(props: Props) {
         setTranslatedChoices(questionId, choiceTexts);
       }
     } catch (error) {
-      console.error("Error fetching translation:", error);
+      if (error instanceof TranslationPausedError) {
+        // Pause translations across the whole page for the Retry-After window
+        // so we stop hammering a provider we already know is down.
+        translationPausedUntil = Date.now() + error.retryAfterSeconds * 1000;
+        setTranslationPaused(true);
+      } else {
+        console.error("Error fetching translation:", error);
+      }
     } finally {
       setLoadingTranslation(false);
     }
@@ -367,6 +389,21 @@ function Component(props: Props) {
               </div>
             </div>
           )}
+
+          {effectiveTranslationOn &&
+            !loadingTranslation &&
+            translationPaused && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                  <span>
+                    Translations are paused for about a minute while the service
+                    comes back online. The original text is shown in the
+                    meantime.
+                  </span>
+                </div>
+              </div>
+            )}
         </div>
         <div className="flex items-center justify-between sm:justify-start gap-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 sm:ml-4">
           <div className="flex items-center gap-2">

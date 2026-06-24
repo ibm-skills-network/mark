@@ -39,7 +39,10 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
         options?.modelName ?? Gpt4VisionPreviewLlmService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,
-      maxRetries: options?.maxRetries,
+      // Default 0: PromptProcessorService owns classification-aware retry, so
+      // the SDK's blind retry (which also retries un-recoverable quota 429s)
+      // would only stack on top of it.
+      maxRetries: options?.maxRetries ?? 0,
     });
   }
 

@@ -14,6 +14,10 @@ import { Choice } from "../../../../assignment/dto/update.questions.request.dto"
 import { LlmRequestOptions } from "../../../core/interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import {
+  classifyLlmError,
+  LlmQuotaExceededError,
+} from "../../../core/utils/llm-error.util";
 import { ITranslationService } from "../interfaces/translation.interface";
 
 interface LanguageMapping {
@@ -28,12 +32,14 @@ export class TranslationService implements ITranslationService {
    * at a time, and sit behind a caller-side retry loop with a 90s
    * per-attempt ceiling. The client timeout must come in well under that
    * ceiling so a stalled connection fails the attempt while there is
-   * still budget to retry it; SDK-internal retries stay at 1 because the
-   * caller's loop owns retrying.
+   * still budget to retry it. SDK-internal retries are off (0): the
+   * PromptProcessor now owns classification-aware retry and the quota
+   * circuit-breaker, so an SDK retry here would only stack on top and would
+   * also blindly retry un-recoverable quota 429s.
    */
   private static readonly LLM_CALL_OPTIONS: LlmRequestOptions = {
     timeoutMs: 60_000,
-    maxRetries: 1,
+    maxRetries: 0,
   };
 
   private readonly logger: Logger;
@@ -465,6 +471,26 @@ INSTRUCTIONS:
         );
       }
     } catch (error) {
+      // Quota / rate-limit surface as 503 + Retry-After (handled by the global
+      // filter) so the caller pauses instead of re-spamming a throttled or
+      // out-of-quota provider. Everything else is a real 500.
+      if (error instanceof LlmQuotaExceededError) {
+        this.logger.warn(
+          `Question translation unavailable (quota): retry after ${error.retryAfterSeconds}s`,
+        );
+        throw error;
+      }
+      if (classifyLlmError(error).kind === "rate_limit") {
+        this.logger.warn(
+          `Question translation rate-limited: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
+        throw new LlmQuotaExceededError(
+          "Translation temporarily unavailable (rate limited)",
+          { retryAfterSeconds: 30, cause: error },
+        );
+      }
       this.logger.error(
         `Error translating question: ${
           error instanceof Error ? error.message : "Unknown error"

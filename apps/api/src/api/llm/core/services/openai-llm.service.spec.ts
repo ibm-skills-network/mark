@@ -43,7 +43,7 @@ describe("OpenAiLlmService request options", () => {
     );
   });
 
-  it("leaves client timeout and retries at SDK defaults when not requested", async () => {
+  it("leaves timeout at the SDK default but disables SDK retry by default", async () => {
     const service = makeService();
 
     await service.invoke([new HumanMessage("hi")], {
@@ -54,7 +54,9 @@ describe("OpenAiLlmService request options", () => {
       Record<string, unknown>,
     ];
     expect(config.timeout).toBeUndefined();
-    expect(config.maxRetries).toBeUndefined();
+    // maxRetries defaults to 0: PromptProcessorService owns classification-aware
+    // retry, so the SDK's blind retry must not stack on top of it.
+    expect(config.maxRetries).toBe(0);
   });
 });
 

@@ -24,6 +24,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { DatabaseCircuitBreakerService } from "../../database/circuit-breaker/database-circuit-breaker.service";
 import { UserSessionRequest } from "../../auth/interfaces/user.session.interface";
+import { LlmQuotaExceededError } from "../../api/llm/core/utils/llm-error.util";
 
 const PRISMA_POOL_CODES = new Set(["P1001", "P1008", "P1017", "P2024"]);
 
@@ -106,6 +107,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
           context,
         );
       }
+    } else if (exception instanceof LlmQuotaExceededError) {
+      // Expected, handled degradation (provider out of quota / circuit open) —
+      // log at warn, not as an unhandled 5xx.
+      this.logger.warn(
+        `LLM unavailable: ${context.method} ${context.url} -> ${status} (retry after ${exception.retryAfterSeconds}s)`,
+        context,
+      );
     } else if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
         `Unhandled ${exceptionName}: ${context.method} ${context.url} -> ${status}`,
@@ -116,6 +124,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `${exceptionName}: ${context.method} ${context.url} -> ${status}`,
         context,
       );
+    }
+
+    if (exception instanceof LlmQuotaExceededError && !response.headersSent) {
+      // Retry-After lets the browser/UI pause instead of re-spamming a dead
+      // provider; the body carries the same hint for clients that read JSON.
+      response.setHeader("Retry-After", String(exception.retryAfterSeconds));
+      response.status(status).json({
+        statusCode: status,
+        code: "LLM_UNAVAILABLE",
+        message: exception.message,
+        retryAfterSeconds: exception.retryAfterSeconds,
+      });
+      return;
     }
 
     const responseBody =
@@ -135,6 +156,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private resolveStatus(exception: unknown): number {
+    if (exception instanceof LlmQuotaExceededError) {
+      return HttpStatus.SERVICE_UNAVAILABLE;
+    }
     if (exception instanceof HttpException) {
       return exception.getStatus();
     }

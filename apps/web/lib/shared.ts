@@ -61,6 +61,22 @@ interface ErrorResponse {
 }
 
 /**
+ * Thrown when the translation backend is temporarily unavailable because the
+ * LLM provider is rate-limited / out of quota (HTTP 503 + Retry-After). Carries
+ * the retry-after hint so the UI can pause for that window instead of
+ * re-requesting a provider that is known to be down.
+ */
+export class TranslationPausedError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(message: string, retryAfterSeconds: number) {
+    super(message);
+    this.name = "TranslationPausedError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+/**
  * Generate a presigned URL for file upload
  */
 export async function generateUploadUrl(
@@ -1951,7 +1967,25 @@ export async function translateQuestion(
   });
 
   if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
+    const errorBody = (await res.json().catch(() => ({}))) as ErrorResponse & {
+      retryAfterSeconds?: number;
+    };
+
+    // 503 = provider rate-limited / out of quota. Surface a typed error so the
+    // caller can pause for the Retry-After window instead of re-requesting.
+    if (res.status === 503) {
+      const headerRetryAfter = Number(res.headers.get("retry-after"));
+      const retryAfterSeconds =
+        errorBody.retryAfterSeconds ??
+        (Number.isFinite(headerRetryAfter) && headerRetryAfter > 0
+          ? headerRetryAfter
+          : 60);
+      throw new TranslationPausedError(
+        errorBody.message || "Translation temporarily unavailable",
+        retryAfterSeconds,
+      );
+    }
+
     throw new Error(errorBody.message || "Failed to translate question");
   }
 

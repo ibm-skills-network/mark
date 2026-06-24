@@ -1,6 +1,7 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { AIUsageType } from "@prisma/client";
 import { z } from "zod";
+import { LlmQuotaExceededError } from "../utils/llm-error.util";
 import { PromptProcessorService } from "./prompt-processor.service";
 
 describe("PromptProcessorService", () => {
@@ -107,12 +108,10 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
   });
 
   it("uses the provider's native structured output and returns the parsed object", async () => {
-    const invokeStructured = jest
-      .fn()
-      .mockResolvedValue({
-        parsed: { grade: 4 },
-        tokenUsage: { input: 10, output: 5 },
-      });
+    const invokeStructured = jest.fn().mockResolvedValue({
+      parsed: { grade: 4 },
+      tokenUsage: { input: 10, output: 5 },
+    });
     const llm = { key: "gpt-4o-mini", invoke: jest.fn(), invokeStructured };
     router.getForFeatureWithFallback.mockResolvedValue(llm);
     const service = makeService();
@@ -146,12 +145,10 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
   it("falls back to text parsing for providers without native structured output", async () => {
     const llm = {
       key: "granite-4-h-small",
-      invoke: jest
-        .fn()
-        .mockResolvedValue({
-          content: '{"grade": 2}',
-          tokenUsage: { input: 3, output: 4 },
-        }),
+      invoke: jest.fn().mockResolvedValue({
+        content: '{"grade": 2}',
+        tokenUsage: { input: 3, output: 4 },
+      }),
     };
     router.getForFeatureWithFallback.mockResolvedValue(llm);
     const service = makeService();
@@ -174,5 +171,132 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       4,
       "granite-4-h-small",
     );
+  });
+});
+
+describe("PromptProcessorService resilience", () => {
+  const logger = { error: jest.fn(), warn: jest.fn() };
+  const parentLogger = { child: jest.fn() };
+  const usageTracker = { trackUsage: jest.fn() };
+  const llm = { key: "gpt-4o-mini", invoke: jest.fn() };
+  const router = { get: jest.fn(), getForFeatureWithFallback: jest.fn() };
+
+  const makeService = () =>
+    new PromptProcessorService(
+      router as any,
+      usageTracker as any,
+      parentLogger as any,
+    );
+
+  const call = (service: PromptProcessorService) =>
+    service.processPrompt(
+      "do it",
+      1,
+      AIUsageType.ASSIGNMENT_GRADING,
+      "gpt-4o-mini",
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    parentLogger.child.mockReturnValue(logger);
+    router.get.mockReturnValue(llm);
+    usageTracker.trackUsage.mockResolvedValue(undefined);
+    // Make backoff instant so the retry tests don't actually sleep.
+    jest.spyOn(global, "setTimeout").mockImplementation(((cb: () => void) => {
+      cb();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as unknown as typeof setTimeout);
+  });
+
+  afterEach(() => {
+    (global.setTimeout as unknown as jest.SpyInstance).mockRestore?.();
+  });
+
+  it("retries a transient failure then succeeds", async () => {
+    llm.invoke
+      .mockRejectedValueOnce(new Error("ECONNRESET"))
+      .mockResolvedValue({
+        content: "ok",
+        tokenUsage: { input: 1, output: 1 },
+      });
+
+    const service = makeService();
+    await expect(call(service)).resolves.toBe("ok");
+
+    expect(llm.invoke).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "llm.retry",
+      expect.objectContaining({ kind: "transient", attempt: 1 }),
+    );
+  });
+
+  it("gives up after exhausting retries on a persistent transient failure", async () => {
+    llm.invoke.mockRejectedValue(
+      Object.assign(new Error("Service Unavailable"), { status: 503 }),
+    );
+
+    const service = makeService();
+    await expect(call(service)).rejects.toThrow("Service Unavailable");
+
+    // initial attempt + MAX_LLM_RETRIES (2) = 3 invocations.
+    expect(llm.invoke).toHaveBeenCalledTimes(3);
+  });
+
+  it("does NOT retry an insufficient_quota error and surfaces a quota error", async () => {
+    llm.invoke.mockRejectedValue(
+      Object.assign(
+        new Error(
+          "429 You exceeded your current quota, please check your plan and billing details.",
+        ),
+        { status: 429 },
+      ),
+    );
+
+    const service = makeService();
+    await expect(call(service)).rejects.toBeInstanceOf(LlmQuotaExceededError);
+
+    // Quota is non-retryable: exactly one provider call.
+    expect(llm.invoke).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      "llm.quota_exceeded",
+      expect.objectContaining({ model: "gpt-4o-mini" }),
+    );
+  });
+
+  it("opens the circuit so subsequent calls fail fast without hitting the provider", async () => {
+    llm.invoke.mockRejectedValue(
+      Object.assign(new Error("You exceeded your current quota"), {
+        status: 429,
+      }),
+    );
+
+    const service = makeService();
+    await expect(call(service)).rejects.toBeInstanceOf(LlmQuotaExceededError);
+    expect(llm.invoke).toHaveBeenCalledTimes(1);
+
+    // Circuit is now open — the next call must not reach the provider.
+    await expect(call(service)).rejects.toBeInstanceOf(LlmQuotaExceededError);
+    expect(llm.invoke).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "llm.quota.circuit_open",
+      expect.objectContaining({ model: "gpt-4o-mini" }),
+    );
+  });
+
+  it("carries a retryAfterSeconds hint on the quota error", async () => {
+    llm.invoke.mockRejectedValue(
+      Object.assign(new Error("insufficient_quota"), {
+        status: 429,
+        code: "insufficient_quota",
+      }),
+    );
+
+    const service = makeService();
+    await call(service).catch((error: unknown) => {
+      expect(error).toBeInstanceOf(LlmQuotaExceededError);
+      expect(
+        (error as LlmQuotaExceededError).retryAfterSeconds,
+      ).toBeGreaterThanOrEqual(60);
+    });
   });
 });

@@ -38,7 +38,10 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       modelName: options?.modelName ?? OpenAiLlmMiniService.DEFAULT_MODEL,
       maxTokens: options?.maxTokens,
       timeout: options?.timeoutMs,
-      maxRetries: options?.maxRetries,
+      // Default 0: PromptProcessorService owns classification-aware retry, so
+      // the SDK's blind retry (which also retries un-recoverable quota 429s)
+      // would only stack on top of it.
+      maxRetries: options?.maxRetries ?? 0,
     });
   }
 
