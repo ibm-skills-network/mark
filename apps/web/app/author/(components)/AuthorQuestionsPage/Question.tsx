@@ -999,11 +999,7 @@ const Question: FC<QuestionProps> = ({
                 className="text-gray-500"
                 onClick={(e) => {
                   e.stopPropagation();
-                  try {
-                    duplicateThisQuestion(question);
-                  } catch (error) {
-                    toast.error("Failed to duplicate question");
-                  }
+                  duplicateThisQuestion(question);
                 }}
               >
                 <DocumentDuplicateIcon width={20} height={20} />

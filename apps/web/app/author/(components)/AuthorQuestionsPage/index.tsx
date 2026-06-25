@@ -17,7 +17,7 @@ import type {
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
-import { generateTempQuestionId } from "@/lib/utils";
+import { generateTempQuestionId, isInteractiveTarget } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -616,43 +616,51 @@ const AuthorQuestionsPage: FC<Props> = ({
   let queue = Promise.resolve();
 
   const duplicateThisQuestion = (question: QuestionAuthorStore) => {
-    queue = queue.then(() => {
-      const questionId = generateTempQuestionId();
-      if (!questionId) {
-        toast.error("Failed to add question");
-        return;
-      }
-      const newQuestion = {
-        ...question,
-        id: questionId,
-        alreadyInBackend: false,
-        assignmentId: assignmentId,
-        choices: question.choices,
-        answer: question.answer,
-        scoring: question.scoring,
-        numRetries: question.numRetries,
-        index: Number(question.index) + 1,
-        randomizedChoices: question.randomizedChoices,
-      };
+    // The actual work runs inside the queued promise, so a synchronous
+    // try/catch at the call site cannot observe failures here. Handle errors on
+    // the chain itself: surface them to the user and recover the queue (the
+    // .catch resolves) so later add/duplicate/delete operations keep working.
+    queue = queue
+      .then(() => {
+        const questionId = generateTempQuestionId();
+        if (!questionId) {
+          toast.error("Failed to add question");
+          return;
+        }
+        const newQuestion = {
+          ...question,
+          id: questionId,
+          alreadyInBackend: false,
+          assignmentId: assignmentId,
+          choices: question.choices,
+          answer: question.answer,
+          scoring: question.scoring,
+          numRetries: question.numRetries,
+          index: Number(question.index) + 1,
+          randomizedChoices: question.randomizedChoices,
+        };
 
-      const questionIndex = Number(question.index);
-      const updatedQuestions = [
-        ...questions.slice(0, questionIndex),
-        newQuestion,
-        ...questions.slice(questionIndex),
-      ];
+        const questionIndex = Number(question.index);
+        const updatedQuestions = [
+          ...questions.slice(0, questionIndex),
+          newQuestion,
+          ...questions.slice(questionIndex),
+        ];
 
-      updatedQuestions.forEach((q, index) => {
-        q.index = index + 1;
+        updatedQuestions.forEach((q, index) => {
+          q.index = index + 1;
+        });
+
+        setQuestions(updatedQuestions);
+        useAuthorStore
+          .getState()
+          .setQuestionOrder(updatedQuestions.map((q) => q.id));
+        setFocusedQuestionId(questionId);
+        toast.success("Question duplicated successfully!");
+      })
+      .catch(() => {
+        toast.error("Failed to duplicate question");
       });
-
-      setQuestions(updatedQuestions);
-      useAuthorStore
-        .getState()
-        .setQuestionOrder(updatedQuestions.map((q) => q.id));
-      setFocusedQuestionId(questionId);
-      toast.success("Question duplicated successfully!");
-    });
   };
 
   const DragHandle = () => (
@@ -714,7 +722,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                 : "shadow-sm"
             }`}
             onClick={(e) => {
-              if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [role="combobox"], [role="listbox"], [contenteditable]')) return;
+              if (isInteractiveTarget(e.target)) return;
               handleFocus(question.id);
             }}
           >

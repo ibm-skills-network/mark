@@ -5,6 +5,7 @@ import {
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
+import { isInteractiveTarget } from "@/lib/utils";
 import { translateQuestion } from "@/lib/talkToBackend";
 import languages from "@/public/languages.json";
 import {
@@ -262,7 +263,7 @@ function Component(props: Props) {
       id={`item-${questionNumber}`}
       onClick={(e) => {
         if (questionDisplay === "ALL_PER_PAGE") {
-          if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [role="combobox"], [role="listbox"], [contenteditable]')) return;
+          if (isInteractiveTarget(e.target)) return;
           setActiveQuestionNumber(questionNumber);
         }
       }}
