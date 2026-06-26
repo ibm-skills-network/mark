@@ -2392,6 +2392,14 @@ export class AdminService {
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
 
+    const hasChoices = questionData.choices && questionData.choices.length > 0;
+    const randomizedChoices =
+      questionData.randomizedChoices != null
+        ? questionData.randomizedChoices
+        : hasChoices
+          ? true
+          : questionData.randomizedChoices;
+
     return {
       assignmentId,
       type: questionData.type,
@@ -2400,7 +2408,7 @@ export class AdminService {
       maxWords: questionData.maxWords,
       maxCharacters: questionData.maxCharacters,
       totalPoints: questionData.totalPoints,
-      randomizedChoices: questionData.randomizedChoices,
+      randomizedChoices,
       choices,
       scoring,
     };
