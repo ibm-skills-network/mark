@@ -252,6 +252,7 @@ export type AuthorActions = {
     questionId: number,
     variantId?: number,
   ) => boolean;
+  setAllRandomizedChoices: (value: boolean) => void;
 
   loadVersions: () => Promise<void>;
   createVersion: (
@@ -1227,6 +1228,19 @@ export const useAuthorStore = createWithEqualityFn<
             get().questions.find((q) => q.id === questionId)
               ?.randomizedChoices || false
           );
+        },
+        setAllRandomizedChoices: (value: boolean) => {
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              if (
+                q.type === "SINGLE_CORRECT" ||
+                q.type === "MULTIPLE_CORRECT"
+              ) {
+                return { ...q, randomizedChoices: value };
+              }
+              return q;
+            }),
+          }));
         },
         addTrueFalseChoice: (questionId, isTrue, variantId) => {
           return set((state) => ({
