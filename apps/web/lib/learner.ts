@@ -58,16 +58,26 @@ export async function createAttempt(
 
     return id;
   } catch (err) {
-    if (err instanceof APIError && err.status === 422) {
+    if (err instanceof APIError && isAiTemporarilyDisabled(err)) {
+      // AI grading kill-switch is engaged for this AI-graded assignment.
+      return "ai temporarily unavailable";
+    } else if (err instanceof APIError && err.status === 422) {
       return "no more attempts";
     } else if (err instanceof APIError && err.status === 429) {
       return "in cooldown period";
-    } else if (err instanceof APIError && err.status === 503) {
-      // AI grading kill-switch is engaged for this AI-graded assignment.
-      return "ai temporarily unavailable";
     }
     return undefined;
   }
+}
+
+/**
+ * Recognises the AI kill-switch response. Matches on the body `code` first (the
+ * stable signal) and falls back to HTTP 409 — the status the backend now uses
+ * because gateways/meshes mangle 503s into generic 500s.
+ */
+export function isAiTemporarilyDisabled(err: APIError): boolean {
+  const code = (err.body as { code?: string } | undefined)?.code;
+  return code === "AI_TEMPORARILY_DISABLED" || err.status === 409;
 }
 
 /**
@@ -371,7 +381,7 @@ export async function submitAssignment(
       if (apiError instanceof APIError) {
         errorMessage = `Submission failed with status: ${apiError.status}`;
 
-        if (apiError.status === 503) {
+        if (isAiTemporarilyDisabled(apiError)) {
           // AI grading kill-switch engaged: the attempt was not submitted and
           // no grading was performed, so the learner's progress is preserved.
           errorMessage =

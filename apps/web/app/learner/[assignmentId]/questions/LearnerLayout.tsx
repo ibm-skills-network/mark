@@ -3,6 +3,7 @@
 import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
 import ErrorModal from "@/components/ErrorModal";
+import ServiceUnavailableNotice from "@/components/ServiceUnavailableNotice";
 import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import {
   createAttempt,
@@ -135,26 +136,7 @@ async function LearnerLayout(props: Props) {
   if (attemptId === "ai temporarily unavailable") {
     log("AI grading temporarily disabled");
     return (
-      <ErrorModal
-        className="h-[calc(100vh-100px)]"
-        statusCode={503}
-        error={
-          "This assignment uses AI grading, which is temporarily out of service. Your work has not been started or lost. Please check back a little later."
-        }
-        headline="Temporarily out of service"
-        userSteps={[
-          {
-            title: "Try again shortly",
-            description:
-              "AI grading is paused for maintenance. Reload this page to retry.",
-          },
-          {
-            title: "Return to course",
-            description: "Head back to the assignment list in the meantime.",
-          },
-        ]}
-        stateTimeline={stateTimeline}
-      />
+      <ServiceUnavailableNotice message="This assignment is graded with AI, which is paused for maintenance right now. Your work hasn't been started or lost." />
     );
   }
 
