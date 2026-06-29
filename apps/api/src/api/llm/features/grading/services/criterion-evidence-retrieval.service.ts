@@ -362,12 +362,15 @@ export class CriterionEvidenceRetrievalService {
         // Only suppress the keyword fallback when the LLM explicitly labelled items
         // as restatement_only/boilerplate_only — not for "irrelevant" (criterion
         // mismatch) or hallucinated chunkIds (both should fall back to keyword scoring).
-        const hasBoilerplateRejections = (parsed.evidence || []).some(
-          (item) =>
-            item.relevance === "restatement_only" ||
-            item.relevance === "boilerplate_only",
-        );
-        const definitivelyRejected = hasBoilerplateRejections && evidence.length === 0;
+        // Short-circuit: if evidence.length > 0 the answer is always false, so skip
+        // the .some() traversal entirely.
+        const definitivelyRejected =
+          evidence.length === 0 &&
+          (parsed.evidence || []).some(
+            (item) =>
+              item.relevance === "restatement_only" ||
+              item.relevance === "boilerplate_only",
+          );
         return { evidence, definitivelyRejected };
       } catch {
         this.logger.warn("Evidence validation parse failed");

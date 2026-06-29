@@ -31,6 +31,7 @@ import {
   DEFAULT_MODEL_SELECTION,
   ExtractedChunk,
   RubricCriterion,
+  rubricCriterionToText,
 } from "../types/criterion-evidence.types";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
@@ -143,9 +144,12 @@ export class EvidenceBasedGradingService {
         })
       | null = null;
 
-    try {
-      const chunks = this.chunkingService.extractFromSubmission(submission);
+    // Extract once so the fallback catch block can reuse the same chunks without
+    // a second parse/OCR pass.  If extraction itself throws, the outer catch
+    // (further up the call stack) handles it — nothing below needs chunks yet.
+    const chunks = this.chunkingService.extractFromSubmission(submission);
 
+    try {
       this.logger.info(
         `Extracted ${chunks.length} chunks from submission (${submission.pages.length} pages, ` +
           `${submission.pages.reduce(
@@ -200,14 +204,11 @@ export class EvidenceBasedGradingService {
       );
 
       // Run the quality gate on the fallback path so boilerplate/empty submissions
-      // can't bypass it via a pipeline failure.
-      const fallbackChunks = this.chunkingService.extractFromSubmission(submission);
-      const rubricTexts = criteria.map(
-        (c) =>
-          `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`,
-      );
+      // can't bypass it via a pipeline failure.  chunks was extracted before the
+      // try block so we reuse it here rather than parsing the submission a second time.
+      const rubricTexts = criteria.map(rubricCriterionToText);
       const { quality: fallbackQuality } = this.qualityService.classifyChunks(
-        fallbackChunks,
+        chunks,
         { question: questionText, rubricTexts },
       );
 
@@ -227,7 +228,7 @@ export class EvidenceBasedGradingService {
             rationale: "No substantive learner evidence found in the submission.",
             decision: "does_not_meet",
             gradedAt: new Date().toISOString(),
-          } as any);
+          });
           totalPoints += minPoints;
           maxPossiblePoints += criterion.maxPoints;
         }

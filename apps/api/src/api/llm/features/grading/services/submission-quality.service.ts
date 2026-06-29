@@ -348,7 +348,7 @@ export class SubmissionQualityService {
       // not the union of all criteria, which would inflate the denominator.
       const isRubricCopy = perCriterionRubricTokenSets.some(
         (criterionTokens) =>
-          this.jaccardSimilarity(chunkTokens!, criterionTokens) >=
+          this.jaccardSimilarity(chunkTokens, criterionTokens) >=
           GRADING_QUALITY.RUBRIC_COPY_SIMILARITY_THRESHOLD,
       );
       if (isRubricCopy) reasons.push("rubric_copy");
@@ -499,7 +499,8 @@ export class SubmissionQualityService {
       tokensByPage.set(page, (tokensByPage.get(page) ?? 0) + tokens);
     }
 
-    const total = [...tokensByPage.values()].reduce((a, b) => a + b, 0);
+    let total = 0;
+    for (const v of tokensByPage.values()) total += v;
     return total / pageNumbers.size;
   }
 

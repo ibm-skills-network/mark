@@ -10,6 +10,7 @@ import {
   JudgeCritique,
   RubricCriterion,
   SubmissionQualityMetadata,
+  rubricCriterionToText,
 } from "../types/criterion-evidence.types";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
@@ -99,10 +100,7 @@ export class CriterionEvidencePipelineService {
     // Per-criterion texts so rubric_copy Jaccard is checked against each criterion
     // individually — concatenating all criteria into one token set inflates the
     // denominator and makes the threshold unreachable for multi-criterion rubrics.
-    const rubricTexts = request.criteria.map(
-      (c) =>
-        `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`,
-    );
+    const rubricTexts = request.criteria.map(rubricCriterionToText);
 
     const { chunks: qualifiedChunks, quality: submissionQuality } =
       this.qualityService.classifyChunks(request.chunks, {
@@ -142,35 +140,28 @@ export class CriterionEvidencePipelineService {
 
       const summary = this.compiler.compile(grades);
 
-      const rubricHash = crypto
-        .createHash("sha256")
-        .update(JSON.stringify(request.criteria))
-        .digest("hex");
-
-      const audit: EvidenceAuditLog = {
-        rubricHash,
-        chunkHashes: request.chunks.map((c) => c.hash),
-        evidenceRetrieval: [],
-        gradingAttempts: [],
-        judgeCritiques: [],
-        finalSelection: grades.map((g) => ({
+      const gatedQuality: SubmissionQualityMetadata = { ...submissionQuality, gated: true };
+      const audit = this.buildAuditLog(
+        request,
+        [],
+        new Map(),
+        [],
+        [],
+        grades.map((g) => ({
           criterionId: g.criterionId,
           attempt: 1,
           supportScore: 0,
           reason: "quality_gate_no_eligible_chunks",
         })),
-        llmCalls: [],
-        submissionQuality,
-        createdAt: new Date().toISOString(),
-      };
+        gatedQuality,
+      );
 
-      const gatedQuality: SubmissionQualityMetadata = { ...submissionQuality, gated: true };
       return {
         grades,
         evidence: [],
         judgeCritiques: [],
         summary,
-        audit: { ...audit, submissionQuality: gatedQuality },
+        audit,
       };
     }
 
