@@ -58,26 +58,38 @@ export async function createAttempt(
 
     return id;
   } catch (err) {
-    if (err instanceof APIError && isAiTemporarilyDisabled(err)) {
+    // Duck-type the error rather than `instanceof APIError`: across Next's
+    // server/SSR module boundary the APIError class identity can differ, so
+    // `instanceof` silently returns false and every branch falls through to
+    // `undefined`. Reading `.status` / `.body.code` works regardless.
+    if (isAiTemporarilyDisabled(err)) {
       // AI grading kill-switch is engaged for this AI-graded assignment.
       return "ai temporarily unavailable";
-    } else if (err instanceof APIError && err.status === 422) {
+    }
+    const status = getErrorStatus(err);
+    if (status === 422) {
       return "no more attempts";
-    } else if (err instanceof APIError && err.status === 429) {
+    } else if (status === 429) {
       return "in cooldown period";
     }
     return undefined;
   }
 }
 
+/** HTTP status off an unknown thrown error (APIError or any `{status}` shape). */
+function getErrorStatus(err: unknown): number | undefined {
+  return (err as { status?: number } | undefined)?.status;
+}
+
 /**
  * Recognises the AI kill-switch response. Matches on the body `code` first (the
  * stable signal) and falls back to HTTP 409 — the status the backend now uses
- * because gateways/meshes mangle 503s into generic 500s.
+ * because gateways/meshes mangle 503s into generic 500s. Accepts `unknown` and
+ * duck-types so it survives the Next server-module-identity `instanceof` gotcha.
  */
-export function isAiTemporarilyDisabled(err: APIError): boolean {
-  const code = (err.body as { code?: string } | undefined)?.code;
-  return code === "AI_TEMPORARILY_DISABLED" || err.status === 409;
+export function isAiTemporarilyDisabled(err: unknown): boolean {
+  const e = err as { status?: number; body?: { code?: string } } | undefined;
+  return e?.body?.code === "AI_TEMPORARILY_DISABLED" || e?.status === 409;
 }
 
 /**
@@ -378,15 +390,18 @@ export async function submitAssignment(
     } catch (apiError) {
       let errorMessage = "Submission failed";
 
-      if (apiError instanceof APIError) {
+      // Check the kill-switch first and duck-typed (not gated on
+      // `instanceof APIError`, which is unreliable across Next's module
+      // boundary) so the out-of-service message always wins for a 409.
+      if (isAiTemporarilyDisabled(apiError)) {
+        // AI grading kill-switch engaged: the attempt was not submitted and
+        // no grading was performed, so the learner's progress is preserved.
+        errorMessage =
+          "Grading is temporarily out of service. Your answers have not been submitted — please try again later.";
+      } else if (apiError instanceof APIError) {
         errorMessage = `Submission failed with status: ${apiError.status}`;
 
-        if (isAiTemporarilyDisabled(apiError)) {
-          // AI grading kill-switch engaged: the attempt was not submitted and
-          // no grading was performed, so the learner's progress is preserved.
-          errorMessage =
-            "Grading is temporarily out of service. Your answers have not been submitted — please try again later.";
-        } else if (
+        if (
           apiError.message.includes("maximum context length") ||
           apiError.message.includes("tokens")
         ) {
