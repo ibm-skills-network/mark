@@ -163,7 +163,12 @@ export class APIClient {
           errorBody = undefined;
         }
 
-        if (!quiet) {
+        // Toasts are client-only UI. `sonner`'s `toast.error` does not exist in
+        // a React Server Component bundle, so calling it during SSR throws a
+        // TypeError that masks the real APIError below — every SSR caller then
+        // sees an unrecognisable error instead of the HTTP status/body. Guard on
+        // the browser environment so server-side error paths surface the APIError.
+        if (!quiet && typeof window !== "undefined") {
           if (response.status >= 500) {
             toast.error(
               `Server Error: ${response.status} ${response.statusText}`,
