@@ -70,10 +70,9 @@ describe("Gateway routing (e2e)", () => {
 
   it("POST /api/v1/auth/admin/send-code with no cookie reaches public passthrough (not cookie-guard rejection)", async () => {
     // Mock: forwardPublicRequestToMarkApi calls axios.request
+    const passthroughResponse = { status: 200, data: { sent: true } };
     // eslint-disable-next-line @typescript-eslint/unbound-method
-    jest
-      .mocked(axios.request)
-      .mockResolvedValue({ status: 200, data: { sent: true } });
+    jest.mocked(axios.request).mockResolvedValue(passthroughResponse);
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/admin/send-code")

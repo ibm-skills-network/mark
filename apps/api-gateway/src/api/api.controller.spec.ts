@@ -16,6 +16,7 @@ import { MockJwtCookieAuthGuard } from "../auth/jwt/cookie-based/mock.jwt.cookie
 import { MessagingService } from "../messaging/messaging.service";
 import { ApiController, DownstreamService } from "./api.controller";
 import { ApiService } from "./api.service";
+import { PublicAuthThrottlerGuard } from "./public-auth-throttler.guard";
 
 describe("ApiController", () => {
   let controller: ApiController;
@@ -43,7 +44,13 @@ describe("ApiController", () => {
           } as Partial<Logger>,
         },
       ],
-    }).compile();
+    })
+      // handlePublicAdminAuth now carries @UseGuards(PublicAuthThrottlerGuard),
+      // which extends ThrottlerGuard and needs ThrottlerModule's providers. This
+      // unit module doesn't import them, so stub the guard out.
+      .overrideGuard(PublicAuthThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ApiController>(ApiController);
     apiService = module.get<ApiService>(ApiService);
