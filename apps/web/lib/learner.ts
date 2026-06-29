@@ -32,7 +32,13 @@ import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 export async function createAttempt(
   assignmentId: number,
   cookies?: string,
-): Promise<number | undefined | "no more attempts" | "in cooldown period"> {
+): Promise<
+  | number
+  | undefined
+  | "no more attempts"
+  | "in cooldown period"
+  | "ai temporarily unavailable"
+> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
     const res = await apiClient.post<BaseBackendResponse>(
@@ -56,6 +62,9 @@ export async function createAttempt(
       return "no more attempts";
     } else if (err instanceof APIError && err.status === 429) {
       return "in cooldown period";
+    } else if (err instanceof APIError && err.status === 503) {
+      // AI grading kill-switch is engaged for this AI-graded assignment.
+      return "ai temporarily unavailable";
     }
     return undefined;
   }
@@ -263,7 +272,6 @@ export async function getLiveRecordingFeedback(
   }
 }
 
-
 export type QuestionGradingStatus =
   | "pending"
   | "in_progress"
@@ -363,7 +371,12 @@ export async function submitAssignment(
       if (apiError instanceof APIError) {
         errorMessage = `Submission failed with status: ${apiError.status}`;
 
-        if (
+        if (apiError.status === 503) {
+          // AI grading kill-switch engaged: the attempt was not submitted and
+          // no grading was performed, so the learner's progress is preserved.
+          errorMessage =
+            "Grading is temporarily out of service. Your answers have not been submitted — please try again later.";
+        } else if (
           apiError.message.includes("maximum context length") ||
           apiError.message.includes("tokens")
         ) {
@@ -473,16 +486,11 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.(
-                "processing",
-                percentage,
-                progress,
-                {
-                  currentQuestion: data.currentQuestion,
-                  totalQuestions: data.totalQuestions,
-                  gradingState: parseGradingState(data.result),
-                },
-              );
+              onProgress?.("processing", percentage, progress, {
+                currentQuestion: data.currentQuestion,
+                totalQuestions: data.totalQuestions,
+                gradingState: parseGradingState(data.result),
+              });
             } else if (data.status === "Completed" && !isCompleted) {
               isCompleted = true;
               onProgress?.("completed", 100, "Grading completed successfully!");
@@ -530,16 +538,11 @@ export async function submitAssignment(
               }
 
               if (data.progress && data.percentage !== undefined) {
-                onProgress?.(
-                  "processing",
-                  data.percentage,
-                  data.progress,
-                  {
-                    currentQuestion: data.currentQuestion,
-                    totalQuestions: data.totalQuestions,
-                    gradingState: parseGradingState(data.result),
-                  },
-                );
+                onProgress?.("processing", data.percentage, data.progress, {
+                  currentQuestion: data.currentQuestion,
+                  totalQuestions: data.totalQuestions,
+                  gradingState: parseGradingState(data.result),
+                });
               }
             } catch (error) {
               console.warn("SSE update event parse failed:", error);

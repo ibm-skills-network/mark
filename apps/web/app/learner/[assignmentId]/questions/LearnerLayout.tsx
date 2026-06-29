@@ -132,6 +132,32 @@ async function LearnerLayout(props: Props) {
     );
   }
 
+  if (attemptId === "ai temporarily unavailable") {
+    log("AI grading temporarily disabled");
+    return (
+      <ErrorModal
+        className="h-[calc(100vh-100px)]"
+        statusCode={503}
+        error={
+          "This assignment uses AI grading, which is temporarily out of service. Your work has not been started or lost. Please check back a little later."
+        }
+        headline="Temporarily out of service"
+        userSteps={[
+          {
+            title: "Try again shortly",
+            description:
+              "AI grading is paused for maintenance. Reload this page to retry.",
+          },
+          {
+            title: "Return to course",
+            description: "Head back to the assignment list in the meantime.",
+          },
+        ]}
+        stateTimeline={stateTimeline}
+      />
+    );
+  }
+
   if (attemptId === "in cooldown period") {
     log("Attempt in cooldown");
     return (

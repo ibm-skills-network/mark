@@ -59,6 +59,7 @@ import { AttemptServiceV2 } from "./services/attempt.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
 import { LtiGradeSyncService } from "./services/lti-grade-sync.service";
+import { GradingKillSwitchService } from "../ai-feature-flags/grading-kill-switch.service";
 
 @ApiTags("Attempts")
 @Injectable()
@@ -76,6 +77,7 @@ export class AttemptControllerV2 {
     @Inject("GradingProgressService")
     private readonly gradingProgressService: GradingProgressService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
+    private readonly gradingKillSwitch: GradingKillSwitchService,
   ) {
     this.logger = parentLogger.child({ context: AttemptControllerV2.name });
   }
@@ -255,6 +257,16 @@ export class AttemptControllerV2 {
 
     this.logger.info(
       `Updating attempt: attemptId=${parsedAttemptId}, assignmentId=${parsedAssignmentId}`,
+    );
+
+    // Kill-switch: block submitting/grading an AI-graded attempt while grading
+    // is disabled. Throwing here means the attempt is neither marked submitted
+    // nor enqueued for grading, so the learner's progress is preserved and no
+    // LLM call is made. Non-AI assignments pass through untouched.
+    await this.gradingKillSwitch.assertGradingAllowed(
+      parsedAssignmentId,
+      request.userSession?.userId,
+      "submit",
     );
 
     const authCookie: string =
