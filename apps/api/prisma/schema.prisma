@@ -890,6 +890,19 @@ model AdminSession {
   @@index([expiresAt])
 }
 
+/// Runtime state of the AI kill-switch, one row per component
+/// ("ALL" master, "GRADING", "CHAT", "AUTHORING"). Env vars seed these rows at
+/// boot; at runtime this table is authoritative so an admin can toggle a
+/// component live (no redeploy). Absence of a row means the component is enabled.
+model AiFeatureFlag {
+  id        Int      @id @default(autoincrement())
+  component String   @unique
+  enabled   Boolean
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
 /// This model tracks the authors of assignments
 model AssignmentAuthor {
   id           Int        @id @default(autoincrement())

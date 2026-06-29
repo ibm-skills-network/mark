@@ -13,6 +13,7 @@ import { AdminController } from "./admin.controller";
 import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 import { AdminDashboardController } from "./controllers/admin-dashboard.controller";
+import { AiFeaturesAdminController } from "./controllers/ai-features-admin.controller";
 import { AttemptAdminController } from "./controllers/attempt-admin.controller";
 import { AssignmentLevelStandardsController } from "./controllers/assignment-level-standards.controller";
 import { AssignmentAnalyticsController } from "./controllers/assignment-analytics.controller";
@@ -54,6 +55,7 @@ import { QueueStatusService } from "./services/queue-status.service";
     TranslationMaintenanceController,
     QueueStatusController,
     AttemptAdminController,
+    AiFeaturesAdminController,
   ],
   providers: [
     AdminService,

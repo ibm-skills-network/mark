@@ -1744,6 +1744,63 @@ export async function getDashboardStats(
   return await apiClient.get(url, { headers });
 }
 
+export interface AiFeatureFlagState {
+  component: "ALL" | "GRADING" | "CHAT" | "AUTHORING";
+  enabled: boolean;
+  disabled: boolean;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+/** Reads the current AI kill-switch state for every component (admin only). */
+export async function getAiFeatureFlags(
+  sessionToken: string,
+): Promise<AiFeatureFlagState[]> {
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/ai-features`;
+  const res = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+      "Cache-Control": "no-cache",
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to fetch AI feature flags");
+  }
+
+  return (await res.json()) as AiFeatureFlagState[];
+}
+
+/** Enables/disables an AI component at runtime (admin only). */
+export async function setAiFeatureFlag(
+  sessionToken: string,
+  component: AiFeatureFlagState["component"],
+  enabled: boolean,
+): Promise<AiFeatureFlagState[]> {
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/ai-features`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+    body: JSON.stringify({ component, enabled }),
+  });
+
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => ({ message: "Unknown error" }))) as ErrorResponse;
+    throw new Error(errorBody.message || "Failed to update AI feature flag");
+  }
+
+  return (await res.json()) as AiFeatureFlagState[];
+}
+
 export async function upscalePricing(
   sessionToken: string,
   upscaleData: {

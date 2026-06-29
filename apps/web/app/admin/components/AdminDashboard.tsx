@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { FeedbackTable } from "./FeedbackTable";
 import { ReportsTable } from "./ReportsTable";
 import { AssignmentAnalyticsTable } from "./AssignmentAnalyticsTable";
+import { AiFeatureControls } from "./AiFeatureControls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -318,6 +319,8 @@ function AdminDashboardContent({
           )}
         </div>
       </div>
+
+      {isAdmin && <AiFeatureControls sessionToken={sessionToken} />}
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
