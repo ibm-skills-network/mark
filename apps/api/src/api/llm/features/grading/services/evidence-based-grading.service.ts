@@ -206,7 +206,7 @@ export class EvidenceBasedGradingService {
       // Run the quality gate on the fallback path so boilerplate/empty submissions
       // can't bypass it via a pipeline failure.  chunks was extracted before the
       // try block so we reuse it here rather than parsing the submission a second time.
-      const rubricTexts = criteria.map(rubricCriterionToText);
+      const rubricTexts = criteria.map((c) => rubricCriterionToText(c));
       const { quality: fallbackQuality } = this.qualityService.classifyChunks(
         chunks,
         { question: questionText, rubricTexts },

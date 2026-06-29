@@ -50,7 +50,8 @@ describe("SubmissionQualityService", () => {
     });
 
     it("does NOT classify a substantive sentence as page_label", () => {
-      const text = "The model achieved 95% accuracy on the test dataset.";
+      // Needs ≥6 unique substantive tokens to clear the too_short guard.
+      const text = "The model achieved 95% accuracy on the validation test dataset.";
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.eligibility).toBe("eligible");
     });
@@ -79,7 +80,8 @@ describe("SubmissionQualityService", () => {
     });
 
     it("does NOT classify a short but substantive chunk as too_short", () => {
-      const text = "Data normalization removes redundancy.";
+      // Needs ≥6 unique substantive tokens to clear the too_short guard.
+      const text = "Data normalization removes redundancy by organizing relational database tables.";
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.eligibility).toBe("eligible");
     });
@@ -99,7 +101,8 @@ describe("SubmissionQualityService", () => {
     });
 
     it("does NOT classify text repeated on 4 pages as boilerplate", () => {
-      const text = "Section header: Introduction to Machine Learning";
+      // Needs ≥6 unique substantive tokens so too_short doesn't fire before the boilerplate check.
+      const text = "Introduction to Machine Learning algorithms, neural networks, and deep learning concepts.";
       const chunks = Array.from({ length: 4 }, (_, i) =>
         makeChunk(text, i + 1, `c${i}`),
       );

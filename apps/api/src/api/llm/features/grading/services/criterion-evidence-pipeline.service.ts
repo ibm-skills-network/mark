@@ -100,7 +100,7 @@ export class CriterionEvidencePipelineService {
     // Per-criterion texts so rubric_copy Jaccard is checked against each criterion
     // individually — concatenating all criteria into one token set inflates the
     // denominator and makes the threshold unreachable for multi-criterion rubrics.
-    const rubricTexts = request.criteria.map(rubricCriterionToText);
+    const rubricTexts = request.criteria.map((c) => rubricCriterionToText(c));
 
     const { chunks: qualifiedChunks, quality: submissionQuality } =
       this.qualityService.classifyChunks(request.chunks, {
