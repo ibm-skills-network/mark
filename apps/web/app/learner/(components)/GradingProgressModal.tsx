@@ -10,6 +10,14 @@ import { toast } from "sonner";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
 import { useCreepingProgress } from "./useCreepingProgress";
 
+// Grading-completion email notifications are disabled. Grading almost always
+// finishes before a learner clicks "Get email when done", so the email never
+// sends and only generates confusion/complaints. The subscription UI and its
+// handler are kept intact behind this flag so the feature can be re-enabled
+// once the timing/UX is reworked. The backend /notify route also returns 503
+// while this is off.
+const EMAIL_NOTIFICATIONS_ENABLED = false;
+
 export interface ProgressState {
   status: "processing" | "completed" | "failed" | "idle";
   progress: number;
@@ -123,9 +131,8 @@ export default function GradingProgressModal({
   // Decouple render status from real status so the wheel can animate to 100%
   // before the success/failure icon appears. "failed" surfaces immediately;
   // "completed" waits for the spring to settle first.
-  const [displayStatus, setDisplayStatus] = useState<ProgressState["status"]>(
-    "processing",
-  );
+  const [displayStatus, setDisplayStatus] =
+    useState<ProgressState["status"]>("processing");
   useEffect(() => {
     if (progressData.status === "completed") {
       setDisplayStatus("processing");
@@ -537,8 +544,9 @@ export default function GradingProgressModal({
                       </div>
                     </motion.div>
 
-                    {/* Email notification section */}
-                    {!emailNotified && (
+                    {/* Email notification section (disabled — see
+                        EMAIL_NOTIFICATIONS_ENABLED at top of file) */}
+                    {EMAIL_NOTIFICATIONS_ENABLED && !emailNotified && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}

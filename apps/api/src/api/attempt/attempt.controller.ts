@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   Req,
+  ServiceUnavailableException,
   Sse,
   UseGuards,
 } from "@nestjs/common";
@@ -684,14 +685,17 @@ export class AttemptControllerV2 {
   ) {
     const email = request.userSession.userId;
 
-    await this.gradingProgressService.enableEmailNotification(
-      Number(attemptId),
-      email,
+    // Grading-completion email notifications are disabled. Grading usually
+    // finishes before a learner subscribes, so the email never delivers and
+    // only generates complaints. We keep the subscription plumbing
+    // (enableEmailNotification + the send path in GradingProgressService)
+    // intact but refuse new subscriptions with 503 so nothing gets emailed.
+    // Re-enable by restoring the enableEmailNotification call below.
+    this.logger.warn(
+      `Grading-completion email subscription refused (feature disabled) for attempt ${attemptId}, user ${email}`,
     );
-
-    return {
-      success: true,
-      message: `You will receive an email at ${email} when grading is complete`,
-    };
+    throw new ServiceUnavailableException(
+      "Grading completion email notifications are currently unavailable",
+    );
   }
 }
