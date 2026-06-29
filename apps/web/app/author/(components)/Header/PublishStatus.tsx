@@ -161,6 +161,12 @@ export default function PublishStatus({
   const [dismissed, setDismissed] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
 
+  // Translations were needed but the AI kill-switch skipped them. The publish
+  // itself succeeded; show an informational notice (not a failure) and keep the
+  // card visible instead of auto-hiding on the total=0 short-circuit below.
+  const skippedByAi =
+    publishResult?.translationsSkippedReason === "ai_unavailable";
+
   // Merge incoming per-job entries before any early return so the sticky
   // ref keeps tracking even when the component would have otherwise hidden.
   const incomingPerJob = publishResult?.translations?.perJob;
@@ -215,7 +221,10 @@ export default function PublishStatus({
   // remain visible so the author can act on it. The effect must run
   // before any early returns to keep hook ordering stable across renders.
   const shouldAutoDismiss =
-    isTerminal && !isFailureMode && (aggregate?.failed ?? 0) === 0;
+    isTerminal &&
+    !isFailureMode &&
+    (aggregate?.failed ?? 0) === 0 &&
+    !skippedByAi;
   React.useEffect(() => {
     if (!shouldAutoDismiss) return;
     const t = setTimeout(() => setDismissed(true), AUTO_DISMISS_MS);
@@ -230,7 +239,8 @@ export default function PublishStatus({
     !isFailureMode &&
     perJob.length === 0 &&
     wireAggregate !== undefined &&
-    wireAggregate.total === 0
+    wireAggregate.total === 0 &&
+    !skippedByAi
   ) {
     return null;
   }
@@ -394,6 +404,13 @@ export default function PublishStatus({
                   {subtext}
                 </motion.p>
               </AnimatePresence>
+            </div>
+          )}
+
+          {skippedByAi && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              AI translations are temporarily unavailable, so this was published
+              without them. Re-publish once AI is back to generate translations.
             </div>
           )}
 
