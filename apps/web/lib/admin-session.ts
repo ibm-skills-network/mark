@@ -44,3 +44,16 @@ export function writeAdminSessionToStorage(session: {
 export function buildAdminLoginRedirect(currentPath: string): string {
   return `/admin?returnTo=${encodeURIComponent(currentPath)}`;
 }
+
+export async function enterOverrideMode(
+  sessionToken: string,
+): Promise<{ expiresAt: string }> {
+  const res = await fetch("/api/v1/auth/admin/override-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionToken }),
+  });
+  if (!res.ok) throw new Error("Could not enter override mode");
+  const data = await res.json();
+  return { expiresAt: data.expiresAt };
+}

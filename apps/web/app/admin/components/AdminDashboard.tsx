@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { FeedbackTable } from "./FeedbackTable";
+import { OverrideMode } from "./OverrideMode";
 import { ReportsTable } from "./ReportsTable";
 import { AssignmentAnalyticsTable } from "./AssignmentAnalyticsTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -652,6 +653,10 @@ function AdminDashboardContent({
               </Button>
             )}
           </nav>
+
+          {isAdmin && (
+            <OverrideMode sessionToken={sessionToken} />
+          )}
         </div>
       </div>
 
