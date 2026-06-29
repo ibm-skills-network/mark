@@ -14,6 +14,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { isAdminOverride } from "../../../auth/admin-override.util";
 import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
@@ -66,6 +67,15 @@ export class ChatAccessControlGuard implements CanActivate {
     }
 
     request.userSession = userSession;
+
+    if (isAdminOverride(userSession)) {
+      this.logger.warn("admin_override_granted", {
+        admin_email: userSession.userId,
+        method,
+        url: originalUrl,
+      });
+      return true;
+    }
 
     const { params } = request;
 

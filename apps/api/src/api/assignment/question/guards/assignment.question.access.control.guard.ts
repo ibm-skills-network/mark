@@ -10,6 +10,7 @@ import { Reflector } from "@nestjs/core";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
+import { isAdminOverride } from "../../../../auth/admin-override.util";
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeForLog } from "../../../../logger/sanitize";
 
@@ -42,6 +43,17 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params, method, originalUrl } = request;
+
+    if (isAdminOverride(userSession)) {
+      this.logger.warn("admin_override_granted", {
+        admin_email: userSession?.userId,
+        assignment_id: params?.assignmentId ?? params?.id,
+        method,
+        url: originalUrl,
+      });
+      return true;
+    }
+
     const { assignmentId: assignmentIdString, id } = params;
 
     const assignmentId = parsePositiveIntId(assignmentIdString);

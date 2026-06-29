@@ -15,6 +15,41 @@ import {
 import { PrismaService } from "../../../../database/prisma.service";
 import { AssignmentAttemptAccessControlGuard } from "./assignment.attempt.access.control.guard";
 
+describe("AssignmentAttemptAccessControlGuard — admin override", () => {
+  it("allows any attempt request when adminOverride is set, without a DB lookup", async () => {
+    const prisma = {
+      assignmentGroup: { findFirst: jest.fn() },
+      assignment: { findUnique: jest.fn() },
+      assignmentAttempt: { findFirst: jest.fn(), findUnique: jest.fn() },
+      question: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const logger = { child: () => ({ warn: jest.fn() }) };
+    const guard = new AssignmentAttemptAccessControlGuard(
+      {} as never,
+      prisma as never,
+      logger as never,
+    );
+    const ctx = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          userSession: {
+            userId: "admin@ibm.com",
+            role: "author",
+            adminOverride: true,
+          },
+          params: { assignmentId: "42", attemptId: "88" },
+          method: "GET",
+          originalUrl: "/api/v2/assignments/42/attempts/88",
+        }),
+      }),
+    } as never;
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
 const mockLogger = {
   child: jest.fn().mockReturnValue({
     info: jest.fn(),

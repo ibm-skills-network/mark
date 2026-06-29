@@ -9,6 +9,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { isAdminOverride } from "../../../../auth/admin-override.util";
 import {
   UserRole,
   UserSessionRequest,
@@ -45,6 +46,17 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params, method, originalUrl } = request;
+
+    if (isAdminOverride(userSession)) {
+      this.logger.warn("admin_override_granted", {
+        admin_email: userSession?.userId,
+        assignment_id: params?.assignmentId ?? params?.id,
+        method,
+        url: originalUrl,
+      });
+      return true;
+    }
+
     const {
       assignmentId: assignmentIdString,
       attemptId: attemptIdString,

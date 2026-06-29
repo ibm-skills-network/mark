@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { isAdminOverride } from "src/auth/admin-override.util";
 import {
   UserRole,
   UserSessionRequest,
@@ -28,6 +29,17 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserSessionRequest>();
     const { userSession, params, method, originalUrl } = request;
+
+    if (isAdminOverride(userSession)) {
+      this.logger.warn("admin_override_granted", {
+        admin_email: userSession?.userId,
+        assignment_id: params?.assignmentId ?? params?.id,
+        method,
+        url: originalUrl,
+      });
+      return true;
+    }
+
     const { id } = params;
     const assignmentId = Number(id) || userSession?.assignmentId;
     if (!assignmentId || Number.isNaN(assignmentId)) {

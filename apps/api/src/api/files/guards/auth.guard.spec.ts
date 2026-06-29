@@ -41,6 +41,38 @@ function makeLogger() {
   } as unknown as Parameters<typeof AuthGuard.prototype.constructor>[1];
 }
 
+describe("FilesAuthGuard — admin override", () => {
+  it("allows any request when adminOverride is set, without any DB lookup", async () => {
+    const prisma = {
+      assignment: { findUnique: jest.fn() },
+      assignmentAuthor: { findUnique: jest.fn() },
+      assignmentGroup: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const guard = new AuthGuard(
+      prisma as unknown as PrismaService,
+      makeLogger() as any,
+    );
+    const ctx = makeContext({
+      paramId: String(ASSIGNMENT_ID),
+      userSession: {
+        userId: "admin@ibm.com",
+        role: UserRole.AUTHOR,
+        assignmentId: ASSIGNMENT_ID,
+        // adminOverride inlined since UserSession type already has it
+      },
+    });
+    // Manually inject adminOverride since makeContext types it as Partial
+    (ctx.switchToHttp().getRequest() as any).userSession.adminOverride = true;
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.assignment.findUnique).not.toHaveBeenCalled();
+    expect(prisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
+    expect(prisma.assignmentAuthor.findUnique).not.toHaveBeenCalled();
+  });
+});
+
 describe("FilesAuthGuard", () => {
   let prisma: {
     assignment: { findUnique: jest.Mock };
