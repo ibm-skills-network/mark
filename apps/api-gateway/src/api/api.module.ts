@@ -6,10 +6,16 @@ import { AdminOverrideService } from "./admin-override.service";
 import { ApiController } from "./api.controller";
 import { ApiService } from "./api.service";
 import { JwtConfigService } from "../auth/jwt/jwt.config.service";
+import { PublicAuthThrottlerGuard } from "./public-auth-throttler.guard";
 
 @Module({
   imports: [AuthModule, JwtModule.register({})],
-  controllers: [ApiController, AdminOverrideController],
-  providers: [ApiService, AdminOverrideService, JwtConfigService],
+  controllers: [AdminOverrideController, ApiController],
+  providers: [
+    ApiService,
+    AdminOverrideService,
+    JwtConfigService,
+    PublicAuthThrottlerGuard,
+  ],
 })
 export class ApiModule {}

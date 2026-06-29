@@ -2,13 +2,12 @@ import {
   Body,
   Controller,
   Post,
-  Req,
   Res,
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import { ThrottlerGuard, Throttle } from "@nestjs/throttler";
-import { Request, Response } from "express";
+import { Response } from "express";
 import { AdminOverrideService } from "./admin-override.service";
 
 @Controller({ path: "auth/admin", version: "1" })
@@ -20,7 +19,6 @@ export class AdminOverrideController {
   @Post("override-session")
   async createOverrideSession(
     @Body() body: { sessionToken?: string },
-    @Req() request: Request,
     @Res() response: Response,
   ) {
     const minted = await this.svc.mintOverrideCookie(body?.sessionToken ?? "");

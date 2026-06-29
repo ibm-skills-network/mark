@@ -241,6 +241,12 @@ export class ApiService {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
+        ...(request.headers["x-forwarded-for"]
+          ? { "x-forwarded-for": request.headers["x-forwarded-for"] as string }
+          : {}),
+        ...(request.headers["x-real-ip"]
+          ? { "x-real-ip": request.headers["x-real-ip"] as string }
+          : {}),
       },
       validateStatus: () => true,
     });

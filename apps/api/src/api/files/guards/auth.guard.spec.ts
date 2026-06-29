@@ -51,7 +51,7 @@ describe("FilesAuthGuard — admin override", () => {
     };
     const guard = new AuthGuard(
       prisma as unknown as PrismaService,
-      makeLogger() as any,
+      makeLogger() as never,
     );
     const ctx = makeContext({
       paramId: String(ASSIGNMENT_ID),

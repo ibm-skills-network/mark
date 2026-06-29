@@ -8,12 +8,14 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { ApiBadRequestResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import { DynamicJwtBearerTokenAuthGuard } from "../auth/jwt/bearer-token-based/dynamic.jwt.bearer.token.auth.guard";
 import { DynamicJwtCookieAuthGuard } from "../auth/jwt/cookie-based/dynamic.jwt.cookie.auth.guard";
 import { ApiService } from "./api.service";
+import { PublicAuthThrottlerGuard } from "./public-auth-throttler.guard";
 
 export enum DownstreamService {
   MARK_API,
@@ -135,6 +137,8 @@ export class ApiController {
     );
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseGuards(PublicAuthThrottlerGuard)
   @Post(["auth/admin/send-code", "auth/admin/verify-code"])
   async handlePublicAdminAuth(
     @Req() request: Request,

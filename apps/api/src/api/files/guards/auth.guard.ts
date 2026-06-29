@@ -33,7 +33,7 @@ export class AuthGuard implements CanActivate {
     if (isAdminOverride(userSession)) {
       this.logger.warn("admin_override_granted", {
         admin_email: userSession?.userId,
-        assignment_id: params?.assignmentId ?? params?.id,
+        assignment_id: params?.id,
         method,
         url: originalUrl,
       });
