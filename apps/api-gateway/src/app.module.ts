@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_FILTER, RouterModule } from "@nestjs/core";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { WinstonModule } from "nest-winston";
 import { ApiModule } from "./api/api.module";
 import { AppService } from "./app.service";
@@ -20,6 +21,7 @@ import { routes } from "./routes";
   imports: [
     ConfigModule.forRoot(),
     WinstonModule.forRoot(winstonOptions),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     HealthModule,
     ApiModule,
     RouterModule.register(routes),

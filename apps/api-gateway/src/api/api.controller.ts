@@ -3,12 +3,13 @@ import {
   Controller,
   Get,
   Injectable,
+  Post,
   Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { Response } from "express";
+import { Request, Response } from "express";
 import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
 import { DynamicJwtBearerTokenAuthGuard } from "../auth/jwt/bearer-token-based/dynamic.jwt.bearer.token.auth.guard";
 import { DynamicJwtCookieAuthGuard } from "../auth/jwt/cookie-based/dynamic.jwt.cookie.auth.guard";
@@ -132,6 +133,14 @@ export class ApiController {
       endpoint,
       extraHeaders,
     );
+  }
+
+  @Post(["auth/admin/send-code", "auth/admin/verify-code"])
+  async handlePublicAdminAuth(
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    await this.apiService.forwardPublicRequestToMarkApi(request, response);
   }
 
   @All("/{*splat}")

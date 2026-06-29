@@ -226,6 +226,27 @@ export class ApiService {
 
     return normalizedHeaders;
   }
+  /** Forward a request to the Mark API without requiring a user session
+   *  (for public admin-auth bootstrap endpoints). */
+  async forwardPublicRequestToMarkApi(
+    request: Request,
+    response: Response,
+  ): Promise<void> {
+    const endpoint = `${process.env.MARK_API_ENDPOINT ?? ""}${request.originalUrl}`;
+    this.assertConfiguredOrigin(endpoint, process.env.MARK_API_ENDPOINT);
+    const upstream = await axios.request({
+      method: request.method,
+      url: endpoint,
+      data: request.body as Record<string, unknown>,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+      },
+      validateStatus: () => true,
+    });
+    response.status(upstream.status).send(upstream.data);
+  }
+
   /**
    * Forward SSE requests specifically
    */
