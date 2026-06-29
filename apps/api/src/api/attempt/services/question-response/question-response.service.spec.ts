@@ -1,10 +1,17 @@
 /* eslint-disable */
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
+import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
+import { UnsupportedImageFormatError } from "../../../llm/features/grading/errors/unsupported-image-format.error";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
@@ -649,5 +656,123 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
     mockPrisma.question.findUnique.mockResolvedValue(null);
 
     await expect(callGetAssignmentContext()).rejects.toThrow(NotFoundException);
+  });
+});
+
+// ─── gradeQuestionNoSave: typed terminal errors pass through unchanged ────────
+
+describe("QuestionResponseService — gradeQuestionNoSave error handling", () => {
+  let service: QuestionResponseService;
+
+  // A grading strategy whose gradeResponse throws — the catch block under test
+  // wraps the call at gradeResponse(...).
+  const mockStrategy = {
+    validateResponse: jest.fn().mockResolvedValue(true),
+    extractLearnerResponse: jest.fn().mockResolvedValue("learner text"),
+    gradeResponse: jest.fn(),
+  };
+
+  const mockGradingFactoryService = {
+    getStrategy: jest.fn().mockReturnValue(mockStrategy),
+  };
+
+  const mockLogger = {
+    child: jest.fn().mockReturnValue({
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    }),
+  };
+
+  // A non-empty TEXT response so isEmptyResponse() returns false and execution
+  // reaches the strategy path (LINK_FILE is excluded by question.type).
+  const question = {
+    id: 7,
+    question: "Explain entropy",
+    type: QuestionType.TEXT,
+    responseType: "TEXT",
+    totalPoints: 5,
+  } as any;
+  const requestDto = {
+    learnerTextResponse: "a non-empty answer",
+    learnerAnswerChoice: null,
+    language: "en",
+  } as any;
+  const assignmentContext = {
+    assignmentInstructions: "",
+    questionAnswerContext: [],
+  };
+
+  const callGradeQuestionNoSave = () =>
+    (
+      service as unknown as {
+        gradeQuestionNoSave: (...args: any[]) => Promise<unknown>;
+      }
+    ).gradeQuestionNoSave(
+      question,
+      requestDto,
+      assignmentContext,
+      5, // assignmentId
+      "en", // language
+      UserRole.LEARNER,
+      10, // assignmentAttemptId
+    );
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuestionResponseService,
+        { provide: PrismaService, useValue: {} },
+        { provide: QuestionService, useValue: { findOne: jest.fn() } },
+        { provide: LocalizationService, useValue: {} },
+        {
+          provide: GradingFactoryService,
+          useValue: mockGradingFactoryService,
+        },
+        { provide: GradingRateLimiterService, useValue: mockRateLimiter },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
+        { provide: "GradingProgressService", useValue: undefined },
+      ],
+    }).compile();
+
+    service = module.get<QuestionResponseService>(QuestionResponseService);
+    jest.clearAllMocks();
+    mockStrategy.validateResponse.mockResolvedValue(true);
+    mockStrategy.extractLearnerResponse.mockResolvedValue("learner text");
+    mockGradingFactoryService.getStrategy.mockReturnValue(mockStrategy);
+  });
+
+  it("rethrows OversizedSubmissionError unchanged (same instance)", async () => {
+    const oversized = new OversizedSubmissionError({
+      blockCount: 60_000,
+      cap: 50_000,
+      filename: "huge.xlsx",
+    });
+    mockStrategy.gradeResponse.mockRejectedValue(oversized);
+
+    await expect(callGradeQuestionNoSave()).rejects.toBe(oversized);
+  });
+
+  it("rethrows UnsupportedImageFormatError unchanged (same instance)", async () => {
+    const unsupported = new UnsupportedImageFormatError({
+      filename: "photo.heic",
+      detectedFormat: "image/heic",
+      reason: "unsupported format detected at submission",
+    });
+    mockStrategy.gradeResponse.mockRejectedValue(unsupported);
+
+    await expect(callGradeQuestionNoSave()).rejects.toBe(unsupported);
+  });
+
+  it("wraps a generic Error in BadRequestException with the technical message", async () => {
+    mockStrategy.gradeResponse.mockRejectedValue(new Error("model exploded"));
+
+    await expect(callGradeQuestionNoSave()).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(callGradeQuestionNoSave()).rejects.toThrow(
+      "Failed to process question response: model exploded",
+    );
   });
 });

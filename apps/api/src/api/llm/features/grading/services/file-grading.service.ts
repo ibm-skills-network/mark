@@ -28,6 +28,7 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
@@ -38,12 +39,14 @@ import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../constants";
 import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import { RubricCriterion } from "../types/criterion-evidence.types";
+import { ContentSummarizationService } from "./content-summarization.service";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
 import {
   extractExpectedFilenameFromText,
   filenamesMatch,
   mentionsFilenameRequirement,
 } from "./spreadsheet-rubric.utils";
+import { readClampedWorkbook } from "./spreadsheet-used-range.utils";
 
 type RubricScore = {
   rubricQuestion: string;
@@ -120,19 +123,6 @@ type SpreadsheetCheckDefinition = {
 @Injectable()
 export class FileGradingService implements IFileGradingService {
   private readonly logger: Logger;
-  private readonly contextWindowByModel: Record<string, number> = {
-    "gpt-5-mini": 128_000,
-    "gpt-5o-mini": 128_000,
-    "gpt-5": 128_000,
-    "gpt-4o-mini": 128_000,
-    "gpt-4o": 128_000,
-    "gpt-4.1-mini": 128_000,
-    "gpt-4.1": 128_000,
-  };
-  private readonly defaultContextWindow = 32_000;
-  private readonly contextSafetyRatio = 0.8;
-  private readonly minimumChunkTokens = 4000;
-  private readonly maximumChunkTokens = 20_000;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -146,6 +136,7 @@ export class FileGradingService implements IFileGradingService {
     private readonly evidenceBasedGrading: EvidenceBasedGradingService,
     private readonly pdfAnnotationService: PdfAnnotationService,
     private readonly s3Service: S3Service,
+    private readonly contentSummarization: ContentSummarizationService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: FileGradingService.name });
@@ -339,7 +330,8 @@ export class FileGradingService implements IFileGradingService {
         scoringCriteria,
         selectedModel,
       );
-      const safeTokenLimit = this.getSafeContextLimit(selectedModel);
+      const safeTokenLimit =
+        this.contentSummarization.getSafeContextLimit(selectedModel);
 
       if (estimatedTokens > safeTokenLimit) {
         this.logger.warn(
@@ -548,6 +540,19 @@ export class FileGradingService implements IFileGradingService {
           `Invalid LLM response: ${response?.slice(0, 100)}`,
         );
       } catch (error) {
+        // A context_length_exceeded 400 is deterministic for a given prompt:
+        // neither a same-model retry nor the fallback-model resend below can
+        // ever succeed, so propagate it immediately instead of burning the
+        // remaining ladder on an identical request.
+        if (isContextLengthExceededError(error)) {
+          this.logger.error("file.grading.context.length.exceeded", {
+            assignmentId,
+            attempt,
+            primaryModel,
+          });
+          throw error;
+        }
+
         lastError = error instanceof Error ? error : new Error(String(error));
         this.logger.warn(
           `LLM attempt ${attempt}/${maxRetries} failed with model ${primaryModel}: ${lastError.message}`,
@@ -1681,17 +1686,19 @@ export class FileGradingService implements IFileGradingService {
 
       try {
         const options: XLSX.ParsingOptions & { FS?: string } = {
-          type: "buffer",
           cellText: true,
           cellDates: true,
-          sheetStubs: true,
         };
 
         if (extension === "tsv") {
           options.FS = "\t";
         }
 
-        const workbook = XLSX.read(buffer, options);
+        // Stubs stay OFF and every sheet is clamped to its real used range:
+        // a declared full-sheet dimension (A1:XFD1048576) would otherwise
+        // materialize a placeholder per virtual cell at parse time and a row
+        // per virtual row in every later sheet walk.
+        const workbook = readClampedWorkbook(buffer, options);
         if (workbook.SheetNames.length === 0) {
           continue;
         }
@@ -2316,17 +2323,6 @@ export class FileGradingService implements IFileGradingService {
     return this.tokenCounter.countTokens(estimateText, modelKey);
   }
 
-  private getSafeContextLimit(modelKey: string): number {
-    const normalized = modelKey.toLowerCase();
-    const matchKey = Object.keys(this.contextWindowByModel).find((key) =>
-      normalized.includes(key),
-    );
-    const limit = matchKey
-      ? this.contextWindowByModel[matchKey]
-      : this.defaultContextWindow;
-    return Math.floor(limit * this.contextSafetyRatio);
-  }
-
   private async summarizeFilesForGrading(
     learnerResponse: LearnerFileUpload[],
     question: string,
@@ -2337,9 +2333,12 @@ export class FileGradingService implements IFileGradingService {
     safeTokenLimit: number,
   ): Promise<Array<{ filename: string; summary: string }>> {
     const summaries: Array<{ filename: string; summary: string }> = [];
-    const chunkTokenLimit = Math.max(
-      this.minimumChunkTokens,
-      Math.min(this.maximumChunkTokens, Math.floor(safeTokenLimit * 0.2)),
+    const chunkTokenLimit =
+      this.contentSummarization.getChunkTokenLimit(safeTokenLimit);
+    const criteriaText = this.contentSummarization.truncateToTokenLimit(
+      this.safeStringify(scoringCriteria),
+      2000,
+      modelKey,
     );
 
     for (const file of learnerResponse) {
@@ -2352,7 +2351,7 @@ export class FileGradingService implements IFileGradingService {
         continue;
       }
 
-      const chunks = this.splitTextIntoChunks(
+      const chunks = this.contentSummarization.splitTextIntoChunks(
         content,
         chunkTokenLimit,
         modelKey,
@@ -2361,15 +2360,17 @@ export class FileGradingService implements IFileGradingService {
 
       for (const chunk of chunks) {
         try {
-          const summary = await this.summarizeChunkForGrading(
+          const summary = await this.contentSummarization.summarizeChunk({
             chunk,
-            file.filename,
-            question,
-            scoringCriteria,
-            assignmentId,
-            language,
+            label: file.filename,
+            questionText: question,
+            criteriaText,
             modelKey,
-          );
+            assignmentId,
+            usageType: AIUsageType.ASSIGNMENT_GRADING,
+            feature: "file_grading",
+            language,
+          });
           chunkSummaries.push(summary.trim());
         } catch (error) {
           this.logger.warn(
@@ -2377,7 +2378,13 @@ export class FileGradingService implements IFileGradingService {
               error instanceof Error ? error.message : String(error)
             }`,
           );
-          chunkSummaries.push(this.truncateToTokenLimit(chunk, 1200, modelKey));
+          chunkSummaries.push(
+            this.contentSummarization.truncateToTokenLimit(
+              chunk,
+              1200,
+              modelKey,
+            ),
+          );
         }
       }
 
@@ -2385,15 +2392,18 @@ export class FileGradingService implements IFileGradingService {
 
       const perFileLimit = Math.max(1500, Math.floor(safeTokenLimit * 0.1));
       if (this.tokenCounter.countTokens(summaryText, modelKey) > perFileLimit) {
-        summaryText = await this.compressSummary(
-          summaryText,
-          question,
-          scoringCriteria,
-          assignmentId,
-          language,
+        summaryText = await this.contentSummarization.compressSummary({
+          summary: summaryText,
+          label: file.filename,
+          questionText: question,
+          criteriaText,
           modelKey,
-          perFileLimit,
-        );
+          assignmentId,
+          usageType: AIUsageType.ASSIGNMENT_GRADING,
+          feature: "file_grading",
+          targetTokens: perFileLimit,
+          language,
+        });
       }
 
       summaries.push({
@@ -2421,17 +2431,20 @@ export class FileGradingService implements IFileGradingService {
     );
 
     if (combinedTokens > safeTokenLimit) {
-      const mergedSummary = await this.compressSummary(
-        summaries
+      const mergedSummary = await this.contentSummarization.compressSummary({
+        summary: summaries
           .map((summary) => `${summary.filename}:\n${summary.summary}`)
           .join("\n\n"),
-        question,
-        scoringCriteria,
-        assignmentId,
-        language,
+        label: "combined",
+        questionText: question,
+        criteriaText,
         modelKey,
-        Math.max(3000, Math.floor(safeTokenLimit * 0.3)),
-      );
+        assignmentId,
+        usageType: AIUsageType.ASSIGNMENT_GRADING,
+        feature: "file_grading",
+        targetTokens: Math.max(3000, Math.floor(safeTokenLimit * 0.3)),
+        language,
+      });
       const mergedFiles = [
         {
           filename: "combined",
@@ -2457,7 +2470,7 @@ export class FileGradingService implements IFileGradingService {
       );
 
       if (mergedTokens > safeTokenLimit) {
-        const trimmedSummary = this.truncateToTokenLimit(
+        const trimmedSummary = this.contentSummarization.truncateToTokenLimit(
           mergedSummary,
           Math.max(2000, Math.floor(safeTokenLimit * 0.2)),
           modelKey,
@@ -2474,178 +2487,6 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return summaries;
-  }
-
-  private splitTextIntoChunks(
-    text: string,
-    maxTokens: number,
-    modelKey: string,
-  ): string[] {
-    const chunks: string[] = [];
-    const approxCharsPerToken = 4;
-    const maxChars = Math.max(1000, maxTokens * approxCharsPerToken);
-    let start = 0;
-
-    while (start < text.length) {
-      let end = Math.min(text.length, start + maxChars);
-      let chunk = text.slice(start, end);
-      let tokenCount = this.tokenCounter.countTokens(chunk, modelKey);
-
-      if (tokenCount > maxTokens) {
-        const ratio = Math.max(0.2, maxTokens / tokenCount);
-        end = Math.min(text.length, start + Math.floor(chunk.length * ratio));
-        chunk = text.slice(start, end);
-        tokenCount = this.tokenCounter.countTokens(chunk, modelKey);
-      }
-
-      if (chunk.length === 0) {
-        break;
-      }
-
-      chunks.push(chunk);
-      start = end;
-    }
-
-    return chunks;
-  }
-
-  private async summarizeChunkForGrading(
-    chunk: string,
-    filename: string,
-    question: string,
-    scoringCriteria: ScoringDto,
-    assignmentId: number,
-    language: string,
-    modelKey: string,
-  ): Promise<string> {
-    const prompt = new PromptTemplate({
-      template: `You are condensing a learner submission chunk to help grading.
-
-QUESTION:
-{question}
-
-SCORING CRITERIA:
-{scoring_criteria}
-
-FILE: {filename}
-
-CONTENT CHUNK:
-{chunk}
-
-LANGUAGE: {language}
-
-Write a concise summary (max 200 words) highlighting evidence relevant to the rubric and any missing elements. Use short bullet points.`,
-      inputVariables: [],
-      partialVariables: {
-        question: () => question,
-        scoring_criteria: () =>
-          this.truncateToTokenLimit(
-            this.safeStringify(scoringCriteria),
-            2000,
-            modelKey,
-          ),
-        filename: () => filename,
-        chunk: () => chunk,
-        language: () => language ?? "en",
-      },
-    });
-
-    return await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "file_grading",
-      modelKey,
-    );
-  }
-
-  private async compressSummary(
-    summaryText: string,
-    question: string,
-    scoringCriteria: ScoringDto,
-    assignmentId: number,
-    language: string,
-    modelKey: string,
-    targetTokens: number,
-  ): Promise<string> {
-    const cappedSummary = this.truncateToTokenLimit(
-      summaryText,
-      Math.max(targetTokens * 2, 4000),
-      modelKey,
-    );
-    const prompt = new PromptTemplate({
-      template: `You are compressing grading notes into a shorter summary.
-
-QUESTION:
-{question}
-
-SCORING CRITERIA:
-{scoring_criteria}
-
-NOTES:
-{summary}
-
-LANGUAGE: {language}
-
-Return a concise summary (max 300 words) focused on evidence and gaps.`,
-      inputVariables: [],
-      partialVariables: {
-        question: () => question,
-        scoring_criteria: () =>
-          this.truncateToTokenLimit(
-            this.safeStringify(scoringCriteria),
-            2000,
-            modelKey,
-          ),
-        summary: () => cappedSummary,
-        language: () => language ?? "en",
-      },
-    });
-
-    try {
-      const compressed = await this.promptProcessor.processPromptForFeature(
-        prompt,
-        assignmentId,
-        AIUsageType.ASSIGNMENT_GRADING,
-        "file_grading",
-        modelKey,
-      );
-
-      return this.truncateToTokenLimit(compressed, targetTokens, modelKey);
-    } catch (error) {
-      this.logger.warn(
-        `Summary compression failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      return this.truncateToTokenLimit(summaryText, targetTokens, modelKey);
-    }
-  }
-
-  private truncateToTokenLimit(
-    text: string,
-    maxTokens: number,
-    modelKey: string,
-  ): string {
-    if (!text) return "";
-    if (this.tokenCounter.countTokens(text, modelKey) <= maxTokens) {
-      return text;
-    }
-
-    const approxCharsPerToken = 4;
-    let end = Math.max(1000, maxTokens * approxCharsPerToken);
-    end = Math.min(text.length, end);
-    let truncated = text.slice(0, end);
-
-    while (
-      truncated.length > 0 &&
-      this.tokenCounter.countTokens(truncated, modelKey) > maxTokens
-    ) {
-      end = Math.floor(end * 0.9);
-      truncated = text.slice(0, end);
-    }
-
-    return truncated;
   }
 
   private safeStringify(value: unknown): string {

@@ -10,7 +10,10 @@ import { S3Service } from "src/api/files/services/s3.service";
 import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
+import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { compactWorksheet } from "../../llm/features/grading/services/spreadsheet-used-range.utils";
 import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
+import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
 import { CanonicalSubmission } from "./structured-content.models";
 import { PdfStructureExtractorService } from "./pdf-structure-extractor.service";
@@ -158,7 +161,11 @@ export class FileContentExtractionService {
 
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
-    options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
+    options?: {
+      useVisionForPDFs?: boolean;
+      useStructuredExtraction?: boolean;
+      provenanceShadow?: boolean;
+    },
   ): Promise<ExtractedFileContent[]> {
     this.logger.debug(`Starting extraction for ${learnerFiles.length} files`);
 
@@ -180,6 +187,9 @@ export class FileContentExtractionService {
 
           return result;
         } catch (error) {
+          if (error instanceof OversizedSubmissionError) {
+            throw error;
+          }
           this.logger.error(
             `Failed to extract content from ${file.filename}:`,
             error,
@@ -225,10 +235,333 @@ export class FileContentExtractionService {
     return isPDF && !optedOut;
   }
 
+  /**
+   * Whether content-provenance shadow instrumentation should run for this
+   * call. Shadow work is opt-in per call site: only the grading path requests
+   * it (`provenanceShadow: true`). Chat uploads, author reference material and
+   * legacy callers pass nothing, so they never join the measurement or write
+   * artifacts into their own buckets.
+   *
+   * On top of the per-call opt-in, the ENABLE_CONTENT_PROVENANCE_SHADOW env
+   * flag is a global kill switch: set it to the string "false" to turn the
+   * shadow path off everywhere without a code change. Defaults to enabled.
+   */
+  private isProvenanceShadowEnabled(optedIn: boolean | undefined): boolean {
+    if (optedIn !== true) return false;
+    return process.env.ENABLE_CONTENT_PROVENANCE_SHADOW !== "false";
+  }
+
+  /**
+   * Compute the short sha256 fingerprint (first 16 hex chars) of a string,
+   * matching the download-branch hash precedent. Depends only on a hashing
+   * primitive, so this seam can move to a dedicated worker unchanged.
+   */
+  private provenanceSha16(value: string): string {
+    return crypto
+      .createHash("sha256")
+      .update(value)
+      .digest("hex")
+      .substring(0, 16);
+  }
+
+  /**
+   * Shadow instrumentation for the trust branch: grading is about to use the
+   * client-supplied file content verbatim. Emit structured telemetry, and —
+   * when the same submission also carries storage coordinates — re-extract the
+   * file server-side, log any checksum/length divergence, and persist a
+   * canonical extraction artifact.
+   *
+   * Depends only on storage + extraction primitives (the COS download, the
+   * shared buffer-extraction routine, and the artifact store), never on any
+   * grading context, so this seam can move to a dedicated worker unchanged.
+   *
+   * Fully fault-tolerant: any internal failure is logged and swallowed. It
+   * never throws and never mutates the extraction result.
+   */
+  private async recordClientContentUse(
+    file: LearnerFileUpload,
+    clientContent: string,
+    shadowEnabled: boolean,
+  ): Promise<void> {
+    if (!shadowEnabled) return;
+
+    try {
+      const clientSha16 = this.provenanceSha16(clientContent);
+
+      // Steady-state measurement telemetry: info, not warn (warn is reserved
+      // for actual anomalies like a real divergence).
+      this.logger.log(
+        `provenance.trust.client.content ${JSON.stringify({
+          questionId: file.questionId,
+          recordId: file.recordId,
+          filename: file.filename,
+          fileType: file.fileType,
+          contentLength: clientContent.length,
+          contentSha16: clientSha16,
+          hasCosCoordinates: Boolean(file.bucket && file.key),
+          hasGithubUrl: Boolean(file.githubUrl),
+        })}`,
+      );
+
+      // Only when the submission also carries storage coordinates can we
+      // re-extract the file server-side and measure divergence. Without them
+      // the telemetry above is all we can capture — and we never persist the
+      // client-supplied content (the divergence artifact persists SERVER text
+      // only, so attacker-controlled text never lands in storage).
+      if (!file.bucket || !file.key) return;
+
+      let serverContent: string;
+      let fileContent: Buffer;
+      let extracted: Awaited<ReturnType<typeof this.extractTextFromBuffer>>;
+      try {
+        fileContent = await this.downloadFileFromCOS(
+          file.bucket,
+          file.key,
+          file.buffer,
+        );
+        extracted = await this.extractTextFromBuffer(
+          fileContent,
+          file.filename,
+          file.fileType,
+        );
+        // Normalize the server text with the SAME pipeline grading applies to
+        // the client content (sanitizeAndTruncate). Hashing raw server text
+        // against sanitized client text produced systematic false divergence
+        // (CRLF / whitespace / truncation), wasting the measurement.
+        serverContent = this.sanitizeAndTruncate(extracted.text);
+      } catch (error) {
+        this.logShadowFailure(file, "reextract", error);
+        return;
+      }
+
+      const serverSha16 = this.provenanceSha16(serverContent);
+      const diverged = clientSha16 !== serverSha16;
+
+      const divergenceLine = `provenance.divergence ${JSON.stringify({
+        questionId: file.questionId,
+        recordId: file.recordId,
+        filename: file.filename,
+        diverged,
+        clientSha16,
+        serverSha16,
+        clientLength: clientContent.length,
+        serverLength: serverContent.length,
+      })}`;
+      // A real divergence is a recoverable anomaly worth a warn; the expected
+      // matching case is routine measurement and logs at info.
+      if (diverged) {
+        this.logger.warn(divergenceLine);
+      } else {
+        this.logger.log(divergenceLine);
+      }
+
+      this.persistProvenanceArtifact(file, {
+        schemaVersion: 1,
+        provenance: "server",
+        recordId: file.recordId,
+        questionId: file.questionId,
+        filename: file.filename,
+        fileType: file.fileType,
+        sha16: serverSha16,
+        contentLength: serverContent.length,
+        byteLength: fileContent.length,
+        metrics: extracted.additionalMetadata ?? null,
+        content: serverContent,
+        clientSha16,
+        clientLength: clientContent.length,
+        diverged,
+        extractedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logShadowFailure(file, "telemetry", error);
+    }
+  }
+
+  /**
+   * Emit the structured `provenance.shadow.failed` warn. The stage names where
+   * in the shadow path the failure occurred ("telemetry" | "reextract" |
+   * "persist") so failures can be attributed without reading the stack.
+   */
+  private logShadowFailure(
+    file: LearnerFileUpload,
+    stage: "telemetry" | "reextract" | "persist",
+    error: unknown,
+  ): void {
+    this.logger.warn(
+      `provenance.shadow.failed ${JSON.stringify({
+        filename: file.filename,
+        questionId: file.questionId,
+        stage,
+        error: error instanceof Error ? error.message : String(error),
+      })}`,
+    );
+  }
+
+  /**
+   * Shadow instrumentation for the download branch: a server-side extraction
+   * just succeeded. Persist a canonical extraction artifact (text, metrics,
+   * checksum) so a later change can reference stored content instead of
+   * embedding it in the job payload.
+   *
+   * Depends only on storage + extraction primitives (the artifact store and
+   * the already-extracted result), never on any grading context, so this seam
+   * can move to a dedicated worker unchanged.
+   *
+   * Fully fault-tolerant: any internal failure is logged and swallowed. It
+   * never throws and never mutates the extraction result.
+   */
+  private async recordServerExtractionArtifact(
+    file: LearnerFileUpload,
+    extracted: { content: string; metadata?: Record<string, unknown> },
+    shadowEnabled: boolean,
+  ): Promise<void> {
+    if (!shadowEnabled) return;
+
+    try {
+      const byteLength =
+        typeof extracted.metadata?.byteLength === "number"
+          ? (extracted.metadata.byteLength as number)
+          : undefined;
+
+      this.persistProvenanceArtifact(file, {
+        schemaVersion: 1,
+        provenance: "server",
+        recordId: file.recordId,
+        questionId: file.questionId,
+        filename: file.filename,
+        fileType: file.fileType,
+        sha16: this.provenanceSha16(extracted.content),
+        contentLength: extracted.content.length,
+        byteLength,
+        metrics: extracted.metadata ?? null,
+        content: extracted.content,
+        extractedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logShadowFailure(file, "telemetry", error);
+    }
+  }
+
+  /**
+   * Allowed destination buckets for provenance artifacts. Resolved lazily once
+   * from the configured learner upload buckets so a hostile, client-supplied
+   * `file.bucket` cannot redirect a write to an arbitrary reachable bucket
+   * (confused-deputy). Memoized because the env-derived names are stable for
+   * the process lifetime.
+   */
+  private allowedArtifactBuckets?: Set<string>;
+
+  private getAllowedArtifactBuckets(): Set<string> {
+    if (!this.allowedArtifactBuckets) {
+      this.allowedArtifactBuckets = new Set(
+        ["learner", "learner-prod"]
+          .map((uploadType) => {
+            try {
+              return this.s3Service.getBucketName(uploadType);
+            } catch {
+              // A bucket env var may be unset in some environments; that
+              // upload type simply contributes nothing to the allowlist.
+              return undefined;
+            }
+          })
+          .filter((name): name is string => Boolean(name)),
+      );
+    }
+    return this.allowedArtifactBuckets;
+  }
+
+  /**
+   * Persist a provenance artifact at a learner-scoped storage key derived from
+   * the source object's own key. The content is capped: oversized text is
+   * dropped in favour of a flag so the artifact stays small.
+   *
+   * Both storage coordinates are required to write: `file.key` (the key the
+   * artifact key derives from — without it the key would collide globally) and
+   * `file.bucket`, which must be one of the known learner buckets. A
+   * client-supplied bucket that is not on the allowlist is rejected before any
+   * S3 call so a hostile DTO cannot redirect the write (confused-deputy).
+   *
+   * The actual PUT is fire-and-forget: it is never awaited, so the extraction
+   * hot path is not blocked on object storage. A catch is attached
+   * synchronously so a rejected PUT can never surface as an unhandled
+   * rejection.
+   *
+   * Depends only on the artifact store (s3Service.putObject), the bucket
+   * allowlist and the deterministic key derivation, never on any grading
+   * context, so this seam can move to a dedicated worker unchanged.
+   */
+  private persistProvenanceArtifact(
+    file: LearnerFileUpload,
+    artifact: Record<string, unknown> & { content?: string | null },
+  ): void {
+    // No source key → the artifact key cannot be learner-scoped; skip.
+    if (!file.key) {
+      this.logger.debug(
+        `provenance.artifact.skipped.no.key ${JSON.stringify({
+          filename: file.filename,
+          questionId: file.questionId,
+        })}`,
+      );
+      return;
+    }
+
+    if (!file.bucket || !this.getAllowedArtifactBuckets().has(file.bucket)) {
+      // Never log the raw client-supplied bucket name at info+: a short hash
+      // is enough to correlate without echoing attacker-chosen input.
+      this.logger.debug(
+        `provenance.artifact.skipped.unknown.bucket ${JSON.stringify({
+          filename: file.filename,
+          questionId: file.questionId,
+          bucketHash: file.bucket
+            ? this.provenanceSha16(file.bucket)
+            : undefined,
+        })}`,
+      );
+      return;
+    }
+
+    const stored: Record<string, unknown> = { ...artifact };
+    if (
+      typeof artifact.content === "string" &&
+      artifact.content.length > 600_000
+    ) {
+      stored.content = null;
+      stored.contentOmitted = true;
+    }
+
+    const key = provenanceArtifactKey({ key: file.key });
+    void this.s3Service
+      .putObject({
+        Bucket: file.bucket,
+        Key: key,
+        Body: JSON.stringify(stored),
+        ContentType: "application/json",
+      })
+      .then(() => {
+        this.logger.debug(
+          `provenance.artifact.stored ${JSON.stringify({
+            key,
+            contentLength:
+              typeof stored.content === "string" ? stored.content.length : null,
+          })}`,
+        );
+      })
+      .catch((error) => {
+        this.logShadowFailure(file, "persist", error);
+      });
+  }
+
   private async extractSingleFileContent(
     file: LearnerFileUpload,
-    options?: { useVisionForPDFs?: boolean; useStructuredExtraction?: boolean },
+    options?: {
+      useVisionForPDFs?: boolean;
+      useStructuredExtraction?: boolean;
+      provenanceShadow?: boolean;
+    },
   ): Promise<ExtractedFileContent> {
+    const shadowEnabled = this.isProvenanceShadowEnabled(
+      options?.provenanceShadow,
+    );
     const isPDF =
       file.filename.toLowerCase().endsWith(".pdf") ||
       file.fileType === "application/pdf";
@@ -325,6 +658,19 @@ export class FileContentExtractionService {
           },
         };
       } catch (error) {
+        // An oversized submission must fail extraction with a clear error,
+        // not silently degrade to truncated simple extraction. The extractor
+        // only knows the internal submission id, so restamp the error with
+        // the learner's actual filename before it surfaces.
+        if (error instanceof OversizedSubmissionError) {
+          throw new OversizedSubmissionError({
+            blockCount: error.blockCount,
+            cap: error.cap,
+            filename: file.filename,
+            questionId: error.questionId,
+            attemptId: error.attemptId,
+          });
+        }
         this.logger.warn(
           `Structured extraction failed for ${file.filename}, falling back to simple extraction: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -349,9 +695,12 @@ export class FileContentExtractionService {
           file.filename,
         );
 
+        const notebookContent = this.sanitizeAndTruncate(extractedNotebook.text);
+        await this.recordClientContentUse(file, notebookContent, shadowEnabled);
+
         return {
           filename: file.filename,
-          content: this.sanitizeAndTruncate(extractedNotebook.text),
+          content: notebookContent,
           fileType: file.fileType,
           extractedText: extractedNotebook.extractedText,
           metadata: {
@@ -364,9 +713,12 @@ export class FileContentExtractionService {
       }
 
       this.logger.debug(`Using existing content for ${file.filename}`);
+      const trustedContent = this.sanitizeAndTruncate(file.content);
+      await this.recordClientContentUse(file, trustedContent, shadowEnabled);
+
       return {
         filename: file.filename,
-        content: this.sanitizeAndTruncate(file.content),
+        content: trustedContent,
         fileType: file.fileType,
         metadata: {
           size: file.content.length,
@@ -396,9 +748,28 @@ export class FileContentExtractionService {
       file.fileType,
     );
 
+    const downloadedContent = this.sanitizeAndTruncate(extractedContent.text);
+    // The artifact stores the full extracted text (not grading's truncated
+    // view) so it stays a faithful canonical record; its own size cap guards
+    // against unbounded payloads.
+    await this.recordServerExtractionArtifact(
+      file,
+      {
+        content: extractedContent.text,
+        metadata: {
+          size: fileContent.length,
+          byteLength: fileContent.length,
+          encoding: extractedContent.encoding,
+          language: extractedContent.detectedLanguage,
+          ...extractedContent.additionalMetadata,
+        },
+      },
+      shadowEnabled,
+    );
+
     return {
       filename: file.filename,
-      content: this.sanitizeAndTruncate(extractedContent.text),
+      content: downloadedContent,
       fileType: file.fileType,
       extractedText: extractedContent.extractedText,
       metadata: {
@@ -2820,48 +3191,6 @@ export class FileContentExtractionService {
   }
 
   /**
-   * Walk only real cell keys on the worksheet and compute the bounding box of
-   * cells that actually carry a value. SheetJS preserves the worksheet's
-   * declared dimension verbatim in `!ref`, which on Excel files saved with a
-   * full-sheet formal dimension (`A1:XFD1048576`) covers 17 billion virtual
-   * cells. Trusting that value blindly causes downstream consumers such as
-   * `sheet_to_csv` to materialize a row for every virtual row in the sheet.
-   * Returns null when the worksheet contains no real cells.
-   */
-  private computeUsedRange(worksheet: XLSX.WorkSheet): XLSX.Range | null {
-    let minRow = Number.POSITIVE_INFINITY;
-    let minCol = Number.POSITIVE_INFINITY;
-    let maxRow = Number.NEGATIVE_INFINITY;
-    let maxCol = Number.NEGATIVE_INFINITY;
-    let found = false;
-
-    for (const key in worksheet) {
-      if (key.charCodeAt(0) === 33) continue; // '!' meta key
-      const addr = XLSX.utils.decode_cell(key);
-      if (
-        !Number.isFinite(addr.r) ||
-        !Number.isFinite(addr.c) ||
-        addr.r < 0 ||
-        addr.c < 0
-      ) {
-        continue;
-      }
-      found = true;
-      if (addr.r < minRow) minRow = addr.r;
-      if (addr.c < minCol) minCol = addr.c;
-      if (addr.r > maxRow) maxRow = addr.r;
-      if (addr.c > maxCol) maxCol = addr.c;
-    }
-
-    if (!found) return null;
-
-    return {
-      s: { r: minRow, c: minCol },
-      e: { r: maxRow, c: maxCol },
-    };
-  }
-
-  /**
    * Thin wrapper around `XLSX.read` so tests can swap the parsed workbook
    * without going through a full disk-format round-trip (writing a workbook
    * with a formal `A1:XFD1048576` !ref is itself a memory bomb under
@@ -2912,23 +3241,19 @@ export class FileContentExtractionService {
 
         allText += `\n=== SHEET: ${sheetName} ===\n`;
 
-        // Replace the worksheet's declared !ref with a tight range covering
-        // only real cells. This bounds sheet_to_csv to the actual data and
-        // prevents the formal-dimension explosion.
-        const tightRange = this.computeUsedRange(worksheet);
-        if (tightRange) {
-          const tightRef = XLSX.utils.encode_range(tightRange);
-          worksheet["!ref"] = tightRef;
-          allText += `Range: ${tightRef} (${
-            tightRange.e.r - tightRange.s.r + 1
-          } rows × ${tightRange.e.c - tightRange.s.c + 1} cols)\n\n`;
-        } else {
-          // Drop !ref entirely so sheet_to_csv emits nothing rather than
-          // honoring a stale declared dimension over an empty sheet.
-          delete worksheet["!ref"];
+        // Compact the worksheet to its real used range (bounds every later
+        // !ref walk to actual data; rejects pathological sheets via the
+        // shared cell budget). Identity for contiguous, unpruned data.
+        compactWorksheet(worksheet, { filename: sheetName });
+        const ref = worksheet["!ref"];
+        if (ref) {
+          const range = XLSX.utils.decode_range(ref);
+          allText += `Range: ${ref} (${range.e.r - range.s.r + 1} rows × ${
+            range.e.c - range.s.c + 1
+          } cols)\n\n`;
         }
 
-        const csvText = tightRange
+        const csvText = ref
           ? XLSX.utils.sheet_to_csv(worksheet, {
               blankrows: true,
               skipHidden: false,
@@ -3023,6 +3348,9 @@ export class FileContentExtractionService {
         },
       };
     } catch (error) {
+      if (error instanceof OversizedSubmissionError) {
+        throw error;
+      }
       const errorMessage =
         typeof error === "object" && error !== null && "message" in error
           ? (error as { message: string }).message

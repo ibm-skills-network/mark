@@ -4,6 +4,7 @@ import {
   QuestionDisplayType,
   QuestionControls,
 } from "@/config/types";
+import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { createWithEqualityFn } from "zustand/traditional";
@@ -234,7 +235,9 @@ export const useAssignmentConfig = createWithEqualityFn<
     ),
     {
       name: getAssignmentConfigName(),
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        createAssignmentScopedStorage("config", getAssignmentConfigName()),
+      ),
       partialize(state) {
         return Object.fromEntries(
           Object.entries(state).filter(

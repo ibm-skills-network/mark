@@ -1166,23 +1166,56 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       );
     }
 
-    const assignment = (await this.prisma.assignment.findUnique({
+    const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
+        id: true,
+        name: true,
+        introduction: true,
+        instructions: true,
+        gradingCriteriaOverview: true,
+        timeEstimateMinutes: true,
+        attemptsBeforeCoolDown: true,
+        retakeAttemptCoolDownMinutes: true,
+        type: true,
+        graded: true,
+        numAttempts: true,
+        allotedTimeMinutes: true,
+        requireAllQuestions: true,
+        optionalQuestionIds: true,
         questions: true,
         questionOrder: true,
         displayOrder: true,
         passingGrade: true,
+        questionDisplay: true,
+        numberOfQuestionsPerAttempt: true,
+        published: true,
         showAssignmentScore: true,
         showSubmissionFeedback: true,
         showQuestionScore: true,
+        showQuestions: true,
+        questionControls: true,
+        updatedAt: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
+            questionControls: true,
           },
         },
       },
-    })) as LearnerGetAssignmentResponseDto;
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentAttempt.assignmentId} not found.`,
+      );
+    }
+
+    const correctAnswerVisibility =
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER";
+    const questionControls = (assignment.currentVersion?.questionControls ??
+      assignment.questionControls ??
+      undefined) as GetAssignmentAttemptResponseDto["questionControls"];
 
     const questionOrder =
       assignmentAttempt.questionOrder || assignment.questionOrder || [];
@@ -1382,8 +1415,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         for (const choice of question.choices) {
           delete choice.points;
           if (
-            (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
-              "ON_PASS" &&
+            correctAnswerVisibility === "ON_PASS" &&
             assignmentAttempt.grade < assignment.passingGrade
           ) {
             delete choice.isCorrect;
@@ -1399,8 +1431,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             for (const choice of translationObject.translatedChoices) {
               delete choice.points;
               if (
-                (assignment.currentVersion?.correctAnswerVisibility ||
-                  "NEVER") === "ON_PASS" &&
+                correctAnswerVisibility === "ON_PASS" &&
                 assignmentAttempt.grade < assignment.passingGrade
               ) {
                 delete choice.isCorrect;
@@ -1421,8 +1452,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         for (const choice of randomizedArray) {
           delete choice.points;
           if (
-            (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
-              "ON_PASS" &&
+            correctAnswerVisibility === "ON_PASS" &&
             assignmentAttempt.grade < assignment.passingGrade
           ) {
             delete choice.isCorrect;
@@ -1433,8 +1463,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       }
 
       if (
-        (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
-          "ON_PASS" &&
+        correctAnswerVisibility === "ON_PASS" &&
         assignmentAttempt.grade < assignment.passingGrade
       ) {
         delete question.answer;
@@ -1455,8 +1484,37 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
-      correctAnswerVisibility:
-        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      correctAnswerVisibility,
+      questionControls,
+      assignmentDetails: {
+        id: assignment.id,
+        name: assignment.name,
+        introduction: assignment.introduction,
+        instructions: assignment.instructions,
+        gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+        timeEstimateMinutes: assignment.timeEstimateMinutes,
+        attemptsBeforeCoolDown: assignment.attemptsBeforeCoolDown,
+        retakeAttemptCoolDownMinutes: assignment.retakeAttemptCoolDownMinutes,
+        type: assignment.type,
+        graded: assignment.graded,
+        numAttempts: assignment.numAttempts,
+        allotedTimeMinutes: assignment.allotedTimeMinutes,
+        requireAllQuestions: assignment.requireAllQuestions,
+        optionalQuestionIds: assignment.optionalQuestionIds,
+        passingGrade: assignment.passingGrade,
+        displayOrder: assignment.displayOrder,
+        questionDisplay: assignment.questionDisplay,
+        numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
+        questionOrder: assignment.questionOrder,
+        published: assignment.published,
+        showAssignmentScore: assignment.showAssignmentScore,
+        showQuestionScore: assignment.showQuestionScore,
+        showSubmissionFeedback: assignment.showSubmissionFeedback,
+        showQuestions: assignment.showQuestions,
+        correctAnswerVisibility,
+        questionControls,
+        updatedAt: assignment.updatedAt,
+      },
     };
   }
 

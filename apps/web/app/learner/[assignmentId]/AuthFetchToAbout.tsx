@@ -1,13 +1,16 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
 import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import type { Assignment } from "@/config/types";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
+import {
+  buildAuthorPreviewPayload,
+  readAuthorPreviewPayload,
+} from "@/app/learner/utils/authorPreview";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
@@ -40,12 +43,11 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   );
   const userPreferedLanguage = useSearchParams().get("lang") || "en";
   const isQuestionPage = useSearchParams().get("question") === "true";
-  const isMounted = true;
   const [error, setError] = useState<{
     code: number;
     message: string;
   } | null>(null);
-  const fetchData = async () => {
+  const fetchData = async (signal?: { cancelled: boolean }) => {
     setIsLoading(true);
     try {
       if (role === "learner") {
@@ -58,7 +60,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
 
           const attemptsData = await getAttempts(assignmentId, cookie);
 
-          if (isMounted && assignmentData) {
+          if (!signal?.cancelled && assignmentData) {
             const normalizedAttempts = (attemptsData ?? []).map((attempt) =>
               normalizeAttemptTimestamps(
                 attempt,
@@ -85,32 +87,49 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
                 ? "You are not authorized to view this page"
                 : "We couldn't load this assignment.",
           });
-          if (isMounted) {
+          if (!signal?.cancelled) {
             setAssignment(null);
           }
         }
       } else if (role === "author") {
-        const assignmentDetails = getStoredData(
-          "assignmentConfig",
-          {},
-        ) as Assignment;
-        if (isMounted) {
-          setAssignment(assignmentDetails);
+        const previewPayload = readAuthorPreviewPayload(assignmentId);
+        const backendAssignment = previewPayload
+          ? null
+          : await getAssignment(assignmentId, userPreferedLanguage, cookie);
+        if (!previewPayload && !backendAssignment) {
+          throw new Error("Failed to fetch assignment.");
+        }
+        let assignmentDetails = previewPayload?.assignmentDetails;
+        if (!assignmentDetails) {
+          if (!backendAssignment) {
+            throw new Error("Failed to fetch assignment.");
+          }
+          assignmentDetails =
+            buildAuthorPreviewPayload(backendAssignment).assignmentDetails;
+        }
+        if (!signal?.cancelled) {
+          setAssignment(assignmentDetails as unknown as Assignment);
         }
       }
     } catch (error) {
-      if (isMounted) {
+      if (!signal?.cancelled) {
         setAssignment(null);
       }
     } finally {
-      setIsLoading(false);
+      if (!signal?.cancelled) {
+        setIsLoading(false);
+      }
     }
   };
   useEffect(() => {
     setAssignmentId(assignmentId);
 
     if (!isQuestionPage) {
-      void fetchData();
+      const signal = { cancelled: false };
+      void fetchData(signal);
+      return () => {
+        signal.cancelled = true;
+      };
     }
   }, [
     assignmentId,

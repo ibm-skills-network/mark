@@ -8,6 +8,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const INTERACTIVE_TARGET_SELECTOR =
+  'button, input, textarea, select, a, [role="button"], [role="combobox"], [role="listbox"], [contenteditable]:not([contenteditable="false"])';
+
+/**
+ * Returns true when a click target is (or is nested within) an interactive
+ * control, so card/section onClick handlers can skip focus changes for clicks
+ * that land on buttons, inputs, links, dropdowns, or editable regions.
+ *
+ * Read-only regions (contenteditable="false") are intentionally NOT treated as
+ * interactive, so clicking them still falls through to the focus handler.
+ */
+export const isInteractiveTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  target.closest(INTERACTIVE_TARGET_SELECTOR) !== null;
+
 export function absoluteUrl(path: string) {
   const base = getBaseUrl();
   return `${base}${path}`;

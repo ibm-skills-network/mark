@@ -25,6 +25,16 @@ import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
 import { sanitizeForLog } from "../logger/sanitize";
 
+// Headers whose values are secrets/PII and must never be logged. Compared
+// case-insensitively. Hoisted to module scope so it isn't rebuilt per request.
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "cookie",
+  "user-session",
+  "x-admin-token",
+  "admin-token",
+]);
+
 @Injectable()
 export class ApiService {
   private readonly logger: Logger;
@@ -99,6 +109,7 @@ export class ApiService {
         endpoint = `${process.env.MARK_API_ENDPOINT ?? ""}${
           request.originalUrl
         }`;
+        this.assertConfiguredOrigin(endpoint, process.env.MARK_API_ENDPOINT);
 
         if (!request.user) {
           throw new UnauthorizedException("Missing or invalid user session");
@@ -115,6 +126,10 @@ export class ApiService {
         endpoint = `${
           process.env.LTI_CREDENTIAL_MANAGER_ENDPOINT ?? ""
         }/${servicePath}`;
+        this.assertConfiguredOrigin(
+          endpoint,
+          process.env.LTI_CREDENTIAL_MANAGER_ENDPOINT,
+        );
         const username = process.env.LTI_CREDENTIAL_MANAGER_USERNAME ?? "";
         const password = process.env.LTI_CREDENTIAL_MANAGER_PASSWORD ?? "";
         const base64Credentials = Buffer.from(
@@ -130,6 +145,39 @@ export class ApiService {
       }
     }
     return { endpoint, extraHeaders };
+  }
+
+  /**
+   * Ensure a computed forwarding endpoint still resolves to the configured
+   * downstream origin. The downstream host is fixed by configuration; a crafted
+   * request target must never be able to move the forward to another host.
+   */
+  private assertConfiguredOrigin(
+    endpoint: string,
+    base: string | undefined,
+  ): void {
+    if (!base) {
+      throw new InternalServerErrorException(
+        "Downstream service endpoint is not configured",
+      );
+    }
+    let target: URL;
+    let configured: URL;
+    try {
+      configured = new URL(base);
+      target = new URL(endpoint);
+    } catch {
+      throw new BadRequestException("Invalid forwarding target");
+    }
+    const protocolAllowed =
+      target.protocol === "http:" || target.protocol === "https:";
+    if (!protocolAllowed || target.origin !== configured.origin) {
+      this.logger.warn("Blocked forwarding to an unexpected origin", {
+        configured_origin: configured.origin,
+        target_origin: target.origin,
+      });
+      throw new BadRequestException("Invalid forwarding target");
+    }
   }
 
   private normalizeOutgoingHeaderValue(
@@ -482,7 +530,19 @@ export class ApiService {
         },
       };
 
-      this.logger.info("Forwarding request: ", config);
+      const safeHeaders = Object.fromEntries(
+        Object.entries((config.headers ?? {}) as Record<string, unknown>).map(
+          ([key, value]) =>
+            SENSITIVE_HEADERS.has(key.toLowerCase())
+              ? [key, "[redacted]"]
+              : [key, sanitizeForLog(value)],
+        ),
+      );
+      this.logger.debug("Forwarding request", {
+        method: config.method,
+        url: config.url,
+        headers: safeHeaders,
+      });
       const response = await axios.request(config);
       return { data: response.data as string, status: response.status };
     } catch (error) {

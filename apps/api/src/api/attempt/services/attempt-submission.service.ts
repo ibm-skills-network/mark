@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -48,6 +50,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import {
   AssignmentAttemptWithRelations,
   AttemptQuestionsMapper,
@@ -96,14 +99,27 @@ export class AttemptSubmissionService {
     userSession: UserSession,
     language: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    const responseDto =
-      await this.questionResponseService.createQuestionResponse(
+    let responseDto: CreateQuestionResponseAttemptResponseDto;
+    try {
+      responseDto = await this.questionResponseService.createQuestionResponse(
         attemptId,
         { ...requestDto, id: questionId },
         userSession.role,
         assignmentId,
         language,
       );
+    } catch (error) {
+      // The grading layers deliberately let these typed terminal errors pass
+      // through un-wrapped so the job worker can classify them as
+      // non-retryable. This autosave route is the one HTTP entry that reaches
+      // the same code; translate it here so the learner sees a clear 400 with
+      // the learner-facing reason instead of a generic 500 from the global
+      // filter.
+      if (error instanceof LearnerFacingGradingError) {
+        throw new BadRequestException(error.learnerMessage);
+      }
+      throw error;
+    }
 
     await this.prisma.questionResponse.deleteMany({
       where: {
@@ -866,6 +882,22 @@ export class AttemptSubmissionService {
       if (!assignmentAttempt) {
         throw new NotFoundException(
           `AssignmentAttempt with Id ${attemptId} not found.`,
+        );
+      }
+
+      // Short-circuit a duplicate submit before the expensive grading pipeline.
+      // commitAttemptWithResponses re-checks this atomically, but that check
+      // only fires AFTER grading — so a duplicate job would otherwise re-run the
+      // full LLM grade (tens of seconds, real cost) just to be rejected at
+      // commit. Bailing here turns the common "submitted twice" case into a
+      // sub-second conflict; the worker treats this ConflictException as a
+      // successful idempotent no-op.
+      if (assignmentAttempt.submitted) {
+        this.logger.warn(
+          `updateLearnerAttempt: attempt ${attemptId} already submitted; skipping re-grade`,
+        );
+        throw new ConflictException(
+          `Attempt ${attemptId} has already been submitted.`,
         );
       }
 

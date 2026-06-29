@@ -36,7 +36,7 @@ interface Props {
     description?: string,
     publishImmediately?: boolean,
     versionNumber?: string,
-  ) => void;
+  ) => Promise<boolean>;
   currentStepId?: number;
 }
 

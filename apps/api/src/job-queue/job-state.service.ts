@@ -14,7 +14,13 @@ interface StoredJobState extends JobStateRecord {
 }
 
 const ACTIVE_JOB_TTL_SECONDS = 24 * 60 * 60;
-const TERMINAL_JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
+// Completed/failed job state is a short-lived convenience cache so the client can
+// read the final status and result immediately after a job finishes; the durable
+// grade and result are persisted in the database. Each terminal hash retains the
+// full serialized result blob, so a multi-day TTL made job state the dominant
+// consumer of the shared Redis instance and forced continuous LRU eviction. Two
+// hours covers the post-completion read window while keeping resident memory low.
+const TERMINAL_JOB_TTL_SECONDS = 2 * 60 * 60;
 const NULL_SENTINEL = "__null__";
 
 @Injectable()

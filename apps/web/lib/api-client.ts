@@ -170,7 +170,7 @@ export class APIClient {
             );
           } else if (response.status === 403) {
             toast.error(
-              `Forbidden: You don't have permission to access this Assessment.`,
+              `You don't have permission to access this. Possibly try logging into AWB again and relaunching the assignment.`,
             );
           } else {
             toast.error(

@@ -5,6 +5,7 @@ import {
 import MarkdownViewer from "@/components/MarkdownViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
+import { isInteractiveTarget } from "@/lib/utils";
 import { translateQuestion } from "@/lib/talkToBackend";
 import languages from "@/public/languages.json";
 import {
@@ -260,8 +261,9 @@ function Component(props: Props) {
   return (
     <section
       id={`item-${questionNumber}`}
-      onClick={() => {
+      onClick={(e) => {
         if (questionDisplay === "ALL_PER_PAGE") {
+          if (isInteractiveTarget(e.target)) return;
           setActiveQuestionNumber(questionNumber);
         }
       }}

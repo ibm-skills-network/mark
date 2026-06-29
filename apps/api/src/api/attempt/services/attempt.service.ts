@@ -35,6 +35,7 @@ import {
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
+import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -413,9 +414,13 @@ export class AttemptServiceV2 {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+      const learnerReason =
+        error instanceof LearnerFacingGradingError
+          ? error.learnerMessage
+          : `Grading failed: ${errorMessage}`;
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Failed",
-        progress: `Grading failed: ${errorMessage}`,
+        progress: learnerReason,
         percentage: 0,
       });
 
@@ -423,7 +428,12 @@ export class AttemptServiceV2 {
         this.gradingProgressService.removeProgressCallback(attemptId);
         // Guard against author preview jobs which use attemptId = -1
         if (attemptId > 0) {
-          await this.gradingProgressService.markFailed(attemptId, errorMessage);
+          await this.gradingProgressService.markFailed(
+            attemptId,
+            error instanceof LearnerFacingGradingError
+              ? error.learnerMessage
+              : errorMessage,
+          );
         }
       }
       throw error;

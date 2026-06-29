@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useChatbot } from "@/hooks/useChatbot";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { UnpublishedActivationModal } from "./UnpublishedActivationModal";
 import {
   GitBranch,
@@ -1172,13 +1173,15 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <FileText className="h-4 w-4 text-purple-600" />
                             <span>Introduction</span>
                           </label>
-                          <div className="bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
+                          <div className="quill-viewer bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
                             <div
                               className="text-gray-900 prose prose-sm max-w-none"
+                              suppressHydrationWarning
                               dangerouslySetInnerHTML={{
-                                __html: (
-                                  selectedVersionDetails || selectedVersion
-                                ).introduction,
+                                __html: sanitizeHtml(
+                                  (selectedVersionDetails || selectedVersion)
+                                    .introduction,
+                                ),
                               }}
                             />
                           </div>
@@ -1189,13 +1192,15 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <FileText className="h-4 w-4 text-green-600" />
                             <span>Instructions</span>
                           </label>
-                          <div className="bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
+                          <div className="quill-viewer bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
                             <div
                               className="text-gray-900 prose prose-sm max-w-none"
+                              suppressHydrationWarning
                               dangerouslySetInnerHTML={{
-                                __html: (
-                                  selectedVersionDetails || selectedVersion
-                                ).instructions,
+                                __html: sanitizeHtml(
+                                  (selectedVersionDetails || selectedVersion)
+                                    .instructions,
+                                ),
                               }}
                             />
                           </div>
@@ -1208,13 +1213,15 @@ export function VersionTreeView({ assignmentId }: Props) {
                               <BarChart3 className="h-4 w-4 text-purple-600" />
                               <span>Grading Criteria</span>
                             </label>
-                            <div className="bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
+                            <div className="quill-viewer bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
                               <div
                                 className="text-gray-900 prose prose-sm max-w-none"
+                                suppressHydrationWarning
                                 dangerouslySetInnerHTML={{
-                                  __html: (
-                                    selectedVersionDetails || selectedVersion
-                                  ).gradingCriteriaOverview,
+                                  __html: sanitizeHtml(
+                                    (selectedVersionDetails || selectedVersion)
+                                      .gradingCriteriaOverview,
+                                  ),
                                 }}
                               />
                             </div>

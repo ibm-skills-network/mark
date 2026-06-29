@@ -1,7 +1,6 @@
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
+import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import type {
   QuestionAttemptRequestWithId,
-  QuestionStore,
   ReplaceAssignmentRequest,
 } from "@/config/types";
 import { useAssignmentId } from "@/hooks/use-assignment-id";
@@ -55,25 +54,25 @@ function Timer(props: Props) {
     state.setShowSubmissionFeedback,
     state.setLearnerStore,
   ]);
-  const setGrade = useAssignmentDetails((state) => state.setGrade);
-  const authorQuestions = getStoredData<QuestionStore[]>("questions", []);
-  const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
-    "assignmentConfig",
-    {
-      introduction: "",
-      graded: false,
-      passingGrade: 0,
-      published: false,
-      questionOrder: [],
-      updatedAt: 0,
-      questions: [],
-    },
-  );
+  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
+    state.assignmentDetails,
+    state.setGrade,
+  ]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   // The URL is authoritative; assignmentDetails is only populated on the
   // overview route and is null on a deep link / hard refresh, which would
   // otherwise gate off auto-submit and silently drop a timed submission.
   const { assignmentId, assignmentIdParam } = useAssignmentId();
+  const authorPreviewPayload = assignmentId
+    ? readAuthorPreviewPayload(assignmentId)
+    : null;
+  const authorQuestions = authorPreviewPayload?.questions ?? questions;
+  const authorAssignmentDetails: ReplaceAssignmentRequest | undefined =
+    authorPreviewPayload?.assignmentDetails
+      ? (authorPreviewPayload.assignmentDetails as ReplaceAssignmentRequest)
+      : assignmentDetails
+        ? (assignmentDetails as ReplaceAssignmentRequest)
+        : undefined;
   const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
   const hasCountdown = typeof countdown === "number";
   const safeCountdown = hasCountdown ? countdown : 0;

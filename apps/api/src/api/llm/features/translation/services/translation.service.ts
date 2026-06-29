@@ -11,6 +11,7 @@ import { decodeIfBase64 } from "src/helpers/decoder";
 import { Logger } from "winston";
 import { z } from "zod";
 import { Choice } from "../../../../assignment/dto/update.questions.request.dto";
+import { LlmRequestOptions } from "../../../core/interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { PROMPT_PROCESSOR } from "../../../llm.constants";
 import { ITranslationService } from "../interfaces/translation.interface";
@@ -22,6 +23,19 @@ interface LanguageMapping {
 
 @Injectable()
 export class TranslationService implements ITranslationService {
+  /**
+   * Translation calls are short (a question, a choice, a title), run 23+
+   * at a time, and sit behind a caller-side retry loop with a 90s
+   * per-attempt ceiling. The client timeout must come in well under that
+   * ceiling so a stalled connection fails the attempt while there is
+   * still budget to retry it; SDK-internal retries stay at 1 because the
+   * caller's loop owns retrying.
+   */
+  private static readonly LLM_CALL_OPTIONS: LlmRequestOptions = {
+    timeoutMs: 60_000,
+    maxRetries: 1,
+  };
+
   private readonly logger: Logger;
   private languageMap: Map<string, string> = new Map();
 
@@ -244,6 +258,7 @@ INSTRUCTIONS:
         AIUsageType.TRANSLATION,
         "translation",
         "gpt-5-nano",
+        TranslationService.LLM_CALL_OPTIONS,
       );
 
       const parsedResponse = await parser.parse(response);
@@ -335,6 +350,7 @@ INSTRUCTIONS:
         AIUsageType.TRANSLATION,
         "translation",
         "gpt-5-nano",
+        TranslationService.LLM_CALL_OPTIONS,
       );
 
       const parsedResponse = await parser.parse(response);
@@ -405,6 +421,7 @@ INSTRUCTIONS:
         AIUsageType.TRANSLATION,
         "translation",
         "gpt-4o-mini",
+        TranslationService.LLM_CALL_OPTIONS,
       );
 
       try {
@@ -440,6 +457,7 @@ INSTRUCTIONS:
           assignmentId,
           AIUsageType.TRANSLATION,
           "gpt-4o-mini",
+          TranslationService.LLM_CALL_OPTIONS,
         );
         return this.restoreImagePlaceholders(
           plain?.trim?.() ?? plain,
@@ -832,6 +850,7 @@ INSTRUCTIONS:
         AIUsageType.TRANSLATION,
         "translation",
         "gpt-4o-mini",
+        TranslationService.LLM_CALL_OPTIONS,
       );
 
       try {
@@ -863,6 +882,7 @@ INSTRUCTIONS:
           assignmentId,
           AIUsageType.TRANSLATION,
           "gpt-4o-mini",
+          TranslationService.LLM_CALL_OPTIONS,
         );
         return plain?.trim?.() ?? plain;
       }

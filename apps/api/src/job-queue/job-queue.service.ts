@@ -77,8 +77,14 @@ export class JobQueueService implements OnModuleDestroy {
       connection: this.getConnection(),
       defaultJobOptions: {
         attempts: 3,
-        removeOnComplete: 1000,
-        removeOnFail: 1000,
+        // Cap retained job history by count. BullMQ keeps completed and failed
+        // jobs — each carrying a full encrypted payload — until evicted; at 1000
+        // per state across every queue this history dominated Redis memory. A
+        // cap of 100 leaves ample history for the admin failed-jobs drill-down
+        // and post-mortems while bounding worst-case retention, including during
+        // a failure storm where 1000 retained payloads per queue was the risk.
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 100 },
       },
     });
 

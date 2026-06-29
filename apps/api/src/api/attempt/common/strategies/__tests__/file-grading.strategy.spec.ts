@@ -15,6 +15,7 @@ import { FileGradingStrategy } from "../file-grading.strategy";
 
 describe("FileGradingStrategy - Type Safety Tests", () => {
   let strategy: FileGradingStrategy;
+  let extractContentFromFilesMock: jest.Mock;
 
   beforeEach(async () => {
     const mockLogger = {
@@ -34,6 +35,8 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
     const mockFileContentExtractionService = {
       extractContentFromFiles: jest.fn().mockResolvedValue([]),
     };
+    extractContentFromFilesMock =
+      mockFileContentExtractionService.extractContentFromFiles;
 
     const mockGradingJudgeService = {
       judgeResponse: jest.fn(),
@@ -288,6 +291,39 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
 
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toEqual(files);
+    });
+  });
+
+  describe("gradeResponse - provenance shadow opt-in", () => {
+    it("requests content-provenance shadow mode when extracting files for grading", async () => {
+      const question = {
+        id: 1,
+        question: "Upload a file",
+        type: "FILE",
+        totalPoints: 10,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+      } as any;
+
+      const learnerResponse = [
+        { filename: "answer.pdf", key: "1/learner@example.com/1/answer.pdf", bucket: "b" },
+      ] as any;
+
+      // gradeResponse calls extractContentFromFiles first, then proceeds into
+      // judge/scoring with mocked-out dependencies. We only assert the
+      // extraction options, so any downstream failure is irrelevant.
+      try {
+        await strategy.gradeResponse(question, learnerResponse, {} as any);
+      } catch {
+        // ignore downstream grading wiring not under test here
+      }
+
+      expect(extractContentFromFilesMock).toHaveBeenCalledTimes(1);
+      const [, options] = extractContentFromFilesMock.mock.calls[0];
+      expect(options).toMatchObject({
+        useStructuredExtraction: true,
+        provenanceShadow: true,
+      });
     });
   });
 });

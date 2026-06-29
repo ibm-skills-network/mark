@@ -9,6 +9,7 @@ import { Job, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { Agent as UndiciAgent } from "undici";
 import { Logger as WinstonLogger } from "winston";
@@ -21,6 +22,7 @@ import {
 import {
   DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS,
   DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS,
+  DEFAULT_JOB_WORKER_LIVENESS_FILE,
   JOB_WORKER_HEARTBEAT_KEY_PREFIX,
 } from "./job-worker-heartbeat.constants";
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
@@ -29,6 +31,7 @@ import { createRedisConnection } from "./redis.connection";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
+import { LearnerFacingGradingError } from "../../api/src/api/llm/features/grading/errors/learner-facing-grading.error";
 
 // Allowed-fields-only shape carried in translation-job payloads. Restricted
 // to identifiers; the LLM-produced translatedText/translatedChoices that
@@ -323,13 +326,42 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private startHeartbeat(): void {
+    // Write the local liveness marker once up front so the file exists before
+    // the first interval fires (and before the probe's initial delay elapses).
+    this.touchLivenessFile();
     this.heartbeatInterval = setInterval(() => {
+      // The local liveness file is rewritten independently of the Redis
+      // heartbeat: the exec livenessProbe checks only this file's age, so a
+      // transient Redis outage must not look like a dead worker. Only a
+      // wedged event loop or a dead process lets the file age out.
+      this.touchLivenessFile();
       void this.writeHeartbeat().catch((error: Error) => {
         this.logger.warn(
           `Failed to write jobs worker heartbeat: ${error.message}`,
         );
       });
     }, this.getHeartbeatIntervalMs());
+  }
+
+  // Rewrite the local liveness file the Kubernetes exec livenessProbe checks.
+  // Fire-and-forget and never throws: a failed write logs a warning and lets
+  // the file age out, which is the correct signal if the filesystem is broken.
+  private touchLivenessFile(): void {
+    void writeFile(this.getLivenessFilePath(), new Date().toISOString()).catch(
+      (error: unknown) => {
+        this.logger.warn(
+          `Failed to write jobs worker liveness file: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      },
+    );
+  }
+
+  private getLivenessFilePath(): string {
+    return (
+      process.env.JOB_WORKER_LIVENESS_FILE ?? DEFAULT_JOB_WORKER_LIVENESS_FILE
+    );
   }
 
   private async writeHeartbeat(): Promise<void> {
@@ -491,14 +523,17 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Per-attempt failure classifier. Three branches:
-  //   A. OversizedSubmissionError (name match — keeps cross-app coupling
-  //      loose; the error class lives in apps/api): always permanent. Log
-  //      and rewrap as UnrecoverableError so BullMQ skips remaining retries.
+  //   A. Learner-facing grading error (instanceof the shared base class, with
+  //      a name-match fallback for the concrete classes that live in apps/api):
+  //      always permanent. Covers oversized submissions and unsupported image
+  //      formats. Log and rewrap as UnrecoverableError so BullMQ skips
+  //      remaining retries; the learner-facing message rides along when the
+  //      typed error survives.
   //   B. V8 OOM / worker OOM (message regex + code === "ERR_WORKER_OUT_OF_MEMORY"):
   //      per-attempt strike counter in Redis with 24h TTL. Two strikes →
   //      permanent fail. One strike → rethrow original so BullMQ retries.
   //   C. Anything else → rethrow untouched.
-  private async classifyAttemptError(job: Job, error: unknown): Promise<never> {
+  private async classifyAttemptError(job: Job, error: unknown): Promise<void> {
     const reason = this.messageOf(error);
     const errorName = error instanceof Error ? error.name : undefined;
 
@@ -522,17 +557,44 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    // Branch A: oversized submission — never retryable.
-    if (errorName === "OversizedSubmissionError") {
-      this.structuredLogger.error("attempt.grade.oversized", {
+    // Branch 0: idempotent duplicate submit. The attempt was already submitted
+    // by the winning job (or this job lost a concurrent commit race), so the
+    // grade is already persisted. Returning instead of throwing makes BullMQ
+    // mark the job completed — no retry, no re-grade — and the Instana span
+    // records success rather than an error. Logged at warn, not error, because
+    // it is an expected outcome of a learner double-submit, not a failure.
+    if (JobWorkerService.ALREADY_SUBMITTED_RE.test(reason)) {
+      this.structuredLogger.warn("attempt.grade.already.submitted", {
         attemptId,
         assignmentId,
-        errorClass: "OversizedSubmissionError",
         reason,
         jobId: job.id,
         jobName: job.name,
       });
-      throw new UnrecoverableError(`OversizedSubmissionError: ${reason}`);
+      return;
+    }
+
+    // Branch A: learner-facing grading error — never retryable. The
+    // UnrecoverableError message is what markAttemptGradingFailed pipes to the
+    // learner's grading modal, so use the learner-facing wording when the typed
+    // error survived; the technical reason stays in the structured log.
+    if (
+      error instanceof LearnerFacingGradingError ||
+      JobWorkerService.TERMINAL_GRADING_ERROR_NAMES.has(errorName ?? "")
+    ) {
+      this.structuredLogger.error("attempt.grade.learner.terminal", {
+        attemptId,
+        assignmentId,
+        errorClass: errorName ?? "LearnerFacingGradingError",
+        reason,
+        jobId: job.id,
+        jobName: job.name,
+      });
+      throw new UnrecoverableError(
+        error instanceof LearnerFacingGradingError
+          ? error.learnerMessage
+          : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
+      );
     }
 
     // Branch B: V8 heap exhaustion or Node worker OOM. Single narrow cast
@@ -608,7 +670,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // which satisfies eslint no-misused-promises without an inline IIFE.
   //
   // A failure is terminal when any of these hold:
-  //   - UnrecoverableError / OversizedSubmissionError rewrap — no more
+  //   - UnrecoverableError / learner-facing grading error rewrap — no more
   //     retries regardless of attemptsMade.
   //   - attemptsMade has exhausted the configured attempts.
   //   - the failure is a stalled-job failure (the worker died mid-job and
@@ -629,7 +691,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const errorName = error instanceof Error ? error.name : undefined;
     const isUnrecoverable =
       errorName === "UnrecoverableError" ||
-      errorName === "OversizedSubmissionError";
+      JobWorkerService.TERMINAL_GRADING_ERROR_NAMES.has(errorName ?? "");
     const isStalledFailure = JobWorkerService.STALLED_MESSAGE_RE.test(
       this.messageOf(error),
     );
@@ -726,6 +788,23 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // with no retry, so this signals a terminal failure even when attemptsMade
   // has not yet exhausted.
   private static readonly STALLED_MESSAGE_RE = /stalled/i;
+
+  // Concrete learner-facing grading error class names. The shared base class
+  // (LearnerFacingGradingError) lives in apps/api and is matched by instanceof
+  // when the typed error survives in-process; this set is the name-only
+  // fallback for the same failures crossing the executor boundary as plain
+  // Error objects carrying only the original `name`.
+  private static readonly TERMINAL_GRADING_ERROR_NAMES = new Set([
+    "OversizedSubmissionError",
+    "UnsupportedImageFormatError",
+  ]);
+
+  // Matches the two ConflictException messages a duplicate submit produces:
+  // the pre-commit "has already been submitted" check and the concurrent-
+  // commit "was concurrently submitted" race. Matched on message (not class)
+  // so it survives the error crossing the executor boundary.
+  private static readonly ALREADY_SUBMITTED_RE =
+    /(already been submitted|concurrently submitted)/i;
 
   // Single source for "extract a printable message from an unknown thrown
   // value." Mirrors the pattern at handleTranslationJob's catch block but
