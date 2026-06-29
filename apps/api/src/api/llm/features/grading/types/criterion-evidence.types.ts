@@ -14,6 +14,15 @@ export interface RubricCriterion {
   maxPoints: number;
 }
 
+/**
+ * Flattens a single RubricCriterion into a single whitespace-separated token
+ * string used for Jaccard rubric-copy detection.  Centralised here so both the
+ * pipeline and the legacy fallback path produce identical strings.
+ */
+export function rubricCriterionToText(c: RubricCriterion): string {
+  return `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`;
+}
+
 export type EvidenceSourceType = "text" | "file" | "image" | "url" | "unknown";
 
 export type ChunkEligibility = "eligible" | "ineligible";
