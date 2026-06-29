@@ -162,6 +162,20 @@ describe("JwtCookieStrategy", () => {
         expect(result.returnUrl).toBe(url);
       }
     });
+
+    it("passes adminOverride through to the session", () => {
+      const strategy = new JwtCookieStrategy(new JwtConfigService());
+      const session = strategy.validate({
+        userID: "admin@ibm.com",
+        role: UserRole.AUTHOR,
+        groupID: "autogen-faculty-awb",
+        assignmentID: 0,
+        adminOverride: true,
+        iat: 1,
+        exp: 2,
+      } as never);
+      expect(session.adminOverride).toBe(true);
+    });
   });
 
   describe("JWT extraction", () => {

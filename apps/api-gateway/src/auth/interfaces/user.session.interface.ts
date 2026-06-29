@@ -14,6 +14,7 @@ export interface UserSession {
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
   launch_presentation_locale?: string;
+  adminOverride?: boolean;
 }
 
 export interface UserSessionPayload {
@@ -24,6 +25,7 @@ export interface UserSessionPayload {
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
   launch_presentation_locale?: string;
+  adminOverride?: boolean;
 }
 
 export interface UserSessionRequest extends Request {

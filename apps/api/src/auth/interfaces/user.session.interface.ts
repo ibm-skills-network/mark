@@ -18,6 +18,7 @@ export interface ClientUserSession {
 export interface UserSession extends ClientUserSession {
   groupId: string;
   gradingCallbackRequired?: boolean;
+  adminOverride?: boolean;
 }
 
 export interface UserSessionRequest extends Request {
