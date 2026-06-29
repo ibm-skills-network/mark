@@ -277,8 +277,12 @@ export const useMarkChatStore = create<MarkChatState>()(
           // so history reloads and post-refresh sessions restore tool access correctly.
           const conversationMessages: ChatMessage[] = [];
           for (const msg of conversation) {
-            if (msg.role === "system" && msg.id.includes("context")) continue;
-
+            // NOTE: do NOT drop `system-context-*` messages here. The backend
+            // (mark-chat.service.getSystemPromptParts) keys on
+            // `role === "system" && id.includes("context")` to build the LLM
+            // system prompt and detect assignment mode/id. Stripping them blinds
+            // the chatbot to the current app/session (assignment, question,
+            // responses, feedback). See useLearnerContext/useAuthorContext.
             if (
               msg.role === "user" &&
               msg.toolCalls?.type === "file_attachments"
