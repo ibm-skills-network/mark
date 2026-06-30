@@ -958,24 +958,41 @@ export class FileGradingService implements IFileGradingService {
       // was not captured on the first pass).
       const existing = file.structuredContent;
       if (!existing) return true;
+
       const blockCount = existing.metadata?.blockCount ?? 0;
       if (blockCount < 10) return true;
       if (text.includes("\t")) return true;
+
       return false;
     }
 
-    // For every other file type: build structured content from extracted text
-    // when it is not already present.  The evidence pipeline's quality gate
-    // handles empty or low-quality content, so the rebuild is always safe.
-    return !file.structuredContent;
+    if (this.isSourceCodeFile(file)) {
+      return false;
+    }
+
+    return !file.structuredContent && this.hasExtractedSubmissionText(file);
   }
 
   private isEvidenceBasedEligible(file: LearnerFileUpload): boolean {
     if (!file.structuredContent) return false;
+    if (this.isSourceCodeFile(file)) return false;
+
     // The PDF structured extractor sets structureQuality; "low" means the
     // extraction was too sparse to support evidence retrieval.
     if (file.metadata?.structureQuality === "low") return false;
+
     return true;
+  }
+
+  private isSourceCodeFile(file: LearnerFileUpload): boolean {
+    const filename = file.filename?.toLowerCase() ?? "";
+    return /\.(py|java|cpp|c|h|hpp|js|jsx|ts|tsx|go|rs|rb|cs)$/.test(filename);
+  }
+
+  private hasExtractedSubmissionText(file: LearnerFileUpload): boolean {
+    return Boolean(
+      (file.extractedText || file.content || file.contentSummary || "").trim(),
+    );
   }
 
   private buildCanonicalSubmissionFromText(
