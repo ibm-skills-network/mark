@@ -13,6 +13,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
@@ -87,6 +88,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         { provide: LlmFacadeService, useValue: llmService },
         { provide: PrismaService, useValue: prismaService },
         { provide: AttemptAccessCacheService, useValue: attemptAccessCache },
+        {
+          provide: AiFeatureFlagsService,
+          useValue: { isDisabled: () => false },
+        },
         { provide: WINSTON_MODULE_PROVIDER, useValue: { child: () => logger } },
       ],
     }).compile();

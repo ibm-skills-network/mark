@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ForbiddenException,
   HttpException,
+  Inject,
   Injectable,
 } from "@nestjs/common";
 import {
@@ -17,11 +18,15 @@ import {
   ToolSet,
 } from "ai";
 import { Response } from "express";
+import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { ChatRole, Prisma } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
 import { z } from "zod";
 import { ChatRepository } from "../repositories/chat.repository";
 import { ChatService } from "./chat.service";
@@ -42,6 +47,8 @@ interface MarkChatRequest {
 
 const STANDARD_ERROR_MESSAGE =
   "Sorry for the inconvenience, I am still new around here and this capability is not there yet, my developers are working on it!";
+const CHAT_DISABLED_MESSAGE =
+  "Mark's AI assistant is temporarily unavailable. Please try again later.";
 const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
 const DEFAULT_MODEL_CONTEXT_TOKENS = 128 * 1000;
 const DEFAULT_RESPONSE_MAX_TOKENS = 15 * 100;
@@ -114,13 +121,19 @@ function withErrorHandling<TArguments extends any[], TResult>(
 
 @Injectable()
 export class MarkChatService {
+  private readonly logger: Logger;
+
   constructor(
     private readonly s3Service: S3Service,
     private readonly fileContentExtractionService: FileContentExtractionService,
     private readonly chatService: ChatService,
     private readonly chatRepository: ChatRepository,
     private readonly processingBudget: FileProcessingBudgetService,
-  ) {}
+    private readonly aiFlags: AiFeatureFlagsService,
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({ context: MarkChatService.name });
+  }
 
   private readIntFromEnv(
     key: string,
@@ -308,6 +321,17 @@ export class MarkChatService {
       throw new BadRequestException("Missing required fields");
     }
 
+    // Kill-switch: short-circuit with a polite message instead of calling the
+    // provider when the AI chat component is disabled.
+    if (this.aiFlags.isDisabled(AiFeatureComponent.CHAT)) {
+      this.logger.info("ai.killswitch.chat.blocked", {
+        chatId,
+        userRole,
+        mode: "respond",
+      });
+      return { reply: CHAT_DISABLED_MESSAGE, functionCalled: false };
+    }
+
     const { systemPrompt, systemContextMessages, assignmentInfo } =
       this.getSystemPromptParts(userRole, conversation);
 
@@ -382,6 +406,23 @@ export class MarkChatService {
 
     if (!userRole || !userText || !conversation) {
       throw new BadRequestException("Missing required fields");
+    }
+
+    // Kill-switch: stream a single polite message and end the response without
+    // touching the provider when the AI chat component is disabled.
+    if (this.aiFlags.isDisabled(AiFeatureComponent.CHAT)) {
+      this.logger.info("ai.killswitch.chat.blocked", {
+        chatId,
+        userRole,
+        mode: "stream",
+      });
+      response.setHeader("Content-Type", "text/plain; charset=utf-8");
+      response.setHeader("Cache-Control", "no-cache, no-transform");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.flushHeaders();
+      response.write(CHAT_DISABLED_MESSAGE);
+      response.end();
+      return;
     }
 
     const { systemPrompt, systemContextMessages, assignmentInfo } =

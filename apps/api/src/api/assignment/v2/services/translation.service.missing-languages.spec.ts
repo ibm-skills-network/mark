@@ -58,6 +58,7 @@ describe("TranslationService missing-language retries", () => {
       llmFacade as never,
       jobStatusService as never,
       llmResolver as never,
+      { isDisabled: () => false } as never,
     );
 
     return { service, prisma, llmFacade };
