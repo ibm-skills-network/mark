@@ -941,57 +941,40 @@ export class FileGradingService implements IFileGradingService {
     const text =
       file.extractedText || file.content || file.contentSummary || "";
 
+    const filename = file.filename?.toLowerCase() ?? "";
     const isSpreadsheet =
       file.fileType?.includes("sheet") ||
-      file.filename?.toLowerCase().endsWith(".xlsx") ||
-      file.filename?.toLowerCase().endsWith(".xls") ||
-      file.filename?.toLowerCase().endsWith(".csv") ||
-      file.filename?.toLowerCase().endsWith(".tsv") ||
-      file.filename?.toLowerCase().endsWith(".ods") ||
+      filename.endsWith(".xlsx") ||
+      filename.endsWith(".xls") ||
+      filename.endsWith(".csv") ||
+      filename.endsWith(".tsv") ||
+      filename.endsWith(".ods") ||
       text.includes("=== EXCEL WORKBOOK ===") ||
       text.includes("=== SHEET:");
-    if (!isSpreadsheet) {
+
+    if (isSpreadsheet) {
+      // Spreadsheets may need a rebuild even when structuredContent exists
+      // (low block count or raw tab characters indicate the tabular structure
+      // was not captured on the first pass).
+      const existing = file.structuredContent;
+      if (!existing) return true;
+      const blockCount = existing.metadata?.blockCount ?? 0;
+      if (blockCount < 10) return true;
+      if (text.includes("\t")) return true;
       return false;
     }
 
-    const existing = file.structuredContent;
-    if (!existing) {
-      return true;
-    }
-
-    const blockCount = existing.metadata?.blockCount ?? 0;
-    if (blockCount < 10) {
-      return true;
-    }
-
-    if (text.includes("\t")) {
-      return true;
-    }
-
-    return false;
+    // For every other file type: build structured content from extracted text
+    // when it is not already present.  The evidence pipeline's quality gate
+    // handles empty or low-quality content, so the rebuild is always safe.
+    return !file.structuredContent;
   }
 
   private isEvidenceBasedEligible(file: LearnerFileUpload): boolean {
     if (!file.structuredContent) return false;
-
-    const filename = file.filename?.toLowerCase() ?? "";
-    const fileType = file.fileType?.toLowerCase() ?? "";
-    const sourceType = file.structuredContent.metadata?.sourceType;
-    const structureQuality = file.metadata?.structureQuality;
-
-    const isPdf =
-      filename.endsWith(".pdf") ||
-      fileType.includes("pdf") ||
-      sourceType === "pdf";
-    const isSpreadsheet =
-      filename.endsWith(".xlsx") ||
-      filename.endsWith(".xls") ||
-      filename.endsWith(".csv") ||
-      filename.endsWith(".tsv");
-
-    if (!isPdf && !isSpreadsheet) return false;
-    if (structureQuality === "low") return false;
-
+    // The PDF structured extractor sets structureQuality; "low" means the
+    // extraction was too sparse to support evidence retrieval.
+    if (file.metadata?.structureQuality === "low") return false;
     return true;
   }
 
