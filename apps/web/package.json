@@ -23,7 +23,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@faker-js/faker": "^8.0.2",
+    "@faker-js/faker": "^8.4.1",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@formkit/auto-animate": "^0.8.0",
