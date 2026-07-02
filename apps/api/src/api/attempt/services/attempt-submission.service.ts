@@ -639,14 +639,47 @@ export class AttemptSubmissionService {
       (sum, q) => sum + (q.totalPoints ?? 0),
       0,
     );
-    const totalPointsEarned = (
-      assignmentAttempt.questionResponses ?? []
-    ).reduce((sum, response) => sum + (response.points ?? 0), 0);
+
+    // A response must never contribute more than its own question's maximum.
+    // Historically some multi-select responses were graded above that max
+    // (the correct choices' points summed past the question's totalPoints),
+    // which inflated the attempt total to a false 100% and could mask other
+    // questions' losses. Clamp per question so already-graded attempts show
+    // the learner's real score. New submissions are already correct (the
+    // grader clamps at scoring time); this keeps historical attempts honest.
+    const questionMaxById = new Map(
+      finalQuestions.map((q) => [q.id, q.totalPoints ?? 0]),
+    );
+    const responses = assignmentAttempt.questionResponses ?? [];
+    const rawPointsEarned = responses.reduce(
+      (sum, response) => sum + (response.points ?? 0),
+      0,
+    );
+    const totalPointsEarned = responses
+      .map((response) => {
+        const questionMax = questionMaxById.get(response.questionId);
+        const points = response.points ?? 0;
+        return typeof questionMax === "number" && questionMax > 0
+          ? Math.min(points, questionMax)
+          : points;
+      })
+      .reduce((sum, points) => sum + points, 0);
+
+    // When clamping actually reduced the total, the stored attempt grade was
+    // derived from the inflated points, so recompute the grade the learner
+    // sees from the clamped total. The persisted grade and the LTI passback
+    // are intentionally left untouched — correcting those is a separate
+    // re-grade, not a display fix.
+    const displayGrade =
+      totalPointsEarned < rawPointsEarned && totalPossiblePoints > 0
+        ? totalPointsEarned / totalPossiblePoints
+        : assignmentAttempt.grade;
 
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
     return {
       ...assignmentAttempt,
+      grade: displayGrade,
       questions: finalQuestions,
       totalPossiblePoints,
       totalPointsEarned:

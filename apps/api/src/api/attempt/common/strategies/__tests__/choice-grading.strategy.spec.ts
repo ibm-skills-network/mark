@@ -479,5 +479,57 @@ describe("ChoiceGradingStrategy - Type Safety Tests", () => {
       expect(result).toBeDefined();
       expect(result.totalPoints).toBe(6);
     });
+
+    it("caps the score at the question's totalPoints when the correct choices sum to more", async () => {
+      // A multi-select worth 1 point, but with two correct choices each
+      // carrying 1 point. Selecting both must not award 2 — the question's
+      // own maximum (totalPoints) is authoritative, otherwise a single
+      // question can exceed 100% and mask other questions' losses.
+      const mockOverCappedQuestion: QuestionDto = {
+        id: 1,
+        question: "Select all that apply",
+        type: QuestionType.MULTIPLE_CORRECT,
+        totalPoints: 1,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "Correct A", isCorrect: true, points: 1 },
+          { id: 2, choice: "Correct B", isCorrect: true, points: 1 },
+          { id: 3, choice: "Wrong", isCorrect: false, points: 0 },
+        ],
+      } as any;
+
+      const result = await strategy.gradeResponse(
+        mockOverCappedQuestion,
+        ["Correct A", "Correct B"],
+        mockContext,
+      );
+
+      expect(result.totalPoints).toBe(1);
+    });
+
+    it("falls back to the correct-choice sum when the question has no usable totalPoints", async () => {
+      // MULTIPLE_CORRECT questions are not required to carry totalPoints,
+      // so when it is absent the correct-choice sum remains the ceiling.
+      const mockNoTotalPointsQuestion: QuestionDto = {
+        id: 1,
+        question: "Select all that apply",
+        type: QuestionType.MULTIPLE_CORRECT,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "Correct A", isCorrect: true, points: 2 },
+          { id: 2, choice: "Correct B", isCorrect: true, points: 3 },
+        ],
+      } as any;
+
+      const result = await strategy.gradeResponse(
+        mockNoTotalPointsQuestion,
+        ["Correct A", "Correct B"],
+        mockContext,
+      );
+
+      expect(result.totalPoints).toBe(5);
+    });
   });
 });
