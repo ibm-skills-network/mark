@@ -725,6 +725,13 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           { questionId: 303, points: 0 },
         ],
       });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [
+          { id: 101, totalPoints: 1 },
+          { id: 202, totalPoints: 1 },
+          { id: 303, totalPoints: 1 },
+        ],
+      );
       const buildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
         .mockResolvedValue([
@@ -795,6 +802,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         ...assignmentAttempt,
         questionResponses: [{ questionId: 101, points: 4 }],
       });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [{ id: 101, totalPoints: 5 }],
+      );
       const buildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
         .mockResolvedValue([{ id: 101, totalPoints: 5 }]);

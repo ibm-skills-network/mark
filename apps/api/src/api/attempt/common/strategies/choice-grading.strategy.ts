@@ -411,7 +411,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     // no usable maximum of its own (totalPoints is optional for
     // MULTIPLE_CORRECT).
     const questionMax =
-      typeof question.totalPoints === "number" && question.totalPoints > 0
+      typeof question.totalPoints === "number"
         ? question.totalPoints
         : maxPoints;
 
