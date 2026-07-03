@@ -157,27 +157,23 @@ export class CriterionEvidenceRetrievalService {
         reranked.map((item) => item.chunk),
         recorder,
       );
-      validatedCount = validation.length;
-      evidence = validation.map((item) => ({
-        chunkId: item.chunk.chunkId,
-        quote: item.chunk.text.slice(0, 220),
-        anchor: item.chunk.anchor,
-        sourceType: item.chunk.sourceType,
-        sourceId: item.chunk.sourceId,
-        relevanceScore: item.relevanceScore,
-        searchScore: item.searchScore,
-        contradiction: item.contradiction,
-      }));
+      if (validation === undefined) {
+        evidence = this.mapRerankedCandidatesToEvidence(reranked);
+      } else {
+        validatedCount = validation.length;
+        evidence = validation.map((item) => ({
+          chunkId: item.chunk.chunkId,
+          quote: item.chunk.text.slice(0, 220),
+          anchor: item.chunk.anchor,
+          sourceType: item.chunk.sourceType,
+          sourceId: item.chunk.sourceId,
+          relevanceScore: item.relevanceScore,
+          searchScore: item.searchScore,
+          contradiction: item.contradiction,
+        }));
+      }
     } else {
-      evidence = reranked.map((item) => ({
-        chunkId: item.chunk.chunkId,
-        quote: item.chunk.text.slice(0, 220),
-        anchor: item.chunk.anchor,
-        sourceType: item.chunk.sourceType,
-        sourceId: item.chunk.sourceId,
-        relevanceScore: item.relevance,
-        searchScore: item.score,
-      }));
+      evidence = this.mapRerankedCandidatesToEvidence(reranked);
     }
 
     const response: CriterionEvidenceResponse = {
@@ -197,6 +193,24 @@ export class CriterionEvidenceRetrievalService {
       expiresAt: Date.now() + CriterionEvidenceRetrievalService.CACHE_TTL_MS,
     });
     return response;
+  }
+
+  private mapRerankedCandidatesToEvidence(
+    reranked: Array<{
+      chunk: ExtractedChunk;
+      score: number;
+      relevance: number;
+    }>,
+  ): CriterionEvidence[] {
+    return reranked.map((item) => ({
+      chunkId: item.chunk.chunkId,
+      quote: item.chunk.text.slice(0, 220),
+      anchor: item.chunk.anchor,
+      sourceType: item.chunk.sourceType,
+      sourceId: item.chunk.sourceId,
+      relevanceScore: item.relevance,
+      searchScore: item.score,
+    }));
   }
 
   private evictIfNeeded(): void {
@@ -281,12 +295,13 @@ export class CriterionEvidenceRetrievalService {
     chunks: ExtractedChunk[],
     recorder?: LlmCallRecorder,
   ): Promise<
-    Array<{
-      chunk: ExtractedChunk;
-      relevanceScore: number;
-      searchScore: number;
-      contradiction: boolean;
-    }>
+    | Array<{
+        chunk: ExtractedChunk;
+        relevanceScore: number;
+        searchScore: number;
+        contradiction: boolean;
+      }>
+    | undefined
   > {
     if (chunks.length === 0) return [];
 
@@ -382,7 +397,7 @@ Return JSON listing which chunkIds are relevant.
     }
 
     this.logger.warn("Evidence validation parse failed for all candidates");
-    return [];
+    return undefined;
   }
 
   private mapParsedSelections(

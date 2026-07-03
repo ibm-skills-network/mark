@@ -162,6 +162,40 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(response.evidence).toHaveLength(0);
   });
 
+  it("falls back to scored candidates when validator output cannot be parsed", async () => {
+    const chunks = [
+      makeChunk("ch1", "The DataLoader implementation loads training data."),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c-parse-fail",
+      rubricQuestion: "Did the learner implement the required DataLoader?",
+      description: "Checks for DataLoader implementation.",
+      criteria: [
+        { description: "Implemented", points: 5 },
+        { description: "Not implemented", points: 0 },
+      ],
+      maxPoints: 5,
+    };
+
+    const service = makeService("not valid json");
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this submission",
+        chunks,
+        assignmentId: 1,
+      },
+      index,
+    );
+
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "ch1" }),
+    ]);
+  });
+
   /**
    * When MiniSearch itself returns 0 candidates (completely empty index or
    * query yields nothing), the fallback still surfaces candidates for LLM
