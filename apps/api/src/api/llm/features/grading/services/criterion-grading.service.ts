@@ -93,6 +93,7 @@ JUDGE FEEDBACK (if any):
 
 OUTPUT RULES:
 - Choose EXACTLY one of the allowed points.
+- If the evidence chunks do not substantively address this criterion (e.g. off-topic, wrong assignment, unrelated content), award the minimum allowed points regardless of superficial keyword overlap.
 - Provide rationale grounded in the cited chunkIds.
 - Cite chunkIds in citations array.
 - Confidence must be high, medium, or low.
