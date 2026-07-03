@@ -177,6 +177,29 @@ export class VersionManagementService {
       );
     }
 
+    // A non-draft version is what learners get served. If it demands more
+    // questions per attempt than the pool holds, attempt creation throws for
+    // every learner (see AttemptSubmissionService.createAssignmentAttempt),
+    // so fail the snapshot instead. Drafts stay editable mid-authoring.
+    if (
+      !createVersionDto.isDraft &&
+      assignment.numberOfQuestionsPerAttempt &&
+      assignment.numberOfQuestionsPerAttempt > assignment.questions.length
+    ) {
+      this.logger.warn(
+        `Version creation rejected: numberOfQuestionsPerAttempt exceeds question pool`,
+        {
+          assignmentId,
+          numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
+          availableQuestions: assignment.questions.length,
+          userId: userSession.userId,
+        },
+      );
+      throw new BadRequestException(
+        `numberOfQuestionsPerAttempt (${assignment.numberOfQuestionsPerAttempt}) exceeds the number of available questions (${assignment.questions.length}). Reduce it or add more questions before publishing.`,
+      );
+    }
+
     let versionNumber: string;
 
     if (createVersionDto.versionNumber) {
@@ -808,6 +831,28 @@ export class VersionManagementService {
     if (version.published) {
       throw new BadRequestException(
         `Version ${version.versionNumber} is already published`,
+      );
+    }
+
+    // Same invariant as createVersion, but against this version's own
+    // snapshot: publishing a version whose numberOfQuestionsPerAttempt
+    // exceeds its snapshotted pool would make it unstartable for learners.
+    if (
+      version.numberOfQuestionsPerAttempt &&
+      version.numberOfQuestionsPerAttempt > version._count.questionVersions
+    ) {
+      this.logger.warn(
+        `Publish rejected: version's numberOfQuestionsPerAttempt exceeds its question pool`,
+        {
+          assignmentId,
+          versionId,
+          numberOfQuestionsPerAttempt: version.numberOfQuestionsPerAttempt,
+          availableQuestions: version._count.questionVersions,
+          userId: userSession?.userId,
+        },
+      );
+      throw new BadRequestException(
+        `numberOfQuestionsPerAttempt (${version.numberOfQuestionsPerAttempt}) exceeds the number of questions in this version (${version._count.questionVersions}). Reduce it or add more questions before publishing.`,
       );
     }
 

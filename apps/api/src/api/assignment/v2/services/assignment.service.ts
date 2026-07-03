@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -286,6 +287,32 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     this.logger.info(
       `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
     );
+
+    // Reject configurations no learner could ever start: asking for more
+    // questions per attempt than the pool contains makes attempt creation
+    // throw for everyone (see AttemptSubmissionService.createAssignmentAttempt).
+    // Validated again at version-snapshot time in VersionManagementService for
+    // paths that bypass this handler.
+    const requestedPerAttempt = updateDto.numberOfQuestionsPerAttempt;
+    if (requestedPerAttempt && requestedPerAttempt > 0 && updateDto.questions) {
+      const availableQuestions = updateDto.questions.filter(
+        (question) => !question.isDeleted,
+      ).length;
+      if (requestedPerAttempt > availableQuestions) {
+        this.logger.warn(
+          `Publish rejected: numberOfQuestionsPerAttempt exceeds question pool`,
+          {
+            assignmentId,
+            requestedPerAttempt,
+            availableQuestions,
+            requestedByUserId: userId,
+          },
+        );
+        throw new BadRequestException(
+          `numberOfQuestionsPerAttempt (${requestedPerAttempt}) exceeds the number of available questions (${availableQuestions}). Reduce it or add more questions before publishing.`,
+        );
+      }
+    }
 
     // Deterministic per-assignment publish job id. BullMQ silently no-ops a
     // duplicate `add` when {jobId} matches an in-flight job, so this gives us
