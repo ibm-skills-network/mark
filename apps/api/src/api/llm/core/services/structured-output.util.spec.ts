@@ -62,11 +62,9 @@ describe("invokeStructuredChatModel", () => {
 
   it("logs and rethrows provider errors", async () => {
     const model = {
-      withStructuredOutput: jest
-        .fn()
-        .mockReturnValue({
-          invoke: jest.fn().mockRejectedValue(new Error("boom")),
-        }),
+      withStructuredOutput: jest.fn().mockReturnValue({
+        invoke: jest.fn().mockRejectedValue(new Error("boom")),
+      }),
     } as never;
     const logger = makeLogger();
 

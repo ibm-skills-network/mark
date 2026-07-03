@@ -437,7 +437,14 @@ export class GradingProgressService {
     if (!callback) return;
     const details = this.snapshot(attemptId);
     try {
-      await callback(status, progress, percentage, details, currentQuestion, totalQuestions);
+      await callback(
+        status,
+        progress,
+        percentage,
+        details,
+        currentQuestion,
+        totalQuestions,
+      );
     } catch (error) {
       this.logger.warn(
         `progress.callback.threw attempt=${attemptId} error=${

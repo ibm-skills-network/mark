@@ -60,7 +60,9 @@ function decodeLtiDestination(jwt) {
   const userId = process.env.CHK_USER;
   const assignmentId = Number(process.env.CHK_ASSIGNMENT);
   if (!userId || !Number.isFinite(assignmentId)) {
-    console.error("CHK_USER (email) and CHK_ASSIGNMENT (assignmentId) are required");
+    console.error(
+      "CHK_USER (email) and CHK_ASSIGNMENT (assignmentId) are required",
+    );
     process.exit(1);
   }
 
@@ -91,11 +93,21 @@ function decodeLtiDestination(jwt) {
       orderBy: { createdAt: "asc" },
       include: {
         questionResponses: {
-          select: { questionId: true, points: true, gradedAt: true, learnerResponse: true },
+          select: {
+            questionId: true,
+            points: true,
+            gradedAt: true,
+            learnerResponse: true,
+          },
           orderBy: { questionId: "asc" },
         },
         gradingProgress: {
-          select: { status: true, progress: true, error: true, completedAt: true },
+          select: {
+            status: true,
+            progress: true,
+            error: true,
+            completedAt: true,
+          },
         },
       },
     });

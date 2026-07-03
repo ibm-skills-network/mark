@@ -254,7 +254,8 @@ const buildAssignmentDetailsFromAttempt = (
       showQuestions:
         attempt.assignmentDetails.showQuestions ?? attempt.showQuestions,
       showQuestionScore:
-        attempt.assignmentDetails.showQuestionScore ?? attempt.showQuestionScore,
+        attempt.assignmentDetails.showQuestionScore ??
+        attempt.showQuestionScore,
       correctAnswerVisibility:
         attempt.assignmentDetails.correctAnswerVisibility ??
         attempt.correctAnswerVisibility,
