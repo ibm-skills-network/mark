@@ -90,22 +90,22 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
   const getActionColor = (action: string) => {
     switch (action) {
       case "created":
-        return "bg-green-100 text-green-700";
+        return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
       case "published":
-        return "bg-blue-100 text-blue-700";
+        return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300";
       case "restored":
-        return "bg-orange-100 text-orange-700";
+        return "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300";
       case "draft_saved":
-        return "bg-gray-100 text-gray-700";
+        return "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200";
     }
   };
 
   return (
     <>
       <button
-        className={`text-sm text-gray-600 hover:text-violet-600 flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 transition-colors ${className}`}
+        className={`text-sm text-gray-600 dark:text-gray-300 hover:text-violet-600 flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${className}`}
         onClick={() => setIsOpen(true)}
       >
         <History className="h-4 w-4" />
@@ -140,8 +140,8 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                       key={version.id}
                       className={`p-3 border rounded-lg cursor-pointer transition-colors ${
                         selectedVersions.includes(version.id)
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-200 hover:border-gray-300"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
                       } ${
                         version.id === currentVersion?.id
                           ? "ring-2 ring-green-500 ring-opacity-50"
@@ -152,7 +152,7 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
-                            <GitBranch className="h-4 w-4 text-gray-400" />
+                            <GitBranch className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                             <span className="font-medium">
                               Version {version.versionNumber}
                             </span>
@@ -173,10 +173,10 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                         </div>
 
                         <div className="text-right">
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
                             {formatVersionAge(version.createdAt)}
                           </div>
-                          <div className="text-xs text-gray-400 flex items-center gap-1">
+                          <div className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
                             <User className="h-3 w-3" />
                             {version.createdBy}
                           </div>
@@ -184,13 +184,13 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                       </div>
 
                       {version.versionDescription && (
-                        <div className="mt-2 text-sm text-gray-600">
+                        <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                           {version.versionDescription}
                         </div>
                       )}
 
                       <div className="mt-2 flex items-center justify-between">
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {version.questionCount} question
                           {version.questionCount !== 1 ? "s" : ""}
                         </div>
@@ -215,7 +215,7 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                 </div>
 
                 {versions.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p>No versions found</p>
                     <p className="text-sm">
@@ -234,7 +234,7 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                 {isLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
-                    <span className="ml-2 text-gray-500">
+                    <span className="ml-2 text-gray-500 dark:text-gray-400">
                       Loading history...
                     </span>
                   </div>
@@ -243,7 +243,7 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                     {versionHistory.map((entry) => (
                       <div
                         key={entry.id}
-                        className="flex items-start gap-3 pb-3 border-b border-gray-100 last:border-b-0"
+                        className="flex items-start gap-3 pb-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                       >
                         <div
                           className={`p-1 rounded-full ${getActionColor(entry.action)}`}
@@ -256,23 +256,23 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                             <p className="text-sm font-medium capitalize">
                               {entry.action.replace("_", " ")}
                               {entry.toVersion && (
-                                <span className="ml-1 text-gray-500">
+                                <span className="ml-1 text-gray-500 dark:text-gray-400">
                                   v{entry.toVersion.versionNumber}
                                 </span>
                               )}
                             </p>
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
                               {formatVersionAge(entry.createdAt)}
                             </span>
                           </div>
 
                           {entry.description && (
-                            <p className="text-xs text-gray-600 mt-1">
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
                               {entry.description}
                             </p>
                           )}
 
-                          <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 flex items-center gap-1">
                             <User className="h-3 w-3" />
                             {entry.userId}
                           </div>
@@ -281,7 +281,7 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
                     ))}
 
                     {versionHistory.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                         <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p>No activity history</p>
                       </div>
@@ -292,7 +292,7 @@ export function VersionHistory({ className = "" }: VersionHistoryProps) {
             </div>
 
             <div className="flex justify-between items-center pt-4 border-t">
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
                 {selectedVersions.length === 0 && "Select versions to compare"}
                 {selectedVersions.length === 1 &&
                   "Select one more version to compare"}

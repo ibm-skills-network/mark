@@ -42,19 +42,19 @@ export function UnsavedChangesModal({
             transition={{ type: "spring", damping: 25, stiffness: 400 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/60 max-w-md w-full">
+            <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/60 dark:border-gray-700/60 max-w-md w-full">
               <div className="p-6">
                 <div className="flex items-center space-x-3 mb-4">
-                  <div className="p-2 bg-amber-100 rounded-lg">
-                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                   </div>
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Unsaved Changes Detected
                   </h2>
                 </div>
 
                 <div className="space-y-4">
-                  <p className="text-gray-600">
+                  <p className="text-gray-600 dark:text-gray-300">
                     You have unsaved changes that will be lost if you{" "}
                     {actionText}
                     {targetName && (
@@ -63,10 +63,10 @@ export function UnsavedChangesModal({
                     . What would you like to do?
                   </p>
 
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
                     <div className="flex items-start space-x-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-amber-700">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
                         <strong>Warning:</strong> Any unsaved changes to your
                         current work will be permanently lost.
                       </p>
@@ -85,7 +85,7 @@ export function UnsavedChangesModal({
 
                   <button
                     onClick={onProceedWithoutSaving}
-                    className="flex items-center justify-center space-x-2 w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors"
+                    className="flex items-center justify-center space-x-2 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-lg transition-colors"
                   >
                     <ArrowRight className="h-4 w-4" />
                     <span>Proceed Without Saving</span>
@@ -93,7 +93,7 @@ export function UnsavedChangesModal({
 
                   <button
                     onClick={onClose}
-                    className="w-full px-4 py-2 text-gray-500 hover:text-gray-700 font-medium transition-colors"
+                    className="w-full px-4 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium transition-colors"
                   >
                     Cancel
                   </button>

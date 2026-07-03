@@ -6,6 +6,7 @@ import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import Dropdown from "@/components/Dropdown";
 import Spinner from "@/components/svgs/Spinner";
+import ThemeToggle from "@/components/ThemeToggle";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   QuestionAttemptRequestWithId,
@@ -483,7 +484,7 @@ function LearnerHeader() {
 
   return (
     <>
-      <header className="border-b border-gray-300 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
+      <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
         <div className="flex flex-col gap-3 sm:hidden">
           <div className="flex items-center gap-3">
             <SNIcon />
@@ -494,6 +495,7 @@ function LearnerHeader() {
 
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1">
+              <ThemeToggle />
               {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
                 <>
                   {languages.length > 1 ? (
@@ -575,6 +577,7 @@ function LearnerHeader() {
           </div>
 
           <div className="flex items-center gap-x-4">
+            <ThemeToggle />
             {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
               <>
                 {languages.length > 1 ? (

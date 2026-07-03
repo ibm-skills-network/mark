@@ -259,7 +259,7 @@ export default function GradingProgressModal({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.8, opacity: 0, y: 50 }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="relative bg-gradient-to-br from-white via-white to-purple-50/50 rounded-3xl shadow-2xl p-8 max-w-md w-full backdrop-blur-xl border border-white/20"
+              className="relative bg-gradient-to-br from-white via-white to-purple-50/50 dark:from-gray-800 dark:via-gray-800 dark:to-purple-900/30 rounded-3xl shadow-2xl p-8 max-w-md w-full backdrop-blur-xl border border-white/20 dark:border-gray-700/50"
               style={{
                 boxShadow:
                   "0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1)",
@@ -368,7 +368,7 @@ export default function GradingProgressModal({
                               <motion.span
                                 initial={{ opacity: 0, y: 5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="text-xs text-gray-500 mt-1"
+                                className="text-xs text-gray-500 dark:text-gray-400 mt-1"
                               >
                                 {progressData.currentQuestion}/
                                 {progressData.totalQuestions}
@@ -466,7 +466,7 @@ export default function GradingProgressModal({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
-                  className="text-2xl font-bold mb-3 bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 bg-clip-text text-transparent"
+                  className="text-2xl font-bold mb-3 bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 dark:from-gray-100 dark:via-white dark:to-gray-100 bg-clip-text text-transparent"
                 >
                   {status === "processing" && "Grading Your Assignment"}
                   {status === "completed" && "🎉 Grading Complete!"}
@@ -477,7 +477,7 @@ export default function GradingProgressModal({
                   key={message}
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="text-gray-600 mb-6 min-h-[48px] flex items-center justify-center text-base px-4"
+                  className="text-gray-600 dark:text-gray-300 mb-6 min-h-[48px] flex items-center justify-center text-base px-4"
                 >
                   {message}
                 </motion.p>
@@ -510,7 +510,7 @@ export default function GradingProgressModal({
                       transition={{ delay: 0.3 }}
                       className="mb-6"
                     >
-                      <div className="relative bg-gray-100 rounded-full h-3 overflow-hidden shadow-inner">
+                      <div className="relative bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden shadow-inner">
                         <motion.div
                           className="h-full rounded-full bg-gradient-to-r from-purple-500 via-blue-500 to-purple-500 relative shadow-lg"
                           style={{
@@ -545,7 +545,7 @@ export default function GradingProgressModal({
                         transition={{ delay: 0.4 }}
                         className="space-y-3"
                       >
-                        <p className="text-gray-500 text-sm">
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">
                           Want to close this tab?
                         </p>
                         <motion.button
@@ -655,7 +655,7 @@ function QuestionGradingList({ state }: { state: GradingProgressDetails }) {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mb-3 px-4 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900 flex items-start gap-2"
+          className="mb-3 px-4 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-200 flex items-start gap-2"
           role="status"
         >
           <span aria-hidden="true">⏳</span>
@@ -714,30 +714,32 @@ const ROW_STYLES: Record<
   }
 > = {
   pending: {
-    container: "bg-gray-50 text-gray-600",
+    container: "bg-gray-50 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300",
     icon: "text-gray-400",
-    label: "text-gray-500",
+    label: "text-gray-500 dark:text-gray-400",
     glyph: "○",
     text: "Queued",
   },
   in_progress: {
-    container: "bg-purple-50 text-purple-900",
+    container:
+      "bg-purple-50 text-purple-900 dark:bg-purple-900/30 dark:text-purple-200",
     icon: "text-purple-500 animate-pulse",
-    label: "text-purple-600",
+    label: "text-purple-600 dark:text-purple-300",
     glyph: "◐",
     text: "Grading",
   },
   completed: {
-    container: "bg-green-50 text-green-900",
+    container:
+      "bg-green-50 text-green-900 dark:bg-green-900/30 dark:text-green-200",
     icon: "text-green-600",
-    label: "text-green-700",
+    label: "text-green-700 dark:text-green-300",
     glyph: "✓",
     text: "Done",
   },
   failed: {
-    container: "bg-red-50 text-red-900",
+    container: "bg-red-50 text-red-900 dark:bg-red-900/30 dark:text-red-200",
     icon: "text-red-600",
-    label: "text-red-700",
+    label: "text-red-700 dark:text-red-300",
     glyph: "✕",
     text: "Failed",
   },

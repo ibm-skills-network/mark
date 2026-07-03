@@ -266,7 +266,7 @@ function Timer(props: Props) {
 
   return (
     <div className="flex items-center space-x-2" {...props}>
-      <div className="text-gray-600 text-base font-medium leading-tight">
+      <div className="text-gray-600 dark:text-gray-300 text-base font-medium leading-tight">
         Time Remaining:
       </div>
       {hasCountdown ? (

@@ -35,26 +35,26 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
   const getChangeIcon = (changeType: string) => {
     switch (changeType) {
       case "added":
-        return <Plus className="h-3 w-3 text-green-600" />;
+        return <Plus className="h-3 w-3 text-green-600 dark:text-green-400" />;
       case "removed":
-        return <Minus className="h-3 w-3 text-red-600" />;
+        return <Minus className="h-3 w-3 text-red-600 dark:text-red-400" />;
       case "modified":
-        return <Edit className="h-3 w-3 text-blue-600" />;
+        return <Edit className="h-3 w-3 text-blue-600 dark:text-blue-400" />;
       default:
-        return <Edit className="h-3 w-3 text-gray-600" />;
+        return <Edit className="h-3 w-3 text-gray-600 dark:text-gray-300" />;
     }
   };
 
   const getChangeColor = (changeType: string) => {
     switch (changeType) {
       case "added":
-        return "bg-green-50 border-green-200";
+        return "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800";
       case "removed":
-        return "bg-red-50 border-red-200";
+        return "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800";
       case "modified":
-        return "bg-blue-50 border-blue-200";
+        return "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800";
       default:
-        return "bg-gray-50 border-gray-200";
+        return "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700";
     }
   };
 
@@ -67,7 +67,7 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
 
   const formatValue = (value: any) => {
     if (value === null || value === undefined) {
-      return <span className="text-gray-400 italic">Not set</span>;
+      return <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>;
     }
 
     if (typeof value === "boolean") {
@@ -95,11 +95,11 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
       <div className="space-y-6 overflow-y-auto max-h-[60vh]">
         <div className="grid grid-cols-2 gap-4 pb-4 border-b">
           <div className="space-y-2">
-            <h3 className="font-semibold text-red-700 flex items-center gap-2">
+            <h3 className="font-semibold text-red-700 dark:text-red-300 flex items-center gap-2">
               <Minus className="h-4 w-4" />
               From: Version {fromVersion.versionNumber}
             </h3>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-gray-300">
               <div>
                 Created: {new Date(fromVersion.createdAt).toLocaleString()}
               </div>
@@ -113,11 +113,11 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
           </div>
 
           <div className="space-y-2">
-            <h3 className="font-semibold text-green-700 flex items-center gap-2">
+            <h3 className="font-semibold text-green-700 dark:text-green-300 flex items-center gap-2">
               <Plus className="h-4 w-4" />
               To: Version {toVersion.versionNumber}
             </h3>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-gray-300">
               <div>
                 Created: {new Date(toVersion.createdAt).toLocaleString()}
               </div>
@@ -156,19 +156,19 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <div className="text-red-700 font-medium mb-1">
+                      <div className="text-red-700 dark:text-red-300 font-medium mb-1">
                         Before:
                       </div>
-                      <div className="p-2 bg-red-50 rounded border">
+                      <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded border">
                         {formatValue(change.fromValue)}
                       </div>
                     </div>
 
                     <div>
-                      <div className="text-green-700 font-medium mb-1">
+                      <div className="text-green-700 dark:text-green-300 font-medium mb-1">
                         After:
                       </div>
-                      <div className="p-2 bg-green-50 rounded border">
+                      <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded border">
                         {formatValue(change.toValue)}
                       </div>
                     </div>
@@ -204,7 +204,7 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
                   </div>
 
                   {change.field && (
-                    <div className="text-sm mb-2 text-gray-600">
+                    <div className="text-sm mb-2 text-gray-600 dark:text-gray-300">
                       Field:{" "}
                       <span className="font-medium">
                         {formatFieldName(change.field)}
@@ -216,19 +216,19 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
                     change.toValue !== undefined && (
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <div className="text-red-700 font-medium mb-1">
+                          <div className="text-red-700 dark:text-red-300 font-medium mb-1">
                             Before:
                           </div>
-                          <div className="p-2 bg-red-50 rounded border">
+                          <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded border">
                             {formatValue(change.fromValue)}
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-green-700 font-medium mb-1">
+                          <div className="text-green-700 dark:text-green-300 font-medium mb-1">
                             After:
                           </div>
-                          <div className="p-2 bg-green-50 rounded border">
+                          <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded border">
                             {formatValue(change.toValue)}
                           </div>
                         </div>
@@ -243,48 +243,48 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
         {assignmentChanges.length === 0 && questionChanges.length === 0 && (
           <div className="text-center py-12">
             <GitCompare className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
               No Changes Found
             </h3>
-            <p className="text-gray-500">
+            <p className="text-gray-500 dark:text-gray-400">
               These two versions appear to be identical.
             </p>
           </div>
         )}
 
         {(assignmentChanges.length > 0 || questionChanges.length > 0) && (
-          <div className="bg-gray-50 p-4 rounded-lg border-t">
+          <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border-t">
             <h3 className="font-semibold mb-2">Summary</h3>
             <div className="grid grid-cols-3 gap-4 text-center text-sm">
               <div>
-                <div className="text-green-600 font-bold text-lg">
+                <div className="text-green-600 dark:text-green-400 font-bold text-lg">
                   {
                     [...assignmentChanges, ...questionChanges].filter(
                       (c) => c.changeType === "added",
                     ).length
                   }
                 </div>
-                <div className="text-gray-600">Added</div>
+                <div className="text-gray-600 dark:text-gray-300">Added</div>
               </div>
               <div>
-                <div className="text-blue-600 font-bold text-lg">
+                <div className="text-blue-600 dark:text-blue-400 font-bold text-lg">
                   {
                     [...assignmentChanges, ...questionChanges].filter(
                       (c) => c.changeType === "modified",
                     ).length
                   }
                 </div>
-                <div className="text-gray-600">Modified</div>
+                <div className="text-gray-600 dark:text-gray-300">Modified</div>
               </div>
               <div>
-                <div className="text-red-600 font-bold text-lg">
+                <div className="text-red-600 dark:text-red-400 font-bold text-lg">
                   {
                     [...assignmentChanges, ...questionChanges].filter(
                       (c) => c.changeType === "removed",
                     ).length
                   }
                 </div>
-                <div className="text-gray-600">Removed</div>
+                <div className="text-gray-600 dark:text-gray-300">Removed</div>
               </div>
             </div>
           </div>
