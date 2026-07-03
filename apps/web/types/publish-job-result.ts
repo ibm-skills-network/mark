@@ -30,4 +30,10 @@ export interface PublishJobResult {
     };
     perJob: PerJobTranslationEntry[];
   };
+  /**
+   * Set when translations were needed but deliberately skipped (not failed).
+   * "ai_unavailable" = the AI kill-switch was on, so the publish succeeded
+   * without translations and the author should be told (not shown a failure).
+   */
+  translationsSkippedReason?: "ai_unavailable";
 }

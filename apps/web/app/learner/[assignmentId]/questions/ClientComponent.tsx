@@ -3,7 +3,9 @@
 import animationData from "@/animations/LoadSN.json";
 import ErrorPage from "@/components/ErrorPage";
 import Loading from "@/components/Loading";
+import ServiceUnavailableNotice from "@/components/ServiceUnavailableNotice";
 import type { QuestionStore } from "@/config/types";
+import { getAiStatus } from "@/lib/ai-status";
 import { getAssignment } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
 import {
@@ -14,6 +16,14 @@ import {
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "@learnerComponents/Question";
 import { useEffect, useMemo, useState } from "react";
+
+// Mirror of the server's AI_GRADED_QUESTION_TYPES — the question types whose
+// grading goes through the LLM. Kept in sync with the backend kill-switch gate
+// so author preview blocks exactly the assignments a learner would be blocked on.
+const AI_GRADED_QUESTION_TYPES = new Set(["TEXT", "URL", "UPLOAD"]);
+
+const isAiGradedQuestion = (question: QuestionStore): boolean =>
+  AI_GRADED_QUESTION_TYPES.has(question.type ?? "");
 
 interface ClientLearnerLayoutProps {
   assignmentId: number;
@@ -33,10 +43,30 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       readAuthorPreviewPayload(assignmentId),
     );
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // null = not yet resolved; false = AI grading available; true = paused by the
+  // kill-switch. Used only to gate the preview UX — the backend still blocks
+  // every paid AI call regardless of what we render here.
+  const [aiGradingPaused, setAiGradingPaused] = useState<boolean | null>(null);
 
   useEffect(() => {
     setRole(role || "learner");
   }, [role, setRole]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getAiStatus().then((status) => {
+      if (cancelled) return;
+      // A failed status fetch returns undefined — fail open (treat as available)
+      // since the server enforces the real gate; we only suppress the preview
+      // when we positively know grading is paused.
+      setAiGradingPaused(status ? status.grading === false : false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +160,23 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
 
   if (!previewPayload || !assignmentDetails) {
     return <Loading animationData={animationData} />;
+  }
+
+  // Author preview never hits the gated learner attempt-creation path, so the
+  // kill-switch has to be applied here too. When this assignment is AI-graded,
+  // hold the preview until the status resolves, then show the same out-of-service
+  // notice a learner would see rather than letting the author run a quiz that
+  // can't be graded. Non-AI (e.g. MCQ) previews are unaffected.
+  const previewHasAiGradedQuestion = allQuestions.some(isAiGradedQuestion);
+  if (previewHasAiGradedQuestion) {
+    if (aiGradingPaused === null) {
+      return <Loading animationData={animationData} />;
+    }
+    if (aiGradingPaused) {
+      return (
+        <ServiceUnavailableNotice message="This assignment is graded with AI, which is paused for maintenance right now. Learners won't be able to start it until AI is back." />
+      );
+    }
   }
 
   return (

@@ -12,6 +12,8 @@ import IORedis from "ioredis";
 import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
+import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { PrismaService } from "src/database/prisma.service";
 import { createRedisConnection } from "src/job-queue/redis.connection";
 import {
@@ -129,16 +131,23 @@ export class TranslationService implements OnModuleDestroy {
   private readonly _languageTranslation: boolean;
 
   /**
-   * Whether language translation is enabled in this deployment. Producers
-   * (publish + PATCH flows) check this before enqueuing TRANSLATE_QUESTION
-   * / TRANSLATE_VARIANT / TRANSLATE_META jobs and before marking pending
-   * status entries on the per-publish hash. When false, the translate
-   * methods short-circuit early and never write terminal status, so any
-   * pending entry that slipped through would leave the publish poll loop
-   * spinning for the full 30-minute timeout.
+   * Whether language translation is enabled right now. Producers (publish +
+   * PATCH flows, question.service) check this before enqueuing
+   * TRANSLATE_QUESTION / TRANSLATE_VARIANT / TRANSLATE_META jobs and before
+   * marking pending status entries on the per-publish hash. When false, the
+   * translate methods short-circuit early and never write terminal status.
+   *
+   * Combines the deploy-time `ENABLE_TRANSLATION` flag with the runtime AI
+   * kill-switch: when the AUTHORING component is disabled (e.g. during an LLM
+   * provider outage) this returns false, so no translation jobs are enqueued
+   * and the publish flow skips them cleanly instead of enqueuing jobs that
+   * would only fail at the provider backstop.
    */
   public get languageTranslation(): boolean {
-    return this._languageTranslation;
+    return (
+      this._languageTranslation &&
+      !this.aiFlags.isDisabled(AiFeatureComponent.AUTHORING)
+    );
   }
   private limiter: Bottleneck;
   private watsonxLimiter: Bottleneck;
@@ -210,6 +219,7 @@ export class TranslationService implements OnModuleDestroy {
     private readonly jobStatusService: JobStatusServiceV2,
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly llmResolver: LLMResolverService,
+    private readonly aiFlags: AiFeatureFlagsService,
   ) {
     this._languageTranslation =
       process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";

@@ -6,7 +6,7 @@ import { render, screen } from "@testing-library/react";
 import ErrorPage from "../ErrorPage";
 
 describe("ErrorPage", () => {
-  it("renders the headline, message, steps and support details for a status", () => {
+  it("renders the headline, message and steps for a status", () => {
     render(<ErrorPage error="Something broke" statusCode={500} />);
 
     expect(
@@ -14,10 +14,29 @@ describe("ErrorPage", () => {
         name: /something went wrong on our side/i,
       }),
     ).toBeInTheDocument();
-    // The message shows in the header and again in the support details.
-    expect(screen.getAllByText("Something broke").length).toBeGreaterThan(0);
+    expect(screen.getByText("Something broke")).toBeInTheDocument();
     expect(screen.getByText(/what you can do/i)).toBeInTheDocument();
-    expect(screen.getByText(/details for support/i)).toBeInTheDocument();
+  });
+
+  it("does not duplicate the message in a support panel", () => {
+    render(<ErrorPage error="Something broke" statusCode={500} />);
+
+    // The message shows once, in the header — there's no redundant
+    // "Details for support" panel re-printing the header facts.
+    expect(screen.getAllByText("Something broke")).toHaveLength(1);
+    expect(screen.queryByText(/details for support/i)).not.toBeInTheDocument();
+  });
+
+  it("renders caller-provided support details when present", () => {
+    render(
+      <ErrorPage
+        error="x"
+        statusCode={500}
+        debugDetails={[{ label: "Request ID", value: "abc-123" }]}
+      />,
+    );
+    expect(screen.getByText("Request ID")).toBeInTheDocument();
+    expect(screen.getByText("abc-123")).toBeInTheDocument();
   });
 
   it("omits the activity timeline when there are no events", () => {

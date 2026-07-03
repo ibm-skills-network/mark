@@ -17,7 +17,7 @@ import type {
 import useBeforeUnload from "@/hooks/use-before-unload";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { generateQuestionVariant, getAssignment } from "@/lib/talkToBackend";
-import { generateTempQuestionId } from "@/lib/utils";
+import { generateTempQuestionId, isInteractiveTarget } from "@/lib/utils";
 import { useAuthorStore } from "@/stores/author";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
@@ -616,43 +616,51 @@ const AuthorQuestionsPage: FC<Props> = ({
   let queue = Promise.resolve();
 
   const duplicateThisQuestion = (question: QuestionAuthorStore) => {
-    queue = queue.then(() => {
-      const questionId = generateTempQuestionId();
-      if (!questionId) {
-        toast.error("Failed to add question");
-        return;
-      }
-      const newQuestion = {
-        ...question,
-        id: questionId,
-        alreadyInBackend: false,
-        assignmentId: assignmentId,
-        choices: question.choices,
-        answer: question.answer,
-        scoring: question.scoring,
-        numRetries: question.numRetries,
-        index: Number(question.index) + 1,
-        randomizedChoices: question.randomizedChoices,
-      };
+    // The actual work runs inside the queued promise, so a synchronous
+    // try/catch at the call site cannot observe failures here. Handle errors on
+    // the chain itself: surface them to the user and recover the queue (the
+    // .catch resolves) so later add/duplicate/delete operations keep working.
+    queue = queue
+      .then(() => {
+        const questionId = generateTempQuestionId();
+        if (!questionId) {
+          toast.error("Failed to add question");
+          return;
+        }
+        const newQuestion = {
+          ...question,
+          id: questionId,
+          alreadyInBackend: false,
+          assignmentId: assignmentId,
+          choices: question.choices,
+          answer: question.answer,
+          scoring: question.scoring,
+          numRetries: question.numRetries,
+          index: Number(question.index) + 1,
+          randomizedChoices: question.randomizedChoices,
+        };
 
-      const questionIndex = Number(question.index);
-      const updatedQuestions = [
-        ...questions.slice(0, questionIndex),
-        newQuestion,
-        ...questions.slice(questionIndex),
-      ];
+        const questionIndex = Number(question.index);
+        const updatedQuestions = [
+          ...questions.slice(0, questionIndex),
+          newQuestion,
+          ...questions.slice(questionIndex),
+        ];
 
-      updatedQuestions.forEach((q, index) => {
-        q.index = index + 1;
+        updatedQuestions.forEach((q, index) => {
+          q.index = index + 1;
+        });
+
+        setQuestions(updatedQuestions);
+        useAuthorStore
+          .getState()
+          .setQuestionOrder(updatedQuestions.map((q) => q.id));
+        setFocusedQuestionId(questionId);
+        toast.success("Question duplicated successfully!");
+      })
+      .catch(() => {
+        toast.error("Failed to duplicate question");
       });
-
-      setQuestions(updatedQuestions);
-      useAuthorStore
-        .getState()
-        .setQuestionOrder(updatedQuestions.map((q) => q.id));
-      setFocusedQuestionId(questionId);
-      toast.success("Question duplicated successfully!");
-    });
   };
 
   const DragHandle = () => (
@@ -713,7 +721,10 @@ const AuthorQuestionsPage: FC<Props> = ({
                 ? "border-1 border-violet-600 shadow-md"
                 : "shadow-sm"
             }`}
-            onClick={() => handleFocus(question.id)}
+            onClick={(e) => {
+              if (isInteractiveTarget(e.target)) return;
+              handleFocus(question.id);
+            }}
           >
             <div className="absolute flex self-center max-w-8 w-8 px-2 left-0">
               <div
@@ -1274,6 +1285,31 @@ const AuthorQuestionsPage: FC<Props> = ({
                 </Transition>
               </Menu>
             </div>
+
+            {questions.length === 0 && (
+              <>
+                <div className="bg-white w-fit whitespace-nowrap border-gray-200 border border-solid shadow-sm hover:shadow-md rounded-md flex justify-center items-center">
+                  <button
+                    type="button"
+                    className="hover:no-underline text-gray-600 hover:text-gray-600 typography-btn px-4 py-2 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-md focus:rounded-md bg-white hover:bg-gray-100 ring-offset-white flex items-center gap-2"
+                    onClick={() => setFileUploadModalOpen(true)}
+                  >
+                    <SparklesIcon className="w-4 h-4 text-violet-600" />
+                    Generate Questions using AI (Beta)
+                  </button>
+                </div>
+                <div className="bg-white w-fit whitespace-nowrap border-gray-200 border border-solid shadow-sm hover:shadow-md rounded-md flex justify-center items-center">
+                  <button
+                    type="button"
+                    className="hover:no-underline text-gray-600 hover:text-gray-600 typography-btn px-4 py-2 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-md focus:rounded-md bg-white hover:bg-gray-100 ring-offset-white flex items-center gap-2"
+                    onClick={() => setIsImportModalOpen(true)}
+                  >
+                    <DocumentArrowDownIcon className="w-4 h-4 text-violet-600" />
+                    Import Questions (Beta)
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

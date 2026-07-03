@@ -74,6 +74,7 @@ describe("TranslationService partial-failure status and scheduling budget", () =
       llmFacade as never,
       jobStatusService as never,
       llmResolver as never,
+      { isDisabled: () => false } as never,
     );
 
     const fakeRedis: FakeStateRedis = {

@@ -119,6 +119,7 @@ describe("Runtime payload safety: TranslationService does not log translation co
       llmFacade as any,
       jobStatusService as any,
       llmResolver as any,
+      { isDisabled: () => false } as any,
     );
   }
 

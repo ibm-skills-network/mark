@@ -997,12 +997,9 @@ const Question: FC<QuestionProps> = ({
 
               <button
                 className="text-gray-500"
-                onClick={() => {
-                  try {
-                    duplicateThisQuestion(question);
-                  } catch (error) {
-                    toast.error("Failed to duplicate question");
-                  }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  duplicateThisQuestion(question);
                 }}
               >
                 <DocumentDuplicateIcon width={20} height={20} />
@@ -1010,7 +1007,10 @@ const Question: FC<QuestionProps> = ({
 
               <button
                 className="text-gray-500"
-                onClick={() => setToggleDeleteConfirmation(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToggleDeleteConfirmation(true);
+                }}
               >
                 <TrashIcon width={20} height={20} />
               </button>

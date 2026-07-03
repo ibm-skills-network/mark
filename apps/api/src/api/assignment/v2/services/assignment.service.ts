@@ -8,6 +8,8 @@ import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
+import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
@@ -82,6 +84,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     private readonly jobQueueService: JobQueueService,
     private readonly prisma: PrismaService,
     private readonly attemptAccessCache: AttemptAccessCacheService,
+    private readonly aiFlags: AiFeatureFlagsService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
@@ -822,9 +825,17 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // work. The frontend hides the PublishProgress card when the
       // aggregate carries total=0, so this becomes a quiet success.
       if (!willEnqueueAnyTranslation) {
+        // Distinguish a benign no-op (metadata-only republish) from
+        // "translations were needed but the AI kill-switch skipped them", so
+        // the author is told rather than silently shipped without translations.
+        const skippedByKillSwitch =
+          shouldTranslateAssignment &&
+          this.aiFlags.isDisabled(AiFeatureComponent.AUTHORING);
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "Completed",
-          progress: "Publishing complete",
+          progress: skippedByKillSwitch
+            ? "Published. AI translations are temporarily unavailable and were skipped — re-publish once AI is restored to generate them."
+            : "Publishing complete",
           percentage: 100,
           result: {
             stage: "translations_complete",
@@ -832,6 +843,9 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               aggregate: { completed: 0, total: 0, failed: 0 },
               perJob: [],
             },
+            ...(skippedByKillSwitch
+              ? { translationsSkippedReason: "ai_unavailable" as const }
+              : {}),
           } satisfies PublishJobResult,
         });
         return;

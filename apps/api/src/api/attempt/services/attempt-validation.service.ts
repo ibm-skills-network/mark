@@ -17,10 +17,14 @@ import {
 } from "src/api/assignment/dto/get.assignment.response.dto";
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
 
 @Injectable()
 export class AttemptValidationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gradingKillSwitch: GradingKillSwitchService,
+  ) {}
 
   /**
    * Validates whether a new attempt can be created for the given assignment and user session.
@@ -31,6 +35,14 @@ export class AttemptValidationService {
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
     userSession: UserSession,
   ): Promise<void> {
+    // Kill-switch: block starting an attempt on an AI-graded assignment while
+    // grading is disabled. Non-AI assignments (e.g. MCQ-only) are unaffected.
+    await this.gradingKillSwitch.assertGradingAllowed(
+      assignment.id,
+      userSession.userId,
+      "start",
+    );
+
     const now = new Date();
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
