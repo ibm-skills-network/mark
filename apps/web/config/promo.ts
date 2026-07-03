@@ -59,7 +59,8 @@ export const PROMO_PRE_START: PromoItem[] = [
   {
     id: "prestart-hashicorp",
     title: "HashiCorp",
-    blurb: "Do cloud right. Automate your infrastructure and security with HashiCorp.",
+    blurb:
+      "Do cloud right. Automate your infrastructure and security with HashiCorp.",
     ctaText: "Learn more",
     href: "https://product-link.skills.network/r/franavnoazad-11",
     imgSrc: "/promo/Hashicorp.png",
@@ -68,7 +69,8 @@ export const PROMO_PRE_START: PromoItem[] = [
   {
     id: "prestart-watsonx-orchestrate",
     title: "watsonx.orchestrate",
-    blurb: "Put AI to work for your business. Build your own AI assistants and agents with watsonx Orchestrate.",
+    blurb:
+      "Put AI to work for your business. Build your own AI assistants and agents with watsonx Orchestrate.",
     ctaText: "Explore",
     href: "https://product-link.skills.network/r/franavnoazad-12",
     imgSrc: "/promo/watsonX-Orchestrate.svg",
@@ -109,7 +111,8 @@ export const PROMO_COMPLETION: PromoItem[] = [
   {
     id: "completion-hashicorp",
     title: "HashiCorp",
-    blurb: "Do cloud right. Automate your infrastructure and security with HashiCorp.",
+    blurb:
+      "Do cloud right. Automate your infrastructure and security with HashiCorp.",
     ctaText: "Learn more",
     href: "https://product-link.skills.network/r/franavnoazad-14",
     imgSrc: "/promo/Hashicorp.png",
@@ -118,13 +121,14 @@ export const PROMO_COMPLETION: PromoItem[] = [
   {
     id: "completion-watsonx-orchestrate",
     title: "watsonx Orchestrate",
-    blurb: "Put AI to work for your business. Build your own AI assistants and agents with watsonx Orchestrate.",
+    blurb:
+      "Put AI to work for your business. Build your own AI assistants and agents with watsonx Orchestrate.",
     ctaText: "Explore",
     href: "https://product-link.skills.network/r/franavnoazad-13",
     imgSrc: "/promo/watsonX-Orchestrate.svg",
     imgAlt: "watsonx Orchestrate",
   },
-    {
+  {
     id: "completion-watsonx-data",
     title: "watsonx.data",
     blurb: "Make your data AI-ready—connected, governed, and context-rich.",

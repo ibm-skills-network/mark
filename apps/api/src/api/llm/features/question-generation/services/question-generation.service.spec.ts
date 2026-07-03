@@ -75,6 +75,44 @@ describe("QuestionGenerationService", () => {
       })),
     });
 
+  const buildChoicesResponse = (label = "Regenerated"): string =>
+    JSON.stringify({
+      choices: [
+        {
+          id: 1,
+          choice: `${label} correct answer`,
+          isCorrect: true,
+          points: 1,
+          feedback: "This choice matches the reviewed question.",
+        },
+        {
+          id: 2,
+          choice: `${label} wrong answer A`,
+          isCorrect: false,
+          points: 0,
+          feedback: "This choice does not match the reviewed question.",
+        },
+        {
+          id: 3,
+          choice: `${label} wrong answer B`,
+          isCorrect: false,
+          points: 0,
+          feedback: "This choice does not match the reviewed question.",
+        },
+        {
+          id: 4,
+          choice: `${label} wrong answer C`,
+          isCorrect: false,
+          points: 0,
+          feedback: "This choice does not match the reviewed question.",
+        },
+      ],
+    });
+
+  const buildReviewResponse = (
+    items: Array<{ question: string; type: MCSubtype | string; page: number }>,
+  ): string => JSON.stringify(items);
+
   const multipleChoiceResponse = JSON.stringify({
     questions: [
       {
@@ -315,6 +353,118 @@ describe("QuestionGenerationService", () => {
     expect(result[0].choices).toHaveLength(4);
   });
 
+  const subtypePromptCases: Array<{
+    label: string;
+    subtype: MCSubtype;
+    generationLine: string;
+    rulesHeading: string;
+    ruleSnippet: string;
+    answerLengthSnippet: string;
+  }> = [
+    {
+      label: "short",
+      subtype: MCSubtype.SHORT,
+      generationLine:
+        "Generate 1 MULTIPLE_CHOICE (SINGLE_CORRECT) SHORT-subtype questions.",
+      rulesHeading: "SHORT QUESTION RULES:",
+      ruleSnippet:
+        'Use a "What" or "How" format only when the answer is still a concise noun phrase from the content.',
+      answerLengthSnippet:
+        "SHORT ANSWER LENGTH: at MOST 5-8 words for both the correct answer and each wrong answer.",
+    },
+    {
+      label: "quantitative",
+      subtype: MCSubtype.QUANTITATIVE,
+      generationLine:
+        "Generate 1 MULTIPLE_CHOICE (SINGLE_CORRECT) QUANTITATIVE-subtype questions.",
+      rulesHeading: "QUANTITATIVE QUESTION RULES:",
+      ruleSnippet:
+        "The question MUST require the learner to interpret or apply a statistic from the content",
+      answerLengthSnippet:
+        "QUANTITATIVE ANSWER LENGTH: at MOST 5-8 words for both the correct answer and each wrong answer.",
+    },
+    {
+      label: "long",
+      subtype: MCSubtype.LONG,
+      generationLine:
+        "Generate 1 MULTIPLE_CHOICE (SINGLE_CORRECT) LONG-subtype questions.",
+      rulesHeading: "LONG QUESTION RULES:",
+      ruleSnippet:
+        "These questions should have minimum 20-word formatted answers showing insight and detail.",
+      answerLengthSnippet:
+        "LONG ANSWER LENGTH: at LEAST 10 words for both the correct answer and each wrong answer.",
+    },
+    {
+      label: "scenario",
+      subtype: MCSubtype.SCENARIO,
+      generationLine:
+        "Generate 1 MULTIPLE_CHOICE (SINGLE_CORRECT) SCENARIO-subtype questions.",
+      rulesHeading: "SCENARIO QUESTION RULES:",
+      ruleSnippet:
+        "These questions should put the learner into a scenario with a client",
+      answerLengthSnippet:
+        "SCENARIO ANSWER LENGTH: at LEAST 10 words for both the correct answer and each wrong answer.",
+    },
+  ];
+
+  it.each(subtypePromptCases)(
+    "includes the $label subtype rules in the generation prompt",
+    async ({
+      subtype,
+      generationLine,
+      rulesHeading,
+      ruleSnippet,
+      answerLengthSnippet,
+    }) => {
+      promptProcessor.processPromptForFeature
+        .mockResolvedValueOnce(buildGenerationResponse(1))
+        .mockResolvedValueOnce(
+          buildReviewResponse([
+            {
+              question: "Which practice keeps code reviews focused 0?",
+              type: subtype,
+              page: 0,
+            },
+          ]),
+        );
+
+      const multipleChoiceSubtypes: Record<MCSubtype, number> = {
+        [MCSubtype.SHORT]: 0,
+        [MCSubtype.QUANTITATIVE]: 0,
+        [MCSubtype.LONG]: 0,
+        [MCSubtype.SCENARIO]: 0,
+      };
+      multipleChoiceSubtypes[subtype] = 1;
+
+      const result = await service.generateAssignmentQuestions(
+        1,
+        AssignmentTypeEnum.QUIZ,
+        {
+          multipleChoice: 0,
+          multipleSelect: 0,
+          textResponse: 0,
+          trueFalse: 0,
+          url: 0,
+          upload: 0,
+          linkFile: 0,
+          multipleChoiceSubtypes,
+        },
+        "IBM product content",
+      );
+
+      const generationPrompt = promptProcessor.processPromptForFeature.mock
+        .calls[0][0] as PromptTemplate;
+      const formattedPrompt = await generationPrompt.format({});
+
+      expect(formattedPrompt).toContain(generationLine);
+      expect(formattedPrompt).toContain(rulesHeading);
+      expect(formattedPrompt).toContain(ruleSnippet);
+      expect(formattedPrompt).toContain(answerLengthSnippet);
+      expect(result).toHaveLength(1);
+      expect(result[0].mcSubtype).toBe(subtype);
+    },
+  );
+
   // ────────────────────────────────────────────────────────────────────────
   // New coverage: review edge cases and parallel shortfall
   // ────────────────────────────────────────────────────────────────────────
@@ -521,6 +671,339 @@ describe("QuestionGenerationService", () => {
     expect(promptProcessor.processPromptForFeature).toHaveBeenCalledTimes(2);
     expect(result).toHaveLength(1);
     expect(result[0].mcSubtype).toBe(MCSubtype.SHORT);
+  });
+
+  it("preserves requested short and long quotas when review reclassifies short questions to long", async () => {
+    promptProcessor.processPromptForFeature
+      // Initial subtype batches: short, then long.
+      .mockResolvedValueOnce(
+        buildGenerationResponse(1, "How does IBM watsonx help teams"),
+      )
+      .mockResolvedValueOnce(
+        buildGenerationResponse(
+          1,
+          "How does IBM Granite differ for enterprises",
+        ),
+      )
+      // Initial review: rule 13 reclassifies the generated short as long.
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          {
+            question: "How does IBM watsonx help teams 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+          {
+            question: "How does IBM Granite differ for enterprises 0?",
+            type: MCSubtype.LONG,
+            page: 1,
+          },
+        ]),
+      )
+      // Choice refresh for the reclassified initial short question.
+      .mockResolvedValueOnce(buildChoicesResponse("Initial reclassified"))
+      // Shortfall generation for the now-empty short bucket.
+      .mockResolvedValueOnce(
+        buildGenerationResponse(1, "How does IBM Instana simplify operations"),
+      )
+      // Re-review reclassifies the replacement as long too.
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          {
+            question: "How does IBM Instana simplify operations 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+        ]),
+      )
+      // Choice refresh for the reclassified shortfall question.
+      .mockResolvedValueOnce(buildChoicesResponse("Shortfall reclassified"));
+
+    const result = await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 1,
+          quantitative: 0,
+          long: 1,
+          scenario: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.filter((q) => q.mcSubtype === MCSubtype.SHORT)).toHaveLength(
+      1,
+    );
+    expect(result.filter((q) => q.mcSubtype === MCSubtype.LONG)).toHaveLength(
+      1,
+    );
+  });
+
+  it("does not emit a long question when a short-only request is reclassified during review", async () => {
+    promptProcessor.processPromptForFeature
+      // Initial short batch.
+      .mockResolvedValueOnce(
+        buildGenerationResponse(1, "How does IBM watsonx help teams"),
+      )
+      // Initial review reclassifies the short question to long.
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          {
+            question: "How does IBM watsonx help teams 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+        ]),
+      )
+      // Choice refresh for the reclassified initial short question.
+      .mockResolvedValueOnce(buildChoicesResponse("Initial reclassified"))
+      // Shortfall generation for the empty short bucket.
+      .mockResolvedValueOnce(
+        buildGenerationResponse(1, "How does IBM Instana simplify operations"),
+      )
+      // Re-review reclassifies the replacement as long too.
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          {
+            question: "How does IBM Instana simplify operations 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+        ]),
+      )
+      // Choice refresh for the reclassified shortfall question.
+      .mockResolvedValueOnce(buildChoicesResponse("Shortfall reclassified"));
+
+    const result = await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 1,
+          quantitative: 0,
+          long: 0,
+          scenario: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result).toEqual([
+      expect.objectContaining({ mcSubtype: MCSubtype.SHORT }),
+    ]);
+    expect(result.some((q) => q.mcSubtype === MCSubtype.LONG)).toBe(false);
+  });
+
+  it("preserves all four subtype quotas when review reclassifies generated questions to long", async () => {
+    promptProcessor.processPromptForFeature
+      // Initial subtype batches: short, quantitative, long, then scenario.
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Initial short"))
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Initial quantitative"))
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Initial long"))
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Initial scenario"))
+      // Initial review reclassifies every question as long.
+      .mockResolvedValueOnce(
+        buildReviewResponse([
+          {
+            question: "Initial short 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+          {
+            question: "Initial quantitative 0?",
+            type: MCSubtype.LONG,
+            page: 1,
+          },
+          {
+            question: "Initial long 0?",
+            type: MCSubtype.LONG,
+            page: 2,
+          },
+          {
+            question: "Initial scenario 0?",
+            type: MCSubtype.LONG,
+            page: 3,
+          },
+        ]),
+      )
+      // Choice refreshes for initial short, quantitative, and scenario items.
+      .mockResolvedValueOnce(buildChoicesResponse("Initial short as long"))
+      .mockResolvedValueOnce(
+        buildChoicesResponse("Initial quantitative as long"),
+      )
+      .mockResolvedValueOnce(buildChoicesResponse("Initial scenario as long"))
+      // Shortfall batches for short, quantitative, and scenario.
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Replacement short"))
+      .mockResolvedValueOnce(
+        buildGenerationResponse(1, "Replacement quantitative"),
+      )
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Replacement scenario"))
+      // Re-review reclassifies all replacements as long too.
+      .mockResolvedValueOnce(
+        buildReviewResponse([
+          {
+            question: "Replacement short 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+          {
+            question: "Replacement quantitative 0?",
+            type: MCSubtype.LONG,
+            page: 1,
+          },
+          {
+            question: "Replacement scenario 0?",
+            type: MCSubtype.LONG,
+            page: 2,
+          },
+        ]),
+      )
+      // Choice refreshes for the reclassified shortfall items.
+      .mockResolvedValueOnce(buildChoicesResponse("Replacement short as long"))
+      .mockResolvedValueOnce(
+        buildChoicesResponse("Replacement quantitative as long"),
+      )
+      .mockResolvedValueOnce(
+        buildChoicesResponse("Replacement scenario as long"),
+      );
+
+    const result = await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 1,
+          quantitative: 1,
+          long: 1,
+          scenario: 1,
+        },
+      },
+      "IBM product content",
+    );
+
+    const countBySubtype = result.reduce(
+      (counts, question) => {
+        if (question.mcSubtype) {
+          counts[question.mcSubtype] += 1;
+        }
+        return counts;
+      },
+      {
+        [MCSubtype.SHORT]: 0,
+        [MCSubtype.QUANTITATIVE]: 0,
+        [MCSubtype.LONG]: 0,
+        [MCSubtype.SCENARIO]: 0,
+      },
+    );
+
+    expect(result).toHaveLength(4);
+    expect(countBySubtype).toEqual({
+      [MCSubtype.SHORT]: 1,
+      [MCSubtype.QUANTITATIVE]: 1,
+      [MCSubtype.LONG]: 1,
+      [MCSubtype.SCENARIO]: 1,
+    });
+  });
+
+  it("does not count an initially-reclassified short question toward the long bucket", async () => {
+    // The reclassified short has a longer stem than the legitimate long question.
+    // Without the initial-review ownership guard, quality sort would promote it
+    // into the long bucket (longer question = higher quality score), leaving the
+    // long quota filled with a short-answer-style question.
+    promptProcessor.processPromptForFeature
+      // short gen: intentionally long stem so it would "win" quality sort
+      .mockResolvedValueOnce(
+        buildGenerationResponse(
+          1,
+          "How does IBM watsonx help clients achieve operational efficiency in complex environments",
+        ),
+      )
+      // long gen: shorter stem (would lose quality sort without the fix)
+      .mockResolvedValueOnce(buildGenerationResponse(1, "What IBM offers"))
+      // initial review: reclassifies short→long, keeps long as long
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          {
+            question:
+              "How does IBM watsonx help clients achieve operational efficiency in complex environments 0?",
+            type: MCSubtype.LONG,
+            page: 0,
+          },
+          {
+            question: "What IBM offers 0?",
+            type: MCSubtype.LONG,
+            page: 1,
+          },
+        ]),
+      )
+      // choice refresh for the reclassified short (subtype changed SHORT→LONG)
+      .mockResolvedValueOnce(buildChoicesResponse("Initial reclassified"))
+      // shortfall generation for the now-empty short bucket
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Replacement short"))
+      // re-review of shortfall: keeps the replacement as short (not reclassified)
+      .mockResolvedValueOnce(
+        JSON.stringify([
+          { question: "Replacement short 0?", type: MCSubtype.SHORT, page: 0 },
+        ]),
+      );
+    // No choice refresh call for the shortfall because its subtype is unchanged.
+
+    const result = await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 1,
+          quantitative: 0,
+          long: 1,
+          scenario: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    expect(result).toHaveLength(2);
+    const longQ = result.find((q) => q.mcSubtype === MCSubtype.LONG);
+    const shortQ = result.find((q) => q.mcSubtype === MCSubtype.SHORT);
+
+    // The long bucket must contain the legitimately-generated long question,
+    // not the reclassified short question (even though it had the longer stem).
+    expect(longQ?.question).toContain("What IBM offers");
+    // The short quota must be filled from the shortfall batch, not from any
+    // reclassified question.
+    expect(shortQ?.question).toContain("Replacement short");
   });
 
   it("does not break the review prompt when content contains curly braces", async () => {

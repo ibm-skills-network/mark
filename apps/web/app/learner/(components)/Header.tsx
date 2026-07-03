@@ -40,7 +40,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
-import GradingProgressModal, { type ProgressState } from "./GradingProgressModal";
+import GradingProgressModal, {
+  type ProgressState,
+} from "./GradingProgressModal";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -323,7 +325,8 @@ function LearnerHeader() {
           setProgressData({
             status,
             progress: status === "completed" ? 100 : progress,
-            currentStage: status === "completed" ? "Grading complete!" : message,
+            currentStage:
+              status === "completed" ? "Grading complete!" : message,
             currentQuestion: metadata?.currentQuestion,
             totalQuestions: metadata?.totalQuestions,
             gradingState: metadata?.gradingState,

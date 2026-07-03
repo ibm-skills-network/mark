@@ -110,6 +110,10 @@ export class QuestionGenerationService implements IQuestionGenerationService {
   private readonly MAX_GENERATION_RETRIES = 3;
   private readonly BATCH_SIZE = 5;
   private readonly BATCH_CONCURRENCY = 2;
+  // Monotonic counter — guarantees globally-unique question IDs within a
+  // service instance. Math.random()-based IDs could collide across concurrent
+  // batch calls, corrupting the initialSubtypeById / shortfallOwnerById maps.
+  private nextQuestionId = 0;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -211,6 +215,19 @@ export class QuestionGenerationService implements IQuestionGenerationService {
       }
     }
 
+    // Snapshot each question's original subtype before the review pass can
+    // reclassify them. Used in finalizeSubtypeQuestions to exclude reclassified
+    // questions from both the original and the new bucket. Only needed when
+    // subtype quotas are in play — finalizeSubtypeQuestions runs only then.
+    const initialSubtypeById = new Map<number, MCSubtype>();
+    if (subtypeTotal > 0) {
+      for (const q of allQuestions) {
+        if (q.mcSubtype !== undefined && typeof q.id === "number") {
+          initialSubtypeById.set(q.id, q.mcSubtype);
+        }
+      }
+    }
+
     // Semantic review pass — only runs when subtype questions are present
     let reviewedQuestions = allQuestions;
     if (subtypeTotal > 0) {
@@ -232,6 +249,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
             assignmentId,
             content,
             learningObjectives,
+            initialSubtypeById,
           )
         : [];
 
@@ -844,6 +862,7 @@ FORMAT INSTRUCTIONS:
   - These questions should be simple and straightforward and show that the learner was paying attention to the content.
   - Their answers should NOT be quantitative.
   - Only ask useful questions about the product or market — do NOT ask about websites, who to contact, or where to find more information.
+  - Use a "What" or "How" format only when the answer is still a concise noun phrase from the content.
   - CRITICAL: A Short question MUST be answerable in a 2-8 word noun phrase WITHOUT explanation. If answering the question requires explaining how or why something works, contributes, or helps — it is NOT a Short question. Questions beginning with "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify" require explanation and MUST be typed as Long, not Short.
     WRONG (do not do this): How does Instana's automated discovery help clients? → Type: Short
     CORRECT (do this instead): How does Instana's automated discovery help clients? → Type: Long
@@ -1276,8 +1295,8 @@ Rules:
     rawQuestions: IGeneratedQuestion[],
     assignmentId: number,
   ): IGeneratedQuestion[] {
-    return rawQuestions.map((question, index) => ({
-      id: Math.floor(Math.random() * 1_000_000) + index,
+    return rawQuestions.map((question) => ({
+      id: ++this.nextQuestionId,
       assignmentId,
       question: question.question?.replaceAll("```", "").trim(),
       totalPoints: question.totalPoints || this.getDefaultPoints(question.type),
@@ -1569,6 +1588,7 @@ Rules:
     assignmentId: number,
     content?: string,
     learningObjectives?: string,
+    initialSubtypeById?: Map<number, MCSubtype>,
   ): Promise<IGeneratedQuestion[]> {
     const bySubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
     for (const subtype of Object.values(MCSubtype)) {
@@ -1576,9 +1596,21 @@ Rules:
     }
 
     for (const q of questions) {
-      if (q.mcSubtype) {
-        bySubtype.get(q.mcSubtype)?.push(q);
+      if (q.mcSubtype === undefined) continue;
+
+      const originalSubtype =
+        typeof q.id === "number"
+          ? (initialSubtypeById?.get(q.id) ?? q.mcSubtype)
+          : q.mcSubtype;
+
+      if (q.mcSubtype !== originalSubtype) {
+        this.logger.warn(
+          `Initial review reclassified a ${originalSubtype} question as ${q.mcSubtype} — not counting it toward either bucket`,
+        );
+        continue;
       }
+
+      bySubtype.get(q.mcSubtype)?.push(q);
     }
 
     const entries: [MCSubtype, number][] = [
@@ -1590,6 +1622,7 @@ Rules:
 
     type SubtypeBucket = {
       subtype: MCSubtype;
+      required: number;
       fromPool: IGeneratedQuestion[];
       fromShortfall: IGeneratedQuestion[];
       fromFallback: IGeneratedQuestion[];
@@ -1656,19 +1689,32 @@ Rules:
           }
         }
 
-        return { subtype, fromPool, fromShortfall, fromFallback };
+        return { subtype, required, fromPool, fromShortfall, fromFallback };
       });
 
     const buckets = await Promise.all(tasks);
 
     // Re-review all shortfall-generated questions together so they pass through
     // the same semantic filter as the originally generated batch. Template
-    // fallbacks stay out — they're last-resort synthetic data.
+    // fallbacks stay out — they're last-resort synthetic data. Keep bucket
+    // ownership separate from reviewed mcSubtype so a question generated for a
+    // missing Short slot cannot inflate the Long bucket after reclassification.
     const allShortfall = buckets.flatMap((b) => b.fromShortfall);
 
-    let reviewedBySubtype: Map<MCSubtype, IGeneratedQuestion[]> | undefined;
+    let reviewedByOriginalSubtype:
+      | Map<MCSubtype, IGeneratedQuestion[]>
+      | undefined;
     if (allShortfall.length > 0) {
       try {
+        const shortfallOwnerById = new Map<number, MCSubtype>();
+        for (const bucket of buckets) {
+          for (const q of bucket.fromShortfall) {
+            if (typeof q.id === "number") {
+              shortfallOwnerById.set(q.id, bucket.subtype);
+            }
+          }
+        }
+
         const reviewedShortfall = await this.reviewSubtypeQuestions(
           allShortfall,
           assignmentId,
@@ -1676,13 +1722,30 @@ Rules:
           learningObjectives,
         );
 
-        reviewedBySubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
+        reviewedByOriginalSubtype = new Map<MCSubtype, IGeneratedQuestion[]>();
         for (const q of reviewedShortfall) {
-          if (q.mcSubtype) {
-            const list = reviewedBySubtype.get(q.mcSubtype) ?? [];
-            list.push(q);
-            reviewedBySubtype.set(q.mcSubtype, list);
+          const originalSubtype =
+            typeof q.id === "number" ? shortfallOwnerById.get(q.id) : undefined;
+
+          if (!originalSubtype) {
+            this.logger.warn(
+              "Reviewed shortfall question could not be mapped to its requested subtype — skipping it",
+            );
+            continue;
           }
+
+          if (q.mcSubtype !== originalSubtype) {
+            this.logger.warn(
+              `Review reclassified a ${originalSubtype} shortfall question as ${
+                q.mcSubtype ?? "unknown"
+              } — not using it to satisfy the ${originalSubtype} quota`,
+            );
+            continue;
+          }
+
+          const list = reviewedByOriginalSubtype.get(originalSubtype) ?? [];
+          list.push(q);
+          reviewedByOriginalSubtype.set(originalSubtype, list);
         }
       } catch (error) {
         this.logger.warn(
@@ -1690,20 +1753,46 @@ Rules:
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        reviewedBySubtype = undefined;
+        reviewedByOriginalSubtype = undefined;
       }
     }
 
     const result: IGeneratedQuestion[] = [];
     for (const bucket of buckets) {
-      const reviewedShortfallForSubtype = reviewedBySubtype
-        ? (reviewedBySubtype.get(bucket.subtype) ?? [])
+      const selected = bucket.fromPool.slice(0, bucket.required);
+      const reviewedShortfallForSubtype = reviewedByOriginalSubtype
+        ? (reviewedByOriginalSubtype.get(bucket.subtype) ?? [])
         : bucket.fromShortfall;
-      result.push(
-        ...bucket.fromPool,
-        ...reviewedShortfallForSubtype,
-        ...bucket.fromFallback,
-      );
+
+      let remaining = bucket.required - selected.length;
+      if (remaining > 0) {
+        selected.push(...reviewedShortfallForSubtype.slice(0, remaining));
+      }
+
+      remaining = bucket.required - selected.length;
+      if (remaining > 0) {
+        selected.push(...bucket.fromFallback.slice(0, remaining));
+      }
+
+      remaining = bucket.required - selected.length;
+      if (remaining > 0) {
+        this.logger.warn(
+          `Subtype ${bucket.subtype} quota still missing ${remaining} question(s) after review — using template fallback`,
+        );
+        selected.push(
+          ...this.generateFallbackQuestionsOfType(
+            QuestionType.SINGLE_CORRECT,
+            remaining,
+            difficultyLevel,
+            assignmentId,
+            content,
+            learningObjectives,
+            bucket.subtype,
+          ),
+        );
+      }
+
+      result.push(...selected);
     }
 
     return result;
@@ -1889,7 +1978,6 @@ Rules:
         difficultyLevel,
         keyTerms,
         assignmentId,
-        index + 1,
       );
       if (mcSubtype) {
         q.mcSubtype = mcSubtype;
@@ -1961,9 +2049,8 @@ Rules:
     difficultyLevel: DifficultyLevel,
     keyTerms: string[],
     assignmentId: number,
-    id?: number,
   ): IGeneratedQuestion {
-    const questionId = id || Math.floor(Math.random() * 1_000_000);
+    const questionId = ++this.nextQuestionId;
     const term = keyTerms.length > 0 ? keyTerms[0] : "the concept";
     const levelText = difficultyLevel.toString().toLowerCase();
 
@@ -2019,22 +2106,14 @@ Rules:
         return {
           ...baseQuestion,
           randomizedChoices: true,
-          choices: this.createContentRelevantChoices(
-            type,
-            difficultyLevel,
-            term,
-          ),
+          choices: this.createContentRelevantChoices(type, term),
         };
       }
       case QuestionType.MULTIPLE_CORRECT: {
         return {
           ...baseQuestion,
           randomizedChoices: true,
-          choices: this.createContentRelevantChoices(
-            type,
-            difficultyLevel,
-            term,
-          ),
+          choices: this.createContentRelevantChoices(type, term),
         };
       }
       case QuestionType.TRUE_FALSE: {
@@ -2082,7 +2161,6 @@ Rules:
   }
   private createContentRelevantChoices(
     type: QuestionType,
-    difficultyLevel: DifficultyLevel,
     term: string,
   ): Choice[] {
     switch (type) {
