@@ -42,6 +42,7 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "@/stores/author";
 import SNIcon from "@components/SNIcon";
+import ThemeToggle from "@/components/ThemeToggle";
 import Title from "@components/Title";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
@@ -838,7 +839,7 @@ function AuthorHeader() {
           isChatbotOpen ? "left-0 right-[25vw]" : "w-full"
         }`}
       >
-        <header className="border-b border-gray-300 bg-white px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
+        <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
           <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-2">
             <div className="flex flex-row items-center space-x-4">
               <SNIcon />
@@ -846,9 +847,9 @@ function AuthorHeader() {
                 <Title level={5} className="leading-6">
                   Auto-Graded Assignment Creator
                 </Title>
-                <div className="text-gray-500 font-medium text-sm leading-5 truncate max-w-[200px] sm:max-w-none">
+                <div className="text-gray-500 dark:text-gray-400 font-medium text-sm leading-5 truncate max-w-[200px] sm:max-w-none">
                   {pageState === "loading" ? (
-                    <div className="h-4 w-32 bg-gray-200 animate-pulse rounded" />
+                    <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
                   ) : (
                     name || "Untitled Assignment"
                   )}
@@ -862,6 +863,7 @@ function AuthorHeader() {
             />
 
             <div className="flex flex-wrap items-center md:ml-auto gap-2 sm:gap-4 mt-2 md:mt-0 ml-auto">
+              <ThemeToggle />
               <div className="w-40 sm:w-52">
                 <Dropdown
                   items={languageOptions}
@@ -884,7 +886,7 @@ function AuthorHeader() {
                         "_blank",
                       )
                     }
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/50 hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-200 shadow-sm hover:shadow-md"
                     title="View insights and analytics for this assignment"
                   >
                     <BarChart3 className="w-4 h-4" />
@@ -933,7 +935,7 @@ function AuthorHeader() {
             <div className="flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => setShowAreYouSureModal(false)}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 border-gray-300 bg-white hover:bg-gray-50"
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>
@@ -957,7 +959,7 @@ function AuthorHeader() {
             <div className="space-y-2">
               <label
                 htmlFor="draft-name"
-                className="block text-sm font-medium text-gray-700"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-200"
               >
                 Draft Name (Optional)
               </label>
@@ -967,17 +969,17 @@ function AuthorHeader() {
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
                 placeholder={`Draft - ${new Date().toLocaleDateString()}`}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-600 focus:border-violet-600"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-600 focus:border-violet-600"
               />
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 If left empty, a default name with timestamp will be used.
               </p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <button
                 onClick={handleCancelSaveDraft}
-                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 border-gray-300 bg-white hover:bg-gray-50"
+                className="text-sm font-medium px-4 py-2 border border-solid rounded-md shadow-sm focus:ring-offset-2 focus:ring-gray-400 focus:ring-2 focus:outline-none transition-all text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>

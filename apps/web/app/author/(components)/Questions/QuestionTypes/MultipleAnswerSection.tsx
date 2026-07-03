@@ -383,20 +383,20 @@ function Section({
   }, [choices]);
 
   return (
-    <div className="w-full border rounded-lg overflow-hidden bg-white">
+    <div className="w-full border rounded-lg overflow-hidden bg-transparent">
       <table className="min-w-full text-left border-collapse">
         <thead>
-          <tr className="bg-white border-b">
-            <th className="p-3 typography-body text-gray-600 border-r w-32">
+          <tr className="bg-transparent border-b">
+            <th className="p-3 typography-body text-gray-600 dark:text-gray-300 border-r w-32">
               Options
             </th>
-            <th className="p-3 typography-body text-gray-600 border-r w-32">
+            <th className="p-3 typography-body text-gray-600 dark:text-gray-300 border-r w-32">
               Points
             </th>
-            <th className="p-3 typography-body text-gray-600 border-r">
+            <th className="p-3 typography-body text-gray-600 dark:text-gray-300 border-r">
               Choices
             </th>
-            <th className="p-3 typography-body text-gray-600 ">
+            <th className="p-3 typography-body text-gray-600 dark:text-gray-300 ">
               <div className="flex items-center justify-between">
                 <span>Feedback</span>
 
@@ -411,7 +411,7 @@ function Section({
                     >
                       <div className="flex justify-end">
                         <button
-                          className="text-gray-500 rounded-full hover:bg-gray-100 w-6 h-6 flex items-center justify-center"
+                          className="text-gray-500 dark:text-gray-400 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 w-6 h-6 flex items-center justify-center"
                           onClick={handleAiClick}
                           disabled={loading}
                         >
@@ -437,7 +437,7 @@ function Section({
                 >
                   <td className={`p-3 border-r`}>
                     {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-full rounded"></div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <div className="flex flex-col items-center space-y-1">
@@ -454,9 +454,9 @@ function Section({
                               }
                             }}
                             disabled={index === 0}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                            className="p-1 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
                           >
-                            <ChevronUpIcon className="h-4 w-4 text-gray-600" />
+                            <ChevronUpIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                           </button>
 
                           <button
@@ -472,9 +472,9 @@ function Section({
                               }
                             }}
                             disabled={index === choices.length - 1}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                            className="p-1 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
                           >
-                            <ChevronDownIcon className="h-4 w-4 text-gray-600" />
+                            <ChevronDownIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                           </button>
                         </div>
 
@@ -502,7 +502,7 @@ function Section({
 
                   <td className="p-3 border-r">
                     {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-full rounded"></div>
                     ) : (
                       <div className="flex items-center">
                         <textarea
@@ -523,7 +523,7 @@ function Section({
                             })
                           }
                           placeholder="Points"
-                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
+                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 dark:text-gray-100 focus:outline-none resize-none overflow-hidden min-h-[24px]"
                           disabled={preview}
                           onKeyDown={(event) =>
                             handleKeyDown(index, "points", event)
@@ -544,9 +544,9 @@ function Section({
                               });
                               setLocalPoints(updatedPoints);
                             }}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                            className="p-1 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
                           >
-                            <ChevronUpIcon className="h-4 w-4 text-gray-600" />
+                            <ChevronUpIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                           </button>
                           <button
                             type="button"
@@ -560,9 +560,9 @@ function Section({
                               });
                               setLocalPoints(updatedPoints);
                             }}
-                            className="p-1 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                            className="p-1 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
                           >
-                            <ChevronDownIcon className="h-4 w-4 text-gray-600" />
+                            <ChevronDownIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
                           </button>
                         </div>
                       </div>
@@ -571,7 +571,7 @@ function Section({
 
                   <td className="p-3 border-r">
                     {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-full rounded"></div>
                     ) : (
                       <textarea
                         ref={(el) => {
@@ -591,7 +591,7 @@ function Section({
                           })
                         }
                         placeholder="Enter a choice."
-                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
+                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 dark:text-gray-100 focus:outline-none resize-none overflow-hidden min-h-[24px]"
                         disabled={preview}
                         onKeyDown={(event) =>
                           handleKeyDown(index, "choice", event)
@@ -602,7 +602,7 @@ function Section({
                   </td>
                   <td className="p-3">
                     {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-full rounded"></div>
                     ) : (
                       <div className="flex items-center gap-x-2">
                         <textarea
@@ -623,7 +623,7 @@ function Section({
                             })
                           }
                           placeholder="Provide feedback for this choice."
-                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
+                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 dark:text-gray-100 focus:outline-none resize-none overflow-hidden min-h-[24px]"
                           disabled={preview}
                           onKeyDown={(event) =>
                             handleKeyDown(index, "feedback", event)
@@ -636,7 +636,7 @@ function Section({
                           onClick={() => handleRemoveChoice(index)}
                           disabled={preview}
                         >
-                          <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                          <XMarkIcon className="h-5 w-5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" />
                         </button>
                       </div>
                     )}
@@ -651,10 +651,10 @@ function Section({
                     <button
                       type="button"
                       disabled={disableAddChoice}
-                      className="w-full text-left text-sm text-gray-600 p-3 hover:bg-gray-100 flex items-center"
+                      className="w-full text-left text-sm text-gray-600 dark:text-gray-300 p-3 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
                       onClick={handleAddChoice}
                     >
-                      <PlusIcon className="h-4 w-4 mr-2 text-gray-500" />
+                      <PlusIcon className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
                       Add Option
                     </button>
                   </td>
@@ -664,24 +664,24 @@ function Section({
           </>
         ) : (
           <tbody>
-            <tr className="border-b border-gray-200 w-full">
+            <tr className="border-b border-gray-200 dark:border-gray-700 w-full">
               <td colSpan={4} className="py-2 px-4 text-center">
                 <div className="flex justify-center items-center gap-x-4">
                   {loading ? (
-                    <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-full rounded"></div>
                   ) : !preview ? (
                     <>
                       <button
-                        className="text-gray-500"
+                        className="text-gray-500 dark:text-gray-400"
                         onClick={handleAiClick}
                         disabled={loading}
                       >
                         <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                         Generate choices with AI
                       </button>
-                      <span className="text-gray-500">OR</span>
+                      <span className="text-gray-500 dark:text-gray-400">OR</span>
                       <button
-                        className="text-gray-500"
+                        className="text-gray-500 dark:text-gray-400"
                         onClick={() => {
                           setCriteriaMode(questionId, "CUSTOM");
                           handleManualChoices();
@@ -693,7 +693,7 @@ function Section({
                       </button>
                     </>
                   ) : (
-                    <p className="text-gray-500 typography-body">
+                    <p className="text-gray-500 dark:text-gray-400 typography-body">
                       No criteria set up yet.
                     </p>
                   )}

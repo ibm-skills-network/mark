@@ -61,15 +61,15 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
       >
         {loading ? (
           <>
-            <div className="animate-pulse bg-gray-200 mt-1 mx-3 h-6 rounded"></div>
+            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 mt-1 mx-3 h-6 rounded"></div>
           </>
         ) : (
-          <th className="py-2 px-4 text-left w-1/6 h-min border-r border-gray-200">
+          <th className="py-2 px-4 text-left w-1/6 h-min border-r border-gray-200 dark:border-gray-700">
             <div className="flex flex-col">
               <input
                 type="number"
                 disabled={preview}
-                className="border-none w-full text-left focus:outline-none focus:ring-0 px-0 py-0 text-gray-600"
+                className="border-none bg-transparent w-full text-left focus:outline-none focus:ring-0 px-0 py-0 text-gray-600 dark:text-gray-300"
                 value={points}
                 min={0}
                 max={maxPoints}
@@ -92,13 +92,13 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
         >
           {loading ? (
             <>
-              <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-full rounded"></div>
             </>
           ) : preview ? (
             <div>{description}</div>
           ) : (
             <textarea
-              className="border-none placeholder-gray-500 focus:outline-none focus:ring-0 px-0 pr-2 py-0 w-full text-left scrollbar-hide resize-none"
+              className="border-none bg-transparent text-gray-800 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-0 px-0 pr-2 py-0 w-full text-left scrollbar-hide resize-none"
               style={{
                 height: "auto",
                 minHeight: `${
@@ -135,7 +135,7 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-gray-500"
+                className="h-5 w-5 text-gray-500 dark:text-gray-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -152,16 +152,16 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
         </th>
       </tr>
       {isLast && !preview && (
-        <tr className="border-t border-gray-200 w-full">
+        <tr className="border-t border-gray-200 dark:border-gray-700 w-full">
           <td colSpan={2} className="py-2 px-4 text-left">
             <div
-              className="text-gray-600 w-full flex items-center gap-x-1.5 text-left text-base full-width cursor-pointer"
+              className="text-gray-600 dark:text-gray-300 w-full flex items-center gap-x-1.5 text-left text-base full-width cursor-pointer"
               onClick={() => {
                 onShiftCriteria(index);
               }}
             >
               <PlusIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
-              <p className="text-gray-600 typography-body">
+              <p className="text-gray-600 dark:text-gray-300 typography-body">
                 Click to add new criterion
               </p>
             </div>
@@ -222,19 +222,19 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
   swappingIndices,
 }) => {
   return (
-    <div className="mx-auto min-w-full border rounded border-solid border-gray-200">
-      <table className="min-w-full bg-white">
+    <div className="mx-auto min-w-full border rounded border-solid border-gray-200 dark:border-gray-700">
+      <table className="min-w-full bg-white dark:bg-gray-800">
         <thead>
-          <tr className="border-b border-gray-200 w-full">
-            <th className="py-2 px-4 text-left bg-gray-100 w-1/6 h-min border-r border-gray-200">
+          <tr className="border-b border-gray-200 dark:border-gray-700 w-full">
+            <th className="py-2 px-4 text-left bg-gray-100 dark:bg-gray-700 w-1/6 h-min border-r border-gray-200 dark:border-gray-700">
               <div className="flex flex-col">
-                <p className="typography-body text-gray-600">Points</p>
+                <p className="typography-body text-gray-600 dark:text-gray-300">Points</p>
               </div>
             </th>
-            <th className="py-2 px-4 text-left bg-gray-100 w-full h-min">
+            <th className="py-2 px-4 text-left bg-gray-100 dark:bg-gray-700 w-full h-min">
               <div className="flex justify-between">
                 <div className="flex flex-col">
-                  <p className="typography-body text-gray-600">Criteria</p>
+                  <p className="typography-body text-gray-600 dark:text-gray-300">Criteria</p>
                 </div>
 
                 {criteriaMode && !preview && (
@@ -247,7 +247,7 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
                   >
                     <div className="flex justify-end">
                       <button
-                        className="text-gray-500"
+                        className="text-gray-500 dark:text-gray-400"
                         onClick={onAiClick}
                         disabled={loading}
                       >
@@ -286,27 +286,27 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
               ) : null,
             )
           ) : (
-            <tr className="border-b border-gray-200 w-full">
+            <tr className="border-b border-gray-200 dark:border-gray-700 w-full">
               <td colSpan={2} className="py-2 px-4 text-center">
                 <div className="flex justify-center items-center gap-x-4">
                   {loading ? (
                     <>
-                      <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-1/2 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-1/2 rounded"></div>
                     </>
                   ) : !preview ? (
                     <>
                       <button
-                        className="text-gray-500"
+                        className="text-gray-500 dark:text-gray-400"
                         onClick={onAiClick}
                         disabled={loading}
                       >
                         <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                         Generate a rubric with AI
                       </button>
-                      <span className="text-gray-500">OR</span>
+                      <span className="text-gray-500 dark:text-gray-400">OR</span>
                       <button
-                        className="text-gray-500"
+                        className="text-gray-500 dark:text-gray-400"
                         onClick={() => {
                           onShiftCriteria();
                         }}
@@ -317,7 +317,7 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
                       </button>
                     </>
                   ) : (
-                    <p className="text-gray-500 typography-body">
+                    <p className="text-gray-500 dark:text-gray-400 typography-body">
                       No criteria set up yet.
                     </p>
                   )}

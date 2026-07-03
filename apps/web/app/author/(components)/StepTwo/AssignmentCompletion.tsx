@@ -42,10 +42,10 @@ const Component: FC<Props> = ({ compact }) => {
       compact={compact}
     >
       <div className="flex flex-col gap-y-1">
-        <label htmlFor="attempts" className="text-gray-600 flex gap-x-1">
+        <label htmlFor="attempts" className="text-gray-600 dark:text-gray-300 flex gap-x-1">
           How many attempts do learners have for this assignment?
           <Tooltip content="The number of times a student can submit this assignment">
-            <InformationCircleIcon className="w-5 inline-block text-gray-500" />
+            <InformationCircleIcon className="w-5 inline-block text-gray-500 dark:text-gray-400" />
           </Tooltip>
         </label>
         <Dropdown<number>
@@ -65,13 +65,13 @@ const Component: FC<Props> = ({ compact }) => {
       </div>
 
       <div className="flex flex-col gap-y-1">
-        <p className=" text-gray-600">
+        <p className=" text-gray-600 dark:text-gray-300">
           What is the passing threshold (in percentage)?
         </p>
         <div className="relative">
           <input
             type="number"
-            className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-10 py-2 focus:outline-none w-full`}
+            className={`border focus:border-violet-600 focus:ring-0 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-md h-10 pl-4 pr-10 py-2 focus:outline-none w-full`}
             placeholder="Ex. 70"
             min={0}
             max={100}
