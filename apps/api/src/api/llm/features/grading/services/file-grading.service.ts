@@ -986,7 +986,9 @@ export class FileGradingService implements IFileGradingService {
 
   private isSourceCodeFile(file: LearnerFileUpload): boolean {
     const filename = file.filename?.toLowerCase() ?? "";
-    return /\.(py|java|cpp|c|h|hpp|js|jsx|ts|tsx|go|rs|rb|cs)$/.test(filename);
+    return /\.(py|java|cpp|cc|cxx|c|h|hpp|hh|js|jsx|mjs|cjs|ts|tsx|go|rs|rb|cs|php|swift|kt|kts|scala|sql|sh|bash|pl|pm|lua|dart|m|mm)$/.test(
+      filename,
+    );
   }
 
   private hasExtractedSubmissionText(file: LearnerFileUpload): boolean {
@@ -2512,8 +2514,11 @@ export class FileGradingService implements IFileGradingService {
     judgeFeedback?: string,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
-      const structuredFile = learnerResponse.find(
-        (file) => file.structuredContent,
+      // Mirror the routing gate's eligibility check so a source-code file that
+      // happens to carry structuredContent is never graded in place of the
+      // intended document in a mixed submission.
+      const structuredFile = learnerResponse.find((file) =>
+        this.isEvidenceBasedEligible(file),
       );
 
       if (!structuredFile || !structuredFile.structuredContent) {

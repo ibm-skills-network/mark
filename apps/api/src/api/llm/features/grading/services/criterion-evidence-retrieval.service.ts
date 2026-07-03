@@ -113,12 +113,18 @@ export class CriterionEvidenceRetrievalService {
 
     if (reranked.length === 0) {
       const allChunks = index.getAllChunks();
-      const scored = allChunks.map((chunk) => ({
-        chunk,
-        score: 0,
-        relevance: this.computeRelevanceScore(request.criterion, chunk.text),
-        combined: this.computeRelevanceScore(request.criterion, chunk.text),
-      }));
+      const scored = allChunks.map((chunk) => {
+        const relevance = this.computeRelevanceScore(
+          request.criterion,
+          chunk.text,
+        );
+        return {
+          chunk,
+          score: 0,
+          relevance,
+          combined: relevance,
+        };
+      });
 
       const aboveThreshold = scored
         .filter((item) => item.relevance >= this.config.minRelevance)
@@ -158,7 +164,7 @@ export class CriterionEvidenceRetrievalService {
         recorder,
       );
       if (validation === undefined) {
-        evidence = this.mapRerankedCandidatesToEvidence(reranked);
+        evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
       } else {
         validatedCount = validation.length;
         evidence = validation.map((item) => ({
@@ -173,7 +179,7 @@ export class CriterionEvidenceRetrievalService {
         }));
       }
     } else {
-      evidence = this.mapRerankedCandidatesToEvidence(reranked);
+      evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
     }
 
     const response: CriterionEvidenceResponse = {
@@ -201,8 +207,9 @@ export class CriterionEvidenceRetrievalService {
       score: number;
       relevance: number;
     }>,
+    maxEvidence: number,
   ): CriterionEvidence[] {
-    return reranked.map((item) => ({
+    return reranked.slice(0, maxEvidence).map((item) => ({
       chunkId: item.chunk.chunkId,
       quote: item.chunk.text.slice(0, 220),
       anchor: item.chunk.anchor,
