@@ -66,7 +66,7 @@ const ReportModal: FC<{
           &#8203;
         </span>
         <motion.div
-          className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg"
+          className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg"
           initial={{ scale: 0.9 }}
           animate={{ scale: 1 }}
           exit={{ scale: 0.9 }}
@@ -74,27 +74,27 @@ const ReportModal: FC<{
           <DialogPanel>
             <DialogTitle
               as="h3"
-              className="text-lg font-medium leading-6 text-gray-900 mb-4"
+              className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4"
             >
               <div className="flex justify-between items-center">
                 Report an issue
                 <XMarkIcon
-                  className="w-6 h-6 text-gray-500 hover:cursor-pointer"
+                  className="w-6 h-6 text-gray-500 dark:text-gray-400 hover:cursor-pointer"
                   onClick={() => setIsReportModalOpen(false)}
                 />
               </div>
             </DialogTitle>
-            <span className="text-gray-600 ">
+            <span className="text-gray-600 dark:text-gray-300">
               Report issues, bugs, or provide feedback about the assignment. Our
               team will review your report and take action as needed.
             </span>
             <div className="space-y-4">
               <div>
-                <label className="block text-gray-700 font-semibold my-2">
+                <label className="block text-gray-700 dark:text-gray-200 font-semibold my-2">
                   Issue Type
                 </label>
                 <select
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   value={issueType}
                   onChange={(e) =>
                     setReportIssueType(e.target.value as REPORT_TYPE)
@@ -115,11 +115,11 @@ const ReportModal: FC<{
                 </select>
               </div>
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">
+                <label className="block text-gray-700 dark:text-gray-200 font-semibold mb-2">
                   Description of the issue
                 </label>
                 <textarea
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   rows={5}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}

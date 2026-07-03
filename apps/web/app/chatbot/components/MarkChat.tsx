@@ -57,6 +57,7 @@ import { getBaseApiPath } from "@/config/constants";
 import UserReportsPanel from "./UserReportsPanel";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
+import { useTheme } from "@/hooks/useTheme";
 import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
@@ -1025,7 +1026,7 @@ export const MarkChat = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [feedbackMode, setFeedbackMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [darkMode, setDarkMode] = useState("light");
+  const { theme: darkMode, setTheme: setDarkMode } = useTheme();
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [specialActions, setSpecialActions] = useState({
@@ -1745,27 +1746,6 @@ export const MarkChat = () => {
       setShouldAutoOpen(false);
     }
   }, [shouldAutoOpen, isOpen, isInitializing, toggleChat]);
-
-  useEffect(() => {
-    const setTheme = (theme) => {
-      if (
-        theme === "dark" ||
-        (theme === "system" &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches)
-      ) {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    };
-    setTheme(darkMode);
-    if (darkMode === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = (e) => setTheme(e.matches ? "dark" : "light");
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-  }, [darkMode]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {

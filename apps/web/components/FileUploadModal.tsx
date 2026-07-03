@@ -334,26 +334,26 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 50, opacity: 0 }}
       >
-        <p className="text-gray-700 mb-2 bg-gray-100 p-4 rounded-md">
+        <p className="text-gray-700 dark:text-gray-200 mb-2 bg-gray-100 dark:bg-gray-700 p-4 rounded-md">
           Generate Questions by providing information. Information can be
           written and/or uploaded.
         </p>
 
         <div className="my-6">
-          <h2 className="text-md text-gray-600 mb-2">
+          <h2 className="text-md text-gray-600 dark:text-gray-300 mb-2">
             What are the learning objectives?
           </h2>
 
           <textarea
             value={learningObjectives}
             onChange={(e) => setLearningObjectives(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-violet-500 focus:border-violet-500 sm:text-sm"
             placeholder="Enter topics, learning objectives, or additional content here..."
           />
         </div>
 
         <div className="mb-6">
-          <h2 className="text-lg text-gray-600 mb-2">
+          <h2 className="text-lg text-gray-600 dark:text-gray-300 mb-2">
             Upload additional resources (optional)
           </h2>
           <div {...getRootProps()} className="w-full">
@@ -361,20 +361,20 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
               whileHover={{ scale: 1.02 }}
               className={`flex flex-col items-center justify-center border-2 border-dashed p-6 rounded-md cursor-pointer transition-colors ${
                 isDragActive
-                  ? "border-purple-500 bg-purple-50"
-                  : "border-gray-300"
+                  ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                  : "border-gray-300 dark:border-gray-600"
               }`}
             >
               <input {...getInputProps()} />
-              <IconCloudUpload size={50} className="text-gray-500 mb-4" />
+              <IconCloudUpload size={50} className="text-gray-500 dark:text-gray-400 mb-4" />
               {isDragActive ? (
                 <p className="text-purple-500">Drop the files here...</p>
               ) : (
                 <>
-                  <p className="text-gray-500">
+                  <p className="text-gray-500 dark:text-gray-400">
                     Drag & drop some files here, or click to select files.
                   </p>
-                  <p className="text-gray-500">
+                  <p className="text-gray-500 dark:text-gray-400">
                     Allowed file types: .txt .pdf .docx .xls .xlsx .csv .md
                     .ipynb
                   </p>
@@ -389,7 +389,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   {fileUploaded.map((file) => (
                     <motion.li
                       key={file.filename}
-                      className="flex flex-col border-gray-300 border rounded-md px-4 py-3 hover:shadow-md"
+                      className="flex flex-col border-gray-300 dark:border-gray-600 border rounded-md px-4 py-3 hover:shadow-md"
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
@@ -406,16 +406,16 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                             setFileInspectorModalOpen(true);
                           }}
                         >
-                          <IconFile size={32} className="text-gray-500" />
+                          <IconFile size={32} className="text-gray-500 dark:text-gray-400" />
                           <div>
-                            <p className="text-gray-700 font-medium text-left">
+                            <p className="text-gray-700 dark:text-gray-200 font-medium text-left">
                               {file.filename}
                             </p>
                             <div className="flex items-center space-x-2">
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
                                 {formatFileSize(file.size)}
                               </p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
                                 {file.tokenCount} tokens
                               </p>
                             </div>
@@ -439,7 +439,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
 
                       <div className="flex-1 mx-4">
                         <p className="text-right text-sm  mb-2">SUCCESS</p>
-                        <div className="relative h-1 w-full bg-gray-200 rounded">
+                        <div className="relative h-1 w-full bg-gray-200 dark:bg-gray-700 rounded">
                           <motion.div
                             className="absolute h-1 bg-purple-500 rounded"
                             initial={{ width: "0%" }}
@@ -454,20 +454,20 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 </AnimatePresence>
               </ul>
             ) : (
-              <p className="text-gray-500 text-center">
+              <p className="text-gray-500 dark:text-gray-400 text-center">
                 No files uploaded yet.
               </p>
             )}
           </div>
         </div>
-        <h1 className="text-lg font-medium text-center text-gray-800 mb-2 border-t border-b border-gray-300 py-2">
+        <h1 className="text-lg font-medium text-center text-gray-800 dark:text-gray-200 mb-2 border-t border-b border-gray-300 dark:border-gray-600 py-2">
           Question Details
         </h1>
         <form onSubmit={handleSend} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid grid-row-2 gap-4">
               <div>
-                <h1 className="text-lg font-medium text-gray-800">Styles</h1>
+                <h1 className="text-lg font-medium text-gray-800 dark:text-gray-200">Styles</h1>
                 <div className="mt-2 space-y-4">
                   {difficultyOptions.map((option) => (
                     <div
@@ -480,14 +480,14 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                         value={option.value}
                         checked={selectedDifficulty === option.value}
                         onChange={() => setSelectedDifficulty(option.value)}
-                        className="h-4 w-4 mt-1 text-violet-600 border-gray-300 focus:ring-violet-500"
+                        className="h-4 w-4 mt-1 text-violet-600 border-gray-300 dark:border-gray-600 focus:ring-violet-500"
                       />
 
                       <div>
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                           {option.label}
                         </span>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
                           {getDifficultyDescription(option.value)}
                         </p>
                       </div>
@@ -497,7 +497,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
               </div>
               <div className="flex items-center space-x-2">
                 <div className="flex items-center">
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     Replace Existing Questions:
                   </label>
                   <Tooltip
@@ -507,7 +507,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   >
                     <IconInfoCircle
                       size={16}
-                      className="text-gray-500 cursor-pointer ml-1"
+                      className="text-gray-500 dark:text-gray-400 cursor-pointer ml-1"
                     />
                   </Tooltip>
                 </div>
@@ -515,7 +515,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   type="button"
                   onClick={() => setReplaceExistingQuestions((prev) => !prev)}
                   className={`${
-                    replaceExistingQuestions ? "bg-violet-600" : "bg-gray-200"
+                    replaceExistingQuestions ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700"
                   } relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none`}
                 >
                   <span
@@ -523,24 +523,24 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       replaceExistingQuestions
                         ? "translate-x-6"
                         : "translate-x-1"
-                    } inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}
+                    } inline-block w-4 h-4 transform bg-white dark:bg-gray-800 rounded-full transition-transform`}
                   />
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-row border-l border-gray-300 pl-4 mb-16">
+            <div className="grid grid-row border-l border-gray-300 dark:border-gray-600 pl-4 mb-16">
               <div className="flex flex-col space-y-2">
-                <h1 className="text-lg font-medium text-gray-800">
+                <h1 className="text-lg font-medium text-gray-800 dark:text-gray-200">
                   Question Types
                 </h1>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   How many questions of each type would you like to generate?
                 </p>
               </div>
 
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Multiple Choice
                 </p>
                 <div className="mt-3 flex items-center space-x-2">
@@ -559,13 +559,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                         multipleChoice: next,
                       }));
                     }}
-                    className="w-16 p-1 border border-gray-300 rounded-md"
+                    className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                   />
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     Total
                   </label>
                 </div>
-                <p className="mt-3 text-xs text-gray-600">
+                <p className="mt-3 text-xs text-gray-600 dark:text-gray-300">
                   Optionally steer the style of some questions. The rest are
                   generated as standard multiple choice.
                 </p>
@@ -593,9 +593,9 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                             [targetKey]: next,
                           }));
                         }}
-                        className="w-16 p-1 border border-gray-300 rounded-md"
+                        className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                       />
-                      <label className="text-sm font-medium text-gray-700">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                         {field.label}
                       </label>
                     </div>
@@ -646,7 +646,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                     <p
                       key={text}
                       translate="no"
-                      className="mt-3 text-xs text-gray-600"
+                      className="mt-3 text-xs text-gray-600 dark:text-gray-300"
                     >
                       {text}
                     </p>
@@ -667,10 +667,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       multipleSelect: clampNonNegative(e.target.value),
                     }))
                   }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
+                  className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
 
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   Multiple Select
                 </label>
               </div>
@@ -688,10 +688,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       textResponse: clampNonNegative(e.target.value),
                     }))
                   }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
+                  className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
 
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   Text Response
                 </label>
               </div>
@@ -709,10 +709,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       trueFalse: clampNonNegative(e.target.value),
                     }))
                   }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
+                  className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
 
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   True or False
                 </label>
               </div>
@@ -730,10 +730,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       url: clampNonNegative(e.target.value),
                     }))
                   }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
+                  className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
 
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   URL Response
                 </label>
                 <Tooltip
@@ -743,7 +743,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 >
                   <IconInfoCircle
                     size={16}
-                    className="text-gray-500 cursor-pointer ml-1"
+                    className="text-gray-500 dark:text-gray-400 cursor-pointer ml-1"
                   />
                 </Tooltip>
               </div>
@@ -761,10 +761,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       upload: clampNonNegative(e.target.value),
                     }))
                   }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
+                  className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
 
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   File Upload
                 </label>
                 <Tooltip
@@ -774,7 +774,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 >
                   <IconInfoCircle
                     size={16}
-                    className="text-gray-500 cursor-pointer ml-1"
+                    className="text-gray-500 dark:text-gray-400 cursor-pointer ml-1"
                   />
                 </Tooltip>
               </div>
@@ -792,10 +792,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       linkFile: clampNonNegative(e.target.value),
                     }))
                   }
-                  className="w-16 p-1 border border-gray-300 rounded-md"
+                  className="w-16 p-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
 
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   Link or File
                 </label>
                 <Tooltip
@@ -805,13 +805,13 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 >
                   <IconInfoCircle
                     size={16}
-                    className="text-gray-500 cursor-pointer ml-1"
+                    className="text-gray-500 dark:text-gray-400 cursor-pointer ml-1"
                   />
                 </Tooltip>
               </div>
             </div>
           </div>
-          <p className="text-sm font-medium text-gray-600 mt-4">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mt-4">
             Total Questions:{" "}
             {Object.values(selectedQuestionTypes).reduce((a, b) => a + b, 0)}
           </p>
@@ -829,7 +829,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
       <AnimatePresence>
         {progress !== null && (
           <motion.div
-            className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center z-10"
+            className="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-90 flex flex-col items-center justify-center z-10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -861,7 +861,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   />
                 ) : null}
                 <motion.span
-                  className="text-xl font-medium text-gray-800 transition-all duration-200"
+                  className="text-xl font-medium text-gray-800 dark:text-gray-200 transition-all duration-200"
                   key={progressMessage}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -870,8 +870,8 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 >
                   {progressMessage}
                 </motion.span>
-                <div className="fixed bottom-0 left-0 w-full bg-gray-100 py-3 shadow-lg">
-                  <span className="text-sm text-gray-700 text-center block px-4">
+                <div className="fixed bottom-0 left-0 w-full bg-gray-100 dark:bg-gray-700 py-3 shadow-lg">
+                  <span className="text-sm text-gray-700 dark:text-gray-200 text-center block px-4">
                     Generating more questions might take longer and could
                     include occasional mistakes, but we're constantly optimizing
                     to improve accuracy and efficiency.
@@ -889,12 +889,12 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           Title="File Viewer"
         >
           <motion.div
-            className="p-6 bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
             <h2 className="text-lg font-bold mb-4">{selectedFileName}</h2>
-            <pre className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
+            <pre className="text-sm whitespace-pre-wrap bg-gray-100 dark:bg-gray-700 p-4 rounded-md text-gray-600 dark:text-gray-300">
               {selectedFileContent}
             </pre>
             <button

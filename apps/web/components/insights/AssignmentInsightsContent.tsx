@@ -486,14 +486,15 @@ export function AssignmentInsightsContent({
     return (
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center py-12 gap-4">
-          <div className="text-red-600">Error: {error || "No data found"}</div>
+          <div className="text-red-600 dark:text-red-400">Error: {error || "No data found"}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="min-h-screen w-full text-foreground">
+      <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3">
@@ -526,7 +527,7 @@ export function AssignmentInsightsContent({
                     {formatCurrency(data.analytics.totalCost ?? 0)}
                   </p>
                 </div>
-                <DollarSign className="h-8 w-8 text-green-600" />
+                <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
             </CardContent>
           </Card>
@@ -542,7 +543,7 @@ export function AssignmentInsightsContent({
                     {data.authorActivity?.totalAuthors || 0}
                   </p>
                 </div>
-                <FileText className="h-8 w-8 text-indigo-600" />
+                <FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
               </div>
             </CardContent>
           </Card>
@@ -557,7 +558,7 @@ export function AssignmentInsightsContent({
                   {data.analytics.uniqueLearners}
                 </p>
               </div>
-              <Users className="h-8 w-8 text-blue-600" />
+              <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
           </CardContent>
         </Card>
@@ -573,7 +574,7 @@ export function AssignmentInsightsContent({
                     : "N/A"}
                 </p>
               </div>
-              <TrendingUp className="h-8 w-8 text-orange-600" />
+              <TrendingUp className="h-8 w-8 text-orange-600 dark:text-orange-400" />
             </div>
           </CardContent>
         </Card>
@@ -589,7 +590,7 @@ export function AssignmentInsightsContent({
                     : "N/A"}
                 </p>
               </div>
-              <BarChart3 className="h-8 w-8 text-purple-600" />
+              <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
             </div>
           </CardContent>
         </Card>
@@ -696,20 +697,20 @@ export function AssignmentInsightsContent({
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                    <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     Cost Analysis Breakdown
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="text-center">
-                      <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mx-auto mb-3">
-                        <TrendingUp className="h-6 w-6 text-blue-600" />
+                      <div className="flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full mx-auto mb-3">
+                        <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="text-sm text-muted-foreground mb-2">
                         Cost per Attempt
                       </div>
-                      <div className="text-2xl font-bold text-blue-700">
+                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
                         {data.analytics.totalAttempts > 0
                           ? formatCurrency(
                               (data.analytics.totalCost ?? 0) /
@@ -723,13 +724,13 @@ export function AssignmentInsightsContent({
                     </div>
 
                     <div className="text-center">
-                      <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mx-auto mb-3">
-                        <FileText className="h-6 w-6 text-green-600" />
+                      <div className="flex items-center justify-center w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full mx-auto mb-3">
+                        <FileText className="h-6 w-6 text-green-600 dark:text-green-400" />
                       </div>
                       <div className="text-sm text-muted-foreground mb-2">
                         Authoring Costs
                       </div>
-                      <div className="text-2xl font-bold text-green-700">
+                      <div className="text-2xl font-bold text-green-700 dark:text-green-300">
                         {formatCurrency(
                           (data.aiUsage ?? [])
                             .filter((usage) =>
@@ -751,13 +752,13 @@ export function AssignmentInsightsContent({
                     </div>
 
                     <div className="text-center">
-                      <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3">
-                        <Users className="h-6 w-6 text-purple-600" />
+                      <div className="flex items-center justify-center w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full mx-auto mb-3">
+                        <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                       </div>
                       <div className="text-sm text-muted-foreground mb-2">
                         Grading Costs
                       </div>
-                      <div className="text-2xl font-bold text-purple-700">
+                      <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
                         {formatCurrency(
                           (data.aiUsage ?? [])
                             .filter((usage) =>
@@ -782,7 +783,7 @@ export function AssignmentInsightsContent({
                   <div className="mt-6 pt-6 border-t">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <h4 className="font-semibold text-sm mb-3 text-green-700">
+                        <h4 className="font-semibold text-sm mb-3 text-green-700 dark:text-green-300">
                           Authoring Details
                         </h4>
                         <div className="space-y-2">
@@ -814,7 +815,7 @@ export function AssignmentInsightsContent({
                       </div>
 
                       <div>
-                        <h4 className="font-semibold text-sm mb-3 text-purple-700">
+                        <h4 className="font-semibold text-sm mb-3 text-purple-700 dark:text-purple-300">
                           Grading Details
                         </h4>
                         <div className="space-y-2">
@@ -863,7 +864,7 @@ export function AssignmentInsightsContent({
                 <ul className="space-y-2">
                   {data.analytics.performanceInsights.map((insight, index) => (
                     <li key={index} className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                       <span className="text-sm">{insight}</span>
                     </li>
                   ))}
@@ -897,7 +898,7 @@ export function AssignmentInsightsContent({
                             active contributors
                           </p>
                         </div>
-                        <Users className="h-8 w-8 text-indigo-600" />
+                        <Users className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
                       </div>
                     </CardContent>
                   </Card>
@@ -918,7 +919,7 @@ export function AssignmentInsightsContent({
                             assignments
                           </p>
                         </div>
-                        <TrendingUp className="h-8 w-8 text-green-600" />
+                        <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
                       </div>
                     </CardContent>
                   </Card>
@@ -940,7 +941,7 @@ export function AssignmentInsightsContent({
                             by all authors combined
                           </p>
                         </div>
-                        <BarChart3 className="h-8 w-8 text-purple-600" />
+                        <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
                       </div>
                     </CardContent>
                   </Card>
@@ -959,7 +960,7 @@ export function AssignmentInsightsContent({
                         {data.authorActivity.activityInsights.map(
                           (insight, index) => (
                             <li key={index} className="flex items-start gap-2">
-                              <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                               <span className="text-sm">{insight}</span>
                             </li>
                           ),
@@ -1002,8 +1003,8 @@ export function AssignmentInsightsContent({
                           <TableRow key={author.userId}>
                             <TableCell className="font-mono text-sm">
                               <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                  <span className="text-xs font-semibold text-indigo-600">
+                                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
                                     {author.userId
                                       .split("@")[0]
                                       ?.substring(0, 2)
@@ -1267,7 +1268,7 @@ export function AssignmentInsightsContent({
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                     {filteredAttempts.length}
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -1275,13 +1276,13 @@ export function AssignmentInsightsContent({
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                     {filteredAttempts.filter((a) => a.submitted).length}
                   </div>
                   <div className="text-sm text-muted-foreground">Submitted</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
                     {filteredAttempts.filter((a) => !a.submitted).length}
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -1289,7 +1290,7 @@ export function AssignmentInsightsContent({
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">
+                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                     {
                       filteredAttempts.filter(
                         (a) => a.grade !== null && a.grade >= 0.6,
@@ -1397,8 +1398,8 @@ export function AssignmentInsightsContent({
                             <span
                               className={
                                 attempt.grade >= 0.6
-                                  ? "text-green-600 font-semibold"
-                                  : "text-red-600 font-semibold"
+                                  ? "text-green-600 dark:text-green-400 font-semibold"
+                                  : "text-red-600 dark:text-red-400 font-semibold"
                               }
                             >
                               {Math.round(attempt.grade * 100)}%
@@ -1447,7 +1448,7 @@ export function AssignmentInsightsContent({
                             ) : (
                               <div className="flex items-center justify-end gap-2">
                                 {passError === attempt.id && (
-                                  <span className="text-xs text-red-600">
+                                  <span className="text-xs text-red-600 dark:text-red-400">
                                     Failed. Try again.
                                   </span>
                                 )}
@@ -1567,13 +1568,13 @@ export function AssignmentInsightsContent({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-green-700">
+                  <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
                     <FileText className="h-5 w-5" />
                     Authoring Costs
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-green-700 mb-4">
+                  <div className="text-3xl font-bold text-green-700 dark:text-green-300 mb-4">
                     {formatCurrency(
                       (data.aiUsage ?? [])
                         .filter((usage) =>
@@ -1620,13 +1621,13 @@ export function AssignmentInsightsContent({
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-purple-700">
+                  <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
                     <Users className="h-5 w-5" />
                     Grading Costs
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-purple-700 mb-4">
+                  <div className="text-3xl font-bold text-purple-700 dark:text-purple-300 mb-4">
                     {formatCurrency(
                       (data.aiUsage ?? [])
                         .filter((usage) =>
@@ -1733,13 +1734,13 @@ export function AssignmentInsightsContent({
                                 "QUESTION_GENERATION",
                                 "ASSIGNMENT_GENERATION",
                               ].includes(usage.usageType)
-                                ? "border-green-300 text-green-700"
+                                ? "border-green-300 dark:border-green-700 text-green-700 dark:text-green-300"
                                 : [
                                       "LIVE_RECORDING_FEEDBACK",
                                       "GRADING_VALIDATION",
                                       "ASSIGNMENT_GRADING",
                                     ].includes(usage.usageType)
-                                  ? "border-purple-300 text-purple-700"
+                                  ? "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300"
                                   : ""
                             }
                           >
@@ -1764,7 +1765,7 @@ export function AssignmentInsightsContent({
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-center font-mono font-semibold text-green-600">
+                        <TableCell className="text-center font-mono font-semibold text-green-600 dark:text-green-400">
                           {formatCurrency(usage.totalCost)}
                         </TableCell>
                         {showDetailedUsage && (
@@ -1775,10 +1776,10 @@ export function AssignmentInsightsContent({
                             <TableCell className="text-center font-mono">
                               {usage.tokensOut.toLocaleString()}
                             </TableCell>
-                            <TableCell className="text-center font-mono text-blue-600">
+                            <TableCell className="text-center font-mono text-blue-600 dark:text-blue-400">
                               {formatCurrency(usage.inputCost)}
                             </TableCell>
-                            <TableCell className="text-center font-mono text-purple-600">
+                            <TableCell className="text-center font-mono text-purple-600 dark:text-purple-400">
                               {formatCurrency(usage.outputCost)}
                             </TableCell>
                             <TableCell>
@@ -1805,25 +1806,25 @@ export function AssignmentInsightsContent({
                     {(data.aiUsage ?? []).map((usage, index) => (
                       <div
                         key={index}
-                        className="border rounded-lg p-4 bg-slate-50"
+                        className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/20"
                       >
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">{usage.usageType}</Badge>
                             <Badge variant="secondary">{usage.modelUsed}</Badge>
                           </div>
-                          <span className="font-semibold text-green-600">
+                          <span className="font-semibold text-green-600 dark:text-green-400">
                             {formatCurrency(usage.totalCost)}
                           </span>
                         </div>
-                        <div className="font-mono text-sm space-y-1 text-slate-700">
-                          <div className="text-blue-600">
+                        <div className="font-mono text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                          <div className="text-blue-600 dark:text-blue-400">
                             {usage.calculationSteps.inputCalculation}
                           </div>
-                          <div className="text-purple-600">
+                          <div className="text-purple-600 dark:text-purple-400">
                             {usage.calculationSteps.outputCalculation}
                           </div>
-                          <div className="text-green-600 font-semibold">
+                          <div className="text-green-600 dark:text-green-400 font-semibold">
                             {usage.calculationSteps.totalCalculation}
                           </div>
                         </div>
@@ -1915,6 +1916,7 @@ export function AssignmentInsightsContent({
         isOpen={isReportModalOpen}
         onClose={closeReportModal}
       />
+      </div>
     </div>
   );
 }

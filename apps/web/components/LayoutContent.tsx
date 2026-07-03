@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { MarkChat } from "../app/chatbot/components/MarkChat";
 import AuthorStoreBridge from "../app/chatbot/store/AuthorStoreBridge";
 import { useChatbot } from "../hooks/useChatbot";
+import { useTheme } from "../hooks/useTheme";
 import ErrorModal from "@/components/ErrorModal";
 import {
   API_SERVER_ERROR_EVENT,
@@ -15,6 +16,7 @@ import { getAiStatus } from "@/lib/ai-status";
 
 export default function LayoutContent({ children }: { children: ReactNode }) {
   const { isOpen } = useChatbot();
+  const { isDark } = useTheme();
   const pathname = usePathname();
   const [chatDisabled, setChatDisabled] = useState(false);
   // Hide the chat widget on admin routes (as before) or when the AI chat
@@ -72,6 +74,7 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
         <AuthorStoreBridge />
         <Toaster
           richColors
+          theme={isDark ? "dark" : "light"}
           position="bottom-left"
           expand={true}
           closeButton={true}
