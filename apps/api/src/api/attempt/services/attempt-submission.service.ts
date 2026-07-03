@@ -600,14 +600,15 @@ export class AttemptSubmissionService {
       (sum, response) => sum + (response.points ?? 0),
       0,
     );
-    const totalPointsEarned = responses.reduce((sum, response) => {
+    let totalPointsEarned = 0;
+    for (const response of responses) {
       const questionMax = questionMaxById.get(response.questionId);
       const points = response.points ?? 0;
-      return (
-        sum +
-        (typeof questionMax === "number" ? Math.min(points, questionMax) : points)
-      );
-    }, 0);
+      totalPointsEarned +=
+        typeof questionMax === "number"
+          ? Math.min(points, questionMax)
+          : points;
+    }
     // Compute score totals before applyVisibilitySettings so they survive
     // even when showQuestions=false strips the questions array. Without this
     // the success page shows "0 / 0" because it can't sum the (empty) array.
