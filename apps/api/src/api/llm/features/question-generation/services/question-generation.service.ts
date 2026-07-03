@@ -217,11 +217,14 @@ export class QuestionGenerationService implements IQuestionGenerationService {
 
     // Snapshot each question's original subtype before the review pass can
     // reclassify them. Used in finalizeSubtypeQuestions to exclude reclassified
-    // questions from both the original and the new bucket.
+    // questions from both the original and the new bucket. Only needed when
+    // subtype quotas are in play — finalizeSubtypeQuestions runs only then.
     const initialSubtypeById = new Map<number, MCSubtype>();
-    for (const q of allQuestions) {
-      if (q.mcSubtype !== undefined && typeof q.id === "number") {
-        initialSubtypeById.set(q.id, q.mcSubtype);
+    if (subtypeTotal > 0) {
+      for (const q of allQuestions) {
+        if (q.mcSubtype !== undefined && typeof q.id === "number") {
+          initialSubtypeById.set(q.id, q.mcSubtype);
+        }
       }
     }
 
