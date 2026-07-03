@@ -49,8 +49,8 @@ function URLQuestion(props: Props) {
       <input
         type="text"
         className={cn(
-          "w-full p-2 border rounded",
-          !validURL ? "border-red-500" : "border-gray-300",
+          "w-full p-2 border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100",
+          !validURL ? "border-red-500" : "border-gray-300 dark:border-gray-600",
           className,
         )}
         value={url}

@@ -20,8 +20,8 @@ export function VersionStatus({
   if (compact) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <GitBranch className="h-3 w-3 text-gray-400" />
-        <span className="text-xs text-gray-600">
+        <GitBranch className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+        <span className="text-xs text-gray-600 dark:text-gray-300">
           v{currentVersion?.versionNumber || "1"}
         </span>
         {currentVersion?.isDraft && (
@@ -38,9 +38,9 @@ export function VersionStatus({
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <GitBranch className="h-4 w-4 text-gray-500" />
+      <GitBranch className="h-4 w-4 text-gray-500 dark:text-gray-400" />
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-gray-700">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
           Version {currentVersion?.versionNumber || "1"}
         </span>
 
@@ -48,7 +48,7 @@ export function VersionStatus({
           {currentVersion?.isActive && (
             <Badge
               variant="default"
-              className="text-xs bg-green-100 text-green-800"
+              className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
             >
               Active
             </Badge>
@@ -56,7 +56,7 @@ export function VersionStatus({
           {currentVersion?.isDraft && (
             <Badge
               variant="secondary"
-              className="text-xs bg-yellow-100 text-yellow-800"
+              className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200"
             >
               Draft
             </Badge>
@@ -64,7 +64,7 @@ export function VersionStatus({
           {hasUnsavedChanges && (
             <Badge
               variant="outline"
-              className="text-xs text-amber-700 border-amber-300"
+              className="text-xs text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700"
             >
               <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 bg-amber-500 rounded-full"></div>
@@ -76,7 +76,7 @@ export function VersionStatus({
       </div>
 
       {currentVersion?.createdAt && (
-        <div className="flex items-center gap-1 text-xs text-gray-500">
+        <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
           <Clock className="h-3 w-3" />
           <span>{formatVersionAge(currentVersion.createdAt)}</span>
         </div>

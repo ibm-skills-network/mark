@@ -47,14 +47,14 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
   );
   const questionControls = assignmentDetails?.questionControls;
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-gray-200">
           {title}
         </h2>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="sm:hidden flex items-center text-gray-600 hover:text-gray-800 transition-colors"
+          className="sm:hidden flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
           aria-label={isCollapsed ? `Expand ${title}` : `Collapse ${title}`}
         >
           {isCollapsed ? (
@@ -72,7 +72,7 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
         }`}
       >
         <MarkdownViewer
-          className="text-gray-600 text-sm sm:text-base"
+          className="text-gray-600 dark:text-gray-300 text-sm sm:text-base"
           allowCopy={!(questionControls?.disableCopy ?? false)}
         >
           {content || `No ${title.toLowerCase()} provided.`}
@@ -338,15 +338,15 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
 
   return (
     <>
-      <main className="flex-1 py-6 sm:py-12 px-4 sm:px-6 bg-gray-50 overflow-auto">
+      <main className="flex-1 py-6 sm:py-12 px-4 sm:px-6 bg-gray-50 dark:bg-gray-900 overflow-auto">
         <div className="max-w-4xl mx-auto space-y-6">
           {role === "learner" && <PromoBanner placement="preStart" />}
           <div className="flex flex-col gap-4">
             <div className="flex flex-col">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 leading-tight">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
                 {name}
               </h1>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 text-gray-600 pt-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 text-gray-600 dark:text-gray-300 pt-2">
                 <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-x-4 sm:gap-y-2">
                   <span className="font-medium text-sm sm:text-base">
                     Latest attempt: {latestAttemptDate}
@@ -387,14 +387,14 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             </div>
           </div>
 
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-gray-200">
                 About this assignment
               </h2>
               <button
                 onClick={() => setIsAboutCollapsed(!isAboutCollapsed)}
-                className="sm:hidden flex items-center text-gray-600 hover:text-gray-800 transition-colors"
+                className="sm:hidden flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
                 aria-label={
                   isAboutCollapsed
                     ? "Expand about section"
@@ -416,13 +416,13 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               }`}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4 sm:p-6">
-                <div className="flex flex-col gap-1 text-gray-600">
+                <div className="flex flex-col gap-1 text-gray-600 dark:text-gray-300">
                   <span className="font-semibold text-sm">Assignment type</span>
                   <span className="text-sm">
                     {graded ? "Graded" : "Practice"}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1 text-gray-600">
+                <div className="flex flex-col gap-1 text-gray-600 dark:text-gray-300">
                   <span className="font-semibold text-sm">Time Limit</span>
                   <span className="text-sm">
                     {allotedTimeMinutes
@@ -430,7 +430,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                       : "Unlimited"}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1 text-gray-600">
+                <div className="flex flex-col gap-1 text-gray-600 dark:text-gray-300">
                   <span className="font-semibold text-sm">Estimated Time</span>
                   <span className="text-sm">
                     {timeEstimateMinutes
@@ -438,7 +438,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                       : "Not provided"}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1 text-gray-600">
+                <div className="flex flex-col gap-1 text-gray-600 dark:text-gray-300">
                   <span className="font-semibold text-sm">
                     Assignment attempts
                   </span>
@@ -450,13 +450,13 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                         } left`}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1 text-gray-600">
+                <div className="flex flex-col gap-1 text-gray-600 dark:text-gray-300">
                   <span className="font-semibold text-sm">Passing Grade</span>
                   <span className="text-sm">{passingGrade}%</span>
                 </div>
               </div>
-              <div className="border-t border-gray-200 px-4 sm:px-6 py-4">
-                <MarkdownViewer className="text-gray-600 text-sm sm:text-base">
+              <div className="border-t border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
+                <MarkdownViewer className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
                   {introduction}
                 </MarkdownViewer>
               </div>
@@ -507,21 +507,21 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             if (restrictions.length === 0) return null;
 
             return (
-              <div className="bg-white shadow rounded-lg overflow-hidden">
-                <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+              <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+                <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-gray-200">
                     Assignment Restrictions
                   </h2>
                 </div>
                 <div className="px-4 sm:px-6 py-4">
-                  <p className="text-gray-600 text-sm mb-4">
+                  <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
                     The following restrictions are enabled for this assignment:
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {restrictions.map((restriction, index) => (
                       <div
                         key={index}
-                        className="flex items-start gap-3 p-3 border border-orange-200 bg-orange-50 rounded-md"
+                        className="flex items-start gap-3 p-3 border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-900/20 rounded-md"
                       >
                         <div className="flex-shrink-0 mt-0.5">
                           <svg
@@ -539,10 +539,10 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                           </svg>
                         </div>
                         <div className="flex-1">
-                          <h3 className="text-sm font-medium text-gray-900">
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {restriction.title}
                           </h3>
-                          <p className="text-xs text-gray-600 mt-1">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                             {restriction.description}
                           </p>
                         </div>
@@ -573,7 +573,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             Title="Please pick one of the available languages"
           >
             <div className="space-y-4">
-              <p className="text-gray-600 text-sm sm:text-base">
+              <p className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
                 We recommend you experience our assignment in
                 <strong> English </strong>
                 as it's the original language. However, if you would like to
@@ -581,13 +581,13 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 our translations are AI generated and may contain some
                 inaccuracies.
               </p>
-              <p className="text-gray-600 text-sm sm:text-base">
+              <p className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
                 You will be able to switch your language at any time during the
                 assignment.
               </p>
 
               {isLoading ? (
-                <div className="text-center text-gray-500 py-4">
+                <div className="text-center text-gray-500 dark:text-gray-400 py-4">
                   Loading languages...
                 </div>
               ) : (
@@ -613,7 +613,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
 
               <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                 <button
-                  className="w-full sm:w-auto px-4 py-2 text-gray-500 hover:text-gray-700 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                   onClick={handleCloseModal}
                 >
                   Cancel

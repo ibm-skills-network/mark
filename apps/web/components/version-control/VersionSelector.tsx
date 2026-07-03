@@ -37,23 +37,23 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="flex items-center gap-2 text-sm text-gray-600">
-        <GitBranch className="h-4 w-4 text-gray-400" />
+      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+        <GitBranch className="h-4 w-4 text-gray-400 dark:text-gray-500" />
         <span>
           v{currentVersion?.versionNumber || "1"}
           {currentVersion?.isDraft && (
-            <span className="text-xs text-gray-500 ml-1">(draft)</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(draft)</span>
           )}
         </span>
       </div>
 
       <Select onValueChange={handleVersionSelect} disabled={isLoadingVersions}>
-        <SelectTrigger className="w-40 h-8 text-xs border-gray-300">
+        <SelectTrigger className="w-40 h-8 text-xs border-gray-300 dark:border-gray-600">
           <SelectValue placeholder="Switch version" />
         </SelectTrigger>
         <SelectContent>
           {publishedVersions.length > 0 && (
-            <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase">
+            <div className="px-2 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
               Published Versions
             </div>
           )}
@@ -64,7 +64,7 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
                   v{version.versionNumber}
                   {version.isActive && " (Current)"}
                 </span>
-                <span className="text-xs text-gray-400 ml-2">
+                <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">
                   {formatVersionAge(version.createdAt)}
                 </span>
               </div>
@@ -73,7 +73,7 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
 
           {draftVersions.length > 0 && (
             <>
-              <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase border-t mt-1 pt-2">
+              <div className="px-2 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase border-t mt-1 pt-2">
                 Draft Versions
               </div>
               {draftVersions.map((version) => (
@@ -83,7 +83,7 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
                       Draft v{version.versionNumber}
                       {version.isActive && " (Current)"}
                     </span>
-                    <span className="text-xs text-gray-400 ml-2">
+                    <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">
                       {formatVersionAge(version.createdAt)}
                     </span>
                   </div>
@@ -95,7 +95,7 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
       </Select>
 
       {isLoadingVersions && (
-        <div className="text-xs text-gray-500">Loading...</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">Loading...</div>
       )}
 
       {versionsLoadFailed && (

@@ -70,9 +70,9 @@ export function QuickVersionActions({
                 onClick={() => setIsDropdownOpen(false)}
               />
 
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px]">
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 min-w-[280px]">
                 <div className="p-3">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 flex items-center gap-2">
                     <Zap className="h-4 w-4" />
                     Quick Restore
                   </h4>
@@ -82,16 +82,16 @@ export function QuickVersionActions({
                       .map((version) => (
                         <div
                           key={version.id}
-                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded"
+                          className="flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                         >
                           <div>
                             <div className="flex items-center gap-2">
-                              <GitBranch className="h-3 w-3 text-gray-400" />
+                              <GitBranch className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                               <span className="text-sm font-medium">
                                 Version {version.versionNumber}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
                               {formatVersionAge(version.createdAt)}
                             </div>
                           </div>
