@@ -62,7 +62,7 @@ export function selectAuthenticationCookie(
  * not whichever duplicate happened to come first.
  */
 export function dedupeAuthenticationCookieHeader(
-  rawHeader: string | undefined,
+  rawHeader?: string,
 ): string | undefined {
   const pairs = parseCookiePairs(rawHeader);
   const authPairs = pairs.filter((pair) => pair.name === COOKIE_NAME);
