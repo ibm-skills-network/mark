@@ -32,25 +32,10 @@ export function selectAuthenticationCookie(
     cookies?: Record<string, string>;
   },
 ): AuthCookieSelection {
-  const candidates: string[] = [];
-
   const rawHeader = request.headers?.cookie;
-  if (typeof rawHeader === "string" && rawHeader.length > 0) {
-    for (const pair of rawHeader.split(";")) {
-      const separatorIndex = pair.indexOf("=");
-      if (separatorIndex === -1) {
-        continue;
-      }
-      const name = pair.slice(0, separatorIndex).trim();
-      if (name !== COOKIE_NAME) {
-        continue;
-      }
-      const value = pair.slice(separatorIndex + 1).trim();
-      if (value.length > 0) {
-        candidates.push(tryDecodeUriComponent(value));
-      }
-    }
-  }
+  const candidates = parseCookiePairs(rawHeader)
+    .filter((pair) => pair.name === COOKIE_NAME)
+    .map((pair) => tryDecodeUriComponent(pair.rawValue));
 
   // Raw header absent (e.g. internal callers): fall back to cookie-parser's
   // view, which by construction holds at most one value per name.
@@ -59,17 +44,78 @@ export function selectAuthenticationCookie(
     return { token: parsed, candidateCount: parsed ? 1 : 0 };
   }
 
-  let selected = candidates[0];
-  let selectedIat = decodeIat(selected);
-  for (const candidate of candidates.slice(1)) {
-    const iat = decodeIat(candidate);
+  return {
+    token: candidates[pickNewestIatIndex(candidates)],
+    candidateCount: candidates.length,
+  };
+}
+
+/**
+ * Rebuilds a Cookie header so it carries only the newest-iat `authentication`
+ * cookie, preserving all other cookies untouched (raw values, original order,
+ * winner appended last). Returns undefined when no rewrite is needed (zero or
+ * one `authentication` cookie) so callers can skip the override entirely.
+ *
+ * Used by the gateway's forwarding layer: downstream services re-read the
+ * cookie themselves (e.g. mark-api stores it as the LTI grade-callback
+ * credential), and they must see the SAME session this gateway authenticated,
+ * not whichever duplicate happened to come first.
+ */
+export function dedupeAuthenticationCookieHeader(
+  rawHeader: string | undefined,
+): string | undefined {
+  const pairs = parseCookiePairs(rawHeader);
+  const authPairs = pairs.filter((pair) => pair.name === COOKIE_NAME);
+  if (authPairs.length <= 1) {
+    return undefined;
+  }
+
+  const winnerIndex = pickNewestIatIndex(
+    authPairs.map((pair) => tryDecodeUriComponent(pair.rawValue)),
+  );
+  const winner = authPairs[winnerIndex];
+
+  const kept = pairs.filter((pair) => pair.name !== COOKIE_NAME);
+  kept.push(winner);
+  return kept.map((pair) => `${pair.name}=${pair.rawValue}`).join("; ");
+}
+
+interface CookiePair {
+  name: string;
+  rawValue: string;
+}
+
+function parseCookiePairs(rawHeader: string | undefined): CookiePair[] {
+  if (typeof rawHeader !== "string" || rawHeader.length === 0) {
+    return [];
+  }
+  const pairs: CookiePair[] = [];
+  for (const pair of rawHeader.split(";")) {
+    const separatorIndex = pair.indexOf("=");
+    if (separatorIndex === -1) {
+      continue;
+    }
+    const name = pair.slice(0, separatorIndex).trim();
+    const rawValue = pair.slice(separatorIndex + 1).trim();
+    if (name.length > 0 && rawValue.length > 0) {
+      pairs.push({ name, rawValue });
+    }
+  }
+  return pairs;
+}
+
+/** Index of the token with the newest decodable iat; ties keep the earliest. */
+function pickNewestIatIndex(tokens: string[]): number {
+  let selectedIndex = 0;
+  let selectedIat = decodeIat(tokens[0]);
+  for (let index = 1; index < tokens.length; index++) {
+    const iat = decodeIat(tokens[index]);
     if (iat > selectedIat) {
-      selected = candidate;
+      selectedIndex = index;
       selectedIat = iat;
     }
   }
-
-  return { token: selected, candidateCount: candidates.length };
+  return selectedIndex;
 }
 
 /** cookie-parser parity: values are usually URL-encoded; garbage passes through. */

@@ -1,4 +1,7 @@
-import { selectAuthenticationCookie } from "./jwt.cookie.extractor";
+import {
+  dedupeAuthenticationCookieHeader,
+  selectAuthenticationCookie,
+} from "./jwt.cookie.extractor";
 
 /** Build a JWT-shaped token whose payload decodes to the given iat. */
 const makeToken = (iat: number, marker = "h"): string =>
@@ -105,5 +108,42 @@ describe("selectAuthenticationCookie", () => {
 
     expect(result.token).toBe(real);
     expect(result.candidateCount).toBe(1);
+  });
+});
+
+describe("dedupeAuthenticationCookieHeader", () => {
+  it("returns undefined when the header has no authentication cookie", () => {
+    expect(dedupeAuthenticationCookieHeader("other=x; session=y")).toBe(
+      undefined,
+    );
+  });
+
+  it("returns undefined when exactly one authentication cookie is present", () => {
+    const token = makeToken(1000);
+    expect(
+      dedupeAuthenticationCookieHeader(`other=x; authentication=${token}`),
+    ).toBe(undefined);
+  });
+
+  it("returns undefined for an undefined header", () => {
+    expect(dedupeAuthenticationCookieHeader()).toBe(undefined);
+  });
+
+  it("rebuilds the header with only the newest-iat authentication cookie, preserving other cookies", () => {
+    const older = makeToken(1000, "old");
+    const newer = makeToken(2000, "new");
+    const rebuilt = dedupeAuthenticationCookieHeader(
+      `other=x; authentication=${older}; theme=dark; authentication=${newer}`,
+    );
+
+    expect(rebuilt).toBe(`other=x; theme=dark; authentication=${newer}`);
+  });
+
+  it("keeps the first authentication cookie when none decode (legacy behavior)", () => {
+    const rebuilt = dedupeAuthenticationCookieHeader(
+      "authentication=first-garbage; authentication=second-garbage",
+    );
+
+    expect(rebuilt).toBe("authentication=first-garbage");
   });
 });
