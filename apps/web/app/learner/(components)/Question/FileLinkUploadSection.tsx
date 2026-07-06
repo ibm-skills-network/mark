@@ -52,7 +52,7 @@ const FileLinkUploadSection = ({
             className={`px-4 py-2 rounded-l-md transition-colors ${
               isFileUpload
                 ? "bg-violet-600 text-white "
-                : "bg-white text-violet-700 hover:bg-gray-50"
+                : "bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-400 hover:bg-gray-50 dark:hover:bg-gray-700"
             }`}
           >
             File Upload
@@ -63,7 +63,7 @@ const FileLinkUploadSection = ({
             className={`px-4 py-2 rounded-r-md transition-colors ${
               !isFileUpload
                 ? "bg-violet-600 text-white "
-                : "bg-white text-violet-700 hover:bg-gray-50"
+                : "bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-400 hover:bg-gray-50 dark:hover:bg-gray-700"
             }`}
           >
             Link Upload

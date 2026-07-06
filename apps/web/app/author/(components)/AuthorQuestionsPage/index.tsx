@@ -1327,9 +1327,9 @@ const AuthorQuestionsPage: FC<Props> = ({
                   onClick={() => setCollapseAll(!collapseAll)}
                   className={`px-4 py-2 border border-gray-300 dark:border-gray-600 text-wrap rounded-lg shadow-md transition-all duration-300 ease-in-out w-full text-sm font-medium ${
                     collapseAll
-                      ? "bg-violet-600 text-white"
-                      : "bg-white dark:bg-gray-800 text-violet-600"
-                  } hover:bg-violet-100`}
+                      ? "bg-violet-600 text-white hover:bg-violet-700"
+                      : "bg-white dark:bg-gray-800 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-gray-700"
+                  }`}
                 >
                   {collapseAll ? "Expand Questions" : "Collapse Questions"}
                 </button>
@@ -1534,7 +1534,9 @@ const SortableNavItem = ({
       <span
         className={`text-sm truncate flex-1 min-w-0 ${isActive ? "font-semibold text-violet-700 dark:text-violet-300" : "text-gray-600 dark:text-gray-300"}`}
       >
-        <span className="text-gray-400 dark:text-gray-500 mr-1">{questionIndex + 1}.</span>
+        <span className="text-gray-400 dark:text-gray-500 mr-1">
+          {questionIndex + 1}.
+        </span>
         {label}
       </span>
       {isDeleting && (
