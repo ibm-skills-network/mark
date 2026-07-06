@@ -401,7 +401,21 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       0,
     );
 
-    const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
+    // The question's own maximum is authoritative: it is the value used by
+    // the grade denominator, the attempt point total, the learner score
+    // line, and the LTI passback. The sum of the correct choices' points can
+    // exceed that maximum (e.g. a 1-point question with two 1-point correct
+    // choices), so capping only at `maxPoints` lets a single question award
+    // more than 100% of its worth and mask other questions' losses in the
+    // attempt total. Fall back to `maxPoints` only when the question carries
+    // no usable maximum of its own (totalPoints is optional for
+    // MULTIPLE_CORRECT).
+    const questionMax =
+      typeof question.totalPoints === "number"
+        ? question.totalPoints
+        : maxPoints;
+
+    const finalPoints = Math.max(0, Math.min(totalPoints, questionMax));
 
     const allCorrectSelected: boolean = correctChoiceTexts.every(
       (correctText) => normalizedLearnerChoices.has(correctText),

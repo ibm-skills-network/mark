@@ -541,7 +541,9 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     const withoutProlog = head.startsWith("<?xml")
       ? head.slice(head.indexOf("?>") + 2).trimStart()
       : head;
-    return /^<svg[\s>]/i.test(withoutProlog) || withoutProlog.startsWith("<svg");
+    return (
+      /^<svg[\s>]/i.test(withoutProlog) || withoutProlog.startsWith("<svg")
+    );
   }
 
   private extractTextualResponse(

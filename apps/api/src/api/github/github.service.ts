@@ -160,8 +160,7 @@ export class GithubService {
         return { ok: response.ok, status: response.status, data };
       } catch (error) {
         lastError = error;
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(
           `GitHub token exchange attempt ${attempt}/${GITHUB_TOKEN_MAX_ATTEMPTS} ` +
             `failed for ${userId}: ${message}`,

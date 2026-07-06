@@ -27,7 +27,10 @@ describe("createAssignmentScopedStorage", () => {
 
     it("generates assignmentFeedbackConfig-{id} for feedbackConfig scope", () => {
       setPathname("/author/789");
-      const storage = createAssignmentScopedStorage("feedbackConfig", "fallback");
+      const storage = createAssignmentScopedStorage(
+        "feedbackConfig",
+        "fallback",
+      );
       storage.setItem("ignored-name", "v");
       expect(localStorage.getItem("assignmentFeedbackConfig-789")).toBe("v");
     });

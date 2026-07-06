@@ -30,7 +30,9 @@ describe("readAuthorPreviewPayload", () => {
   });
 
   it("returns null when assignmentConfig is absent", () => {
-    mockGetStoredData.mockReturnValueOnce(null).mockReturnValueOnce(VALID_QUESTIONS);
+    mockGetStoredData
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce(VALID_QUESTIONS);
     expect(readAuthorPreviewPayload(1)).toBeNull();
   });
 
@@ -49,7 +51,9 @@ describe("readAuthorPreviewPayload", () => {
   });
 
   it("returns payload even when questions array is empty (no-question assignments)", () => {
-    mockGetStoredData.mockReturnValueOnce(VALID_DETAILS).mockReturnValueOnce([]);
+    mockGetStoredData
+      .mockReturnValueOnce(VALID_DETAILS)
+      .mockReturnValueOnce([]);
     expect(readAuthorPreviewPayload(1)).toEqual({
       assignmentDetails: VALID_DETAILS,
       questions: [],
@@ -126,7 +130,10 @@ describe("buildAuthorPreviewPayload", () => {
     const raw = [{ id: 1 }] as any;
     const processed = [{ id: 1, processed: true }] as any;
     mockProcessQuestions.mockReturnValueOnce(processed);
-    const result = buildAuthorPreviewPayload({ ...baseAssignment, questions: raw });
+    const result = buildAuthorPreviewPayload({
+      ...baseAssignment,
+      questions: raw,
+    });
     expect(result.questions).toEqual(processed);
   });
 
