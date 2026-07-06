@@ -529,19 +529,19 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
               </div>
               <div className="flex flex-wrap gap-2">
                 {globalFilter && (
-                  <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                  <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 text-xs px-2 py-1 rounded">
                     Search: {globalFilter}
                   </span>
                 )}
                 {table.getColumn("status")?.getFilterValue() !== undefined && (
-                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                  <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200 text-xs px-2 py-1 rounded">
                     Status:{" "}
                     {String(table.getColumn("status")?.getFilterValue())}
                   </span>
                 )}
                 {table.getColumn("issueType")?.getFilterValue() !==
                   undefined && (
-                  <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                  <span className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200 text-xs px-2 py-1 rounded">
                     Type:{" "}
                     {String(table.getColumn("issueType")?.getFilterValue())}
                   </span>
@@ -592,16 +592,16 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900">
                       {table.getHeaderGroups().map((headerGroup) => (
                         <tr key={headerGroup.id}>
                           {headerGroup.headers.map((header) => (
                             <th
                               key={header.id}
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                               onClick={
                                 header.column.getCanSort()
                                   ? header.column.getToggleSortingHandler()
@@ -643,11 +643,11 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
                         </tr>
                       ))}
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {table.getRowModel().rows.map((row) => (
                         <tr
                           key={row.id}
-                          className="hover:bg-gray-50 transition-colors"
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         >
                           {row.getVisibleCells().map((cell) => (
                             <td
@@ -670,22 +670,22 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
               {table.getFilteredRowModel().rows.length === 0 &&
                 reports.length > 0 && (
                   <div className="text-center py-12">
-                    <div className="p-4 bg-gray-50 rounded-2xl mx-auto w-fit mb-4">
-                      <Search className="h-8 w-8 mx-auto text-gray-300" />
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl mx-auto w-fit mb-4">
+                      <Search className="h-8 w-8 mx-auto text-gray-300 dark:text-gray-600" />
                     </div>
-                    <p className="text-sm font-medium text-gray-600 mb-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
                       No reports match your filters
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
                       Try adjusting your search terms or filters
                     </p>
                   </div>
                 )}
 
               {table.getPageCount() > 1 && (
-                <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                <div className="flex items-center justify-between px-6 py-3 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-700">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
                       Page {table.getState().pagination.pageIndex + 1} of{" "}
                       {table.getPageCount()}
                     </span>

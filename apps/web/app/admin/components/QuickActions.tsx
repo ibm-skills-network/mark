@@ -49,7 +49,8 @@ const quickActions = [
     description: "Find assignments with highest AI processing costs",
     icon: DollarSign,
     category: "Cost Analysis",
-    color: "bg-red-100 text-red-800 border-red-200",
+    hover:
+      "hover:bg-red-100 hover:text-red-800 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-200 dark:hover:border-red-800",
   },
   {
     id: "top-assignments-by-attempts",
@@ -57,7 +58,8 @@ const quickActions = [
     description: "Assignments with highest number of attempts",
     icon: TrendingUp,
     category: "Activity",
-    color: "bg-blue-100 text-blue-800 border-blue-200",
+    hover:
+      "hover:bg-blue-100 hover:text-blue-800 hover:border-blue-200 dark:hover:bg-blue-900/30 dark:hover:text-blue-200 dark:hover:border-blue-800",
   },
   {
     id: "top-assignments-by-learners",
@@ -65,7 +67,8 @@ const quickActions = [
     description: "Find assignments with highest learner engagement",
     icon: Users,
     category: "Engagement",
-    color: "bg-green-100 text-green-800 border-green-200",
+    hover:
+      "hover:bg-green-100 hover:text-green-800 hover:border-green-200 dark:hover:bg-green-900/30 dark:hover:text-green-200 dark:hover:border-green-800",
   },
   {
     id: "most-expensive-assignments",
@@ -73,7 +76,8 @@ const quickActions = [
     description: "Assignments with highest total costs",
     icon: DollarSign,
     category: "Cost Analysis",
-    color: "bg-red-100 text-red-800 border-red-200",
+    hover:
+      "hover:bg-red-100 hover:text-red-800 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-200 dark:hover:border-red-800",
   },
   {
     id: "assignments-with-most-reports",
@@ -81,7 +85,8 @@ const quickActions = [
     description: "Find assignments generating most issue reports",
     icon: AlertTriangle,
     category: "Quality",
-    color: "bg-orange-100 text-orange-800 border-orange-200",
+    hover:
+      "hover:bg-orange-100 hover:text-orange-800 hover:border-orange-200 dark:hover:bg-orange-900/30 dark:hover:text-orange-200 dark:hover:border-orange-800",
   },
   {
     id: "highest-rated-assignments",
@@ -89,7 +94,8 @@ const quickActions = [
     description: "Best performing assignments by learner ratings",
     icon: Star,
     category: "Quality",
-    color: "bg-yellow-100 text-yellow-800 border-yellow-200",
+    hover:
+      "hover:bg-yellow-100 hover:text-yellow-800 hover:border-yellow-200 dark:hover:bg-yellow-900/30 dark:hover:text-yellow-200 dark:hover:border-yellow-800",
   },
   {
     id: "assignments-with-lowest-ratings",
@@ -97,7 +103,8 @@ const quickActions = [
     description: "Assignments needing attention based on ratings",
     icon: Star,
     category: "Quality",
-    color: "bg-gray-100 text-gray-800 border-gray-200",
+    hover:
+      "hover:bg-gray-100 hover:text-gray-800 hover:border-gray-200 dark:hover:bg-gray-700 dark:hover:text-gray-200 dark:hover:border-gray-600",
   },
   {
     id: "recent-high-activity",
@@ -105,7 +112,8 @@ const quickActions = [
     description: "Assignments with high activity in last 7 days",
     icon: Activity,
     category: "Activity",
-    color: "bg-purple-100 text-purple-800 border-purple-200",
+    hover:
+      "hover:bg-purple-100 hover:text-purple-800 hover:border-purple-200 dark:hover:bg-purple-900/30 dark:hover:text-purple-200 dark:hover:border-purple-800",
   },
   {
     id: "cost-per-learner-analysis",
@@ -113,7 +121,8 @@ const quickActions = [
     description: "Analyze cost efficiency per learner",
     icon: BarChart,
     category: "Cost Analysis",
-    color: "bg-indigo-100 text-indigo-800 border-indigo-200",
+    hover:
+      "hover:bg-indigo-100 hover:text-indigo-800 hover:border-indigo-200 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-200 dark:hover:border-indigo-800",
   },
   {
     id: "completion-rate-analysis",
@@ -121,7 +130,8 @@ const quickActions = [
     description: "Analyze assignment completion rates",
     icon: Target,
     category: "Performance",
-    color: "bg-teal-100 text-teal-800 border-teal-200",
+    hover:
+      "hover:bg-teal-100 hover:text-teal-800 hover:border-teal-200 dark:hover:bg-teal-900/30 dark:hover:text-teal-200 dark:hover:border-teal-800",
   },
 ];
 
@@ -232,12 +242,9 @@ export function QuickActions({
                   key={action.id}
                   className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${
                     isSelected
-                      ? "ring-2 ring-blue-500 border-blue-300 shadow-lg"
-                      : "hover:border-blue-200"
-                  } ${action.color
-                    .replace("bg-", "hover:bg-")
-                    .replace("text-", "hover:text-")
-                    .replace("border-", "hover:border-")}`}
+                      ? "ring-2 ring-blue-500 border-blue-300 dark:border-blue-700 shadow-lg"
+                      : ""
+                  } ${action.hover}`}
                   onClick={() => setSelectedAction(action.id)}
                 >
                   <CardHeader className="pb-3">
@@ -307,9 +314,9 @@ export function QuickActions({
                 </Button>
 
                 {error && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-200">
                     <div className="flex items-center gap-3">
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                      <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
                       <div>
                         <p className="font-medium text-sm">Error</p>
                         <p className="text-xs mt-1">{error}</p>

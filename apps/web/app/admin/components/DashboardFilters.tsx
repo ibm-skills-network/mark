@@ -204,27 +204,27 @@ export function DashboardFilters({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {currentFilters.startDate && (
-                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                    <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 text-xs px-2 py-1 rounded">
                       From: {currentFilters.startDate}
                     </span>
                   )}
                   {currentFilters.endDate && (
-                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                    <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 text-xs px-2 py-1 rounded">
                       To: {currentFilters.endDate}
                     </span>
                   )}
                   {currentFilters.assignmentId && (
-                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                    <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200 text-xs px-2 py-1 rounded">
                       Assignment ID: {currentFilters.assignmentId}
                     </span>
                   )}
                   {currentFilters.assignmentName && (
-                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                    <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200 text-xs px-2 py-1 rounded">
                       Assignment: {currentFilters.assignmentName}
                     </span>
                   )}
                   {currentFilters.userId && (
-                    <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                    <span className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200 text-xs px-2 py-1 rounded">
                       User: {currentFilters.userId}
                     </span>
                   )}
