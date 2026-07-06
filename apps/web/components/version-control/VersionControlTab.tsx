@@ -403,7 +403,7 @@ export function VersionControlTab() {
                     ? "Describe this draft so you can find it later..."
                     : "Describe the changes in this version..."
                 }
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md resize-none"
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 rounded-md resize-none"
                 rows={3}
               />
             </div>
