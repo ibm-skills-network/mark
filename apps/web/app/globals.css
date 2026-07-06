@@ -36,24 +36,27 @@
 
   .dark {
     color-scheme: dark;
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Dark tokens track the Tailwind gray palette the app's hand-written
+       dark: classes use (gray-900 page, gray-800 cards, gray-700 muted), so
+       shadcn primitives (tabs, inputs, selects) match the rest of the UI. */
+    --background: 221 39% 11%;
+    --foreground: 210 20% 98%;
     --card: 215 28% 17%;
     --card-foreground: 0 0% 98%;
     --popover: 215 28% 17%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
+    --secondary: 217 19% 27%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
+    --muted: 217 19% 27%;
+    --muted-foreground: 218 11% 65%;
+    --accent: 217 19% 27%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
+    --border: 217 19% 27%;
+    --input: 215 14% 34%;
     --ring: 0 0% 83.1%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
