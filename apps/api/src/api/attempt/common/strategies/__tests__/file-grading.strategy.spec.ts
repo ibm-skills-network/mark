@@ -306,7 +306,11 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
       } as any;
 
       const learnerResponse = [
-        { filename: "answer.pdf", key: "1/learner@example.com/1/answer.pdf", bucket: "b" },
+        {
+          filename: "answer.pdf",
+          key: "1/learner@example.com/1/answer.pdf",
+          bucket: "b",
+        },
       ] as any;
 
       // gradeResponse calls extractContentFromFiles first, then proceeds into

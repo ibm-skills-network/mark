@@ -570,12 +570,8 @@ export class AttemptSubmissionService {
       );
     }
 
-    const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
-      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
-      assignmentAttempt.grade || 0,
-      assignment.passingGrade,
-    );
-
+    // Fetch questions before deciding answer visibility: shouldShowCorrectAnswers
+    // must use the clamped grade, not the potentially inflated stored one.
     const cachedQuestions =
       await this.attemptAccessCacheService.getQuestionDtosForAttemptAccess({
         assignmentId: assignmentAttempt.assignmentId,
@@ -584,6 +580,52 @@ export class AttemptSubmissionService {
         questionVersions:
           assignmentAttempt.assignmentVersion?.questionVersions ?? [],
       });
+
+    // A response must never contribute more than its own question's maximum.
+    // Historically some multi-select responses were graded above that max
+    // (the correct choices' points summed past the question's totalPoints),
+    // which inflated the attempt total to a false 100% and could mask other
+    // questions' losses. Clamp per question so already-graded attempts show
+    // the learner's real score. New submissions are already correct (the
+    // grader clamps at scoring time); this keeps historical attempts honest.
+    //
+    // Store totalPoints as-is (no ?? 0) so that a question with a null
+    // totalPoints is treated as unknown-max (pass through) rather than
+    // zero-max, which the > 0 guard would also pass through but misleadingly.
+    const questionMaxById = new Map(
+      cachedQuestions.map((q) => [q.id, q.totalPoints]),
+    );
+    const responses = assignmentAttempt.questionResponses ?? [];
+    const rawPointsEarned = responses.reduce(
+      (sum, response) => sum + (response.points ?? 0),
+      0,
+    );
+    let totalPointsEarned = 0;
+    for (const response of responses) {
+      const questionMax = questionMaxById.get(response.questionId);
+      const points = response.points ?? 0;
+      totalPointsEarned +=
+        typeof questionMax === "number"
+          ? Math.min(points, questionMax)
+          : points;
+    }
+    // Compute score totals before applyVisibilitySettings so they survive
+    // even when showQuestions=false strips the questions array. Without this
+    // the success page shows "0 / 0" because it can't sum the (empty) array.
+    const totalPossiblePoints = cachedQuestions.reduce(
+      (sum, q) => sum + (q.totalPoints ?? 0),
+      0,
+    );
+    const effectiveGrade =
+      totalPointsEarned < rawPointsEarned && totalPossiblePoints > 0
+        ? totalPointsEarned / totalPossiblePoints
+        : assignmentAttempt.grade;
+
+    const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      effectiveGrade || 0,
+      assignment.passingGrade,
+    );
 
     const questionsToShow = this.applyAnswerVisibilityToQuestionDtos(
       cachedQuestions,
@@ -632,21 +674,24 @@ export class AttemptSubmissionService {
         assignmentAttempt.preferredLanguage || undefined,
       );
 
-    // Compute score totals BEFORE applyVisibilitySettings so they survive
-    // even when showQuestions=false strips the questions array. Without this
-    // the success page shows "0 / 0" because it can't sum the (empty) array.
-    const totalPossiblePoints = finalQuestions.reduce(
-      (sum, q) => sum + (q.totalPoints ?? 0),
-      0,
-    );
-    const totalPointsEarned = (
-      assignmentAttempt.questionResponses ?? []
-    ).reduce((sum, response) => sum + (response.points ?? 0), 0);
-
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
+
+    // When clamping reduced the total, recompute the grade the learner sees.
+    // Read assignmentAttempt.grade after applyVisibilitySettings: that call
+    // sets it to null when showAssignmentScore=false, which must be respected
+    // even when clamping occurred. The persisted grade and the LTI passback
+    // are intentionally left untouched — correcting those is a separate
+    // re-grade, not a display fix.
+    const displayGrade =
+      totalPointsEarned < rawPointsEarned &&
+      totalPossiblePoints > 0 &&
+      assignmentAttempt.grade !== null
+        ? totalPointsEarned / totalPossiblePoints
+        : assignmentAttempt.grade;
 
     return {
       ...assignmentAttempt,
+      grade: displayGrade,
       questions: finalQuestions,
       totalPossiblePoints,
       totalPointsEarned:

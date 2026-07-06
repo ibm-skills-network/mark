@@ -33,15 +33,17 @@ const prematureCloseResponse = () =>
   ({
     ok: true,
     status: 200,
-    json: jest.fn().mockRejectedValue(
-      Object.assign(
-        new Error(
-          "Invalid response body while trying to fetch " +
-            "https://github.com/login/oauth/access_token: Premature close",
+    json: jest
+      .fn()
+      .mockRejectedValue(
+        Object.assign(
+          new Error(
+            "Invalid response body while trying to fetch " +
+              "https://github.com/login/oauth/access_token: Premature close",
+          ),
+          { name: "FetchError", type: "system" },
         ),
-        { name: "FetchError", type: "system" },
       ),
-    ),
   }) as unknown as Response;
 
 describe("GithubService.exchangeCodeForToken", () => {

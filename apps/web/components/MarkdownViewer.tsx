@@ -64,7 +64,9 @@ const MarkdownViewer: FC<Props> = (props) => {
         },
       });
 
-      quill.root.innerHTML = sanitizeHtml(String(latestChildrenRef.current) || "");
+      quill.root.innerHTML = sanitizeHtml(
+        String(latestChildrenRef.current) || "",
+      );
       quill.disable();
       quillInstanceRef.current = quill;
     });
@@ -85,7 +87,9 @@ const MarkdownViewer: FC<Props> = (props) => {
 
   useEffect(() => {
     if (quillInstanceRef.current) {
-      quillInstanceRef.current.root.innerHTML = sanitizeHtml(String(children) || "");
+      quillInstanceRef.current.root.innerHTML = sanitizeHtml(
+        String(children) || "",
+      );
     }
   }, [children]);
 

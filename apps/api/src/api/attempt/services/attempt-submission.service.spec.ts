@@ -712,11 +712,99 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       buildSpy.mockRestore();
     });
 
+    it("clamps a response graded above its question's max and recomputes the displayed grade so an already-graded attempt cannot show a false 100%", async () => {
+      // Reproduces the multi-select overshoot: Q202 was graded 2 points on a
+      // 1-point question, which inflated the attempt total so the +1 overshoot
+      // masked Q303's 0 and produced a false 3/3 = 100%.
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        grade: 1, // stored grade was derived from the inflated points
+        questionResponses: [
+          { questionId: 101, points: 1 },
+          { questionId: 202, points: 2 }, // over the question's max of 1
+          { questionId: 303, points: 0 },
+        ],
+      });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [
+          { id: 101, totalPoints: 1 },
+          { id: 202, totalPoints: 1 },
+          { id: 303, totalPoints: 1 },
+        ],
+      );
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([
+          { id: 101, totalPoints: 1 },
+          { id: 202, totalPoints: 1 },
+          { id: 303, totalPoints: 1 },
+        ]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101, 202, 303],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      expect(result.totalPossiblePoints).toBe(3);
+      // 1 + min(2,1) + 0 = 2, not the inflated 1 + 2 + 0 = 3.
+      expect(result.totalPointsEarned).toBe(2);
+      expect(result.grade).toBeCloseTo(2 / 3);
+
+      buildSpy.mockRestore();
+    });
+
+    it("leaves the stored grade untouched when no response exceeds its question's max", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        grade: 0.7,
+        questionResponses: [
+          { questionId: 101, points: 4 },
+          { questionId: 202, points: 3 },
+        ],
+      });
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([
+          { id: 101, totalPoints: 5 },
+          { id: 202, totalPoints: 5 },
+        ]);
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      expect(result.totalPointsEarned).toBe(7);
+      // Nothing was clamped, so the persisted grade is passed through as-is.
+      expect(result.grade).toBe(0.7);
+
+      buildSpy.mockRestore();
+    });
+
     it("omits totalPointsEarned when showAssignmentScore=false", async () => {
       mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
         ...assignmentAttempt,
         questionResponses: [{ questionId: 101, points: 4 }],
       });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [{ id: 101, totalPoints: 5 }],
+      );
       const buildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
         .mockResolvedValue([{ id: 101, totalPoints: 5 }]);

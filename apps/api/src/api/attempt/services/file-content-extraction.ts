@@ -695,7 +695,9 @@ export class FileContentExtractionService {
           file.filename,
         );
 
-        const notebookContent = this.sanitizeAndTruncate(extractedNotebook.text);
+        const notebookContent = this.sanitizeAndTruncate(
+          extractedNotebook.text,
+        );
         await this.recordClientContentUse(file, notebookContent, shadowEnabled);
 
         return {

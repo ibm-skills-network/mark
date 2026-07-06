@@ -50,6 +50,18 @@ function makeCodeFile(
   return makeFile(filename, { content: code, extractedText: code });
 }
 
+function makeDocumentFile(
+  filename: string,
+  content = "Project Report\n\nThe submission includes the requested title.",
+): LearnerFileUpload {
+  return makeFile(filename, {
+    fileType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    content,
+    extractedText: content,
+  });
+}
+
 function makePdfFile(
   filename: string,
   structuredContent?: CanonicalSubmission,
@@ -184,6 +196,12 @@ describe("FileGradingService.shouldRebuildStructuredContent", () => {
     expect(service.shouldRebuildStructuredContent(file)).toBe(false);
   });
 
+  it("returns true for document text without existing structuredContent", () => {
+    const file = makeDocumentFile("report.docx");
+    delete (file as any).structuredContent;
+    expect(service.shouldRebuildStructuredContent(file)).toBe(true);
+  });
+
   it("returns false for a spreadsheet that already has sufficient blocks", () => {
     const existing: CanonicalSubmission = {
       submissionId: "data.xlsx",
@@ -236,6 +254,16 @@ describe("FileGradingService.ensureStructuredContentForEvidenceGrading", () => {
     ]);
     expect(result[0].structuredContent).toBeDefined();
     expect(result[0].structuredContent?.metadata.blockCount).toBeGreaterThan(0);
+  });
+
+  it("adds structuredContent to a docx document that lacks it", () => {
+    const docxFile = makeDocumentFile("report.docx");
+    delete (docxFile as any).structuredContent;
+    const result = service.ensureStructuredContentForEvidenceGrading([
+      docxFile,
+    ]);
+    expect(result[0].structuredContent).toBeDefined();
+    expect(result[0].structuredContent?.submissionId).toBe("report.docx");
   });
 
   it("preserves existing structuredContent on a PDF", () => {
@@ -332,6 +360,32 @@ describe("FileGradingService - code files use template-based grading", () => {
       (f: LearnerFileUpload) => f.structuredContent,
     );
     expect(hasStructuredContent).toBe(true);
+  });
+
+  it("docx file becomes evidence eligible after enrichment", () => {
+    const docxFile = makeDocumentFile("report.docx");
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading([
+      docxFile,
+    ]);
+    expect(service.isEvidenceBasedEligible(enriched)).toBe(true);
+  });
+
+  it("code file is not evidence eligible even if structuredContent exists", () => {
+    const structure: CanonicalSubmission = {
+      submissionId: "solution.py",
+      metadata: {
+        wordCount: 3,
+        pageCount: 1,
+        blockCount: 2,
+        sourceType: "txt",
+        checksum: "code",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [{ pageNumber: 1, blocks: [] }],
+    };
+    const pyFile = makeCodeFile("solution.py");
+    (pyFile as any).structuredContent = structure;
+    expect(service.isEvidenceBasedEligible(pyFile)).toBe(false);
   });
 });
 
