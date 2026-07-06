@@ -115,7 +115,6 @@ const SaveAndPublishButton: FC<Props> = ({
       setAssignmentFeedbackConfigStore({
         ...getAssignmentFeedbackHydration(assignment),
       });
-
     }
   };
 

@@ -604,9 +604,7 @@ describe("FileContentExtractionService.extractExcelText - OversizedSubmissionErr
       Sheets: { BigSheet: sheet },
     };
 
-    jest
-      .spyOn(service as any, "readExcelWorkbook")
-      .mockReturnValue(wb);
+    jest.spyOn(service as any, "readExcelWorkbook").mockReturnValue(wb);
     jest
       .spyOn(service as any, "extractExcelChartsAndImages")
       .mockResolvedValue({ section: "", chartCount: 0, imageCount: 0 });
@@ -797,7 +795,12 @@ function buildProvenanceService(): {
   const log = jest.fn();
   const error = jest.fn();
   (service as any).logger = { warn, debug, log, error };
-  return { service, putObject, getBucketName, logs: { warn, debug, log, error } };
+  return {
+    service,
+    putObject,
+    getBucketName,
+    logs: { warn, debug, log, error },
+  };
 }
 
 // Shadow work is opt-in per call site: only grading passes this option.
@@ -873,7 +876,9 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         ...logs.warn.mock.calls,
         ...logs.log.mock.calls,
         ...logs.debug.mock.calls,
-      ].filter((c) => typeof c[0] === "string" && c[0].startsWith("provenance."));
+      ].filter(
+        (c) => typeof c[0] === "string" && c[0].startsWith("provenance."),
+      );
       expect(allProvenanceLogs).toHaveLength(0);
     });
 
@@ -1182,7 +1187,9 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
       await flushMicrotasks();
 
       expect(putObject).toHaveBeenCalledTimes(1);
-      expect(putObject.mock.calls[0][0].Bucket).toBe(ALLOWED_LEARNER_PROD_BUCKET);
+      expect(putObject.mock.calls[0][0].Bucket).toBe(
+        ALLOWED_LEARNER_PROD_BUCKET,
+      );
     });
   });
 
@@ -1296,7 +1303,9 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         ...logs.warn.mock.calls,
         ...logs.log.mock.calls,
         ...logs.debug.mock.calls,
-      ].filter((c) => typeof c[0] === "string" && c[0].startsWith("provenance."));
+      ].filter(
+        (c) => typeof c[0] === "string" && c[0].startsWith("provenance."),
+      );
       expect(provenanceLogs).toHaveLength(0);
     });
   });
@@ -1334,7 +1343,10 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
       // the catch wired up the failure log.
       await flushMicrotasks();
       const failed = findProvenance(logs.warn, "provenance.shadow.failed");
-      expect(failed).toMatchObject({ filename: "report.pdf", stage: "persist" });
+      expect(failed).toMatchObject({
+        filename: "report.pdf",
+        stage: "persist",
+      });
     });
 
     it("does not await the artifact PUT: extraction resolves even if putObject never settles", async () => {
@@ -1422,7 +1434,10 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         key: "1/learner@example.com/7/report.pdf",
       };
 
-      await (service as any).extractSingleFileContent(realPayloadFile, SHADOW_ON);
+      await (service as any).extractSingleFileContent(
+        realPayloadFile,
+        SHADOW_ON,
+      );
       await flushMicrotasks();
 
       expect(putObject).toHaveBeenCalledTimes(1);

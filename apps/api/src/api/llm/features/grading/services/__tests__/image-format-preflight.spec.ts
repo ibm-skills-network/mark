@@ -55,7 +55,10 @@ function isoBmff(brand: string): Buffer {
 
 const HEIC = isoBmff("heic");
 const AVIF = isoBmff("avif");
-const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>', "utf8");
+const SVG = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+  "utf8",
+);
 const SVG_XML = Buffer.from(
   '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>',
   "utf8",
@@ -181,10 +184,7 @@ describe("ImageGradingService.preflightImageBuffer - convert or reject (mocked s
     const { service, mockLogger } = buildService();
 
     // Valid TIFF header + enough padding to exceed the 50MB convert cap.
-    const oversized = Buffer.concat([
-      TIFF_LE,
-      Buffer.alloc(51 * 1024 * 1024),
-    ]);
+    const oversized = Buffer.concat([TIFF_LE, Buffer.alloc(51 * 1024 * 1024)]);
 
     let thrown: unknown;
     try {

@@ -83,5 +83,4 @@ describe("AdminReportsController", () => {
       expect.objectContaining({ actor_user_id: "unknown" }),
     );
   });
-
 });

@@ -24,14 +24,12 @@ describe("ssrf-safe-http", () => {
       expect(isBlockedAddress(ip)).toBe(true);
     });
 
-    it.each([
-      "8.8.8.8",
-      "1.1.1.1",
-      "93.184.216.34",
-      "2606:4700:4700::1111",
-    ])("allows public address %s", (ip) => {
-      expect(isBlockedAddress(ip)).toBe(false);
-    });
+    it.each(["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"])(
+      "allows public address %s",
+      (ip) => {
+        expect(isBlockedAddress(ip)).toBe(false);
+      },
+    );
   });
 
   describe("assertFetchableUrl", () => {
@@ -47,11 +45,11 @@ describe("ssrf-safe-http", () => {
       expect(() => assertFetchableUrl(url)).toThrow(BlockedUrlError);
     });
 
-    it.each([
-      "https://example.com/path?q=1",
-      "http://93.184.216.34/page",
-    ])("allows %s", (url) => {
-      expect(() => assertFetchableUrl(url)).not.toThrow();
-    });
+    it.each(["https://example.com/path?q=1", "http://93.184.216.34/page"])(
+      "allows %s",
+      (url) => {
+        expect(() => assertFetchableUrl(url)).not.toThrow();
+      },
+    );
   });
 });

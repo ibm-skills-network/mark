@@ -111,23 +111,37 @@ export class CriterionEvidenceRetrievalService {
         .slice(0, maxEvidence);
     }
 
-    let usedFallback = false;
     if (reranked.length === 0) {
-      usedFallback = true;
       const allChunks = index.getAllChunks();
-      const scored = allChunks.map((chunk) => ({
-        chunk,
-        score: 0,
-        relevance: this.computeRelevanceScore(request.criterion, chunk.text),
-        combined: this.computeRelevanceScore(request.criterion, chunk.text),
-      }));
+      const scored = allChunks.map((chunk) => {
+        const relevance = this.computeRelevanceScore(
+          request.criterion,
+          chunk.text,
+        );
+        return {
+          chunk,
+          score: 0,
+          relevance,
+          combined: relevance,
+        };
+      });
 
       const aboveThreshold = scored
         .filter((item) => item.relevance >= this.config.minRelevance)
         .sort((a, b) => b.combined - a.combined)
         .slice(0, maxEvidence);
 
-      reranked = aboveThreshold.length > 0 ? aboveThreshold : scored;
+      // Lexical relevance scoring misses genuinely relevant content with no
+      // keyword overlap (e.g. numeric spreadsheet cells vs. prose rubric
+      // language), so surface the top-scoring corpus chunks as *candidates*
+      // here. LLM validation below is the actual relevance judge; its
+      // verdict — even an empty one — is trusted as final.
+      reranked =
+        aboveThreshold.length > 0
+          ? aboveThreshold
+          : scored
+              .sort((a, b) => b.combined - a.combined)
+              .slice(0, this.config.maxCandidates);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
@@ -136,22 +150,22 @@ export class CriterionEvidenceRetrievalService {
       );
     }
 
-    let evidence: CriterionEvidence[] = [];
+    let evidence: CriterionEvidence[];
     let validatedCount = 0;
 
-    const skipValidation = usedFallback && reranked.length > maxEvidence;
-
-    if (
-      !skipValidation &&
-      (strategy === "llm" || this.config.enableLlmValidation)
-    ) {
+    if (strategy === "llm" || this.config.enableLlmValidation) {
+      // The LLM validator is the actual relevance judge for these candidates
+      // (which may include chunks below the lexical relevance threshold).
+      // Its verdict is trusted as final — including an empty one, which
+      // means none of the candidates actually address this criterion.
       const validation = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
         recorder,
       );
-
-      if (validation.length > 0) {
+      if (validation === undefined) {
+        evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
+      } else {
         validatedCount = validation.length;
         evidence = validation.map((item) => ({
           chunkId: item.chunk.chunkId,
@@ -164,18 +178,8 @@ export class CriterionEvidenceRetrievalService {
           contradiction: item.contradiction,
         }));
       }
-    }
-
-    if (evidence.length === 0) {
-      evidence = reranked.map((item) => ({
-        chunkId: item.chunk.chunkId,
-        quote: item.chunk.text.slice(0, 220),
-        anchor: item.chunk.anchor,
-        sourceType: item.chunk.sourceType,
-        sourceId: item.chunk.sourceId,
-        relevanceScore: item.relevance,
-        searchScore: item.score,
-      }));
+    } else {
+      evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
     }
 
     const response: CriterionEvidenceResponse = {
@@ -195,6 +199,25 @@ export class CriterionEvidenceRetrievalService {
       expiresAt: Date.now() + CriterionEvidenceRetrievalService.CACHE_TTL_MS,
     });
     return response;
+  }
+
+  private mapRerankedCandidatesToEvidence(
+    reranked: Array<{
+      chunk: ExtractedChunk;
+      score: number;
+      relevance: number;
+    }>,
+    maxEvidence: number,
+  ): CriterionEvidence[] {
+    return reranked.slice(0, maxEvidence).map((item) => ({
+      chunkId: item.chunk.chunkId,
+      quote: item.chunk.text.slice(0, 220),
+      anchor: item.chunk.anchor,
+      sourceType: item.chunk.sourceType,
+      sourceId: item.chunk.sourceId,
+      relevanceScore: item.relevance,
+      searchScore: item.score,
+    }));
   }
 
   private evictIfNeeded(): void {
@@ -279,12 +302,13 @@ export class CriterionEvidenceRetrievalService {
     chunks: ExtractedChunk[],
     recorder?: LlmCallRecorder,
   ): Promise<
-    Array<{
-      chunk: ExtractedChunk;
-      relevanceScore: number;
-      searchScore: number;
-      contradiction: boolean;
-    }>
+    | Array<{
+        chunk: ExtractedChunk;
+        relevanceScore: number;
+        searchScore: number;
+        contradiction: boolean;
+      }>
+    | undefined
   > {
     if (chunks.length === 0) return [];
 
@@ -380,7 +404,7 @@ Return JSON listing which chunkIds are relevant.
     }
 
     this.logger.warn("Evidence validation parse failed for all candidates");
-    return [];
+    return undefined;
   }
 
   private mapParsedSelections(

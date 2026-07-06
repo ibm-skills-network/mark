@@ -506,6 +506,21 @@ const Question: FC<Props> = ({
     );
   }, [questionResponses, showSubmissionFeedback]);
 
+  // A question response should never display more points than the question is
+  // worth. Some historical multi-select responses were graded above the
+  // question maximum; clamp for display so the per-question score, its
+  // pass/partial styling, and the attempt total all agree. The -1 sentinel
+  // ("points hidden") is preserved.
+  const displayedPoints =
+    highestScoreResponse?.points === -1
+      ? -1
+      : Math.min(
+          highestScoreResponse?.points ?? 0,
+          typeof totalPoints === "number"
+            ? totalPoints
+            : Number.POSITIVE_INFINITY,
+        );
+
   const parsedFeedback = useMemo<{
     feedbackText: string;
     structuredFeedback?: StructuredFeedbackData;
@@ -676,7 +691,7 @@ const Question: FC<Props> = ({
       return parsedFeedback.structuredFeedback.summary;
     }
     if (highestScoreResponse?.points !== undefined) {
-      return `Awarded ${highestScoreResponse.points}/${totalPoints} points.`;
+      return `Awarded ${displayedPoints}/${totalPoints} points.`;
     }
     return "";
   }, [
@@ -711,9 +726,9 @@ const Question: FC<Props> = ({
         <p
           className={`text-gray-800 w-full ${
             shouldShowHighlighting
-              ? highestScoreResponse?.points === totalPoints
+              ? displayedPoints === totalPoints
                 ? "bg-green-50 border border-green-500 rounded p-2"
-                : highestScoreResponse?.points > 0
+                : displayedPoints > 0
                   ? "bg-yellow-50 border border-yellow-500 rounded p-2"
                   : "bg-red-50 border border-red-700 rounded p-2"
               : "bg-gray-50 border border-gray-300 rounded p-2"
@@ -855,9 +870,9 @@ const Question: FC<Props> = ({
         <p
           className={`text-gray-800 w-full ${
             shouldShowHighlighting
-              ? highestScoreResponse?.points === totalPoints
+              ? displayedPoints === totalPoints
                 ? "bg-green-50 border border-green-500 rounded p-2"
-                : highestScoreResponse?.points > 0
+                : displayedPoints > 0
                   ? "bg-yellow-50 border border-yellow-500 rounded p-2"
                   : "bg-red-50 border border-red-700 rounded p-2"
               : "bg-gray-50 border border-gray-300 rounded p-2"
@@ -883,9 +898,9 @@ const Question: FC<Props> = ({
           <p
             className={`text-gray-800 w-full ${
               shouldShowHighlighting
-                ? highestScoreResponse?.points === totalPoints
+                ? displayedPoints === totalPoints
                   ? "bg-green-50 border border-green-500 rounded p-2"
-                  : highestScoreResponse?.points > 0
+                  : displayedPoints > 0
                     ? "bg-yellow-50 border border-yellow-500 rounded p-2"
                     : "bg-red-50 border border-red-700 rounded p-2"
                 : "bg-gray-50 border border-gray-300 rounded p-2"
@@ -952,9 +967,9 @@ const Question: FC<Props> = ({
           <p
             className={`text-gray-800 w-full ${
               shouldShowHighlighting
-                ? highestScoreResponse?.points === totalPoints
+                ? displayedPoints === totalPoints
                   ? "bg-green-50 border border-green-500 rounded p-2"
-                  : highestScoreResponse?.points > 0
+                  : displayedPoints > 0
                     ? "bg-yellow-50 border border-yellow-500 rounded p-2"
                     : "bg-red-50 border border-red-700 rounded p-2"
                 : "bg-gray-50 border border-gray-300 rounded p-2"
@@ -1003,7 +1018,7 @@ const Question: FC<Props> = ({
           <p className="text-sm text-gray-600">
             Score:{" "}
             <span className="font-bold text-gray-800">
-              {highestScoreResponse?.points || 0}/{totalPoints}
+              {displayedPoints}/{totalPoints}
             </span>
           </p>
         )}
