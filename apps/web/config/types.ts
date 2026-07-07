@@ -564,6 +564,7 @@ export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
     authorComment?: string;
+    randomizedChoices?: boolean;
     learnerResponse: string;
     translationOn: boolean;
     selectedLanguage: string;
