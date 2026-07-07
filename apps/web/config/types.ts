@@ -514,6 +514,7 @@ export interface Question extends CreateQuestionRequest {
   variants?: QuestionVariants[];
   authorComment?: string;
   randomizedChoices?: boolean;
+  isDeleted?: boolean;
   alreadyInBackend?: boolean;
   videoPresentationConfig?: videoPresentationConfig;
   liveRecordingConfig?: LiveRecordingConfig;

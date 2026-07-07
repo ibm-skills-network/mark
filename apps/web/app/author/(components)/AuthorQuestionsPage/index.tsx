@@ -998,6 +998,9 @@ const AuthorQuestionsPage: FC<Props> = ({
       updatedQuestions.forEach((q, index) => {
         q.index = index + 1;
       });
+      const activeQuestionCount = updatedQuestions.filter(
+        (question) => !question.isDeleted,
+      ).length;
 
       setQuestions(updatedQuestions);
       useAuthorStore
@@ -1081,9 +1084,31 @@ const AuthorQuestionsPage: FC<Props> = ({
             settingsUpdated = true;
           }
           if (assignmentData.config.numberOfQuestionsPerAttempt !== undefined) {
+            const importedQuestionsPerAttempt =
+              assignmentData.config.numberOfQuestionsPerAttempt;
+            const normalizedQuestionsPerAttempt =
+              typeof importedQuestionsPerAttempt === "number" &&
+              importedQuestionsPerAttempt > activeQuestionCount
+                ? activeQuestionCount > 0
+                  ? activeQuestionCount
+                  : null
+                : importedQuestionsPerAttempt;
+
             configStore.setNumberOfQuestionsPerAttempt(
-              assignmentData.config.numberOfQuestionsPerAttempt,
+              normalizedQuestionsPerAttempt,
             );
+            if (
+              typeof importedQuestionsPerAttempt === "number" &&
+              importedQuestionsPerAttempt !== normalizedQuestionsPerAttempt
+            ) {
+              const normalizedLabel =
+                normalizedQuestionsPerAttempt === null
+                  ? "unlimited"
+                  : normalizedQuestionsPerAttempt;
+              toast.warning(
+                `Questions per attempt was reduced from ${importedQuestionsPerAttempt} to ${normalizedLabel} because only ${activeQuestionCount} active question(s) are available.`,
+              );
+            }
             settingsUpdated = true;
           }
           if (assignmentData.config.displayOrder !== undefined) {

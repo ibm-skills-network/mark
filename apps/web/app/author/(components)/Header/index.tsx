@@ -562,6 +562,30 @@ function AuthorHeader() {
     removeEphemeralFields(clonedOriginalQuestions);
 
     clonedCurrentQuestions = calculateTotalPoints(clonedCurrentQuestions);
+    const activeQuestionCount = clonedCurrentQuestions.filter(
+      (question) => !question.isDeleted,
+    ).length;
+
+    const normalizedQuestionsPerAttempt =
+      typeof numberOfQuestionsPerAttempt === "number" &&
+      numberOfQuestionsPerAttempt > activeQuestionCount
+        ? activeQuestionCount > 0
+          ? activeQuestionCount
+          : null
+        : numberOfQuestionsPerAttempt;
+
+    if (normalizedQuestionsPerAttempt !== numberOfQuestionsPerAttempt) {
+      useAssignmentConfig
+        .getState()
+        .setNumberOfQuestionsPerAttempt?.(normalizedQuestionsPerAttempt);
+      const normalizedLabel =
+        normalizedQuestionsPerAttempt === null
+          ? "unlimited"
+          : normalizedQuestionsPerAttempt;
+      toast.warning(
+        `Questions per attempt was reduced from ${numberOfQuestionsPerAttempt} to ${normalizedLabel} because only ${activeQuestionCount} active question(s) are available.`,
+      );
+    }
 
     const questionsAreDifferent =
       JSON.stringify(clonedCurrentQuestions) !==
@@ -596,7 +620,7 @@ function AuthorHeader() {
       showQuestionScore,
       showAssignmentScore,
       correctAnswerVisibility,
-      numberOfQuestionsPerAttempt,
+      numberOfQuestionsPerAttempt: normalizedQuestionsPerAttempt,
       requireAllQuestions,
       optionalQuestionIds,
       questionControls,

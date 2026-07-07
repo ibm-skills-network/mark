@@ -38,7 +38,9 @@ const Component: FC<Props> = ({ compact }) => {
     setSelectedRandomQuestions(true);
   }
 
-  const totalQuestions = useAuthorStore((s) => s.questions).length;
+  const totalQuestions = useAuthorStore(
+    (s) => s.questions.filter((question) => !question.isDeleted).length,
+  );
 
   const [popupMessage, setPopupMessage] = useState("");
   const [showPopup, setShowPopup] = useState(false);

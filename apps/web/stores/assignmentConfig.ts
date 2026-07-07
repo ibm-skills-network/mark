@@ -14,7 +14,7 @@ type GradingDataActions = {
   setQuestionDisplay: (questionDisplay: QuestionDisplayType) => void;
   questionVariationNumber: number;
   setNumberOfQuestionsPerAttempt?: (
-    numberOfQuestionsPerAttempt: number | undefined,
+    numberOfQuestionsPerAttempt: number | null | undefined,
   ) => void;
   setQuestionVariationNumber: (questionVariationNumber: number) => void;
   setGraded: (graded: boolean) => void;
