@@ -266,9 +266,7 @@ describe("JobStateService", () => {
       percentage: 100,
       result: { ok: true },
     });
-    expect(fakeRedis.ttls.get(`mark:jobs:state:${job.id}`)).toBe(
-      7 * 24 * 60 * 60,
-    );
+    expect(fakeRedis.ttls.get(`mark:jobs:state:${job.id}`)).toBe(2 * 60 * 60);
     expect(
       fakeRedis.strings.has(`mark:jobs:active:${hashActiveKey(activeKey)}`),
     ).toBe(false);

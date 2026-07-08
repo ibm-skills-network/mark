@@ -1,4 +1,9 @@
 import * as XLSX from "xlsx";
+import {
+  MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+  MAX_SPREADSHEET_CELLS_PER_SUBMISSION,
+} from "../constants";
+import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 
 /**
  * Walk only real cell keys on the worksheet and compute the bounding box of
@@ -44,22 +49,168 @@ export function computeUsedRange(worksheet: XLSX.WorkSheet): XLSX.Range | null {
   };
 }
 
+export interface SpreadsheetBudgetMeta {
+  filename?: string;
+  questionId?: number;
+  attemptId?: number;
+}
+
+function assertSpreadsheetWithinBudget(
+  rowCount: number,
+  cellCount: number,
+  meta?: SpreadsheetBudgetMeta,
+): void {
+  const overRows = rowCount > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION;
+  const overCells = cellCount > MAX_SPREADSHEET_CELLS_PER_SUBMISSION;
+  if (!overRows && !overCells) return;
+  throw new OversizedSubmissionError({
+    blockCount: overRows ? rowCount : cellCount,
+    cap: overRows
+      ? MAX_EVIDENCE_BLOCKS_PER_SUBMISSION
+      : MAX_SPREADSHEET_CELLS_PER_SUBMISSION,
+    filename: meta?.filename,
+    questionId: meta?.questionId,
+    attemptId: meta?.attemptId,
+  });
+}
+
+/**
+ * Rewrite a worksheet so `!ref` spans only its real data. Walks value-bearing
+ * cells once (O(real cells)): collects populated rows and "meaningful" columns
+ * (columns carrying a value in any row other than the topmost populated row —
+ * the de-facto header). When data is already contiguous and no column is
+ * pruned, only `!ref` is tightened (identical to the prior bounding-box clamp).
+ * Otherwise cells are remapped to a dense range so a far-flung total or a
+ * full-grid table does not force downstream `!ref` walks to span the gap.
+ * Throws OversizedSubmissionError when the compacted sheet is still over budget.
+ */
+export function compactWorksheet(
+  ws: XLSX.WorkSheet,
+  meta?: SpreadsheetBudgetMeta,
+): void {
+  const realCells: { r: number; c: number; key: string }[] = [];
+  const rowSet = new Set<number>();
+  const allColSet = new Set<number>();
+  let topRow = Number.POSITIVE_INFINITY;
+
+  for (const key in ws) {
+    if (key.codePointAt(0) === 33) continue; // '!' meta
+    const cell = ws[key] as XLSX.CellObject;
+    if (cell.t === "z") continue; // style-only stub, no value
+    const a = XLSX.utils.decode_cell(key);
+    if (!Number.isFinite(a.r) || !Number.isFinite(a.c) || a.r < 0 || a.c < 0) {
+      continue;
+    }
+    realCells.push({ r: a.r, c: a.c, key });
+    rowSet.add(a.r);
+    allColSet.add(a.c);
+    if (a.r < topRow) topRow = a.r;
+  }
+
+  if (realCells.length === 0) {
+    delete ws["!ref"];
+    return;
+  }
+
+  const belowTopColSet = new Set<number>();
+  for (const { r, c } of realCells) {
+    if (r !== topRow) belowTopColSet.add(c);
+  }
+  const cols = (
+    belowTopColSet.size > 0 ? [...belowTopColSet] : [...allColSet]
+  ).sort((x, y) => x - y);
+  const rows = [...rowSet].sort((x, y) => x - y);
+
+  assertSpreadsheetWithinBudget(rows.length, rows.length * cols.length, meta);
+
+  const rowsContiguous = rows.at(-1)! - rows[0] + 1 === rows.length;
+  const colsContiguous = cols.at(-1)! - cols[0] + 1 === cols.length;
+  const colsAllKept = cols.length === allColSet.size;
+
+  if (rowsContiguous && colsContiguous && colsAllKept) {
+    // Identity case: no gaps, nothing pruned — just tighten !ref (the original
+    // bounding-box clamp). Cells are left exactly where they are.
+    ws["!ref"] = XLSX.utils.encode_range({
+      s: { r: rows[0], c: cols[0] },
+      e: { r: rows.at(-1)!, c: cols.at(-1)! },
+    });
+    return;
+  }
+
+  // Compaction: remap to a dense, 0-based range.
+  const rowRemap = new Map<number, number>();
+  for (const [index, r] of rows.entries()) rowRemap.set(r, index);
+  const colRemap = new Map<number, number>();
+  for (const [index, c] of cols.entries()) colRemap.set(c, index);
+  const colKept = new Set(cols);
+
+  const newCells: Record<string, XLSX.CellObject> = {};
+  for (const { r, c, key } of realCells) {
+    if (!colKept.has(c)) continue; // prune non-meaningful columns
+    const nr = rowRemap.get(r)!;
+    const nc = colRemap.get(c)!;
+    newCells[XLSX.utils.encode_cell({ r: nr, c: nc })] = ws[
+      key
+    ] as XLSX.CellObject;
+  }
+
+  const comments = ws["!comments"] as Record<string, unknown> | undefined;
+  let newComments: Record<string, unknown> | undefined;
+  if (comments) {
+    newComments = {};
+    for (const cAddr in comments) {
+      const a = XLSX.utils.decode_cell(cAddr);
+      if (rowRemap.has(a.r) && colKept.has(a.c)) {
+        const na = XLSX.utils.encode_cell({
+          r: rowRemap.get(a.r)!,
+          c: colRemap.get(a.c)!,
+        });
+        newComments[na] = comments[cAddr];
+      }
+    }
+  }
+
+  // Wipe old cell keys and stale, index-bound presentation meta, then install
+  // the dense data. Old keys are removed before new ones are added, so a
+  // remapped address can safely reuse an old address.
+  for (const key in ws) {
+    if (key.codePointAt(0) === 33) {
+      if (
+        key === "!merges" ||
+        key === "!cols" ||
+        key === "!rows" ||
+        key === "!comments"
+      ) {
+        delete ws[key];
+      }
+      continue;
+    }
+    delete ws[key];
+  }
+  Object.assign(ws, newCells);
+  if (newComments && Object.keys(newComments).length > 0) {
+    ws["!comments"] = newComments;
+  }
+  ws["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: rows.length - 1, c: cols.length - 1 },
+  });
+}
+
 /**
  * Replace each worksheet's declared `!ref` with a tight range covering only
  * real cells so `sheet_to_json` / `sheet_to_csv` walks are bounded by actual
  * data. Worksheets with no real cells lose `!ref` entirely so consumers emit
  * nothing rather than honoring a stale declared dimension.
  */
-export function clampWorkbookToUsedRanges(workbook: XLSX.WorkBook): void {
+export function clampWorkbookToUsedRanges(
+  workbook: XLSX.WorkBook,
+  meta?: SpreadsheetBudgetMeta,
+): void {
   for (const sheetName of workbook.SheetNames) {
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) continue;
-    const tightRange = computeUsedRange(worksheet);
-    if (tightRange) {
-      worksheet["!ref"] = XLSX.utils.encode_range(tightRange);
-    } else {
-      delete worksheet["!ref"];
-    }
+    compactWorksheet(worksheet, meta);
   }
 }
 
@@ -75,12 +226,13 @@ export function clampWorkbookToUsedRanges(workbook: XLSX.WorkBook): void {
 export function readClampedWorkbook(
   buffer: Buffer,
   options: XLSX.ParsingOptions & { FS?: string } = {},
+  meta?: SpreadsheetBudgetMeta,
 ): XLSX.WorkBook {
   const workbook = XLSX.read(buffer, {
     ...options,
     type: "buffer",
     sheetStubs: false,
   });
-  clampWorkbookToUsedRanges(workbook);
+  clampWorkbookToUsedRanges(workbook, meta);
   return workbook;
 }

@@ -537,6 +537,82 @@ describe("FileContentExtractionService.extractExcelText - used-range clamping", 
     );
     expect(payload.totalUsedCells).toBeGreaterThan(0);
   });
+
+  it("extracts a full-grid table sheet from its real data, not the declared grid", async () => {
+    const XLSX = await import("xlsx");
+    const sheet: XLSX.WorkSheet = {
+      A1: { t: "s", v: "name", w: "name" },
+      B1: { t: "s", v: "qty", w: "qty" },
+      ZZ1: { t: "s", v: "autoheader", w: "autoheader" },
+      A2: { t: "s", v: "widget", w: "widget" },
+      B2: { t: "n", v: 5, w: "5" },
+      B1048576: { t: "n", v: 5, w: "5", f: "SUM(B2:B1048575)" },
+      "!ref": "A1:XFD1048576",
+    };
+    const workbook: XLSX.WorkBook = {
+      SheetNames: ["Sheet1"],
+      Sheets: { Sheet1: sheet },
+    };
+    // service is the SUT instance from the existing describe-block setup
+    jest
+      .spyOn(
+        service as unknown as { readExcelWorkbook: () => XLSX.WorkBook },
+        "readExcelWorkbook",
+      )
+      .mockReturnValue(workbook);
+
+    jest
+      .spyOn(service as any, "extractExcelChartsAndImages")
+      .mockResolvedValue({ section: "", chartCount: 0, imageCount: 0 });
+
+    const started = Date.now();
+    const result = await (
+      service as unknown as {
+        extractExcelText: (b: Buffer, x?: boolean) => Promise<{ text: string }>;
+      }
+    ).extractExcelText(Buffer.from("x"), true);
+
+    expect(Date.now() - started).toBeLessThan(2000); // no 1M-row walk
+    expect(result.text).toContain("Range: A1:B3"); // 3 rows × 2 cols
+    expect(result.text).toContain("widget");
+    expect(result.text).not.toContain("autoheader"); // pruned empty column
+  });
+});
+
+// ─── extractExcelText – OversizedSubmissionError propagation ─────────────────
+
+describe("FileContentExtractionService.extractExcelText - OversizedSubmissionError propagation", () => {
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  it("re-throws OversizedSubmissionError without wrapping it in a generic Error", async () => {
+    // Build a workbook with a single sheet that is OVER the row budget.
+    // compactWorksheet calls assertSpreadsheetWithinBudget which throws
+    // OversizedSubmissionError when rows.length > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION (50_000).
+    const XLSX = await import("xlsx");
+    const sheet: XLSX.WorkSheet = {};
+    for (let r = 0; r < 60_001; r++) {
+      const key = `A${r + 1}`;
+      sheet[key] = { t: "n", v: r, w: String(r) };
+    }
+    sheet["!ref"] = `A1:A60001`;
+    const wb: XLSX.WorkBook = {
+      SheetNames: ["BigSheet"],
+      Sheets: { BigSheet: sheet },
+    };
+
+    jest.spyOn(service as any, "readExcelWorkbook").mockReturnValue(wb);
+    jest
+      .spyOn(service as any, "extractExcelChartsAndImages")
+      .mockResolvedValue({ section: "", chartCount: 0, imageCount: 0 });
+
+    await expect(
+      (service as any).extractExcelText(Buffer.from([]), true),
+    ).rejects.toThrow(OversizedSubmissionError);
+  });
 });
 
 describe("FileContentExtractionService.shouldUseStructuredExtraction", () => {
@@ -719,7 +795,12 @@ function buildProvenanceService(): {
   const log = jest.fn();
   const error = jest.fn();
   (service as any).logger = { warn, debug, log, error };
-  return { service, putObject, getBucketName, logs: { warn, debug, log, error } };
+  return {
+    service,
+    putObject,
+    getBucketName,
+    logs: { warn, debug, log, error },
+  };
 }
 
 // Shadow work is opt-in per call site: only grading passes this option.
@@ -795,7 +876,9 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         ...logs.warn.mock.calls,
         ...logs.log.mock.calls,
         ...logs.debug.mock.calls,
-      ].filter((c) => typeof c[0] === "string" && c[0].startsWith("provenance."));
+      ].filter(
+        (c) => typeof c[0] === "string" && c[0].startsWith("provenance."),
+      );
       expect(allProvenanceLogs).toHaveLength(0);
     });
 
@@ -1104,7 +1187,9 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
       await flushMicrotasks();
 
       expect(putObject).toHaveBeenCalledTimes(1);
-      expect(putObject.mock.calls[0][0].Bucket).toBe(ALLOWED_LEARNER_PROD_BUCKET);
+      expect(putObject.mock.calls[0][0].Bucket).toBe(
+        ALLOWED_LEARNER_PROD_BUCKET,
+      );
     });
   });
 
@@ -1218,7 +1303,9 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         ...logs.warn.mock.calls,
         ...logs.log.mock.calls,
         ...logs.debug.mock.calls,
-      ].filter((c) => typeof c[0] === "string" && c[0].startsWith("provenance."));
+      ].filter(
+        (c) => typeof c[0] === "string" && c[0].startsWith("provenance."),
+      );
       expect(provenanceLogs).toHaveLength(0);
     });
   });
@@ -1256,7 +1343,10 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
       // the catch wired up the failure log.
       await flushMicrotasks();
       const failed = findProvenance(logs.warn, "provenance.shadow.failed");
-      expect(failed).toMatchObject({ filename: "report.pdf", stage: "persist" });
+      expect(failed).toMatchObject({
+        filename: "report.pdf",
+        stage: "persist",
+      });
     });
 
     it("does not await the artifact PUT: extraction resolves even if putObject never settles", async () => {
@@ -1344,7 +1434,10 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         key: "1/learner@example.com/7/report.pdf",
       };
 
-      await (service as any).extractSingleFileContent(realPayloadFile, SHADOW_ON);
+      await (service as any).extractSingleFileContent(
+        realPayloadFile,
+        SHADOW_ON,
+      );
       await flushMicrotasks();
 
       expect(putObject).toHaveBeenCalledTimes(1);

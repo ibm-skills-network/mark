@@ -2227,3 +2227,42 @@ export async function removeFailedJob(
     },
   });
 }
+
+export interface ForcePassResult {
+  success: true;
+  attemptId: number;
+  grade: number;
+  submitted: boolean;
+  lti: {
+    attempted: boolean;
+    status: string | null;
+    message: string;
+  };
+}
+
+/**
+ * Admin action: manually pass a single attempt (set its grade + mark it
+ * submitted, force grading progress to COMPLETED, best-effort re-sync to the
+ * LMS). `gradePercent` is on the 0-100 scale; omit it to pass at 100%.
+ */
+export async function forcePassAttempt(
+  sessionToken: string,
+  attemptId: number,
+  gradePercent?: number,
+): Promise<ForcePassResult> {
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/attempts/${encodeURIComponent(
+    String(attemptId),
+  )}/force-pass`;
+  return apiClient.post(
+    url,
+    gradePercent === undefined ? {} : { gradePercent },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": sessionToken,
+      },
+    },
+  );
+}

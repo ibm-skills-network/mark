@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type MouseEvent,
 } from "react";
 import "quill/dist/quill.snow.css";
 import "highlight.js/styles/vs2015.css";
@@ -22,7 +23,34 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   maxWords?: number | null;
   maxCharacters?: number | null;
   allowCopy?: boolean;
+  toolbarMode?: "full" | "learner";
 }
+
+const fullToolbarOptions = [
+  [{ header: [1, 2, 3, 4, 5, 6, false] }],
+  ["bold", "italic", "underline", "strike"],
+  ["blockquote", "code-block"],
+  [{ list: "ordered" }, { list: "bullet" }],
+  [{ script: "sub" }, { script: "super" }],
+  [{ indent: "-1" }, { indent: "+1" }],
+  [{ direction: "rtl" }],
+  [{ color: [] }, { background: [] }],
+  [{ align: [] }],
+  ["link", "image", "video"],
+  ["clean"],
+];
+
+const learnerToolbarOptions = [
+  ["bold", "italic", "underline"],
+  [{ list: "ordered" }, { list: "bullet" }],
+  ["link"],
+  ["clean"],
+];
+
+const toolbarOptionsByMode = {
+  full: fullToolbarOptions,
+  learner: learnerToolbarOptions,
+};
 
 const MarkdownEditor: React.FC<Props> = ({
   value,
@@ -32,13 +60,23 @@ const MarkdownEditor: React.FC<Props> = ({
   maxWords,
   maxCharacters,
   placeholder = "Write your question here...",
+  toolbarMode = "full",
 }) => {
   const quillRef = useRef<HTMLDivElement>(null);
+  const setValueRef = useRef(setValue);
+  const maxWordsRef = useRef(maxWords);
+  const maxCharactersRef = useRef(maxCharacters);
   const [quillInstance, setQuillInstance] = useState<any>(null);
   const [wordCount, setWordCount] = useState<number>(
     value?.split(/\s+/).filter(Boolean).length ?? 0,
   );
   const [charCount, setCharCount] = useState<number>(value?.length ?? 0);
+
+  useEffect(() => {
+    setValueRef.current = setValue;
+    maxWordsRef.current = maxWords;
+    maxCharactersRef.current = maxCharacters;
+  }, [maxCharacters, maxWords, setValue]);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,11 +86,6 @@ const MarkdownEditor: React.FC<Props> = ({
         quillRef.current &&
         !quillInstance
       ) {
-        const existingToolbars = document.querySelectorAll(".ql-toolbar");
-        existingToolbars.forEach((toolbar, index) => {
-          if (index > 0) toolbar.remove();
-        });
-
         window.hljs = hljs;
 
         const QuillModule = await import("quill");
@@ -62,19 +95,7 @@ const MarkdownEditor: React.FC<Props> = ({
           theme: "snow",
           placeholder,
           modules: {
-            toolbar: [
-              [{ header: [1, 2, 3, 4, 5, 6, false] }],
-              ["bold", "italic", "underline", "strike"],
-              ["blockquote", "code-block"],
-              [{ list: "ordered" }, { list: "bullet" }],
-              [{ script: "sub" }, { script: "super" }],
-              [{ indent: "-1" }, { indent: "+1" }],
-              [{ direction: "rtl" }],
-              [{ color: [] }, { background: [] }],
-              [{ align: [] }],
-              ["link", "image", "video"],
-              ["clean"],
-            ],
+            toolbar: toolbarOptionsByMode[toolbarMode],
             syntax: {
               highlight: (text: string) => hljs.highlightAuto(text).value,
             },
@@ -83,28 +104,30 @@ const MarkdownEditor: React.FC<Props> = ({
 
         quill.on("text-change", () => {
           const text = quill.getText().trim();
+          const characterLimit = maxCharactersRef.current;
+          const wordLimit = maxWordsRef.current;
 
-          if (maxCharacters && maxCharacters > 0) {
+          if (characterLimit && characterLimit > 0) {
             const charCount = text.length;
-            if (charCount <= maxCharacters) {
+            if (charCount <= characterLimit) {
               setCharCount(charCount);
-              setValue(quill.root.innerHTML);
+              setValueRef.current(quill.root.innerHTML);
             } else {
               quill.deleteText(charCount - 1, charCount);
             }
           }
-          if (maxWords && maxWords > 0) {
+          if (wordLimit && wordLimit > 0) {
             const wordsArray = text.split(/\s+/).filter(Boolean);
             const wordCount = wordsArray.length;
 
-            if (wordCount <= maxWords) {
+            if (wordCount <= wordLimit) {
               setWordCount(wordCount);
-              setValue(quill.root.innerHTML);
+              setValueRef.current(quill.root.innerHTML);
             } else {
               quill.deleteText(text.length - 1, text.length);
             }
           } else {
-            setValue(quill.root.innerHTML);
+            setValueRef.current(quill.root.innerHTML);
           }
         });
 
@@ -123,7 +146,17 @@ const MarkdownEditor: React.FC<Props> = ({
         setQuillInstance(null);
       }
     };
-  }, [quillInstance]);
+  }, [placeholder, quillInstance, toolbarMode]);
+
+  const focusEditorFromShell = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".ql-toolbar") || target.closest(".ql-editor")) {
+      return;
+    }
+
+    event.preventDefault();
+    quillInstance?.focus();
+  };
 
   useEffect(() => {
     if (quillInstance) {
@@ -137,40 +170,41 @@ const MarkdownEditor: React.FC<Props> = ({
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
-      .ql-container.ql-snow {
+      .quill-editor-shell .ql-container.ql-snow {
         min-height: 100px !important;
         height: auto !important;
         overflow: visible !important;
       }
-      .ql-container.ql-snow .ql-editor {
+      .quill-editor-shell .ql-container.ql-snow .ql-editor {
         font-family: "IBM Plex Sans", sans-serif !important;
         font-size: 16px !important;
         line-height: 1.3 !important;
         background-color: transparent !important;
         height: auto !important;
+        min-height: 98px !important;
         overflow: visible !important;
         padding: 0 !important;
       }
-      .ql-editor p,
-      .ql-editor li,
-      .ql-editor blockquote {
+      .quill-editor-shell .ql-editor p,
+      .quill-editor-shell .ql-editor li,
+      .quill-editor-shell .ql-editor blockquote {
         margin: 0.25em 0 !important; 
       }
-      .ql-editor ul,
-      .ql-editor ol {
+      .quill-editor-shell .ql-editor ul,
+      .quill-editor-shell .ql-editor ol {
         padding-left: 1em !important; 
         margin: 0.25em 0 !important; 
       }
-      .ql-editor code {
+      .quill-editor-shell .ql-editor code {
         white-space: pre-wrap !important;
         line-height: 1 !important; 
         padding: 0.1em 0.2em !important;
         background-color: #f5f5f5 !important;
       }
-      .ql-editor pre {
+      .quill-editor-shell .ql-editor pre {
         background-color: #f5f5f5 !important;
       }
-      .ql-editor .hljs {
+      .quill-editor-shell .ql-editor .hljs {
         padding: 0.2em !important;
         font-size: 0.95em !important;
       }
@@ -183,13 +217,14 @@ const MarkdownEditor: React.FC<Props> = ({
   }, []);
 
   return (
-    <div className={cn("flex flex-col", className)}>
+    <div className={cn("quill-editor-shell flex flex-col", className)}>
       <div
         className={cn(
-          "quill-editor overflow-auto p-2 border border-gray-200 rounded min-h-[100px]",
+          "quill-editor overflow-auto p-2 border border-gray-200 rounded min-h-[100px] focus-within:border-violet-600 focus-within:ring-2 focus-within:ring-violet-100",
           textareaClassName,
         )}
         ref={quillRef}
+        onMouseDown={focusEditorFromShell}
       />
 
       {maxWords ? (

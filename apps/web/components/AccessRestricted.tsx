@@ -9,8 +9,8 @@ export default function AccessRestricted() {
   return (
     <LearnerNotice
       title="You don’t have access to this assignment"
-      description="Make sure you’re signed in to the right account and opening it from your course. You may need a valid enrollment or instructor access."
-      footnote="Still stuck? Relaunch the assignment from your course."
+      description="Your session may have expired or you may not be logged in to Author Workbench. Try logging into AWB again, then relaunch the assignment from your course."
+      footnote="Still stuck? Make sure you’re signed in to the right account and that you have a valid enrollment or instructor access."
     />
   );
 }

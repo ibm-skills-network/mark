@@ -56,6 +56,14 @@ interface DashboardFilters {
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  // TODO: this insights cache is a per-pod in-memory Map, so writes that change
+  // an attempt (e.g. the admin force-pass in AttemptAdminService) can't
+  // invalidate it across replicas — the admin analytics view stays stale for up
+  // to INSIGHTS_CACHE_TTL after such a write. Accepted for now: force-pass is a
+  // rare admin action, the underlying DB is updated synchronously, and the
+  // acting admin gets an optimistic UI update. If insights need to be live after
+  // writes, move this to a shared Redis-backed cache service (see
+  // AttemptAccessCacheService / GradingCacheService) with an invalidate(assignmentId).
   private readonly insightsCache = new Map<
     string,
     { data: any; cachedAt: number }

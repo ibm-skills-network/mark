@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -8,6 +9,8 @@ import IORedis from "ioredis";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
+import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
@@ -82,6 +85,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     private readonly jobQueueService: JobQueueService,
     private readonly prisma: PrismaService,
     private readonly attemptAccessCache: AttemptAccessCacheService,
+    private readonly aiFlags: AiFeatureFlagsService,
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: "AssignmentServiceV2" });
@@ -283,6 +287,32 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     this.logger.info(
       `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
     );
+
+    // Reject configurations no learner could ever start: asking for more
+    // questions per attempt than the pool contains makes attempt creation
+    // throw for everyone (see AttemptSubmissionService.createAssignmentAttempt).
+    // Validated again at version-snapshot time in VersionManagementService for
+    // paths that bypass this handler.
+    const requestedPerAttempt = updateDto.numberOfQuestionsPerAttempt;
+    if (requestedPerAttempt && requestedPerAttempt > 0 && updateDto.questions) {
+      const availableQuestions = updateDto.questions.filter(
+        (question) => !question.isDeleted,
+      ).length;
+      if (requestedPerAttempt > availableQuestions) {
+        this.logger.warn(
+          `Publish rejected: numberOfQuestionsPerAttempt exceeds question pool`,
+          {
+            assignmentId,
+            requestedPerAttempt,
+            availableQuestions,
+            requestedByUserId: userId,
+          },
+        );
+        throw new BadRequestException(
+          `numberOfQuestionsPerAttempt (${requestedPerAttempt}) exceeds the number of available questions (${availableQuestions}). Reduce it or add more questions before publishing.`,
+        );
+      }
+    }
 
     // Deterministic per-assignment publish job id. BullMQ silently no-ops a
     // duplicate `add` when {jobId} matches an in-flight job, so this gives us
@@ -822,9 +852,17 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       // work. The frontend hides the PublishProgress card when the
       // aggregate carries total=0, so this becomes a quiet success.
       if (!willEnqueueAnyTranslation) {
+        // Distinguish a benign no-op (metadata-only republish) from
+        // "translations were needed but the AI kill-switch skipped them", so
+        // the author is told rather than silently shipped without translations.
+        const skippedByKillSwitch =
+          shouldTranslateAssignment &&
+          this.aiFlags.isDisabled(AiFeatureComponent.AUTHORING);
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "Completed",
-          progress: "Publishing complete",
+          progress: skippedByKillSwitch
+            ? "Published. AI translations are temporarily unavailable and were skipped — re-publish once AI is restored to generate them."
+            : "Publishing complete",
           percentage: 100,
           result: {
             stage: "translations_complete",
@@ -832,6 +870,9 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               aggregate: { completed: 0, total: 0, failed: 0 },
               perJob: [],
             },
+            ...(skippedByKillSwitch
+              ? { translationsSkippedReason: "ai_unavailable" as const }
+              : {}),
           } satisfies PublishJobResult,
         });
         return;

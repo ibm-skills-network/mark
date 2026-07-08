@@ -256,6 +256,12 @@ export async function startQuestionGenerationJob(
 ): Promise<string> {
   const response = await uploadFiles(payload);
 
+  if (response.aiUnavailable) {
+    throw new Error(
+      "AI question generation is paused for maintenance right now. Please try again later.",
+    );
+  }
+
   if (!response.success || !response.jobId) {
     throw new Error("Failed to upload files");
   }

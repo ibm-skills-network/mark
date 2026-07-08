@@ -39,6 +39,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import {
+  forcePassAttempt,
   getAuthorAssignmentInsights,
   getCurrentAdminUser,
   getDetailedAssignmentInsights,
@@ -231,6 +232,13 @@ export function AssignmentInsightsContent({
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
+  // Admin force-pass action state. sessionToken is captured from the admin
+  // fetch so the per-attempt action can reuse it.
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [confirmingPassId, setConfirmingPassId] = useState<number | null>(null);
+  const [passingId, setPassingId] = useState<number | null>(null);
+  const [passError, setPassError] = useState<number | null>(null);
+
   useEffect(() => {
     // Author mode: normal app session (cookie). The endpoint is
     // ownership-scoped server-side and returns no admin-only data, so there is
@@ -263,6 +271,8 @@ export function AssignmentInsightsContent({
         clearAdminSessionStorage();
         router.replace(buildAdminLoginRedirect(window.location.pathname));
       };
+
+      setSessionToken(stored.sessionToken);
 
       try {
         const user = await getCurrentAdminUser(stored.sessionToken);
@@ -303,6 +313,47 @@ export function AssignmentInsightsContent({
       void fetchAdminInsights();
     }
   }, [assignmentId, router, mode]);
+
+  // A grade is "passing" at or above the assignment's passing grade
+  // (stored 0-100, attempt grades are 0-1 fractions); fall back to the 60%
+  // threshold this view uses elsewhere when no passing grade is configured.
+  const passThreshold =
+    data?.assignment.passingGrade != null
+      ? data.assignment.passingGrade / 100
+      : 0.6;
+  const isAttemptPassing = (grade: number | null) =>
+    grade !== null && grade >= passThreshold;
+
+  // Force-pass a single attempt. The insights payload is cached server-side for
+  // ~60s, so a refetch would return the stale grade and clobber the change;
+  // instead optimistically update the row in place (the backend set grade=100%
+  // and submitted=true). Admin-only; the button is hidden in author mode.
+  const handleForcePass = async (attemptId: number) => {
+    if (!sessionToken) return;
+    setPassError(null);
+    setPassingId(attemptId);
+    try {
+      await forcePassAttempt(sessionToken, attemptId);
+      setConfirmingPassId(null);
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              attempts: prev.attempts.map((a) =>
+                a.id === attemptId ? { ...a, grade: 1, submitted: true } : a,
+              ),
+            }
+          : prev,
+      );
+    } catch {
+      // Leave confirm mode so the row falls back to the default action arm,
+      // which is the only place the "Failed. Try again." message renders.
+      setConfirmingPassId(null);
+      setPassError(attemptId);
+    } finally {
+      setPassingId(null);
+    }
+  };
 
   const formatCurrency = (amount: number | undefined | null) => {
     return new Intl.NumberFormat("en-US", {
@@ -1309,13 +1360,18 @@ export function AssignmentInsightsContent({
                           ))}
                       </div>
                     </TableHead>
+                    {isUserAdmin && (
+                      <TableHead className="text-right w-[300px] whitespace-nowrap">
+                        Actions
+                      </TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAttempts.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={isUserAdmin ? 6 : 5}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No attempts match the current filters
@@ -1358,6 +1414,57 @@ export function AssignmentInsightsContent({
                             ? formatDuration(attempt.timeSpent)
                             : "N/A"}
                         </TableCell>
+                        {isUserAdmin && (
+                          <TableCell className="text-right w-[300px] whitespace-nowrap">
+                            {isAttemptPassing(attempt.grade) ? (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            ) : confirmingPassId === attempt.id ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-xs text-muted-foreground">
+                                  Pass at 100%?
+                                </span>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  disabled={passingId === attempt.id}
+                                  onClick={() => handleForcePass(attempt.id)}
+                                >
+                                  {passingId === attempt.id
+                                    ? "Passing…"
+                                    : "Confirm"}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={passingId === attempt.id}
+                                  onClick={() => setConfirmingPassId(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-2">
+                                {passError === attempt.id && (
+                                  <span className="text-xs text-red-600">
+                                    Failed. Try again.
+                                  </span>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setPassError(null);
+                                    setConfirmingPassId(attempt.id);
+                                  }}
+                                >
+                                  Force Pass
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}

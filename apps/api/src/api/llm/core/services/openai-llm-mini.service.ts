@@ -3,13 +3,16 @@ import { ChatOpenAI } from "@langchain/openai";
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import type { ZodTypeAny } from "zod";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import {
   IMultimodalLlmProvider,
   LlmRequestOptions,
   LlmResponse,
+  LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { invokeStructuredChatModel } from "./structured-output.util";
 
 /**
  * Light-weight provider that targets the smaller/faster gpt-4o-mini model.
@@ -82,6 +85,28 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       content: responseContent,
       tokenUsage: { input: inputTokens, output: outputTokens },
     };
+  }
+
+  /**
+   * Send a request and return a value validated against `schema` using the
+   * model's native structured output. The model fills schema fields and the
+   * SDK serializes the JSON, so the result is always valid JSON — unlike
+   * free-form "respond with JSON" generation, which emits unescaped quotes /
+   * control characters on code-heavy submissions and fails a strict parse.
+   */
+  async invokeStructured<T>(
+    messages: HumanMessage[],
+    schema: ZodTypeAny,
+    options?: LlmRequestOptions,
+  ): Promise<LlmStructuredResponse<T>> {
+    return invokeStructuredChatModel<T>(
+      this.createChatModel(options),
+      messages,
+      schema,
+      this.tokenCounter,
+      this.logger,
+      options?.modelName ?? this.key,
+    );
   }
 
   /** Invocation that includes an inline image */

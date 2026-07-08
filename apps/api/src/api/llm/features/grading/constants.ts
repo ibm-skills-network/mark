@@ -23,3 +23,25 @@ export function resolveMaxEvidenceBlocksPerSubmission(): number {
 
 export const MAX_EVIDENCE_BLOCKS_PER_SUBMISSION =
   resolveMaxEvidenceBlocksPerSubmission();
+
+// Hard cap on the number of cells (rows × columns) a single spreadsheet
+// submission may expand into after it is compacted to its real data. A genuine
+// dataset stays well under this; the cap exists to reject pathological sheets
+// (e.g. a table sized to the whole grid) before any walk materializes them.
+//
+// Tunable per environment via GRADING_MAX_SPREADSHEET_CELLS; falls back to the
+// default whenever that var is unset, empty, or not a positive integer.
+const DEFAULT_MAX_SPREADSHEET_CELLS_PER_SUBMISSION = 1_000_000;
+
+export function resolveMaxSpreadsheetCellsPerSubmission(): number {
+  const parsed = Number.parseInt(
+    process.env.GRADING_MAX_SPREADSHEET_CELLS ?? "",
+    10,
+  );
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_SPREADSHEET_CELLS_PER_SUBMISSION;
+}
+
+export const MAX_SPREADSHEET_CELLS_PER_SUBMISSION =
+  resolveMaxSpreadsheetCellsPerSubmission();

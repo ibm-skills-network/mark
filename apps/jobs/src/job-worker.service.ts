@@ -347,16 +347,15 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // Fire-and-forget and never throws: a failed write logs a warning and lets
   // the file age out, which is the correct signal if the filesystem is broken.
   private touchLivenessFile(): void {
-    void writeFile(
-      this.getLivenessFilePath(),
-      new Date().toISOString(),
-    ).catch((error: unknown) => {
-      this.logger.warn(
-        `Failed to write jobs worker liveness file: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
+    void writeFile(this.getLivenessFilePath(), new Date().toISOString()).catch(
+      (error: unknown) => {
+        this.logger.warn(
+          `Failed to write jobs worker liveness file: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      },
+    );
   }
 
   private getLivenessFilePath(): string {
@@ -534,7 +533,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   //      per-attempt strike counter in Redis with 24h TTL. Two strikes →
   //      permanent fail. One strike → rethrow original so BullMQ retries.
   //   C. Anything else → rethrow untouched.
-  private async classifyAttemptError(job: Job, error: unknown): Promise<never> {
+  private async classifyAttemptError(job: Job, error: unknown): Promise<void> {
     const reason = this.messageOf(error);
     const errorName = error instanceof Error ? error.name : undefined;
 
@@ -556,6 +555,23 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         jobName: job.name,
         decryptError: this.messageOf(decryptError),
       });
+    }
+
+    // Branch 0: idempotent duplicate submit. The attempt was already submitted
+    // by the winning job (or this job lost a concurrent commit race), so the
+    // grade is already persisted. Returning instead of throwing makes BullMQ
+    // mark the job completed — no retry, no re-grade — and the Instana span
+    // records success rather than an error. Logged at warn, not error, because
+    // it is an expected outcome of a learner double-submit, not a failure.
+    if (JobWorkerService.ALREADY_SUBMITTED_RE.test(reason)) {
+      this.structuredLogger.warn("attempt.grade.already.submitted", {
+        attemptId,
+        assignmentId,
+        reason,
+        jobId: job.id,
+        jobName: job.name,
+      });
+      return;
     }
 
     // Branch A: learner-facing grading error — never retryable. The
@@ -782,6 +798,13 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     "OversizedSubmissionError",
     "UnsupportedImageFormatError",
   ]);
+
+  // Matches the two ConflictException messages a duplicate submit produces:
+  // the pre-commit "has already been submitted" check and the concurrent-
+  // commit "was concurrently submitted" race. Matched on message (not class)
+  // so it survives the error crossing the executor boundary.
+  private static readonly ALREADY_SUBMITTED_RE =
+    /(already been submitted|concurrently submitted)/i;
 
   // Single source for "extract a printable message from an unknown thrown
   // value." Mirrors the pattern at handleTranslationJob's catch block but

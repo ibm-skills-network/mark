@@ -1,6 +1,9 @@
 /* eslint-disable */
 import { HttpService } from "@nestjs/axios";
-import { NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { LtiSyncStatus } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -10,6 +13,7 @@ import { QuestionService } from "../question/question.service";
 import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import { AttemptServiceV1 } from "./attempt.service";
 import { LtiGradeSyncService } from "../../attempt/services/lti-grade-sync.service";
+import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
 
 describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
   let service: AttemptServiceV1;
@@ -47,6 +51,11 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
     createAndSync: jest.fn(),
   };
 
+  const mockGradingKillSwitch = {
+    assertGradingAllowed: jest.fn(),
+    assignmentUsesAiGrading: jest.fn(),
+  };
+
   const mockHttpService = {
     put: jest.fn(),
   };
@@ -76,6 +85,10 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
         { provide: QuestionService, useValue: mockQuestionService },
         { provide: AssignmentServiceV1, useValue: mockAssignmentService },
         { provide: LtiGradeSyncService, useValue: mockLtiGradeSyncService },
+        {
+          provide: GradingKillSwitchService,
+          useValue: mockGradingKillSwitch,
+        },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
@@ -531,6 +544,10 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
           { provide: LlmFacadeService, useValue: mockLlmFacadeService },
           { provide: QuestionService, useValue: mockQuestionService },
           { provide: AssignmentServiceV1, useValue: mockAssignmentService },
+          {
+            provide: GradingKillSwitchService,
+            useValue: mockGradingKillSwitch,
+          },
           { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
         ],
       }).compile();

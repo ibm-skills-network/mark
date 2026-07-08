@@ -34,9 +34,11 @@ function buildService() {
     validateContent: jest.fn().mockResolvedValue(true),
   };
   service.chunkingService = {
-    extractFromImages: jest.fn().mockReturnValue([
-      { id: "c1", text: "extracted ocr text", source: "img" },
-    ]),
+    extractFromImages: jest
+      .fn()
+      .mockReturnValue([
+        { id: "c1", text: "extracted ocr text", source: "img" },
+      ]),
   };
   service.evidencePipeline = {
     gradeWithEvidence: jest.fn().mockResolvedValue({

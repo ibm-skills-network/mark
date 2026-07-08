@@ -13,6 +13,7 @@ import {
   VariantDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
@@ -87,6 +88,10 @@ describe("QuestionService", () => {
         {
           provide: JobQueueService,
           useValue: jobQueueService,
+        },
+        {
+          provide: AiFeatureFlagsService,
+          useValue: { isDisabled: jest.fn().mockReturnValue(false) },
         },
       ],
     }).compile();

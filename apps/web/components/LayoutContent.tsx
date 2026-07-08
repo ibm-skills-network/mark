@@ -11,12 +11,30 @@ import {
   API_SERVER_ERROR_EVENT,
   type ApiServerErrorDetail,
 } from "@/lib/api-events";
+import { getAiStatus } from "@/lib/ai-status";
 
 export default function LayoutContent({ children }: { children: ReactNode }) {
   const { isOpen } = useChatbot();
   const pathname = usePathname();
-  const hideMarkChat = pathname?.startsWith("/admin") ?? false;
+  const [chatDisabled, setChatDisabled] = useState(false);
+  // Hide the chat widget on admin routes (as before) or when the AI chat
+  // component is switched off. The widget hiding is a UX hint only — the
+  // backend independently returns an "unavailable" message if chat is used.
+  const hideMarkChat =
+    (pathname?.startsWith("/admin") ?? false) || chatDisabled;
   const [apiError, setApiError] = useState<ApiServerErrorDetail | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAiStatus().then((status) => {
+      if (!cancelled && status) {
+        setChatDisabled(status.chat === false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     const handler = (event: Event) => {

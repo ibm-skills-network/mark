@@ -1245,9 +1245,31 @@ function Component() {
 
     if (data.questions) {
       csv += "Questions\n";
-      csv += "Type,Question,Response Type,Total Points\n";
+      // Only advertise the choices column when choices are actually present
+      // (they are omitted from the export data when the user unchecks
+      // "include question choices"), keeping the CSV consistent with JSON/PDF.
+      const includeChoices = data.questions.some(
+        (q: any) => q.choices && q.choices.length > 0,
+      );
+      csv += includeChoices
+        ? "Type,Question,Response Type,Total Points,Answer Choices\n"
+        : "Type,Question,Response Type,Total Points\n";
       data.questions.forEach((q: any) => {
-        csv += `${q.type},"${q.question?.replace(/"/g, '""') || ""}",${q.responseType},${q.totalPoints}\n`;
+        const baseRow = `${q.type},"${q.question?.replace(/"/g, '""') || ""}",${q.responseType},${q.totalPoints}`;
+        if (!includeChoices) {
+          csv += `${baseRow}\n`;
+          return;
+        }
+        const choices =
+          q.choices && q.choices.length > 0
+            ? q.choices
+                .map(
+                  (c: any, i: number) =>
+                    `${i + 1}. ${c.choice ?? ""}${c.isCorrect ? " [Correct]" : ""}`,
+                )
+                .join(" | ")
+            : "";
+        csv += `${baseRow},"${choices.replace(/"/g, '""')}"\n`;
       });
     }
 

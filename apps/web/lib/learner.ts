@@ -32,7 +32,13 @@ import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 export async function createAttempt(
   assignmentId: number,
   cookies?: string,
-): Promise<number | undefined | "no more attempts" | "in cooldown period"> {
+): Promise<
+  | number
+  | undefined
+  | "no more attempts"
+  | "in cooldown period"
+  | "ai temporarily unavailable"
+> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
     const res = await apiClient.post<BaseBackendResponse>(
@@ -52,13 +58,38 @@ export async function createAttempt(
 
     return id;
   } catch (err) {
-    if (err instanceof APIError && err.status === 422) {
+    // Duck-type the error rather than `instanceof APIError`: across Next's
+    // server/SSR module boundary the APIError class identity can differ, so
+    // `instanceof` silently returns false and every branch falls through to
+    // `undefined`. Reading `.status` / `.body.code` works regardless.
+    if (isAiTemporarilyDisabled(err)) {
+      // AI grading kill-switch is engaged for this AI-graded assignment.
+      return "ai temporarily unavailable";
+    }
+    const status = getErrorStatus(err);
+    if (status === 422) {
       return "no more attempts";
-    } else if (err instanceof APIError && err.status === 429) {
+    } else if (status === 429) {
       return "in cooldown period";
     }
     return undefined;
   }
+}
+
+/** HTTP status off an unknown thrown error (APIError or any `{status}` shape). */
+function getErrorStatus(err: unknown): number | undefined {
+  return (err as { status?: number } | undefined)?.status;
+}
+
+/**
+ * Recognises the AI kill-switch response. Matches on the body `code` first (the
+ * stable signal) and falls back to HTTP 409 — the status the backend now uses
+ * because gateways/meshes mangle 503s into generic 500s. Accepts `unknown` and
+ * duck-types so it survives the Next server-module-identity `instanceof` gotcha.
+ */
+export function isAiTemporarilyDisabled(err: unknown): boolean {
+  const e = err as { status?: number; body?: { code?: string } } | undefined;
+  return e?.body?.code === "AI_TEMPORARILY_DISABLED" || e?.status === 409;
 }
 
 /**
@@ -263,7 +294,6 @@ export async function getLiveRecordingFeedback(
   }
 }
 
-
 export type QuestionGradingStatus =
   | "pending"
   | "in_progress"
@@ -360,7 +390,15 @@ export async function submitAssignment(
     } catch (apiError) {
       let errorMessage = "Submission failed";
 
-      if (apiError instanceof APIError) {
+      // Check the kill-switch first and duck-typed (not gated on
+      // `instanceof APIError`, which is unreliable across Next's module
+      // boundary) so the out-of-service message always wins for a 409.
+      if (isAiTemporarilyDisabled(apiError)) {
+        // AI grading kill-switch engaged: the attempt was not submitted and
+        // no grading was performed, so the learner's progress is preserved.
+        errorMessage =
+          "Grading is temporarily out of service. Your answers have not been submitted — please try again later.";
+      } else if (apiError instanceof APIError) {
         errorMessage = `Submission failed with status: ${apiError.status}`;
 
         if (
@@ -473,16 +511,11 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.(
-                "processing",
-                percentage,
-                progress,
-                {
-                  currentQuestion: data.currentQuestion,
-                  totalQuestions: data.totalQuestions,
-                  gradingState: parseGradingState(data.result),
-                },
-              );
+              onProgress?.("processing", percentage, progress, {
+                currentQuestion: data.currentQuestion,
+                totalQuestions: data.totalQuestions,
+                gradingState: parseGradingState(data.result),
+              });
             } else if (data.status === "Completed" && !isCompleted) {
               isCompleted = true;
               onProgress?.("completed", 100, "Grading completed successfully!");
@@ -530,16 +563,11 @@ export async function submitAssignment(
               }
 
               if (data.progress && data.percentage !== undefined) {
-                onProgress?.(
-                  "processing",
-                  data.percentage,
-                  data.progress,
-                  {
-                    currentQuestion: data.currentQuestion,
-                    totalQuestions: data.totalQuestions,
-                    gradingState: parseGradingState(data.result),
-                  },
-                );
+                onProgress?.("processing", data.percentage, data.progress, {
+                  currentQuestion: data.currentQuestion,
+                  totalQuestions: data.totalQuestions,
+                  gradingState: parseGradingState(data.result),
+                });
               }
             } catch (error) {
               console.warn("SSE update event parse failed:", error);

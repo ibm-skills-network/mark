@@ -35,7 +35,9 @@ describe("MarkDownEditor", () => {
   it("sanitizes the incoming value before loading it into the editor", async () => {
     render(
       <MarkDownEditor
-        value={'<p>safe</p><img src="x" onerror="alert(1)"><script>alert(2)</script>'}
+        value={
+          '<p>safe</p><img src="x" onerror="alert(1)"><script>alert(2)</script>'
+        }
         setValue={jest.fn()}
       />,
     );

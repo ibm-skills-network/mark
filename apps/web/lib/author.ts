@@ -643,7 +643,7 @@ export async function getAttempts(
 export async function uploadFiles(
   payload: QuestionGenerationPayload,
   cookies?: string,
-): Promise<{ success: boolean; jobId?: string }> {
+): Promise<{ success: boolean; jobId?: string; aiUnavailable?: boolean }> {
   const endpointURL = `${getApiRoutes().assignments}/${payload.assignmentId}/generate-questions`;
 
   try {
@@ -651,6 +651,9 @@ export async function uploadFiles(
       endpointURL,
       { ...payload },
       {
+        // We handle the error ourselves below — suppress the generic
+        // "Client Error: 409" toast so the AI-paused case shows a clear message.
+        quiet: true,
         headers: {
           Connection: "keep-alive",
           KeepAlive: "timeout=1000000",
@@ -671,6 +674,13 @@ export async function uploadFiles(
       return { success: false };
     }
   } catch (err) {
+    // The AI authoring kill-switch returns 409 / code AI_TEMPORARILY_DISABLED at
+    // the enqueue point. Flag it distinctly so the caller can tell the author AI
+    // generation is paused, instead of a generic failure (or silent templates).
+    const e = err as { status?: number; body?: { code?: string } } | undefined;
+    if (e?.status === 409 || e?.body?.code === "AI_TEMPORARILY_DISABLED") {
+      return { success: false, aiUnavailable: true };
+    }
     return { success: false };
   }
 }

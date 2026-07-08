@@ -11,6 +11,7 @@ import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { compactWorksheet } from "../../llm/features/grading/services/spreadsheet-used-range.utils";
 import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
@@ -694,7 +695,9 @@ export class FileContentExtractionService {
           file.filename,
         );
 
-        const notebookContent = this.sanitizeAndTruncate(extractedNotebook.text);
+        const notebookContent = this.sanitizeAndTruncate(
+          extractedNotebook.text,
+        );
         await this.recordClientContentUse(file, notebookContent, shadowEnabled);
 
         return {
@@ -3190,48 +3193,6 @@ export class FileContentExtractionService {
   }
 
   /**
-   * Walk only real cell keys on the worksheet and compute the bounding box of
-   * cells that actually carry a value. SheetJS preserves the worksheet's
-   * declared dimension verbatim in `!ref`, which on Excel files saved with a
-   * full-sheet formal dimension (`A1:XFD1048576`) covers 17 billion virtual
-   * cells. Trusting that value blindly causes downstream consumers such as
-   * `sheet_to_csv` to materialize a row for every virtual row in the sheet.
-   * Returns null when the worksheet contains no real cells.
-   */
-  private computeUsedRange(worksheet: XLSX.WorkSheet): XLSX.Range | null {
-    let minRow = Number.POSITIVE_INFINITY;
-    let minCol = Number.POSITIVE_INFINITY;
-    let maxRow = Number.NEGATIVE_INFINITY;
-    let maxCol = Number.NEGATIVE_INFINITY;
-    let found = false;
-
-    for (const key in worksheet) {
-      if (key.charCodeAt(0) === 33) continue; // '!' meta key
-      const addr = XLSX.utils.decode_cell(key);
-      if (
-        !Number.isFinite(addr.r) ||
-        !Number.isFinite(addr.c) ||
-        addr.r < 0 ||
-        addr.c < 0
-      ) {
-        continue;
-      }
-      found = true;
-      if (addr.r < minRow) minRow = addr.r;
-      if (addr.c < minCol) minCol = addr.c;
-      if (addr.r > maxRow) maxRow = addr.r;
-      if (addr.c > maxCol) maxCol = addr.c;
-    }
-
-    if (!found) return null;
-
-    return {
-      s: { r: minRow, c: minCol },
-      e: { r: maxRow, c: maxCol },
-    };
-  }
-
-  /**
    * Thin wrapper around `XLSX.read` so tests can swap the parsed workbook
    * without going through a full disk-format round-trip (writing a workbook
    * with a formal `A1:XFD1048576` !ref is itself a memory bomb under
@@ -3282,23 +3243,19 @@ export class FileContentExtractionService {
 
         allText += `\n=== SHEET: ${sheetName} ===\n`;
 
-        // Replace the worksheet's declared !ref with a tight range covering
-        // only real cells. This bounds sheet_to_csv to the actual data and
-        // prevents the formal-dimension explosion.
-        const tightRange = this.computeUsedRange(worksheet);
-        if (tightRange) {
-          const tightRef = XLSX.utils.encode_range(tightRange);
-          worksheet["!ref"] = tightRef;
-          allText += `Range: ${tightRef} (${
-            tightRange.e.r - tightRange.s.r + 1
-          } rows × ${tightRange.e.c - tightRange.s.c + 1} cols)\n\n`;
-        } else {
-          // Drop !ref entirely so sheet_to_csv emits nothing rather than
-          // honoring a stale declared dimension over an empty sheet.
-          delete worksheet["!ref"];
+        // Compact the worksheet to its real used range (bounds every later
+        // !ref walk to actual data; rejects pathological sheets via the
+        // shared cell budget). Identity for contiguous, unpruned data.
+        compactWorksheet(worksheet, { filename: sheetName });
+        const ref = worksheet["!ref"];
+        if (ref) {
+          const range = XLSX.utils.decode_range(ref);
+          allText += `Range: ${ref} (${range.e.r - range.s.r + 1} rows × ${
+            range.e.c - range.s.c + 1
+          } cols)\n\n`;
         }
 
-        const csvText = tightRange
+        const csvText = ref
           ? XLSX.utils.sheet_to_csv(worksheet, {
               blankrows: true,
               skipHidden: false,
@@ -3393,6 +3350,9 @@ export class FileContentExtractionService {
         },
       };
     } catch (error) {
+      if (error instanceof OversizedSubmissionError) {
+        throw error;
+      }
       const errorMessage =
         typeof error === "object" && error !== null && "message" in error
           ? (error as { message: string }).message
