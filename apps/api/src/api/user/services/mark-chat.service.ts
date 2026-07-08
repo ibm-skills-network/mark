@@ -29,6 +29,10 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { z } from "zod";
 import { ChatRepository } from "../repositories/chat.repository";
+import {
+  collectToolResultsAcrossSteps,
+  partitionClientExecutions,
+} from "./chat-tool-results";
 import { ChatService } from "./chat.service";
 
 type MarkChatRole = "system" | "user" | "assistant";
@@ -377,12 +381,13 @@ export class MarkChatService {
       maxOutputTokens,
     });
 
-    const functionResults =
-      result.toolResults?.map((toolResult) => ({
+    const functionResults = collectToolResultsAcrossSteps(result.steps).map(
+      (toolResult) => ({
         tool_call_id: toolResult.toolCallId,
         function_name: toolResult.toolName,
         result: toolResult.output,
-      })) || [];
+      }),
+    );
 
     const replyText = result.text || "I'm not sure how to respond to that.";
     const reply = formattedConversation.contextTrimmed
@@ -506,47 +511,11 @@ export class MarkChatService {
         }
       }
 
-      const trackedClientExecutions: { function: string; params: any }[] = [];
-      const nonClientToolOutputs: Array<{
-        toolName?: string;
-        rawResult: string;
-      }> = [];
-      const toolResults = await result.toolResults;
-      const resolvedToolResults = Array.isArray(toolResults) ? toolResults : [];
-      for (const toolResult of resolvedToolResults) {
-        if (!toolResult || toolResult.output === undefined) continue;
-
-        const rawResult =
-          typeof toolResult.output === "string"
-            ? toolResult.output
-            : JSON.stringify(toolResult.output);
-
-        if (typeof rawResult !== "string" || rawResult.length === 0) continue;
-
-        try {
-          const parsedResult = JSON.parse(rawResult) as {
-            clientExecution?: boolean;
-            function?: string;
-            params?: unknown;
-          };
-          if (parsedResult?.clientExecution && parsedResult.function) {
-            trackedClientExecutions.push({
-              function: parsedResult.function,
-              params: parsedResult.params,
-            });
-            continue;
-          }
-        } catch {
-          // Non-JSON tool output is expected for content tools.
-        }
-
-        // Do not stream raw tool output to users.
-        // The model should synthesize tool results into natural language.
-        nonClientToolOutputs.push({
-          toolName: toolResult.toolName,
-          rawResult,
-        });
-      }
+      // Do not stream raw tool output to users.
+      // The model should synthesize tool results into natural language.
+      const steps = await result.steps;
+      const { trackedClientExecutions, nonClientToolOutputs } =
+        partitionClientExecutions(collectToolResultsAcrossSteps(steps));
 
       if (!fullContent.trim() && nonClientToolOutputs.length > 0) {
         const fallback = this.buildToolOnlyFallback(nonClientToolOutputs);
@@ -807,6 +776,7 @@ TOOL USAGE:
 - Use provideFeedback for sharing general feedback about teaching experience
 - Use submitSuggestion for platform or teaching tool improvement ideas
 - Use submitInquiry for general questions or inquiries
+- reportIssue, provideFeedback, submitSuggestion, and submitInquiry only OPEN a pre-filled form — nothing is submitted until the user submits the form. After calling one, ask the user to review and submit the form. NEVER claim the report, feedback, suggestion, or inquiry was already submitted.
 
 IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
 
@@ -884,6 +854,7 @@ TOOL USAGE:
 - Use provideFeedback for sharing general feedback about learning experience
 - Use submitSuggestion for platform improvement ideas
 - Use submitInquiry for general questions or inquiries
+- reportIssue, provideFeedback, submitSuggestion, and submitInquiry only OPEN a pre-filled form — nothing is submitted until the user submits the form. After calling one, ask the user to review and submit the form. NEVER claim the report, feedback, suggestion, or inquiry was already submitted.
 
 IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
 
@@ -909,6 +880,23 @@ FILE LINK WORKFLOW:
 - For report/feedback/suggestion/inquiry form prefills, use only the user’s latest request. Do not include unrelated file lists.`;
 
     return (systemPrompts[userRole] || "") + fileToolGuidance;
+  }
+
+  /**
+   * Report/feedback/suggestion/inquiry tools only open a pre-filled form on
+   * the client — nothing is filed until the user submits it. The note rides
+   * along in the tool result so the model doesn't tell the user the report
+   * was already submitted.
+   */
+  private showReportPreviewResult(
+    formParameters: Record<string, unknown>,
+  ): string {
+    return JSON.stringify({
+      clientExecution: true,
+      function: "showReportPreview",
+      params: formParameters,
+      note: "A pre-filled form was opened in the chat window, but NOTHING has been submitted yet. Ask the user to review the form and press Submit to file it. Do not claim the report, feedback, suggestion, or inquiry was already submitted.",
+    });
   }
 
   private sanitizePrefillDescription(description: string): string {
@@ -1224,7 +1212,7 @@ FILE LINK WORKFLOW:
       },
       reportIssue: {
         description:
-          "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
+          "Open a pre-filled issue-report form for a technical issue or bug with the platform. The issue is only reported once the user reviews and submits the form. Extract the user's issue description and use it to prefill the form.",
         inputSchema: z.object({
           issueType: z
             .enum(["technical", "content", "grading", "other"])
@@ -1258,23 +1246,19 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              issueType,
-              description: sanitizedDescription,
-              assignmentId,
-              severity: severity || "info",
-              userRole: "author",
-              category: "Author Issue",
-            },
+          return this.showReportPreviewResult({
+            issueType,
+            description: sanitizedDescription,
+            assignmentId,
+            severity: severity || "info",
+            userRole: "author",
+            category: "Author Issue",
           });
         },
       },
       provideFeedback: {
         description:
-          "Provide general feedback about the teaching experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+          "Open a pre-filled feedback form about the teaching experience or platform. The feedback is only sent once the user reviews and submits the form. Extract the user's feedback text and use it as the description to prefill the form.",
         inputSchema: z.object({
           feedbackType: z
             .enum(["general", "assignment", "grading", "experience"])
@@ -1308,24 +1292,20 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "feedback",
-              issueType: "FEEDBACK",
-              description: sanitizedDescription,
-              assignmentId,
-              rating,
-              userRole: "author",
-              category: "Author Feedback",
-            },
+          return this.showReportPreviewResult({
+            type: "feedback",
+            issueType: "FEEDBACK",
+            description: sanitizedDescription,
+            assignmentId,
+            rating,
+            userRole: "author",
+            category: "Author Feedback",
           });
         },
       },
       submitSuggestion: {
         description:
-          "Submit suggestions for improving the platform or teaching tools. Extract the user's suggestion text and use it as the description to prefill the form.",
+          "Open a pre-filled suggestion form for improving the platform or teaching tools. The suggestion is only sent once the user reviews and submits the form. Extract the user's suggestion text and use it as the description to prefill the form.",
         inputSchema: z.object({
           suggestionType: z
             .enum(["feature", "content", "ui", "general"])
@@ -1351,23 +1331,19 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "suggestion",
-              issueType: "SUGGESTION",
-              description: sanitizedDescription,
-              assignmentId,
-              userRole: "author",
-              category: "Author Suggestion",
-            },
+          return this.showReportPreviewResult({
+            type: "suggestion",
+            issueType: "SUGGESTION",
+            description: sanitizedDescription,
+            assignmentId,
+            userRole: "author",
+            category: "Author Suggestion",
           });
         },
       },
       submitInquiry: {
         description:
-          "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+          "Open a pre-filled inquiry form for general questions about the platform or assignments. The inquiry is only sent once the user reviews and submits the form. Extract the user's question text and use it as the description to prefill the form.",
         inputSchema: z.object({
           inquiryType: z
             .enum(["general", "technical", "academic", "other"])
@@ -1393,17 +1369,13 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "inquiry",
-              issueType: "OTHER",
-              description: sanitizedDescription,
-              assignmentId,
-              userRole: "author",
-              category: "Author Inquiry",
-            },
+          return this.showReportPreviewResult({
+            type: "inquiry",
+            issueType: "OTHER",
+            description: sanitizedDescription,
+            assignmentId,
+            userRole: "author",
+            category: "Author Inquiry",
           });
         },
       },
@@ -1433,7 +1405,7 @@ FILE LINK WORKFLOW:
       },
       reportIssue: {
         description:
-          "Report a technical issue or bug with the platform. Extract the user's issue description and use it to prefill the form.",
+          "Open a pre-filled issue-report form for a technical issue or bug with the platform. The issue is only reported once the user reviews and submits the form. Extract the user's issue description and use it to prefill the form.",
         inputSchema: z.object({
           issueType: z
             .enum(["technical", "content", "grading", "other"])
@@ -1467,24 +1439,20 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "report",
-              issueType,
-              description: sanitizedDescription,
-              assignmentId,
-              severity: severity || "info",
-              userRole: "learner",
-              category: "Learner Issue",
-            },
+          return this.showReportPreviewResult({
+            type: "report",
+            issueType,
+            description: sanitizedDescription,
+            assignmentId,
+            severity: severity || "info",
+            userRole: "learner",
+            category: "Learner Issue",
           });
         },
       },
       provideFeedback: {
         description:
-          "Provide general feedback about the learning experience or platform. Extract the user's feedback text and use it as the description to prefill the form.",
+          "Open a pre-filled feedback form about the learning experience or platform. The feedback is only sent once the user reviews and submits the form. Extract the user's feedback text and use it as the description to prefill the form.",
         inputSchema: z.object({
           feedbackType: z
             .enum(["general", "assignment", "grading", "experience"])
@@ -1518,24 +1486,20 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "feedback",
-              issueType: "FEEDBACK",
-              description: sanitizedDescription,
-              assignmentId,
-              rating,
-              userRole: "learner",
-              category: "Learner Feedback",
-            },
+          return this.showReportPreviewResult({
+            type: "feedback",
+            issueType: "FEEDBACK",
+            description: sanitizedDescription,
+            assignmentId,
+            rating,
+            userRole: "learner",
+            category: "Learner Feedback",
           });
         },
       },
       submitSuggestion: {
         description:
-          "Submit suggestions for improving the platform or assignments. Extract the user's suggestion text and use it as the description to prefill the form.",
+          "Open a pre-filled suggestion form for improving the platform or assignments. The suggestion is only sent once the user reviews and submits the form. Extract the user's suggestion text and use it as the description to prefill the form.",
         inputSchema: z.object({
           suggestionType: z
             .enum(["feature", "content", "ui", "general"])
@@ -1561,23 +1525,19 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "suggestion",
-              issueType: "SUGGESTION",
-              description: sanitizedDescription,
-              assignmentId,
-              userRole: "learner",
-              category: "Learner Suggestion",
-            },
+          return this.showReportPreviewResult({
+            type: "suggestion",
+            issueType: "SUGGESTION",
+            description: sanitizedDescription,
+            assignmentId,
+            userRole: "learner",
+            category: "Learner Suggestion",
           });
         },
       },
       submitInquiry: {
         description:
-          "Submit general questions or inquiries about the platform or assignments. Extract the user's question text and use it as the description to prefill the form.",
+          "Open a pre-filled inquiry form for general questions about the platform or assignments. The inquiry is only sent once the user reviews and submits the form. Extract the user's question text and use it as the description to prefill the form.",
         inputSchema: z.object({
           inquiryType: z
             .enum(["general", "technical", "academic", "other"])
@@ -1603,17 +1563,13 @@ FILE LINK WORKFLOW:
         }) => {
           const sanitizedDescription =
             this.sanitizePrefillDescription(description);
-          return JSON.stringify({
-            clientExecution: true,
-            function: "showReportPreview",
-            params: {
-              type: "inquiry",
-              issueType: "OTHER",
-              description: sanitizedDescription,
-              assignmentId,
-              userRole: "learner",
-              category: "Learner Inquiry",
-            },
+          return this.showReportPreviewResult({
+            type: "inquiry",
+            issueType: "OTHER",
+            description: sanitizedDescription,
+            assignmentId,
+            userRole: "learner",
+            category: "Learner Inquiry",
           });
         },
       },

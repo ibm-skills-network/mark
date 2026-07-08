@@ -1,0 +1,76 @@
+{{- if .Values.ltiSyncDrain.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "mark-jobs.fullname" . }}-lti-sync-drain
+  labels:
+    {{- include "mark-jobs.labels" . | nindent 4 }}
+    app: lti-sync-drain
+spec:
+  schedule: {{ .Values.ltiSyncDrain.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 7200
+      template:
+        metadata:
+          annotations:
+            kubectl.kubernetes.io/default-container: drain
+          labels:
+            {{- include "mark-jobs.labels" . | nindent 12 }}
+            app: lti-sync-drain
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            {{- include "mark-jobs.imagePullSecrets" . | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: drain
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - node
+                - /scripts/lti-sync-drain.js
+                - --execute
+                - --all
+                - --concurrency={{ .Values.ltiSyncDrain.concurrency }}
+              env:
+                - name: API_BASE
+                  value: {{ .Values.ltiSyncDrain.apiBase | quote }}
+                - name: NODE_PATH
+                  value: /usr/src/app/node_modules
+              envFrom:
+                - secretRef:
+                    name: {{ include "mark-jobs.fullname" . }}-secrets
+              workingDir: /usr/src/app
+              resources:
+                {{- toYaml .Values.ltiSyncDrain.resources | nindent 16 }}
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: drain-script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: drain-script
+              configMap:
+                name: {{ include "mark-jobs.fullname" . }}-lti-sync-drain-script
+            - name: tmp
+              emptyDir: {}
+{{- end }}
