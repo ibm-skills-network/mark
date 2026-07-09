@@ -346,7 +346,8 @@ export const useQuestionsAreReadyToBePublished = (
       }
       if (
         !assignmentConfig.displayOrder &&
-        assignmentConfig.numberOfQuestionsPerAttempt !== null
+        assignmentConfig.numberOfQuestionsPerAttempt !== null &&
+        assignmentConfig.numberOfQuestionsPerAttempt !== undefined
       ) {
         message = `Question order is required.`;
         debugLog(message);

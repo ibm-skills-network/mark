@@ -25,6 +25,29 @@ const AI_GRADED_QUESTION_TYPES = new Set(["TEXT", "URL", "UPLOAD"]);
 const isAiGradedQuestion = (question: QuestionStore): boolean =>
   AI_GRADED_QUESTION_TYPES.has(question.type ?? "");
 
+const shuffleItems = <T,>(items: T[]): T[] => {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+  return shuffled;
+};
+
+const maybeShuffleChoices = (question: QuestionStore): QuestionStore => {
+  if (!question.randomizedChoices || !Array.isArray(question.choices)) {
+    return question;
+  }
+
+  return {
+    ...question,
+    choices: shuffleItems(question.choices),
+  };
+};
+
 interface ClientLearnerLayoutProps {
   assignmentId: number;
   role?: "learner" | "author";
@@ -114,24 +137,39 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   // Content-based dep: `allQuestions` is a fresh array each render (re-parsed
   // from localStorage), so we key the memo on the question id list instead of
   // the array ref — otherwise the shuffle would re-run on every render.
-  const questionIdsKey = allQuestions.map((q) => q.id).join("|");
+  const questionShuffleKey = allQuestions
+    .map(
+      (q) => {
+        const choicesKey = Array.isArray(q.choices)
+          ? q.choices
+              .map((choice) =>
+                typeof choice === "object" && choice !== null
+                  ? `${choice.choice}:${choice.points}:${choice.isCorrect}:${choice.feedback ?? ""}`
+                  : String(choice),
+              )
+              .join("~")
+          : "";
+
+        return `${q.id}:${q.randomizedChoices === true}:${choicesKey}`;
+      },
+    )
+    .join("|");
   const questions: QuestionStore[] = useMemo(() => {
     const shouldShuffle =
       displayOrder === "RANDOM" ||
       (numberOfQuestionsPerAttempt !== null && numberOfQuestionsPerAttempt > 0);
 
-    if (!shouldShuffle) return allQuestions;
+    if (!shouldShuffle) return allQuestions.map(maybeShuffleChoices);
 
-    const pool = [...allQuestions];
-    for (let index = pool.length - 1; index > 0; index--) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
-    }
+    const pool = shuffleItems(allQuestions);
 
-    return numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
+    const selectedQuestions =
+      numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
       ? pool.slice(0, numberOfQuestionsPerAttempt)
       : pool;
-  }, [questionIdsKey, displayOrder, numberOfQuestionsPerAttempt]);
+
+    return selectedQuestions.map(maybeShuffleChoices);
+  }, [questionShuffleKey, displayOrder, numberOfQuestionsPerAttempt]);
   useEffect(() => {
     if (!assignmentDetails) return;
 

@@ -948,6 +948,48 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
     });
 
+    it("returns the grade even when showAssignmentScore is false", async () => {
+      // The author is testing their own quiz: hiding the learner-facing score
+      // must not hide the preview grade, otherwise a perfect run renders as 0%.
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        questions: [],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: false,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+      });
+
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [{ id: 1, question: "Preview response" }],
+        authorQuestions: [{ id: 1, totalPoints: 1 }],
+      };
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({ questionId: 1, totalPoints: 1, metadata: undefined }),
+      ]);
+      mockGradingService.calculateGradeForAuthor.mockReturnValue({
+        grade: 1,
+        totalPointsEarned: 1,
+        totalPossiblePoints: 1,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        -1,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "",
+        false,
+        authorRequest as UpdateAttemptRequest,
+      );
+
+      expect(result.grade).toBe(1);
+      expect(result.totalPointsEarned).toBe(1);
+      expect(result.totalPossiblePoints).toBe(1);
+    });
+
     it("throws when preview responses reference questions missing from provided draft questions", async () => {
       const updateDto = {
         submitted: true,

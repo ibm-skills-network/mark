@@ -342,6 +342,10 @@ function LearnerHeader() {
         setTotalPointsPossible(res.totalPossiblePoints);
         if (grade !== undefined) {
           setGrade(grade * 100);
+        } else {
+          // No grade on this submission (score hidden): clear any grade left
+          // from a previous attempt so the success page doesn't show it.
+          setGrade(null);
         }
         if (role === "learner") {
           setShowSubmissionFeedback(res.showSubmissionFeedback);
