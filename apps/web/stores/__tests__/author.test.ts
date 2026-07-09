@@ -17,7 +17,6 @@ const makeQuestion = (id: number, index: number): QuestionAuthorStore => ({
   alreadyInBackend: true,
   answer: null,
   assignmentId: 1,
-  gradingContextQuestionIds: [],
   randomizedChoices: false,
 });
 
@@ -92,7 +91,7 @@ describe("hydrateAuthorStore", () => {
   });
 
   it("clears hasUnsavedChanges even when the store was dirty before", () => {
-    useAuthorStore.getState().setDataFromBackend({ name: "Dirty" });
+    useAuthorStore.getState().setDataFromBackend({ introduction: "Dirty" });
     expect(useAuthorStore.getState().hasUnsavedChanges).toBe(true);
 
     useAuthorStore.getState().hydrateAuthorStore({

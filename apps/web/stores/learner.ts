@@ -494,7 +494,19 @@ export const useLearnerOverviewStore = createWithEqualityFn<
         listOfAttempts: [],
         assignmentId: null,
         setListOfAttempts: (listOfAttempts) => set({ listOfAttempts }),
-        setAssignmentId: (assignmentId) => set({ assignmentId }),
+        setAssignmentId: (assignmentId) => {
+          set({ assignmentId });
+          // Drop details held in memory for a different assignment so the
+          // header never shows the previous assignment's title while the
+          // new one is fetching.
+          const { assignmentDetails } = useAssignmentDetails.getState();
+          if (assignmentDetails && assignmentDetails.id !== assignmentId) {
+            useAssignmentDetails.setState({
+              assignmentDetails: null,
+              grade: null,
+            });
+          }
+        },
         assignmentName: "",
         setAssignmentName: (assignmentName) => set({ assignmentName }),
         languageModalTriggered: true,
@@ -1036,7 +1048,9 @@ export const useAssignmentDetails = createWithEqualityFn<
       },
     ),
     {
-      name: "assignmentDetails",
+      // Scoped per assignment like the other learner stores — a static key
+      // rehydrates the previously viewed assignment's details (stale title).
+      name: `assignmentDetails-${ASSIGNMENT_ID}`,
       storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
         assignmentDetails: state.assignmentDetails,

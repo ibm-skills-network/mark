@@ -17,7 +17,6 @@ const makeQuestion = (id: number, index: number): QuestionAuthorStore => ({
   alreadyInBackend: true,
   answer: null,
   assignmentId: 1,
-  gradingContextQuestionIds: [],
   randomizedChoices: false,
 });
 
