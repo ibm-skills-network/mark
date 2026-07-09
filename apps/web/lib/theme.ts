@@ -1,8 +1,10 @@
 export type Theme = "light" | "dark" | "system";
 
-export const THEME_STORAGE_KEY = "theme";
+// Namespaced so a generic "theme" key written by another app on the same
+// origin (common on localhost during development) is never honored.
+export const THEME_STORAGE_KEY = "mark-theme";
 export const THEME_CHANGED_EVENT = "theme-changed";
-export const DEFAULT_THEME: Theme = "system";
+export const DEFAULT_THEME: Theme = "light";
 
 const VALID_THEMES = new Set<Theme>(["light", "dark", "system"]);
 
@@ -10,7 +12,7 @@ export function isTheme(value: string | null | undefined): value is Theme {
   return Boolean(value && VALID_THEMES.has(value as Theme));
 }
 
-/** The persisted preference, or DEFAULT_THEME ("system") when unset/invalid. */
+/** The persisted preference, or DEFAULT_THEME ("light") when unset/invalid. */
 export function getStoredTheme(): Theme {
   if (typeof window === "undefined") return DEFAULT_THEME;
   let stored: string | null = null;

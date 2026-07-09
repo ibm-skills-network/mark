@@ -65,9 +65,10 @@ ineum('trackSessions');
 ineum('autoPageDetection', { titleAsPageName: true });`
     : null;
 
-  // Any stored value other than "light"/"dark" (unset, "system", legacy or
-  // corrupted writes) falls back to the OS scheme, mirroring getStoredTheme.
-  const themeBootstrapScript = `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var e=document.documentElement;e.classList.toggle("dark",d);e.setAttribute("data-color-mode",d?"dark":"light");}catch(e){}})();`;
+  // Dark only when explicitly stored as "dark", or stored as "system" and the
+  // OS prefers dark. Anything else (unset, legacy or corrupted writes) stays
+  // light, mirroring getStoredTheme's DEFAULT_THEME fallback.
+  const themeBootstrapScript = `(function(){try{var t=localStorage.getItem("mark-theme");var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var e=document.documentElement;e.classList.toggle("dark",d);e.setAttribute("data-color-mode",d?"dark":"light");}catch(e){}})();`;
 
   return (
     <html

@@ -50,6 +50,17 @@ describe("theme", () => {
       expect(getStoredTheme()).toBe(DEFAULT_THEME);
     });
 
+    it("defaults to light even when the OS prefers dark", () => {
+      mockPrefersDark(true);
+      expect(getStoredTheme()).toBe("light");
+      expect(resolveDark(getStoredTheme())).toBe(false);
+    });
+
+    it("ignores a value under the generic 'theme' key another app wrote", () => {
+      window.localStorage.setItem("theme", "dark");
+      expect(getStoredTheme()).toBe("light");
+    });
+
     it("returns the default when the stored value is invalid", () => {
       window.localStorage.setItem(THEME_STORAGE_KEY, "neon");
       expect(getStoredTheme()).toBe(DEFAULT_THEME);
