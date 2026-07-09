@@ -171,5 +171,40 @@ describe("JwtCookieStrategy", () => {
       expect(configService.jwtConstants).toBeDefined();
       expect(configService.jwtConstants.secret).toBe("test-secret");
     });
+
+    it("authenticates the newest session when duplicate authentication cookies are sent", (done) => {
+      const jwt = require("jsonwebtoken");
+      const now = Math.floor(Date.now() / 1000);
+      const makeSession = (userID: string, assignmentID: number, iat: number) =>
+        jwt.sign(
+          { userID, role: UserRole.LEARNER, assignmentID, iat },
+          "test-secret",
+          { expiresIn: "1h" },
+        );
+      // Browser sends duplicates oldest-first (RFC 6265): the stale session
+      // arrives before the fresh launch's cookie.
+      const stale = makeSession("stale@example.com", 2477, now - 3 * 86_400);
+      const fresh = makeSession("fresh@example.com", 1817, now);
+      const request: any = {
+        headers: { cookie: `authentication=${stale}; authentication=${fresh}` },
+        cookies: { authentication: stale }, // cookie-parser keeps the first
+        method: "GET",
+        path: "/api/v1/user-session",
+      };
+
+      strategy.authenticate = Object.getPrototypeOf(strategy).authenticate;
+      strategy.success = (user: any) => {
+        try {
+          expect(user.userId).toBe("fresh@example.com");
+          expect(user.assignmentId).toBe(1817);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      };
+      strategy.fail = (info: any) => done(new Error(`auth failed: ${info}`));
+      strategy.error = (error: any) => done(error);
+      strategy.authenticate(request, {});
+    });
   });
 });

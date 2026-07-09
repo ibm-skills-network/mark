@@ -23,6 +23,7 @@ import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
+import { logAiInvocation } from "src/api/llm/core/utils/ai-invocation-log.util";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { ChatRole, Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -390,6 +391,15 @@ export class MarkChatService {
     );
 
     const replyText = result.text || "I'm not sure how to respond to that.";
+
+    logAiInvocation(this.logger, {
+      modelKey: chatModel,
+      purpose: "chat_assistant",
+      prompt: userText,
+      response: replyText,
+      context: { chat_id: chatId, user_role: userRole, mode: "respond" },
+    });
+
     const reply = formattedConversation.contextTrimmed
       ? `${CONTEXT_WINDOW_WARNING}\n\n${replyText}`
       : replyText;
@@ -527,6 +537,14 @@ export class MarkChatService {
         const marker = `\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`;
         writeChunk(marker);
       }
+
+      logAiInvocation(this.logger, {
+        modelKey: chatModel,
+        purpose: "chat_assistant",
+        prompt: userText,
+        response: fullContent,
+        context: { chat_id: chatId, user_role: userRole, mode: "stream" },
+      });
 
       const hasContent = fullContent.trim().length > 0;
       const hasToolCalls = trackedClientExecutions.length > 0;

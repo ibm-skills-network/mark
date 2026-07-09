@@ -21,6 +21,7 @@ import { Request, Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
+import { dedupeAuthenticationCookieHeader } from "../auth/jwt/cookie-based/jwt.cookie.extractor";
 import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
 import { sanitizeForLog } from "../logger/sanitize";
@@ -119,6 +120,19 @@ export class ApiService {
           "user-session": JSON.stringify(request.user),
           "Cache-Control": "no-cache",
         };
+
+        // When the browser holds duplicate `authentication` cookies (Lax vs
+        // Partitioned jars), forward only the one this gateway authenticated
+        // with. mark-api re-reads the cookie itself (e.g. as the LTI
+        // grade-callback credential) and must not pick a different, stale
+        // session via cookie-parser's first-wins. Lowercase key so it
+        // overrides the client's `cookie` header in normalizeOutgoingHeaders.
+        const dedupedCookieHeader = dedupeAuthenticationCookieHeader(
+          request.headers?.cookie,
+        );
+        if (dedupedCookieHeader !== undefined) {
+          extraHeaders.cookie = dedupedCookieHeader;
+        }
         break;
       }
       case DownstreamService.LTI_CREDENTIAL_MANAGER: {

@@ -16,6 +16,7 @@ import { USAGE_TRACKER } from "../../llm.constants";
 import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
+import { logAiInvocation } from "../utils/ai-invocation-log.util";
 import { LlmRouter } from "./llm-router.service";
 
 @Injectable()
@@ -57,6 +58,7 @@ export class PromptProcessorService implements IPromptProcessor {
         usageType,
         llm,
         options,
+        featureKey,
       );
     } catch (error) {
       this.logger.error(
@@ -100,6 +102,13 @@ export class PromptProcessorService implements IPromptProcessor {
         schema,
         options,
       );
+      logAiInvocation(this.logger, {
+        modelKey: llm.key,
+        purpose: featureKey,
+        prompt: input,
+        response: JSON.stringify(parsed),
+        context: { assignment_id: assignmentId, usage_type: usageType },
+      });
       await this.trackUsageSafely(
         assignmentId,
         usageType,
@@ -122,6 +131,7 @@ export class PromptProcessorService implements IPromptProcessor {
       usageType,
       llm,
       options,
+      featureKey,
     );
     const parser = StructuredOutputParser.fromZodSchema(schema);
     return (await parser.parse(raw)) as T;
@@ -180,6 +190,7 @@ export class PromptProcessorService implements IPromptProcessor {
     usageType: AIUsageType,
     llm: any,
     options?: LlmRequestOptions,
+    purposeLabel?: string,
   ): Promise<string> {
     let input: string;
 
@@ -247,6 +258,14 @@ export class PromptProcessorService implements IPromptProcessor {
 
     const response = this.cleanResponse(result.content);
 
+    logAiInvocation(this.logger, {
+      modelKey: llm.key,
+      purpose: purposeLabel ?? usageType,
+      prompt: input,
+      response,
+      context: { assignment_id: assignmentId, usage_type: usageType },
+    });
+
     await this.trackUsageSafely(
       assignmentId,
       usageType,
@@ -310,6 +329,14 @@ export class PromptProcessorService implements IPromptProcessor {
       );
 
       const response = this.cleanResponse(result.content);
+
+      logAiInvocation(this.logger, {
+        modelKey: llm.key,
+        purpose: usageType,
+        prompt: `${textContent} [image omitted]`,
+        response,
+        context: { assignment_id: assignmentId, usage_type: usageType },
+      });
 
       await this.trackUsageSafely(
         assignmentId,
