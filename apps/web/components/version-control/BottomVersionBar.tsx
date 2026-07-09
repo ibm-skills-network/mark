@@ -594,7 +594,7 @@ export function BottomVersionBar() {
               className="group flex items-center space-x-2 px-4 py-2.5 text-sm font-medium bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-white dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200 border border-gray-200/60 dark:border-gray-700/60 hover:border-indigo-300/60 hover:shadow-md backdrop-blur-sm"
             >
               <GitMerge className="h-4 w-4 group-hover:scale-110 group-hover:text-indigo-600 transition-all" />
-              <span className="hidden sm:inlin">Version History</span>
+              <span className="hidden sm:inline">Version History</span>
             </button>
           </div>
         </div>

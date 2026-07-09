@@ -65,10 +65,20 @@ ineum('trackSessions');
 ineum('autoPageDetection', { titleAsPageName: true });`
     : null;
 
-  const themeBootstrapScript = `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||((t===null||t==="system")&&window.matchMedia("(prefers-color-scheme: dark)").matches);var e=document.documentElement;e.classList.toggle("dark",d);e.setAttribute("data-color-mode",d?"dark":"light");}catch(e){}})();`;
+  // Any stored value other than "light"/"dark" (unset, "system", legacy or
+  // corrupted writes) falls back to the OS scheme, mirroring getStoredTheme.
+  const themeBootstrapScript = `(function(){try{var t=localStorage.getItem("theme");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var e=document.documentElement;e.classList.toggle("dark",d);e.setAttribute("data-color-mode",d?"dark":"light");}catch(e){}})();`;
 
   return (
-    <html lang="en" className="h-full">
+    <html
+      lang="en"
+      className="h-full"
+      // SSR fallback so @uiw markdown surfaces stay light when the bootstrap
+      // script can't run (blocked inline scripts, storage errors, no JS).
+      data-color-mode="light"
+      // The bootstrap script mutates class/data-color-mode before hydration.
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
         {instanaBootstrapScript ? (
@@ -85,10 +95,7 @@ ineum('autoPageDetection', { titleAsPageName: true });`
           </>
         ) : null}
       </head>
-      <body
-        className={`${inter.className} h-full m-0 p-0`}
-        suppressHydrationWarning
-      >
+      <body className={`${inter.className} h-full m-0 p-0`}>
         <LayoutContent>{children}</LayoutContent>
       </body>
     </html>

@@ -37,30 +37,36 @@ createTheme("whiteVioletTheme", {
   },
 });
 
-createTheme("darkVioletTheme", {
-  text: {
-    primary: "#E5E7EB",
-    secondary: "#9CA3AF",
+// The third argument makes unset tokens (pagination buttons, selected rows,
+// disabled text) inherit the library's dark defaults instead of the light ones.
+createTheme(
+  "darkVioletTheme",
+  {
+    text: {
+      primary: "#E5E7EB",
+      secondary: "#9CA3AF",
+    },
+    background: {
+      default: "#111827",
+    },
+    context: {
+      background: "#312E81",
+      text: "#E0E7FF",
+    },
+    divider: {
+      default: "#374151",
+    },
+    highlightOnHover: {
+      default: "#1F2937",
+      text: "#E0E7FF",
+    },
+    striped: {
+      default: "#1F2937",
+      text: "#E5E7EB",
+    },
   },
-  background: {
-    default: "#111827",
-  },
-  context: {
-    background: "#312E81",
-    text: "#E0E7FF",
-  },
-  divider: {
-    default: "#374151",
-  },
-  highlightOnHover: {
-    default: "#1F2937",
-    text: "#E0E7FF",
-  },
-  striped: {
-    default: "#1F2937",
-    text: "#E5E7EB",
-  },
-});
+  "dark",
+);
 
 interface AttemptTableRow {
   id: number;

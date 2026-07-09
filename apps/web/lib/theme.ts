@@ -13,7 +13,14 @@ export function isTheme(value: string | null | undefined): value is Theme {
 /** The persisted preference, or DEFAULT_THEME ("system") when unset/invalid. */
 export function getStoredTheme(): Theme {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    // Touching localStorage throws SecurityError in storage-blocked
+    // third-party iframes (LTI/ALM embeds); fall back to the default
+    // rather than crashing the tree.
+  }
   return isTheme(stored) ? stored : DEFAULT_THEME;
 }
 
@@ -46,7 +53,12 @@ export function applyTheme(theme: Theme): void {
 /** Persist a theme preference, apply it, and notify other listeners. */
 export function setStoredTheme(theme: Theme): void {
   if (typeof window === "undefined" || !isTheme(theme)) return;
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Storage can be blocked (third-party iframe) or full; the preference
+    // won't persist, but the theme still applies for this page view.
+  }
   applyTheme(theme);
   window.dispatchEvent(
     new CustomEvent<Theme>(THEME_CHANGED_EVENT, { detail: theme }),

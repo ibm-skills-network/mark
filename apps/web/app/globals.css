@@ -86,48 +86,6 @@ body .w-md-editor-text-input {
   @apply !text-base;
 }
 
-/* Dark mode */
-.dark .ql-toolbar.ql-snow,
-.dark .ql-container.ql-snow {
-  border-color: #374151;
-}
-.dark .ql-container.ql-snow {
-  background-color: #111827;
-}
-.dark .ql-editor {
-  color: #e5e7eb;
-}
-.dark .ql-editor.ql-blank::before {
-  color: #9ca3af;
-}
-.dark .ql-snow .ql-stroke {
-  stroke: #d1d5db;
-}
-.dark .ql-snow .ql-fill,
-.dark .ql-snow .ql-stroke.ql-fill {
-  fill: #d1d5db;
-}
-.dark .ql-snow .ql-picker {
-  color: #d1d5db;
-}
-.dark .ql-snow .ql-picker-options {
-  background-color: #1f2937;
-  border-color: #374151;
-}
-.dark .ql-snow.ql-toolbar button:hover .ql-stroke,
-.dark .ql-snow.ql-toolbar button.ql-active .ql-stroke {
-  stroke: #a78bfa;
-}
-.dark .ql-snow.ql-toolbar button:hover .ql-fill,
-.dark .ql-snow.ql-toolbar button.ql-active .ql-fill {
-  fill: #a78bfa;
-}
-.dark .ql-snow.ql-toolbar button:hover,
-.dark .ql-snow.ql-toolbar button.ql-active,
-.dark .ql-snow .ql-picker-label:hover,
-.dark .ql-snow .ql-picker-item:hover {
-  color: #a78bfa;
-}
 /* Blur content when tab is not visible and preventScreenshot is on */
 body.assignment-blur {
   filter: blur(10px);
@@ -365,6 +323,16 @@ code {
 .quill-viewer .ql-container.ql-snow {
   border-color: #e5e7eb !important;
 }
+/* Quill dark mode — single source for all Quill dark styling. Generic
+   .ql-* rules cover every instance; the shell/viewer overrides need
+   !important only to beat the light-mode !important border rule above. */
+.dark .ql-toolbar.ql-snow,
+.dark .ql-container.ql-snow {
+  border-color: #374151;
+}
+.dark .ql-container.ql-snow {
+  background-color: #1f2937;
+}
 .dark .quill-editor-shell .ql-container.ql-snow,
 .dark .quill-editor-shell .ql-toolbar.ql-snow,
 .dark .quill-viewer .ql-container.ql-snow {
@@ -374,15 +342,46 @@ code {
   background-color: #1f2937;
   border-color: #374151;
 }
-.dark .quill-editor-shell .ql-container.ql-snow {
-  background-color: #1f2937;
-}
 .dark .quill-viewer .ql-container.ql-snow {
   background-color: transparent;
 }
 .dark .quill-editor-shell .ql-toolbar {
   background-color: #1f2937;
   border-bottom-color: #374151;
+}
+.dark .ql-editor {
+  color: #e5e7eb;
+}
+.dark .ql-editor.ql-blank::before {
+  color: #9ca3af;
+}
+.dark .ql-snow .ql-stroke {
+  stroke: #d1d5db;
+}
+.dark .ql-snow .ql-fill,
+.dark .ql-snow .ql-stroke.ql-fill {
+  fill: #d1d5db;
+}
+.dark .ql-snow .ql-picker {
+  color: #d1d5db;
+}
+.dark .ql-snow .ql-picker-options {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+.dark .ql-snow.ql-toolbar button:hover .ql-stroke,
+.dark .ql-snow.ql-toolbar button.ql-active .ql-stroke {
+  stroke: #a78bfa;
+}
+.dark .ql-snow.ql-toolbar button:hover .ql-fill,
+.dark .ql-snow.ql-toolbar button.ql-active .ql-fill {
+  fill: #a78bfa;
+}
+.dark .ql-snow.ql-toolbar button:hover,
+.dark .ql-snow.ql-toolbar button.ql-active,
+.dark .ql-snow .ql-picker-label:hover,
+.dark .ql-snow .ql-picker-item:hover {
+  color: #a78bfa;
 }
 .dark .quill-editor-shell .ql-editor code,
 .dark .quill-viewer .ql-editor code,

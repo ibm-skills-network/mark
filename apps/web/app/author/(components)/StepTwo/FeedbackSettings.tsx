@@ -139,7 +139,7 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
           />
 
           <div
-            className={`relative w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-violet-300 rounded-full peer ${showCorrectAnswers ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700"} transition-colors`}
+            className={`relative w-11 h-6 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-violet-300 rounded-full peer ${showCorrectAnswers ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700"} transition-colors`}
           >
             <div
               className={`absolute top-[2px] left-[2px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full h-5 w-5 transition-transform ${showCorrectAnswers ? "transform translate-x-5" : ""}`}

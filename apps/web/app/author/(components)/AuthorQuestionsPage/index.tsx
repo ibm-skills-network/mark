@@ -716,10 +716,10 @@ const AuthorQuestionsPage: FC<Props> = ({
           {...attributes}
         >
           <div
-            className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white dark:bg-gray-800 py-6 px-8 group border border-gray-400 dark:border-gray-600 w-full ${
+            className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white dark:bg-gray-800 py-6 px-8 group border w-full ${
               focusedQuestionId === question.id
                 ? "border-1 border-violet-600 shadow-md"
-                : "shadow-sm"
+                : "border-gray-400 dark:border-gray-600 shadow-sm"
             }`}
             onClick={(e) => {
               if (isInteractiveTarget(e.target)) return;

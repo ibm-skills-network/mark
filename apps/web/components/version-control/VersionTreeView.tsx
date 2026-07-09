@@ -820,9 +820,9 @@ export function VersionTreeView({ assignmentId }: Props) {
               {getFavoriteVersions().length > 0 && (
                 <button
                   onClick={() => setShowFavoritesModal(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors "
+                  className="flex items-center space-x-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
                 >
-                  <Star className="h-4 w-4 fill-current text-yellow-500" />
+                  <Star className="h-4 w-4 fill-current" />
                   <span>
                     Show Starred Versions ({getFavoriteVersions().length})
                   </span>
@@ -1805,11 +1805,11 @@ export function VersionTreeView({ assignmentId }: Props) {
               className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-gray-900 dark:to-gray-900">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                      <Star className="h-6 w-6 text-yellow-500 fill-current" />
+                    <div className="p-2 bg-yellow-200 dark:bg-yellow-900/30 rounded-lg">
+                      <Star className="h-6 w-6 text-yellow-600 dark:text-yellow-400 fill-current" />
                     </div>
                     <div>
                       <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -1858,14 +1858,14 @@ export function VersionTreeView({ assignmentId }: Props) {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.1 }}
-                            className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 hover:shadow-lg relative"
+                            className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-gray-900 dark:to-gray-900 rounded-lg p-6 border border-yellow-200 dark:border-gray-700 hover:border-yellow-300 dark:hover:border-gray-600 transition-all duration-200 hover:shadow-lg relative"
                           >
                             <div className="absolute top-3 right-3">
                               <button
                                 onClick={() =>
                                   toggleFavoriteVersion(version.id)
                                 }
-                                className="text-yellow-500 hover:text-yellow-600 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                                className="text-yellow-500 hover:text-yellow-600 transition-colors p-1 rounded-full hover:bg-yellow-100 dark:hover:bg-gray-700"
                                 title="Remove from favorites"
                               >
                                 <Star className="h-5 w-5 fill-current" />
@@ -1874,8 +1874,8 @@ export function VersionTreeView({ assignmentId }: Props) {
 
                             <div className="mb-4">
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                  <GitCommit className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                <div className="p-2 bg-yellow-200 dark:bg-yellow-900/30 rounded-lg">
+                                  <GitCommit className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                                 </div>
                                 <div>
                                   <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
@@ -1941,7 +1941,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                                   setShowFavoritesModal(false);
                                   handleViewDetails(version, false);
                                 }}
-                                className="flex items-center space-x-1 px-3 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md transition-colors"
+                                className="flex items-center space-x-1 px-3 py-2 text-sm font-medium bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors"
                               >
                                 <Eye className="h-4 w-4" />
                                 <span>Details</span>

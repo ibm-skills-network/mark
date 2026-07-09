@@ -475,11 +475,11 @@ const GithubModal: React.FC<{
                     <ArrowLeftIcon className="mr-1 h-5 w-5" />
                   </button>
                   <button
-                    className={`text-md font-semibold text-gray-800 dark:text-gray-100 truncate
+                    className={`text-md font-semibold truncate
                     ${
                       currentPath.length === 0
                         ? "text-violet-500"
-                        : "hover:text-violet-600"
+                        : "text-gray-800 dark:text-gray-100 hover:text-violet-600"
                     }
                       `}
                     onClick={() => fetchRepoContents(selectedRepo, [])}

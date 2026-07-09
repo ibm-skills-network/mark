@@ -853,7 +853,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           <MarkdownViewer
             className={`typography-body px-1 py-0.5 ${
               localQuestionTitle?.trim() === ""
-                ? "!text-gray-500 dark:text-gray-400"
+                ? "!text-gray-500 dark:!text-gray-400"
                 : "!text-black dark:!text-gray-100"
             }`}
           >

@@ -408,9 +408,9 @@ const SpecialActionUI = ({
               onClick={() => handleCreateQuestion("multiple-choice")}
               className={`text-xs py-1.5 px-3 ${
                 specialActions.data?.suggestedType === "multiple-choice"
-                  ? "bg-purple-200 text-purple-900"
-                  : "bg-purple-100 text-purple-800"
-              } hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 rounded-md transition-colors`}
+                  ? "bg-purple-200 text-purple-900 dark:bg-purple-700 dark:text-purple-100"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+              } hover:bg-purple-200 dark:hover:bg-purple-800 rounded-md transition-colors`}
             >
               Multiple Choice
             </button>
@@ -418,9 +418,9 @@ const SpecialActionUI = ({
               onClick={() => handleCreateQuestion("true/false")}
               className={`text-xs py-1.5 px-3 ${
                 specialActions.data?.suggestedType === "true/false"
-                  ? "bg-purple-200 text-purple-900"
-                  : "bg-purple-100 text-purple-800"
-              } hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 rounded-md transition-colors`}
+                  ? "bg-purple-200 text-purple-900 dark:bg-purple-700 dark:text-purple-100"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+              } hover:bg-purple-200 dark:hover:bg-purple-800 rounded-md transition-colors`}
             >
               True/False
             </button>
@@ -428,9 +428,9 @@ const SpecialActionUI = ({
               onClick={() => handleCreateQuestion("text response")}
               className={`text-xs py-1.5 px-3 ${
                 specialActions.data?.suggestedType === "text response"
-                  ? "bg-purple-200 text-purple-900"
-                  : "bg-purple-100 text-purple-800"
-              } hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 rounded-md transition-colors`}
+                  ? "bg-purple-200 text-purple-900 dark:bg-purple-700 dark:text-purple-100"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+              } hover:bg-purple-200 dark:hover:bg-purple-800 rounded-md transition-colors`}
             >
               Text Response
             </button>
@@ -3180,9 +3180,9 @@ Please help me with this.`;
                       onClick={() => handleSendWithContext(true)}
                       className={`p-1.5 ${
                         isSendDisabled
-                          ? "bg-purple-400 cursor-not-allowed"
-                          : "bg-purple-600 hover:bg-purple-700"
-                      } dark:bg-purple-700 dark:hover:bg-purple-800 rounded-full transition-colors`}
+                          ? "bg-purple-400 dark:bg-purple-900 cursor-not-allowed"
+                          : "bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800"
+                      } rounded-full transition-colors`}
                       title="Send message"
                       disabled={isSendDisabled}
                     >
