@@ -32,12 +32,19 @@ interface Props {
 
 export function MarkChatToggleButton({ role, className = "" }: Props) {
   const toggle = useChatbot((s) => s.toggle);
+  const isUnavailable = useChatbot((s) => s.isUnavailable);
   const labels = role === "author" ? AUTHOR_LABELS : LEARNER_LABELS;
   const [label, setLabel] = useState<string>(labels[0]);
 
   useEffect(() => {
     setLabel(labels[Math.floor(Math.random() * labels.length)]);
   }, [role]);
+
+  // Chat access was denied for this session; offering the button would only
+  // open a panel that can never load.
+  if (isUnavailable) {
+    return null;
+  }
 
   return (
     <button

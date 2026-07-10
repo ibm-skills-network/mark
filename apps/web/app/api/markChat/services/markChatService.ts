@@ -31,7 +31,13 @@ export async function getOrCreateTodayChat(
 
     if (!res.ok) {
       const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to get or create chat");
+      const error = new Error(
+        errorBody.message || "Failed to get or create chat",
+      ) as Error & { status?: number };
+      // Callers need the status to tell "chat not available for this user"
+      // (403 from the access guard) apart from a genuine failure.
+      error.status = res.status;
+      throw error;
     }
 
     return await res.json();

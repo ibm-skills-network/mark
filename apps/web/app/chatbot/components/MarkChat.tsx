@@ -977,7 +977,12 @@ const FileAttachmentDisplay: React.FC<FileAttachmentDisplayProps> = ({
 };
 
 export const MarkChat = () => {
-  const { isOpen: isChatbotOpen, toggle: toggleChatbot } = useChatbot();
+  const {
+    isOpen: isChatbotOpen,
+    toggle: toggleChatbot,
+    isUnavailable: isChatUnavailable,
+    markUnavailable: markChatUnavailable,
+  } = useChatbot();
   const {
     isOpen,
     toggleChat,
@@ -1718,8 +1723,17 @@ export const MarkChat = () => {
         }
       } catch (error) {
         if (cancelled) return;
-        console.error("initializeChat failed:", error);
-        toast.error("Could not load chat session");
+        // A 403 means this session simply has no chat access (e.g. the
+        // learner's group isn't linked to the assignment). That's a policy
+        // outcome, not a malfunction — hide the chat instead of toasting an
+        // error on every page the widget mounts on.
+        if ((error as { status?: number }).status === 403) {
+          console.warn("Chat unavailable for this session (403)");
+          markChatUnavailable();
+        } else {
+          console.error("initializeChat failed:", error);
+          toast.error("Could not load chat session");
+        }
       } finally {
         if (!cancelled) setIsInitializing(false);
       }
@@ -1737,6 +1751,7 @@ export const MarkChat = () => {
     clearAttachedFiles,
     clearSessionContextFiles,
     getCurrentAssignmentId,
+    markChatUnavailable,
     resetChat,
   ]);
 
@@ -2922,6 +2937,12 @@ Please help me with this.`;
     isTyping ||
     isInitializing ||
     hasPendingUploads;
+
+  // Chat access was denied for this session — render nothing (the toggle
+  // button hides itself off the same store flag).
+  if (isChatUnavailable) {
+    return null;
+  }
 
   return (
     <>
