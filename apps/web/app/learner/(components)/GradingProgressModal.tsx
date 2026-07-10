@@ -158,10 +158,6 @@ export default function GradingProgressModal({
     displayProgress,
     (v) => `${v * 2.64} 264`,
   );
-  const displayProgressPercent = useTransform(
-    displayProgress,
-    (v) => `${Math.round(v)}%`,
-  );
   const barWidth = useTransform(displayProgress, (v) => `${Math.round(v)}%`);
   const getStatusColor = () => {
     switch (status) {
@@ -356,23 +352,48 @@ export default function GradingProgressModal({
                         </svg>
                       </motion.div>
 
-                      {/* Center content with glassmorphism */}
+                      {/* Center content with glassmorphism. No percent here:
+                          learners read a % in the wheel as their score
+                          climbing, so the center shows question progress (or
+                          a neutral pulse) instead. */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="bg-white/80 backdrop-blur-md rounded-full w-24 h-24 shadow-xl flex flex-col items-center justify-center border border-white/50">
-                          <motion.span className="text-3xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                            {displayProgressPercent}
-                          </motion.span>
                           {progressData.currentQuestion &&
-                            progressData.totalQuestions && (
+                          progressData.totalQuestions ? (
+                            <>
                               <motion.span
                                 initial={{ opacity: 0, y: 5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                                translate="no"
+                                className="text-2xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent"
                               >
                                 {progressData.currentQuestion}/
                                 {progressData.totalQuestions}
                               </motion.span>
-                            )}
+                              <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                questions
+                              </span>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              {[0, 1, 2].map((i) => (
+                                <motion.span
+                                  key={i}
+                                  className="w-2 h-2 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"
+                                  animate={{
+                                    opacity: [0.3, 1, 0.3],
+                                    scale: [0.8, 1.1, 0.8],
+                                  }}
+                                  transition={{
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                    delay: i * 0.2,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
