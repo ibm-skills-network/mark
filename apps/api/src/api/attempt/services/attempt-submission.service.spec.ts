@@ -948,9 +948,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
     });
 
-    it("returns the grade even when showAssignmentScore is false", async () => {
-      // The author is testing their own quiz: hiding the learner-facing score
-      // must not hide the preview grade, otherwise a perfect run renders as 0%.
+    it("withholds the grade when showAssignmentScore is false, mirroring the learner response", async () => {
+      // The preview is the author's only window into the learner experience,
+      // so it must apply the same visibility rules as the learner submit path.
       mockPrisma.assignment.findUnique.mockResolvedValue({
         id: assignmentId,
         questions: [],
@@ -985,9 +985,38 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         authorRequest as UpdateAttemptRequest,
       );
 
-      expect(result.grade).toBe(1);
+      expect(result.grade).toBeUndefined();
       expect(result.totalPointsEarned).toBe(1);
       expect(result.totalPossiblePoints).toBe(1);
+    });
+
+    it("returns the grade when showAssignmentScore is true", async () => {
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [{ id: 1, question: "Preview response" }],
+        authorQuestions: [{ id: 1, totalPoints: 2 }],
+      };
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({ questionId: 1, totalPoints: 2, metadata: undefined }),
+      ]);
+      mockGradingService.calculateGradeForAuthor.mockReturnValue({
+        grade: 1,
+        totalPointsEarned: 2,
+        totalPossiblePoints: 2,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        -1,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "",
+        false,
+        authorRequest as UpdateAttemptRequest,
+      );
+
+      expect(result.grade).toBe(1);
     });
 
     it("throws when preview responses reference questions missing from provided draft questions", async () => {

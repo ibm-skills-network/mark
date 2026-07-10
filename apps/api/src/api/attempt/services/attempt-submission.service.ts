@@ -1241,10 +1241,10 @@ export class AttemptSubmissionService {
         success: true,
         totalPointsEarned,
         totalPossiblePoints,
-        // showAssignmentScore hides the score from learners, not from the
-        // author previewing their own quiz — withholding it here made the
-        // success page render a null grade as 0% / Failed.
-        grade,
+        // The preview must mirror the learner submit response (including
+        // withholding the grade when the score is hidden) — it's often the
+        // author's only way to see what learners actually experience.
+        grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:

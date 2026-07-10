@@ -15,7 +15,11 @@ import {
   getUser,
   submitFeedback,
 } from "@/lib/talkToBackend";
-import { resolveStoreGrade } from "@/lib/gradeDisplay";
+import {
+  resolveMissingGradeReason,
+  resolveStoreGrade,
+  type MissingGradeReason,
+} from "@/lib/gradeDisplay";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
@@ -79,6 +83,10 @@ function SuccessPage() {
   );
 
   const [showQuestions, setShowQuestions] = useState<boolean>(false);
+  // Why the NaN-grade view is showing: score hidden by the author (default,
+  // matches every learner path) vs. grade data simply lost (preview reload).
+  const [missingGradeReason, setMissingGradeReason] =
+    useState<MissingGradeReason>("score-hidden");
 
   const [pageHeight, setPageHeight] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -279,6 +287,11 @@ function SuccessPage() {
           setShowQuestions(zustandShowQuestions);
           // A never-set store grade must render the hidden-score view, not 0%.
           setGrade(resolveStoreGrade(zustandGrade));
+          setMissingGradeReason(
+            resolveMissingGradeReason(
+              zustandAssignmentDetails?.showAssignmentScore,
+            ),
+          );
           setTotalPointsEarned(zustandTotalPointsEarned);
           setTotalPoints(zustandTotalPoints);
           setAssignmentDetails(zustandAssignmentDetails);
@@ -691,7 +704,7 @@ function SuccessPage() {
                 </motion.div>
               </div>
             </>
-          ) : (
+          ) : missingGradeReason === "score-hidden" ? (
             <motion.h1
               className="text-5xl font-extrabold text-gray-800"
               initial={{ opacity: 0, y: -30 }}
@@ -700,6 +713,25 @@ function SuccessPage() {
               Grades are currently unavailable as the author has disabled
               viewing them.
             </motion.h1>
+          ) : (
+            <>
+              <motion.h1
+                className="text-5xl font-extrabold text-gray-800"
+                initial={{ opacity: 0, y: -30 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                Preview results are no longer available.
+              </motion.h1>
+              <motion.p
+                className="text-xl text-gray-600"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                Preview attempts aren&apos;t saved, so their results don&apos;t
+                survive a page reload. Run the preview again to see what
+                learners get.
+              </motion.p>
+            </>
           )}
         </div>
 
