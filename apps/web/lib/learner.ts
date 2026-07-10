@@ -167,6 +167,14 @@ export async function getCompletedAttempt(
   attemptId: number,
   cookies?: string,
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
+  // Author-preview attempts use the sentinel id -1 and are never persisted
+  // server-side, so requesting one is a guaranteed 403 — which the api-client
+  // surfaces as a "no permission / log into AWB" toast on every preview
+  // completion. Skip straight to the caller's store fallback instead.
+  if (attemptId < 0) {
+    return undefined;
+  }
+
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/completed`;
 
   try {
