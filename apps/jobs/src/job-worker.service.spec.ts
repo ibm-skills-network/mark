@@ -39,6 +39,7 @@ type JobWorkerServiceTestAccessor = JobWorkerService & {
     concurrency: number,
     options?: { lockDuration?: number; maxStalledCount?: number },
   ) => unknown;
+  resolveConsumedQueues: () => Set<string>;
 };
 
 const asTestAccessor = (s: JobWorkerService): JobWorkerServiceTestAccessor =>
@@ -1676,6 +1677,45 @@ describe("JobWorkerService", () => {
       expect(startEntrySpan).toHaveBeenCalledWith("job.attempt.grade");
       expect(handler).toHaveBeenCalledWith(job);
       expect(completeEntrySpan).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe("resolveConsumedQueues", () => {
+    const allQueues = Object.values(JOB_QUEUE_NAMES);
+
+    afterEach(() => {
+      delete process.env.JOB_WORKER_QUEUES;
+    });
+
+    it("returns all queues when JOB_WORKER_QUEUES is unset", () => {
+      delete process.env.JOB_WORKER_QUEUES;
+      const accessor = service as unknown as JobWorkerServiceTestAccessor;
+      expect([...accessor.resolveConsumedQueues()].sort()).toEqual(
+        [...allQueues].sort(),
+      );
+    });
+
+    it("returns all queues when JOB_WORKER_QUEUES is blank", () => {
+      process.env.JOB_WORKER_QUEUES = "   ";
+      const accessor = service as unknown as JobWorkerServiceTestAccessor;
+      expect(accessor.resolveConsumedQueues().size).toBe(allQueues.length);
+    });
+
+    it("returns only the listed queues, trimming whitespace", () => {
+      process.env.JOB_WORKER_QUEUES = " mark.attempt.heavy , mark.attempt ";
+      const accessor = service as unknown as JobWorkerServiceTestAccessor;
+      expect([...accessor.resolveConsumedQueues()].sort()).toEqual([
+        "mark.attempt",
+        "mark.attempt.heavy",
+      ]);
+    });
+
+    it("throws on an unknown queue name", () => {
+      process.env.JOB_WORKER_QUEUES = "mark.attempt.hevy";
+      const accessor = service as unknown as JobWorkerServiceTestAccessor;
+      expect(() => accessor.resolveConsumedQueues()).toThrow(
+        /unknown queue name/i,
+      );
     });
   });
 });

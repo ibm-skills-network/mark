@@ -414,6 +414,30 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     return defaultValue;
   }
 
+  // Parses JOB_WORKER_QUEUES into the set of queues this pod consumes.
+  // Unset/blank means ALL queues (local dev and single-deployment envs keep
+  // today's behavior). An unknown queue name throws so the pod crash-loops
+  // loudly at boot — a typo that silently consumed nothing would strand a
+  // queue with no worker and no error anywhere.
+  private resolveConsumedQueues(): Set<string> {
+    const allQueues = Object.values(JOB_QUEUE_NAMES) as string[];
+    const raw = process.env.JOB_WORKER_QUEUES;
+    if (raw === undefined || raw.trim() === "") {
+      return new Set(allQueues);
+    }
+    const requested = raw
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+    const unknown = requested.filter((name) => !allQueues.includes(name));
+    if (unknown.length > 0) {
+      throw new Error(
+        `JOB_WORKER_QUEUES contains unknown queue name(s): ${unknown.join(", ")}`,
+      );
+    }
+    return new Set(requested);
+  }
+
   private getHeartbeatIntervalMs(): number {
     const parsedInterval = Number.parseInt(
       process.env.JOB_WORKER_HEARTBEAT_INTERVAL_MS ?? "",
