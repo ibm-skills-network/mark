@@ -363,22 +363,37 @@ describe("JobWorkerService", () => {
     );
     expect(Worker).toHaveBeenNthCalledWith(
       5,
+      JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+      expect.any(Function),
+      {
+        connection: mockConnection,
+        concurrency: 1,
+        lockDuration: 600_000,
+        maxStalledCount: 0,
+      },
+    );
+    expect(Worker).toHaveBeenNthCalledWith(
+      6,
       JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
       expect.any(Function),
       { connection: mockConnection, concurrency: 1 },
     );
-    expect(workerInstances).toHaveLength(5);
+    expect(workerInstances).toHaveLength(6);
     // Most workers wire two listeners (completed + failed) via createWorker.
-    // The ATTEMPT worker additionally gets a third listener attached after
-    // createWorker returns: the terminal-failure → GradingProgress/JobState
-    // notifier. That extra listener is what unsticks the learner's modal
-    // when a grading job permanent-fails.
+    // The ATTEMPT and ATTEMPT_HEAVY workers additionally get a third listener
+    // attached after createWorker returns: the terminal-failure →
+    // GradingProgress/JobState notifier. That extra listener is what
+    // unsticks the learner's modal when a grading job permanent-fails,
+    // regardless of which pod (fast or heavy) ran it.
     for (const worker of workerInstances) {
       const expectedListenerCount =
-        worker.queueName === JOB_QUEUE_NAMES.ATTEMPT ? 3 : 2;
+        worker.queueName === JOB_QUEUE_NAMES.ATTEMPT ||
+        worker.queueName === JOB_QUEUE_NAMES.ATTEMPT_HEAVY
+          ? 3
+          : 2;
       expect(worker.on.mock.calls.length).toBe(expectedListenerCount);
     }
-    expect(workerWaitUntilReady).toHaveBeenCalledTimes(5);
+    expect(workerWaitUntilReady).toHaveBeenCalledTimes(6);
   });
 
   // ─── Change 9: configurable GRADING_WORKER_CONCURRENCY ──────────────────────────
@@ -570,7 +585,7 @@ describe("JobWorkerService", () => {
 
     await service.onModuleDestroy();
 
-    expect(workerClose).toHaveBeenCalledTimes(5);
+    expect(workerClose).toHaveBeenCalledTimes(6);
     expect(mockConnection.del).toHaveBeenCalledWith(
       expect.stringMatching(/^mark\.jobs\.worker\.heartbeat:/),
     );
@@ -1716,6 +1731,64 @@ describe("JobWorkerService", () => {
       expect(() => accessor.resolveConsumedQueues()).toThrow(
         /unknown queue name/i,
       );
+    });
+  });
+
+  describe("queue-filtered worker registration", () => {
+    afterEach(() => {
+      delete process.env.JOB_WORKER_QUEUES;
+      delete process.env.HEAVY_GRADING_WORKER_CONCURRENCY;
+    });
+
+    it("starts workers for all queues (including heavy) by default", async () => {
+      delete process.env.JOB_WORKER_QUEUES;
+      await service.onModuleInit();
+      const startedQueues = (Worker as unknown as jest.Mock).mock.calls.map(
+        (call) => call[0] as string,
+      );
+      expect(startedQueues.sort()).toEqual(
+        (Object.values(JOB_QUEUE_NAMES) as string[]).sort(),
+      );
+    });
+
+    it("starts only the heavy worker when JOB_WORKER_QUEUES selects it", async () => {
+      process.env.JOB_WORKER_QUEUES = "mark.attempt.heavy";
+      await service.onModuleInit();
+      const workerCalls = (Worker as unknown as jest.Mock).mock.calls;
+      expect(workerCalls).toHaveLength(1);
+      expect(workerCalls[0][0]).toBe(JOB_QUEUE_NAMES.ATTEMPT_HEAVY);
+      const options = workerCalls[0][2] as {
+        concurrency: number;
+        lockDuration: number;
+        maxStalledCount: number;
+      };
+      expect(options.concurrency).toBe(1);
+      expect(options.lockDuration).toBe(600_000);
+      expect(options.maxStalledCount).toBe(0);
+    });
+
+    it("honours HEAVY_GRADING_WORKER_CONCURRENCY", async () => {
+      process.env.JOB_WORKER_QUEUES = "mark.attempt.heavy";
+      process.env.HEAVY_GRADING_WORKER_CONCURRENCY = "2";
+      await service.onModuleInit();
+      const options = (Worker as unknown as jest.Mock).mock.calls[0][2] as {
+        concurrency: number;
+      };
+      expect(options.concurrency).toBe(2);
+    });
+
+    it("reports only consumed queues in the heartbeat", async () => {
+      process.env.JOB_WORKER_QUEUES = "mark.attempt.heavy";
+      await service.onModuleInit();
+      // The existing spec mocks the redis connection via mockConnection.set;
+      // reuse its captured calls to parse the heartbeat payload JSON.
+      const heartbeatPayload = JSON.parse(
+        mockConnection.set.mock.calls[0][1] as string,
+      ) as { queues: string[]; concurrencyByQueue: Record<string, number> };
+      expect(heartbeatPayload.queues).toEqual([JOB_QUEUE_NAMES.ATTEMPT_HEAVY]);
+      expect(Object.keys(heartbeatPayload.concurrencyByQueue)).toEqual([
+        JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+      ]);
     });
   });
 });
