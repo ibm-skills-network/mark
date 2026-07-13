@@ -1,7 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { Job, JobsOptions, JobState, Queue } from "bullmq";
 import IORedis from "ioredis";
-import { JOB_QUEUE_NAMES } from "./job-queue.constants";
+import {
+  JOB_PRIORITIES,
+  JOB_QUEUE_NAMES,
+  JobName,
+} from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
 
@@ -98,11 +102,25 @@ export class JobQueueService implements OnModuleDestroy {
     payload: unknown,
     options: JobsOptions = {},
   ): Promise<void> {
-    this.logger.log(`Enqueuing job ${jobName} on queue ${queueName}`);
+    // Centralized priority assignment: BullMQ runs unprioritized jobs before
+    // ALL prioritized ones, so every job class on a prioritized queue must
+    // get its priority here — call sites cannot be trusted to remember.
+    // An explicit options.priority (spread last) still wins for one-offs.
+    const mappedPriority = JOB_PRIORITIES[jobName as JobName];
+    const jobOptions: JobsOptions = {
+      ...(mappedPriority !== undefined && { priority: mappedPriority }),
+      ...options,
+    };
+    this.logger.log(
+      `Enqueuing job ${jobName} on queue ${queueName}` +
+        (jobOptions.priority === undefined
+          ? ""
+          : ` with priority ${jobOptions.priority}`),
+    );
     await this.getQueue(queueName).add(
       jobName,
       encryptJobPayload(payload),
-      options,
+      jobOptions,
     );
   }
 
