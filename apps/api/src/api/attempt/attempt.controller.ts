@@ -302,7 +302,7 @@ export class AttemptControllerV2 {
 
       return { gradingJobId, message };
     } else if (needsLongRunningGrading && isAuthorMode) {
-      const { gradingJobId, message } =
+      const { gradingJobId, message, queueName } =
         await this.attemptService.createAuthorGradingJob(
           parsedAssignmentId,
           learnerUpdateAssignmentAttemptDto,
@@ -316,6 +316,7 @@ export class AttemptControllerV2 {
         learnerUpdateAssignmentAttemptDto,
         authCookie,
         request,
+        queueName,
       );
 
       return { gradingJobId, message };

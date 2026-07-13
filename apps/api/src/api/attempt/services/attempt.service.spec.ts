@@ -19,6 +19,12 @@ const makeRequest = (userId = "user-1", role = UserRole.LEARNER) =>
     },
   }) as unknown as UserSessionRequest;
 
+const request = makeRequest("author-1", UserRole.AUTHOR);
+const updateDto = {
+  submitted: true,
+  responsesForQuestions: [],
+};
+
 describe("AttemptServiceV2", () => {
   let service: AttemptServiceV2;
   let mockPrisma: { assignmentAttempt: { findUnique: jest.Mock } };
@@ -287,6 +293,33 @@ describe("AttemptServiceV2", () => {
 
       expect(result.gradingJobId).toBe("existing-preview-id");
       expect(mockJobStateService.createJob).not.toHaveBeenCalled();
+    });
+
+    it("routes author previews with file questions to the heavy queue", async () => {
+      mockJobStateService.acquireActiveJobLock!.mockResolvedValue(null);
+      mockJobStateService.createJob!.mockResolvedValue({ id: "job-2" });
+      const result = await service.createAuthorGradingJob(
+        3,
+        { ...updateDto, authorQuestions: [{ type: "UPLOAD" }] } as never,
+        "",
+        request,
+      );
+      expect(result.queueName).toBe("mark.attempt.heavy");
+    });
+
+    it("routes MCQ-only author previews to the standard queue (previews never inline)", async () => {
+      mockJobStateService.acquireActiveJobLock!.mockResolvedValue(null);
+      mockJobStateService.createJob!.mockResolvedValue({ id: "job-2" });
+      const result = await service.createAuthorGradingJob(
+        3,
+        {
+          ...updateDto,
+          authorQuestions: [{ type: "SINGLE_CORRECT" }],
+        } as never,
+        "",
+        request,
+      );
+      expect(result.queueName).toBe("mark.attempt");
     });
   });
 

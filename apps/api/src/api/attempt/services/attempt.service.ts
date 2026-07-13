@@ -35,7 +35,6 @@ import {
 import { PrismaService } from "../../../database/prisma.service";
 import {
   JOB_NAMES,
-  JOB_QUEUE_NAMES,
   JobQueueName,
 } from "../../../job-queue/job-queue.constants";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
@@ -86,11 +85,14 @@ export class AttemptServiceV2 {
    */
   async createAuthorGradingJob(
     assignmentId: number,
-    _updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     _authCookie: string,
     request: UserSessionRequest,
-  ): Promise<{ gradingJobId: string; message: string }> {
-    void _updateDto;
+  ): Promise<{
+    gradingJobId: string;
+    message: string;
+    queueName: JobQueueName;
+  }> {
     void _authCookie;
     const activeKey = this.buildGradingActiveKey(
       request.userSession.userId,
@@ -103,16 +105,34 @@ export class AttemptServiceV2 {
       temporaryJobId,
     );
 
+    // Author previews are never inline (the sync path is learner-only), so
+    // "inline" (deterministic-only preview) rides the standard queue.
+    const authorTier = classifyAttemptTier(
+      (updateDto.authorQuestions ?? []).map((question) => question.type),
+    );
+    const queueName = attemptQueueForTier(
+      authorTier === "inline" ? "standard" : authorTier,
+    );
+
     if (existingJobId !== null) {
       return {
         gradingJobId: existingJobId,
         message:
           "Author preview job is already in progress. Reusing existing job.",
+        queueName,
       };
     }
 
+    this.logger.log("grading.enqueue.routed", {
+      assignmentId,
+      kind: "attempt-author-preview",
+      tier: authorTier,
+      queueName,
+      userId: request.userSession.userId,
+    });
+
     const gradingJob = await this.jobStateService.createJob({
-      queueName: JOB_QUEUE_NAMES.ATTEMPT,
+      queueName,
       jobName: JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW,
       kind: "attempt-author-preview",
       attemptId: null,
@@ -128,6 +148,7 @@ export class AttemptServiceV2 {
       gradingJobId: gradingJob.id,
       message:
         "Author preview job created. Use the SSE endpoint to track progress.",
+      queueName,
     };
   }
   // Tier lookup for the submit path. Types come from the attempt's PINNED
@@ -266,11 +287,12 @@ export class AttemptServiceV2 {
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     _authCookie: string,
     request: UserSessionRequest,
+    queueName: JobQueueName,
   ): Promise<void> {
     void _authCookie;
     try {
       await this.jobQueueService.enqueue(
-        JOB_QUEUE_NAMES.ATTEMPT,
+        queueName,
         JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW,
         {
           assignmentId,
