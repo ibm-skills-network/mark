@@ -1283,7 +1283,7 @@ const Question: FC<QuestionProps> = ({
             <button
               type="button"
               onClick={() => setApplyAllDialog((s) => ({ ...s, open: false }))}
-              className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors dark:text-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
             >
               Just this one
             </button>

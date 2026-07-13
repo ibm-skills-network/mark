@@ -1230,15 +1230,19 @@ export const useAuthorStore = createWithEqualityFn<
           );
         },
         setAllRandomizedChoices: (value: boolean) => {
+          const isChoiceType = (type: string) =>
+            type === "SINGLE_CORRECT" || type === "MULTIPLE_CORRECT";
           set((state) => ({
             questions: state.questions.map((q) => {
-              if (
-                q.type === "SINGLE_CORRECT" ||
-                q.type === "MULTIPLE_CORRECT"
-              ) {
-                return { ...q, randomizedChoices: value };
+              const variants = q.variants?.map((variant) =>
+                isChoiceType(variant.type)
+                  ? { ...variant, randomizedChoices: value }
+                  : variant,
+              );
+              if (isChoiceType(q.type)) {
+                return { ...q, randomizedChoices: value, variants };
               }
-              return q;
+              return { ...q, variants };
             }),
           }));
         },

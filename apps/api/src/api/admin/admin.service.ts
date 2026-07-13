@@ -2394,11 +2394,8 @@ export class AdminService {
 
     const hasChoices = questionData.choices && questionData.choices.length > 0;
     const randomizedChoices =
-      questionData.randomizedChoices != null
-        ? questionData.randomizedChoices
-        : hasChoices
-          ? true
-          : questionData.randomizedChoices;
+      questionData.randomizedChoices ??
+      (hasChoices ? true : questionData.randomizedChoices);
 
     return {
       assignmentId,

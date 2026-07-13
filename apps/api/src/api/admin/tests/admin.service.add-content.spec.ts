@@ -1001,4 +1001,39 @@ describe("AdminService - addContentToAssignment", () => {
       expect(capturedFindManyArgs?.orderBy).toEqual({ id: "asc" });
     });
   });
+
+  describe("mapQuestionDataForCreation - randomizedChoices default", () => {
+    const map = (questionData: any) =>
+      (service as any).mapQuestionDataForCreation(
+        questionData,
+        mockAssignmentId,
+      );
+
+    it("defaults to true when unset and the question has choices", () => {
+      const result = map({
+        type: QuestionType.SINGLE_CORRECT,
+        randomizedChoices: null,
+        choices: [{ id: 1, choice: "A", isCorrect: true }],
+      });
+      expect(result.randomizedChoices).toBe(true);
+    });
+
+    it("leaves it unset when there are no choices", () => {
+      const result = map({
+        type: QuestionType.TEXT,
+        randomizedChoices: null,
+        choices: null,
+      });
+      expect(result.randomizedChoices).toBeNull();
+    });
+
+    it("respects an explicit false even when choices are present", () => {
+      const result = map({
+        type: QuestionType.SINGLE_CORRECT,
+        randomizedChoices: false,
+        choices: [{ id: 1, choice: "A", isCorrect: true }],
+      });
+      expect(result.randomizedChoices).toBe(false);
+    });
+  });
 });
