@@ -264,10 +264,16 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     ];
 
     const consumedQueues = this.resolveConsumedQueues();
-    this.consumedQueues = [...consumedQueues];
     const activeSpecs = workerSpecs.filter((spec) =>
       consumedQueues.has(spec.queueName),
     );
+
+    // Sourced from activeSpecs (what actually gets a Worker registered below),
+    // not the raw env-resolution set. If a queue is ever added to
+    // JOB_QUEUE_NAMES without a matching workerSpecs entry, a pod listing it
+    // in JOB_WORKER_QUEUES would otherwise pass validation and claim it as
+    // consumed in the heartbeat while starting no worker for it.
+    this.consumedQueues = activeSpecs.map((spec) => spec.queueName);
 
     this.concurrencyByQueue = Object.fromEntries(
       activeSpecs.map((spec) => [spec.queueName, spec.concurrency]),

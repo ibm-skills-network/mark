@@ -255,13 +255,21 @@ export class QueueStatusService {
   async getRedisHealth(): Promise<RedisHealthDto> {
     const heartbeats =
       await this.workerConnectionService.getAllWorkerHeartbeats();
-    const heartbeatPods = this.liveHeartbeats(heartbeats).length;
+    // Scope the pod count to pods that actually serve the probe queue. Since
+    // the fast/heavy split, a heavy-deployment pod heartbeats but registers no
+    // BullMQ worker on mark.attempt — counting it here would permanently
+    // desync this from workerConnections below. A missing `queues` field
+    // (pre-tiering pod image) always counts: those pods consumed every queue.
+    const heartbeatPods = this.liveHeartbeats(heartbeats).filter((hb) =>
+      this.heartbeatServesQueue(hb, JOB_QUEUE_NAMES.ATTEMPT),
+    ).length;
 
     const info = await this.jobQueueService.getRedisInfo();
 
     // Reconcile BullMQ's view of registered worker connections against the
-    // number of live heartbeat pods. Each pod registers one Worker per queue,
-    // so a single queue's connection count should track the live pod count.
+    // number of live heartbeat pods that serve this queue. Each pod serving
+    // the queue registers one Worker for it, so the connection count should
+    // track the queue-scoped live pod count above (not the total pod count).
     let workerConnections = 0;
     try {
       workerConnections = await this.jobQueueService.getQueueWorkerConnections(
@@ -492,6 +500,21 @@ export class QueueStatusService {
       : defaultConcurrencyPerPod;
 
     return { concurrencyPerPod, livePods, clusterCapacity };
+  }
+
+  /**
+   * A heartbeat "serves" a queue when its published `queues` list includes
+   * it. A heartbeat with no `queues` field at all (a pre-tiering pod image,
+   * which always consumed every queue) counts as serving every queue — this
+   * is distinct from an explicit empty array, which is a real modern payload
+   * and must not be treated as "serves everything."
+   */
+  private heartbeatServesQueue(
+    hb: JobWorkerHeartbeat,
+    queueName: string,
+  ): boolean {
+    if (hb.queues === undefined) return true;
+    return hb.queues.includes(queueName);
   }
 
   private liveHeartbeats(

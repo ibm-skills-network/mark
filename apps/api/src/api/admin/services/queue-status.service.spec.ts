@@ -508,4 +508,63 @@ describe("QueueStatusService", () => {
     expect(health.workerConnections).toBe(2);
     expect(health.reconciled).toBe(true);
   });
+
+  it("getRedisHealth reconciles per queue: a heavy-only pod does not inflate the pod count against mark.attempt worker connections", async () => {
+    const now = Date.now();
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        instanceId: "fast-pod",
+        queues: [
+          "mark.attempt",
+          "mark.assignment.v1",
+          "mark.assignment.v2",
+          "mark.assignment.v2.translations",
+          "mark.admin.translation",
+        ],
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+      {
+        // Heavy deployment: consumes only mark.attempt.heavy, so it registers
+        // no BullMQ worker on mark.attempt and must not count toward the
+        // mark.attempt reconcile.
+        instanceId: "heavy-pod",
+        queues: ["mark.attempt.heavy"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+    ]);
+    jobQueue.getRedisInfo.mockResolvedValue({
+      usedMemoryBytes: 100,
+      usedMemoryHuman: "100B",
+      connectedClients: 3,
+      opsPerSec: 1,
+    });
+    jobQueue.getQueueWorkerConnections.mockResolvedValue(1);
+    const health = await make().getRedisHealth();
+    expect(health.heartbeatPods).toBe(1);
+    expect(health.workerConnections).toBe(1);
+    expect(health.reconciled).toBe(true);
+  });
+
+  it("getRedisHealth counts a legacy heartbeat with no queues field as serving the probe queue", async () => {
+    const now = Date.now();
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        // Pre-tiering pod image: never wrote a `queues` field at all. Legacy
+        // pods always consumed every queue, so a missing field must count as
+        // "serves mark.attempt" rather than being excluded.
+        instanceId: "legacy-pod",
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+    ]);
+    jobQueue.getRedisInfo.mockResolvedValue({
+      usedMemoryBytes: 100,
+      usedMemoryHuman: "100B",
+      connectedClients: 3,
+      opsPerSec: 1,
+    });
+    jobQueue.getQueueWorkerConnections.mockResolvedValue(1);
+    const health = await make().getRedisHealth();
+    expect(health.heartbeatPods).toBe(1);
+    expect(health.reconciled).toBe(true);
+  });
 });
