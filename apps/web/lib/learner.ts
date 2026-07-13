@@ -427,6 +427,15 @@ export async function submitAssignment(
     const { gradingJobId, message } = responseData;
 
     if (!gradingJobId) {
+      // Deterministic-only attempts grade synchronously: the API returns the
+      // graded attempt itself (it carries the attempt id) instead of a job to
+      // stream. Resolve with it directly — callers already consume this exact
+      // shape from the SSE finalize path. `grade` may be null when scores are
+      // hidden, so the attempt id is the discriminator, not the grade.
+      if (typeof responseData.id === "number") {
+        onProgress?.("completed", 100, message ?? "Grading complete");
+        return responseData;
+      }
       throw new Error("No grading job ID returned");
     }
 
