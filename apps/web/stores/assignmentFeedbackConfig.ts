@@ -89,10 +89,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
     {
       name: getAuthorStoreName(),
       storage: createJSONStorage(() =>
-        createAssignmentScopedStorage(
-          "feedbackConfig",
-          getAuthorStoreName(),
-        ),
+        createAssignmentScopedStorage("feedbackConfig", getAuthorStoreName()),
       ),
       partialize(state) {
         return Object.fromEntries(
