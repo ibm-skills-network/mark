@@ -280,13 +280,14 @@ export class AttemptControllerV2 {
     const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
 
     if (needsLongRunningGrading && !isAuthorMode) {
-      const { gradingJobId, message } =
+      const { gradingJobId, message, queueName } =
         await this.attemptService.createGradingJob(
           parsedAttemptId,
           parsedAssignmentId,
           learnerUpdateAssignmentAttemptDto,
           authCookie,
           request,
+          "standard",
         );
 
       await this.attemptService.enqueueGradingJob(
@@ -296,6 +297,7 @@ export class AttemptControllerV2 {
         learnerUpdateAssignmentAttemptDto,
         authCookie,
         request,
+        queueName,
       );
 
       return { gradingJobId, message };

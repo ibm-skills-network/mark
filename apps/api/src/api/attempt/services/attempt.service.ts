@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { Observable } from "rxjs";
@@ -27,10 +27,16 @@ import {
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
+import {
+  AttemptTier,
+  attemptQueueForTier,
+  classifyAttemptTier,
+} from "../../../job-queue/attempt-tier";
 import { PrismaService } from "../../../database/prisma.service";
 import {
   JOB_NAMES,
   JOB_QUEUE_NAMES,
+  JobQueueName,
 } from "../../../job-queue/job-queue.constants";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
@@ -48,6 +54,8 @@ import {
 
 @Injectable()
 export class AttemptServiceV2 {
+  private readonly logger = new Logger(AttemptServiceV2.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly submissionService: AttemptSubmissionService,
@@ -122,6 +130,26 @@ export class AttemptServiceV2 {
         "Author preview job created. Use the SSE endpoint to track progress.",
     };
   }
+  // Tier lookup for the submit path. Types come from the attempt's PINNED
+  // assignment version — the exact question set this attempt is graded
+  // against, immune to later republishes. A missing version degrades to
+  // "standard" (pre-tiering behavior), never to a crash.
+  async classifyLearnerAttemptTier(attemptId: number): Promise<AttemptTier> {
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: {
+        assignmentVersion: {
+          select: { questionVersions: { select: { type: true } } },
+        },
+      },
+    });
+    const questionTypes =
+      attempt?.assignmentVersion?.questionVersions.map(
+        (questionVersion) => questionVersion.type,
+      ) ?? [];
+    return classifyAttemptTier(questionTypes);
+  }
+
   /**
    * Create a grading job for long-running grading operations
    */
@@ -131,7 +159,12 @@ export class AttemptServiceV2 {
     _updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     _authCookie: string,
     request: UserSessionRequest,
-  ): Promise<{ gradingJobId: string; message: string }> {
+    tier: Exclude<AttemptTier, "inline">,
+  ): Promise<{
+    gradingJobId: string;
+    message: string;
+    queueName: JobQueueName;
+  }> {
     void _updateDto;
     void _authCookie;
     const activeKey = this.buildGradingActiveKey(
@@ -150,11 +183,21 @@ export class AttemptServiceV2 {
         gradingJobId: existingJobId,
         message:
           "A grading job is already running for this attempt. Reusing existing job.",
+        queueName: attemptQueueForTier(tier),
       };
     }
 
+    const queueName = attemptQueueForTier(tier);
+    this.logger.log("grading.enqueue.routed", {
+      attemptId,
+      assignmentId,
+      tier,
+      queueName,
+      userId: request.userSession.userId,
+    });
+
     const gradingJob = await this.jobStateService.createJob({
-      queueName: JOB_QUEUE_NAMES.ATTEMPT,
+      queueName,
       jobName: JOB_NAMES.ATTEMPT_GRADE,
       kind: "attempt-grading",
       attemptId,
@@ -169,6 +212,7 @@ export class AttemptServiceV2 {
     return {
       gradingJobId: gradingJob.id,
       message: "Grading job created. Use the SSE endpoint to track progress.",
+      queueName,
     };
   }
 
@@ -179,10 +223,11 @@ export class AttemptServiceV2 {
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     request: UserSessionRequest,
+    queueName: JobQueueName,
   ): Promise<void> {
     try {
       await this.jobQueueService.enqueue(
-        JOB_QUEUE_NAMES.ATTEMPT,
+        queueName,
         JOB_NAMES.ATTEMPT_GRADE,
         {
           assignmentId,

@@ -21,12 +21,19 @@ const makeRequest = (userId = "user-1", role = UserRole.LEARNER) =>
 
 describe("AttemptServiceV2", () => {
   let service: AttemptServiceV2;
+  let mockPrisma: { assignmentAttempt: { findUnique: jest.Mock } };
   let mockJobStateService: jest.Mocked<Partial<JobStateService>>;
   let mockJobQueueService: jest.Mocked<Partial<JobQueueService>>;
   let mockSubmissionService: jest.Mocked<Partial<AttemptSubmissionService>>;
   let mockGradingProgressService: jest.Mocked<Partial<GradingProgressService>>;
 
   beforeEach(() => {
+    mockPrisma = {
+      assignmentAttempt: {
+        findUnique: jest.fn(),
+      },
+    };
+
     mockJobStateService = {
       acquireActiveJobLock: jest.fn(),
       createJob: jest.fn(),
@@ -49,7 +56,7 @@ describe("AttemptServiceV2", () => {
     };
 
     service = new AttemptServiceV2(
-      {} as any,
+      mockPrisma as any,
       mockSubmissionService as any,
       {} as any,
       {} as any,
@@ -85,6 +92,7 @@ describe("AttemptServiceV2", () => {
         {} as any,
         "cookie",
         makeRequest(),
+        "standard",
       );
 
       expect(result.gradingJobId).toBe("new-job-id");
@@ -107,6 +115,7 @@ describe("AttemptServiceV2", () => {
         {} as any,
         "cookie",
         makeRequest(),
+        "standard",
       );
 
       expect(result.gradingJobId).toBe("existing-job-id");
@@ -128,12 +137,106 @@ describe("AttemptServiceV2", () => {
         updatedAt: new Date().toISOString(),
       });
 
-      await service.createGradingJob(10, 5, {} as any, "", makeRequest());
+      await service.createGradingJob(
+        10,
+        5,
+        {} as any,
+        "",
+        makeRequest(),
+        "standard",
+      );
 
       const lockCall = mockJobStateService.acquireActiveJobLock!.mock.calls[0];
       const createCall = mockJobStateService.createJob!.mock.calls[0][0];
       // The temp ID passed to acquireActiveJobLock must equal reservedId
       expect(createCall.reservedId).toBe(lockCall[1]);
+    });
+
+    it("routes standard-tier grading to mark.attempt", async () => {
+      mockJobStateService.acquireActiveJobLock!.mockResolvedValue(null);
+      mockJobStateService.createJob!.mockResolvedValue({ id: "job-1" } as any);
+
+      const result = await service.createGradingJob(
+        7,
+        3,
+        {} as any,
+        "",
+        makeRequest(),
+        "standard",
+      );
+
+      expect(result.queueName).toBe("mark.attempt");
+      expect(mockJobStateService.createJob).toHaveBeenCalledWith(
+        expect.objectContaining({ queueName: "mark.attempt" }),
+      );
+    });
+
+    it("routes heavy-tier grading to mark.attempt.heavy", async () => {
+      mockJobStateService.acquireActiveJobLock!.mockResolvedValue(null);
+      mockJobStateService.createJob!.mockResolvedValue({ id: "job-1" } as any);
+
+      const result = await service.createGradingJob(
+        7,
+        3,
+        {} as any,
+        "",
+        makeRequest(),
+        "heavy",
+      );
+
+      expect(result.queueName).toBe("mark.attempt.heavy");
+      expect(mockJobStateService.createJob).toHaveBeenCalledWith(
+        expect.objectContaining({ queueName: "mark.attempt.heavy" }),
+      );
+    });
+  });
+
+  // ─── enqueueGradingJob — routes to the queue it is told ──────────────────
+
+  describe("enqueueGradingJob", () => {
+    it("enqueues on the queue it is told to", async () => {
+      mockJobQueueService.enqueue!.mockResolvedValue(undefined);
+
+      await service.enqueueGradingJob(
+        "job-1",
+        7,
+        3,
+        {} as any,
+        "",
+        makeRequest(),
+        "mark.attempt.heavy",
+      );
+
+      expect(mockJobQueueService.enqueue).toHaveBeenCalledWith(
+        "mark.attempt.heavy",
+        "attempt.grade",
+        expect.anything(),
+        expect.objectContaining({ jobId: "job-1" }),
+      );
+    });
+  });
+
+  // ─── classifyLearnerAttemptTier — tier lookup from pinned version ────────
+
+  describe("classifyLearnerAttemptTier", () => {
+    it("classifies from the attempt's pinned question versions", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        assignmentVersion: {
+          questionVersions: [{ type: "UPLOAD" }, { type: "TEXT" }],
+        },
+      });
+
+      await expect(service.classifyLearnerAttemptTier(7)).resolves.toBe(
+        "heavy",
+      );
+    });
+
+    it("falls back to standard when the attempt has no version data", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue(null);
+
+      await expect(service.classifyLearnerAttemptTier(7)).resolves.toBe(
+        "standard",
+      );
     });
   });
 
