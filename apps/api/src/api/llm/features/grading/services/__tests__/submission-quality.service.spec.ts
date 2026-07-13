@@ -1,11 +1,7 @@
 import { SubmissionQualityService } from "../submission-quality.service";
 import { ExtractedChunk } from "../../types/criterion-evidence.types";
 
-function makeChunk(
-  text: string,
-  page = 1,
-  id?: string,
-): ExtractedChunk {
+function makeChunk(text: string, page = 1, id?: string): ExtractedChunk {
   const chunkId = id ?? text.slice(0, 8).replaceAll(/\s/g, "_");
   return {
     chunkId,
@@ -51,7 +47,8 @@ describe("SubmissionQualityService", () => {
 
     it("does NOT classify a substantive sentence as page_label", () => {
       // Needs ≥6 unique substantive tokens to clear the too_short guard.
-      const text = "The model achieved 95% accuracy on the validation test dataset.";
+      const text =
+        "The model achieved 95% accuracy on the validation test dataset.";
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.eligibility).toBe("eligible");
     });
@@ -61,7 +58,6 @@ describe("SubmissionQualityService", () => {
     it.each([
       "=== PDF DOCUMENT ===",
       "--- CONTENT ---",
-      "=== GENERATED SUMMARY ===",
       "Pages: 12",
       "Title: My Report",
       "Creator: Adobe PDF",
@@ -69,6 +65,26 @@ describe("SubmissionQualityService", () => {
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.eligibility).toBe("ineligible");
       expect(chunks[0].quality?.ineligibleReasons).toContain("metadata_only");
+    });
+
+    it("classifies generated summaries as generated_summary ineligible", () => {
+      const { chunks } = service.classifyChunks([
+        makeChunk("=== GENERATED SUMMARY ===\nThis document covers topics."),
+      ]);
+      expect(chunks[0].quality?.eligibility).toBe("ineligible");
+      expect(chunks[0].quality?.ineligibleReasons).toContain(
+        "generated_summary",
+      );
+    });
+
+    it("classifies validator reports as non_learner_source ineligible", () => {
+      const { chunks } = service.classifyChunks([
+        makeChunk("=== VALIDATOR REPORT ===\nduplicate_rows: 0"),
+      ]);
+      expect(chunks[0].quality?.eligibility).toBe("ineligible");
+      expect(chunks[0].quality?.ineligibleReasons).toContain(
+        "non_learner_source",
+      );
     });
   });
 
@@ -81,7 +97,8 @@ describe("SubmissionQualityService", () => {
 
     it("does NOT classify a short but substantive chunk as too_short", () => {
       // Needs ≥6 unique substantive tokens to clear the too_short guard.
-      const text = "Data normalization removes redundancy by organizing relational database tables.";
+      const text =
+        "Data normalization removes redundancy by organizing relational database tables.";
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.eligibility).toBe("eligible");
     });
@@ -102,7 +119,8 @@ describe("SubmissionQualityService", () => {
 
     it("does NOT classify text repeated on 4 pages as boilerplate", () => {
       // Needs ≥6 unique substantive tokens so too_short doesn't fire before the boilerplate check.
-      const text = "Introduction to Machine Learning algorithms, neural networks, and deep learning concepts.";
+      const text =
+        "Introduction to Machine Learning algorithms, neural networks, and deep learning concepts.";
       const chunks = Array.from({ length: 4 }, (_, i) =>
         makeChunk(text, i + 1, `c${i}`),
       );
@@ -181,7 +199,8 @@ describe("SubmissionQualityService", () => {
 
   describe("substantiveTokenCount", () => {
     it("records substantiveTokenCount for each chunk", () => {
-      const text = "Data normalization reduces redundancy in relational databases.";
+      const text =
+        "Data normalization reduces redundancy in relational databases.";
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.substantiveTokenCount).toBeGreaterThan(0);
     });

@@ -1,6 +1,11 @@
 export const GRADING_QUALITY = {
-  MIN_SUBSTANTIVE_TOKENS: 6,
-  MIN_FULL_CREDIT_EVIDENCE_TOKENS: 10,
+  /**
+   * Noise floor for prose blocks: a block is too_short only below this many
+   * distinct substantive tokens. Deliberately low (see ../grading-policy.ts)
+   * so valid short answers reach the rubric; structural blocks
+   * (code/table/list/equation/quote/image) are exempt entirely.
+   */
+  MIN_SUBSTANTIVE_TOKENS: 2,
   /** Minimum distinct pages a chunk must repeat across to be flagged boilerplate (file/PDF sources). */
   BOILERPLATE_REPEAT_MIN_PAGES: 5,
   /** Minimum raw occurrences for boilerplate detection in text/url sources (no pages to spread across). */

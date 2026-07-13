@@ -97,14 +97,19 @@ const STOPWORDS = new Set([
 const PAGE_LABEL_PATTERN =
   /^-?\s*(page\s+)?\d+(\s*[/-]\s*\d+|\s+of\s+\d+)?\s*-?\.?$/i;
 
-const METADATA_BANNER_PREFIXES = [
-  "=== pdf document ===",
-  "--- content ---",
-  "=== generated summary ===",
-  "=== validator report ===",
-];
+// Banner → ineligible reason. Generated summaries and system validator
+// reports get distinct reasons so audits can tell them apart from plain
+// extraction metadata (see ../grading-policy.ts for the evidence policy).
+const BANNER_REASONS: Array<{ prefix: string; reason: ChunkIneligibleReason }> =
+  [
+    { prefix: "=== pdf document ===", reason: "metadata_only" },
+    { prefix: "--- content ---", reason: "metadata_only" },
+    { prefix: "=== generated summary ===", reason: "generated_summary" },
+    { prefix: "=== validator report ===", reason: "non_learner_source" },
+  ];
 
-const METADATA_KEY_PATTERN = /^(pages|title|creator|author|subject|keywords)\s*:/i;
+const METADATA_KEY_PATTERN =
+  /^(pages|title|creator|author|subject|keywords)\s*:/i;
 
 // "unknown" is included so unrecognised block types don't falsely trigger heading-only detection.
 const SUBSTANTIVE_BLOCK_TYPES = new Set([
@@ -116,6 +121,17 @@ const SUBSTANTIVE_BLOCK_TYPES = new Set([
   "quote",
   "image",
   "unknown",
+]);
+
+// Block types whose content is meaningful even when very short (a code
+// statement, a table cell, an equation) — exempt from the too_short check.
+const STRUCTURAL_BLOCK_TYPES = new Set([
+  "table",
+  "code",
+  "list",
+  "equation",
+  "quote",
+  "image",
 ]);
 
 @Injectable()
@@ -147,14 +163,18 @@ export class SubmissionQualityService {
     // Build per-criterion token sets for rubric_copy detection. Checking each criterion
     // independently prevents the union-set denominator from growing so large that no
     // realistic learner answer can reach the 0.85 Jaccard threshold.
-    const rubricTextsSource = context?.rubricTexts ?? (context?.rubricText ? [context.rubricText] : []);
+    const rubricTextsSource =
+      context?.rubricTexts ?? (context?.rubricText ? [context.rubricText] : []);
     const perCriterionRubricTokenSets: Set<string>[] = rubricTextsSource
       .map((t) => this.tokenize(t))
       .filter((s) => s.size >= GRADING_QUALITY.RUBRIC_COPY_MIN_TOKENS);
 
     const pageTextCounts = this.buildPageTextCounts(chunks);
     const textRepeatCounts = this.buildTextRepeatCounts(chunks);
-    const boilerplateTexts = this.detectBoilerplateTexts(pageTextCounts, textRepeatCounts);
+    const boilerplateTexts = this.detectBoilerplateTexts(
+      pageTextCounts,
+      textRepeatCounts,
+    );
 
     const perChunkAnnotated: ExtractedChunk[] = chunks.map((chunk) => {
       const quality = this.classifyChunk(
@@ -171,7 +191,11 @@ export class SubmissionQualityService {
     // Re-mark chunks on heading-only pages as ineligible (unless already ineligible).
     const annotated: ExtractedChunk[] = perChunkAnnotated.map((chunk) => {
       const page = this.getChunkPage(chunk);
-      if (page !== null && headingOnlyPages.has(page) && chunk.quality?.eligibility === "eligible") {
+      if (
+        page !== null &&
+        headingOnlyPages.has(page) &&
+        chunk.quality?.eligibility === "eligible"
+      ) {
         return {
           ...chunk,
           quality: {
@@ -217,7 +241,10 @@ export class SubmissionQualityService {
     const eligiblePageNumbers = this.extractPageNumbers(eligibleChunks);
     const avgSubstantiveTokensPerPage =
       eligiblePageNumbers.size > 0
-        ? this.computeAvgSubstantiveTokensPerPage(eligibleChunks, eligiblePageNumbers)
+        ? this.computeAvgSubstantiveTokensPerPage(
+            eligibleChunks,
+            eligiblePageNumbers,
+          )
         : allPageNumbers.size > 0
           ? this.computeAvgSubstantiveTokensPerPage(annotated, allPageNumbers)
           : undefined;
@@ -228,6 +255,7 @@ export class SubmissionQualityService {
       boilerplateRatio,
       pageCount,
       avgSubstantiveTokensPerPage,
+      hasVisualContent: chunks.some((chunk) => this.isVisualChunk(chunk)),
     });
 
     const qualityWarnings = this.buildWarnings({
@@ -290,7 +318,8 @@ export class SubmissionQualityService {
     }
     if (
       parameters.classification === "boilerplate_many_pages" ||
-      parameters.classification === "low_information"
+      parameters.classification === "low_information" ||
+      parameters.classification === "needs_visual_evidence"
     ) {
       warnings.push(`Submission classified as ${parameters.classification}`);
     }
@@ -307,22 +336,32 @@ export class SubmissionQualityService {
     const normalizedText = chunk.text.trim();
     const normalizedLower = normalizedText.toLowerCase();
 
-    if (this.isMetadataBanner(normalizedLower)) {
-      reasons.push("metadata_only");
+    const bannerReason = this.getBannerReason(normalizedLower);
+    if (bannerReason) {
+      reasons.push(bannerReason);
     }
 
     if (this.isPageLabel(normalizedText)) {
       reasons.push("page_label");
     }
 
-    if (reasons.length === 0 && boilerplateTexts.has(this.normalizeForDedup(normalizedText))) {
+    if (
+      reasons.length === 0 &&
+      boilerplateTexts.has(this.normalizeForDedup(normalizedText))
+    ) {
       reasons.push("boilerplate");
     }
 
-    const substantiveTokenCount = this.getSubstantiveTokens(normalizedText).size;
+    const substantiveTokenCount =
+      this.getSubstantiveTokens(normalizedText).size;
 
+    // too_short is a noise floor for prose only; structural and visual chunks
+    // (code, tables, lists, equations, quotes, images/OCR) can be legitimately
+    // terse and are never rejected for length. See ../grading-policy.ts.
     if (
       reasons.length === 0 &&
+      !this.isStructuralChunk(chunk) &&
+      !this.isVisualChunk(chunk) &&
       substantiveTokenCount < GRADING_QUALITY.MIN_SUBSTANTIVE_TOKENS
     ) {
       reasons.push("too_short");
@@ -368,14 +407,25 @@ export class SubmissionQualityService {
     return PAGE_LABEL_PATTERN.test(text.trim());
   }
 
-  private isMetadataBanner(lowerText: string): boolean {
-    for (const prefix of METADATA_BANNER_PREFIXES) {
-      if (lowerText.startsWith(prefix)) return true;
+  private getBannerReason(lowerText: string): ChunkIneligibleReason | null {
+    for (const { prefix, reason } of BANNER_REASONS) {
+      if (lowerText.startsWith(prefix)) return reason;
     }
     // Metadata key-value lines are always short (e.g. "Title: My Doc").
     // Reject the pattern on long text to avoid false-positives on learner content
     // that begins with "Subject:", "Title:", "Author:", etc.
-    return lowerText.length <= 80 && METADATA_KEY_PATTERN.test(lowerText);
+    return lowerText.length <= 80 && METADATA_KEY_PATTERN.test(lowerText)
+      ? "metadata_only"
+      : null;
+  }
+
+  private isStructuralChunk(chunk: ExtractedChunk): boolean {
+    const blockType = chunk.metadata?.blockType;
+    return blockType !== undefined && STRUCTURAL_BLOCK_TYPES.has(blockType);
+  }
+
+  private isVisualChunk(chunk: ExtractedChunk): boolean {
+    return chunk.anchor.type === "image" || chunk.sourceType === "image";
   }
 
   // A heading-only page has chunks exclusively of type "heading" with no
@@ -384,7 +434,6 @@ export class SubmissionQualityService {
   // chunks without blockType (text/url sources) are skipped so they never
   // trigger false heading-only flags.
   private detectHeadingOnlyPages(chunks: ExtractedChunk[]): Set<number> {
-
     const pageHasSubstantive = new Map<number, boolean>();
     const pageHasKnownBlock = new Map<number, boolean>();
 
@@ -495,7 +544,8 @@ export class SubmissionQualityService {
       const tokens =
         chunk.quality?.eligibility === "ineligible"
           ? 0
-          : (chunk.quality?.substantiveTokenCount ?? this.getSubstantiveTokens(chunk.text).size);
+          : (chunk.quality?.substantiveTokenCount ??
+            this.getSubstantiveTokens(chunk.text).size);
       tokensByPage.set(page, (tokensByPage.get(page) ?? 0) + tokens);
     }
 
@@ -510,6 +560,7 @@ export class SubmissionQualityService {
     boilerplateRatio: number;
     pageCount?: number;
     avgSubstantiveTokensPerPage?: number;
+    hasVisualContent?: boolean;
   }): SubmissionQualityClassification {
     if (parameters.totalChunks === 0) return "empty";
 
@@ -517,8 +568,17 @@ export class SubmissionQualityService {
     // When eligible chunks exist, grading proceeds and the classification is "clean"
     // regardless of boilerplate ratio — quality signal is surfaced via qualityWarnings.
     if (parameters.eligibleCount === 0) {
-      if (parameters.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL) {
+      if (
+        parameters.boilerplateRatio >= GRADING_QUALITY.BOILERPLATE_RATIO_FAIL
+      ) {
         return "boilerplate_many_pages";
+      }
+
+      // Visual content is present but produced no eligible evidence (e.g. OCR
+      // matched boilerplate or the prompt). Flags that manual/visual review
+      // could still find gradable work.
+      if (parameters.hasVisualContent) {
+        return "needs_visual_evidence";
       }
 
       if (
@@ -536,10 +596,7 @@ export class SubmissionQualityService {
   }
 
   private normalizeForDedup(text: string): string {
-    return text
-      .toLowerCase()
-      .replaceAll(/\s+/g, " ")
-      .trim();
+    return text.toLowerCase().replaceAll(/\s+/g, " ").trim();
   }
 
   private tokenize(text: string): Set<string> {
@@ -550,9 +607,7 @@ export class SubmissionQualityService {
         .split(/\s+/)
         .filter(
           (token) =>
-            token.length > 2 &&
-            !/^\d+$/.test(token) &&
-            !STOPWORDS.has(token),
+            token.length > 2 && !/^\d+$/.test(token) && !STOPWORDS.has(token),
         ),
     );
   }
@@ -565,9 +620,7 @@ export class SubmissionQualityService {
         .split(/\s+/)
         .filter(
           (token) =>
-            token.length > 1 &&
-            !/^\d+$/.test(token) &&
-            !STOPWORDS.has(token),
+            token.length > 1 && !/^\d+$/.test(token) && !STOPWORDS.has(token),
         ),
     );
   }

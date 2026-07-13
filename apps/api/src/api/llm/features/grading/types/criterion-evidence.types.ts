@@ -34,8 +34,6 @@ export type ChunkIneligibleReason =
   | "prompt_copy"
   | "rubric_copy"
   | "too_short"
-  | "low_information"
-  | "duplicate"
   | "generated_summary"
   | "non_learner_source"
   | "heading_only_page";
