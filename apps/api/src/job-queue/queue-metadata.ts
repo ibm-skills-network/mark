@@ -35,6 +35,10 @@ export const QUEUE_METADATA: Record<string, QueueMetadata> = {
     role: "learner",
     defaultConcurrencyPerPod: 4,
   },
+  [JOB_QUEUE_NAMES.ATTEMPT_HEAVY]: {
+    role: "learner",
+    defaultConcurrencyPerPod: 1,
+  },
   [JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS]: {
     role: "translation",
     defaultConcurrencyPerPod: 8,
