@@ -99,19 +99,21 @@ describe("CriterionEvidencePipelineService", () => {
     };
 
     const qualityService = {
-      classifyChunks: jest.fn().mockImplementation((chunks: ExtractedChunk[]) => ({
-        chunks,
-        quality: {
-          classification: "clean",
-          gated: false,
-          qualityWarnings: [],
-          rawChunkCount: chunks.length,
-          eligibleChunkCount: chunks.length,
-          ineligibleChunkCount: 0,
-          boilerplateRatio: 0,
-          ineligibleReasonBreakdown: {},
-        },
-      })),
+      classifyChunks: jest
+        .fn()
+        .mockImplementation((chunks: ExtractedChunk[]) => ({
+          chunks,
+          quality: {
+            classification: "clean",
+            gated: false,
+            qualityWarnings: [],
+            rawChunkCount: chunks.length,
+            eligibleChunkCount: chunks.length,
+            ineligibleChunkCount: 0,
+            boilerplateRatio: 0,
+            ineligibleReasonBreakdown: {},
+          },
+        })),
     };
 
     const pipeline = new CriterionEvidencePipelineService(
@@ -133,5 +135,83 @@ describe("CriterionEvidencePipelineService", () => {
 
     expect(result.grades[0].attempt).toBe(1);
     expect(result.audit.finalSelection[0].reason).toBe("highest_support_score");
+  });
+
+  it("short-circuits to minimum rubric points when the quality gate rejects all chunks", async () => {
+    const { SubmissionQualityService } = await import(
+      "./submission-quality.service"
+    );
+
+    const twoLevelCriterion: RubricCriterion = {
+      id: "c-two",
+      rubricQuestion: "Two-level criterion",
+      description: "",
+      criteria: [
+        { description: "Not met", points: 2 },
+        { description: "Met", points: 5 },
+      ],
+      maxPoints: 5,
+    };
+
+    // Completion-only rubric: single level, min === max — policy awards it.
+    const oneLevelCriterion: RubricCriterion = {
+      id: "c-one",
+      rubricQuestion: "Completion-only criterion",
+      description: "",
+      criteria: [{ description: "Completed", points: 3 }],
+      maxPoints: 3,
+    };
+
+    const ineligibleChunks: ExtractedChunk[] = [
+      {
+        chunkId: "meta",
+        text: "=== PDF DOCUMENT ===",
+        sourceType: "file",
+        sourceId: "sub",
+        anchor: { type: "file", page: 1, blockId: "b1" },
+        hash: "meta",
+      },
+      {
+        chunkId: "label",
+        text: "Page 1 of 3",
+        sourceType: "file",
+        sourceId: "sub",
+        anchor: { type: "file", page: 1, blockId: "b2" },
+        hash: "label",
+      },
+    ];
+
+    const mustNotBeCalled = jest.fn(() => {
+      throw new Error("must not be called when quality gate fires");
+    });
+
+    const pipeline = new CriterionEvidencePipelineService(
+      { retrieveEvidence: mustNotBeCalled } as any,
+      { gradeCriterion: mustNotBeCalled } as any,
+      { judge: mustNotBeCalled } as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+      new SubmissionQualityService(),
+    );
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Question text for the assignment",
+      criteria: [twoLevelCriterion, oneLevelCriterion],
+      chunks: ineligibleChunks,
+      assignmentId: 1,
+    });
+
+    expect(mustNotBeCalled).not.toHaveBeenCalled();
+    expect(result.grades).toHaveLength(2);
+    expect(result.grades[0].pointsAwarded).toBe(2); // non-zero rubric minimum
+    expect(result.grades[1].pointsAwarded).toBe(3); // completion-only: min === max
+    expect(result.summary.totalPoints).toBe(5);
+    expect(result.audit.submissionQuality?.gated).toBe(true);
+    expect(result.audit.submissionQuality?.eligibleChunkCount).toBe(0);
+    expect(
+      result.audit.finalSelection.every(
+        (selection) => selection.reason === "quality_gate_no_eligible_chunks",
+      ),
+    ).toBe(true);
   });
 });

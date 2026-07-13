@@ -142,4 +142,102 @@ describe("CriterionEvidenceRetrievalService", () => {
 
     expect(response.evidence.length).toBeGreaterThan(0);
   });
+
+  describe("validation outcomes", () => {
+    const criterion: RubricCriterion = {
+      id: "c-validate",
+      rubricQuestion: "Does the submission explain database normalization?",
+      description: "Normalization explanation check.",
+      criteria: [
+        { description: "Explained", points: 2 },
+        { description: "Not explained", points: 0 },
+      ],
+      maxPoints: 2,
+    };
+
+    async function run(promptReturnValue: string) {
+      const chunks = [
+        makeChunk("ch1", "Normalization reduces database redundancy."),
+        makeChunk("ch2", "Some unrelated learner text about databases."),
+      ];
+      const service = makeService(promptReturnValue);
+      const index = new ChunkIndex(chunks);
+      return service.retrieveEvidence(
+        {
+          criterion,
+          question: "Explain normalization",
+          chunks,
+          assignmentId: 1,
+        },
+        index,
+      );
+    }
+
+    it("marks supported evidence as validated", async () => {
+      const response = await run(
+        JSON.stringify({
+          evidence: [{ chunkId: "ch1", relevance: "supports" }],
+        }),
+      );
+      expect(response.validationOutcome).toBe("validated");
+      expect(response.evidence).toHaveLength(1);
+      expect(response.evidence[0].chunkId).toBe("ch1");
+    });
+
+    it("respects an explicit irrelevant rejection and does not fall back", async () => {
+      const response = await run(
+        JSON.stringify({
+          evidence: [
+            { chunkId: "ch1", relevance: "irrelevant" },
+            { chunkId: "ch2", relevance: "irrelevant" },
+          ],
+        }),
+      );
+      expect(response.validationOutcome).toBe("rejected");
+      expect(response.evidence).toHaveLength(0);
+    });
+
+    it("respects an explicit boilerplate_only rejection and does not fall back", async () => {
+      const response = await run(
+        JSON.stringify({
+          evidence: [{ chunkId: "ch1", relevance: "boilerplate_only" }],
+        }),
+      );
+      expect(response.validationOutcome).toBe("rejected");
+      expect(response.evidence).toHaveLength(0);
+    });
+
+    it("respects an explicit restatement_only rejection and does not fall back", async () => {
+      const response = await run(
+        JSON.stringify({
+          evidence: [{ chunkId: "ch1", relevance: "restatement_only" }],
+        }),
+      );
+      expect(response.validationOutcome).toBe("rejected");
+      expect(response.evidence).toHaveLength(0);
+    });
+
+    it("falls back to keyword evidence on validation parse failure", async () => {
+      const response = await run("this is not parseable JSON at all");
+      expect(response.validationOutcome).toBe("technical_failure");
+      expect(response.evidence.length).toBeGreaterThan(0);
+    });
+
+    it("treats empty validation output as validated and allows keyword fallback", async () => {
+      const response = await run(JSON.stringify({ evidence: [] }));
+      expect(response.validationOutcome).toBe("validated");
+      expect(response.evidence.length).toBeGreaterThan(0);
+    });
+
+    it("keeps contradiction evidence visible but flagged", async () => {
+      const response = await run(
+        JSON.stringify({
+          evidence: [{ chunkId: "ch1", relevance: "contradicts" }],
+        }),
+      );
+      expect(response.validationOutcome).toBe("validated");
+      expect(response.evidence).toHaveLength(1);
+      expect(response.evidence[0].contradiction).toBe(true);
+    });
+  });
 });

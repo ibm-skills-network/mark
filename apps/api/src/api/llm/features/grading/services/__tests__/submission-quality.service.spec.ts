@@ -205,4 +205,115 @@ describe("SubmissionQualityService", () => {
       expect(chunks[0].quality?.substantiveTokenCount).toBeGreaterThan(0);
     });
   });
+
+  describe("short answers and structural content (source-aware policy)", () => {
+    it("keeps a short but valid prose answer eligible", () => {
+      const { chunks } = service.classifyChunks([makeChunk("Paris, France.")]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+
+    it("keeps short code fragments eligible via structural exemption", () => {
+      const chunk: ExtractedChunk = {
+        ...makeChunk("x = 5"),
+        metadata: { blockType: "code" },
+      };
+      const { chunks } = service.classifyChunks([chunk]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+
+    it("keeps short table rows eligible via structural exemption", () => {
+      const chunk: ExtractedChunk = {
+        ...makeChunk("East | 100"),
+        metadata: { blockType: "table" },
+      };
+      const { chunks } = service.classifyChunks([chunk]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+
+    it("keeps short image OCR chunks eligible", () => {
+      const chunk: ExtractedChunk = {
+        chunkId: "img1",
+        text: "chart",
+        sourceType: "image",
+        sourceId: "figure.png",
+        anchor: { type: "image", imageId: "img1" },
+        hash: "img1",
+      };
+      const { chunks } = service.classifyChunks([chunk]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+  });
+
+  describe("prompt copy followed by a real answer", () => {
+    it("excludes the copied prompt but keeps the real answer eligible", () => {
+      const question =
+        "Explain the concept of data normalization and its importance in database design.";
+      const copy = makeChunk(question, 1, "copy");
+      const answer = makeChunk(
+        "Normalization organizes relational tables to reduce redundancy and improve integrity.",
+        1,
+        "answer",
+      );
+
+      const { chunks, quality } = service.classifyChunks([copy, answer], {
+        question,
+      });
+
+      expect(chunks[0].quality?.ineligibleReasons).toContain("prompt_copy");
+      expect(chunks[1].quality?.eligibility).toBe("eligible");
+      expect(quality.classification).toBe("clean");
+      expect(quality.eligibleChunkCount).toBe(1);
+    });
+  });
+
+  describe("heading-only pages", () => {
+    it("marks pages containing only headings as heading_only_page", () => {
+      const heading: ExtractedChunk = {
+        ...makeChunk("Introduction to Machine Learning Systems"),
+        metadata: { blockType: "heading" },
+      };
+      const { chunks, quality } = service.classifyChunks([heading]);
+      expect(chunks[0].quality?.eligibility).toBe("ineligible");
+      expect(chunks[0].quality?.ineligibleReasons).toContain(
+        "heading_only_page",
+      );
+      expect(quality.eligibleChunkCount).toBe(0);
+    });
+
+    it("does not flag headings on pages that also carry body content", () => {
+      const heading: ExtractedChunk = {
+        ...makeChunk("Results and Analysis Overview", 1, "h1"),
+        metadata: { blockType: "heading" },
+      };
+      const body: ExtractedChunk = {
+        ...makeChunk(
+          "The experiment produced consistent accuracy improvements across datasets.",
+          1,
+          "b1",
+        ),
+        metadata: { blockType: "paragraph" },
+      };
+      const { chunks } = service.classifyChunks([heading, body]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+      expect(chunks[1].quality?.eligibility).toBe("eligible");
+    });
+  });
+
+  describe("needs_visual_evidence classification", () => {
+    it("classifies image-bearing submissions with zero eligible chunks as needs_visual_evidence", () => {
+      const question =
+        "Explain the concept of data normalization and its importance in database design.";
+      const imageChunk: ExtractedChunk = {
+        chunkId: "img1",
+        text: question, // OCR that is a pure prompt copy
+        sourceType: "image",
+        sourceId: "photo.png",
+        anchor: { type: "image", imageId: "img1", page: 1 },
+        hash: "img1",
+      };
+      const { quality } = service.classifyChunks([imageChunk], { question });
+      expect(quality.eligibleChunkCount).toBe(0);
+      expect(quality.classification).toBe("needs_visual_evidence");
+    });
+  });
 });
