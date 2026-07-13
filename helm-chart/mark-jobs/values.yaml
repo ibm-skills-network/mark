@@ -50,6 +50,17 @@ env:
   # the GRADING_CONCURRENCY name with the LLM cap; renamed so tuning one
   # tier doesn't silently retune the other.
   GRADING_WORKER_CONCURRENCY: "4"
+  # Comma-separated queue names this deployment's pods consume. Unset/empty
+  # means ALL queues (single-deployment and local-dev behavior). Deploy
+  # overlays use this to split the fast and heavy worker tiers, e.g.
+  #   fast:  every queue except mark.attempt.heavy
+  #   heavy: "mark.attempt.heavy"
+  # An unknown queue name fails the pod at boot (crash loop) by design.
+  # JOB_WORKER_QUEUES: ""
+  # BullMQ worker concurrency for mark.attempt.heavy when consumed. Default 1:
+  # heavy jobs are the file/image extraction memory hogs, so one at a time
+  # per pod unless observation says otherwise.
+  # HEAVY_GRADING_WORKER_CONCURRENCY: "1"
   # Hard cap on evidence blocks per submission ingestion (spreadsheet text
   # splitting + PDF structure extraction). The code falls back to 50000 when
   # this is unset, empty, or not a positive integer.
