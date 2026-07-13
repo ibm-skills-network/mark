@@ -11,6 +11,7 @@ import {
   CriterionGradeSchema,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { minimumRubricPoints } from "../grading-policy";
 import { buildCriterionGradingPrompt } from "../prompts/criterion-grading.prompt";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
@@ -50,8 +51,8 @@ export class CriterionGradingService {
     const allowedPoints = request.criterion.criteria.map(
       (level) => level.points,
     );
-    const maxPoints = Math.max(...allowedPoints);
-    const minPoints = Math.min(...allowedPoints);
+    const maxPoints = request.criterion.maxPoints;
+    const minPoints = minimumRubricPoints(request.criterion);
 
     if (!request.evidence || request.evidence.length === 0) {
       return {

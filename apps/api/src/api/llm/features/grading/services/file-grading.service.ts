@@ -647,6 +647,9 @@ export class FileGradingService implements IFileGradingService {
     );
   }
 
+  // No-evidence scoring follows the shared policy in ../grading-policy.ts:
+  // each criterion gets its minimum rubric level (full credit only for
+  // deliberate one-level completion criteria).
   private createMinimumEvidenceResponse(
     maxTotalPoints: number,
     scoringCriteria?: ScoringDto,

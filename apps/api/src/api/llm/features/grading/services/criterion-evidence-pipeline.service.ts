@@ -12,6 +12,7 @@ import {
   SubmissionQualityMetadata,
   rubricCriterionToText,
 } from "../types/criterion-evidence.types";
+import { NO_EVIDENCE_RATIONALE, minimumRubricPoints } from "../grading-policy";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
 import {
@@ -119,15 +120,12 @@ export class CriterionEvidencePipelineService {
       );
 
       const grades: CriterionGrade[] = request.criteria.map((criterion) => {
-        const allowedPoints = criterion.criteria.map((l) => l.points);
-        const minPoints = allowedPoints.length > 0 ? Math.min(...allowedPoints) : 0;
         return {
           criterionId: criterion.id,
           rubricQuestion: criterion.rubricQuestion,
-          pointsAwarded: minPoints,
+          pointsAwarded: minimumRubricPoints(criterion),
           maxPoints: criterion.maxPoints,
-          rationale:
-            "No substantive learner evidence found in the submission.",
+          rationale: NO_EVIDENCE_RATIONALE,
           citations: [],
           confidence: "low" as const,
           decision: "does_not_meet" as const,
@@ -140,7 +138,10 @@ export class CriterionEvidencePipelineService {
 
       const summary = this.compiler.compile(grades);
 
-      const gatedQuality: SubmissionQualityMetadata = { ...submissionQuality, gated: true };
+      const gatedQuality: SubmissionQualityMetadata = {
+        ...submissionQuality,
+        gated: true,
+      };
       const audit = this.buildAuditLog(
         request,
         [],

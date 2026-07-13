@@ -33,6 +33,7 @@ import {
   RubricCriterion,
   rubricCriterionToText,
 } from "../types/criterion-evidence.types";
+import { NO_EVIDENCE_RATIONALE, minimumRubricPoints } from "../grading-policy";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { SubmissionQualityService } from "./submission-quality.service";
@@ -217,15 +218,14 @@ export class EvidenceBasedGradingService {
           `Quality gate fired on fallback path: classification=${fallbackQuality.classification}`,
         );
         for (const criterion of criteria) {
-          const allowedPoints = criterion.criteria.map((l) => l.points);
-          const minPoints = allowedPoints.length > 0 ? Math.min(...allowedPoints) : 0;
+          const minPoints = minimumRubricPoints(criterion);
           criteriaResults.push({
             criterionId: criterion.id,
             rubricQuestion: criterion.rubricQuestion,
             pointsAwarded: minPoints,
             maxPoints: criterion.maxPoints,
             evidence: [],
-            rationale: "No substantive learner evidence found in the submission.",
+            rationale: NO_EVIDENCE_RATIONALE,
             decision: "does_not_meet",
             gradedAt: new Date().toISOString(),
           });
@@ -479,9 +479,7 @@ LANGUAGE: {language}
       submission,
     );
 
-    const minPoints = Math.min(
-      ...criterion.criteria.map((level) => level.points),
-    );
+    const minPoints = minimumRubricPoints(criterion);
 
     if (validatedEvidence.length === 0) {
       this.logger.warn(
@@ -1066,9 +1064,7 @@ LANGUAGE: {language}
       criterion.description
     } ${criteriaText}`.trim();
     const rubricText = rawRubricText.toLowerCase();
-    const minPoints = Math.min(
-      ...criterion.criteria.map((level) => level.points),
-    );
+    const minPoints = minimumRubricPoints(criterion);
     const maxPoints = criterion.maxPoints;
 
     const readValue = (key: string): string | undefined =>
