@@ -9,7 +9,11 @@ import {
   RubricCriterion,
 } from "../types/criterion-evidence.types";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { LLM_RESOLVER_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
+import {
+  LLM_RESOLVER_SERVICE,
+  PROMPT_PROCESSOR,
+  isGradingJudgeEnabled,
+} from "../../../llm.constants";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import { extractStructuredJSON } from "../../../core/utils/structured-json.util";
 import { buildCriterionJudgePrompt } from "../prompts/criterion-judge.prompt";
@@ -40,6 +44,17 @@ export class CriterionJudgeService {
     request: JudgeRequest,
     recorder?: LlmCallRecorder,
   ): Promise<JudgeCritique> {
+    if (!isGradingJudgeEnabled()) {
+      this.logger.debug(
+        `Criterion judge disabled via ENABLE_GRADING_JUDGE; auto-approving grades for assignment ${request.assignmentId}`,
+      );
+      return {
+        approved: true,
+        issues: [],
+        summary: "Judge disabled (ENABLE_GRADING_JUDGE)",
+      };
+    }
+
     const parser = StructuredOutputParser.fromZodSchema(JudgeCritiqueSchema);
     const formatInstructions = parser.getFormatInstructions();
 

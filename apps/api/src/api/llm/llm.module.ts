@@ -71,12 +71,11 @@ import {
   USAGE_TRACKER,
   VALIDATOR_SERVICE,
   VIDEO_PRESENTATION_GRADING_SERVICE,
+  isGradingJudgeEnabled,
 } from "./llm.constants";
 import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service";
 
-const shouldDisableJudge = !["1", "true", "yes"].includes(
-  (process.env.ENABLE_GRADING_JUDGE || "").toLowerCase(),
-);
+const shouldDisableJudge = !isGradingJudgeEnabled();
 
 @Global()
 @Module({
