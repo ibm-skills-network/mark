@@ -198,20 +198,21 @@ export class EvidenceBasedGradingService {
         `Evidence pipeline complete: ${totalPoints}/${maxPossiblePoints} points (${criteriaResults.length} criteria)`,
       );
     } catch (error) {
+      const pipelineFailureReason =
+        error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `Evidence pipeline failed, falling back to legacy grading: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Evidence pipeline failed, falling back to legacy grading: ${pipelineFailureReason}`,
       );
 
       // Run the quality gate on the fallback path so boilerplate/empty submissions
       // can't bypass it via a pipeline failure.  chunks was extracted before the
       // try block so we reuse it here rather than parsing the submission a second time.
       const rubricTexts = criteria.map((c) => rubricCriterionToText(c));
-      const { quality: fallbackQuality } = this.qualityService.classifyChunks(
-        chunks,
-        { question: questionText, rubricTexts },
-      );
+      const { chunks: classifiedChunks, quality: fallbackQuality } =
+        this.qualityService.classifyChunks(chunks, {
+          question: questionText,
+          rubricTexts,
+        });
 
       if (fallbackQuality.eligibleChunkCount === 0) {
         this.logger.warn(
@@ -232,7 +233,39 @@ export class EvidenceBasedGradingService {
           totalPoints += minPoints;
           maxPossiblePoints += criterion.maxPoints;
         }
+        auditLog = {
+          gradedAt: new Date().toISOString(),
+          modelUsed: "quality_gate_fallback",
+          determinismChecksum: submission.metadata.checksum,
+          auditLog: {
+            fallbackReason: pipelineFailureReason,
+            finalSelection: criteria.map((criterion) => ({
+              criterionId: criterion.id,
+              reason: "quality_gate_no_eligible_chunks",
+            })),
+            submissionQuality: { ...fallbackQuality, gated: true },
+          },
+        };
       } else {
+        // Legacy fallback must see only quality-eligible content — a transient
+        // pipeline error must not re-open grading of excluded chunks.
+        const qualifiedSubmission = this.buildQualifiedSubmission(
+          submission,
+          classifiedChunks,
+        );
+        auditLog = {
+          gradedAt: new Date().toISOString(),
+          modelUsed: "legacy_fallback_qualified",
+          determinismChecksum: submission.metadata.checksum,
+          auditLog: {
+            fallbackReason: pipelineFailureReason,
+            finalSelection: criteria.map((criterion) => ({
+              criterionId: criterion.id,
+              reason: "pipeline_failure_legacy_fallback",
+            })),
+            submissionQuality: fallbackQuality,
+          },
+        };
         for (const criterion of criteria) {
           try {
             this.logger.debug(
@@ -240,7 +273,7 @@ export class EvidenceBasedGradingService {
             );
 
             const result = await this.gradeOneCriterion(
-              submission,
+              qualifiedSubmission,
               criterion,
               questionText,
               assignmentId,
@@ -623,6 +656,55 @@ LANGUAGE: {language}
     this.logger.debug(
       `Updated ${updatedCount} image blocks with criterion-aware descriptions`,
     );
+  }
+
+  /**
+   * Copy of the submission containing only blocks whose chunks passed the
+   * quality gate, so legacy fallback grading (and its citation validation)
+   * can never see or credit excluded content.
+   *
+   * The system-generated spreadsheet validator report (always blockId "p1b0",
+   * classified non_learner_source) is deliberately kept: the deterministic
+   * validator overrides depend on it, and learner-embedded lookalike banners
+   * arrive under other blockIds so they stay filtered out.
+   */
+  private buildQualifiedSubmission(
+    submission: CanonicalSubmission,
+    classifiedChunks: ExtractedChunk[],
+  ): CanonicalSubmission {
+    const eligibleBlockIds = new Set<string>();
+    for (const chunk of classifiedChunks) {
+      if (chunk.quality?.eligibility === "ineligible") continue;
+      if (chunk.anchor.type === "file" && chunk.anchor.blockId) {
+        eligibleBlockIds.add(chunk.anchor.blockId);
+      } else if (chunk.anchor.type === "image" && chunk.anchor.imageId) {
+        eligibleBlockIds.add(chunk.anchor.imageId);
+      }
+    }
+
+    const pages = submission.pages
+      .map((page) => ({
+        ...page,
+        blocks: page.blocks.filter(
+          (block) =>
+            eligibleBlockIds.has(block.blockId) ||
+            (block.blockId === "p1b0" &&
+              block.text.startsWith("=== VALIDATOR REPORT ===")),
+        ),
+      }))
+      .filter((page) => page.blocks.length > 0);
+
+    const blockCount = pages.reduce((sum, page) => sum + page.blocks.length, 0);
+
+    return {
+      ...submission,
+      pages,
+      metadata: {
+        ...submission.metadata,
+        pageCount: pages.length,
+        blockCount,
+      },
+    };
   }
 
   /**
