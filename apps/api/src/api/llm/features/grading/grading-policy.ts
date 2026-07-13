@@ -7,10 +7,11 @@ import { RubricCriterion } from "./types/criterion-evidence.types";
  * 1. No-evidence scoring: every criterion is awarded its MINIMUM rubric point
  *    level. This preserves the pre-refactor behavior on every path (pipeline
  *    quality gate, legacy fallback, FileGradingService minimum-response).
- *    Deliberate exception to the remediation plan's "never 100%" invariant:
- *    when a criterion has a single point level (min === max), the minimum IS
- *    full credit and is still awarded — completion-only criteria are meant to
- *    award their points unconditionally.
+ *    Completion-only criteria (a single point level, min === max) award their
+ *    points only when the submission is NON-EMPTY: submitting something counts
+ *    as completion even when it is not valid evidence for substantive
+ *    criteria. A completely empty submission (no extractable content at all)
+ *    is awarded zero on completion-only criteria so it can never reach 100%.
  *
  * 2. What counts as learner evidence:
  *    - Learner evidence: learner prose, code, tables, lists, equations,
@@ -37,4 +38,20 @@ export const NO_EVIDENCE_RATIONALE =
 export function minimumRubricPoints(criterion: RubricCriterion): number {
   const points = criterion.criteria.map((level) => level.points);
   return points.length > 0 ? Math.min(...points) : 0;
+}
+
+/**
+ * Points to award a criterion when a submission has no eligible evidence.
+ * Multi-level criteria always get their minimum. Completion-only criteria
+ * (min === max) get their points for a non-empty submission but zero for a
+ * completely empty one, so an empty file can never earn full credit.
+ */
+export function noEvidencePoints(
+  pointLevels: number[],
+  submissionIsEmpty: boolean,
+): number {
+  const min = pointLevels.length > 0 ? Math.min(...pointLevels) : 0;
+  if (!submissionIsEmpty) return min;
+  const max = pointLevels.length > 0 ? Math.max(...pointLevels) : 0;
+  return min === max ? 0 : min;
 }

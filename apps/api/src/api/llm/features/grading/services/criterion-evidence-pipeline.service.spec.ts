@@ -204,7 +204,8 @@ describe("CriterionEvidencePipelineService", () => {
     expect(mustNotBeCalled).not.toHaveBeenCalled();
     expect(result.grades).toHaveLength(2);
     expect(result.grades[0].pointsAwarded).toBe(2); // non-zero rubric minimum
-    expect(result.grades[1].pointsAwarded).toBe(3); // completion-only: min === max
+    // Non-empty submission: completion-only criterion still awards its level.
+    expect(result.grades[1].pointsAwarded).toBe(3);
     expect(result.summary.totalPoints).toBe(5);
     expect(result.audit.submissionQuality?.gated).toBe(true);
     expect(result.audit.submissionQuality?.eligibleChunkCount).toBe(0);
@@ -213,5 +214,56 @@ describe("CriterionEvidencePipelineService", () => {
         (selection) => selection.reason === "quality_gate_no_eligible_chunks",
       ),
     ).toBe(true);
+  });
+
+  it("assigns zero to completion-only criteria for completely empty submissions", async () => {
+    const { SubmissionQualityService } = await import(
+      "./submission-quality.service"
+    );
+
+    const twoLevelCriterion: RubricCriterion = {
+      id: "c-two",
+      rubricQuestion: "Two-level criterion",
+      description: "",
+      criteria: [
+        { description: "Not met", points: 2 },
+        { description: "Met", points: 5 },
+      ],
+      maxPoints: 5,
+    };
+
+    const oneLevelCriterion: RubricCriterion = {
+      id: "c-one",
+      rubricQuestion: "Completion-only criterion",
+      description: "",
+      criteria: [{ description: "Completed", points: 3 }],
+      maxPoints: 3,
+    };
+
+    const mustNotBeCalled = jest.fn(() => {
+      throw new Error("must not be called when quality gate fires");
+    });
+
+    const pipeline = new CriterionEvidencePipelineService(
+      { retrieveEvidence: mustNotBeCalled } as any,
+      { gradeCriterion: mustNotBeCalled } as any,
+      { judge: mustNotBeCalled } as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+      new SubmissionQualityService(),
+    );
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Question text for the assignment",
+      criteria: [twoLevelCriterion, oneLevelCriterion],
+      chunks: [], // completely empty submission
+      assignmentId: 1,
+    });
+
+    expect(mustNotBeCalled).not.toHaveBeenCalled();
+    expect(result.grades[0].pointsAwarded).toBe(2); // multi-level minimum kept
+    expect(result.grades[1].pointsAwarded).toBe(0); // completion-only: empty ⇒ 0
+    expect(result.audit.submissionQuality?.classification).toBe("empty");
+    expect(result.audit.submissionQuality?.gated).toBe(true);
   });
 });

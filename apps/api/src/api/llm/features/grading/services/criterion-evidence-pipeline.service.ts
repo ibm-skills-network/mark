@@ -12,7 +12,7 @@ import {
   SubmissionQualityMetadata,
   rubricCriterionToText,
 } from "../types/criterion-evidence.types";
-import { NO_EVIDENCE_RATIONALE, minimumRubricPoints } from "../grading-policy";
+import { NO_EVIDENCE_RATIONALE, noEvidencePoints } from "../grading-policy";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
 import {
@@ -119,11 +119,15 @@ export class CriterionEvidencePipelineService {
           `ineligible=${submissionQuality.ineligibleChunkCount}`,
       );
 
+      const submissionIsEmpty = submissionQuality.rawChunkCount === 0;
       const grades: CriterionGrade[] = request.criteria.map((criterion) => {
         return {
           criterionId: criterion.id,
           rubricQuestion: criterion.rubricQuestion,
-          pointsAwarded: minimumRubricPoints(criterion),
+          pointsAwarded: noEvidencePoints(
+            criterion.criteria.map((level) => level.points),
+            submissionIsEmpty,
+          ),
           maxPoints: criterion.maxPoints,
           rationale: NO_EVIDENCE_RATIONALE,
           citations: [],

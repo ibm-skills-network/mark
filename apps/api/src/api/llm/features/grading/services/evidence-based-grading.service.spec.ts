@@ -351,7 +351,7 @@ describe("EvidenceBasedGradingService (orchestration)", () => {
       expect(result.criteriaResults.map((c) => c.pointsAwarded)).toEqual([
         0, // min of 0/5
         2, // non-zero rubric minimum preserved
-        3, // completion-only criterion: min === max, policy awards it
+        3, // completion-only criterion: submission is non-empty, so it awards
       ]);
       expect(result.criteriaResults.every((c) => c.evidence.length === 0)).toBe(
         true,
@@ -369,7 +369,7 @@ describe("EvidenceBasedGradingService (orchestration)", () => {
       ).toBe(true);
     });
 
-    it("handles a completely empty submission the same way", async () => {
+    it("gives a completely empty submission zero even on completion-only criteria", async () => {
       const pipeline = {
         gradeWithEvidence: jest
           .fn()
@@ -381,12 +381,16 @@ describe("EvidenceBasedGradingService (orchestration)", () => {
 
       const result = await service.gradeSubmission(
         submission,
-        [TWO_LEVEL_CRITERION],
+        [TWO_LEVEL_CRITERION, COMPLETION_ONLY_CRITERION],
         QUESTION,
         1,
       );
 
       expect(promptProcessor.processPromptForFeature).not.toHaveBeenCalled();
+      // Empty ⇒ completion-only criterion gets 0, not its full-credit minimum.
+      expect(result.criteriaResults.map((c) => c.pointsAwarded)).toEqual([
+        0, 0,
+      ]);
       expect(result.totalPoints).toBe(0);
       const audit = (result.metadata as any).auditLog;
       expect(audit.submissionQuality.classification).toBe("empty");

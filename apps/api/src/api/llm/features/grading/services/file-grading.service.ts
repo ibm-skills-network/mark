@@ -40,6 +40,7 @@ import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import { RubricCriterion } from "../types/criterion-evidence.types";
 import { ContentSummarizationService } from "./content-summarization.service";
+import { noEvidencePoints } from "../grading-policy";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
 import {
   extractExpectedFilenameFromText,
@@ -648,23 +649,23 @@ export class FileGradingService implements IFileGradingService {
   }
 
   // No-evidence scoring follows the shared policy in ../grading-policy.ts:
-  // each criterion gets its minimum rubric level (full credit only for
-  // deliberate one-level completion criteria).
+  // each criterion gets its minimum rubric level; one-level completion
+  // criteria award their points only for non-empty submissions.
   private createMinimumEvidenceResponse(
     maxTotalPoints: number,
     scoringCriteria?: ScoringDto,
+    submissionIsEmpty = false,
   ): FileBasedQuestionResponseModel {
     const rubricScores: RubricScore[] = [];
 
     if (scoringCriteria?.rubrics && Array.isArray(scoringCriteria.rubrics)) {
       for (const rubric of scoringCriteria.rubrics) {
         const pointsList = rubric.criteria?.map((c) => c.points) ?? [];
-        const minPoints = pointsList.length > 0 ? Math.min(...pointsList) : 0;
         const maxPoints = pointsList.length > 0 ? Math.max(...pointsList) : 0;
 
         rubricScores.push({
           rubricQuestion: rubric.rubricQuestion || "Unnamed rubric",
-          pointsAwarded: minPoints,
+          pointsAwarded: noEvidencePoints(pointsList, submissionIsEmpty),
           maxPoints,
           justification: "No supporting evidence found in the submission.",
           evidence: [],
@@ -2613,9 +2614,15 @@ export class FileGradingService implements IFileGradingService {
       this.logger.warn(
         "Evidence-based grading failed - assigning minimum points",
       );
+      const submissionIsEmpty = !learnerResponse.some((file) =>
+        file.structuredContent?.pages?.some((page) =>
+          page.blocks?.some((b) => b.text?.trim() || b.imageData),
+        ),
+      );
       return this.createMinimumEvidenceResponse(
         maxTotalPoints,
         scoringCriteria,
+        submissionIsEmpty,
       );
     }
   }
