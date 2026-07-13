@@ -138,11 +138,27 @@ export interface CriterionEvidence {
   contradiction?: boolean;
 }
 
+/**
+ * Outcome of LLM evidence validation:
+ * - "validated": parse succeeded; selected evidence (possibly empty) is trusted
+ * - "rejected": parse succeeded, nothing validated, and the validator explicitly
+ *   labelled candidates irrelevant/restatement_only/boilerplate_only — keyword
+ *   fallback must NOT override this decision
+ * - "technical_failure": response could not be parsed — keyword fallback allowed
+ * - "disabled": validation was intentionally not run — keyword fallback allowed
+ */
+export type EvidenceValidationOutcome =
+  | "validated"
+  | "rejected"
+  | "technical_failure"
+  | "disabled";
+
 export interface CriterionEvidenceResponse {
   criterionId: string;
   evidence: CriterionEvidence[];
   strategyUsed: EvidenceRetrievalStrategy;
   retrievedAt: string;
+  validationOutcome?: EvidenceValidationOutcome;
   debug?: {
     candidateCount: number;
     validatedCount: number;

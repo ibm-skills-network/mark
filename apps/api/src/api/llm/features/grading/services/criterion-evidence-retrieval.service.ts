@@ -12,6 +12,7 @@ import {
   CriterionEvidenceResponse,
   EvidenceAnchor,
   EvidenceRetrievalStrategy,
+  EvidenceValidationOutcome,
   EvidenceValidationSchema,
   ExtractedChunk,
   RubricCriterion,
@@ -114,7 +115,10 @@ export class CriterionEvidenceRetrievalService {
     if (reranked.length === 0) {
       const allChunks = index.getAllChunks();
       const scored = allChunks.map((chunk) => {
-        const relevance = this.computeRelevanceScore(request.criterion, chunk.text);
+        const relevance = this.computeRelevanceScore(
+          request.criterion,
+          chunk.text,
+        );
         return { chunk, score: 0, relevance, combined: relevance };
       });
 
@@ -124,7 +128,10 @@ export class CriterionEvidenceRetrievalService {
         .slice(0, maxEvidence);
 
       // Cap fallback length so LLM validation always runs on a bounded candidate set.
-      reranked = aboveThreshold.length > 0 ? aboveThreshold : scored.slice(0, maxEvidence);
+      reranked =
+        aboveThreshold.length > 0
+          ? aboveThreshold
+          : scored.slice(0, maxEvidence);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
@@ -135,10 +142,7 @@ export class CriterionEvidenceRetrievalService {
 
     let evidence: CriterionEvidence[] = [];
     let validatedCount = 0;
-    // True when validation ran AND the LLM returned evidence items but they were
-    // all classified as restatement_only/boilerplate_only (filtered by score).
-    // In that case we must not rescue with the keyword fallback.
-    let definitivelyRejected = false;
+    let validationOutcome: EvidenceValidationOutcome = "disabled";
 
     if (strategy === "llm" || this.config.enableLlmValidation) {
       const outcome = await this.validateWithLlm(
@@ -147,8 +151,10 @@ export class CriterionEvidenceRetrievalService {
         recorder,
       );
 
-      if (outcome !== null) {
-        definitivelyRejected = outcome.definitivelyRejected;
+      if (outcome === null) {
+        validationOutcome = "technical_failure";
+      } else {
+        validationOutcome = outcome.outcome;
         if (outcome.evidence.length > 0) {
           validatedCount = outcome.evidence.length;
           evidence = outcome.evidence.map((item) => ({
@@ -165,9 +171,11 @@ export class CriterionEvidenceRetrievalService {
       }
     }
 
-    // Keyword fallback: only when validation didn't produce evidence AND the LLM
-    // did not explicitly mark everything as restatement/boilerplate.
-    if (evidence.length === 0 && !definitivelyRejected) {
+    // Keyword fallback: only when validation produced no evidence AND did not
+    // explicitly reject the candidates. An explicit rejection (irrelevant/
+    // restatement_only/boilerplate_only) is a validator decision and must not
+    // be overridden; a technical failure or disabled validation may fall back.
+    if (evidence.length === 0 && validationOutcome !== "rejected") {
       evidence = reranked.map((item) => ({
         chunkId: item.chunk.chunkId,
         quote: item.chunk.text.slice(0, 220),
@@ -184,6 +192,7 @@ export class CriterionEvidenceRetrievalService {
       evidence,
       strategyUsed: strategy,
       retrievedAt: new Date().toISOString(),
+      validationOutcome,
       debug: {
         candidateCount: candidates.length,
         validatedCount,
@@ -276,11 +285,15 @@ export class CriterionEvidenceRetrievalService {
   }
 
   /**
-   * Returns null on parse failure (caller should fall back to keyword results).
-   * Returns an object with:
+   * Returns null on parse failure — a technical failure; the caller may fall
+   * back to keyword results. On successful parse returns:
    * - evidence: items the LLM considered relevant (may be empty)
-   * - definitivelyRejected: true when the LLM returned items but all were
-   *   classified restatement_only/boilerplate_only — caller must NOT fall back.
+   * - outcome "rejected": nothing validated AND the LLM explicitly labelled
+   *   candidates irrelevant/restatement_only/boilerplate_only — an explicit
+   *   validator decision the caller must NOT override with keyword fallback.
+   * - outcome "validated": everything else (including an empty selection with
+   *   no explicit rejection labels, e.g. structured/numeric content the
+   *   validator could not assess — keyword fallback stays available there).
    */
   private async validateWithLlm(
     request: CriterionEvidenceRequest,
@@ -293,9 +306,9 @@ export class CriterionEvidenceRetrievalService {
       searchScore: number;
       contradiction: boolean;
     }>;
-    definitivelyRejected: boolean;
+    outcome: "validated" | "rejected";
   } | null> {
-    if (chunks.length === 0) return { evidence: [], definitivelyRejected: false };
+    if (chunks.length === 0) return { evidence: [], outcome: "validated" };
 
     const parser = StructuredOutputParser.fromZodSchema(
       EvidenceValidationSchema,
@@ -359,19 +372,20 @@ export class CriterionEvidenceRetrievalService {
           chunks,
           request.maxEvidence ?? this.config.maxEvidence,
         );
-        // Only suppress the keyword fallback when the LLM explicitly labelled items
-        // as restatement_only/boilerplate_only — not for "irrelevant" (criterion
-        // mismatch) or hallucinated chunkIds (both should fall back to keyword scoring).
-        // Short-circuit: if evidence.length > 0 the answer is always false, so skip
-        // the .some() traversal entirely.
-        const definitivelyRejected =
+        // Explicit rejection labels are a validator decision; when nothing was
+        // validated and at least one such label is present, report "rejected"
+        // so the caller does not rescue the candidates via keyword fallback.
+        // Short-circuit: if evidence.length > 0 the answer is always false, so
+        // skip the .some() traversal entirely.
+        const rejected =
           evidence.length === 0 &&
           (parsed.evidence || []).some(
             (item) =>
+              item.relevance === "irrelevant" ||
               item.relevance === "restatement_only" ||
               item.relevance === "boilerplate_only",
           );
-        return { evidence, definitivelyRejected };
+        return { evidence, outcome: rejected ? "rejected" : "validated" };
       } catch {
         this.logger.warn("Evidence validation parse failed");
       }
