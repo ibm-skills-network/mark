@@ -6,6 +6,7 @@ import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import Dropdown from "@/components/Dropdown";
 import Spinner from "@/components/svgs/Spinner";
+import ThemeToggle from "@/components/ThemeToggle";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   QuestionAttemptRequestWithId,
@@ -40,7 +41,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
-import GradingProgressModal, { type ProgressState } from "./GradingProgressModal";
+import GradingProgressModal, {
+  type ProgressState,
+} from "./GradingProgressModal";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -323,7 +326,8 @@ function LearnerHeader() {
           setProgressData({
             status,
             progress: status === "completed" ? 100 : progress,
-            currentStage: status === "completed" ? "Grading complete!" : message,
+            currentStage:
+              status === "completed" ? "Grading complete!" : message,
             currentQuestion: metadata?.currentQuestion,
             totalQuestions: metadata?.totalQuestions,
             gradingState: metadata?.gradingState,
@@ -338,6 +342,10 @@ function LearnerHeader() {
         setTotalPointsPossible(res.totalPossiblePoints);
         if (grade !== undefined) {
           setGrade(grade * 100);
+        } else {
+          // No grade on this submission (score hidden): clear any grade left
+          // from a previous attempt so the success page doesn't show it.
+          setGrade(null);
         }
         if (role === "learner") {
           setShowSubmissionFeedback(res.showSubmissionFeedback);
@@ -483,7 +491,7 @@ function LearnerHeader() {
 
   return (
     <>
-      <header className="border-b border-gray-300 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
+      <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
         <div className="flex flex-col gap-3 sm:hidden">
           <div className="flex items-center gap-3">
             <SNIcon />
@@ -494,6 +502,7 @@ function LearnerHeader() {
 
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1">
+              <ThemeToggle />
               {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
                 <>
                   {languages.length > 1 ? (
@@ -575,6 +584,7 @@ function LearnerHeader() {
           </div>
 
           <div className="flex items-center gap-x-4">
+            <ThemeToggle />
             {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
               <>
                 {languages.length > 1 ? (

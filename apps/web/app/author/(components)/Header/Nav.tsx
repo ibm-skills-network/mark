@@ -137,7 +137,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                   className="relative flex text-center p-3 gap-x-2.5 focus:outline-none items-center text-nowrap rounded-lg transition-all duration-200"
                 >
                   {isActive && (
-                    <div className="absolute inset-0 rounded-lg bg-violet-100" />
+                    <div className="absolute inset-0 rounded-lg bg-violet-100 dark:bg-violet-900/30" />
                   )}
 
                   <div
@@ -146,7 +146,7 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                         ? "text-violet-600 drop-shadow-lg scale-125"
                         : isCompleted
                           ? "text-violet-500"
-                          : "text-gray-400"
+                          : "text-gray-400 dark:text-gray-500"
                     }`}
                   >
                     <Icon className={isActive ? "drop-shadow-sm" : ""} />
@@ -163,10 +163,10 @@ export const Nav: FC<NavProps> = ({ currentStepId, setCurrentStepId }) => {
                   <span
                     className={`text-sm font-medium relative z-10 transition-all duration-200 ${
                       isActive
-                        ? "text-violet-700 font-bold drop-shadow-sm"
+                        ? "text-violet-700 dark:text-violet-300 font-bold drop-shadow-sm"
                         : isCompleted
-                          ? "text-violet-600 font-semibold"
-                          : "text-gray-500 group-hover:text-gray-700"
+                          ? "text-violet-600 dark:text-violet-400 font-semibold"
+                          : "text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200"
                     }`}
                   >
                     {step.name}

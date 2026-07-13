@@ -5,6 +5,7 @@ import { winstonOptions } from "./logger.config";
 import { JobWorkerService } from "./job-worker.service";
 
 // Provider source modules (all @Global where applicable, but explicit imports keep intent clear)
+import { AiFeatureFlagsModule } from "../../api/src/api/ai-feature-flags/ai-feature-flags.module";
 import { DatabaseModule } from "../../api/src/database/database.module";
 import { JobQueueModule } from "../../api/src/job-queue/job-queue.module";
 import { SharedModule } from "../../api/src/shared.module";
@@ -29,6 +30,11 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
   imports: [
     ConfigModule.forRoot(),
     WinstonModule.forRoot(winstonOptions),
+    // Provides AiFeatureFlagsService (required by PromptProcessorService) and
+    // GradingKillSwitchService (required by the attempt/assignment services).
+    // @Global in the api app, but not inherited into the jobs DI scope — must
+    // be imported explicitly here, same as FileProcessingBudgetModule below.
+    AiFeatureFlagsModule,
     DatabaseModule,
     JobQueueModule,
     SharedModule,

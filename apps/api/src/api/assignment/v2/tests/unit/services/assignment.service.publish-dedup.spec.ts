@@ -5,6 +5,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
 import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
@@ -69,6 +70,10 @@ describe("AssignmentServiceV2 – publishAssignment dedup", () => {
           useValue: {
             invalidateForAssignment: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: AiFeatureFlagsService,
+          useValue: { isDisabled: () => false },
         },
         { provide: WINSTON_MODULE_PROVIDER, useValue: { child: () => logger } },
       ],

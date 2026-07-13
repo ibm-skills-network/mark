@@ -209,12 +209,12 @@ const FileUploadSection = ({
           <div className="flex flex-1">
             <div className="flex flex-col gap-4 pr-4 w-full">
               {responseType === "CODE" && (
-                <div className="bg-white py-8 flex flex-col items-center border gap-4 border-gray-200 rounded-md p-4">
-                  <span className="text-lg">
+                <div className="bg-white dark:bg-gray-800 py-8 flex flex-col items-center border gap-4 border-gray-200 dark:border-gray-700 rounded-md p-4">
+                  <span className="text-lg dark:text-gray-100">
                     Browse your repositories and select the files you need.
                   </span>
                   <button
-                    className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
+                    className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 dark:border dark:border-gray-600"
                     onClick={() => {
                       setGithubModalOpen(true);
                     }}

@@ -4,6 +4,13 @@ import { OpenAIModerationChain } from "@langchain/classic/chains";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { IModerationService } from "../interfaces/moderation.interface";
+import { logAiInvocation } from "../utils/ai-invocation-log.util";
+
+/**
+ * OpenAIModerationChain does not expose which moderation model the endpoint
+ * ran, so invocations are logged under this generic key.
+ */
+const MODERATION_MODEL_KEY = "openai-moderation";
 
 @Injectable()
 export class ModerationService implements IModerationService {
@@ -31,6 +38,13 @@ export class ModerationService implements IModerationService {
 
       const { output: guardRailsResponse } = await moderation.invoke({
         input: content,
+      });
+
+      logAiInvocation(this.logger, {
+        modelKey: MODERATION_MODEL_KEY,
+        purpose: "moderation",
+        prompt: content,
+        response: String(guardRailsResponse),
       });
 
       const isViolation =
@@ -141,6 +155,13 @@ export class ModerationService implements IModerationService {
 
       const flagged = moderationResult.output !== "No issues found.";
       const details: string = moderationResult.output as string;
+
+      logAiInvocation(this.logger, {
+        modelKey: MODERATION_MODEL_KEY,
+        purpose: "moderation",
+        prompt: content,
+        response: details,
+      });
 
       return { flagged, details };
     } catch (error) {

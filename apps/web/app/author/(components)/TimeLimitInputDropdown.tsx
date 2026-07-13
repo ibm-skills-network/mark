@@ -49,7 +49,7 @@ const Component: FC<Props> = (props) => {
           type="button"
           onClick={() => setIsOpen(true)}
           className={cn(
-            "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-purple-600",
+            "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 dark:border-gray-600 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-purple-600",
             isOpen ? "rounded-t-md ring-purple-600 ring-1" : "rounded-md",
           )}
         >
@@ -69,10 +69,10 @@ const Component: FC<Props> = (props) => {
                 }}
                 onChange={(e) => setTempValue(Number(e.target.value) || null)}
                 onBlur={() => setAllotedTimeMinutes(tempValue || null)}
-                className="w-full h-full bg-gray-100 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
+                className="w-full h-full bg-gray-100 dark:bg-gray-700 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
               />
             ) : (
-              <p className="whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700">
+              <p className="whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700 dark:text-gray-200">
                 {value} minute{value > 1 ? "s" : ""}
               </p>
             )
@@ -101,13 +101,13 @@ const Component: FC<Props> = (props) => {
 
       <div
         className={cn(
-          "absolute w-full bg-white rounded-b-md shadow-lg border border-gray-300 origin-top duration-150 z-10",
+          "absolute w-full bg-white dark:bg-gray-800 rounded-b-md shadow-lg border border-gray-300 dark:border-gray-600 origin-top duration-150 z-10",
           isOpen ? "scale-100" : "scale-0",
         )}
       >
         {value ? (
           <div
-            className="w-full  h-12 outline-none hover:bg-gray-100 transition cursor-pointer text-left flex items-center px-4 py-2"
+            className="w-full  h-12 outline-none hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer text-left flex items-center px-4 py-2"
             onClick={() => {
               setAllotedTimeMinutes(null);
               setIsOpen(false);
@@ -131,7 +131,7 @@ const Component: FC<Props> = (props) => {
               }}
               onChange={(e) => setTempValue(Number(e.target.value) || null)}
               onBlur={() => setAllotedTimeMinutes(tempValue || null)}
-              className="w-full h-full bg-gray-100 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
+              className="w-full h-full bg-gray-100 dark:bg-gray-700 rounded-t-[0.25rem] border-0 border-b border-b-gray-400 outline-none transition focus:border-b-black !ring-0"
             />
           </div>
         )}

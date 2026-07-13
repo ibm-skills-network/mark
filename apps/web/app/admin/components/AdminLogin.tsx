@@ -104,10 +104,10 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
 
   if (step === "email") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
               <Shield className="w-6 h-6 text-blue-600" />
             </div>
             <CardTitle className="text-2xl">Admin Access</CardTitle>
@@ -117,25 +117,25 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3 mb-6">
-              <Alert className="border-blue-200 bg-blue-50">
-                <Mail className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-800">
+              <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/30">
+                <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-800 dark:text-blue-200">
                   <strong>Use the same email</strong> you used when publishing
                   assignments.
                 </AlertDescription>
               </Alert>
 
-              <Alert className="border-amber-200 bg-amber-50">
-                <Users className="h-4 w-4 text-amber-600" />
-                <AlertDescription className="text-amber-800">
+              <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30">
+                <Users className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-amber-800 dark:text-amber-200">
                   <strong>No access?</strong> You need to have activity in an
                   assignment to access that assignment's admin dashboard.
                 </AlertDescription>
               </Alert>
 
-              <Alert className="border-purple-200 bg-purple-50">
-                <MessageSquare className="h-4 w-4 text-purple-600" />
-                <AlertDescription className="text-purple-800">
+              <Alert className="border-purple-200 bg-purple-50 dark:border-purple-800 dark:bg-purple-900/30">
+                <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <AlertDescription className="text-purple-800 dark:text-purple-200">
                   <strong>Super user privileges?</strong> Contact the developers
                   or stakeholders for elevated access.
                 </AlertDescription>
@@ -181,11 +181,11 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-            <Mail className="w-6 h-6 text-green-600" />
+          <div className="mx-auto mb-4 w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+            <Mail className="w-6 h-6 text-green-600 dark:text-green-400" />
           </div>
           <CardTitle className="text-2xl">Enter Verification Code</CardTitle>
           <CardDescription>We sent a 6-digit code to {email}</CardDescription>
@@ -241,7 +241,7 @@ export function AdminLogin({ onAuthenticated }: AdminLoginProps) {
               variant="link"
               onClick={handleBackToEmail}
               disabled={loading}
-              className="text-sm text-gray-600"
+              className="text-sm text-gray-600 dark:text-gray-300"
             >
               Use different email
             </Button>

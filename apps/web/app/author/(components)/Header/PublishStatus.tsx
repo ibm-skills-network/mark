@@ -161,6 +161,12 @@ export default function PublishStatus({
   const [dismissed, setDismissed] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
 
+  // Translations were needed but the AI kill-switch skipped them. The publish
+  // itself succeeded; show an informational notice (not a failure) and keep the
+  // card visible instead of auto-hiding on the total=0 short-circuit below.
+  const skippedByAi =
+    publishResult?.translationsSkippedReason === "ai_unavailable";
+
   // Merge incoming per-job entries before any early return so the sticky
   // ref keeps tracking even when the component would have otherwise hidden.
   const incomingPerJob = publishResult?.translations?.perJob;
@@ -215,7 +221,10 @@ export default function PublishStatus({
   // remain visible so the author can act on it. The effect must run
   // before any early returns to keep hook ordering stable across renders.
   const shouldAutoDismiss =
-    isTerminal && !isFailureMode && (aggregate?.failed ?? 0) === 0;
+    isTerminal &&
+    !isFailureMode &&
+    (aggregate?.failed ?? 0) === 0 &&
+    !skippedByAi;
   React.useEffect(() => {
     if (!shouldAutoDismiss) return;
     const t = setTimeout(() => setDismissed(true), AUTO_DISMISS_MS);
@@ -230,7 +239,8 @@ export default function PublishStatus({
     !isFailureMode &&
     perJob.length === 0 &&
     wireAggregate !== undefined &&
-    wireAggregate.total === 0
+    wireAggregate.total === 0 &&
+    !skippedByAi
   ) {
     return null;
   }
@@ -326,7 +336,7 @@ export default function PublishStatus({
       transition={{ duration: 0.2 }}
       className="mt-4"
     >
-      <Card className="bg-white border-border">
+      <Card className="bg-white dark:bg-gray-800 border-border">
         <CardContent className="p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <h3 key={heading} translate="no" className="typography-h5">
@@ -337,7 +347,7 @@ export default function PublishStatus({
                 type="button"
                 onClick={() => setDismissed(true)}
                 aria-label="Dismiss"
-                className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2"
+                className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -346,7 +356,7 @@ export default function PublishStatus({
 
           {/* Unified progress bar — fills smoothly across both phases. */}
           <div className="relative">
-            <div className="h-3 rounded-full bg-gray-200 overflow-hidden">
+            <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
               <motion.div
                 className={cn("h-full rounded-full shadow-md", barColor)}
                 initial={{ width: 0 }}
@@ -394,6 +404,13 @@ export default function PublishStatus({
                   {subtext}
                 </motion.p>
               </AnimatePresence>
+            </div>
+          )}
+
+          {skippedByAi && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              AI translations are temporarily unavailable, so this was published
+              without them. Re-publish once AI is back to generate translations.
             </div>
           )}
 
@@ -446,7 +463,7 @@ export default function PublishStatus({
                       return (
                         <li
                           key={`${entry.kind}:${entry.id}`}
-                          className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50 border border-gray-200"
+                          className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700"
                         >
                           <StatusDot status={entry.status} />
                           <span

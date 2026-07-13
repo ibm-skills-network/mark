@@ -64,7 +64,7 @@ const Tooltip: FC<Props> = (props) => {
                 : { bottom: `${distance}rem` }
             }
             className={cn(
-              "absolute rounded-lg z-9000 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 dark:bg-white bg-gray-950 dark:text-gray-800 text-slate-100 min-w-max group-hover/tooltip:scale-100 text-wrap",
+              "absolute rounded-lg z-9000 w-auto p-2 text-xs font-bold transition-all duration-100 scale-0 bg-gray-950 text-slate-100 dark:bg-gray-800 dark:text-gray-100 dark:border dark:border-gray-600 min-w-max group-hover/tooltip:scale-100 text-wrap",
               `group-hover/tooltip:delay-${delay}`,
               maxWidth ? `max-w-[${maxWidth}px]` : "max-w-xs",
               getClassNamesFromDirectionAndDistance(),

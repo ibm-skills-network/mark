@@ -6,12 +6,16 @@ import { PromptProcessorService } from "./prompt-processor.service";
 describe("PromptProcessorService", () => {
   const logger = {
     error: jest.fn(),
+    info: jest.fn(),
   };
   const parentLogger = {
     child: jest.fn(),
   };
   const usageTracker = {
     trackUsage: jest.fn(),
+  };
+  const aiFlags = {
+    assertUsageEnabled: jest.fn(),
   };
   const llm = {
     key: "gpt-4o-mini",
@@ -37,6 +41,7 @@ describe("PromptProcessorService", () => {
     const service = new PromptProcessorService(
       router as any,
       usageTracker as any,
+      aiFlags as any,
       parentLogger as any,
     );
 
@@ -68,6 +73,7 @@ describe("PromptProcessorService", () => {
     const service = new PromptProcessorService(
       router as any,
       usageTracker as any,
+      aiFlags as any,
       parentLogger as any,
     );
 
@@ -80,12 +86,38 @@ describe("PromptProcessorService", () => {
       ),
     ).rejects.toThrow("provider down");
   });
+
+  it("never touches the provider when the kill-switch backstop throws", async () => {
+    aiFlags.assertUsageEnabled.mockImplementation(() => {
+      throw new Error("AI disabled");
+    });
+    const service = new PromptProcessorService(
+      router as any,
+      usageTracker as any,
+      aiFlags as any,
+      parentLogger as any,
+    );
+
+    await expect(
+      service.processPrompt(
+        "grade this",
+        55,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "gpt-4o-mini",
+      ),
+    ).rejects.toThrow("AI disabled");
+
+    expect(router.get).not.toHaveBeenCalled();
+    expect(llm.invoke).not.toHaveBeenCalled();
+    expect(usageTracker.trackUsage).not.toHaveBeenCalled();
+  });
 });
 
 describe("PromptProcessorService.processStructuredPromptForFeature", () => {
-  const logger = { error: jest.fn(), warn: jest.fn() };
+  const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn() };
   const parentLogger = { child: jest.fn() };
   const usageTracker = { trackUsage: jest.fn() };
+  const aiFlags = { assertUsageEnabled: jest.fn() };
   const router = {
     get: jest.fn(),
     getForFeatureWithFallback: jest.fn(),
@@ -97,6 +129,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
     new PromptProcessorService(
       router as any,
       usageTracker as any,
+      aiFlags as any,
       parentLogger as any,
     );
 
@@ -107,12 +140,10 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
   });
 
   it("uses the provider's native structured output and returns the parsed object", async () => {
-    const invokeStructured = jest
-      .fn()
-      .mockResolvedValue({
-        parsed: { grade: 4 },
-        tokenUsage: { input: 10, output: 5 },
-      });
+    const invokeStructured = jest.fn().mockResolvedValue({
+      parsed: { grade: 4 },
+      tokenUsage: { input: 10, output: 5 },
+    });
     const llm = { key: "gpt-4o-mini", invoke: jest.fn(), invokeStructured };
     router.getForFeatureWithFallback.mockResolvedValue(llm);
     const service = makeService();
@@ -128,6 +159,15 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
     );
 
     expect(result).toEqual({ grade: 4 });
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gpt-4o-mini] TEXT_GRADING - grade this ; {"grade":4}',
+      expect.objectContaining({
+        ai_invocation: true,
+        model: "gpt-4o-mini",
+        purpose: "TEXT_GRADING",
+        assignment_id: 77,
+      }),
+    );
     // The string path that does the brittle JSON.parse must NOT be used.
     expect(llm.invoke).not.toHaveBeenCalled();
     expect(invokeStructured).toHaveBeenCalledTimes(1);
@@ -146,12 +186,10 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
   it("falls back to text parsing for providers without native structured output", async () => {
     const llm = {
       key: "granite-4-h-small",
-      invoke: jest
-        .fn()
-        .mockResolvedValue({
-          content: '{"grade": 2}',
-          tokenUsage: { input: 3, output: 4 },
-        }),
+      invoke: jest.fn().mockResolvedValue({
+        content: '{"grade": 2}',
+        tokenUsage: { input: 3, output: 4 },
+      }),
     };
     router.getForFeatureWithFallback.mockResolvedValue(llm);
     const service = makeService();

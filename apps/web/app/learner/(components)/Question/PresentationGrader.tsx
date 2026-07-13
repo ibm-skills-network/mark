@@ -578,7 +578,7 @@ export default function PresentationGrader({
   }, [recording, recordingStartTime, maxDuration, stopRecording]);
 
   return (
-    <div className="bg-white rounded-lg overflow-hidden w-full max-w-lg mx-auto border relative">
+    <div className="bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg overflow-hidden w-full max-w-lg mx-auto border dark:border-gray-700 relative">
       <div className="relative">
         <video
           ref={videoRef}
@@ -610,7 +610,7 @@ export default function PresentationGrader({
 
       <div className="p-6">
         {cameraError && (
-          <div className="text-red-600 text-center mb-4 flex flex-col items-center">
+          <div className="text-red-600 dark:text-red-400 text-center mb-4 flex flex-col items-center">
             <span>{cameraError}</span>
             <button
               onClick={reconnectCamera}
@@ -661,7 +661,7 @@ export default function PresentationGrader({
         </div>
 
         {(evaluateBodyLanguageEnabled || liveConfig.evaluateTimeManagement) && (
-          <p className="mt-4 text-center text-gray-600 italic">
+          <p className="mt-4 text-center text-gray-600 dark:text-gray-300 italic">
             Note: Your{" "}
             {evaluateBodyLanguageEnabled && (
               <span className="font-semibold">body language</span>
@@ -677,13 +677,13 @@ export default function PresentationGrader({
         )}
 
         {(processing || feedbackLoading) && (
-          <div className="mt-4 p-4 border rounded bg-gray-100 text-gray-800 text-sm">
+          <div className="mt-4 p-4 border dark:border-gray-600 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm">
             <div className="animate-pulse">Processing video… please wait.</div>
           </div>
         )}
 
         {videoBlob && !recording && !processing && (
-          <div className="mt-4 p-4 border rounded bg-gray-50 text-gray-800">
+          <div className="mt-4 p-4 border dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
             {feedbackLoading ? (
               <div className="animate-pulse">Analyzing your presentation…</div>
             ) : (
@@ -694,7 +694,7 @@ export default function PresentationGrader({
                     {aiFeedback ? (
                       <FeedbackFormatter>{aiFeedback}</FeedbackFormatter>
                     ) : (
-                      <div className="text-sm text-gray-500 italic">
+                      <div className="text-sm text-gray-500 dark:text-gray-400 italic">
                         No feedback yet.
                       </div>
                     )}

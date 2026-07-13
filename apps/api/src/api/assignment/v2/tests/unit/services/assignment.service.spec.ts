@@ -3,6 +3,7 @@
 /* eslint-disable unicorn/no-useless-undefined */
 /* eslint-disable @typescript-eslint/unbound-method */
 
+import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -13,6 +14,7 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/v2/services/question.service";
 import { AttemptAccessCacheService } from "src/api/attempt/services/attempt-access-cache.service";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
@@ -87,6 +89,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         { provide: LlmFacadeService, useValue: llmService },
         { provide: PrismaService, useValue: prismaService },
         { provide: AttemptAccessCacheService, useValue: attemptAccessCache },
+        {
+          provide: AiFeatureFlagsService,
+          useValue: { isDisabled: () => false },
+        },
         { provide: WINSTON_MODULE_PROVIDER, useValue: { child: () => logger } },
       ],
     }).compile();
@@ -276,6 +282,46 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         status: "Failed",
         progress: "Failed to enqueue publish job: fail",
       });
+    });
+  });
+
+  describe("publishAssignment question-pool validation", () => {
+    it("rejects publish when numberOfQuestionsPerAttempt exceeds the question pool", async () => {
+      const dto = createMockUpdateAssignmentQuestionsDto({
+        numberOfQuestionsPerAttempt: 15,
+      });
+
+      await expect(
+        service.publishAssignment(1, dto, "author-123"),
+      ).rejects.toThrow(BadRequestException);
+      expect(jobStatusService.createPublishJob).not.toHaveBeenCalled();
+      expect(jobQueueService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("counts only non-deleted questions when validating the pool", async () => {
+      const dto = createMockUpdateAssignmentQuestionsDto({
+        numberOfQuestionsPerAttempt: 2,
+        questions: [
+          createMockQuestionDto(),
+          createMockQuestionDto({ id: 2, isDeleted: true }),
+        ],
+      });
+
+      await expect(
+        service.publishAssignment(1, dto, "author-123"),
+      ).rejects.toThrow(BadRequestException);
+      expect(jobQueueService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("allows publish when numberOfQuestionsPerAttempt is within the pool", async () => {
+      const dto = createMockUpdateAssignmentQuestionsDto({
+        numberOfQuestionsPerAttempt: 2,
+      });
+
+      const response = await service.publishAssignment(1, dto, "author-123");
+
+      expect(response).toEqual({ jobId: 1, message: "Publishing started" });
+      expect(jobQueueService.enqueue).toHaveBeenCalled();
     });
   });
 

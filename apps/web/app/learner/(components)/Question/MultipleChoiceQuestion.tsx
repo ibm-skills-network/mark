@@ -61,8 +61,8 @@ function MultipleChoiceQuestion({
               "flex w-full p-3 rounded-lg transition-colors duration-200 border",
               "text-lg font-normal",
               isSelected
-                ? "text-violet-900 bg-violet-50 border-violet-300"
-                : "bg-white text-gray-800 hover:bg-gray-50 border-gray-200",
+                ? "text-violet-900 bg-violet-50 border-violet-300 dark:text-violet-200 dark:bg-violet-900/30 dark:border-violet-700"
+                : "bg-white text-gray-800 hover:bg-gray-50 border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 dark:border-gray-700",
             )}
             onClick={() => handleChoiceClick(index)}
           >

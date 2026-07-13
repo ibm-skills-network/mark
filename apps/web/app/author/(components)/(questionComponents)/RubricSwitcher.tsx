@@ -129,23 +129,23 @@ const RubricItem: React.FC<RubricItemProps> = ({
   return (
     <div
       key={`question-${questionId}-rubric-${index}`}
-      className="bg-neutral-50 flex p-4 items-start gap-4 rounded-md border border-gray-200"
+      className="bg-neutral-50 dark:bg-gray-800 flex p-4 items-start gap-4 rounded-md border border-gray-200 dark:border-gray-700"
     >
       <div className="flex items-center gap-2">
-        <span className="text-gray-600 typography-body">
+        <span className="text-gray-600 dark:text-gray-300 typography-body">
           {questionIndex}.{index + 1}
         </span>
       </div>
       <div className="flex-1 flex flex-col ">
         {loading && inProgressRubricIndex === index ? (
-          <div className="animate-pulse bg-gray-200 h-5 mb-2 w-full rounded"></div>
+          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 mb-2 w-full rounded"></div>
         ) : (
           <div
             className="flex items-center justify-between mb-2"
             onBlur={handleBlur}
           >
             <textarea
-              className="title-placeholder placeholder-gray-500 w-full rounded-md p-2 border border-gray-200"
+              className="title-placeholder placeholder-gray-500 dark:placeholder-gray-400 w-full rounded-md p-2 border border-gray-200 dark:border-gray-700 bg-transparent text-gray-800 dark:text-gray-200"
               value={localRubricQuestion}
               onChange={(e) => setLocalRubricQuestion(e.target.value)}
               placeholder="Question to evalutate rubric"
@@ -187,7 +187,7 @@ const RubricItem: React.FC<RubricItemProps> = ({
         onClick={() => {
           removeRubric(questionId, index, variantId);
         }}
-        className="text-gray-500"
+        className="text-gray-500 dark:text-gray-400"
       >
         <TrashIcon width={20} height={20} />
       </button>
@@ -272,10 +272,10 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
                 onClick={() => {
                   addOneRubric(questionId, variantId);
                 }}
-                className="flex items-center flex-1 gap-2 border border-gray-200 rounded-md p-2 hover:bg-gray-100 py-2 px-4"
+                className="flex items-center flex-1 gap-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 py-2 px-4"
               >
-                <PlusIcon className="w-4 h-4 text-gray-500" />
-                <span className="text-gray-600 typography-body text-wrap">
+                <PlusIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <span className="text-gray-600 dark:text-gray-300 typography-body text-wrap">
                   Create Blank Rubric Table
                 </span>
               </button>
@@ -284,10 +284,10 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
                   handleExtendRubric(variantId);
                   setGeneratingRubric(true);
                 }}
-                className="flex items-center gap-2 flex-1 border bg-violet-100 border-gray-200 rounded-md p-2 hover:bg-gray-100 py-2 px-4"
+                className="flex items-center gap-2 flex-1 border bg-violet-100 dark:bg-violet-900/40 border-gray-200 dark:border-violet-800 rounded-md p-2 hover:bg-gray-100 dark:hover:bg-violet-900/60 py-2 px-4"
               >
-                <SparklesIcon className="w-4 h-4 text-violet-500" />
-                <span className="text-violet-900 typography-body text-wrap">
+                <SparklesIcon className="w-4 h-4 text-violet-500 dark:text-violet-300" />
+                <span className="text-violet-900 dark:text-violet-200 typography-body text-wrap">
                   Let AI generate a rubric for me
                 </span>
               </button>
@@ -298,13 +298,13 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
         <div className="flex justify-center items-center gap-x-4 border px-4 py-2">
           {loading ? (
             <>
-              <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
-              <div className="animate-pulse bg-gray-200 h-5 w-1/2 rounded"></div>
+              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-1/2 rounded"></div>
+              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-5 w-1/2 rounded"></div>
             </>
           ) : !preview ? (
             <>
               <button
-                className="text-gray-500"
+                className="text-gray-500 dark:text-gray-400"
                 onClick={() => {
                   onAiClick();
                 }}
@@ -313,9 +313,9 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
                 <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                 Generate a rubric with AI
               </button>
-              <span className="text-gray-500">OR</span>
+              <span className="text-gray-500 dark:text-gray-400">OR</span>
               <button
-                className="text-gray-500"
+                className="text-gray-500 dark:text-gray-400"
                 onClick={() => {
                   onShiftCriteria(0);
                 }}
@@ -326,7 +326,7 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
               </button>
             </>
           ) : (
-            <p className="text-gray-500 typography-body">
+            <p className="text-gray-500 dark:text-gray-400 typography-body">
               No criteria set up yet.
             </p>
           )}

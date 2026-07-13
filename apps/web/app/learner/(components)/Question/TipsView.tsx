@@ -32,25 +32,25 @@ function TipsView() {
   if (isMobile) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-        <div className="mx-auto w-full max-w-xs sm:max-w-sm bg-white border border-gray-300 rounded-lg shadow hover:shadow-mdflex flex-col gap-y-3 p-4">
+        <div className="mx-auto w-full max-w-xs sm:max-w-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow hover:shadow-mdflex flex-col gap-y-3 p-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-gray-800 text-lg">Tips</h1>
+            <h1 className="text-gray-800 dark:text-gray-100 text-lg">Tips</h1>
             <XMarkIcon
-              className="h-6 w-6 text-gray-600 cursor-pointer"
+              className="h-6 w-6 text-gray-600 dark:text-gray-300 cursor-pointer"
               onClick={() => setTips(false)}
             />
           </div>
-          <div className="flex flex-col gap-y-2 border-y py-2">
-            <h1 className="text-gray-800 text-lg pb-2">Language Assistance</h1>
-            <p className="text-gray-600 leading-tight">
+          <div className="flex flex-col gap-y-2 border-y dark:border-gray-700 py-2">
+            <h1 className="text-gray-800 dark:text-gray-100 text-lg pb-2">Language Assistance</h1>
+            <p className="text-gray-600 dark:text-gray-300 leading-tight">
               Unsure about a question? Toggle between translations in your
               chosen language.
             </p>
             <div className="flex items-center gap-x-2 mt-2 px-4">
-              <LanguageIcon className="h-6 w-6 text-gray-600" />
+              <LanguageIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
               <div
                 className={cn(
-                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200",
+                  "relative inline-flex h-5 w-10 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200 dark:bg-gray-600",
                 )}
                 aria-checked={false}
               >
@@ -76,23 +76,23 @@ function TipsView() {
                 />
               </div>
             </div>
-            <p className="text-gray-600 text-xs">
+            <p className="text-gray-600 dark:text-gray-400 text-xs">
               * TRANSLATIONS ARE MACHINE GENERATED
             </p>
           </div>
-          <div className="flex flex-col gap-y-2 border-b pb-2">
-            <h1 className="text-gray-800 text-lg">Tags</h1>
-            <p className="text-gray-600 leading-tight">
+          <div className="flex flex-col gap-y-2 border-b dark:border-gray-700 pb-2">
+            <h1 className="text-gray-800 dark:text-gray-100 text-lg">Tags</h1>
+            <p className="text-gray-600 dark:text-gray-300 leading-tight">
               Wanted to come back to this question later? tag the question!
             </p>
             <div className="flex items-center gap-x-2 px-4">
               <div className="flex items-center gap-x-1">
                 <TagIcon className="h-6 w-6 text-violet-600" />
-                <p className="text-gray-600 text-xs">UNTAGGED</p>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">UNTAGGED</p>
               </div>
               <div className="flex items-center gap-x-1">
                 <SolidTagIcon className="h-6 w-6 text-violet-600" />
-                <p className="text-gray-600 text-xs">TAGGED</p>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">TAGGED</p>
               </div>
             </div>
           </div>
@@ -104,7 +104,7 @@ function TipsView() {
               checked={persistTips}
             />
 
-            <p className="text-gray-600 text-sm">Don't Show This Again</p>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">Don't Show This Again</p>
           </div>
         </div>
       </div>
@@ -112,25 +112,25 @@ function TipsView() {
   }
 
   return (
-    <div className="p-4 border border-gray-300 rounded-lg flex flex-col gap-y-3 w-full md:w-[250px] bg-white shadow hover:shadow-md">
+    <div className="p-4 border border-gray-300 dark:border-gray-600 rounded-lg flex flex-col gap-y-3 w-full md:w-[250px] bg-white dark:bg-gray-800 shadow hover:shadow-md">
       <div className="flex items-center justify-between ">
-        <h1 className="text-gray-800 text-lg">Tips</h1>
+        <h1 className="text-gray-800 dark:text-gray-100 text-lg">Tips</h1>
         <XMarkIcon
-          className="h-6 w-6 text-gray-600 cursor-pointer hover:cursor-pointer"
+          className="h-6 w-6 text-gray-600 dark:text-gray-300 cursor-pointer hover:cursor-pointer"
           onClick={() => setTips(false)}
         />
       </div>
-      <div className="flex flex-col gap-y-2 border-y py-2">
-        <h1 className="text-gray-800 text-lg pb-2">Language Assistance</h1>
-        <p className="text-gray-600 leading-tight">
+      <div className="flex flex-col gap-y-2 border-y dark:border-gray-700 py-2">
+        <h1 className="text-gray-800 dark:text-gray-100 text-lg pb-2">Language Assistance</h1>
+        <p className="text-gray-600 dark:text-gray-300 leading-tight">
           Unsure about a question? Toggle between translations in your chosen
           language.
         </p>
         <div className="flex items-center gap-x-2 mt-2 px-4">
-          <LanguageIcon className="h-6 w-6 text-gray-600" />
+          <LanguageIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
           <div
             className={cn(
-              "relative inline-flex h-5 w-10 flex-shrink-0  rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200",
+              "relative inline-flex h-5 w-10 flex-shrink-0  rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-200 dark:bg-gray-600",
             )}
             aria-checked={false}
           >
@@ -156,25 +156,25 @@ function TipsView() {
             />
           </div>
         </div>
-        <p className="text-gray-600 text-xs">
+        <p className="text-gray-600 dark:text-gray-400 text-xs">
           * TRANSLATIONS ARE MACHINE GENERATED
         </p>
       </div>
-      <div className="flex flex-col gap-y-2 border-b pb-2">
-        <h1 className="text-gray-800 text-lg">Tags</h1>
-        <p className="text-gray-600 leading-tight">
+      <div className="flex flex-col gap-y-2 border-b dark:border-gray-700 pb-2">
+        <h1 className="text-gray-800 dark:text-gray-100 text-lg">Tags</h1>
+        <p className="text-gray-600 dark:text-gray-300 leading-tight">
           Wanted to come back to this question later? tag the question!
         </p>
         <div className="flex items-center gap-x-2 px-4">
           <div className="flex items-center gap-x-1">
             <TagIcon className="h-6 w-6 text-violet-600" />
           </div>
-          <ArrowRightIcon className="h-4 w-4 text-gray-600" />
+          <ArrowRightIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
           <div className="flex items-center gap-x-1">
             <SolidTagIcon className="h-6 w-6 text-violet-600" />
           </div>
-          <ArrowRightIcon className="h-4 w-4 text-gray-600" />
-          <div className="w-10 h-11 border rounded-md text-center relative  justify-center focus:outline-none flex flex-col items-center bg-violet-100 border-violet-400 text-violet-700">
+          <ArrowRightIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+          <div className="w-10 h-11 border rounded-md text-center relative  justify-center focus:outline-none flex flex-col items-center bg-violet-100 dark:bg-violet-900/30 border-violet-400 dark:border-violet-500 text-violet-700 dark:text-violet-300">
             <div
               className="absolute top-0 right-0 w-4 h-4 bg-violet-500"
               style={{
@@ -195,7 +195,7 @@ function TipsView() {
           checked={persistTips}
         />
 
-        <p className="text-gray-600 text-sm">Don't Show This Again</p>
+        <p className="text-gray-600 dark:text-gray-300 text-sm">Don't Show This Again</p>
       </div>
     </div>
   );

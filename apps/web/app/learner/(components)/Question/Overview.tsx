@@ -47,15 +47,20 @@ function Overview({ questions }: Props) {
         "w-8 h-9 md:w-10 md:h-11 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";
 
       if (index === activeQuestionNumber - 1) {
-        baseClasses += " bg-gray-100 border-violet-700 text-violet-600";
+        baseClasses +=
+          " bg-gray-100 border-violet-700 text-violet-600 dark:bg-gray-700 dark:text-violet-300";
       } else if (isRequired) {
-        baseClasses += " bg-red-50 border-red-300 text-red-700";
+        baseClasses +=
+          " bg-red-50 border-red-300 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300";
       } else if (question.status === "flagged") {
-        baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
+        baseClasses +=
+          " bg-gray-100 border-gray-400 text-gray-500 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-300";
       } else if (question.status === "edited") {
-        baseClasses += " bg-violet-100 border-gray-400 text-violet-800 ";
+        baseClasses +=
+          " bg-violet-100 border-gray-400 text-violet-800 dark:bg-violet-900/40 dark:border-gray-500 dark:text-violet-200 ";
       } else {
-        baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
+        baseClasses +=
+          " bg-gray-100 border-gray-400 text-gray-500 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-300";
       }
 
       return baseClasses;
@@ -64,24 +69,24 @@ function Overview({ questions }: Props) {
   );
 
   return (
-    <div className="p-3 md:p-4 border-0 md:border md:border-gray-300 md:rounded-lg flex flex-col gap-y-3 w-full md:max-w-[250px] bg-transparent md:bg-white md:shadow md:hover:shadow-md md:max-h-[310px]">
+    <div className="p-3 md:p-4 border-0 md:border md:border-gray-300 dark:md:border-gray-700 md:rounded-lg flex flex-col gap-y-3 w-full md:max-w-[250px] bg-transparent md:bg-white dark:md:bg-gray-800 md:shadow md:hover:shadow-md md:max-h-[310px]">
       {expiresAt ? (
         <Timer />
       ) : (
-        <div className="text-gray-600 leading-tight text-sm md:text-base">
+        <div className="text-gray-600 dark:text-gray-300 leading-tight text-sm md:text-base">
           No time limit
         </div>
       )}
 
-      <hr className="border-gray-300 -mx-3 md:-mx-4" />
+      <hr className="border-gray-300 dark:border-gray-700 -mx-3 md:-mx-4" />
 
       <div className="flex items-center justify-between">
-        <h3 className="text-gray-600 leading-tight text-sm md:text-base font-medium">
+        <h3 className="text-gray-600 dark:text-gray-300 leading-tight text-sm md:text-base font-medium">
           Questions
         </h3>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="md:hidden flex items-center text-gray-600 hover:text-gray-800 transition-colors"
+          className="md:hidden flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
           aria-label={isCollapsed ? "Expand questions" : "Collapse questions"}
         >
           {isCollapsed ? (

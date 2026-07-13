@@ -57,6 +57,7 @@ import { getBaseApiPath } from "@/config/constants";
 import UserReportsPanel from "./UserReportsPanel";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
+import { useTheme } from "@/hooks/useTheme";
 import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
@@ -407,9 +408,9 @@ const SpecialActionUI = ({
               onClick={() => handleCreateQuestion("multiple-choice")}
               className={`text-xs py-1.5 px-3 ${
                 specialActions.data?.suggestedType === "multiple-choice"
-                  ? "bg-purple-200 text-purple-900"
-                  : "bg-purple-100 text-purple-800"
-              } hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 rounded-md transition-colors`}
+                  ? "bg-purple-200 text-purple-900 dark:bg-purple-700 dark:text-purple-100"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+              } hover:bg-purple-200 dark:hover:bg-purple-800 rounded-md transition-colors`}
             >
               Multiple Choice
             </button>
@@ -417,9 +418,9 @@ const SpecialActionUI = ({
               onClick={() => handleCreateQuestion("true/false")}
               className={`text-xs py-1.5 px-3 ${
                 specialActions.data?.suggestedType === "true/false"
-                  ? "bg-purple-200 text-purple-900"
-                  : "bg-purple-100 text-purple-800"
-              } hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 rounded-md transition-colors`}
+                  ? "bg-purple-200 text-purple-900 dark:bg-purple-700 dark:text-purple-100"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+              } hover:bg-purple-200 dark:hover:bg-purple-800 rounded-md transition-colors`}
             >
               True/False
             </button>
@@ -427,9 +428,9 @@ const SpecialActionUI = ({
               onClick={() => handleCreateQuestion("text response")}
               className={`text-xs py-1.5 px-3 ${
                 specialActions.data?.suggestedType === "text response"
-                  ? "bg-purple-200 text-purple-900"
-                  : "bg-purple-100 text-purple-800"
-              } hover:bg-purple-200 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 rounded-md transition-colors`}
+                  ? "bg-purple-200 text-purple-900 dark:bg-purple-700 dark:text-purple-100"
+                  : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+              } hover:bg-purple-200 dark:hover:bg-purple-800 rounded-md transition-colors`}
             >
               Text Response
             </button>
@@ -976,7 +977,12 @@ const FileAttachmentDisplay: React.FC<FileAttachmentDisplayProps> = ({
 };
 
 export const MarkChat = () => {
-  const { isOpen: isChatbotOpen, toggle: toggleChatbot } = useChatbot();
+  const {
+    isOpen: isChatbotOpen,
+    toggle: toggleChatbot,
+    isUnavailable: isChatUnavailable,
+    markUnavailable: markChatUnavailable,
+  } = useChatbot();
   const {
     isOpen,
     toggleChat,
@@ -1025,7 +1031,7 @@ export const MarkChat = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [feedbackMode, setFeedbackMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [darkMode, setDarkMode] = useState("light");
+  const { theme: darkMode, setTheme: setDarkMode } = useTheme();
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [specialActions, setSpecialActions] = useState({
@@ -1717,8 +1723,17 @@ export const MarkChat = () => {
         }
       } catch (error) {
         if (cancelled) return;
-        console.error("initializeChat failed:", error);
-        toast.error("Could not load chat session");
+        // A 403 means this session simply has no chat access (e.g. the
+        // learner's group isn't linked to the assignment). That's a policy
+        // outcome, not a malfunction — hide the chat instead of toasting an
+        // error on every page the widget mounts on.
+        if ((error as { status?: number }).status === 403) {
+          console.warn("Chat unavailable for this session (403)");
+          markChatUnavailable();
+        } else {
+          console.error("initializeChat failed:", error);
+          toast.error("Could not load chat session");
+        }
       } finally {
         if (!cancelled) setIsInitializing(false);
       }
@@ -1736,6 +1751,7 @@ export const MarkChat = () => {
     clearAttachedFiles,
     clearSessionContextFiles,
     getCurrentAssignmentId,
+    markChatUnavailable,
     resetChat,
   ]);
 
@@ -1745,27 +1761,6 @@ export const MarkChat = () => {
       setShouldAutoOpen(false);
     }
   }, [shouldAutoOpen, isOpen, isInitializing, toggleChat]);
-
-  useEffect(() => {
-    const setTheme = (theme) => {
-      if (
-        theme === "dark" ||
-        (theme === "system" &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches)
-      ) {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    };
-    setTheme(darkMode);
-    if (darkMode === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = (e) => setTheme(e.matches ? "dark" : "light");
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-  }, [darkMode]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
@@ -2943,6 +2938,12 @@ Please help me with this.`;
     isInitializing ||
     hasPendingUploads;
 
+  // Chat access was denied for this session — render nothing (the toggle
+  // button hides itself off the same store flag).
+  if (isChatUnavailable) {
+    return null;
+  }
+
   return (
     <>
       <AnimatePresence>
@@ -3200,9 +3201,9 @@ Please help me with this.`;
                       onClick={() => handleSendWithContext(true)}
                       className={`p-1.5 ${
                         isSendDisabled
-                          ? "bg-purple-400 cursor-not-allowed"
-                          : "bg-purple-600 hover:bg-purple-700"
-                      } dark:bg-purple-700 dark:hover:bg-purple-800 rounded-full transition-colors`}
+                          ? "bg-purple-400 dark:bg-purple-900 cursor-not-allowed"
+                          : "bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800"
+                      } rounded-full transition-colors`}
                       title="Send message"
                       disabled={isSendDisabled}
                     >

@@ -30,12 +30,12 @@ function ConfigGroup({
         onClick={onToggle}
         className="flex items-center gap-1.5 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 rounded group"
       >
-        <span className="text-sm font-semibold tracking-widest uppercase text-gray-500 group-hover:text-gray-700 transition-colors">
+        <span className="text-sm font-semibold tracking-widest uppercase text-gray-500 dark:text-gray-400 group-hover:text-gray-700 transition-colors">
           {title}
         </span>
         <ChevronDownIcon
           className={cn(
-            "w-4 h-4 text-gray-400 transition-transform duration-200",
+            "w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200",
             open && "rotate-180",
           )}
         />
@@ -62,7 +62,7 @@ export function ConfigGroups() {
         <AssignmentCompletion compact />
       </ConfigGroup>
 
-      <hr className="border-gray-200" />
+      <hr className="border-gray-200 dark:border-gray-700" />
 
       <ConfigGroup
         title="Feedback"
@@ -72,7 +72,7 @@ export function ConfigGroups() {
         <AssignmentFeedback compact />
       </ConfigGroup>
 
-      <hr className="border-gray-200" />
+      <hr className="border-gray-200 dark:border-gray-700" />
 
       <ConfigGroup
         title="Advanced"

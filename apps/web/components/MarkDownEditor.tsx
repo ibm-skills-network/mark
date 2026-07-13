@@ -220,7 +220,7 @@ const MarkdownEditor: React.FC<Props> = ({
     <div className={cn("quill-editor-shell flex flex-col", className)}>
       <div
         className={cn(
-          "quill-editor overflow-auto p-2 border border-gray-200 rounded min-h-[100px] focus-within:border-violet-600 focus-within:ring-2 focus-within:ring-violet-100",
+          "quill-editor overflow-auto p-2 border border-gray-200 dark:border-gray-600 rounded min-h-[100px] focus-within:border-violet-600 focus-within:ring-2 focus-within:ring-violet-100 dark:focus-within:ring-violet-900/40",
           textareaClassName,
         )}
         ref={quillRef}

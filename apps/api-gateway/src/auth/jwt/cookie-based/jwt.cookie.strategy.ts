@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Request } from "express";
 import { ExtractJwt, Strategy } from "passport-jwt";
@@ -7,6 +7,7 @@ import {
   UserSessionPayload,
 } from "../../interfaces/user.session.interface";
 import { JwtConfigService } from "../jwt.config.service";
+import { selectAuthenticationCookie } from "./jwt.cookie.extractor";
 
 interface IRequestWithCookies extends Request {
   cookies: {
@@ -19,6 +20,9 @@ interface IJwtPayload extends UserSessionPayload {
   exp: number;
 }
 
+// Routed through winston: main.ts passes the winston logger to NestFactory.
+const logger = new Logger("JwtCookieStrategy");
+
 @Injectable()
 export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
@@ -28,7 +32,18 @@ export class JwtCookieStrategy extends PassportStrategy(
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: IRequestWithCookies) => {
-          return request?.cookies?.authentication;
+          const { token, candidateCount } = selectAuthenticationCookie(request);
+          if (candidateCount > 1) {
+            // Duplicate cookie jars (Lax vs Partitioned attributes coexist).
+            // We authenticate the newest launch; log so the fleet-wide rate
+            // of duplicates stays observable. Never log token contents.
+            logger.warn(
+              `Multiple authentication cookies on request (count=${candidateCount}, path=${request.path}); using newest iat`,
+            );
+          }
+          // passport-jwt's JwtFromRequestFunction contract uses null for "no token".
+          // eslint-disable-next-line unicorn/no-null
+          return token ?? null;
         },
       ]),
       ignoreExpiration: false,

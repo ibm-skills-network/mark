@@ -3,6 +3,7 @@
 import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
 import ErrorModal from "@/components/ErrorModal";
+import ServiceUnavailableNotice from "@/components/ServiceUnavailableNotice";
 import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import {
   createAttempt,
@@ -129,6 +130,13 @@ async function LearnerLayout(props: Props) {
         ]}
         stateTimeline={stateTimeline}
       />
+    );
+  }
+
+  if (attemptId === "ai temporarily unavailable") {
+    log("AI grading temporarily disabled");
+    return (
+      <ServiceUnavailableNotice message="This assignment is graded with AI, which is paused for maintenance right now. Your work hasn't been started or lost." />
     );
   }
 

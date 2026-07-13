@@ -15,6 +15,7 @@ import {
   getUser,
   submitFeedback,
 } from "@/lib/talkToBackend";
+import { resolveStoreGrade } from "@/lib/gradeDisplay";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
@@ -276,7 +277,8 @@ function SuccessPage() {
           setShowSubmissionFeedback(zustandShowSubmissionFeedback);
           setQuestions(zustandQuestions);
           setShowQuestions(zustandShowQuestions);
-          setGrade(zustandGrade);
+          // A never-set store grade must render the hidden-score view, not 0%.
+          setGrade(resolveStoreGrade(zustandGrade));
           setTotalPointsEarned(zustandTotalPointsEarned);
           setTotalPoints(zustandTotalPoints);
           setAssignmentDetails(zustandAssignmentDetails);

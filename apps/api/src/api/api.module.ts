@@ -3,6 +3,7 @@ import { JobExecutorController } from "src/job-queue/job-executor.controller";
 import { JobExecutorService } from "src/job-queue/job-executor.service";
 import { SharedModule } from "src/shared.module";
 import { AdminModule } from "./admin/admin.module";
+import { AiFeatureFlagsModule } from "./ai-feature-flags/ai-feature-flags.module";
 import { ApiController } from "./api.controller";
 import { ApiService } from "./api.service";
 import { AssignmentModuleV1 } from "./assignment/v1/modules/assignment.module";
@@ -20,6 +21,7 @@ import { ChatModule } from "./user/modules/chat.module";
   providers: [ApiService, JobExecutorService],
   imports: [
     SharedModule,
+    AiFeatureFlagsModule,
     LlmModule,
     AssignmentModuleV1,
     AssignmentModuleV2,

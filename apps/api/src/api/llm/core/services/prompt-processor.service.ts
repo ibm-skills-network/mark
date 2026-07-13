@@ -11,10 +11,12 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import type { ZodTypeAny } from "zod";
 import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
+import { AiFeatureFlagsService } from "../../../ai-feature-flags/ai-feature-flags.service";
 import { USAGE_TRACKER } from "../../llm.constants";
 import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
+import { logAiInvocation } from "../utils/ai-invocation-log.util";
 import { LlmRouter } from "./llm-router.service";
 
 @Injectable()
@@ -24,6 +26,7 @@ export class PromptProcessorService implements IPromptProcessor {
   constructor(
     private readonly router: LlmRouter,
     @Inject(USAGE_TRACKER) private readonly usageTracker: IUsageTracker,
+    private readonly aiFlags: AiFeatureFlagsService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: PromptProcessorService.name });
@@ -40,6 +43,9 @@ export class PromptProcessorService implements IPromptProcessor {
     fallbackModel = "gpt-4o-mini",
     options?: LlmRequestOptions,
   ): Promise<string> {
+    // Kill-switch backstop: never make a paid provider call for a disabled
+    // AI component, even for work that was already queued before the flip.
+    this.aiFlags.assertUsageEnabled(usageType);
     try {
       const llm = await this.router.getForFeatureWithFallback(
         featureKey,
@@ -52,6 +58,7 @@ export class PromptProcessorService implements IPromptProcessor {
         usageType,
         llm,
         options,
+        featureKey,
       );
     } catch (error) {
       this.logger.error(
@@ -76,6 +83,8 @@ export class PromptProcessorService implements IPromptProcessor {
     fallbackModel = "gpt-4o-mini",
     options?: LlmRequestOptions,
   ): Promise<T> {
+    // Kill-switch backstop (see processPromptForFeature).
+    this.aiFlags.assertUsageEnabled(usageType);
     const llm = await this.router.getForFeatureWithFallback(
       featureKey,
       fallbackModel,
@@ -93,6 +102,13 @@ export class PromptProcessorService implements IPromptProcessor {
         schema,
         options,
       );
+      logAiInvocation(this.logger, {
+        modelKey: llm.key,
+        purpose: featureKey,
+        prompt: input,
+        response: JSON.stringify(parsed),
+        context: { assignment_id: assignmentId, usage_type: usageType },
+      });
       await this.trackUsageSafely(
         assignmentId,
         usageType,
@@ -115,6 +131,7 @@ export class PromptProcessorService implements IPromptProcessor {
       usageType,
       llm,
       options,
+      featureKey,
     );
     const parser = StructuredOutputParser.fromZodSchema(schema);
     return (await parser.parse(raw)) as T;
@@ -130,6 +147,8 @@ export class PromptProcessorService implements IPromptProcessor {
     llmKey = "gpt-4o",
     options?: LlmRequestOptions,
   ): Promise<string> {
+    // Kill-switch backstop (see processPromptForFeature).
+    this.aiFlags.assertUsageEnabled(usageType);
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
 
@@ -171,6 +190,7 @@ export class PromptProcessorService implements IPromptProcessor {
     usageType: AIUsageType,
     llm: any,
     options?: LlmRequestOptions,
+    purposeLabel?: string,
   ): Promise<string> {
     let input: string;
 
@@ -238,6 +258,14 @@ export class PromptProcessorService implements IPromptProcessor {
 
     const response = this.cleanResponse(result.content);
 
+    logAiInvocation(this.logger, {
+      modelKey: llm.key,
+      purpose: purposeLabel ?? usageType,
+      prompt: input,
+      response,
+      context: { assignment_id: assignmentId, usage_type: usageType },
+    });
+
     await this.trackUsageSafely(
       assignmentId,
       usageType,
@@ -263,6 +291,8 @@ export class PromptProcessorService implements IPromptProcessor {
     llmKey = "gpt-4.1-mini",
     options?: LlmRequestOptions,
   ): Promise<string> {
+    // Kill-switch backstop (see processPromptForFeature).
+    this.aiFlags.assertUsageEnabled(usageType);
     try {
       const llm = this.router.get(llmKey ?? "gpt-4.1-mini");
 
@@ -299,6 +329,14 @@ export class PromptProcessorService implements IPromptProcessor {
       );
 
       const response = this.cleanResponse(result.content);
+
+      logAiInvocation(this.logger, {
+        modelKey: llm.key,
+        purpose: usageType,
+        prompt: `${textContent} [image omitted]`,
+        response,
+        context: { assignment_id: assignmentId, usage_type: usageType },
+      });
 
       await this.trackUsageSafely(
         assignmentId,

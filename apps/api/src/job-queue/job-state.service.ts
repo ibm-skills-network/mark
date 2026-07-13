@@ -163,8 +163,7 @@ export class JobStateService implements OnModuleDestroy {
           : this.normalizePercentage(statusUpdate.percentage),
       currentQuestion:
         statusUpdate.currentQuestion ?? existingJob.currentQuestion,
-      totalQuestions:
-        statusUpdate.totalQuestions ?? existingJob.totalQuestions,
+      totalQuestions: statusUpdate.totalQuestions ?? existingJob.totalQuestions,
       result:
         statusUpdate.result === undefined
           ? existingJob.result

@@ -32,6 +32,7 @@ interface Props {
 
 export function MarkChatToggleButton({ role, className = "" }: Props) {
   const toggle = useChatbot((s) => s.toggle);
+  const isUnavailable = useChatbot((s) => s.isUnavailable);
   const labels = role === "author" ? AUTHOR_LABELS : LEARNER_LABELS;
   const [label, setLabel] = useState<string>(labels[0]);
 
@@ -39,12 +40,18 @@ export function MarkChatToggleButton({ role, className = "" }: Props) {
     setLabel(labels[Math.floor(Math.random() * labels.length)]);
   }, [role]);
 
+  // Chat access was denied for this session; offering the button would only
+  // open a panel that can never load.
+  if (isUnavailable) {
+    return null;
+  }
+
   return (
     <button
       type="button"
       onClick={toggle}
       title="Open Mark AI Assistant"
-      className={`shrink-0 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg hover:bg-violet-100 hover:border-violet-300 transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap ${className}`}
+      className={`shrink-0 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/50 hover:border-violet-300 dark:hover:border-violet-700 transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap ${className}`}
     >
       <Image
         src={MarkFace}

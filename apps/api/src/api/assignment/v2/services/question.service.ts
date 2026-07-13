@@ -13,6 +13,9 @@ import {
 } from "@prisma/client";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
+import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
+import { AiTemporarilyDisabledException } from "src/api/ai-feature-flags/ai-temporarily-disabled.exception";
 import { PrismaService } from "src/database/prisma.service";
 import { JobQueueService } from "src/job-queue/job-queue.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
@@ -51,6 +54,7 @@ export class QuestionService {
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
     private readonly jobQueueService: JobQueueService,
+    private readonly aiFlags: AiFeatureFlagsService,
   ) {}
 
   async getQuestionsForAssignment(
@@ -531,6 +535,18 @@ export class QuestionService {
     payload: QuestionGenerationPayload,
     userId: string,
   ): Promise<{ message: string; jobId: string }> {
+    // AI authoring kill-switch: fail fast at the enqueue point. Generation runs
+    // in the jobs worker, where a blocked LLM call would otherwise be swallowed
+    // and silently replaced with template questions. Throwing here returns a
+    // clean 409 so the author is told AI is paused instead of getting
+    // placeholder questions with no signal.
+    if (this.aiFlags.isDisabled(AiFeatureComponent.AUTHORING)) {
+      this.logger.warn(
+        `Question generation blocked by AI kill-switch for assignment ${assignmentId}`,
+      );
+      throw new AiTemporarilyDisabledException();
+    }
+
     this.validateQuestionGenerationPayload(payload);
     const files = await this.resolveQuestionGenerationFiles(
       assignmentId,

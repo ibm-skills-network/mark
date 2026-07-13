@@ -54,7 +54,7 @@ const CheckboxWithTooltip: FC<CheckboxWithTooltipProps> = ({
       name={name}
       checked={typeof checked !== "undefined" ? checked : defaultChecked}
       onChange={(e) => onChange && onChange(e.target.checked)}
-      className="h-4 w-4 text-purple-600 border-gray-300 rounded"
+      className="h-4 w-4 text-purple-600 border-gray-300 dark:border-gray-600 rounded"
     />
 
     <label htmlFor={id} className="font-medium">
@@ -62,7 +62,7 @@ const CheckboxWithTooltip: FC<CheckboxWithTooltipProps> = ({
     </label>
     <div className="tooltip">
       <span className="tooltiptext">{tooltipText}</span>
-      <InformationCircleIcon className="h-5 w-5 text-gray-500 hover:text-gray-700 cursor-pointer" />
+      <InformationCircleIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer" />
     </div>
   </div>
 );
@@ -128,12 +128,12 @@ const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
             onChange && onChange(newValue);
           }
         }}
-        className="h-8 w-18 text-violet-600 border-gray-300 rounded"
+        className="h-8 w-18 text-violet-600 border-gray-300 dark:border-gray-600 rounded"
       />
 
       <div className="tooltip">
         <span className="tooltiptext">{tooltipText}</span>
-        <InformationCircleIcon className="h-5 w-5 text-gray-500 hover:text-gray-700 cursor-pointer" />
+        <InformationCircleIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer" />
       </div>
     </div>
   );
@@ -192,7 +192,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
   }, [responseType]);
   return (
     <>
-      <hr className="mt-2 border-gray-200 w-full" />
+      <hr className="mt-2 border-gray-200 dark:border-gray-700 w-full" />
       <h2 className="text-lg font-semibold px-2">Presentation Options</h2>
       <div className="flex flex-wrap items-center gap-x-8 px-2 mt-2">
         {responseType === "LIVE_RECORDING" && (
@@ -258,7 +258,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
           }
         />
       </div>
-      <hr className="my-2 border-gray-200 w-full" />
+      <hr className="my-2 border-gray-200 dark:border-gray-700 w-full" />
     </>
   );
 };
@@ -841,7 +841,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         </div>
       ) : (
         <div
-          className="text-gray-500 cursor-pointer w-full"
+          className="text-gray-500 dark:text-gray-400 cursor-pointer w-full"
           onClick={() =>
             setToggleTitle(
               questionId,
@@ -853,15 +853,15 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           <MarkdownViewer
             className={`typography-body px-1 py-0.5 ${
               localQuestionTitle?.trim() === ""
-                ? "!text-gray-500"
-                : "!text-black"
+                ? "!text-gray-500 dark:!text-gray-400"
+                : "!text-black dark:!text-gray-100"
             }`}
           >
             {localQuestionTitle?.trim() === ""
               ? "Enter question here"
               : localQuestionTitle}
           </MarkdownViewer>
-          <div className="border-b border-gray-200 w-full" />
+          <div className="border-b border-gray-200 dark:border-gray-700 w-full" />
         </div>
       )}
 
@@ -871,12 +871,12 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         setIsAuthorCommentVisible &&
         setAuthorComment &&
         (isAuthorCommentVisible ? (
-          <div className="w-full mb-4 bg-grey-50 border border-violet-200 rounded-md p-3">
-            <label className="block text-violet-900 text-sm font-semibold mb-1">
+          <div className="w-full mb-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-md p-3">
+            <label className="block text-violet-900 dark:text-violet-300 text-sm font-semibold mb-1">
               Private Author Comment (Not visible to learners)
             </label>
             <textarea
-              className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-800 focus:ring-violet-500 focus:border-violet-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md p-2 text-sm text-gray-800 dark:text-gray-200 focus:ring-violet-500 focus:border-violet-500"
               placeholder="Add a note, reminder, or explanation for this question..."
               value={authorComment ?? ""}
               onChange={(e) => setAuthorComment?.(e.target.value)}
@@ -889,16 +889,16 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           <button
             type="button"
             onClick={() => setIsAuthorCommentVisible?.(true)}
-            className="flex items-center gap-2 bg-violet-100 border border-violet-200 rounded-md py-2 px-4 hover:bg-violet-100 transition-colors duration-150 w-fit"
+            className="flex items-center gap-2 bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-800 rounded-md py-2 px-4 hover:bg-violet-100 dark:hover:bg-violet-900/60 transition-colors duration-150 w-fit"
           >
-            <span className="text-violet-800 typography-body text-nowrap font-bold">
+            <span className="text-violet-800 dark:text-violet-200 typography-body text-nowrap font-bold">
               + Add Author Comment
             </span>
           </button>
         ))}
 
       {!variantMode && preview && authorComment?.trim() && (
-        <div className="w-full mb-4 p-3 bg-gray-50 rounded-md text-gray-700">
+        <div className="w-full mb-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-md text-gray-700 dark:text-gray-200">
           <strong>Author Comment:</strong>
           <p className="mt-1">{authorComment}</p>
         </div>
@@ -908,14 +908,14 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) && (
         <div className="flex flex-col justify-between gap-2 my-3">
           <div>
-            <p className="text-gray-700  leading-7 text-lg font-semibold tracking-normal">
+            <p className="text-gray-700 dark:text-gray-200  leading-7 text-lg font-semibold tracking-normal">
               Rubric
             </p>
           </div>
 
           <div className="flex lg:flex-row flex-col gap-2">
-            <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
-              <span className="text-gray-600 typography-body">
+            <div className="flex items-center mr-4 gap-2 text-gray-600 dark:text-gray-300 text-nowrap">
+              <span className="text-gray-600 dark:text-gray-300 typography-body">
                 Show Sub-Questions to Learner
               </span>
               <Tooltip
@@ -931,7 +931,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                   }
                   className={cn(
                     "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                    showSubQuestionsToLearner ? "bg-violet-600" : "bg-gray-200",
+                    showSubQuestionsToLearner ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
                   )}
                   role="switch"
                   aria-checked={showSubQuestionsToLearner}
@@ -949,8 +949,8 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               </Tooltip>
             </div>
             {showSubQuestionsToLearner && (
-              <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
-                <span className="text-gray-600 typography-body">
+              <div className="flex items-center mr-4 gap-2 text-gray-600 dark:text-gray-300 text-nowrap">
+                <span className="text-gray-600 dark:text-gray-300 typography-body">
                   Show Rubrics to Learner
                 </span>
                 <Tooltip
@@ -966,7 +966,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                     }
                     className={cn(
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                      showRubricsToLearner ? "bg-violet-600" : "bg-gray-200",
+                      showRubricsToLearner ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
                     )}
                     role="switch"
                     aria-checked={showRubricsToLearner}
@@ -985,8 +985,8 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               </div>
             )}
             {showSubQuestionsToLearner && showRubricsToLearner && (
-              <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
-                <span className="text-gray-600 typography-body">
+              <div className="flex items-center mr-4 gap-2 text-gray-600 dark:text-gray-300 text-nowrap">
+                <span className="text-gray-600 dark:text-gray-300 typography-body">
                   Display Rubric Points to Learners
                 </span>
                 <Tooltip
@@ -1007,7 +1007,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                     }}
                     className={cn(
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                      showPoints ? "bg-violet-600" : "bg-gray-200",
+                      showPoints ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
                     )}
                     role="switch"
                     aria-checked={showPoints}
@@ -1031,11 +1031,11 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         questionIndex === 1 &&
         !variantMode &&
         !preview && (
-          <div className="flex justify-between bg-violet-100 rounded py-4 pl-3 pr-5">
+          <div className="flex justify-between bg-violet-100 dark:bg-violet-900/30 rounded py-4 pl-3 pr-5">
             <div className="flex items-start h-full">
               <InformationCircleIcon className="stroke-white fill-violet-600 h-8 w-8 p-1" />
             </div>
-            <p className="typography-body text-violet-800">
+            <p className="typography-body text-violet-800 dark:text-violet-200">
               Create multiple rubrics to evaluate students on the same
               submission. Learner's will <b>not </b>see rubric evaluation
               questions. Unless you toggle the "Show to Learners" option. If
@@ -1043,7 +1043,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             </p>
             <div className="flex items-start h-full">
               <button
-                className="text-gray-500"
+                className="text-gray-500 dark:text-gray-400"
                 onClick={() => setShowCriteriaHeader(false)}
               >
                 <svg
@@ -1087,7 +1087,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${
               isItTrueOrFalse === true
                 ? "bg-violet-600 text-white border-violet-600 shadow-lg"
-                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+                : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
             }`}
             onClick={() => handleSelectAnswer(true)}
           >
@@ -1100,7 +1100,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             className={`px-6 py-3 rounded-lg text-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 ${
               isItTrueOrFalse === false
                 ? "bg-violet-600 text-white border-violet-600 shadow-lg"
-                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+                : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
             }`}
             onClick={() => handleSelectAnswer(false)}
           >
@@ -1110,7 +1110,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
           <div className="relative flex items-center">
             <input
               type="number"
-              className="text-center w-16 px-3 py-2 rounded-lg border text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all duration-200"
+              className="text-center w-16 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all duration-200"
               value={localPoints}
               disabled={preview}
               onChange={(e) => setLocalPoints(parseInt(e.target.value, 10))}
@@ -1119,7 +1119,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               style={{ width: `${localPoints?.toString()?.length + 5}ch` }}
             />
 
-            <span className="ml-2 text-gray-600">pts</span>
+            <span className="ml-2 text-gray-600 dark:text-gray-300">pts</span>
           </div>
         </div>
       ) : (

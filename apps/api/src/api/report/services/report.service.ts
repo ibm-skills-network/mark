@@ -22,6 +22,12 @@ import {
 } from "src/auth/interfaces/user.session.interface";
 import { AdminEmailService } from "src/auth/services/admin-email.service";
 import { PrismaService } from "src/database/prisma.service";
+import {
+  buildChatIssueBody,
+  buildChatIssueTitle,
+  CHAT_ISSUE_FOOTER,
+  defaultSeverityForIssueType,
+} from "../helpers/issue-template";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 
@@ -1022,15 +1028,8 @@ export class ReportsService {
 
     const isProduction = process.env.NODE_ENV === "production";
     const role = userSession?.role || "Author";
-    let issueSeverity: "info" | "warning" | "error" | "critical" =
-      severity || "info";
-
-    if (!severity) {
-      if (issueType === "technical") issueSeverity = "error";
-      if (issueType === "bug") issueSeverity = "error";
-      if (issueType === "critical") issueSeverity = "critical";
-      if (issueType === "grading") issueSeverity = "warning";
-    }
+    const issueSeverity: "info" | "warning" | "error" | "critical" =
+      severity || defaultSeverityForIssueType(issueType);
     const userEmail = additionalDetails?.userEmail || userSession?.userId;
     const safeUserEmail =
       typeof userEmail === "string" && userEmail.trim().length > 0
@@ -1087,29 +1086,19 @@ export class ReportsService {
     const potentialDuplicate = similarReports.find((r) => r.similarity > 0.85);
     const highSimilarityReport = similarReports.find((r) => r.similarity > 0.7);
 
-    const issueTitle = `[MARK CHAT] [
-${isProduction ? "PROD" : "DEV"}] [${role}] ${issueSeverity.toUpperCase()} ${
-      issueType.charAt(0).toUpperCase() + issueType.slice(1)
-    } Assignment ${assignmentId || "N/A"} - ${
-      role === "learner" ? `Attempt ${attemptId}` : ""
-    }
-    : ${description.slice(0, 50)}...`;
-
-    let issueBody = `
-## Issue Report from Mark Chat
-
-**Issue Type:** ${issueType}
-**Reported By:** ${role || "Unknown"}
-**User Email:** ${safeUserEmail}
-**Assignment ID:** ${assignmentId || "N/A"}
-**Attempt ID:** ${attemptId || "N/A"}
-**Time Reported:** ${new Date().toISOString()}
-**Severity:** ${issueSeverity}
-**Environment:** ${isProduction ? "Production" : "Development"}
-
-### Description
-${description}
-`;
+    const issueTemplateInput = {
+      issueType,
+      role,
+      severity: issueSeverity,
+      userEmail: safeUserEmail,
+      assignmentId,
+      attemptId,
+      reportedAt: new Date(),
+      isProduction,
+      description,
+    };
+    const issueTitle = buildChatIssueTitle(issueTemplateInput);
+    let issueBody = buildChatIssueBody(issueTemplateInput);
 
     const finalScreenshotUrl =
       screenshotUrl || additionalDetails?.screenshotUrl;
@@ -1150,7 +1139,7 @@ Screenshot Key: \`${finalScreenshotUrl}\`
       }
     }
 
-    issueBody += `\n---\n*This issue was automatically reported through the Mark Chat feature.*`;
+    issueBody += CHAT_ISSUE_FOOTER;
 
     if (potentialDuplicate) {
       issueBody += `\n\n⚠️ **Potential Duplicate** ⚠️\nThis issue appears to be a duplicate of Issue #${
@@ -1756,10 +1745,22 @@ A new related issue has been created: #${issue.number}
     // recovers them instead of 500ing forever.
     if (!report.issueNumber) {
       const labels = ["chat-report", report.issueType.toLowerCase()];
+      const backfillDescription = report.description ?? "(no description)";
+      const backfillTemplateInput = {
+        issueType: report.issueType,
+        role: report.author ? "author" : "learner",
+        severity: defaultSeverityForIssueType(report.issueType),
+        userEmail: report.reporterId,
+        assignmentId: report.assignmentId,
+        attemptId: report.attemptId,
+        reportedAt: report.createdAt ?? new Date(),
+        isProduction: process.env.NODE_ENV === "production",
+        description: backfillDescription,
+      };
 
       const issue = await this.createGithubIssue(
-        `Report #${report.id}`,
-        report.description ?? "(no description)",
+        buildChatIssueTitle(backfillTemplateInput),
+        buildChatIssueBody(backfillTemplateInput) + CHAT_ISSUE_FOOTER,
         labels,
       );
       report.issueNumber = issue.number;

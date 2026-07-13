@@ -27,7 +27,7 @@ const Component: FC<Props> = ({ compact }) => {
     >
       <button onClick={handleGradedChange} type="button" value="graded">
         <div className="flex items-center gap-x-1.5 cursor-pointer">
-          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white border border-gray-400 border-solid rounded-full">
+          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-600 border-solid rounded-full">
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
@@ -38,13 +38,13 @@ const Component: FC<Props> = ({ compact }) => {
           <p
             className={cn(
               "leading-5 transition-all cursor-pointer",
-              graded === true ? "font-bold text-violet-600" : "font-medium",
+              graded === true ? "font-bold text-violet-600 dark:text-violet-300" : "font-medium",
             )}
           >
             Graded
           </p>
         </div>
-        <p className="text-gray-500 text-left cursor-pointer">
+        <p className="text-gray-500 dark:text-gray-400 text-left cursor-pointer">
           This assignment&apos;s score directly impacts the learner&apos;s
           overall course grade.
         </p>
@@ -52,7 +52,7 @@ const Component: FC<Props> = ({ compact }) => {
 
       <button onClick={handleGradedChange} type="button" value="ungraded">
         <div className="flex items-center gap-x-1.5 cursor-pointer">
-          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white border border-gray-400 border-solid rounded-full">
+          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-600 border-solid rounded-full">
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
@@ -63,13 +63,13 @@ const Component: FC<Props> = ({ compact }) => {
           <div
             className={cn(
               "leading-5 cursor-pointer transition-all",
-              graded === false ? "font-bold text-violet-600" : "font-medium",
+              graded === false ? "font-bold text-violet-600 dark:text-violet-300" : "font-medium",
             )}
           >
             Practice
           </div>
         </div>
-        <p className="text-gray-500 text-left cursor-pointer">
+        <p className="text-gray-500 dark:text-gray-400 text-left cursor-pointer">
           The assignment will not count towards the learner&apos;s course grade.
         </p>
       </button>

@@ -111,17 +111,17 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <DocumentArrowDownIcon className="w-6 h-6 text-purple-600" />
-            <h2 className="text-xl font-semibold text-gray-900">
+            <DocumentArrowDownIcon className="w-6 h-6 text-purple-600 dark:text-purple-300" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               Export Assignment
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <XMarkIcon className="w-6 h-6" />
           </button>
@@ -129,7 +129,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
         <div className="p-6">
           <div className="mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               Export Format
             </h3>
             <div className="grid grid-cols-3 gap-4">
@@ -156,12 +156,12 @@ const ExportModal: React.FC<ExportModalProps> = ({
                   className={cn(
                     "p-4 border rounded-lg text-left transition-all",
                     format === formatOption.value
-                      ? "border-purple-500 bg-purple-50 text-purple-900"
-                      : "border-gray-200 hover:border-gray-300",
+                      ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-900 dark:text-purple-200"
+                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300",
                   )}
                 >
                   <div className="font-medium mb-1">{formatOption.label}</div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
                     {formatOption.description}
                   </div>
                 </button>
@@ -170,14 +170,14 @@ const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           <div className="mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               What to Include
             </h3>
             <div className="space-y-3">
               {exportOptionsList.map((option) => (
                 <div
                   key={option.id}
-                  className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   <button
                     onClick={() => handleOptionChange(option.id)}
@@ -185,7 +185,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                       "w-5 h-5 border-2 rounded flex items-center justify-center mt-0.5 transition-colors",
                       exportOptions[option.id]
                         ? "border-purple-500 bg-purple-500"
-                        : "border-gray-300 hover:border-purple-400",
+                        : "border-gray-300 dark:border-gray-600 hover:border-purple-400",
                     )}
                   >
                     {exportOptions[option.id] && (
@@ -193,10 +193,10 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     )}
                   </button>
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">
                       {option.label}
                     </div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
                       {option.description}
                     </div>
                   </div>
@@ -206,7 +206,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           <div className="mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               Quick Select
             </h3>
             <div className="flex gap-2">
@@ -223,7 +223,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     includeVariants: true,
                   })
                 }
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Select All
               </button>
@@ -240,7 +240,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     includeVariants: false,
                   })
                 }
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Deselect All
               </button>
@@ -257,7 +257,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     includeVariants: false,
                   })
                 }
-                className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Essential Only
               </button>
@@ -265,10 +265,10 @@ const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             Cancel
           </button>

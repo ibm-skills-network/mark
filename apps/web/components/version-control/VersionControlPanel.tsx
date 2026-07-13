@@ -106,11 +106,11 @@ export function VersionControlPanel({
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-          <GitBranch className="h-4 w-4 text-blue-600" />
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <GitBranch className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <span className="text-blue-900 font-semibold text-sm">
+              <span className="text-blue-900 dark:text-blue-200 font-semibold text-sm">
                 Version{" "}
                 {checkedOutVersion?.versionNumber ||
                   currentVersion?.versionNumber ||
@@ -119,7 +119,7 @@ export function VersionControlPanel({
               {checkedOutVersion?.isDraft && (
                 <Badge
                   variant="secondary"
-                  className="text-xs bg-yellow-100 text-yellow-800"
+                  className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200"
                 >
                   Draft
                 </Badge>
@@ -127,7 +127,7 @@ export function VersionControlPanel({
               {checkedOutVersion?.isActive && (
                 <Badge
                   variant="default"
-                  className="text-xs bg-green-100 text-green-800"
+                  className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
                 >
                   Published
                 </Badge>
@@ -135,20 +135,20 @@ export function VersionControlPanel({
               {checkedOutVersion && !checkedOutVersion.isActive && (
                 <Badge
                   variant="outline"
-                  className="text-xs border-blue-300 text-blue-700"
+                  className="text-xs border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
                 >
                   Checked Out
                 </Badge>
               )}
             </div>
             {currentVersion?.versionDescription && (
-              <span className="text-xs text-blue-700 truncate max-w-[200px]">
+              <span className="text-xs text-blue-700 dark:text-blue-300 truncate max-w-[200px]">
                 {currentVersion.versionDescription}
               </span>
             )}
             {!currentVersion?.versionDescription &&
               currentVersion?.createdAt && (
-                <span className="text-xs text-blue-600">
+                <span className="text-xs text-blue-600 dark:text-blue-400">
                   Created {formatVersionAge(currentVersion.createdAt)}
                 </span>
               )}
@@ -156,7 +156,7 @@ export function VersionControlPanel({
         </div>
 
         {hasUnsavedChanges && (
-          <div className="flex items-center gap-1 text-amber-600">
+          <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
             <div className="h-2 w-2 bg-amber-500 rounded-full animate-pulse"></div>
             <span className="text-xs font-medium">Unsaved changes</span>
           </div>
@@ -188,7 +188,7 @@ export function VersionControlPanel({
           </Button>
 
           {isVersionMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[300px]">
+            <div className="absolute right-0 top-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 min-w-[300px]">
               <div className="p-3">
                 <h3 className="font-semibold text-sm mb-3">
                   Available Versions
@@ -196,7 +196,7 @@ export function VersionControlPanel({
 
                 {publishedVersions.length > 0 && (
                   <div className="mb-4">
-                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
                       Published Versions
                     </div>
                     <div className="space-y-2">
@@ -205,10 +205,10 @@ export function VersionControlPanel({
                           key={version.id}
                           className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
                             version.id === checkedOutVersion?.id
-                              ? "border-blue-300 bg-blue-50 ring-2 ring-blue-200"
+                              ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-200"
                               : version.isActive
-                                ? "border-green-300 bg-green-50"
-                                : "border-gray-100 hover:bg-gray-50"
+                                ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20"
+                                : "border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                           }`}
                         >
                           <div className="flex-1">
@@ -216,10 +216,10 @@ export function VersionControlPanel({
                               <span
                                 className={`font-medium text-sm ${
                                   version.id === checkedOutVersion?.id
-                                    ? "text-blue-900"
+                                    ? "text-blue-900 dark:text-blue-200"
                                     : version.isActive
-                                      ? "text-green-900"
-                                      : "text-gray-900"
+                                      ? "text-green-900 dark:text-green-200"
+                                      : "text-gray-900 dark:text-gray-100"
                                 }`}
                               >
                                 Version {version.versionNumber}
@@ -230,7 +230,7 @@ export function VersionControlPanel({
                                   className="text-xs bg-blue-600"
                                 >
                                   <div className="flex items-center gap-1">
-                                    <div className="h-1.5 w-1.5 bg-white rounded-full animate-pulse"></div>
+                                    <div className="h-1.5 w-1.5 bg-white dark:bg-gray-800 rounded-full animate-pulse"></div>
                                     You're here
                                   </div>
                                 </Badge>
@@ -245,12 +245,12 @@ export function VersionControlPanel({
                                   </Badge>
                                 )}
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               {formatVersionAge(version.createdAt)} •{" "}
                               {version.questionCount} questions
                             </div>
                             {version.versionDescription && (
-                              <div className="text-xs text-gray-600 mt-1">
+                              <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
                                 {version.versionDescription}
                               </div>
                             )}
@@ -271,18 +271,18 @@ export function VersionControlPanel({
                                 <Eye className="h-3 w-3 mr-1" />
                                 Check it out
                               </Button>
-                              <span className="text-xs text-gray-400 text-center">
+                              <span className="text-xs text-gray-400 dark:text-gray-500 text-center">
                                 Switch to this version
                               </span>
                             </div>
                           )}
                           {version.id === checkedOutVersion?.id && (
                             <div className="flex flex-col gap-1 items-center">
-                              <div className="text-xs text-blue-600 font-medium px-2 py-1 bg-blue-100 rounded">
+                              <div className="text-xs text-blue-600 dark:text-blue-400 font-medium px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded">
                                 ✓ Current workspace
                               </div>
                               {version.isActive && (
-                                <div className="text-xs text-green-600 font-medium">
+                                <div className="text-xs text-green-600 dark:text-green-400 font-medium">
                                   Published
                                 </div>
                               )}
@@ -296,32 +296,32 @@ export function VersionControlPanel({
 
                 {drafts.length > 0 && (
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
                       My Private Drafts
                     </div>
                     <div className="space-y-2">
                       {drafts.map((draft) => (
                         <div
                           key={draft.id}
-                          className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
+                          className="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm truncate text-gray-900">
+                              <span className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
                                 {draft.draftName}
                               </span>
                               <Badge
                                 variant="secondary"
-                                className="text-xs bg-yellow-100 text-yellow-800"
+                                className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200"
                               >
                                 Draft
                               </Badge>
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               {formatVersionAge(draft.updatedAt)} •{" "}
                               {draft.questionCount} questions
                             </div>
-                            <div className="text-xs text-gray-600 mt-1 truncate">
+                            <div className="text-xs text-gray-600 dark:text-gray-300 mt-1 truncate">
                               Assignment: {draft.assignmentName}
                             </div>
                           </div>
@@ -341,7 +341,7 @@ export function VersionControlPanel({
                               onClick={() =>
                                 handleDeleteDraft(draft.id, draft.draftName)
                               }
-                              className="text-xs text-red-600 hover:text-red-700 hover:border-red-300 hover:bg-red-50 px-2"
+                              className="text-xs text-red-600 dark:text-red-400 hover:text-red-700 hover:border-red-300 hover:bg-red-50 px-2"
                             >
                               🗑️
                             </Button>
@@ -354,14 +354,14 @@ export function VersionControlPanel({
 
                 {draftVersions.length > 0 && (
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
                       Legacy Draft Versions
                     </div>
                     <div className="space-y-2">
                       {draftVersions.map((version) => (
                         <div
                           key={version.id}
-                          className="flex items-center justify-between p-2 border border-gray-100 rounded hover:bg-gray-50"
+                          className="flex items-center justify-between p-2 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                         >
                           <div>
                             <div className="flex items-center gap-2">
@@ -372,12 +372,12 @@ export function VersionControlPanel({
                                 Legacy
                               </Badge>
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
                               {formatVersionAge(version.createdAt)} •{" "}
                               {version.questionCount} questions
                             </div>
                             {version.versionDescription && (
-                              <div className="text-xs text-gray-600 mt-1">
+                              <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
                                 {version.versionDescription}
                               </div>
                             )}
@@ -406,15 +406,15 @@ export function VersionControlPanel({
                   drafts.length === 0 &&
                   !isLoadingVersions &&
                   !isLoadingDrafts && (
-                    <div className="text-center py-4 text-gray-500">
+                    <div className="text-center py-4 text-gray-500 dark:text-gray-400">
                       <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No versions or drafts available</p>
                     </div>
                   )}
 
                 {(isLoadingVersions || isLoadingDrafts) && (
-                  <div className="text-center py-4 text-gray-500">
-                    <div className="animate-spin h-5 w-5 border-2 border-gray-300 border-t-gray-600 rounded-full mx-auto mb-2"></div>
+                  <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                    <div className="animate-spin h-5 w-5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 rounded-full mx-auto mb-2"></div>
                     <p className="text-sm">Loading versions and drafts...</p>
                   </div>
                 )}
@@ -516,10 +516,10 @@ function VersionHistoryModal({
               key={version.id}
               className={`p-4 border rounded-lg transition-all ${
                 version.id === checkedOutVersion?.id
-                  ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-200"
                   : version.isActive
-                    ? "border-green-500 bg-green-50"
-                    : "border-gray-200 hover:border-gray-300"
+                    ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -528,16 +528,16 @@ function VersionHistoryModal({
                     <GitBranch
                       className={`h-4 w-4 ${
                         version.id === currentVersion?.id
-                          ? "text-blue-600"
-                          : "text-gray-400"
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-gray-400 dark:text-gray-500"
                       }`}
                     />
 
                     <span
                       className={`font-semibold ${
                         version.id === currentVersion?.id
-                          ? "text-blue-900"
-                          : "text-gray-900"
+                          ? "text-blue-900 dark:text-blue-200"
+                          : "text-gray-900 dark:text-gray-100"
                       }`}
                     >
                       Version {version.versionNumber}
@@ -548,7 +548,7 @@ function VersionHistoryModal({
                     {version.id === checkedOutVersion?.id && (
                       <Badge variant="default" className="text-xs bg-blue-600">
                         <div className="flex items-center gap-1">
-                          <div className="h-1.5 w-1.5 bg-white rounded-full animate-pulse"></div>
+                          <div className="h-1.5 w-1.5 bg-white dark:bg-gray-800 rounded-full animate-pulse"></div>
                           You're here
                         </div>
                       </Badge>
@@ -565,7 +565,7 @@ function VersionHistoryModal({
                     {version.isDraft && (
                       <Badge
                         variant="secondary"
-                        className="text-xs bg-yellow-100 text-yellow-800"
+                        className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200"
                       >
                         Draft
                       </Badge>
@@ -574,23 +574,23 @@ function VersionHistoryModal({
                 </div>
 
                 <div className="text-right">
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
                     {formatVersionAge(version.createdAt)}
                   </div>
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-gray-400 dark:text-gray-500">
                     {version.questionCount} questions
                   </div>
                 </div>
               </div>
 
               {version.versionDescription && (
-                <div className="mt-2 text-sm text-gray-600">
+                <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                   {version.versionDescription}
                 </div>
               )}
 
               <div className="mt-3 flex items-center justify-between">
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 dark:text-gray-400">
                   Created by {version.createdBy}
                 </div>
 
@@ -608,7 +608,7 @@ function VersionHistoryModal({
                   </Button>
                 )}
                 {version.id === checkedOutVersion?.id && (
-                  <div className="text-xs text-blue-600 font-medium px-3 py-1 bg-blue-100 rounded">
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded">
                     ✓ You're here
                   </div>
                 )}
@@ -617,9 +617,9 @@ function VersionHistoryModal({
           ))}
 
           {versions.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               <GitBranch className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <h3 className="font-medium text-gray-700 mb-1">
+              <h3 className="font-medium text-gray-700 dark:text-gray-200 mb-1">
                 No Versions Yet
               </h3>
               <p className="text-sm">

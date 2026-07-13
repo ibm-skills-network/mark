@@ -1,3 +1,6 @@
+echo "Checking lti-sync-drain script sync..."
+scripts/check-drain-script-sync.sh
+
 echo "Running yarn lint..."
 yarn lint
 

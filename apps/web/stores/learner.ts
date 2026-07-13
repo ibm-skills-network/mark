@@ -448,7 +448,7 @@ export type AssignmentDetailsState = {
 
 export type AssignmentDetailsActions = {
   setAssignmentDetails: (assignmentDetails: Assignment) => void;
-  setGrade: (grade: number) => void;
+  setGrade: (grade: number | null) => void;
 };
 
 const isQuestionEdited = (question: QuestionStore) => {

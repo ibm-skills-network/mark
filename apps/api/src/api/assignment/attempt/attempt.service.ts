@@ -27,6 +27,7 @@ import {
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
 import { LtiGradeSyncService } from "src/api/attempt/services/lti-grade-sync.service";
+import { GradingKillSwitchService } from "src/api/ai-feature-flags/grading-kill-switch.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
@@ -110,6 +111,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     private readonly assignmentService: AssignmentServiceV1,
     private readonly httpService: HttpService,
     @Optional() private readonly ltiGradeSyncService: LtiGradeSyncService,
+    private readonly gradingKillSwitch: GradingKillSwitchService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: AttemptServiceV1.name });
@@ -406,6 +408,13 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       assignmentId,
       userSession,
     );
+    // Kill-switch: block starting an AI-graded attempt while grading is
+    // disabled (non-AI assignments are unaffected).
+    await this.gradingKillSwitch.assertGradingAllowed(
+      assignmentId,
+      userSession.userId,
+      "start",
+    );
     await this.validateNewAttempt(assignment, userSession);
     const attemptExpiresAt = this.calculateAttemptExpiresAt(assignment);
     const assignmentAttempt = await this.prisma.assignmentAttempt.create({
@@ -563,6 +572,14 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     request: UserSessionRequest,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role, userId } = request.userSession;
+    // Kill-switch: block submitting/grading an AI-graded attempt while grading
+    // is disabled. The attempt is left un-submitted (progress preserved) and no
+    // LLM call is made. Non-AI assignments pass through untouched.
+    await this.gradingKillSwitch.assertGradingAllowed(
+      assignmentId,
+      userId,
+      "submit",
+    );
     if (role === UserRole.LEARNER) {
       const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
         where: { id: assignmentAttemptId },

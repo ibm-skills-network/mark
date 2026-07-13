@@ -429,7 +429,12 @@ export default function LLMAssignmentsPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {feature.isActive ? (
-                          <Badge variant="default">Active</Badge>
+                          <Badge
+                            variant="default"
+                            className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-200 dark:hover:bg-green-900/30"
+                          >
+                            Active
+                          </Badge>
                         ) : (
                           <Badge variant="secondary">Inactive</Badge>
                         )}
@@ -489,6 +494,11 @@ export default function LLMAssignmentsPage() {
                           <h4 className="font-medium">{model.displayName}</h4>
                           <Badge
                             variant={model.isActive ? "default" : "secondary"}
+                            className={
+                              model.isActive
+                                ? "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-200 dark:hover:bg-green-900/30"
+                                : undefined
+                            }
                           >
                             {model.isActive ? "Active" : "Inactive"}
                           </Badge>

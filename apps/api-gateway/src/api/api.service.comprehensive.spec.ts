@@ -44,6 +44,51 @@ describe("ApiService - Comprehensive Stress Tests (Simplified)", () => {
     jest.clearAllMocks();
   });
 
+  describe("getForwardingDetails cookie dedup", () => {
+    beforeEach(() => {
+      process.env.MARK_API_ENDPOINT = "http://mark-api:3000";
+    });
+
+    const makeToken = (iat: number, marker = "h"): string =>
+      `${marker}.${Buffer.from(JSON.stringify({ iat })).toString("base64url")}.s`;
+
+    it("rewrites the forwarded cookie header to the newest authentication cookie when duplicates exist", () => {
+      const older = makeToken(1000, "old");
+      const newer = makeToken(2000, "new");
+      const mockRequest = {
+        originalUrl: "/api/v1/test",
+        user: { userId: "test-user" },
+        headers: {
+          cookie: `theme=dark; authentication=${older}; authentication=${newer}`,
+        },
+      } as any;
+
+      const { extraHeaders } = service.getForwardingDetails(
+        DownstreamService.MARK_API,
+        mockRequest,
+      );
+
+      expect(extraHeaders.cookie).toBe(`theme=dark; authentication=${newer}`);
+    });
+
+    it("does not override the cookie header when only one authentication cookie is present", () => {
+      const token = makeToken(1000);
+      const mockRequest = {
+        originalUrl: "/api/v1/test",
+        user: { userId: "test-user" },
+        headers: { cookie: `authentication=${token}` },
+      } as any;
+
+      const { extraHeaders } = service.getForwardingDetails(
+        DownstreamService.MARK_API,
+        mockRequest,
+      );
+
+      expect(extraHeaders.cookie).toBeUndefined();
+      expect(extraHeaders.Cookie).toBeUndefined();
+    });
+  });
+
   describe("Error Resilience Tests", () => {
     beforeEach(() => {
       process.env.MARK_API_ENDPOINT = "http://mark-api:3000";

@@ -109,10 +109,10 @@ export function VersionControlTab() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="flex items-center space-x-2 rounded-lg border p-4">
-          <GitBranch className="h-5 w-5 text-blue-600" />
+          <GitBranch className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           <div>
             <p className="text-sm font-medium">Current Workspace</p>
-            <p className="text-2xl font-bold text-blue-600">
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
               Version{" "}
               {checkedOutVersion?.versionNumber ||
                 currentVersion?.versionNumber ||
@@ -129,10 +129,10 @@ export function VersionControlTab() {
         </div>
 
         <div className="flex items-center space-x-2 rounded-lg border p-4">
-          <Activity className="h-5 w-5 text-green-600" />
+          <Activity className="h-5 w-5 text-green-600 dark:text-green-400" />
           <div>
             <p className="text-sm font-medium">Published Version</p>
-            <p className="text-2xl font-bold text-green-600">
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
               Version {currentVersion?.versionNumber || "1"}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -144,10 +144,10 @@ export function VersionControlTab() {
         </div>
 
         <div className="flex items-center space-x-2 rounded-lg border p-4">
-          <FileText className="h-5 w-5 text-yellow-600" />
+          <FileText className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
           <div>
             <p className="text-sm font-medium">My Private Drafts</p>
-            <p className="text-2xl font-bold text-yellow-600">
+            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
               {drafts.length}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -197,7 +197,7 @@ export function VersionControlTab() {
 
         {isLoadingVersions ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin h-8 w-8 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
+            <div className="animate-spin h-8 w-8 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 rounded-full"></div>
           </div>
         ) : versionsLoadFailed ? (
           <div className="text-center py-8 text-red-500">
@@ -218,15 +218,15 @@ export function VersionControlTab() {
                   key={version.id}
                   className={`flex items-center justify-between p-4 border rounded-lg transition-colors ${
                     version.id === checkedOutVersion?.id
-                      ? "border-blue-300 bg-blue-50 ring-2 ring-blue-200"
+                      ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-200"
                       : version.isActive
-                        ? "border-green-300 bg-green-50"
-                        : "border-gray-200 hover:bg-gray-50"
+                        ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20"
+                        : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                   }`}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
-                      <GitBranch className="h-4 w-4 text-gray-400" />
+                      <GitBranch className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">
@@ -255,10 +255,10 @@ export function VersionControlTab() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                           {version.versionDescription || "No description"}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {formatVersionAge(version.createdAt)} •{" "}
                           {version.questionCount} questions • by{" "}
                           {version.createdBy}
@@ -291,7 +291,7 @@ export function VersionControlTab() {
                               version.versionNumber,
                             )
                           }
-                          className="text-green-600 hover:text-green-700"
+                          className="text-green-600 dark:text-green-400 hover:text-green-700"
                         >
                           Make Active
                         </Button>
@@ -300,7 +300,7 @@ export function VersionControlTab() {
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 <GitBranch className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p>No versions yet</p>
                 <p className="text-sm">
@@ -317,14 +317,14 @@ export function VersionControlTab() {
 
         {isLoadingDrafts ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin h-8 w-8 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
+            <div className="animate-spin h-8 w-8 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 rounded-full"></div>
           </div>
         ) : drafts.length > 0 ? (
           <div className="space-y-3">
             {drafts.map((draft) => (
               <div
                 key={draft.id}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
@@ -336,10 +336,10 @@ export function VersionControlTab() {
                           Draft
                         </Badge>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                         Assignment: {draft.assignmentName}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formatVersionAge(draft.updatedAt)} •{" "}
                         {draft.questionCount} questions
                       </p>
@@ -360,7 +360,7 @@ export function VersionControlTab() {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteDraft(draft.id, draft.draftName)}
-                    className="text-red-600 hover:text-red-700"
+                    className="text-red-600 dark:text-red-400 hover:text-red-700"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -369,7 +369,7 @@ export function VersionControlTab() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p>No drafts yet</p>
             <p className="text-sm">
@@ -403,7 +403,7 @@ export function VersionControlTab() {
                     ? "Describe this draft so you can find it later..."
                     : "Describe the changes in this version..."
                 }
-                className="w-full p-3 border border-gray-300 rounded-md resize-none"
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 rounded-md resize-none"
                 rows={3}
               />
             </div>

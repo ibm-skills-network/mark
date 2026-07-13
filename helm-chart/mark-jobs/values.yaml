@@ -35,8 +35,9 @@ env:
   # grab the same 50 SCHEDULED rows on each tick and PUT them in
   # parallel, causing duplicate submissions and burning retry budget.
   # Envs that want retries should ship a separate single-instance
-  # mechanism (we use a K8s CronJob `lti-sync-drain` in apps-faculty-deploy
-  # — see config/lti-sync-drain/cronjob.yaml). Once the race is fixed in
+  # mechanism (this chart ships a K8s CronJob `lti-sync-drain` — see
+  # templates/lti-sync-drain-cronjob.yaml, gated by ltiSyncDrain.enabled).
+  # Once the race is fixed in
   # apps/api/src/api/attempt/schedulers/lti-sync-scheduler.ts (Redis
   # lock or FOR UPDATE SKIP LOCKED), this can be flipped back to "true"
   # and the CronJob retired.
@@ -69,3 +70,19 @@ env:
   ENABLE_PARALLEL_GRADING: "false"
 
 secretEnv: {}
+
+ltiSyncDrain:
+  # Single-instance retry for stuck LtiGradeSync rows, standing in for the
+  # in-process scheduler (ENABLE_LTI_SCHEDULER=false). Disable once the
+  # scheduler race is fixed and the in-process path is re-enabled.
+  enabled: true
+  schedule: "*/5 * * * *"
+  concurrency: 2
+  apiBase: "http://mark-api/api"
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
