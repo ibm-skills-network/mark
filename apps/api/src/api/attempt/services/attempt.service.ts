@@ -115,11 +115,31 @@ export class AttemptServiceV2 {
     );
 
     if (existingJobId !== null) {
+      // Resolve the queue from the *running* job's own state record, not the
+      // freshly computed tier above: if the author edited their question set
+      // while a preview job was in flight and the tier flipped, enqueueing
+      // the reused jobId onto a different queue would miss BullMQ's
+      // same-jobId dedup (which only applies within a single queue), letting
+      // the job run twice concurrently. Fall back to the freshly computed
+      // queue only if the job record itself is gone (e.g. TTL expiry).
+      const existingJob = await this.jobStateService.getJob(existingJobId);
+      const resolvedQueueName =
+        (existingJob?.queueName as JobQueueName | undefined) ?? queueName;
+      if (existingJob && resolvedQueueName !== queueName) {
+        this.logger.log("grading.enqueue.tier-flip-guarded", {
+          assignmentId,
+          kind: "attempt-author-preview",
+          existingJobId,
+          reusedQueueName: resolvedQueueName,
+          freshlyComputedQueueName: queueName,
+          userId: request.userSession.userId,
+        });
+      }
       return {
         gradingJobId: existingJobId,
         message:
           "Author preview job is already in progress. Reusing existing job.",
-        queueName,
+        queueName: resolvedQueueName,
       };
     }
 

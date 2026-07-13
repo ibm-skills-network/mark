@@ -295,6 +295,42 @@ describe("AttemptServiceV2", () => {
       expect(mockJobStateService.createJob).not.toHaveBeenCalled();
     });
 
+    it("reuses the running job's own queue on lock reuse, even when the freshly computed tier differs (mid-flight tier flip)", async () => {
+      mockJobStateService.acquireActiveJobLock!.mockResolvedValue(
+        "existing-preview-id",
+      );
+      // The in-flight job is running on mark.attempt (standard tier), but
+      // the author has since edited the question set to include an UPLOAD
+      // question, which would freshly classify as heavy (mark.attempt.heavy).
+      mockJobStateService.getJob!.mockResolvedValue({
+        id: "existing-preview-id",
+        queueName: "mark.attempt",
+        jobName: "attempt-author-preview",
+        kind: "attempt-author-preview",
+        userId: "author-1",
+        status: "Processing",
+        progress: "Grading in progress",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await service.createAuthorGradingJob(
+        3,
+        { ...updateDto, authorQuestions: [{ type: "UPLOAD" }] } as never,
+        "",
+        request,
+      );
+
+      // Must return the existing job's own queue, not the freshly computed
+      // one — enqueueing the reused jobId onto a different queue would miss
+      // BullMQ's same-jobId dedup (which only applies within one queue) and
+      // let the job run twice concurrently.
+      expect(result.queueName).toBe("mark.attempt");
+      expect(mockJobStateService.getJob).toHaveBeenCalledWith(
+        "existing-preview-id",
+      );
+    });
+
     it("routes author previews with file questions to the heavy queue", async () => {
       mockJobStateService.acquireActiveJobLock!.mockResolvedValue(null);
       mockJobStateService.createJob!.mockResolvedValue({ id: "job-2" });
