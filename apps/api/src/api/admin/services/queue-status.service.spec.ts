@@ -567,4 +567,84 @@ describe("QueueStatusService", () => {
     expect(health.heartbeatPods).toBe(1);
     expect(health.reconciled).toBe(true);
   });
+
+  it("getRedisHealth does not report reconciled when no live pod serves the probe queue", async () => {
+    const now = Date.now();
+    // Only a heavy-only pod is live: it serves mark.attempt.heavy, not the
+    // probe queue mark.attempt, and BullMQ sees no worker connection there.
+    // A zero-against-zero match must NOT read as reconciled/healthy — that
+    // would hide a complete grading-worker outage behind a green widget.
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        instanceId: "heavy-pod",
+        queues: ["mark.attempt.heavy"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+    ]);
+    jobQueue.getRedisInfo.mockResolvedValue({
+      usedMemoryBytes: 100,
+      usedMemoryHuman: "100B",
+      connectedClients: 3,
+      opsPerSec: 1,
+    });
+    jobQueue.getQueueWorkerConnections.mockResolvedValue(0);
+    const health = await make().getRedisHealth();
+    expect(health.heartbeatPods).toBe(0);
+    expect(health.workerConnections).toBe(0);
+    expect(health.reconciled).toBe(false);
+  });
+
+  it("getRedisHealth ignores a heartbeat whose queues field is a malformed non-array", async () => {
+    const now = Date.now();
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        instanceId: "good-pod",
+        queues: ["mark.attempt"],
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+      {
+        // Corrupt payload: queues is not an array. It must be treated as
+        // serving nothing rather than throwing a TypeError out of the
+        // (unguarded) getRedisHealth request.
+        instanceId: "corrupt-pod",
+        queues: 42 as unknown as string[],
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+    ]);
+    jobQueue.getRedisInfo.mockResolvedValue({
+      usedMemoryBytes: 100,
+      usedMemoryHuman: "100B",
+      connectedClients: 3,
+      opsPerSec: 1,
+    });
+    jobQueue.getQueueWorkerConnections.mockResolvedValue(1);
+    const health = await make().getRedisHealth();
+    expect(health.heartbeatPods).toBe(1);
+    expect(health.reconciled).toBe(true);
+  });
+
+  it("counts a legacy heartbeat with no queues field toward the probe queue's capacity", async () => {
+    const now = Date.now();
+    jobQueue.getQueueCounts.mockResolvedValue({
+      waiting: 0,
+      active: 0,
+      delayed: 0,
+      failed: 0,
+      completed: 0,
+      paused: 0,
+    });
+    // Pre-tiering pod image: no `queues` field, so it ran a worker for every
+    // queue. It must count toward mark.attempt capacity — the same predicate
+    // the redis-health reconcile uses — so the capacity panel and the health
+    // widget agree about this pod instead of disagreeing.
+    workerConn.getAllWorkerHeartbeats.mockResolvedValue([
+      {
+        instanceId: "legacy-pod",
+        updatedAt: new Date(now - 1_000).toISOString(),
+      },
+    ]);
+    const queues = await make().getQueueStats();
+    const attempt = queues.find((q) => q.name === "mark.attempt");
+    expect(attempt?.livePods).toBe(1);
+  });
 });

@@ -288,7 +288,11 @@ export class QueueStatusService {
       opsPerSec: info.opsPerSec,
       workerConnections,
       heartbeatPods,
-      reconciled: workerConnections === heartbeatPods,
+      // A zero-against-zero match is not "healthy" — it means no live pod
+      // serves this queue at all (every worker down, or an overlay draining
+      // only other tiers). Require at least one live pod before reporting
+      // reconciled so a total worker outage cannot read as green.
+      reconciled: heartbeatPods > 0 && workerConnections === heartbeatPods,
     };
   }
 
@@ -476,10 +480,11 @@ export class QueueStatusService {
     let sawPublishedForQueue = false;
 
     for (const hb of liveHeartbeats) {
-      const servesQueue = Array.isArray(hb.queues)
-        ? hb.queues.includes(queueName)
-        : false;
-      if (!servesQueue) {
+      // Same predicate as the redis-health reconcile: a legacy heartbeat with
+      // no `queues` field counts as serving every queue. Sharing it keeps the
+      // capacity panel and the health widget from disagreeing about the same
+      // pod (e.g. a pre-tiering pod being counted by one but not the other).
+      if (!this.heartbeatServesQueue(hb, queueName)) {
         continue;
       }
       livePods += 1;
@@ -514,6 +519,11 @@ export class QueueStatusService {
     queueName: string,
   ): boolean {
     if (hb.queues === undefined) return true;
+    // A present-but-malformed non-array value (corrupt heartbeat payload)
+    // must not throw out of the callers — getRedisHealth is not wrapped in a
+    // try/catch, so an unguarded `.includes` would 500 the whole request.
+    // Treat it as serving nothing.
+    if (!Array.isArray(hb.queues)) return false;
     return hb.queues.includes(queueName);
   }
 

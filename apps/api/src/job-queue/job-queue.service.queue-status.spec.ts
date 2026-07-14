@@ -22,11 +22,19 @@ describe("JobQueueService read methods", () => {
     service = new JobQueueService();
   });
 
-  it("getQueueCounts returns the six counts with 0 defaults", async () => {
-    getJobCounts.mockResolvedValue({ waiting: 3, active: 1, failed: 2 });
+  it("folds prioritized into waiting and defaults the rest to 0", async () => {
+    // Prioritized jobs live in a separate ZSET; they are queued-not-started
+    // just like `waiting`, so getQueueCounts must request and add them in.
+    getJobCounts.mockResolvedValue({
+      waiting: 3,
+      prioritized: 4,
+      active: 1,
+      failed: 2,
+    });
     const counts = await service.getQueueCounts("mark.attempt");
     expect(getJobCounts).toHaveBeenCalledWith(
       "waiting",
+      "prioritized",
       "active",
       "delayed",
       "failed",
@@ -34,7 +42,7 @@ describe("JobQueueService read methods", () => {
       "paused",
     );
     expect(counts).toEqual({
-      waiting: 3,
+      waiting: 7,
       active: 1,
       delayed: 0,
       failed: 2,

@@ -105,11 +105,18 @@ export class JobQueueService implements OnModuleDestroy {
     // Centralized priority assignment: BullMQ runs unprioritized jobs before
     // ALL prioritized ones, so every job class on a prioritized queue must
     // get its priority here — call sites cannot be trusted to remember.
-    // An explicit options.priority (spread last) still wins for one-offs.
+    // An explicit options.priority still wins for one-offs, but pull it out
+    // rather than spreading raw options last: a spread copies an explicit
+    // `priority: undefined` over the mapped value and silently unprioritizes
+    // the job (which would then jump ahead of every prioritized job). The
+    // nullish fallback keeps the mapped priority when the override is absent
+    // or explicitly undefined.
     const mappedPriority = JOB_PRIORITIES[jobName as JobName];
+    const { priority: overridePriority, ...restOptions } = options;
+    const resolvedPriority = overridePriority ?? mappedPriority;
     const jobOptions: JobsOptions = {
-      ...(mappedPriority !== undefined && { priority: mappedPriority }),
-      ...options,
+      ...(resolvedPriority !== undefined && { priority: resolvedPriority }),
+      ...restOptions,
     };
     this.logger.log(
       `Enqueuing job ${jobName} on queue ${queueName}` +
@@ -154,6 +161,7 @@ export class JobQueueService implements OnModuleDestroy {
   async getQueueCounts(queueName: string): Promise<QueueCounts> {
     const counts = await this.getQueue(queueName).getJobCounts(
       "waiting",
+      "prioritized",
       "active",
       "delayed",
       "failed",
@@ -161,7 +169,13 @@ export class JobQueueService implements OnModuleDestroy {
       "paused",
     );
     return {
-      waiting: counts.waiting ?? 0,
+      // BullMQ v5 keeps queued jobs that carry a priority in a separate
+      // `prioritized` ZSET, not the plain `wait` list. Every job class on the
+      // attempt/translation queues now gets a priority via JOB_PRIORITIES, so
+      // counting only `waiting` would report a badly backed-up grading or
+      // translation queue as empty. Both are "queued, not yet started," so
+      // fold them into the single waiting number the dashboard shows.
+      waiting: (counts.waiting ?? 0) + (counts.prioritized ?? 0),
       active: counts.active ?? 0,
       delayed: counts.delayed ?? 0,
       failed: counts.failed ?? 0,
