@@ -634,6 +634,58 @@ ${parsed.guidance}
   }
 
   /**
+   * The vision model rejects images past its per-image size/dimension limits —
+   * a large lossless PNG screenshot base64-encodes past the provider's cap and
+   * comes back as an "unsupported image" error, which the caller then relabels
+   * as a format problem and tells the learner to upload a PNG they already
+   * uploaded. Downscale oversized pass-through rasters here so the model always
+   * receives a within-limits image. Images already within limits, or ones sharp
+   * can't process, are returned untouched.
+   */
+  private async normalizeOversizedImage(
+    buffer: Buffer,
+    detected: string,
+    filename?: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    // Vision providers downscale beyond ~1568px on the long edge anyway; staying
+    // under ~4MB keeps the base64 payload below the per-image ceiling.
+    const MAX_EDGE_PX = 1568;
+    const MAX_BYTES = 4 * 1024 * 1024;
+
+    try {
+      const metadata = await sharp(buffer).metadata();
+      const longestEdge = Math.max(metadata.width ?? 0, metadata.height ?? 0);
+      if (buffer.length <= MAX_BYTES && longestEdge <= MAX_EDGE_PX) {
+        return { buffer, mimeType: detected };
+      }
+
+      const resized = await sharp(buffer)
+        .resize(MAX_EDGE_PX, MAX_EDGE_PX, {
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer();
+      this.logger.info("image.grading.downscaled", {
+        filename,
+        detectedFormat: detected,
+        fromBytes: buffer.length,
+        toBytes: resized.length,
+      });
+      return { buffer: resized, mimeType: "image/png" };
+    } catch (error) {
+      // Fall back to the original bytes rather than newly failing an image that
+      // would otherwise have been sent to the model as-is.
+      this.logger.warn("image.grading.downscale.failed", {
+        filename,
+        detectedFormat: detected,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { buffer, mimeType: detected };
+    }
+  }
+
+  /**
    * Magic-byte sniffing only — no filename input. Recognizes the raster
    * formats the grading pipeline can either pass through (jpeg/png/gif/webp)
    * or convert (bmp/tiff/avif), plus the ones it must reject (heic/svg).
@@ -766,7 +818,7 @@ ${parsed.guidance}
       detected === "image/gif" ||
       detected === "image/webp"
     ) {
-      return { buffer, mimeType: detected };
+      return await this.normalizeOversizedImage(buffer, detected, filename);
     }
 
     if (

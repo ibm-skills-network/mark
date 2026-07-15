@@ -53,6 +53,52 @@ describe("preflightImageBuffer - real sharp conversion", () => {
     expect(result.buffer.subarray(0, 8)).toEqual(PNG_MAGIC);
   });
 
+  it("downscales an oversized PNG so it stays under the vision provider's limits", async () => {
+    const { service } = buildService();
+
+    // A 4000px-wide PNG — larger than the 1568px long-edge cap, the size that
+    // makes a real screenshot upload come back as "unsupported format".
+    const bigPng = await sharp({
+      create: {
+        width: 4000,
+        height: 3000,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    expect(service.detectMimeFromBytes(bigPng)).toBe("image/png");
+
+    const result = await service.preflightImageBuffer(bigPng, "screenshot.png");
+
+    expect(result.mimeType).toBe("image/png");
+    const meta = await sharp(result.buffer).metadata();
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(
+      1568,
+    );
+  });
+
+  it("passes a small PNG through untouched", async () => {
+    const { service } = buildService();
+    const smallPng = await sharp({
+      create: {
+        width: 8,
+        height: 8,
+        channels: 3,
+        background: { r: 1, g: 2, b: 3 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const result = await service.preflightImageBuffer(smallPng, "small.png");
+
+    expect(result.mimeType).toBe("image/png");
+    expect(result.buffer).toBe(smallPng);
+  });
+
   it("rejects genuinely unsupported data without invoking sharp conversion", async () => {
     const { service } = buildService();
     await expect(
