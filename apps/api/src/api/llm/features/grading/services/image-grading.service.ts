@@ -680,7 +680,9 @@ ${parsed.guidance}
       // byte cap, where a rejected image would be the alternative.
       if (resized.length > MAX_BYTES) {
         let lossy = resized;
-        let jpegQuality = JPEG_QUALITY_STEPS[JPEG_QUALITY_STEPS.length - 1];
+        // Tracks the quality that produced the returned buffer; the loop always
+        // overwrites it, starting from the first (highest-quality) step.
+        let jpegQuality = JPEG_QUALITY_STEPS[0];
         for (const quality of JPEG_QUALITY_STEPS) {
           // JPEG has no alpha channel; flatten a transparent PNG onto white
           // (the neutral background for a screenshot) so it does not composite
