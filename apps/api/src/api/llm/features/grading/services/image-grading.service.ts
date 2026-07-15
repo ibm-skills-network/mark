@@ -651,6 +651,11 @@ ${parsed.guidance}
     // under ~4MB keeps the base64 payload below the per-image ceiling.
     const MAX_EDGE_PX = 1568;
     const MAX_BYTES = 4 * 1024 * 1024;
+    // Escalating lossy fallback for the rare image that stays over the byte cap
+    // even after the dimension clamp — a dense photo or near-incompressible
+    // content whose lossless PNG is still too large at 1568px. At that size a
+    // JPEG lands well under the cap; the descending steps are a backstop.
+    const JPEG_QUALITY_STEPS = [80, 60];
 
     try {
       const metadata = await sharp(buffer).metadata();
@@ -666,9 +671,53 @@ ${parsed.guidance}
         })
         .png()
         .toBuffer();
+
+      // The dimension clamp satisfies the pixel limit but never shrinks the
+      // bytes of an image that was already within the edge cap, so a lossless
+      // PNG can still exceed the byte ceiling. Re-encode the downscaled raster
+      // as JPEG at descending quality until it fits. The lossless PNG is kept
+      // for the common case; we go lossy only when losslessness cannot meet the
+      // byte cap, where a rejected image would be the alternative.
+      if (resized.length > MAX_BYTES) {
+        let lossy = resized;
+        let jpegQuality = JPEG_QUALITY_STEPS[JPEG_QUALITY_STEPS.length - 1];
+        for (const quality of JPEG_QUALITY_STEPS) {
+          // JPEG has no alpha channel; flatten a transparent PNG onto white
+          // (the neutral background for a screenshot) so it does not composite
+          // onto black.
+          lossy = await sharp(resized)
+            .flatten({ background: "#ffffff" })
+            .jpeg({ quality })
+            .toBuffer();
+          jpegQuality = quality;
+          if (lossy.length <= MAX_BYTES) {
+            break;
+          }
+        }
+        this.logger.info("image.grading.downscaled", {
+          filename,
+          detectedFormat: detected,
+          outputFormat: "image/jpeg",
+          jpegQuality,
+          fromBytes: buffer.length,
+          toBytes: lossy.length,
+        });
+        if (lossy.length > MAX_BYTES) {
+          // Not reachable for a 1568px image at these qualities, but never
+          // silently hand the model an over-cap image without a trace.
+          this.logger.warn("image.grading.downscale.over.cap", {
+            filename,
+            detectedFormat: detected,
+            toBytes: lossy.length,
+          });
+        }
+        return { buffer: lossy, mimeType: "image/jpeg" };
+      }
+
       this.logger.info("image.grading.downscaled", {
         filename,
         detectedFormat: detected,
+        outputFormat: "image/png",
         fromBytes: buffer.length,
         toBytes: resized.length,
       });
