@@ -9,3 +9,18 @@
 export function resolveStoreGrade(grade: number | null | undefined): number {
   return typeof grade === "number" ? grade : Number.NaN;
 }
+
+export type MissingGradeReason = "score-hidden" | "results-missing";
+
+/**
+ * Explains why there is no grade to display, so the empty state can be
+ * honest. Only an explicit showAssignmentScore=false means the author hid
+ * the score; anything else means the grade was simply lost — e.g. reloading
+ * an author preview, whose results are never persisted — and blaming the
+ * visibility setting would be misleading.
+ */
+export function resolveMissingGradeReason(
+  showAssignmentScore: boolean | undefined,
+): MissingGradeReason {
+  return showAssignmentScore === false ? "score-hidden" : "results-missing";
+}
