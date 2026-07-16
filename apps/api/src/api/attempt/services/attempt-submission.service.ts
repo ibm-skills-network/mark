@@ -612,10 +612,38 @@ export class AttemptSubmissionService {
     // Compute score totals before applyVisibilitySettings so they survive
     // even when showQuestions=false strips the questions array. Without this
     // the success page shows "0 / 0" because it can't sum the (empty) array.
-    const totalPossiblePoints = cachedQuestions.reduce(
-      (sum, q) => sum + (q.totalPoints ?? 0),
-      0,
-    );
+    //
+    // Scope the denominator to the questions actually served to this attempt.
+    // Question-bank assignments draw numberOfQuestionsPerAttempt (< bank size)
+    // questions, recorded in assignmentAttempt.questionOrder. Summing every
+    // cached question inflates the total to the full bank size (e.g. "15/20"
+    // when only 15 were served). Mirror the served-set precedence the
+    // questions mapper uses so numerator and denominator cover the same set.
+    const servedQuestionIds = assignmentAttempt.questionOrder?.length
+      ? assignmentAttempt.questionOrder
+      : assignment.questionOrder?.length
+        ? assignment.questionOrder
+        : cachedQuestions.map((q) => q.id);
+    const servedQuestionIdSet = new Set(servedQuestionIds);
+    let totalPossiblePoints = 0;
+    for (const questionId of servedQuestionIdSet) {
+      if (questionMaxById.has(questionId)) {
+        // Question is in the cache: use its defined max (null totalPoints
+        // stays 0, matching the historical denominator behavior).
+        totalPossiblePoints += questionMaxById.get(questionId) ?? 0;
+      } else {
+        // Served (in questionOrder) but absent from the cache — a question
+        // deleted after this attempt was submitted, which only happens on
+        // non-versioned assignments (versioned attempts read an immutable
+        // snapshot). The numerator still counts this response via pass-through,
+        // so mirror that here; otherwise the total could fall below the earned
+        // points and render a >100% score.
+        const deletedResponse = responses.find(
+          (r) => r.questionId === questionId,
+        );
+        totalPossiblePoints += deletedResponse?.points ?? 0;
+      }
+    }
     const effectiveGrade =
       totalPointsEarned < rawPointsEarned && totalPossiblePoints > 0
         ? totalPointsEarned / totalPossiblePoints

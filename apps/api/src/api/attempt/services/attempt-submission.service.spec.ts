@@ -712,6 +712,109 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       buildSpy.mockRestore();
     });
 
+    it("scopes totalPossiblePoints to the questions served this attempt, not the whole question bank", async () => {
+      // Question-bank assignment: bank of 3 cached questions, but only 2 were
+      // drawn for this attempt (questionOrder). The denominator must be the 2
+      // served (10), not the full bank of 3 (15) — otherwise the success page
+      // shows an inflated "X/15" when only 2 questions were answered.
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        questionOrder: [101, 202],
+        questionResponses: [
+          { questionId: 101, points: 5 },
+          { questionId: 202, points: 5 },
+        ],
+      });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [
+          { id: 101, totalPoints: 5 },
+          { id: 202, totalPoints: 5 },
+          { id: 303, totalPoints: 5 }, // in the bank, not served this attempt
+        ],
+      );
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([
+          { id: 101, totalPoints: 5 },
+          { id: 202, totalPoints: 5 },
+        ]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101, 202, 303],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      expect(result.totalPossiblePoints).toBe(10);
+      expect(result.totalPointsEarned).toBe(10);
+      expect(result.grade).toBe(0.9);
+
+      buildSpy.mockRestore();
+    });
+
+    it("keeps the denominator >= earned when a served question was deleted after submission", async () => {
+      // Non-versioned assignment: Q202 was served (in questionOrder) and graded,
+      // but the author deleted it afterwards so it is gone from the question
+      // cache. The numerator still counts its response via pass-through, so the
+      // denominator must count it too — otherwise the score renders above 100%.
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        grade: 0.9,
+        questionOrder: [101, 202],
+        questionResponses: [
+          { questionId: 101, points: 5 },
+          { questionId: 202, points: 4 }, // question deleted from the cache
+        ],
+      });
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [{ id: 101, totalPoints: 5 }], // 202 missing: deleted after submission
+      );
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101, 202],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+
+      // 5 (cached Q101) + 4 (Q202's earned points, mirrored) = 9, not 5.
+      expect(result.totalPossiblePoints).toBe(9);
+      expect(result.totalPointsEarned).toBe(9);
+      expect(result.totalPointsEarned).toBeLessThanOrEqual(
+        result.totalPossiblePoints as number,
+      );
+
+      buildSpy.mockRestore();
+    });
+
     it("clamps a response graded above its question's max and recomputes the displayed grade so an already-graded attempt cannot show a false 100%", async () => {
       // Reproduces the multi-select overshoot: Q202 was graded 2 points on a
       // 1-point question, which inflated the attempt total so the +1 overshoot
@@ -719,6 +822,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
         ...assignmentAttempt,
         grade: 1, // stored grade was derived from the inflated points
+        questionOrder: [101, 202, 303], // all three served this attempt
         questionResponses: [
           { questionId: 101, points: 1 },
           { questionId: 202, points: 2 }, // over the question's max of 1
