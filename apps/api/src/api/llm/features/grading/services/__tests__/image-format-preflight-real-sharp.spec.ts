@@ -53,6 +53,110 @@ describe("preflightImageBuffer - real sharp conversion", () => {
     expect(result.buffer.subarray(0, 8)).toEqual(PNG_MAGIC);
   });
 
+  it("downscales an oversized PNG so it stays under the vision provider's limits", async () => {
+    const { service } = buildService();
+
+    // A 4000px-wide PNG — larger than the 1568px long-edge cap, the size that
+    // makes a real screenshot upload come back as "unsupported format".
+    const bigPng = await sharp({
+      create: {
+        width: 4000,
+        height: 3000,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    expect(service.detectMimeFromBytes(bigPng)).toBe("image/png");
+
+    const result = await service.preflightImageBuffer(bigPng, "screenshot.png");
+
+    expect(result.mimeType).toBe("image/png");
+    const meta = await sharp(result.buffer).metadata();
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(
+      1568,
+    );
+  });
+
+  it("passes a small PNG through untouched", async () => {
+    const { service } = buildService();
+    const smallPng = await sharp({
+      create: {
+        width: 8,
+        height: 8,
+        channels: 3,
+        background: { r: 1, g: 2, b: 3 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const result = await service.preflightImageBuffer(smallPng, "small.png");
+
+    expect(result.mimeType).toBe("image/png");
+    expect(result.buffer).toBe(smallPng);
+  });
+
+  it("re-encodes an under-dimension but over-byte image as JPEG below the byte cap", async () => {
+    const { service } = buildService();
+
+    const MAX_BYTES = 4 * 1024 * 1024;
+
+    // 1500px square of incompressible pseudo-noise: within the 1568px edge cap
+    // but far past the 4MB byte cap as lossless PNG. The dimension clamp alone
+    // can't shrink it, so preflight must fall back to a lossy encoder to land
+    // the image under the provider's per-image byte ceiling.
+    const px = 1500 * 1500 * 3;
+    const raw = Buffer.allocUnsafe(px);
+    let s = 0x12345678;
+    for (let i = 0; i < px; i++) {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      s >>>= 0;
+      raw[i] = s & 0xff;
+    }
+    const noisyPng = await sharp(raw, {
+      raw: { width: 1500, height: 1500, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    expect(service.detectMimeFromBytes(noisyPng)).toBe("image/png");
+    // Sanity: the fixture really is over the cap yet within the edge limit.
+    expect(noisyPng.length).toBeGreaterThan(MAX_BYTES);
+
+    const result = await service.preflightImageBuffer(noisyPng, "dense.png");
+
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.buffer.length).toBeLessThanOrEqual(MAX_BYTES);
+  });
+
+  it("keeps a downscaled image as lossless PNG when it fits under the byte cap", async () => {
+    const { service } = buildService();
+
+    // Oversized dimensions but ordinary content: the fit-inside-1568 clamp
+    // brings it under the byte cap as PNG, so it must stay lossless PNG rather
+    // than needlessly dropping to JPEG.
+    const bigPng = await sharp({
+      create: {
+        width: 4000,
+        height: 3000,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const result = await service.preflightImageBuffer(bigPng, "screenshot.png");
+
+    expect(result.mimeType).toBe("image/png");
+    expect(result.buffer.length).toBeLessThanOrEqual(4 * 1024 * 1024);
+  });
+
   it("rejects genuinely unsupported data without invoking sharp conversion", async () => {
     const { service } = buildService();
     await expect(

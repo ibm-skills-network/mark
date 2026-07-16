@@ -540,9 +540,9 @@ const VideoPresentationEditor = ({
   const isExceedingLimit = targetTime > 0 && finalTrimLength > targetTime;
 
   return (
-    <div className="bg-white rounded-lg overflow-hidden w-full max-w-lg mx-auto border">
+    <div className="bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg overflow-hidden w-full max-w-lg mx-auto border dark:border-gray-700">
       {processingTranscript || (!transcript && videoFile) ? (
-        <div className="flex items-center justify-center h-64 border-b">
+        <div className="flex items-center justify-center h-64 border-b dark:border-gray-700">
           <div className="flex items-center space-x-2">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
             <p className="text-violet-600">Processing...</p>
@@ -567,10 +567,10 @@ const VideoPresentationEditor = ({
 
         <div
           {...getVideoRootProps()}
-          className="border-dashed border-2 p-4 text-center cursor-pointer mb-4"
+          className="border-dashed border-2 dark:border-gray-600 p-4 text-center cursor-pointer mb-4"
         >
           <input {...getVideoInputProps()} />
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
             {videoURL
               ? "Replace the video by dropping or clicking here."
               : "Drag & drop or click to select a video file."}
@@ -600,7 +600,7 @@ const VideoPresentationEditor = ({
               Upload Slides (PowerPoint only):
             </label>
             {processSlides ? (
-              <div className="flex items-center justify-center h-16 border-b">
+              <div className="flex items-center justify-center h-16 border-b dark:border-gray-700">
                 <div className="flex items-center space-x-2">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
                   <p className="text-violet-600">Processing...</p>
@@ -609,10 +609,10 @@ const VideoPresentationEditor = ({
             ) : (
               <div
                 {...getSlidesRootProps()}
-                className="border-dashed border-2 p-4 text-center cursor-pointer"
+                className="border-dashed border-2 dark:border-gray-600 p-4 text-center cursor-pointer"
               >
                 <input {...getSlidesInputProps()} />
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   Drag & drop or click to select PPTX files.
                 </p>
               </div>
@@ -640,7 +640,7 @@ const VideoPresentationEditor = ({
 
         {readyIndicator &&
           (transcript || (evaluateSlidesQuality && slidesData)) && (
-            <div className="mb-4 p-3 border border-green-300 bg-green-50 text-green-700 rounded">
+            <div className="mb-4 p-3 border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-200 rounded">
               <h3 className="font-semibold text-center text-sm mb-1">
                 Ready to Submit
               </h3>
@@ -648,7 +648,7 @@ const VideoPresentationEditor = ({
           )}
 
         {limitError && (
-          <p className="text-red-600 text-sm mb-2">
+          <p className="text-red-600 dark:text-red-400 text-sm mb-2">
             <strong>Note:</strong> {limitError}
           </p>
         )}
@@ -656,10 +656,10 @@ const VideoPresentationEditor = ({
 
       {showEditorModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-lg p-4 rounded shadow-lg relative">
+          <div className="bg-white dark:bg-gray-800 dark:text-gray-100 w-full max-w-lg p-4 rounded shadow-lg relative">
             <h3 className="text-lg font-semibold mb-4">Edit / Trim Video</h3>
             {targetTime > 0 && (
-              <p className="text-xs text-gray-600 mb-2">
+              <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
                 Maximum allowed length: {targetTime} seconds
               </p>
             )}
@@ -677,7 +677,7 @@ const VideoPresentationEditor = ({
                     trimStartSeconds,
                   )
                 }
-                className="border rounded p-1 w-16"
+                className="border dark:border-gray-600 dark:bg-gray-900 rounded p-1 w-16"
               />
 
               <input
@@ -691,7 +691,7 @@ const VideoPresentationEditor = ({
                     parseInt(e.target.value, 10),
                   )
                 }
-                className="border rounded p-1 w-16"
+                className="border dark:border-gray-600 dark:bg-gray-900 rounded p-1 w-16"
               />
             </div>
 
@@ -705,7 +705,7 @@ const VideoPresentationEditor = ({
                 onChange={(e) =>
                   updateTrimEnd(parseInt(e.target.value, 10), trimEndSeconds)
                 }
-                className="border rounded p-1 w-16"
+                className="border dark:border-gray-600 dark:bg-gray-900 rounded p-1 w-16"
               />
 
               <input
@@ -716,7 +716,7 @@ const VideoPresentationEditor = ({
                 onChange={(e) =>
                   updateTrimEnd(trimEndMinutes, parseInt(e.target.value, 10))
                 }
-                className="border rounded p-1 w-16"
+                className="border dark:border-gray-600 dark:bg-gray-900 rounded p-1 w-16"
               />
             </div>
 
@@ -741,7 +741,7 @@ const VideoPresentationEditor = ({
             <div className="flex justify-end space-x-2">
               <button
                 onClick={closeEditorModal}
-                className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400"
+                className="px-3 py-1 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 rounded"
               >
                 Cancel
               </button>
@@ -770,7 +770,7 @@ const VideoPresentationEditor = ({
             </div>
 
             {isExceedingLimit && (
-              <p className="text-red-600 text-xs mt-2">
+              <p className="text-red-600 dark:text-red-400 text-xs mt-2">
                 Your trim exceeds the {targetTime}-second limit. Adjust times or
                 remove the trimmed video.
               </p>

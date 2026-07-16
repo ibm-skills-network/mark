@@ -400,11 +400,11 @@ export function VersionSelectionModal({
   const getChangeTypeColor = (type: "major" | "minor" | "patch") => {
     switch (type) {
       case "major":
-        return "border-red-200 bg-red-50 text-red-700";
+        return "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300";
       case "minor":
-        return "border-blue-200 bg-blue-50 text-blue-700";
+        return "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300";
       case "patch":
-        return "border-green-200 bg-green-50 text-green-700";
+        return "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300";
     }
   };
 
@@ -426,20 +426,20 @@ export function VersionSelectionModal({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 400 }}
-              className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl"
+              className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-indigo-100 rounded-lg">
-                      <Tag className="h-5 w-5 text-indigo-600" />
+                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                      <Tag className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-semibold text-gray-900">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                         Save Your Changes
                       </h2>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         Choose how you want to save your work
                       </p>
                     </div>
@@ -447,9 +447,9 @@ export function VersionSelectionModal({
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={onClose}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                     >
-                      <X className="h-5 w-5 text-gray-400" />
+                      <X className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                     </button>
                   </div>
                 </div>
@@ -471,7 +471,7 @@ export function VersionSelectionModal({
                     )}
 
                     <div className="space-y-4 mb-8">
-                      <h3 className="font-medium text-gray-900 mb-4">
+                      <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-4">
                         Choose how to save your changes:
                       </h3>
 
@@ -485,28 +485,28 @@ export function VersionSelectionModal({
                           setShouldUpdate(false);
                           setStep("details");
                         }}
-                        className="w-full p-6 rounded-lg border-2 border-gray-200 bg-gray-50 hover:bg-gray-100 text-left transition-all group"
+                        className="w-full p-6 rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-700 text-left transition-all group"
                       >
                         <div className="flex items-start space-x-4">
                           <div>
-                            <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                            <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                               Save as Personal Draft
                             </h4>
-                            <p className="text-gray-700 mb-3">
+                            <p className="text-gray-700 dark:text-gray-200 mb-3">
                               Save your work in progress privately. Perfect when
                               you're not ready to share with the team yet.
                             </p>
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                               <span className="font-medium">
                                 • Private to you only
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                               <span className="font-medium">
                                 • Can continue editing anytime
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                               <span className="font-medium">
                                 • Not visible to team members
                               </span>
@@ -525,28 +525,28 @@ export function VersionSelectionModal({
                           setShouldUpdate(false);
                           setStep("details");
                         }}
-                        className="w-full p-6 rounded-lg border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 text-left transition-all group"
+                        className="w-full p-6 rounded-lg border-2 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-left transition-all group"
                       >
                         <div className="flex items-start space-x-4">
                           <div>
-                            <h4 className="text-lg font-semibold text-amber-900 mb-2">
+                            <h4 className="text-lg font-semibold text-amber-900 dark:text-amber-200 mb-2">
                               Create Draft Version
                             </h4>
-                            <p className="text-amber-700 mb-3">
+                            <p className="text-amber-700 dark:text-amber-300 mb-3">
                               Create a version that's ready to become the next
                               published version. One step away from going live.
                             </p>
-                            <div className="flex items-center space-x-2 text-sm text-amber-600">
+                            <div className="flex items-center space-x-2 text-sm text-amber-600 dark:text-amber-400">
                               <span className="font-medium">
                                 • Adds -rc suffix (e.g., v2.1.0-rc1)
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2 text-sm text-amber-600">
+                            <div className="flex items-center space-x-2 text-sm text-amber-600 dark:text-amber-400">
                               <span className="font-medium">
                                 • Visible to team for review
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2 text-sm text-amber-600">
+                            <div className="flex items-center space-x-2 text-sm text-amber-600 dark:text-amber-400">
                               <span className="font-medium">
                                 • Ready for publishing workflow
                               </span>
@@ -559,7 +559,7 @@ export function VersionSelectionModal({
                     <div className="flex justify-end">
                       <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-lg transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg transition-colors"
                       >
                         Cancel
                       </button>
@@ -567,18 +567,18 @@ export function VersionSelectionModal({
                   </div>
                 ) : (
                   <div>
-                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                         <span className="font-medium">Selected approach:</span>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
                             shouldUpdate
-                              ? "bg-green-100 text-green-700"
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
                               : isDraft
                                 ? isPersonalDraft
-                                  ? "bg-gray-100 text-gray-700"
-                                  : "bg-amber-100 text-amber-700"
-                                : "bg-indigo-100 text-indigo-700"
+                                  ? "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+                                  : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                                : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                           }`}
                         >
                           {shouldUpdate
@@ -594,7 +594,7 @@ export function VersionSelectionModal({
 
                     <div className="mb-6">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-medium text-gray-900 dark:text-gray-100">
                           {shouldUpdate
                             ? "Select Version to Update"
                             : isDraft
@@ -607,8 +607,8 @@ export function VersionSelectionModal({
 
                       <div className="space-y-3">
                         {isPersonalDraft ? (
-                          <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                          <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                               <span className="font-medium">
                                 Personal drafts don't require version numbers -
                                 your work will be saved privately for you to
@@ -629,8 +629,8 @@ export function VersionSelectionModal({
                               }}
                               className={`w-full p-4 rounded-lg border text-left transition-all ${
                                 selectedVersion === version
-                                  ? "border-indigo-300 bg-indigo-50 shadow-sm"
-                                  : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                                  ? "border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 shadow-sm"
+                                  : "border-gray-200 dark:border-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                               }`}
                             >
                               <div className="flex items-center justify-between">
@@ -642,7 +642,7 @@ export function VersionSelectionModal({
                                     </span>
                                   </div>
                                   {index === 0 && !shouldUpdate && (
-                                    <span className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full font-medium">
+                                    <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs rounded-full font-medium">
                                       Recommended
                                     </span>
                                   )}
@@ -650,24 +650,24 @@ export function VersionSelectionModal({
                                     workingVersion &&
                                     (version as any).originalVersion?.id ===
                                       workingVersion.id && (
-                                      <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
+                                      <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full font-medium">
                                         Current Working
                                       </span>
                                     )}
                                   {version.rc && (
-                                    <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                    <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs rounded-full font-medium">
                                       Draft
                                     </span>
                                   )}
                                   {shouldUpdate && (
                                     <>
-                                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                                      <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full font-medium">
                                         Can Update
                                       </span>
 
                                       {(version as any).originalVersion
                                         ?.isDraft && (
-                                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                        <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs rounded-full font-medium">
                                           Will Create New
                                         </span>
                                       )}
@@ -676,7 +676,7 @@ export function VersionSelectionModal({
                                         ?.published &&
                                         !(version as any).originalVersion
                                           ?.isDraft && (
-                                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                                          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full font-medium">
                                             Will Publish
                                           </span>
                                         )}
@@ -696,9 +696,9 @@ export function VersionSelectionModal({
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="p-4 border border-gray-200 rounded-lg"
+                            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
                           >
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                               Custom Version (e.g.,{" "}
                               {isDraft ? "1.0.0-rc1" : "1.0.0"})
                             </label>
@@ -710,7 +710,7 @@ export function VersionSelectionModal({
                                 setSelectedVersion(null);
                               }}
                               placeholder={isDraft ? "1.0.0-rc1" : "1.0.0"}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono"
                             />
                           </motion.div>
                         )}
@@ -718,7 +718,7 @@ export function VersionSelectionModal({
                     </div>
 
                     <div className="mb-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                         Version Description
                       </label>
                       <textarea
@@ -726,19 +726,19 @@ export function VersionSelectionModal({
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Describe what changed in this version..."
                         rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                       />
                     </div>
 
                     {!customVersion &&
                       !selectedVersion &&
                       suggestions.length > 0 && (
-                        <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <div className="flex items-center space-x-2 text-sm text-blue-700">
+                        <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <div className="flex items-center space-x-2 text-sm text-blue-700 dark:text-blue-300">
                             <AlertCircle className="h-4 w-4" />
                             <span>
                               <strong>Auto-selection:</strong> Will use{" "}
-                              <code className="bg-blue-100 px-1 rounded font-mono">
+                              <code className="bg-blue-100 dark:bg-blue-900/30 px-1 rounded font-mono">
                                 v{formatSemanticVersion(suggestions[0])}
                               </code>{" "}
                               if no version is selected
@@ -747,7 +747,7 @@ export function VersionSelectionModal({
                                   ?.published &&
                                 !(suggestions[0] as any).originalVersion
                                   ?.isDraft && (
-                                  <span className="block mt-1 font-medium text-blue-800">
+                                  <span className="block mt-1 font-medium text-blue-800 dark:text-blue-200">
                                     ⚠️ This will trigger the full publish
                                     process since it's updating a published
                                     version.
@@ -762,8 +762,8 @@ export function VersionSelectionModal({
                       selectedVersion &&
                       (selectedVersion as any).originalVersion?.published &&
                       !(selectedVersion as any).originalVersion?.isDraft && (
-                        <div className="mb-6 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                          <div className="flex items-center space-x-2 text-sm text-orange-700">
+                        <div className="mb-6 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                          <div className="flex items-center space-x-2 text-sm text-orange-700 dark:text-orange-300">
                             <AlertCircle className="h-4 w-4" />
                             <span>
                               <strong>Publishing Notice:</strong> You're
@@ -778,8 +778,8 @@ export function VersionSelectionModal({
                     {shouldUpdate &&
                       selectedVersion &&
                       (selectedVersion as any).originalVersion?.isDraft && (
-                        <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                          <div className="flex items-center space-x-2 text-sm text-amber-700">
+                        <div className="mb-6 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                          <div className="flex items-center space-x-2 text-sm text-amber-700 dark:text-amber-300">
                             <AlertCircle className="h-4 w-4" />
                             <span>
                               <strong>Draft Update Notice:</strong> Updating a
@@ -794,7 +794,7 @@ export function VersionSelectionModal({
                     <div className="flex items-center justify-between">
                       <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-lg transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg transition-colors"
                       >
                         Cancel
                       </button>

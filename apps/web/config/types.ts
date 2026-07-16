@@ -514,6 +514,7 @@ export interface Question extends CreateQuestionRequest {
   variants?: QuestionVariants[];
   authorComment?: string;
   randomizedChoices?: boolean;
+  isDeleted?: boolean;
   alreadyInBackend?: boolean;
   videoPresentationConfig?: videoPresentationConfig;
   liveRecordingConfig?: LiveRecordingConfig;
@@ -564,6 +565,7 @@ export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
     authorComment?: string;
+    randomizedChoices?: boolean;
     learnerResponse: string;
     translationOn: boolean;
     selectedLanguage: string;

@@ -305,27 +305,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         <motion.div
           whileHover={{ scale: isUploading ? 1 : 1.02 }}
           className={`flex flex-col items-center justify-center border-2 border-dashed p-6 rounded-md transition-colors ${
-            isDragActive ? "border-purple-500 bg-purple-50" : "border-gray-300"
+            isDragActive
+              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/30"
+              : "border-gray-300 dark:border-gray-600"
           }`}
         >
           <input {...getInputProps()} disabled={isUploading} />
-          <IconCloudUpload size={50} className="text-gray-500 mb-4" />
+          <IconCloudUpload
+            size={50}
+            className="text-gray-500 dark:text-gray-400 mb-4"
+          />
           {isDragActive ? (
             <p className="text-purple-500">Drop the files here...</p>
           ) : isUploading ? (
-            <p className="text-gray-500">Upload in progress...</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              Upload in progress...
+            </p>
           ) : (
             <>
-              <p className="text-gray-500">
+              <p className="text-gray-500 dark:text-gray-400">
                 Drag & drop files here, or click to select files.
               </p>
               {Object.keys(acceptedFileTypes).length > 0 && (
-                <p className="text-gray-500 text-sm mt-2">
+                <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
                   Allowed file types:{" "}
                   {Object.values(acceptedFileTypes).flat().join(", ")}
                 </p>
               )}
-              <p className="text-gray-500 text-sm">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
                 Maximum file size: {formatFileSize(maxFileSize)}
               </p>
             </>
@@ -345,7 +352,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -354,10 +361,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                       flex items-center justify-center w-10 h-10 rounded-full
                       ${
                         status.status === "error"
-                          ? "bg-red-100"
+                          ? "bg-red-100 dark:bg-red-900/30"
                           : status.status === "waiting"
-                            ? "bg-amber-100"
-                            : "bg-purple-100"
+                            ? "bg-amber-100 dark:bg-amber-900/30"
+                            : "bg-purple-100 dark:bg-purple-900/30"
                       }
                     `}
                     >
@@ -374,14 +381,17 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                       ) : status.status === "error" ? (
                         <IconFile size={20} className="text-red-600" />
                       ) : (
-                        <IconFile size={20} className="text-gray-600" />
+                        <IconFile
+                          size={20}
+                          className="text-gray-600 dark:text-gray-300"
+                        />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                         {fileData.file.name}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
                         {formatFileSize(fileData.file.size)}
                       </p>
                     </div>
@@ -391,12 +401,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                     text-sm font-semibold px-3 py-1 rounded-full
                     ${
                       status.status === "error"
-                        ? "bg-red-100 text-red-700"
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200"
                         : status.status === "uploading"
-                          ? "bg-purple-100 text-purple-700"
+                          ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-200"
                           : status.status === "waiting"
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-gray-100 text-gray-700"
+                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                            : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
                     }
                   `}
                   >
@@ -405,7 +415,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 </div>
 
                 {/* Progress bar */}
-                <div className="relative h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                <div className="relative h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <motion.div
                     className={`absolute h-full rounded-full ${
                       status.status === "error"
@@ -446,10 +456,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                   text-xs mt-2
                   ${
                     status.status === "error"
-                      ? "text-red-600"
+                      ? "text-red-600 dark:text-red-400"
                       : status.status === "waiting"
-                        ? "text-amber-700"
-                        : "text-gray-600"
+                        ? "text-amber-700 dark:text-amber-400"
+                        : "text-gray-600 dark:text-gray-300"
                   }
                 `}
                 >
@@ -464,7 +474,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       {existingFiles.length > 0 && (
         <div className="mt-6 w-full">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-md font-medium">Uploaded Files</h3>
+            <h3 className="text-md font-medium dark:text-gray-100">
+              Uploaded Files
+            </h3>
             <button
               onClick={() => setShowUploaded(!showUploaded)}
               className="text-purple-500 text-sm hover:text-purple-700"
@@ -478,7 +490,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               {existingFiles.map((file) => (
                 <motion.li
                   key={file.key || file.filename}
-                  className="flex flex-col border-gray-300 border rounded-md px-4 py-3 hover:shadow-md"
+                  className="flex flex-col border-gray-300 dark:border-gray-600 border rounded-md px-4 py-3 hover:shadow-md"
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
@@ -486,12 +498,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 >
                   <div className="flex items-center justify-between space-x-3 px-4">
                     <div className="flex items-center space-x-3">
-                      <IconFile size={32} className="text-gray-500" />
+                      <IconFile
+                        size={32}
+                        className="text-gray-500 dark:text-gray-400"
+                      />
                       <div>
-                        <p className="text-gray-700 font-medium text-left">
+                        <p className="text-gray-700 dark:text-gray-200 font-medium text-left">
                           {file.filename}
                         </p>
-                        <p className="text-xs text-gray-500 truncate max-w-xs">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
                           {file.key}
                         </p>
                       </div>

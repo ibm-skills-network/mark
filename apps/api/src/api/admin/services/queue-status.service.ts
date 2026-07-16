@@ -255,13 +255,21 @@ export class QueueStatusService {
   async getRedisHealth(): Promise<RedisHealthDto> {
     const heartbeats =
       await this.workerConnectionService.getAllWorkerHeartbeats();
-    const heartbeatPods = this.liveHeartbeats(heartbeats).length;
+    // Scope the pod count to pods that actually serve the probe queue. Since
+    // the fast/heavy split, a heavy-deployment pod heartbeats but registers no
+    // BullMQ worker on mark.attempt — counting it here would permanently
+    // desync this from workerConnections below. A missing `queues` field
+    // (pre-tiering pod image) always counts: those pods consumed every queue.
+    const heartbeatPods = this.liveHeartbeats(heartbeats).filter((hb) =>
+      this.heartbeatServesQueue(hb, JOB_QUEUE_NAMES.ATTEMPT),
+    ).length;
 
     const info = await this.jobQueueService.getRedisInfo();
 
     // Reconcile BullMQ's view of registered worker connections against the
-    // number of live heartbeat pods. Each pod registers one Worker per queue,
-    // so a single queue's connection count should track the live pod count.
+    // number of live heartbeat pods that serve this queue. Each pod serving
+    // the queue registers one Worker for it, so the connection count should
+    // track the queue-scoped live pod count above (not the total pod count).
     let workerConnections = 0;
     try {
       workerConnections = await this.jobQueueService.getQueueWorkerConnections(
@@ -280,7 +288,11 @@ export class QueueStatusService {
       opsPerSec: info.opsPerSec,
       workerConnections,
       heartbeatPods,
-      reconciled: workerConnections === heartbeatPods,
+      // A zero-against-zero match is not "healthy" — it means no live pod
+      // serves this queue at all (every worker down, or an overlay draining
+      // only other tiers). Require at least one live pod before reporting
+      // reconciled so a total worker outage cannot read as green.
+      reconciled: heartbeatPods > 0 && workerConnections === heartbeatPods,
     };
   }
 
@@ -468,10 +480,11 @@ export class QueueStatusService {
     let sawPublishedForQueue = false;
 
     for (const hb of liveHeartbeats) {
-      const servesQueue = Array.isArray(hb.queues)
-        ? hb.queues.includes(queueName)
-        : false;
-      if (!servesQueue) {
+      // Same predicate as the redis-health reconcile: a legacy heartbeat with
+      // no `queues` field counts as serving every queue. Sharing it keeps the
+      // capacity panel and the health widget from disagreeing about the same
+      // pod (e.g. a pre-tiering pod being counted by one but not the other).
+      if (!this.heartbeatServesQueue(hb, queueName)) {
         continue;
       }
       livePods += 1;
@@ -492,6 +505,26 @@ export class QueueStatusService {
       : defaultConcurrencyPerPod;
 
     return { concurrencyPerPod, livePods, clusterCapacity };
+  }
+
+  /**
+   * A heartbeat "serves" a queue when its published `queues` list includes
+   * it. A heartbeat with no `queues` field at all (a pre-tiering pod image,
+   * which always consumed every queue) counts as serving every queue — this
+   * is distinct from an explicit empty array, which is a real modern payload
+   * and must not be treated as "serves everything."
+   */
+  private heartbeatServesQueue(
+    hb: JobWorkerHeartbeat,
+    queueName: string,
+  ): boolean {
+    if (hb.queues === undefined) return true;
+    // A present-but-malformed non-array value (corrupt heartbeat payload)
+    // must not throw out of the callers — getRedisHealth is not wrapped in a
+    // try/catch, so an unguarded `.includes` would 500 the whole request.
+    // Treat it as serving nothing.
+    if (!Array.isArray(hb.queues)) return false;
+    return hb.queues.includes(queueName);
   }
 
   private liveHeartbeats(

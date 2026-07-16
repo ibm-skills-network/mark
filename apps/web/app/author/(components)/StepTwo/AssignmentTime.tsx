@@ -141,7 +141,7 @@ const Component: FC<Props> = ({ compact }) => {
               onClick={toggleStrictTimeLimit}
               className={cn(
                 "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                strictTimeLimit ? "bg-violet-600" : "bg-gray-200",
+                strictTimeLimit ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
               )}
               role="switch"
               aria-checked={strictTimeLimit}
@@ -160,7 +160,7 @@ const Component: FC<Props> = ({ compact }) => {
             <p
               className={cn(
                 "leading-5 transition-all cursor-pointer justify-center self-center",
-                strictTimeLimit ? "text-gray-500" : "text-gray-700",
+                strictTimeLimit ? "text-gray-500 dark:text-gray-400" : "text-gray-700 dark:text-gray-200",
               )}
             >
               Enforce Required Questions
@@ -171,7 +171,7 @@ const Component: FC<Props> = ({ compact }) => {
               disabled={strictTimeLimit}
               className={cn(
                 "relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                requireAllQuestions ? "bg-violet-600" : "bg-gray-200",
+                requireAllQuestions ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
                 strictTimeLimit && "opacity-50 cursor-not-allowed",
               )}
               role="switch"
@@ -195,7 +195,7 @@ const Component: FC<Props> = ({ compact }) => {
               <InformationCircleIcon
                 className={cn(
                   "w-5 inline-block",
-                  strictTimeLimit ? "text-gray-400" : "text-gray-500",
+                  strictTimeLimit ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400",
                 )}
               />
             </Tooltip>
@@ -207,7 +207,7 @@ const Component: FC<Props> = ({ compact }) => {
               <input
                 type="number"
                 className={cn(
-                  "border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full",
+                  "border focus:border-violet-600 focus:ring-0 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full",
                   timeLimitError && "border-red-500 focus:border-red-500",
                 )}
                 placeholder="Enter time limit in minutes"
@@ -240,12 +240,12 @@ const Component: FC<Props> = ({ compact }) => {
       {!strictTimeLimit && requireAllQuestions && (
         <div className="flex flex-col gap-y-1">
           <details className="relative">
-            <summary className="cursor-pointer list-none border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 px-4 py-2 flex items-center justify-between hover:border-gray-300 transition-colors">
+            <summary className="cursor-pointer list-none border focus:border-violet-600 focus:ring-0 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-md h-10 px-4 py-2 flex items-center justify-between hover:border-gray-300 transition-colors">
               <span className="text-sm text-black-600">
                 Select Required Questions
               </span>
               <svg
-                className="w-4 h-4 text-gray-400"
+                className="w-4 h-4 text-gray-400 dark:text-gray-500"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -258,10 +258,10 @@ const Component: FC<Props> = ({ compact }) => {
                 />
               </svg>
             </summary>
-            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
               <div className="p-2 flex flex-col gap-1">
                 {questions.length === 0 ? (
-                  <p className="text-xs text-gray-500 px-2 py-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1">
                     No questions added yet.
                   </p>
                 ) : (
@@ -281,28 +281,28 @@ const Component: FC<Props> = ({ compact }) => {
                         className={cn(
                           "flex items-center gap-3 rounded px-2 py-2 cursor-pointer transition-all",
                           isOptional
-                            ? "hover:bg-gray-50"
-                            : "hover:bg-violet-50",
+                            ? "hover:bg-gray-50 dark:hover:bg-gray-700"
+                            : "hover:bg-violet-50 dark:hover:bg-violet-900/30",
                         )}
                       >
-                        <span className="text-xs font-medium text-gray-500 flex-shrink-0">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">
                           {index + 1}.
                         </span>
                         <div className="min-w-0 flex-1">
                           <p
                             className={cn(
                               "text-sm truncate",
-                              isOptional ? "text-gray-600" : "text-gray-800",
+                              isOptional ? "text-gray-600 dark:text-gray-300" : "text-gray-800 dark:text-gray-200",
                             )}
                           >
                             {questionText}
                           </p>
-                          <p className="text-xs text-gray-500">{typeLabel}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{typeLabel}</p>
                         </div>
                         {!isOptional && (
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             <span className="w-2 h-2 rounded-full bg-violet-600"></span>
-                            <span className="text-xs font-medium text-violet-700">
+                            <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
                               Required
                             </span>
                           </div>
@@ -312,8 +312,8 @@ const Component: FC<Props> = ({ compact }) => {
                   })
                 )}
               </div>
-              <div className="border-t border-gray-200 p-2 bg-gray-50">
-                <p className="text-xs text-amber-600">
+              <div className="border-t border-gray-200 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-900">
+                <p className="text-xs text-amber-600 dark:text-amber-300">
                   Click on a question title to toggle.
                 </p>
               </div>
@@ -324,14 +324,14 @@ const Component: FC<Props> = ({ compact }) => {
 
       {!strictTimeLimit && (
         <div className="flex flex-col gap-y-1">
-          <p className=" text-gray-600">
+          <p className=" text-gray-600 dark:text-gray-300">
             How long should learners expect to spend on this assignment (in
             minutes)?
           </p>
           <div className="relative">
             <input
               type="number"
-              className={`border focus:border-violet-600 focus:ring-0 border-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
+              className={`border focus:border-violet-600 focus:ring-0 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-md h-10 pl-4 pr-12 py-2 focus:outline-none w-full`}
               placeholder="Ex. 60"
               min={0}
               step={5}

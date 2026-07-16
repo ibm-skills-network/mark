@@ -634,6 +634,109 @@ ${parsed.guidance}
   }
 
   /**
+   * The vision model rejects images past its per-image size/dimension limits —
+   * a large lossless PNG screenshot base64-encodes past the provider's cap and
+   * comes back as an "unsupported image" error, which the caller then relabels
+   * as a format problem and tells the learner to upload a PNG they already
+   * uploaded. Downscale oversized pass-through rasters here so the model always
+   * receives a within-limits image. Images already within limits, or ones sharp
+   * can't process, are returned untouched.
+   */
+  private async normalizeOversizedImage(
+    buffer: Buffer,
+    detected: string,
+    filename?: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    // Vision providers downscale beyond ~1568px on the long edge anyway; staying
+    // under ~4MB keeps the base64 payload below the per-image ceiling.
+    const MAX_EDGE_PX = 1568;
+    const MAX_BYTES = 4 * 1024 * 1024;
+    // Escalating lossy fallback for the rare image that stays over the byte cap
+    // even after the dimension clamp — a dense photo or near-incompressible
+    // content whose lossless PNG is still too large at 1568px. At that size a
+    // JPEG lands well under the cap; the descending steps are a backstop.
+    const JPEG_QUALITY_STEPS = [80, 60];
+
+    try {
+      const metadata = await sharp(buffer).metadata();
+      const longestEdge = Math.max(metadata.width ?? 0, metadata.height ?? 0);
+      if (buffer.length <= MAX_BYTES && longestEdge <= MAX_EDGE_PX) {
+        return { buffer, mimeType: detected };
+      }
+
+      const resized = await sharp(buffer)
+        .resize(MAX_EDGE_PX, MAX_EDGE_PX, {
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer();
+
+      // The dimension clamp satisfies the pixel limit but never shrinks the
+      // bytes of an image that was already within the edge cap, so a lossless
+      // PNG can still exceed the byte ceiling. Re-encode the downscaled raster
+      // as JPEG at descending quality until it fits. The lossless PNG is kept
+      // for the common case; we go lossy only when losslessness cannot meet the
+      // byte cap, where a rejected image would be the alternative.
+      if (resized.length > MAX_BYTES) {
+        let lossy = resized;
+        // Tracks the quality that produced the returned buffer; the loop always
+        // overwrites it, starting from the first (highest-quality) step.
+        let jpegQuality = JPEG_QUALITY_STEPS[0];
+        for (const quality of JPEG_QUALITY_STEPS) {
+          // JPEG has no alpha channel; flatten a transparent PNG onto white
+          // (the neutral background for a screenshot) so it does not composite
+          // onto black.
+          lossy = await sharp(resized)
+            .flatten({ background: "#ffffff" })
+            .jpeg({ quality })
+            .toBuffer();
+          jpegQuality = quality;
+          if (lossy.length <= MAX_BYTES) {
+            break;
+          }
+        }
+        this.logger.info("image.grading.downscaled", {
+          filename,
+          detectedFormat: detected,
+          outputFormat: "image/jpeg",
+          jpegQuality,
+          fromBytes: buffer.length,
+          toBytes: lossy.length,
+        });
+        if (lossy.length > MAX_BYTES) {
+          // Not reachable for a 1568px image at these qualities, but never
+          // silently hand the model an over-cap image without a trace.
+          this.logger.warn("image.grading.downscale.over.cap", {
+            filename,
+            detectedFormat: detected,
+            toBytes: lossy.length,
+          });
+        }
+        return { buffer: lossy, mimeType: "image/jpeg" };
+      }
+
+      this.logger.info("image.grading.downscaled", {
+        filename,
+        detectedFormat: detected,
+        outputFormat: "image/png",
+        fromBytes: buffer.length,
+        toBytes: resized.length,
+      });
+      return { buffer: resized, mimeType: "image/png" };
+    } catch (error) {
+      // Fall back to the original bytes rather than newly failing an image that
+      // would otherwise have been sent to the model as-is.
+      this.logger.warn("image.grading.downscale.failed", {
+        filename,
+        detectedFormat: detected,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { buffer, mimeType: detected };
+    }
+  }
+
+  /**
    * Magic-byte sniffing only — no filename input. Recognizes the raster
    * formats the grading pipeline can either pass through (jpeg/png/gif/webp)
    * or convert (bmp/tiff/avif), plus the ones it must reject (heic/svg).
@@ -766,7 +869,7 @@ ${parsed.guidance}
       detected === "image/gif" ||
       detected === "image/webp"
     ) {
-      return { buffer, mimeType: detected };
+      return await this.normalizeOversizedImage(buffer, detected, filename);
     }
 
     if (

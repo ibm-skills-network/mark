@@ -484,10 +484,10 @@ const SaveAndPublishButton: FC<Props> = ({
               onClick={() => setShowErrorModal(false)}
             />
 
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
               <button
                 onClick={() => setShowErrorModal(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                className="absolute top-4 right-4 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <XMarkIcon className="h-6 w-6" />
               </button>
@@ -499,7 +499,7 @@ const SaveAndPublishButton: FC<Props> = ({
                 {statusMessage.type === "warning" && (
                   <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-2" />
                 )}
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {statusMessage.type === "error" ? "Error" : "Warning"}
                 </h3>
               </div>
@@ -523,7 +523,7 @@ const SaveAndPublishButton: FC<Props> = ({
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowErrorModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
                 >
                   Close
                 </button>

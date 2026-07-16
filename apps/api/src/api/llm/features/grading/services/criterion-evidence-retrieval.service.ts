@@ -140,7 +140,7 @@ export class CriterionEvidenceRetrievalService {
       );
     }
 
-    let evidence: CriterionEvidence[] = [];
+    let evidence: CriterionEvidence[];
     let validatedCount = 0;
     let validationOutcome: EvidenceValidationOutcome = "disabled";
 
@@ -170,7 +170,6 @@ export class CriterionEvidenceRetrievalService {
         }
       }
     }
-
     // Keyword fallback: only when validation produced no evidence AND did not
     // explicitly reject the candidates. An explicit rejection (irrelevant/
     // restatement_only/boilerplate_only) is a validator decision and must not

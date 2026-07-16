@@ -67,7 +67,8 @@ export class JobExecutorService {
       case JOB_QUEUE_NAMES.ASSIGNMENT_V2: {
         return this.executeAssignmentV2Job(request.jobName, request.payload);
       }
-      case JOB_QUEUE_NAMES.ATTEMPT: {
+      case JOB_QUEUE_NAMES.ATTEMPT:
+      case JOB_QUEUE_NAMES.ATTEMPT_HEAVY: {
         return this.executeAttemptJob(request.jobName, request.payload);
       }
       case JOB_QUEUE_NAMES.ADMIN_TRANSLATION: {

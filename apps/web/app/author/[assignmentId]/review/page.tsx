@@ -97,17 +97,17 @@ const IssuesModal = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Issues Found ({totalAllIssues} total)
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <XMarkIcon className="w-5 h-5" />
           </button>
@@ -117,15 +117,15 @@ const IssuesModal = ({
           {!isValid &&
             message &&
             !isQuestionRelatedValidationError(message) && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
                     <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mt-0.5" />
                     <div>
-                      <h3 className="font-medium text-red-900 mb-1">
+                      <h3 className="font-medium text-red-900 dark:text-red-200 mb-1">
                         Configuration Error
                       </h3>
-                      <p className="text-sm text-red-700">{message}</p>
+                      <p className="text-sm text-red-700 dark:text-red-300">{message}</p>
                     </div>
                   </div>
                   <button
@@ -133,7 +133,7 @@ const IssuesModal = ({
                       onClose();
                       onNavigateToConfig();
                     }}
-                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors flex-shrink-0 ml-4"
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 rounded-md transition-colors flex-shrink-0 ml-4"
                   >
                     Go to Config
                     <ArrowRightIcon className="w-3 h-3" />
@@ -146,12 +146,12 @@ const IssuesModal = ({
             message &&
             Object.keys(questionIssues).length > 0 &&
             isQuestionRelatedValidationError(message) && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-3">
                   <InformationCircleIcon className="w-5 h-5 text-blue-500 mt-0.5" />
                   <div>
-                    <h3 className="font-medium text-blue-900 mb-1">Note</h3>
-                    <p className="text-sm text-blue-700">
+                    <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-1">Note</h3>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
                       The validation system also detected this issue, but it's
                       shown below as a question-specific issue with fix options.
                     </p>
@@ -171,10 +171,10 @@ const IssuesModal = ({
               return (
                 <div
                   key={questionId}
-                  className="border border-red-200 rounded-lg p-4 bg-red-50"
+                  className="border border-red-200 dark:border-red-800 rounded-lg p-4 bg-red-50 dark:bg-red-900/20"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-medium text-red-900">
+                    <h3 className="font-medium text-red-900 dark:text-red-200">
                       Question {questionIndex}:{" "}
                       <MarkdownViewer>
                         {question?.question || "Untitled Question"}
@@ -182,7 +182,7 @@ const IssuesModal = ({
                     </h3>
                     <button
                       onClick={() => onNavigateToFix(parseInt(questionId))}
-                      className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                      className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 rounded-md transition-colors"
                     >
                       Go to Fix
                       <ArrowRightIcon className="w-3 h-3" />
@@ -193,11 +193,11 @@ const IssuesModal = ({
                     {issues.map((issue, index) => (
                       <div
                         key={index}
-                        className="flex items-center justify-between p-2 bg-white rounded border border-red-200"
+                        className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border border-red-200 dark:border-red-800"
                       >
                         <div className="flex items-start gap-2">
                           <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <span className="text-sm text-red-700">{issue}</span>
+                          <span className="text-sm text-red-700 dark:text-red-300">{issue}</span>
                         </div>
 
                         {canAutoFix(issue) && (
@@ -205,7 +205,7 @@ const IssuesModal = ({
                             onClick={() =>
                               onAutoFix(parseInt(questionId), issue)
                             }
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors"
                             title="Automatically fix this issue"
                           >
                             <WrenchScrewdriverIcon className="w-3 h-3" />
@@ -221,15 +221,15 @@ const IssuesModal = ({
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
               Fix these issues to ensure your assignment works properly for
               learners.
             </p>
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Close
             </button>
@@ -273,7 +273,7 @@ const ChangeComparison = ({
 
   const renderValue = (value: any, isOld = false) => {
     if (value === null || value === undefined || value === "") {
-      return <span className="text-gray-400 italic">Not set</span>;
+      return <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>;
     }
 
     if (type === "boolean") {
@@ -281,7 +281,7 @@ const ChangeComparison = ({
         <span
           className={cn(
             "font-medium",
-            isOld ? "text-red-700" : "text-green-700",
+            isOld ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300",
           )}
         >
           {value ? "Yes" : "No"}
@@ -292,14 +292,14 @@ const ChangeComparison = ({
     if (type === "markdown") {
       const cleanValue = value.replace(/<\/?[^>]+(>|$)/g, "").trim();
       if (cleanValue === "" || cleanValue === "Not set") {
-        return <span className="text-gray-400 italic">Not set</span>;
+        return <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>;
       }
       return (
         <div
-          className={cn("rounded-md p-3", isOld ? "bg-red-50" : "bg-green-50")}
+          className={cn("rounded-md p-3", isOld ? "bg-red-50 dark:bg-red-900/20" : "bg-green-50 dark:bg-green-900/20")}
         >
           <MarkdownViewer
-            className={cn("text-sm", isOld ? "text-red-900" : "text-green-900")}
+            className={cn("text-sm", isOld ? "text-red-900 dark:text-red-200" : "text-green-900 dark:text-green-200")}
           >
             {value}
           </MarkdownViewer>
@@ -309,7 +309,7 @@ const ChangeComparison = ({
 
     return (
       <span
-        className={cn("font-medium", isOld ? "text-red-700" : "text-green-700")}
+        className={cn("font-medium", isOld ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300")}
       >
         {String(value)}
       </span>
@@ -319,11 +319,11 @@ const ChangeComparison = ({
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
-        <h6 className="text-sm font-medium text-gray-600">{label}</h6>
+        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300">{label}</h6>
         {onNavigate && (
           <button
             onClick={onNavigate}
-            className="text-xs text-violet-600 hover:text-violet-700 flex items-center gap-1"
+            className="text-xs text-violet-600 dark:text-violet-300 hover:text-violet-700 flex items-center gap-1"
           >
             Go to section
             <ArrowRightIcon className="w-3 h-3" />
@@ -333,14 +333,14 @@ const ChangeComparison = ({
       <div className="flex flex-col">
         <div className="flex items-center gap-2 mb-1">
           <MinusIcon className="w-4 h-4 text-red-500" />
-          <span className="text-xs font-medium text-red-600">Before</span>
+          <span className="text-xs font-medium text-red-600 dark:text-red-300">Before</span>
         </div>
         <div
           className={cn(
             "p-3 rounded-md border",
             type === "markdown"
-              ? "bg-red-50/50 border-red-200"
-              : "bg-red-50 border-red-200",
+              ? "bg-red-50/50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+              : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
           )}
         >
           {renderValue(before, true)}
@@ -349,14 +349,14 @@ const ChangeComparison = ({
       <div className="flex flex-col">
         <div className="flex items-center gap-2 mb-1">
           <PlusIcon className="w-4 h-4 text-green-500" />
-          <span className="text-xs font-medium text-green-600">After</span>
+          <span className="text-xs font-medium text-green-600 dark:text-green-300">After</span>
         </div>
         <div
           className={cn(
             "p-3 rounded-md border",
             type === "markdown"
-              ? "bg-green-50/50 border-green-200"
-              : "bg-green-50 border-green-200",
+              ? "bg-green-50/50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+              : "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
           )}
         >
           {renderValue(after, false)}
@@ -378,11 +378,11 @@ const ChangesSection = ({
   const router = useRouter();
 
   return (
-    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-violet-200 hover:shadow-sm transition-all">
+    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border border-violet-200 dark:border-violet-800 hover:shadow-sm transition-all">
       <div className="flex items-center justify-between w-full mb-4">
         <div className="flex items-center gap-2">
-          <h4 className="text-gray-900 text-xl font-bold">{title}</h4>
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
+          <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">{title}</h4>
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
             <PencilIcon className="w-3 h-3" />
             Modified
           </span>
@@ -390,9 +390,9 @@ const ChangesSection = ({
         {link && (
           <button
             onClick={() => router.push(link)}
-            className="hover:bg-gray-100 p-2 rounded-md"
+            className="hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-md"
           >
-            <PencilSquareIcon className="h-6 w-6 text-gray-500" />
+            <PencilSquareIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
         )}
       </div>
@@ -421,23 +421,23 @@ const Section = ({
   return (
     <div
       className={cn(
-        "flex flex-col gap-y-4 px-8 py-6 bg-white rounded border hover:shadow-sm transition-all",
-        hasChanges && "border-violet-300 bg-white",
-        !isValid && "border-red-300 bg-red-50/30",
-        isValid && !hasChanges && "border-gray-200",
+        "flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border hover:shadow-sm transition-all",
+        hasChanges && "border-violet-300 dark:border-violet-700 bg-white dark:bg-gray-800",
+        !isValid && "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/20",
+        isValid && !hasChanges && "border-gray-200 dark:border-gray-700",
       )}
     >
       <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-2">
-          <h4 className="text-gray-900 text-xl font-bold">{title}</h4>
+          <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">{title}</h4>
           {hasChanges && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
               <PencilIcon className="w-3 h-3" />
               Modified
             </span>
           )}
           {!isValid && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-full">
               <ExclamationTriangleIcon className="w-3 h-3" />
               Error
             </span>
@@ -446,19 +446,19 @@ const Section = ({
         {link && (
           <button
             onClick={() => router.push(link)}
-            className="hover:bg-gray-100 p-2 rounded-md"
+            className="hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-md"
           >
-            <PencilSquareIcon className="h-6 w-6 text-gray-500" />
+            <PencilSquareIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
         )}
       </div>
       {!isValid && errorMessage && (
-        <div className="text-sm text-red-600 flex items-start gap-2">
+        <div className="text-sm text-red-600 dark:text-red-300 flex items-start gap-2">
           <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
           {errorMessage}
         </div>
       )}
-      <MarkdownViewer className="text-gray-600">
+      <MarkdownViewer className="text-gray-600 dark:text-gray-300">
         {content
           ? content.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
             ? "Not set"
@@ -592,36 +592,36 @@ const QuestionChanges = ({
     if (hasActualChanges) {
       changes.push(
         <div key="choices" className="mb-4">
-          <h6 className="text-sm font-medium text-gray-600 mb-2">Choices</h6>
+          <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Choices</h6>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <MinusIcon className="w-4 h-4 text-red-500" />
-                <span className="text-xs font-medium text-red-600">Before</span>
+                <span className="text-xs font-medium text-red-600 dark:text-red-300">Before</span>
               </div>
               <div className="space-y-2">
                 {originalChoices.length > 0 ? (
                   originalChoices.map((choice: any, idx: number) => (
                     <div
                       key={idx}
-                      className="p-2 bg-red-50 border border-red-200 rounded text-sm"
+                      className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm"
                     >
                       <div className="flex items-start gap-2">
                         <span className="font-medium">Choice {idx + 1}:</span>
                         <span>{choice.choice || "(empty)"}</span>
                         {choice.isCorrect && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded">
                             Correct
                           </span>
                         )}
-                        <span className="text-xs text-gray-600">
+                        <span className="text-xs text-gray-600 dark:text-gray-300">
                           Points: {choice.points}
                         </span>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-gray-600">
+                  <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-gray-600 dark:text-gray-300">
                     No choices defined
                   </div>
                 )}
@@ -630,7 +630,7 @@ const QuestionChanges = ({
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <PlusIcon className="w-4 h-4 text-green-500" />
-                <span className="text-xs font-medium text-green-600">
+                <span className="text-xs font-medium text-green-600 dark:text-green-300">
                   After
                 </span>
               </div>
@@ -639,24 +639,24 @@ const QuestionChanges = ({
                   currentChoices.map((choice: any, idx: number) => (
                     <div
                       key={idx}
-                      className="p-2 bg-green-50 border border-green-200 rounded text-sm"
+                      className="p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm"
                     >
                       <div className="flex items-start gap-2">
                         <span className="font-medium">Choice {idx + 1}:</span>
                         <span>{choice.choice || "(empty)"}</span>
                         {choice.isCorrect && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded">
                             Correct
                           </span>
                         )}
-                        <span className="text-xs text-gray-600">
+                        <span className="text-xs text-gray-600 dark:text-gray-300">
                           Points: {choice.points}
                         </span>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-gray-600">
+                  <div className="p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-gray-600 dark:text-gray-300">
                     No choices defined
                   </div>
                 )}
@@ -671,10 +671,10 @@ const QuestionChanges = ({
   if (changeDetails.some((d) => d.includes("Updated scoring criteria"))) {
     changes.push(
       <div key="rubrics" className="mb-4">
-        <h6 className="text-sm font-medium text-gray-600 mb-2">
+        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
           Rubric Changes
         </h6>
-        <div className="p-3 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900">
+        <div className="p-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded text-sm text-violet-900 dark:text-violet-200">
           Rubric criteria have been modified
         </div>
       </div>,
@@ -686,10 +686,10 @@ const QuestionChanges = ({
   ) {
     changes.push(
       <div key="videoConfig" className="mb-4">
-        <h6 className="text-sm font-medium text-gray-600 mb-2">
+        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
           Video Presentation Configuration
         </h6>
-        <div className="p-3 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900">
+        <div className="p-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded text-sm text-violet-900 dark:text-violet-200">
           Video presentation settings have been modified
         </div>
       </div>,
@@ -699,10 +699,10 @@ const QuestionChanges = ({
   if (changeDetails.some((d) => d.includes("Updated live recording config"))) {
     changes.push(
       <div key="liveConfig" className="mb-4">
-        <h6 className="text-sm font-medium text-gray-600 mb-2">
+        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
           Live Recording Configuration
         </h6>
-        <div className="p-3 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900">
+        <div className="p-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded text-sm text-violet-900 dark:text-violet-200">
           Live recording settings have been modified
         </div>
       </div>,
@@ -713,14 +713,14 @@ const QuestionChanges = ({
   if (variantChanges.length > 0) {
     changes.push(
       <div key="variants" className="mb-4">
-        <h6 className="text-sm font-medium text-gray-600 mb-2">
+        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
           Variant Changes
         </h6>
         <div className="space-y-2">
           {variantChanges.map((change, idx) => (
             <div
               key={idx}
-              className="p-2 bg-violet-50 border border-violet-200 rounded text-sm text-violet-900"
+              className="p-2 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded text-sm text-violet-900 dark:text-violet-200"
             >
               {change}
             </div>
@@ -733,19 +733,19 @@ const QuestionChanges = ({
   if (changes.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-violet-200 hover:shadow-sm transition-all mb-4">
+    <div className="flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border border-violet-200 dark:border-violet-800 hover:shadow-sm transition-all mb-4">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xl font-bold text-gray-900">
+        <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
           Question {index + 1}
         </span>
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
           <PencilIcon className="w-3 h-3" />
           Modified
         </span>
       </div>
       <button
         onClick={onNavigateToQuestion}
-        className="text-sm text-violet-600 hover:text-violet-700 flex items-center gap-1"
+        className="text-sm text-violet-600 dark:text-violet-300 hover:text-violet-700 flex items-center gap-1"
       >
         Go to question
         <ArrowRightIcon className="w-3 h-3" />
@@ -1485,7 +1485,7 @@ function Component() {
                 </span>
               </span>
             ) : (
-              <span className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <CheckCircleIcon className="w-5 h-5" />
                 No changes detected
               </span>
@@ -1494,7 +1494,7 @@ function Component() {
             {!isValid && (
               <button
                 onClick={() => setIsIssuesModalOpen(true)}
-                className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-md transition-colors bg-red-100 border border-red-200"
+                className="flex items-center gap-2 text-sm text-red-600 dark:text-red-300 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-md transition-colors bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800"
               >
                 <ExclamationTriangleIcon className="w-5 h-5" />
                 {(() => {
@@ -1532,14 +1532,14 @@ function Component() {
             Export
           </button>
 
-          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode("changes")}
               className={cn(
                 "px-4 py-2 text-sm font-medium rounded-md transition-all",
                 viewMode === "changes"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-600 hover:text-gray-900",
+                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100",
               )}
             >
               <div className="flex items-center gap-2">
@@ -1552,8 +1552,8 @@ function Component() {
               className={cn(
                 "px-4 py-2 text-sm font-medium rounded-md transition-all",
                 viewMode === "full"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-600 hover:text-gray-900",
+                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100",
               )}
             >
               <div className="flex items-center gap-2">
@@ -1566,15 +1566,15 @@ function Component() {
       </div>
 
       {changes.details.length ? (
-        <div className="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
-          <h3 className="font-semibold text-violet-900 mb-2">
+        <div className="mb-6 p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
+          <h3 className="font-semibold text-violet-900 dark:text-violet-200 mb-2">
             Changes Summary
           </h3>
           <ul className="space-y-1">
             {changes.details.map((change, idx) => (
               <li
                 key={idx}
-                className="text-sm text-violet-800 flex items-start gap-2"
+                className="text-sm text-violet-800 dark:text-violet-200 flex items-start gap-2"
               >
                 <span className="text-violet-400 mt-1">•</span>
                 {change}
@@ -1583,11 +1583,11 @@ function Component() {
           </ul>
         </div>
       ) : (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <h3 className="font-semibold text-green-900 mb-2">
+        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <h3 className="font-semibold text-green-900 dark:text-green-200 mb-2">
             No Changes Detected
           </h3>
-          <p className="text-sm text-green-800">
+          <p className="text-sm text-green-800 dark:text-green-200">
             Your assignment is up to date with no modifications needed.
           </p>
         </div>
@@ -1693,13 +1693,13 @@ function Component() {
             changes.requireAllQuestions ||
             changes.optionalQuestionIds) &&
             originalAssignment && (
-              <div className="flex flex-col gap-y-4 px-8 py-6 bg-white rounded border border-violet-200 hover:shadow-sm transition-all">
+              <div className="flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border border-violet-200 dark:border-violet-800 hover:shadow-sm transition-all">
                 <div className="flex items-center justify-between w-full mb-4">
                   <div className="flex items-center gap-2">
-                    <h4 className="text-gray-900 text-xl font-bold">
+                    <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">
                       Assignment Configuration
                     </h4>
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
                       <PencilIcon className="w-3 h-3" />
                       Modified
                     </span>
@@ -1708,9 +1708,9 @@ function Component() {
                     onClick={() =>
                       router.push(`/author/${activeAssignmentId}/config`)
                     }
-                    className="hover:bg-gray-100 p-2 rounded-md"
+                    className="hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-md"
                   >
-                    <PencilSquareIcon className="h-6 w-6 text-gray-500" />
+                    <PencilSquareIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" />
                   </button>
                 </div>
 
@@ -1946,17 +1946,17 @@ function Component() {
               <Title>Questions</Title>
               <div className="flex items-center gap-4">
                 {changes.questionsAdded && (
-                  <span className="text-sm text-green-600">
+                  <span className="text-sm text-green-600 dark:text-green-300">
                     {changes.questionsAdded}
                   </span>
                 )}
                 {changes.questionsDeleted && (
-                  <span className="text-sm text-red-600">
+                  <span className="text-sm text-red-600 dark:text-red-300">
                     {changes.questionsDeleted}
                   </span>
                 )}
                 {Object.keys(questionIssues).length > 0 && (
-                  <span className="text-sm text-red-600 flex items-center gap-2">
+                  <span className="text-sm text-red-600 dark:text-red-300 flex items-center gap-2">
                     <ExclamationTriangleIcon className="w-4 h-4" />
                     {Object.keys(questionIssues).length} question(s) have issues
                   </span>
@@ -1978,29 +1978,29 @@ function Component() {
                 <div
                   key={question.id}
                   className={cn(
-                    "flex flex-col gap-y-4 px-8 py-6 bg-white rounded border hover:shadow-sm transition-all mb-4",
-                    hasIssues && "border-red-300 bg-red-50/30",
+                    "flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border hover:shadow-sm transition-all mb-4",
+                    hasIssues && "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/20",
                     questionChanges.length > 0 &&
                       !hasIssues &&
-                      "border-violet-300 bg-violet-50/30",
+                      "border-violet-300 dark:border-violet-700 bg-violet-50/30 dark:bg-violet-900/20",
                     !hasIssues &&
                       questionChanges.length === 0 &&
-                      "border-gray-200",
+                      "border-gray-200 dark:border-gray-700",
                   )}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-600">
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
                         Question {index + 1}
                       </span>
                       {questionChanges.length > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 bg-violet-100 rounded-full">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
                           <PencilIcon className="w-3 h-3" />
                           Modified
                         </span>
                       )}
                       {hasIssues && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-full">
                           <ExclamationTriangleIcon className="w-3 h-3" />
                           {hasIssues.length} issue
                           {hasIssues.length > 1 ? "s" : ""}
@@ -2014,7 +2014,7 @@ function Component() {
                       {hasIssues.map((issue, idx) => (
                         <div
                           key={idx}
-                          className="text-sm text-red-600 flex items-start gap-2"
+                          className="text-sm text-red-600 dark:text-red-300 flex items-start gap-2"
                         >
                           <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
                           {issue}
@@ -2033,7 +2033,7 @@ function Component() {
               );
             })
           ) : (
-            <p className="text-gray-500">No questions added yet.</p>
+            <p className="text-gray-500 dark:text-gray-400">No questions added yet.</p>
           )
         ) : (
           <>
@@ -2048,13 +2048,13 @@ function Component() {
               return (
                 <div
                   key={question.id}
-                  className="flex flex-col gap-y-4 px-8 py-6 bg-white  rounded border border-green-200 hover:shadow-sm transition-all mb-4"
+                  className="flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800  rounded border border-green-200 dark:border-green-800 hover:shadow-sm transition-all mb-4"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl font-bold text-gray-900">
+                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
                       Question {index + 1}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-full">
                       <StarIcon className="w-3 h-3" />
                       New Question
                     </span>
@@ -2113,18 +2113,18 @@ function Component() {
               return (
                 <div
                   key={origQuestion.id}
-                  className="flex flex-col gap-y-4 px-8 py-6 bg-red-50 rounded border border-red-200 hover:shadow-sm transition-all mb-4"
+                  className="flex flex-col gap-y-4 px-8 py-6 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800 hover:shadow-sm transition-all mb-4"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl font-bold text-gray-900">
+                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
                       Question (Deleted)
                     </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-full">
                       <MinusIcon className="w-3 h-3" />
                       Deleted
                     </span>
                   </div>
-                  <div className="text-sm text-red-700">
+                  <div className="text-sm text-red-700 dark:text-red-300">
                     <p className="font-medium">Type: {origQuestion.type}</p>
                     <p>Title: {origQuestion.question || "No title"}</p>
                   </div>

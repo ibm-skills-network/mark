@@ -887,17 +887,17 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <DocumentArrowUpIcon className="w-6 h-6 text-purple-600" />
-            <h2 className="text-xl font-semibold text-gray-900">
+            <DocumentArrowUpIcon className="w-6 h-6 text-purple-600 dark:text-purple-300" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               Import Questions
             </h2>
           </div>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <XMarkIcon className="w-6 h-6" />
           </button>
@@ -907,7 +907,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
           {importStep === "upload" && (
             <div className="space-y-6">
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
                   Select File to Import
                 </h3>
 
@@ -915,25 +915,25 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   className={cn(
                     "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
                     dragActive
-                      ? "border-purple-500 bg-purple-50"
-                      : "border-gray-300 hover:border-gray-400",
+                      ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                      : "border-gray-300 dark:border-gray-600 hover:border-gray-400",
                   )}
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
                   onDragOver={handleDrag}
                   onDrop={handleDrop}
                 >
-                  <DocumentArrowUpIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-lg font-medium text-gray-900 mb-2">
+                  <DocumentArrowUpIcon className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
                     Drop your file here, or{" "}
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-purple-600 hover:text-purple-700 underline"
+                      className="text-purple-600 dark:text-purple-300 hover:text-purple-700 underline"
                     >
                       browse
                     </button>
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     Supports JSON, Excel (.xlsx), Open edX (.xml)
                   </p>
 
@@ -947,13 +947,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 </div>
 
                 {selectedFile && (
-                  <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckIcon className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <CheckIcon className="w-5 h-5 text-green-600 dark:text-green-300 flex-shrink-0" />
                     <div>
-                      <p className="font-medium text-green-900">
+                      <p className="font-medium text-green-900 dark:text-green-200">
                         {selectedFile.name}
                       </p>
-                      <p className="text-sm text-green-700">
+                      <p className="text-sm text-green-700 dark:text-green-300">
                         {(selectedFile.size / 1024).toFixed(1)} KB
                       </p>
                     </div>
@@ -961,18 +961,18 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 )}
 
                 {isProcessing && (
-                  <div className="flex items-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <div className="flex items-center gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
-                    <p className="text-purple-900">Processing file...</p>
+                    <p className="text-purple-900 dark:text-purple-200">Processing file...</p>
                   </div>
                 )}
               </div>
 
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-2">
+              <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
                   Supported Formats
                 </h4>
-                <ul className="text-sm text-gray-600 space-y-1">
+                <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
                   <li>
                     <strong>JSON:</strong> Complete assignment exports with all
                     question data
@@ -992,32 +992,32 @@ const ImportModal: React.FC<ImportModalProps> = ({
 
           {importStep === "configure" && parsedData && (
             <div className="space-y-6">
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <h3 className="font-medium text-purple-900 mb-2">
+              <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                <h3 className="font-medium text-purple-900 dark:text-purple-200 mb-2">
                   Import Summary
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-purple-700">Questions found: </span>
+                    <span className="text-purple-700 dark:text-purple-300">Questions found: </span>
                     <span className="font-medium">
                       {parsedData.questions?.length || 0}
                     </span>
                   </div>
                   <div>
-                    <span className="text-purple-700">File format: </span>
+                    <span className="text-purple-700 dark:text-purple-300">File format: </span>
                     <span className="font-medium">
                       {selectedFile?.name.split(".").pop()?.toUpperCase()}
                     </span>
                   </div>
                   {parsedData.assignment && (
                     <div>
-                      <span className="text-purple-700">Assignment data: </span>
+                      <span className="text-purple-700 dark:text-purple-300">Assignment data: </span>
                       <span className="font-medium">Available</span>
                     </div>
                   )}
                   {parsedData.config && (
                     <div>
-                      <span className="text-purple-700">Configuration: </span>
+                      <span className="text-purple-700 dark:text-purple-300">Configuration: </span>
                       <span className="font-medium">Available</span>
                     </div>
                   )}
@@ -1025,7 +1025,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
                   Import Options
                 </h3>
 
@@ -1039,12 +1039,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
                         onChange={() =>
                           handleImportOptionChange("appendToExisting")
                         }
-                        className="text-purple-600 focus:ring-purple-500"
+                        className="text-purple-600 dark:text-purple-300 focus:ring-purple-500"
                       />
 
                       <label
                         htmlFor="append"
-                        className="font-medium text-gray-900"
+                        className="font-medium text-gray-900 dark:text-gray-100"
                       >
                         Add to existing questions
                       </label>
@@ -1057,12 +1057,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
                         onChange={() =>
                           handleImportOptionChange("replaceExisting")
                         }
-                        className="text-purple-600 focus:ring-purple-500"
+                        className="text-purple-600 dark:text-purple-300 focus:ring-purple-500"
                       />
 
                       <label
                         htmlFor="replace"
-                        className="font-medium text-gray-900"
+                        className="font-medium text-gray-900 dark:text-gray-100"
                       >
                         Replace all existing questions
                       </label>
@@ -1109,7 +1109,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   ].map((option) => (
                     <div
                       key={option.id}
-                      className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg"
+                      className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg"
                     >
                       <input
                         type="checkbox"
@@ -1122,17 +1122,17 @@ const ImportModal: React.FC<ImportModalProps> = ({
                             option.id as keyof ImportOptions,
                           )
                         }
-                        className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                        className="mt-0.5 text-purple-600 dark:text-purple-300 focus:ring-purple-500"
                       />
 
                       <div>
                         <label
                           htmlFor={option.id}
-                          className="font-medium text-gray-900"
+                          className="font-medium text-gray-900 dark:text-gray-100"
                         >
                           {option.label}
                         </label>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
                           {option.description}
                         </p>
                       </div>
@@ -1142,22 +1142,22 @@ const ImportModal: React.FC<ImportModalProps> = ({
               </div>
 
               {validationErrors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <ExclamationTriangleIcon className="w-5 h-5 text-red-600" />
-                    <h4 className="font-medium text-red-900">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-red-600 dark:text-red-300" />
+                    <h4 className="font-medium text-red-900 dark:text-red-200">
                       Validation Errors
                     </h4>
                   </div>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {validationErrors.map((error, idx) => (
-                      <div key={idx} className="text-sm text-red-800">
+                      <div key={idx} className="text-sm text-red-800 dark:text-red-200">
                         <strong>Question {error.questionIndex + 1}:</strong>{" "}
                         {error.message} (field: {error.field})
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-red-600 mt-2">
+                  <p className="text-xs text-red-600 dark:text-red-300 mt-2">
                     Note: Errors marked with "will be auto-generated" or "will
                     be auto-calculated" won't prevent import.
                   </p>
@@ -1165,12 +1165,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
               )}
 
               {importOptions.replaceExisting && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                   <div className="flex items-center gap-2">
-                    <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600" />
-                    <h4 className="font-medium text-yellow-900">Warning</h4>
+                    <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600 dark:text-yellow-300" />
+                    <h4 className="font-medium text-yellow-900 dark:text-yellow-200">Warning</h4>
                   </div>
-                  <p className="text-sm text-yellow-800 mt-1">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
                     This will permanently delete all existing questions and
                     replace them with the imported ones.
                   </p>
@@ -1180,10 +1180,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <button
             onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             Cancel
           </button>

@@ -336,7 +336,7 @@ export default function PublishStatus({
       transition={{ duration: 0.2 }}
       className="mt-4"
     >
-      <Card className="bg-white border-border">
+      <Card className="bg-white dark:bg-gray-800 border-border">
         <CardContent className="p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <h3 key={heading} translate="no" className="typography-h5">
@@ -347,7 +347,7 @@ export default function PublishStatus({
                 type="button"
                 onClick={() => setDismissed(true)}
                 aria-label="Dismiss"
-                className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2"
+                className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -356,7 +356,7 @@ export default function PublishStatus({
 
           {/* Unified progress bar — fills smoothly across both phases. */}
           <div className="relative">
-            <div className="h-3 rounded-full bg-gray-200 overflow-hidden">
+            <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
               <motion.div
                 className={cn("h-full rounded-full shadow-md", barColor)}
                 initial={{ width: 0 }}
@@ -463,7 +463,7 @@ export default function PublishStatus({
                       return (
                         <li
                           key={`${entry.kind}:${entry.id}`}
-                          className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50 border border-gray-200"
+                          className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700"
                         >
                           <StatusDot status={entry.status} />
                           <span

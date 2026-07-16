@@ -430,7 +430,7 @@ const GithubModal: React.FC<{
         >
           {!token ? (
             <div className="flex flex-col items-center gap-y-4">
-              <p className="text-sm text-gray-600 text-center">
+              <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
                 Your GitHub token is invalid or expired.
               </p>
               <button
@@ -449,13 +449,13 @@ const GithubModal: React.FC<{
               transition={{ duration: 0.3 }}
             >
               <div className="relative mb-4">
-                <IconSearch className="h-5 w-5 text-gray-500 absolute top-1/2 left-4 transform -translate-y-1/2" />
+                <IconSearch className="h-5 w-5 text-gray-500 dark:text-gray-400 absolute top-1/2 left-4 transform -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Search for files..."
                   value={searchQuery}
                   onChange={handleSearchForFiles}
-                  className="pl-10 pr-4 py-2 w-full rounded-lg border border-gray-200 focus:outline-none focus:ring-violet-500 focus:border-violet-500"
+                  className="pl-10 pr-4 py-2 w-full rounded-lg border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400 focus:outline-none focus:ring-violet-500 focus:border-violet-500"
                 />
               </div>
 
@@ -470,16 +470,16 @@ const GithubModal: React.FC<{
                         void fetchRepoContents(selectedRepo, newPath);
                       }
                     }}
-                    className="flex items-center text-gray-500 hover:text-gray-600 transition-colors duration-200 font-medium"
+                    className="flex items-center text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 transition-colors duration-200 font-medium"
                   >
                     <ArrowLeftIcon className="mr-1 h-5 w-5" />
                   </button>
                   <button
-                    className={`text-md font-semibold text-gray-800 truncate 
+                    className={`text-md font-semibold truncate
                     ${
                       currentPath.length === 0
                         ? "text-violet-500"
-                        : "hover:text-violet-600"
+                        : "text-gray-800 dark:text-gray-100 hover:text-violet-600"
                     }
                       `}
                     onClick={() => fetchRepoContents(selectedRepo, [])}
@@ -489,7 +489,9 @@ const GithubModal: React.FC<{
 
                   {currentPath.map((dir, index) => (
                     <div key={dir} className="flex items-center gap-x-[1px]">
-                      <span className="text-gray-500">/</span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        /
+                      </span>
                       <button
                         onClick={() =>
                           fetchRepoContents(
@@ -500,7 +502,7 @@ const GithubModal: React.FC<{
                         className={` transition-colors duration-200 font-medium ${
                           index === currentPath.length - 1
                             ? "text-violet-500 underline hover:text-violet-600"
-                            : "text-gray-500 hover:text-violet-600"
+                            : "text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400"
                         }`}
                       >
                         {dir}
@@ -509,14 +511,16 @@ const GithubModal: React.FC<{
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 border-t border-gray-200 max-h-[60vh]">
+              <div className="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-700 max-h-[60vh]">
                 <div className="p-4 overflow-y-auto mb-20">
-                  <h2 className="text-lg font-bold text-gray-700 mb-4">
+                  <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4">
                     Folders and Files
                   </h2>
                   {loadingSearch ? (
                     <div className="flex items-center justify-center">
-                      <p className="text-gray-500">Searching...</p>
+                      <p className="text-gray-500 dark:text-gray-400">
+                        Searching...
+                      </p>
                     </div>
                   ) : (
                     <>
@@ -526,7 +530,7 @@ const GithubModal: React.FC<{
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ duration: 0.2 }}
-                          className={`px-4 py-3 bg-white rounded-lg hover:shadow-md transition-shadow duration-200 flex flex-col mb-2 border border-gray-200
+                          className={`px-4 py-3 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow duration-200 flex flex-col mb-2 border border-gray-200 dark:border-gray-700
                           ${
                             content.type === "dir"
                               ? ""
@@ -547,7 +551,7 @@ const GithubModal: React.FC<{
                                   content.name,
                                 ])
                               }
-                              className="flex items-center text-gray-600 hover:text-gray-700 font-medium transition-colors duration-200"
+                              className="flex items-center text-gray-600 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-200 font-medium transition-colors duration-200"
                             >
                               <FolderIcon className="mr-2 h-5 w-5" />
                               {content.name}
@@ -564,7 +568,7 @@ const GithubModal: React.FC<{
                                            content.download_url,
                                        )
                                          ? "text-violet-500"
-                                         : "text-gray-600 hover:text-violet-600"
+                                         : "text-gray-600 dark:text-gray-300 hover:text-violet-600 dark:hover:text-violet-400"
                                      }`}
                                   onClick={() => {
                                     if (
@@ -622,8 +626,8 @@ const GithubModal: React.FC<{
                   )}
                 </div>
 
-                <div className="p-4 border-l border-gray-200 overflow-y-auto">
-                  <h2 className="text-lg font-bold text-gray-700 mb-4">
+                <div className="p-4 border-l border-gray-200 dark:border-gray-700 overflow-y-auto">
+                  <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4">
                     Selected Files
                   </h2>
                   {selectedFiles.length > 0 ? (
@@ -631,7 +635,7 @@ const GithubModal: React.FC<{
                       {selectedFiles.map((fileUrl, index) => (
                         <li
                           key={index}
-                          className="flex items-center w-full justify-between px-4 py-3 bg-white rounded-lg shadow hover:shadow-md transition-shadow duration-200 border border-violet-500"
+                          className="flex items-center w-full justify-between px-4 py-3 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow duration-200 border border-violet-500"
                         >
                           <button
                             className="flex items-center gap-x-2"
@@ -662,7 +666,9 @@ const GithubModal: React.FC<{
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-gray-500">No files selected.</p>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No files selected.
+                    </p>
                   )}
                 </div>
               </div>
@@ -676,7 +682,7 @@ const GithubModal: React.FC<{
                 exit={{ opacity: 0, x: 10 }}
                 transition={{ duration: 0.3 }}
               >
-                <p className="text-sm text-gray-700 mb-2">
+                <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
                   Select a repository to browse its files:
                 </p>
                 <div className="my-4">
@@ -695,10 +701,10 @@ const GithubModal: React.FC<{
                         className={
                           repos[repos.length - 1].owner.login === owner
                             ? ""
-                            : "border-b border-gray-200 pb-4"
+                            : "border-b border-gray-200 dark:border-gray-700 pb-4"
                         }
                       >
-                        <h2 className="text-lg font-bold text-gray-700 my-4">
+                        <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 my-4">
                           {owner}/
                         </h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -710,10 +716,10 @@ const GithubModal: React.FC<{
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ duration: 0.2 }}
-                                className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow duration-200 flex items-center justify-between hover:cursor-pointer"
+                                className="p-4 bg-white dark:bg-gray-800 border border-transparent dark:border-gray-700 rounded-lg shadow hover:shadow-md transition-shadow duration-200 flex items-center justify-between hover:cursor-pointer"
                                 onClick={() => fetchRepoContents(repo.name)}
                               >
-                                <span className="text-gray-700 font-medium truncate">
+                                <span className="text-gray-700 dark:text-gray-200 font-medium truncate">
                                   {repo.name}
                                 </span>
                               </motion.div>
@@ -727,10 +733,10 @@ const GithubModal: React.FC<{
           )}
 
           {selectedRepo && selectedFiles.length > 0 && (
-            <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center border-t border-gray-200 bg-white">
+            <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
               <button
                 onClick={() => handleDeselectRepo()}
-                className=" text-black font-semibold py-3 px-4 rounded-lg transition-colors duration-200 ease-in-out border border-gray-200 shadow-sm hover:shadow-md"
+                className=" text-black dark:text-gray-100 font-semibold py-3 px-4 rounded-lg transition-colors duration-200 ease-in-out border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow-md"
               >
                 Return to Repo List
               </button>

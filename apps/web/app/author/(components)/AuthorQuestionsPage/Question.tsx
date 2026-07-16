@@ -496,10 +496,10 @@ const Question: FC<QuestionProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center justify-between rounded-lg bg-white w-full gap-y-6">
+    <div className="flex flex-col items-center justify-between rounded-lg bg-white dark:bg-gray-800 w-full gap-y-6">
       <div className="flex gap-2 flex-wrap w-full">
         <div className="flex items-center gap-x-2 flex-1">
-          <div className="items-center w-11 h-full typography-body text-gray-500 border border-gray-200 rounded-md text-center">
+          <div className="items-center w-11 h-full typography-body text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md text-center">
             {preview ? (
               <div className="w-full h-full flex items-center justify-center">
                 {questionIndex}
@@ -513,7 +513,7 @@ const Question: FC<QuestionProps> = ({
                 onChange={handleIndexChange}
                 onBlur={handleIndexBlur}
                 onKeyPress={handleKeyPress}
-                className="w-full h-full text-center p-0 m-0 border-none bg-transparent focus:outline-none focus:ring-0"
+                className="w-full h-full text-center p-0 m-0 border-none bg-transparent text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-0"
               />
             )}
           </div>
@@ -521,7 +521,7 @@ const Question: FC<QuestionProps> = ({
           <Menu as="div" className="relative inline-block text-left">
             <div>
               <Menu.Button
-                className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 rounded-md bg-white text-gray-700 min-w-[208px] h-min body-typography gap-1.5 hover:bg-gray-100"
+                className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 min-w-[208px] h-min body-typography gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-700"
                 disabled={preview}
               >
                 {questionType === "EMPTY" ? (
@@ -532,13 +532,13 @@ const Question: FC<QuestionProps> = ({
                         style={{ color: "#F59E0B" }}
                       />
 
-                      <span className="typography-body text-center text-gray-600">
+                      <span className="typography-body text-center text-gray-600 dark:text-gray-300">
                         Select Type
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 typography-body text-gray-600">
+                  <div className="flex items-center gap-1.5 typography-body text-gray-600 dark:text-gray-300">
                     {
                       questionTypes.find((qt) => qt.value === questionType)
                         ?.icon
@@ -551,7 +551,7 @@ const Question: FC<QuestionProps> = ({
                 )}
                 {preview ? null : (
                   <ChevronDownIcon
-                    className="w-5 h-5 text-gray-500"
+                    className="w-5 h-5 text-gray-500 dark:text-gray-400"
                     aria-hidden="true"
                   />
                 )}
@@ -567,7 +567,7 @@ const Question: FC<QuestionProps> = ({
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
+              <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
                 <div className="py-1">
                   {questionTypes?.map((qt) => (
                     <Menu.Item key={qt.value}>
@@ -605,8 +605,8 @@ const Question: FC<QuestionProps> = ({
                           }
                           className={`${
                             active
-                              ? "bg-gray-100 text-gray-600"
-                              : "text-gray-600"
+                              ? "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                              : "text-gray-600 dark:text-gray-300"
                           } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
                             disabledMenuButtons.includes(qt.value)
                               ? "cursor-not-allowed opacity-50"
@@ -628,11 +628,11 @@ const Question: FC<QuestionProps> = ({
             <Menu as="div" className="relative inline-block text-left">
               <div>
                 <Menu.Button
-                  className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 rounded-md bg-white text-gray-700 min-w-[208px] h-min body-typography gap-1.5 hover:bg-gray-100"
+                  className="inline-flex justify-between items-center px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 min-w-[208px] h-min body-typography gap-1.5 hover:bg-gray-100 dark:hover:bg-gray-700"
                   disabled={preview}
                 >
                   {responseTypes ? (
-                    <div className="flex items-center gap-1.5 typography-body text-gray-600">
+                    <div className="flex items-center gap-1.5 typography-body text-gray-600 dark:text-gray-300">
                       {
                         responseTypes.find((qt) => qt.value === responseType)
                           ?.icon
@@ -645,7 +645,7 @@ const Question: FC<QuestionProps> = ({
                   ) : null}
                   {preview ? null : (
                     <ChevronDownIcon
-                      className="w-5 h-5 text-gray-500"
+                      className="w-5 h-5 text-gray-500 dark:text-gray-400"
                       aria-hidden="true"
                     />
                   )}
@@ -661,7 +661,7 @@ const Question: FC<QuestionProps> = ({
                 leaveFrom="transform opacity-100 scale-100"
                 leaveTo="transform opacity-0 scale-95"
               >
-                <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
+                <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700 rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
                   <div className="py-1">
                     {responseTypes
                       ?.filter((qt) => {
@@ -696,8 +696,8 @@ const Question: FC<QuestionProps> = ({
                               }
                               className={`${
                                 active
-                                  ? "bg-gray-100 text-gray-600"
-                                  : "text-gray-600"
+                                  ? "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                  : "text-gray-600 dark:text-gray-300"
                               } group flex items-center w-full py-2 px-4 gap-1.5 typography-body ${
                                 disabledMenuButtons.includes(qt.value)
                                   ? "cursor-not-allowed opacity-50"
@@ -719,17 +719,17 @@ const Question: FC<QuestionProps> = ({
 
         <div className="flex items-center gap-4 flex-wrap">
           {preview ? (
-            <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-nowrap ">
               {maxCharacters ? (
                 <div className="flex items-center">
-                  <span className="text-gray-600 typography-body">
+                  <span className="text-gray-600 dark:text-gray-300 typography-body">
                     Character Count: {maxCharacters}
                   </span>
                 </div>
               ) : (
                 maxWordCount && (
                   <div className="flex items-center">
-                    <span className="text-gray-600 typography-body">
+                    <span className="text-gray-600 dark:text-gray-300 typography-body">
                       Word Count: {maxWordCount}
                     </span>
                   </div>
@@ -740,11 +740,11 @@ const Question: FC<QuestionProps> = ({
                   handleEditClick(questionId);
                 }}
               >
-                <PencilSquareIcon className="h-6 w-6 text-gray-500" />
+                <PencilSquareIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-nowrap ">
               {showWordCountInput ? (
                 <>
                   <ArrowPathRoundedSquareIcon
@@ -763,7 +763,7 @@ const Question: FC<QuestionProps> = ({
 
                   {countMode === "CHARACTER" ? (
                     <div className="flex items-center">
-                      <span className="text-gray-600 typography-body">
+                      <span className="text-gray-600 dark:text-gray-300 typography-body">
                         Character Count:
                       </span>
                       <input
@@ -799,7 +799,7 @@ const Question: FC<QuestionProps> = ({
                             maxWordCount: null,
                           });
                         }}
-                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none bg-transparent text-gray-700 dark:text-gray-200 ${
                           isFocused ? "focused" : "not-focused"
                         }`}
                         style={{
@@ -821,7 +821,7 @@ const Question: FC<QuestionProps> = ({
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 text-gray-500"
+                          className="h-4 w-4 text-gray-500 dark:text-gray-400"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -837,7 +837,7 @@ const Question: FC<QuestionProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center">
-                      <span className="text-gray-600 typography-body test">
+                      <span className="text-gray-600 dark:text-gray-300 typography-body test">
                         Word Count:
                       </span>
                       <input
@@ -873,7 +873,7 @@ const Question: FC<QuestionProps> = ({
                             maxCharacters: null,
                           });
                         }}
-                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none ${
+                        className={`w-16 h-8 text-left px-1 py-1 m-0 border-none bg-transparent text-gray-700 dark:text-gray-200 ${
                           isFocused ? "focused" : "not-focused"
                         }`}
                         style={{
@@ -898,7 +898,7 @@ const Question: FC<QuestionProps> = ({
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 text-gray-500"
+                          className="h-4 w-4 text-gray-500 dark:text-gray-400"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -931,7 +931,7 @@ const Question: FC<QuestionProps> = ({
                   />
 
                   <span
-                    className="text-gray-600 typography-body"
+                    className="text-gray-600 dark:text-gray-300 typography-body"
                     onClick={() => {
                       setShowWordCountInput(questionId, true);
                       if (maxCharacters) {
@@ -948,7 +948,7 @@ const Question: FC<QuestionProps> = ({
                 </div>
               ) : questionType === "TEXT" ? (
                 <button
-                  className="text-gray-600 text-nowrap typography-body"
+                  className="text-gray-600 dark:text-gray-300 text-nowrap typography-body"
                   onClick={() => {
                     setShowWordCountInput(questionId, true);
                     handleResetCounters("CHARACTER");
@@ -967,7 +967,7 @@ const Question: FC<QuestionProps> = ({
                   }
                   className="flex items-center gap-2"
                 >
-                  <IconArrowsShuffle className="w-6 h-6 text-gray-500 cursor-pointer" />
+                  <IconArrowsShuffle className="w-6 h-6 text-gray-500 dark:text-gray-400 cursor-pointer" />
                   <button
                     type="button"
                     onClick={() => {
@@ -977,7 +977,7 @@ const Question: FC<QuestionProps> = ({
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                       question.randomizedChoices
                         ? "bg-violet-600"
-                        : "bg-gray-200",
+                        : "bg-gray-200 dark:bg-gray-700",
                     )}
                     role="switch"
                     aria-checked={question.randomizedChoices}
@@ -996,7 +996,7 @@ const Question: FC<QuestionProps> = ({
               ) : null}
 
               <button
-                className="text-gray-500"
+                className="text-gray-500 dark:text-gray-400"
                 onClick={(e) => {
                   e.stopPropagation();
                   duplicateThisQuestion(question);
@@ -1006,7 +1006,7 @@ const Question: FC<QuestionProps> = ({
               </button>
 
               <button
-                className="text-gray-500"
+                className="text-gray-500 dark:text-gray-400"
                 onClick={(e) => {
                   e.stopPropagation();
                   setToggleDeleteConfirmation(true);
@@ -1084,7 +1084,7 @@ const Question: FC<QuestionProps> = ({
             return (
               <div
                 key={variant.id}
-                className="border-t-2 flex flex-col border-gray-200 pt-4 w-full gap-y-6"
+                className="border-t-2 flex flex-col border-gray-200 dark:border-gray-700 pt-4 w-full gap-y-6"
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="typography-body">Variant {index + 1}</span>
@@ -1099,7 +1099,7 @@ const Question: FC<QuestionProps> = ({
                         }
                         className="flex items-center gap-2"
                       >
-                        <IconArrowsShuffle className="w-6 h-6 text-gray-500 cursor-pointer" />
+                        <IconArrowsShuffle className="w-6 h-6 text-gray-500 dark:text-gray-400 cursor-pointer" />
 
                         <button
                           type="button"
@@ -1115,7 +1115,7 @@ const Question: FC<QuestionProps> = ({
                             "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                             variant.randomizedChoices
                               ? "bg-violet-600"
-                              : "bg-gray-200",
+                              : "bg-gray-200 dark:bg-gray-700",
                           )}
                           role="switch"
                           aria-checked={variant.randomizedChoices}
@@ -1133,7 +1133,7 @@ const Question: FC<QuestionProps> = ({
                       </Tooltip>
                     ) : null}
                     <button
-                      className="text-gray-500"
+                      className="text-gray-500 dark:text-gray-400"
                       onClick={() => handleDeleteVariant(variant.id)}
                     >
                       <TrashIcon width={20} height={20} />
@@ -1198,20 +1198,20 @@ const Question: FC<QuestionProps> = ({
                 <div className="flex items-center justify-center w-full gap-4">
                   <button
                     onClick={handleAddVariant}
-                    className="flex items-center gap-2 border border-gray-200 rounded-md p-2 hover:bg-gray-100 py-2 px-4"
+                    className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 py-2 px-4"
                   >
-                    <PlusIcon className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-600 typography-body text-nowrap">
+                    <PlusIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300 typography-body text-nowrap">
                       Create Blank Variant
                     </span>
                   </button>
 
                   <button
                     onClick={handleAddVariantUsingAi}
-                    className="flex items-center gap-2 bg-violet-100 border border-violet-200 rounded-md p-2 hover:bg-violet-100 py-2 px-4"
+                    className="flex items-center gap-2 bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-800 rounded-md p-2 hover:bg-violet-100 dark:hover:bg-violet-900/60 py-2 px-4"
                   >
-                    <SparklesIcon className="w-4 h-4 text-violet-800" />
-                    <span className="text-violet-800 typography-body text-nowrap font-bold">
+                    <SparklesIcon className="w-4 h-4 text-violet-800 dark:text-violet-300" />
+                    <span className="text-violet-800 dark:text-violet-200 typography-body text-nowrap font-bold">
                       Add Variant
                     </span>
                   </button>
@@ -1223,9 +1223,9 @@ const Question: FC<QuestionProps> = ({
       )}
       {toggleDeleteConfirmation && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded-lg max-w-xl w-full max-h-[80vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg max-w-xl w-full max-h-[80vh] overflow-y-auto">
             <h2 className="text-lg font-bold mb-4">Delete Question</h2>
-            <p className="text-gray-600 mb-4">
+            <p className="text-gray-600 dark:text-gray-300 mb-4">
               Are you sure you want to delete this question?
             </p>
             <div className="flex items-center gap-4 justify-end">
@@ -1240,7 +1240,7 @@ const Question: FC<QuestionProps> = ({
               </button>
               <button
                 onClick={() => setToggleDeleteConfirmation(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-300"
               >
                 Cancel
               </button>

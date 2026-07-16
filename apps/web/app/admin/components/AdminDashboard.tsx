@@ -234,15 +234,15 @@ function AdminDashboardContent({
   if (statsError) {
     return (
       <div className="container mx-auto p-6 space-y-6">
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30">
           <CardHeader>
-            <CardTitle className="text-red-800 flex items-center gap-2">
+            <CardTitle className="text-red-800 dark:text-red-200 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               Error Loading Dashboard
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-red-700 text-sm">
+            <p className="text-red-700 dark:text-red-300 text-sm">
               {statsError instanceof Error
                 ? statsError.message
                 : "Failed to load dashboard data"}
@@ -271,7 +271,14 @@ function AdminDashboardContent({
               {isAdmin ? "Admin Dashboard" : "Author Dashboard"}
             </h1>
             {stats && (
-              <Badge variant={isAdmin ? "default" : "secondary"}>
+              <Badge
+                variant={isAdmin ? "default" : "secondary"}
+                className={
+                  isAdmin
+                    ? "bg-violet-100 text-violet-800 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-200 dark:hover:bg-violet-900/30"
+                    : undefined
+                }
+              >
                 {isAdmin ? "Super Admin" : "Author"}
               </Badge>
             )}
@@ -530,7 +537,7 @@ function AdminDashboardContent({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="text-3xl font-bold text-gray-900 leading-none">
+                    <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 leading-none">
                       {stats.totalReports.toLocaleString()}
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -560,7 +567,7 @@ function AdminDashboardContent({
           </div>
 
           <Card className="overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 border-b">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-gray-800 dark:to-gray-900 border-b">
               <CardTitle className="flex items-center gap-2 text-xl">
                 <div className="w-3 h-3 bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full"></div>
                 AI Cost Breakdown

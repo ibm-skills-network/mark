@@ -30,7 +30,7 @@ export function SectionWithTitle<T extends ElementType = "section">(
   const Component = as ?? "section";
   return (
     <Component
-      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white rounded border border-solid border-gray-400 max-md:px-5"
+      className="group relative flex flex-col items-start gap-y-4 px-8 py-6 max-w-full bg-white dark:bg-gray-800 rounded border border-solid border-gray-400 dark:border-gray-600 max-md:px-5"
       {...rest}
     >
       <div className="flex flex-col gap-y-1.5">
@@ -38,22 +38,22 @@ export function SectionWithTitle<T extends ElementType = "section">(
           className={cn(
             "flex items-center gap-2 max-md:flex-wrap",
             compact
-              ? "text-base font-semibold text-gray-700"
+              ? "text-base font-semibold text-gray-700 dark:text-gray-200"
               : "text-2xl font-bold text-black",
           )}
         >
           {IconForTitle && (
-            <IconForTitle className="shrink-0 my-auto w-6 aspect-square text-gray-500" />
+            <IconForTitle className="shrink-0 my-auto w-6 aspect-square text-gray-500 dark:text-gray-400" />
           )}
           <span className={cn(IconForTitle && "pl-1.5")}>{title}</span>
           {required && (
-            <span className="text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded">
+            <span className="text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 px-1.5 py-0.5 rounded">
               Required
             </span>
           )}
         </Title>
         {description && (
-          <p className="text-base leading-6 text-gray-600 font-[450]">
+          <p className="text-base leading-6 text-gray-600 dark:text-gray-300 font-[450]">
             {description}
           </p>
         )}

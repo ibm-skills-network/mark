@@ -54,12 +54,12 @@ const Component: FC<Props> = ({ compact }) => {
       <div className="flex flex-col gap-y-1">
         <label
           htmlFor="attempts-before-cooldown-period"
-          className="text-gray-600 flex gap-x-1"
+          className="text-gray-600 dark:text-gray-300 flex gap-x-1"
         >
           How many attempts do learners have before they have to wait to retake
           the assignment?
           <Tooltip content="The number of times a student can submit this assignment before they have to wait to retake it">
-            <InformationCircleIcon className="w-5 inline-block text-gray-500" />
+            <InformationCircleIcon className="w-5 inline-block text-gray-500 dark:text-gray-400" />
           </Tooltip>
         </label>
         <Dropdown<number>
@@ -82,11 +82,11 @@ const Component: FC<Props> = ({ compact }) => {
         <div className="flex flex-col gap-y-1">
           <label
             htmlFor="cooldown-period"
-            className="text-gray-600 flex gap-x-1"
+            className="text-gray-600 dark:text-gray-300 flex gap-x-1"
           >
             How long do learners have to wait before making another attempt?
             <Tooltip content="The number of times a student can submit this assignment before they have to wait to retake it">
-              <InformationCircleIcon className="w-5 inline-block text-gray-500" />
+              <InformationCircleIcon className="w-5 inline-block text-gray-500 dark:text-gray-400" />
             </Tooltip>
           </label>
           <Dropdown<number>

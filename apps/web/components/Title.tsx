@@ -17,7 +17,7 @@ function Title(props: Props) {
         { "text-2xl": level === 3 },
         { "text-xl": level === 4 },
         { "text-lg": level === 5 },
-        "font-bold text-gray-900",
+        "font-bold text-gray-900 dark:text-gray-100",
         className,
       )}
     >

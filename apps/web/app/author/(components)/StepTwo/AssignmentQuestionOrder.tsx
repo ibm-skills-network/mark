@@ -38,7 +38,9 @@ const Component: FC<Props> = ({ compact }) => {
     setSelectedRandomQuestions(true);
   }
 
-  const totalQuestions = useAuthorStore((s) => s.questions).length;
+  const totalQuestions = useAuthorStore(
+    (s) => s.questions.filter((question) => !question.isDeleted).length,
+  );
 
   const [popupMessage, setPopupMessage] = useState("");
   const [showPopup, setShowPopup] = useState(false);
@@ -78,14 +80,14 @@ const Component: FC<Props> = ({ compact }) => {
             className={cn(
               "leading-5 transition-all",
               displayOrder === "DEFINED"
-                ? "font-bold text-violet-600"
+                ? "font-bold text-violet-600 dark:text-violet-300"
                 : "font-medium",
             )}
           >
             Strict Order
           </p>
         </div>
-        <p className="text-gray-500 text-left">
+        <p className="text-gray-500 dark:text-gray-400 text-left">
           Questions always appear in the order you set.
         </p>
       </button>
@@ -100,14 +102,14 @@ const Component: FC<Props> = ({ compact }) => {
             className={cn(
               "leading-5 transition-all",
               displayOrder === "RANDOM" && !selectedRandomQuestions
-                ? "font-bold text-violet-600"
+                ? "font-bold text-violet-600 dark:text-violet-300"
                 : "font-medium",
             )}
           >
             Random Order
           </p>
         </div>
-        <p className="text-gray-500 text-left">
+        <p className="text-gray-500 dark:text-gray-400 text-left">
           All questions are shuffled for each assignment attempt.
         </p>
       </button>
@@ -119,7 +121,7 @@ const Component: FC<Props> = ({ compact }) => {
             className={cn(
               "leading-5 transition-all",
               selectedRandomQuestions
-                ? "font-bold text-violet-600"
+                ? "font-bold text-violet-600 dark:text-violet-300"
                 : "font-medium",
             )}
           >
@@ -127,7 +129,7 @@ const Component: FC<Props> = ({ compact }) => {
           </p>
           <input
             type="number"
-            className="border focus:border-violet-600 focus:ring-0 border-gray-200 w-52 rounded-md h-10 focus:outline-none"
+            className="border focus:border-violet-600 focus:ring-0 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 w-52 rounded-md h-10 focus:outline-none"
             placeholder="Number per attempt"
             min={0}
             max={totalQuestions || undefined}
@@ -170,7 +172,7 @@ const Component: FC<Props> = ({ compact }) => {
 
           {showPopup && <Popup message={popupMessage} />}
         </div>
-        <p className="text-gray-500 text-left">
+        <p className="text-gray-500 dark:text-gray-400 text-left">
           {numberOfQuestionsPerAttempt ? (
             <>
               For each assignment attempt learners will be given{" "}
@@ -195,7 +197,7 @@ const Component: FC<Props> = ({ compact }) => {
 };
 
 const RadioDot: FC<{ active: boolean }> = ({ active }) => (
-  <div className="flex items-center justify-center w-4 h-4 bg-white border border-gray-400 rounded-full">
+  <div className="flex items-center justify-center w-4 h-4 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-600 rounded-full">
     <div
       className={cn("w-2.5 h-2.5 rounded-full", active && "bg-violet-600")}
     />
@@ -203,14 +205,14 @@ const RadioDot: FC<{ active: boolean }> = ({ active }) => (
 );
 
 const Popup: FC<{ message: string }> = ({ message }) => (
-  <div className="absolute top-full left-0 mt-2 z-10 bg-orange-50 border border-orange-200 rounded-md shadow-lg p-3 max-w-sm">
+  <div className="absolute top-full left-0 mt-2 z-10 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md shadow-lg p-3 max-w-sm">
     <div className="flex items-start space-x-2">
       <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center mt-0.5">
         <span className="text-white text-xs">!</span>
       </div>
-      <span className="text-orange-700 text-sm">{message}</span>
+      <span className="text-orange-700 dark:text-orange-300 text-sm">{message}</span>
     </div>
-    <div className="absolute -top-1 left-4 w-2 h-2 bg-orange-50 border-l border-t border-orange-200 transform rotate-45" />
+    <div className="absolute -top-1 left-4 w-2 h-2 bg-orange-50 dark:bg-orange-900/20 border-l border-t border-orange-200 dark:border-orange-800 transform rotate-45" />
   </div>
 );
 

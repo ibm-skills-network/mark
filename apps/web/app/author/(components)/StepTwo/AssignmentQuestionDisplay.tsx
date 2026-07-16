@@ -30,7 +30,7 @@ const Component: FC<Props> = ({ compact }) => {
         value="ONE_PER_PAGE"
       >
         <div className="flex items-center gap-x-1.5 cursor-pointer">
-          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white border border-gray-400 border-solid rounded-full">
+          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-600 border-solid rounded-full">
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
@@ -42,14 +42,14 @@ const Component: FC<Props> = ({ compact }) => {
             className={cn(
               "leading-5 transition-all cursor-pointer",
               questionDisplay === "ONE_PER_PAGE"
-                ? "font-bold text-violet-600"
+                ? "font-bold text-violet-600 dark:text-violet-300"
                 : "font-medium",
             )}
           >
             One question per page
           </p>
         </div>
-        <p className="text-gray-500 text-left cursor-pointer">
+        <p className="text-gray-500 dark:text-gray-400 text-left cursor-pointer">
           Each question will be displayed on a separate page for the learner to
           answer
         </p>
@@ -61,7 +61,7 @@ const Component: FC<Props> = ({ compact }) => {
         value="ALL_PER_PAGE"
       >
         <div className="flex items-center gap-x-1.5 cursor-pointer">
-          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white border border-gray-400 border-solid rounded-full">
+          <div className="flex flex-col justify-center items-center px-1 my-auto w-4 h-4 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-600 border-solid rounded-full">
             <div
               className={cn(
                 "w-2.5 h-2.5 rounded-full",
@@ -73,14 +73,14 @@ const Component: FC<Props> = ({ compact }) => {
             className={cn(
               "leading-5 cursor-pointer transition-all",
               questionDisplay === "ALL_PER_PAGE"
-                ? "font-bold text-violet-600"
+                ? "font-bold text-violet-600 dark:text-violet-300"
                 : "font-medium",
             )}
           >
             All questions in one page
           </div>
         </div>
-        <p className="text-gray-500 text-left cursor-pointer">
+        <p className="text-gray-500 dark:text-gray-400 text-left cursor-pointer">
           All questions will be displayed on one page for the learner to answer
         </p>
       </button>

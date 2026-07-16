@@ -61,16 +61,13 @@ describe("CriterionEvidenceRetrievalService", () => {
   });
 
   /**
-   * REGRESSION: Spreadsheet data (pure numeric / short cell values) has zero
-   * lexical overlap with abstract rubric language.  MiniSearch fuzzy+prefix
-   * matching may return candidates, but computeRelevanceScore returns 0 for
-   * all of them, and the >= 0.15 filter strips the reranked array to length 0.
-   *
-   * Before the fix the fallback only checked `candidates.length === 0`.
-   * The correct check is `reranked.length === 0` (after the filter).
-   * This test verifies evidence is surfaced unconditionally in that case.
+   * Spreadsheet data (pure numeric / short cell values) has zero lexical
+   * overlap with abstract rubric language, so computeRelevanceScore returns 0
+   * for all candidates and the >= 0.15 filter strips reranked to length 0.
+   * The full corpus must still be surfaced as *candidates* to LLM validation
+   * (not as final evidence) so a genuinely relevant chunk can still be found.
    */
-  it("surfaces chunks when MiniSearch returns candidates but all are filtered by relevance", async () => {
+  it("surfaces the full corpus as candidates to LLM validation when all are filtered by relevance", async () => {
     const chunks = [
       makeChunk("ch1", "100"),
       makeChunk("ch2", "200"),
@@ -92,7 +89,19 @@ describe("CriterionEvidenceRetrievalService", () => {
       maxPoints: 2,
     };
 
-    const service = makeService();
+    const promptProcessor = {
+      processPromptForFeature: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          evidence: [{ chunkId: "ch5", relevance: "supports" }],
+        }),
+      ),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelForValidationTask: jest.fn().mockResolvedValue("test-model"),
+      } as any,
+    );
     const index = new ChunkIndex(chunks);
 
     const response = await service.retrieveEvidence(
@@ -105,15 +114,94 @@ describe("CriterionEvidenceRetrievalService", () => {
       index,
     );
 
-    expect(response.evidence.length).toBe(5);
-    expect(response.criterionId).toBe("empty-rows");
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "ch5" }),
+    ]);
+    const promptArg = promptProcessor.processPromptForFeature.mock.calls[0][0];
+    const validationPrompt = await promptArg.format({});
+    for (const chunk of chunks) {
+      expect(validationPrompt).toContain(chunk.chunkId);
+    }
+  });
+
+  /**
+   * If none of the surfaced candidates actually address the criterion, the
+   * LLM validator's "nothing relevant" verdict must be trusted as final —
+   * not overridden with the raw, unvalidated candidates. Otherwise an
+   * off-topic submission would always produce non-empty "evidence".
+   */
+  it("returns no evidence when the LLM validator finds nothing relevant", async () => {
+    const chunks = [
+      makeChunk("ch1", "This document is about something unrelated."),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c1",
+      rubricQuestion: "Did the learner implement the required DataLoader?",
+      description: "Checks for DataLoader implementation.",
+      criteria: [
+        { description: "Implemented", points: 5 },
+        { description: "Not implemented", points: 0 },
+      ],
+      maxPoints: 5,
+    };
+
+    const service = makeService(JSON.stringify({ evidence: [] }));
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this submission",
+        chunks,
+        assignmentId: 1,
+      },
+      index,
+    );
+
+    expect(response.evidence).toHaveLength(0);
+  });
+
+  it("falls back to scored candidates when validator output cannot be parsed", async () => {
+    const chunks = [
+      makeChunk("ch1", "The DataLoader implementation loads training data."),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c-parse-fail",
+      rubricQuestion: "Did the learner implement the required DataLoader?",
+      description: "Checks for DataLoader implementation.",
+      criteria: [
+        { description: "Implemented", points: 5 },
+        { description: "Not implemented", points: 0 },
+      ],
+      maxPoints: 5,
+    };
+
+    const service = makeService("not valid json");
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this submission",
+        chunks,
+        assignmentId: 1,
+      },
+      index,
+    );
+
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "ch1" }),
+    ]);
   });
 
   /**
    * When MiniSearch itself returns 0 candidates (completely empty index or
-   * query yields nothing), the same fallback path should fire.
+   * query yields nothing), the fallback still surfaces candidates for LLM
+   * validation, and a genuine match should come through as evidence.
    */
-  it("surfaces chunks via fallback when MiniSearch returns zero candidates", async () => {
+  it("surfaces candidates via fallback when MiniSearch returns zero candidates", async () => {
     const chunks = [makeChunk("ch1", "X")];
 
     const criterion: RubricCriterion = {
@@ -127,7 +215,9 @@ describe("CriterionEvidenceRetrievalService", () => {
       maxPoints: 1,
     };
 
-    const service = makeService();
+    const service = makeService(
+      JSON.stringify({ evidence: [{ chunkId: "ch1", relevance: "supports" }] }),
+    );
     const index = new ChunkIndex(chunks);
 
     const response = await service.retrieveEvidence(

@@ -54,10 +54,10 @@ function Dropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.95 }}
             transition={{ type: "spring", damping: 25, stiffness: 400 }}
-            className="absolute bottom-full mb-3 left-0 right-0 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-200/60 z-50 max-h-80 overflow-hidden"
+            className="absolute bottom-full mb-3 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-200/60 dark:border-gray-700/60 z-50 max-h-80 overflow-hidden"
             style={{ width }}
           >
-            <div className="absolute inset-0 bg-gradient-to-t from-white/5 to-white/20 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white/5 to-white/20 dark:from-white/0 dark:to-white/5 pointer-events-none" />
             {children}
           </motion.div>
         </>
@@ -283,14 +283,14 @@ export function BottomVersionBar() {
   if (isLoadingVersions) {
     return (
       <div
-        className={`fixed bottom-0 left-0 bg-white/95 backdrop-blur-md border-t border-gray-200/60 px-6 py-3 z-40 shadow-lg transition-all duration-300 ease-in-out ${
+        className={`fixed bottom-0 left-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200/60 dark:border-gray-700/60 px-6 py-3 z-40 shadow-lg transition-all duration-300 ease-in-out ${
           isChatbotOpen ? "right-[25vw]" : "right-0"
         }`}
       >
         <div className="flex items-center justify-center space-x-4">
           <div className="flex items-center space-x-2">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
-            <span className="text-sm font-medium text-gray-600">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
               Loading version information...
             </span>
           </div>
@@ -298,7 +298,7 @@ export function BottomVersionBar() {
             onClick={() => {
               loadVersions().catch(console.error);
             }}
-            className="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors"
+            className="text-xs bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg transition-colors"
           >
             Retry
           </button>
@@ -310,13 +310,13 @@ export function BottomVersionBar() {
   if (versionsLoadFailed) {
     return (
       <div
-        className={`fixed bottom-0 left-0 bg-white/95 backdrop-blur-md border-t border-gray-200/60 px-6 py-3 z-40 shadow-lg transition-all duration-300 ease-in-out ${
+        className={`fixed bottom-0 left-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200/60 dark:border-gray-700/60 px-6 py-3 z-40 shadow-lg transition-all duration-300 ease-in-out ${
           isChatbotOpen ? "right-[25vw]" : "right-0"
         }`}
       >
         <div className="flex items-center justify-center">
           <div className="text-red-500">⚠️</div>
-          <span className="ml-3 text-sm font-medium text-red-600">
+          <span className="ml-3 text-sm font-medium text-red-600 dark:text-red-400">
             Failed to load version information
           </span>
         </div>
@@ -327,12 +327,12 @@ export function BottomVersionBar() {
   if (!workingVersion && activeAssignmentId) {
     return (
       <div
-        className={`fixed bottom-0 left-0 bg-white/95 backdrop-blur-md border-t border-gray-200/60 px-6 py-3 z-40 shadow-lg transition-all duration-300 ease-in-out ${
+        className={`fixed bottom-0 left-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200/60 dark:border-gray-700/60 px-6 py-3 z-40 shadow-lg transition-all duration-300 ease-in-out ${
           isChatbotOpen ? "right-[25vw]" : "right-0"
         }`}
       >
         <div className="flex items-center justify-center">
-          <span className="text-sm font-medium text-gray-600">
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
             No versions available yet. Save your assignment as a version or
             publish it to create the first version.
           </span>
@@ -344,11 +344,11 @@ export function BottomVersionBar() {
   return (
     <>
       <div
-        className={`fixed bottom-0 left-0 bg-white/95 backdrop-blur-md border-t border-gray-200/60 z-40 shadow-lg transition-all duration-300 ease-in-out ${
+        className={`fixed bottom-0 left-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200/60 dark:border-gray-700/60 z-40 shadow-lg transition-all duration-300 ease-in-out ${
           isChatbotOpen ? "right-[25vw]" : "right-0"
         }`}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-50/30 via-white/50 to-indigo-50/30 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-50/30 via-white/50 to-indigo-50/30 dark:from-blue-900/10 dark:via-gray-900/30 dark:to-indigo-900/10 pointer-events-none" />
         <div className="relative flex items-center justify-between px-6 py-3">
           <div className="flex items-center space-x-4">
             <div className="relative">
@@ -357,11 +357,11 @@ export function BottomVersionBar() {
                   setVersionsOpen(!versionsOpen);
                   setDraftsOpen(false);
                 }}
-                className="group flex items-center space-x-3 px-4 py-2.5 rounded-xl hover:bg-white/60 transition-all duration-200 border border-gray-200/60 hover:border-indigo-300/60 hover:shadow-md backdrop-blur-sm bg-white/40"
+                className="group flex items-center space-x-3 px-4 py-2.5 rounded-xl hover:bg-white/60 dark:hover:bg-gray-800/60 transition-all duration-200 border border-gray-200/60 dark:border-gray-700/60 hover:border-indigo-300/60 hover:shadow-md backdrop-blur-sm bg-white/40 dark:bg-gray-800/40"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="p-1.5 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
-                    <GitBranch className="h-4 w-4 text-indigo-600" />
+                  <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg group-hover:bg-indigo-200 transition-colors">
+                    <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div className="flex items-center space-x-2">
                     <div
@@ -369,16 +369,16 @@ export function BottomVersionBar() {
                     />
 
                     <div className="flex items-center space-x-2">
-                      <span className="font-semibold text-gray-900">
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
                         v{workingVersion?.versionNumber || "0.0.0"}
                       </span>
                       <span
                         className={`text-xs font-medium px-2 py-1 rounded-full ${
                           getVersionStatus() === "modified"
-                            ? "bg-amber-100 text-amber-700"
+                            ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
                             : getVersionStatus() === "checkout"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-green-100 text-green-700"
+                              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                              : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
                         }`}
                       >
                         {getStatusText()}
@@ -387,7 +387,7 @@ export function BottomVersionBar() {
                   </div>
                 </div>
                 <ChevronUp
-                  className={`h-4 w-4 text-gray-400 transition-all duration-200 group-hover:text-indigo-500 ${
+                  className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-all duration-200 group-hover:text-indigo-500 ${
                     versionsOpen ? "rotate-180" : ""
                   }`}
                 />
@@ -401,14 +401,14 @@ export function BottomVersionBar() {
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-2">
-                      <div className="p-1.5 bg-indigo-100 rounded-lg">
-                        <GitBranch className="h-4 w-4 text-indigo-600" />
+                      <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                        <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                       </div>
-                      <h3 className="font-semibold text-gray-900">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                         Version History
                       </h3>
                     </div>
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-full">
                       {versions.length} versions
                     </span>
                   </div>
@@ -447,8 +447,8 @@ export function BottomVersionBar() {
                           tabIndex={0}
                           className={`w-full p-4 rounded-xl border text-left transition-all duration-200 group relative overflow-hidden ${
                             isWorking
-                              ? "border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 shadow-md"
-                              : "border-gray-200/60 hover:border-indigo-200 hover:bg-gradient-to-r hover:from-gray-50/50 hover:to-blue-50/30 hover:shadow-sm"
+                              ? "border-indigo-300 dark:border-indigo-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 shadow-md"
+                              : "border-gray-200/60 dark:border-gray-700/60 hover:border-indigo-200 dark:hover:border-indigo-700 hover:bg-gradient-to-r hover:from-gray-50/50 hover:to-blue-50/30 dark:hover:from-gray-800/50 dark:hover:to-blue-900/20 hover:shadow-sm"
                           }`}
                         >
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -460,46 +460,46 @@ export function BottomVersionBar() {
                                   className={`w-3 h-3 rounded-full flex-shrink-0 transition-all ${
                                     isCurrentVersion
                                       ? "bg-green-500 shadow-lg shadow-green-500/30"
-                                      : "bg-gray-300"
+                                      : "bg-gray-300 dark:bg-gray-600"
                                   }`}
                                 />
 
                                 {index < versions.length - 1 && (
-                                  <div className="w-px h-12 bg-gradient-to-b from-gray-300 to-transparent mt-2" />
+                                  <div className="w-px h-12 bg-gradient-to-b from-gray-300 dark:from-gray-600 to-transparent mt-2" />
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center space-x-2 mb-2">
                                   <div className="flex items-center space-x-2">
                                     <Tag className="h-3.5 w-3.5 text-indigo-500" />
-                                    <span className="font-semibold text-gray-900">
+                                    <span className="font-semibold text-gray-900 dark:text-gray-100">
                                       v{version.versionNumber || "0.0.0"}
                                     </span>
                                   </div>
                                   <div className="flex space-x-1">
                                     {isCurrentVersion && (
-                                      <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full flex items-center space-x-1">
+                                      <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full flex items-center space-x-1">
                                         <CheckCircle className="h-3 w-3" />
                                         <span>Active</span>
                                       </span>
                                     )}
                                     {isCheckedOut && (
-                                      <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full flex items-center space-x-1">
+                                      <span className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full flex items-center space-x-1">
                                         <Eye className="h-3 w-3" />
                                         <span>Checked Out</span>
                                       </span>
                                     )}
                                   </div>
                                 </div>
-                                <div className="text-sm text-gray-600 mb-2 line-clamp-2">
+                                <div className="text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-2">
                                   {version.versionDescription || (
-                                    <span className="italic text-gray-400">
+                                    <span className="italic text-gray-400 dark:text-gray-500">
                                       No description provided
                                     </span>
                                   )}
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3 text-xs text-gray-500">
+                                  <div className="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400">
                                     <div className="flex items-center space-x-1">
                                       <Clock className="h-3 w-3" />
                                       <span>
@@ -516,7 +516,7 @@ export function BottomVersionBar() {
                                     )}
                                   </div>
                                   {getVersionQuestionCount(version) > 0 && (
-                                    <div className="flex items-center space-x-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">
+                                    <div className="flex items-center space-x-1 text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded-full">
                                       <Activity className="h-3 w-3" />
                                       <span>
                                         {getVersionQuestionCount(version)}{" "}
@@ -532,10 +532,10 @@ export function BottomVersionBar() {
                                 e.stopPropagation();
                                 toggleFavoriteVersion(version.id);
                               }}
-                              className={`flex items-center space-x-1 p-1 rounded hover:bg-gray-100 transition-colors ${
+                              className={`flex items-center space-x-1 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
                                 isVersionFavorite(version.id)
                                   ? "text-yellow-500"
-                                  : "text-gray-400 hover:text-yellow-500"
+                                  : "text-gray-400 dark:text-gray-500 hover:text-yellow-500"
                               }`}
                               title={
                                 isVersionFavorite(version.id)
@@ -558,8 +558,8 @@ export function BottomVersionBar() {
           </div>
 
           <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-4 text-gray-600">
-              <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 rounded-lg">
+            <div className="flex items-center space-x-4 text-gray-600 dark:text-gray-300">
+              <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 dark:bg-gray-800/40 rounded-lg">
                 <Clock className="h-3.5 w-3.5 text-indigo-500" />
                 <span className="text-xs font-medium">
                   {formatVersionAge(workingVersion?.createdAt)}
@@ -567,7 +567,7 @@ export function BottomVersionBar() {
               </div>
 
               {workingVersion?.versionDescription && (
-                <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 rounded-lg max-w-80">
+                <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 dark:bg-gray-800/40 rounded-lg max-w-80">
                   <Eye className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
                   <span className="text-xs font-medium truncate">
                     {workingVersion?.versionDescription ||
@@ -576,7 +576,7 @@ export function BottomVersionBar() {
                 </div>
               )}
 
-              <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 rounded-lg">
+              <div className="flex items-center space-x-2 px-2 py-1 bg-white/40 dark:bg-gray-800/40 rounded-lg">
                 <TrendingUp className="h-3.5 w-3.5 text-green-500" />
                 <span className="text-xs font-medium">
                   {getVersionQuestionCount(workingVersion)} questions
@@ -591,7 +591,7 @@ export function BottomVersionBar() {
               onClick={() =>
                 router.push(`/author/${activeAssignmentId}/version-tree`)
               }
-              className="group flex items-center space-x-2 px-4 py-2.5 text-sm font-medium bg-white/60 text-gray-700 rounded-xl hover:bg-white hover:text-indigo-600 transition-all duration-200 border border-gray-200/60 hover:border-indigo-300/60 hover:shadow-md backdrop-blur-sm"
+              className="group flex items-center space-x-2 px-4 py-2.5 text-sm font-medium bg-white/60 dark:bg-gray-800/60 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-white dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200 border border-gray-200/60 dark:border-gray-700/60 hover:border-indigo-300/60 hover:shadow-md backdrop-blur-sm"
             >
               <GitMerge className="h-4 w-4 group-hover:scale-110 group-hover:text-indigo-600 transition-all" />
               <span className="hidden sm:inline">Version History</span>

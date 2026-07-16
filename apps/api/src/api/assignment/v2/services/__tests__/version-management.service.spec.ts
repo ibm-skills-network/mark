@@ -388,6 +388,139 @@ describe("VersionManagementService", () => {
     });
   });
 
+  describe("question-pool validation", () => {
+    const authorSession = {
+      userId: "author@example.com",
+      role: UserRole.AUTHOR,
+    } as never;
+
+    const buildAssignmentWithPool = (
+      numberOfQuestionsPerAttempt: number | null,
+      questionCount: number,
+    ) => ({
+      id: 1,
+      currentVersionId: null,
+      name: "Assignment",
+      numberOfQuestionsPerAttempt,
+      questionOrder: [],
+      questions: Array.from({ length: questionCount }, (_, index) => ({
+        id: index + 1,
+        totalPoints: 5,
+        authorComment: null,
+        type: "SINGLE_CORRECT",
+        responseType: "OTHER",
+        question: `Question ${index + 1}`,
+        maxWords: null,
+        scoring: null,
+        choices: null,
+        randomizedChoices: false,
+        answer: null,
+        gradingContextQuestionIds: [],
+        maxCharacters: null,
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+      })),
+      versions: [],
+    });
+
+    it("createVersion rejects a non-draft version when numberOfQuestionsPerAttempt exceeds the pool", async () => {
+      mockPrismaService.assignment.findUnique.mockResolvedValue(
+        buildAssignmentWithPool(15, 5),
+      );
+
+      await expect(
+        service.createVersion(
+          1,
+          {
+            versionNumber: "1.0.0",
+            versionDescription: "v1",
+            isDraft: false,
+            shouldActivate: true,
+          },
+          authorSession,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("createVersion allows a draft version even when the pool is too small", async () => {
+      mockPrismaService.assignment.findUnique.mockResolvedValue(
+        buildAssignmentWithPool(15, 5),
+      );
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      const tx = {
+        assignmentVersion: {
+          create: jest.fn().mockResolvedValue({
+            id: 10,
+            versionNumber: "1.0.0",
+            versionDescription: "draft",
+            isDraft: true,
+            isActive: false,
+            published: false,
+            createdBy: "author@example.com",
+            createdAt: new Date(),
+          }),
+        },
+        questionVersion: { create: jest.fn().mockResolvedValue({ id: 100 }) },
+        versionHistory: { create: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await expect(
+        service.createVersion(
+          1,
+          {
+            versionNumber: "1.0.0",
+            versionDescription: "draft",
+            isDraft: true,
+            shouldActivate: false,
+          },
+          authorSession,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it("publishVersion rejects when the version's numberOfQuestionsPerAttempt exceeds its snapshot pool", async () => {
+      const version = {
+        id: 20,
+        assignmentId: 1,
+        versionNumber: "1.0.0",
+        versionDescription: "v1",
+        published: false,
+        isDraft: true,
+        isActive: false,
+        createdBy: "author@example.com",
+        createdAt: new Date(),
+        numberOfQuestionsPerAttempt: 15,
+        _count: { questionVersions: 5 },
+      };
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(version);
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      // Functional tx so the un-guarded flow completes; the guard must reject
+      // before the transaction ever runs.
+      const tx = {
+        assignmentVersion: {
+          update: jest
+            .fn()
+            .mockResolvedValue({ ...version, published: true, isActive: true }),
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+        assignment: { update: jest.fn().mockResolvedValue({}) },
+        versionHistory: { create: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await expect(
+        service.publishVersion(1, 20, { userSession: authorSession }),
+      ).rejects.toThrow(BadRequestException);
+      expect(tx.assignmentVersion.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe("question ordering in version snapshots", () => {
     const mockUserSession = {
       userId: "user123",

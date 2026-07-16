@@ -253,8 +253,8 @@ export function VersionTreeView({ assignmentId }: Props) {
               }`}
             />
 
-            <Tag className="h-4 w-4 text-indigo-600" />
-            <span className="font-semibold text-gray-900">
+            <Tag className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="font-semibold text-gray-900 dark:text-gray-100">
               v{row.original.versionNumber}
             </span>
           </div>
@@ -272,9 +272,9 @@ export function VersionTreeView({ assignmentId }: Props) {
         header: "Description",
         cell: ({ getValue }) => (
           <div className="max-w-xs">
-            <p className="text-sm text-gray-900 truncate">
+            <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
               {getValue() || (
-                <span className="italic text-gray-400">No description</span>
+                <span className="italic text-gray-400 dark:text-gray-500">No description</span>
               )}
             </p>
           </div>
@@ -289,32 +289,32 @@ export function VersionTreeView({ assignmentId }: Props) {
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-1">
             {row.original.isActive && (
-              <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full flex items-center space-x-1">
+              <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full flex items-center space-x-1">
                 <CheckCircle className="h-3 w-3" />
                 <span>Active</span>
               </span>
             )}
             {row.original.isCheckedOut && (
-              <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full flex items-center space-x-1">
+              <span className="px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full flex items-center space-x-1">
                 <Eye className="h-3 w-3" />
                 <span>Checked Out</span>
               </span>
             )}
             {row.original.isDraft ? (
-              <span className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-full">
+              <span className="px-2 py-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full">
                 Draft
               </span>
             ) : row.original.published ? (
-              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">
+              <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
                 Published
               </span>
             ) : (
-              <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full">
+              <span className="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
                 Unpublished
               </span>
             )}
             {row.original.isFavorite && (
-              <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full flex items-center space-x-1">
+              <span className="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full flex items-center space-x-1">
                 <Star className="h-3 w-3 fill-current" />
                 <span>Favorite</span>
               </span>
@@ -327,8 +327,8 @@ export function VersionTreeView({ assignmentId }: Props) {
         header: "Questions",
         cell: ({ getValue }) => (
           <div className="flex items-center space-x-1">
-            <Activity className="h-4 w-4 text-indigo-600" />
-            <span className="font-medium text-gray-900">{getValue()}</span>
+            <Activity className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="font-medium text-gray-900 dark:text-gray-100">{getValue()}</span>
           </div>
         ),
 
@@ -339,8 +339,8 @@ export function VersionTreeView({ assignmentId }: Props) {
         header: "Created By",
         cell: ({ getValue }) => (
           <div className="flex items-center space-x-1">
-            <User className="h-4 w-4 text-gray-500" />
-            <span className="text-sm text-gray-700 truncate max-w-25">
+            <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-700 dark:text-gray-200 truncate max-w-25">
               {getValue() || "Unknown"}
             </span>
           </div>
@@ -353,8 +353,8 @@ export function VersionTreeView({ assignmentId }: Props) {
         header: "Created",
         cell: ({ getValue }) => (
           <div className="flex items-center space-x-1">
-            <Clock className="h-4 w-4 text-gray-500" />
-            <span className="text-sm text-gray-700">{getValue()}</span>
+            <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-700 dark:text-gray-200">{getValue()}</span>
           </div>
         ),
 
@@ -371,7 +371,7 @@ export function VersionTreeView({ assignmentId }: Props) {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => handleViewDetails(row.original.actions, false)}
-              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
+              className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md transition-colors"
             >
               <Eye className="h-3 w-3" />
               <span>Details</span>
@@ -396,7 +396,7 @@ export function VersionTreeView({ assignmentId }: Props) {
               className={`p-1.5 rounded-md transition-colors ${
                 row.original.isFavorite
                   ? "text-yellow-500 hover:text-yellow-600"
-                  : "text-gray-400 hover:text-yellow-500"
+                  : "text-gray-400 dark:text-gray-500 hover:text-yellow-500"
               }`}
               title={
                 row.original.isFavorite
@@ -662,53 +662,53 @@ export function VersionTreeView({ assignmentId }: Props) {
 
   return (
     <div
-      className={`fixed top-32 left-0 bottom-0 bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 flex flex-col z-30 transition-all duration-300 ease-in-out ${
+      className={`fixed top-32 left-0 bottom-0 bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 flex flex-col z-30 transition-all duration-300 ease-in-out ${
         isChatbotOpen ? "right-[25vw]" : "right-0"
       }`}
     >
-      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 px-6 py-4 shadow-sm">
+      <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-6 py-4 shadow-sm dark:bg-gray-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4 gap-2">
             <button
               onClick={() => router.push(`/author/${assignmentId}`)}
-              className="flex items-center space-x-2 text-gray-600 hover:text-indigo-600 transition-colors duration-200 px-3 py-1.5 rounded-lg hover:bg-indigo-50"
+              className="flex items-center space-x-2 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-200 px-3 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
             >
               <ArrowLeft className="h-4 w-4" />
               <span className="font-medium">Back to Editor</span>
             </button>
 
-            <div className="h-6 w-px bg-gray-300" />
+            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
 
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <GitMerge className="h-5 w-5 text-indigo-600" />
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <GitMerge className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                   Version History
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Track and manage assignment versions
                 </p>
               </div>
             </div>
-            <div className="h-6 w-px bg-gray-300" />
+            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
 
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-4 text-sm">
-                <div className="flex items-center space-x-2 px-2 py-1 bg-green-50 rounded-full">
+                <div className="flex items-center space-x-2 px-2 py-1 bg-green-50 dark:bg-green-900/20 rounded-full">
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-green-700 font-medium">Published</span>
+                  <span className="text-green-700 dark:text-green-300 font-medium">Published</span>
                 </div>
-                <div className="flex items-center space-x-2 px-2 py-1 bg-purple-50 rounded-full">
+                <div className="flex items-center space-x-2 px-2 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-full">
                   <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                  <span className="text-purple-700 font-medium">
+                  <span className="text-purple-700 dark:text-purple-300 font-medium">
                     Checked Out
                   </span>
                 </div>
-                <div className="flex items-center space-x-2 px-2 py-1 bg-gray-50 rounded-full">
+                <div className="flex items-center space-x-2 px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded-full">
                   <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                  <span className="text-gray-700 font-medium">Version</span>
+                  <span className="text-gray-700 dark:text-gray-200 font-medium">Version</span>
                 </div>
               </div>
             </div>
@@ -716,86 +716,86 @@ export function VersionTreeView({ assignmentId }: Props) {
         </div>
       </div>
 
-      <div className="px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-gray-100">
+      <div className="px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-gray-100 dark:border-gray-700 dark:bg-gray-800">
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Hash className="h-4 w-4 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <Hash className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Versions</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Versions</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.totalVersions}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="h-4 w-4 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Published</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Published</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.publishedVersions}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Unpublished</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Unpublished</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.unpublishedVersions}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Edit3 className="h-4 w-4 text-orange-600" />
+              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                <Edit3 className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">My Private Drafts</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-500 dark:text-gray-400">My Private Drafts</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.totalDrafts}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <FileText className="h-4 w-4 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Latest Version</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Latest Version</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   v{versionStats.latestVersion?.versionNumber || 0}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Activity className="h-4 w-4 text-indigo-600" />
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <Activity className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Questions</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Questions</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.totalQuestions}
                 </p>
               </div>
@@ -804,16 +804,16 @@ export function VersionTreeView({ assignmentId }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto dark:bg-gray-800">
         <div className="flex-1 p-6 overflow-y-auto">
-          <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-20">
-            <div className="mb-6 flex items-center justify-between">
+          <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-20 dark:bg-gray-800">
+            <div className="mb-6 flex items-center justify-between ">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                  <GitBranch className="h-5 w-5 text-indigo-600" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center space-x-2  ">
+                  <GitBranch className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                   <span>Version History</span>
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   Searchable and filterable table of all assignment versions
                 </p>
               </div>
@@ -832,19 +832,19 @@ export function VersionTreeView({ assignmentId }: Props) {
 
             <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center justify-between">
               <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
                   placeholder="Search versions..."
                   value={globalFilter ?? ""}
                   onChange={(e) => setGlobalFilter(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-800"
                 />
 
                 {globalFilter && (
                   <button
                     onClick={() => setGlobalFilter("")}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                   >
                     <svg
                       className="h-4 w-4"
@@ -863,7 +863,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                 )}
               </div>
 
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                 <span>
                   Showing {table.getFilteredRowModel().rows.length} of{" "}
                   {versions.length} versions
@@ -871,16 +871,16 @@ export function VersionTreeView({ assignmentId }: Props) {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-gray-200">
+            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-900">
                     {table.getHeaderGroups().map((headerGroup) => (
                       <tr key={headerGroup.id}>
                         {headerGroup.headers.map((header) => (
                           <th
                             key={header.id}
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                             onClick={
                               header.column.getCanSort()
                                 ? header.column.getToggleSortingHandler()
@@ -900,11 +900,11 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 <span className="flex flex-col">
                                   {{
                                     asc: (
-                                      <SortAsc className="h-3 w-3 text-gray-400" />
+                                      <SortAsc className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                                     ),
 
                                     desc: (
-                                      <SortDesc className="h-3 w-3 text-gray-400" />
+                                      <SortDesc className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                                     ),
                                   }[header.column.getIsSorted() as string] ?? (
                                     <div className="flex flex-col">
@@ -920,14 +920,14 @@ export function VersionTreeView({ assignmentId }: Props) {
                       </tr>
                     ))}
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {table.getRowModel().rows.map((row, index) => (
                       <motion.tr
                         key={row.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="hover:bg-gray-50 transition-colors"
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
                         {row.getVisibleCells().map((cell) => (
                           <td
@@ -949,24 +949,24 @@ export function VersionTreeView({ assignmentId }: Props) {
 
             {table.getFilteredRowModel().rows.length === 0 && (
               <div className="text-center py-12">
-                <div className="p-4 bg-gray-50 rounded-2xl mx-auto w-fit mb-4">
+                <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl mx-auto w-fit mb-4">
                   <GitBranch className="h-8 w-8 mx-auto text-gray-300" />
                 </div>
                 {globalFilter ? (
                   <>
-                    <p className="text-sm font-medium text-gray-600 mb-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
                       No versions match your search
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
                       Try adjusting your search terms
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-medium text-gray-600 mb-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
                       No versions yet
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
                       Save your first version to see it here
                     </p>
                   </>
@@ -975,9 +975,9 @@ export function VersionTreeView({ assignmentId }: Props) {
             )}
 
             {table.getPageCount() > 1 && (
-              <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+              <div className="flex items-center justify-between px-6 py-3 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-700">
+                  <span className="text-sm text-gray-700 dark:text-gray-200">
                     Page {table.getState().pagination.pageIndex + 1} of{" "}
                     {table.getPageCount()}
                   </span>
@@ -986,14 +986,14 @@ export function VersionTreeView({ assignmentId }: Props) {
                   <button
                     onClick={() => table.previousPage()}
                     disabled={!table.getCanPreviousPage()}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
                   <button
                     onClick={() => table.nextPage()}
                     disabled={!table.getCanNextPage()}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>
@@ -1009,9 +1009,9 @@ export function VersionTreeView({ assignmentId }: Props) {
           <>
             {isLoadingDetails && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 flex items-center space-x-3">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 flex items-center space-x-3">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-                  <span className="text-gray-700 font-medium">
+                  <span className="text-gray-700 dark:text-gray-200 font-medium">
                     Loading version details...
                   </span>
                 </div>
@@ -1030,12 +1030,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.9, opacity: 0 }}
-                  className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-semibold text-gray-900">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                         {(selectedVersionDetails || selectedVersion)
                           .versionNumber
                           ? `Version ${(selectedVersionDetails || selectedVersion).versionNumber} Details`
@@ -1043,7 +1043,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                       </h2>
                       <button
                         onClick={() => setShowDetails(false)}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                       >
                         ✕
                       </button>
@@ -1054,20 +1054,20 @@ export function VersionTreeView({ assignmentId }: Props) {
                     <div className="space-y-6">
                       <div className="grid grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Assignment Name
                           </label>
-                          <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
+                          <p className="text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
                             {(selectedVersionDetails || selectedVersion).name ||
                               "Untitled Assignment"}
                           </p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Created
                           </label>
-                          <div className="bg-gray-50 p-3 rounded-lg">
-                            <p className="text-gray-900 font-medium">
+                          <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
+                            <p className="text-gray-900 dark:text-gray-100 font-medium">
                               {formatVersionAge(
                                 (selectedVersionDetails || selectedVersion)
                                   .createdAt,
@@ -1075,7 +1075,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                             </p>
                             {(selectedVersionDetails || selectedVersion)
                               .createdBy && (
-                              <p className="text-sm text-gray-600 mt-1">
+                              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                                 by{" "}
                                 {
                                   (selectedVersionDetails || selectedVersion)
@@ -1089,12 +1089,12 @@ export function VersionTreeView({ assignmentId }: Props) {
 
                       <div className="grid grid-cols-3 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Version Number
                           </label>
-                          <div className="bg-gray-50 p-3 rounded-lg flex items-center space-x-2">
-                            <Tag className="h-4 w-4 text-indigo-600" />
-                            <span className="text-gray-900 font-semibold">
+                          <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg flex items-center space-x-2">
+                            <Tag className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                            <span className="text-gray-900 dark:text-gray-100 font-semibold">
                               v
                               {
                                 (selectedVersionDetails || selectedVersion)
@@ -1104,28 +1104,28 @@ export function VersionTreeView({ assignmentId }: Props) {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Status
                           </label>
-                          <div className="bg-gray-50 p-3 rounded-lg">
+                          <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
                             <div className="flex flex-wrap gap-1">
                               {(selectedVersionDetails || selectedVersion)
                                 .isActive && (
-                                <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full flex items-center space-x-1">
+                                <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full flex items-center space-x-1">
                                   <CheckCircle className="h-3 w-3" />
                                   <span>Active</span>
                                 </span>
                               )}
                               {(selectedVersionDetails || selectedVersion)
                                 .isDraft && (
-                                <span className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-full flex items-center space-x-1">
+                                <span className="px-2 py-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full flex items-center space-x-1">
                                   <FileText className="h-3 w-3" />
                                   <span>Draft</span>
                                 </span>
                               )}
                               {(selectedVersionDetails || selectedVersion)
                                 .published && (
-                                <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full">
+                                <span className="px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full">
                                   Published
                                 </span>
                               )}
@@ -1133,12 +1133,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Questions
                           </label>
-                          <div className="bg-gray-50 p-3 rounded-lg flex items-center space-x-2">
-                            <Activity className="h-4 w-4 text-purple-600" />
-                            <span className="text-gray-900 font-semibold">
+                          <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg flex items-center space-x-2">
+                            <Activity className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            <span className="text-gray-900 dark:text-gray-100 font-semibold">
                               {getVersionQuestionCount(
                                 selectedVersionDetails || selectedVersion,
                               )}
@@ -1149,11 +1149,11 @@ export function VersionTreeView({ assignmentId }: Props) {
 
                       {selectedVersion.versionDescription && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Version Description
                           </label>
-                          <div className="bg-purple-50  p-3 rounded-lg">
-                            <p className="text-gray-900">
+                          <div className="bg-purple-50 dark:bg-purple-900/20  p-3 rounded-lg">
+                            <p className="text-gray-900 dark:text-gray-100">
                               {
                                 (selectedVersionDetails || selectedVersion)
                                   .versionDescription
@@ -1164,18 +1164,18 @@ export function VersionTreeView({ assignmentId }: Props) {
                       )}
 
                       <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
                           Assignment Content
                         </h3>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center space-x-2">
-                            <FileText className="h-4 w-4 text-purple-600" />
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2 flex items-center space-x-2">
+                            <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                             <span>Introduction</span>
                           </label>
-                          <div className="quill-viewer bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
+                          <div className="quill-viewer bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto">
                             <div
-                              className="text-gray-900 prose prose-sm max-w-none"
+                              className="text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
                               suppressHydrationWarning
                               dangerouslySetInnerHTML={{
                                 __html: sanitizeHtml(
@@ -1188,13 +1188,13 @@ export function VersionTreeView({ assignmentId }: Props) {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center space-x-2">
-                            <FileText className="h-4 w-4 text-green-600" />
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2 flex items-center space-x-2">
+                            <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
                             <span>Instructions</span>
                           </label>
-                          <div className="quill-viewer bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
+                          <div className="quill-viewer bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto">
                             <div
-                              className="text-gray-900 prose prose-sm max-w-none"
+                              className="text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
                               suppressHydrationWarning
                               dangerouslySetInnerHTML={{
                                 __html: sanitizeHtml(
@@ -1209,13 +1209,13 @@ export function VersionTreeView({ assignmentId }: Props) {
                         {(selectedVersionDetails || selectedVersion)
                           .gradingCriteriaOverview && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center space-x-2">
-                              <BarChart3 className="h-4 w-4 text-purple-600" />
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2 flex items-center space-x-2">
+                              <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                               <span>Grading Criteria</span>
                             </label>
-                            <div className="quill-viewer bg-gray-50 border rounded-lg p-4 max-h-40 overflow-y-auto">
+                            <div className="quill-viewer bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto">
                               <div
-                                className="text-gray-900 prose prose-sm max-w-none"
+                                className="text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
                                 suppressHydrationWarning
                                 dangerouslySetInnerHTML={{
                                   __html: sanitizeHtml(
@@ -1234,8 +1234,8 @@ export function VersionTreeView({ assignmentId }: Props) {
                         (selectedVersionDetails || selectedVersion)
                           .questionVersions.length > 0 && (
                           <div className="space-y-4">
-                            <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center space-x-2">
-                              <Activity className="h-5 w-5 text-indigo-600" />
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2 flex items-center space-x-2">
+                              <Activity className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                               <span>
                                 Questions (
                                 {getVersionQuestionCount(
@@ -1256,19 +1256,19 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 return (
                                   <div
                                     key={q.id || index}
-                                    className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+                                    className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                                   >
                                     <div className="flex items-start justify-between">
                                       <div className="flex-1">
                                         <div className="flex items-center space-x-2 mb-2">
-                                          <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2 py-1 rounded-full">
+                                          <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 text-xs font-medium px-2 py-1 rounded-full">
                                             Q{index + 1}
                                           </span>
-                                          <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full">
+                                          <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 text-xs font-medium px-2 py-1 rounded-full">
                                             {questionType}
                                           </span>
                                         </div>
-                                        <p className="text-sm text-gray-700 line-clamp-2 font-medium">
+                                        <p className="text-sm text-gray-700 dark:text-gray-200 line-clamp-2 font-medium">
                                           {q.question
                                             ? q.question.length > 100
                                               ? `${q.question.substring(0, 100)}...`
@@ -1276,13 +1276,13 @@ export function VersionTreeView({ assignmentId }: Props) {
                                             : "No question text"}
                                         </p>
                                         {q.responseType && (
-                                          <p className="text-xs text-gray-500 mt-1">
+                                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                             Response type: {q.responseType}
                                           </p>
                                         )}
                                       </div>
                                       <div className="text-right ml-4">
-                                        <div className="bg-green-100 text-green-800 text-sm font-semibold px-3 py-1 rounded-full">
+                                        <div className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-sm font-semibold px-3 py-1 rounded-full">
                                           {totalPoints} pts
                                         </div>
                                       </div>
@@ -1292,12 +1292,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                               })}
                             </div>
 
-                            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3">
                               <div className="flex items-center justify-between text-sm">
-                                <span className="text-indigo-700 font-medium">
+                                <span className="text-indigo-700 dark:text-indigo-300 font-medium">
                                   Total Points:
                                 </span>
-                                <span className="text-indigo-900 font-bold text-lg">
+                                <span className="text-indigo-900 dark:text-indigo-200 font-bold text-lg">
                                   {(
                                     (selectedVersionDetails || selectedVersion)
                                       ?.questionVersions || []
@@ -1314,25 +1314,25 @@ export function VersionTreeView({ assignmentId }: Props) {
                         )}
 
                       <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
                           Configuration
                         </h3>
 
                         <div className="grid grid-cols-2 gap-6">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
-                              <BarChart3 className="h-4 w-4 text-purple-600" />
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-3 flex items-center space-x-2">
+                              <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                               <span>Assignment Settings</span>
                             </label>
-                            <div className="bg-gray-50 p-4 rounded-lg space-y-3 text-sm">
+                            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg space-y-3 text-sm">
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">Graded:</span>
+                                <span className="text-gray-600 dark:text-gray-300">Graded:</span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
                                       .graded
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-gray-100 text-gray-700"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
                                   }`}
                                 >
                                   {(selectedVersionDetails || selectedVersion)
@@ -1342,10 +1342,10 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Max Attempts:
                                 </span>
-                                <span className="font-medium text-gray-900">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .numAttempts === -1
                                     ? "Unlimited"
@@ -1356,10 +1356,10 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Attempts Before Cooldown Period:
                                 </span>
-                                <span className="font-medium text-gray-900">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .attemptsBeforeCoolDown === 0
                                     ? "Never wait"
@@ -1370,10 +1370,10 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Time Learners Wait Between Attempts (Minutes):
                                 </span>
-                                <span className="font-medium text-gray-900">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .attemptsBeforeCoolDown === 0 ||
                                   (selectedVersionDetails || selectedVersion)
@@ -1386,20 +1386,20 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Passing Grade:
                                 </span>
-                                <span className="font-medium text-gray-900">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .passingGrade || 0}
                                   %
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Time Limit:
                                 </span>
-                                <span className="font-medium text-gray-900">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .allotedTimeMinutes
                                     ? `${(selectedVersionDetails || selectedVersion).allotedTimeMinutes} mins`
@@ -1407,8 +1407,8 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">Display:</span>
-                                <span className="font-medium text-gray-900">
+                                <span className="text-gray-600 dark:text-gray-300">Display:</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .questionDisplay || "Default"}
                                 </span>
@@ -1416,21 +1416,21 @@ export function VersionTreeView({ assignmentId }: Props) {
                             </div>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center space-x-2">
-                              <Eye className="h-4 w-4 text-green-600" />
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-3 flex items-center space-x-2">
+                              <Eye className="h-4 w-4 text-green-600 dark:text-green-400" />
                               <span>Learner Visibility</span>
                             </label>
-                            <div className="bg-gray-50 p-4 rounded-lg space-y-3 text-sm">
+                            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg space-y-3 text-sm">
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Assignment Score:
                                 </span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
                                       .showAssignmentScore
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-red-100 text-red-700"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
                                   }`}
                                 >
                                   {(selectedVersionDetails || selectedVersion)
@@ -1440,15 +1440,15 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Question Scores:
                                 </span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
                                       .showQuestionScore
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-red-100 text-red-700"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
                                   }`}
                                 >
                                   {(selectedVersionDetails || selectedVersion)
@@ -1458,15 +1458,15 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   AI Feedback:
                                 </span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
                                       .showSubmissionFeedback
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-red-100 text-red-700"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
                                   }`}
                                 >
                                   {(selectedVersionDetails || selectedVersion)
@@ -1476,15 +1476,15 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Questions:
                                 </span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
                                       .showQuestions
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-red-100 text-red-700"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
                                   }`}
                                 >
                                   {(selectedVersionDetails || selectedVersion)
@@ -1494,20 +1494,20 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 dark:text-gray-300">
                                   Correct Answer Visibility:
                                 </span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
                                       .correctAnswerVisibility === "ALWAYS"
-                                      ? "bg-green-100 text-green-700"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
                                       : (
                                             selectedVersionDetails ||
                                             selectedVersion
                                           ).correctAnswerVisibility === "NEVER"
-                                        ? "bg-red-100 text-red-700"
-                                        : "bg-yellow-100 text-yellow-700"
+                                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                                        : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300"
                                   }`}
                                 >
                                   {
@@ -1523,10 +1523,10 @@ export function VersionTreeView({ assignmentId }: Props) {
                     </div>
                   </div>
 
-                  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3 ">
+                  <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-end space-x-3 ">
                     <button
                       onClick={() => setShowDetails(false)}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                     >
                       Close
                     </button>
@@ -1598,13 +1598,13 @@ export function VersionTreeView({ assignmentId }: Props) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-red-100 rounded-lg">
+                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
                   <svg
-                    className="h-6 w-6 text-red-600"
+                    className="h-6 w-6 text-red-600 dark:text-red-400"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -1617,13 +1617,13 @@ export function VersionTreeView({ assignmentId }: Props) {
                     />
                   </svg>
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                   Delete Version
                 </h2>
               </div>
 
               <div className="mb-6">
-                <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 p-4 mb-4">
                   <div className="flex">
                     <div className="flex-shrink-0">
                       <svg
@@ -1641,7 +1641,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm text-red-700">
+                      <p className="text-sm text-red-700 dark:text-red-300">
                         <strong>Warning:</strong> This action is irreversible.
                         Version <strong>{versionToDelete.versionNumber}</strong>{" "}
                         will be permanently deleted.
@@ -1652,7 +1652,7 @@ export function VersionTreeView({ assignmentId }: Props) {
 
                 {versionToDelete.isActive && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                       This is the active version. Select a replacement version
                       to activate:
                     </label>
@@ -1661,7 +1661,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                       onChange={(e) =>
                         setReplacementVersionId(Number(e.target.value))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                       required
                     >
                       <option value="">Select a version...</option>
@@ -1681,7 +1681,7 @@ export function VersionTreeView({ assignmentId }: Props) {
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={cancelDelete}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
                   disabled={isDeleting}
                 >
                   Cancel
@@ -1737,20 +1737,20 @@ export function VersionTreeView({ assignmentId }: Props) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Edit3 className="h-6 w-6 text-blue-600" />
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Edit3 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                   Edit Version Number
                 </h2>
               </div>
 
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                   Version Number
                 </label>
                 <input
@@ -1758,10 +1758,10 @@ export function VersionTreeView({ assignmentId }: Props) {
                   value={newVersionNumber}
                   onChange={(e) => setNewVersionNumber(e.target.value)}
                   placeholder="e.g., 1.2.0, 2.0.0-rc1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
 
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Current: v{versionToEdit.versionNumber}
                 </p>
               </div>
@@ -1769,7 +1769,7 @@ export function VersionTreeView({ assignmentId }: Props) {
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={cancelEdit}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -1802,20 +1802,20 @@ export function VersionTreeView({ assignmentId }: Props) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-yellow-50 to-amber-50">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-gray-900 dark:to-gray-900">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-yellow-200 rounded-lg">
-                      <Star className="h-6 w-6 text-yellow-600 fill-current" />
+                    <div className="p-2 bg-yellow-200 dark:bg-yellow-900/30 rounded-lg">
+                      <Star className="h-6 w-6 text-yellow-600 dark:text-yellow-400 fill-current" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-semibold text-gray-900">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                         Starred Versions
                       </h2>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
                         {getFavoriteVersions().length} versions you've marked as
                         important
                       </p>
@@ -1823,7 +1823,7 @@ export function VersionTreeView({ assignmentId }: Props) {
                   </div>
                   <button
                     onClick={() => setShowFavoritesModal(false)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                    className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                   >
                     <svg
                       className="h-6 w-6"
@@ -1858,14 +1858,14 @@ export function VersionTreeView({ assignmentId }: Props) {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.1 }}
-                            className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg p-6 border border-yellow-200 hover:border-yellow-300 transition-all duration-200 hover:shadow-lg relative"
+                            className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-gray-900 dark:to-gray-900 rounded-lg p-6 border border-yellow-200 dark:border-gray-700 hover:border-yellow-300 dark:hover:border-gray-600 transition-all duration-200 hover:shadow-lg relative"
                           >
                             <div className="absolute top-3 right-3">
                               <button
                                 onClick={() =>
                                   toggleFavoriteVersion(version.id)
                                 }
-                                className="text-yellow-500 hover:text-yellow-600 transition-colors p-1 rounded-full hover:bg-yellow-100"
+                                className="text-yellow-500 hover:text-yellow-600 transition-colors p-1 rounded-full hover:bg-yellow-100 dark:hover:bg-gray-700"
                                 title="Remove from favorites"
                               >
                                 <Star className="h-5 w-5 fill-current" />
@@ -1874,36 +1874,36 @@ export function VersionTreeView({ assignmentId }: Props) {
 
                             <div className="mb-4">
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="p-2 bg-yellow-200 rounded-lg">
-                                  <GitCommit className="h-5 w-5 text-yellow-600" />
+                                <div className="p-2 bg-yellow-200 dark:bg-yellow-900/30 rounded-lg">
+                                  <GitCommit className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                                 </div>
                                 <div>
-                                  <h3 className="font-semibold text-gray-900 text-lg">
+                                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
                                     v{version.versionNumber}
                                   </h3>
                                   <div className="flex flex-wrap gap-2 mt-1">
                                     {isCurrentVersion && (
-                                      <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full flex items-center space-x-1">
+                                      <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full flex items-center space-x-1">
                                         <CheckCircle className="h-3 w-3" />
                                         <span>Active</span>
                                       </span>
                                     )}
                                     {isCheckedOut && (
-                                      <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full flex items-center space-x-1">
+                                      <span className="px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full flex items-center space-x-1">
                                         <Eye className="h-3 w-3" />
                                         <span>Checked Out</span>
                                       </span>
                                     )}
                                     {version.isDraft ? (
-                                      <span className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-full">
+                                      <span className="px-2 py-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full">
                                         Draft
                                       </span>
                                     ) : version.published ? (
-                                      <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">
+                                      <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
                                         Published
                                       </span>
                                     ) : (
-                                      <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full">
+                                      <span className="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
                                         Unpublished
                                       </span>
                                     )}
@@ -1912,12 +1912,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                               </div>
 
                               {version.versionDescription && (
-                                <p className="text-sm text-gray-700 mb-3 line-clamp-3">
+                                <p className="text-sm text-gray-700 dark:text-gray-200 mb-3 line-clamp-3">
                                   {version.versionDescription}
                                 </p>
                               )}
 
-                              <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                              <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300 mb-4">
                                 <div className="flex items-center space-x-1">
                                   <Clock className="h-4 w-4" />
                                   <span>
@@ -1976,13 +1976,13 @@ export function VersionTreeView({ assignmentId }: Props) {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <div className="p-4 bg-gray-50 rounded-2xl mx-auto w-fit mb-4">
-                      <Star className="h-8 w-8 mx-auto text-gray-300" />
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl mx-auto w-fit mb-4">
+                      <Star className="h-8 w-8 mx-auto text-gray-300 dark:text-gray-600" />
                     </div>
-                    <p className="text-sm font-medium text-gray-600 mb-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
                       No starred versions yet
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
                       Click the star icon on any version to mark it as a
                       favorite
                     </p>
@@ -1990,10 +1990,10 @@ export function VersionTreeView({ assignmentId }: Props) {
                 )}
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-end">
                 <button
                   onClick={() => setShowFavoritesModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Close
                 </button>

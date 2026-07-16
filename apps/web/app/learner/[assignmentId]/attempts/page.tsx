@@ -10,6 +10,7 @@ import DataTable, {
   createTheme,
   TableColumn,
 } from "react-data-table-component";
+import { useTheme } from "@/hooks/useTheme";
 
 createTheme("whiteVioletTheme", {
   text: {
@@ -36,6 +37,37 @@ createTheme("whiteVioletTheme", {
   },
 });
 
+// The third argument makes unset tokens (pagination buttons, selected rows,
+// disabled text) inherit the library's dark defaults instead of the light ones.
+createTheme(
+  "darkVioletTheme",
+  {
+    text: {
+      primary: "#E5E7EB",
+      secondary: "#9CA3AF",
+    },
+    background: {
+      default: "#111827",
+    },
+    context: {
+      background: "#312E81",
+      text: "#E0E7FF",
+    },
+    divider: {
+      default: "#374151",
+    },
+    highlightOnHover: {
+      default: "#1F2937",
+      text: "#E0E7FF",
+    },
+    striped: {
+      default: "#1F2937",
+      text: "#E5E7EB",
+    },
+  },
+  "dark",
+);
+
 interface AttemptTableRow {
   id: number;
   assignmentId?: number;
@@ -55,6 +87,7 @@ export default function AssignmentAttempts() {
   const [assignmentDetails] = useAssignmentDetails((state) => [
     state.assignmentDetails,
   ]);
+  const { isDark } = useTheme();
 
   const sortedAttempts = [...listOfAttempts].sort((a, b) => {
     if (!a.createdAt || !b.createdAt) return 0;
@@ -247,7 +280,7 @@ export default function AssignmentAttempts() {
             pointerOnHover
             defaultSortFieldId={2}
             defaultSortAsc={false}
-            theme="whiteVioletTheme"
+            theme={isDark ? "darkVioletTheme" : "whiteVioletTheme"}
             pagination
           />
         ) : (

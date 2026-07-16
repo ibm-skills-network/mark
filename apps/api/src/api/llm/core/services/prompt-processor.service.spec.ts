@@ -6,6 +6,7 @@ import { PromptProcessorService } from "./prompt-processor.service";
 describe("PromptProcessorService", () => {
   const logger = {
     error: jest.fn(),
+    info: jest.fn(),
   };
   const parentLogger = {
     child: jest.fn(),
@@ -113,7 +114,7 @@ describe("PromptProcessorService", () => {
 });
 
 describe("PromptProcessorService.processStructuredPromptForFeature", () => {
-  const logger = { error: jest.fn(), warn: jest.fn() };
+  const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn() };
   const parentLogger = { child: jest.fn() };
   const usageTracker = { trackUsage: jest.fn() };
   const aiFlags = { assertUsageEnabled: jest.fn() };
@@ -158,6 +159,15 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
     );
 
     expect(result).toEqual({ grade: 4 });
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gpt-4o-mini] TEXT_GRADING - grade this ; {"grade":4}',
+      expect.objectContaining({
+        ai_invocation: true,
+        model: "gpt-4o-mini",
+        purpose: "TEXT_GRADING",
+        assignment_id: 77,
+      }),
+    );
     // The string path that does the brittle JSON.parse must NOT be used.
     expect(llm.invoke).not.toHaveBeenCalled();
     expect(invokeStructured).toHaveBeenCalledTimes(1);

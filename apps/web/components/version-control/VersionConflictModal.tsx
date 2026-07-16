@@ -67,42 +67,42 @@ export function VersionConflictModal({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 400 }}
-              className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl"
+              className="relative w-full max-w-lg bg-white dark:bg-gray-800 rounded-xl shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-amber-100 rounded-lg">
-                      <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-semibold text-gray-900">
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                         Version Already Exists
                       </h2>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         Choose how to proceed
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={onClose}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                   >
-                    <X className="h-5 w-5 text-gray-400" />
+                    <X className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                   </button>
                 </div>
 
-                <div className="mb-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
                   <div className="flex items-start space-x-3">
-                    <Tag className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-amber-800">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                         Version{" "}
                         <span className="font-mono">{requestedVersion}</span>{" "}
                         already exists
                       </p>
-                      <p className="text-xs text-amber-700 mt-1">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                         This version was created previously and contains{" "}
                         {existingVersion.questionCount} questions
                       </p>
@@ -110,51 +110,51 @@ export function VersionConflictModal({
                   </div>
                 </div>
 
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">
+                <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
                     Existing Version Details
                   </h3>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
-                        <Tag className="h-3 w-3 text-gray-500" />
-                        <span className="text-gray-600">Version</span>
+                        <Tag className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                        <span className="text-gray-600 dark:text-gray-300">Version</span>
                       </div>
-                      <span className="font-mono font-medium text-gray-900">
+                      <span className="font-mono font-medium text-gray-900 dark:text-gray-100">
                         {existingVersion.versionNumber}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
-                        <Clock className="h-3 w-3 text-gray-500" />
-                        <span className="text-gray-600">Created</span>
+                        <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                        <span className="text-gray-600 dark:text-gray-300">Created</span>
                       </div>
-                      <span className="text-gray-900">
+                      <span className="text-gray-900 dark:text-gray-100">
                         {formatVersionAge(existingVersion.createdAt)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
-                        <User className="h-3 w-3 text-gray-500" />
-                        <span className="text-gray-600">Created by</span>
+                        <User className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                        <span className="text-gray-600 dark:text-gray-300">Created by</span>
                       </div>
-                      <span className="text-gray-900">
+                      <span className="text-gray-900 dark:text-gray-100">
                         {existingVersion.createdBy}
                       </span>
                     </div>
                     {existingVersion.versionDescription && (
                       <div className="text-xs">
                         <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-gray-600">Description</span>
+                          <span className="text-gray-600 dark:text-gray-300">Description</span>
                         </div>
-                        <p className="text-gray-900 bg-white p-2 rounded border text-xs">
+                        <p className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 p-2 rounded border text-xs">
                           {existingVersion.versionDescription}
                         </p>
                       </div>
                     )}
                     <div className="flex space-x-1 pt-1">
                       {existingVersion.isDraft && (
-                        <span className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">
+                        <span className="px-2 py-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full">
                           Draft
                         </span>
                       )}
@@ -182,14 +182,14 @@ export function VersionConflictModal({
 
                   <button
                     onClick={onClose}
-                    className="w-full px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border border-gray-300 rounded-lg transition-colors"
+                    className="w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
                 </div>
 
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                  <div className="text-xs text-blue-700">
+                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
                     <p className="font-medium mb-1">What happens next?</p>
                     <ul className="space-y-1 text-xs">
                       <li>

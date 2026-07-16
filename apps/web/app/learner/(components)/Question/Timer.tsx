@@ -184,6 +184,10 @@ function Timer(props: Props) {
     setTotalPointsPossible(res.totalPossiblePoints);
     if (grade !== undefined) {
       setGrade(grade * 100);
+    } else {
+      // No grade on this submission (score hidden): clear any grade left
+      // from a previous attempt so the success page doesn't show it.
+      setGrade(null);
     }
     setShowSubmissionFeedback(res.showSubmissionFeedback);
     for (const question of questions) {
@@ -266,7 +270,7 @@ function Timer(props: Props) {
 
   return (
     <div className="flex items-center space-x-2" {...props}>
-      <div className="text-gray-600 text-base font-medium leading-tight">
+      <div className="text-gray-600 dark:text-gray-300 text-base font-medium leading-tight">
         Time Remaining:
       </div>
       {hasCountdown ? (
