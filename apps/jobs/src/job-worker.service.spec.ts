@@ -39,7 +39,7 @@ type JobWorkerServiceTestAccessor = JobWorkerService & {
     concurrency: number,
     options?: { lockDuration?: number; maxStalledCount?: number },
   ) => unknown;
-  resolveConsumedQueues: () => Set<string>;
+  resolveConsumedQueues: (knownQueues: string[]) => Set<string>;
 };
 
 const asTestAccessor = (s: JobWorkerService): JobWorkerServiceTestAccessor =>
@@ -1705,7 +1705,7 @@ describe("JobWorkerService", () => {
     it("returns all queues when JOB_WORKER_QUEUES is unset", () => {
       delete process.env.JOB_WORKER_QUEUES;
       const accessor = service as unknown as JobWorkerServiceTestAccessor;
-      expect([...accessor.resolveConsumedQueues()].sort()).toEqual(
+      expect([...accessor.resolveConsumedQueues(allQueues)].sort()).toEqual(
         [...allQueues].sort(),
       );
     });
@@ -1713,13 +1713,15 @@ describe("JobWorkerService", () => {
     it("returns all queues when JOB_WORKER_QUEUES is blank", () => {
       process.env.JOB_WORKER_QUEUES = "   ";
       const accessor = service as unknown as JobWorkerServiceTestAccessor;
-      expect(accessor.resolveConsumedQueues().size).toBe(allQueues.length);
+      expect(accessor.resolveConsumedQueues(allQueues).size).toBe(
+        allQueues.length,
+      );
     });
 
     it("returns only the listed queues, trimming whitespace", () => {
       process.env.JOB_WORKER_QUEUES = " mark.attempt.heavy , mark.attempt ";
       const accessor = service as unknown as JobWorkerServiceTestAccessor;
-      expect([...accessor.resolveConsumedQueues()].sort()).toEqual([
+      expect([...accessor.resolveConsumedQueues(allQueues)].sort()).toEqual([
         "mark.attempt",
         "mark.attempt.heavy",
       ]);
@@ -1728,9 +1730,23 @@ describe("JobWorkerService", () => {
     it("throws on an unknown queue name", () => {
       process.env.JOB_WORKER_QUEUES = "mark.attempt.hevy";
       const accessor = service as unknown as JobWorkerServiceTestAccessor;
-      expect(() => accessor.resolveConsumedQueues()).toThrow(
+      expect(() => accessor.resolveConsumedQueues(allQueues)).toThrow(
         /unknown queue name/i,
       );
+    });
+
+    it("throws when a requested queue name has no worker spec, even if it is a valid queue name", () => {
+      // A queue that exists in JOB_QUEUE_NAMES but is absent from this pod's
+      // worker specs must not pass validation — it would otherwise be claimed
+      // as consumed in the heartbeat while starting no worker for it.
+      process.env.JOB_WORKER_QUEUES = JOB_QUEUE_NAMES.ATTEMPT_HEAVY;
+      const accessor = service as unknown as JobWorkerServiceTestAccessor;
+      const specQueuesWithoutHeavy = allQueues.filter(
+        (name) => name !== JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+      );
+      expect(() =>
+        accessor.resolveConsumedQueues(specQueuesWithoutHeavy),
+      ).toThrow(/unknown queue name/i);
     });
   });
 

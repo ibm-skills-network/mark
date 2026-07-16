@@ -263,7 +263,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       },
     ];
 
-    const consumedQueues = this.resolveConsumedQueues();
+    const consumedQueues = this.resolveConsumedQueues(
+      workerSpecs.map((spec) => spec.queueName),
+    );
     const activeSpecs = workerSpecs.filter((spec) =>
       consumedQueues.has(spec.queueName),
     );
@@ -473,21 +475,23 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Parses JOB_WORKER_QUEUES into the set of queues this pod consumes.
-  // Unset/blank means ALL queues (local dev and single-deployment envs keep
-  // today's behavior). An unknown queue name throws so the pod crash-loops
-  // loudly at boot — a typo that silently consumed nothing would strand a
-  // queue with no worker and no error anywhere.
-  private resolveConsumedQueues(): Set<string> {
-    const allQueues = Object.values(JOB_QUEUE_NAMES) as string[];
+  // Unset/blank means ALL queues this pod has a worker for (local dev and
+  // single-deployment envs keep today's behavior). Validation is against the
+  // caller-supplied queues that actually have a worker spec — not the raw
+  // JOB_QUEUE_NAMES list — so a queue name that exists but has no worker spec
+  // cannot pass validation and be claimed as consumed while starting no
+  // worker (a silent no-op). An unknown queue name throws so the pod
+  // crash-loops loudly at boot rather than stranding a queue with no worker.
+  private resolveConsumedQueues(knownQueues: string[]): Set<string> {
     const raw = process.env.JOB_WORKER_QUEUES;
     if (raw === undefined || raw.trim() === "") {
-      return new Set(allQueues);
+      return new Set(knownQueues);
     }
     const requested = raw
       .split(",")
       .map((name) => name.trim())
       .filter((name) => name !== "");
-    const unknown = requested.filter((name) => !allQueues.includes(name));
+    const unknown = requested.filter((name) => !knownQueues.includes(name));
     if (unknown.length > 0) {
       throw new Error(
         `JOB_WORKER_QUEUES contains unknown queue name(s): ${unknown.join(", ")}`,
