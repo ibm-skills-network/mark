@@ -19,6 +19,8 @@
 
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
 import { CanonicalSubmission } from "src/api/attempt/services/structured-content.models";
+import { EvidenceChunkingService } from "../evidence-chunking.service";
+import { SubmissionQualityService } from "../submission-quality.service";
 
 // ── Helper to build a minimal LearnerFileUpload ────────────────────────────
 
@@ -95,6 +97,8 @@ function buildService() {
 
   // Stub the methods that call external services (LLM, S3, etc.)
   service.evidenceBasedGrading = { gradeSubmission: jest.fn() };
+  service.evidenceChunking = new EvidenceChunkingService();
+  service.submissionQuality = new SubmissionQualityService();
   service.pdfAnnotationService = {};
   service.s3Service = {};
   service.moderationService = {
@@ -109,6 +113,67 @@ function buildService() {
 
   return service;
 }
+
+describe("FileGradingService - evidence fallback completion scoring", () => {
+  it("does not count a generated validator report as learner content", async () => {
+    const service = buildService();
+    service.evidenceBasedGrading.gradeSubmission.mockRejectedValue(
+      new Error("grading failed"),
+    );
+
+    const structure: CanonicalSubmission = {
+      submissionId: "empty.xlsx",
+      metadata: {
+        wordCount: 0,
+        pageCount: 1,
+        blockCount: 1,
+        sourceType: "txt",
+        checksum: "empty",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: "p1b0",
+              type: "paragraph",
+              text: "=== VALIDATOR REPORT ===\nduplicate_rows: 0",
+              page: 1,
+            },
+          ],
+        },
+      ],
+    };
+    const file = makeFile("empty.xlsx", {
+      content: "",
+      extractedText: "",
+      structuredContent: structure,
+    });
+    const scoringCriteria = {
+      type: "CRITERIA_BASED",
+      rubrics: [
+        {
+          rubricQuestion: "Submission completed",
+          criteria: [{ description: "Completed", points: 3 }],
+        },
+      ],
+    };
+
+    const result = await service.gradeWithEvidenceBasedApproach(
+      [file],
+      "Upload the completed workbook.",
+      3,
+      scoringCriteria,
+      1,
+      "en",
+      [{ rubricQuestion: "Submission completed", maxPoints: 3 }],
+    );
+
+    expect(result.points).toBe(0);
+    expect(result.rubricScores[0].pointsAwarded).toBe(0);
+  });
+});
 
 // ─── shouldRebuildStructuredContent ───────────────────────────────────────
 

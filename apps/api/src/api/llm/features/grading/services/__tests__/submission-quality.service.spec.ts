@@ -1,13 +1,18 @@
 import { SubmissionQualityService } from "../submission-quality.service";
 import { ExtractedChunk } from "../../types/criterion-evidence.types";
 
-function makeChunk(text: string, page = 1, id?: string): ExtractedChunk {
+function makeChunk(
+  text: string,
+  page = 1,
+  id?: string,
+  sourceId = "test-submission",
+): ExtractedChunk {
   const chunkId = id ?? text.slice(0, 8).replaceAll(/\s/g, "_");
   return {
     chunkId,
     text,
     sourceType: "file",
-    sourceId: "test-submission",
+    sourceId,
     anchor: { type: "file", page, blockId: chunkId },
     hash: chunkId,
   };
@@ -86,6 +91,46 @@ describe("SubmissionQualityService", () => {
         "non_learner_source",
       );
     });
+
+    it("classifies reconstructed file metadata blocks as metadata_only", () => {
+      const metadata = [
+        "Filename: empty.xlsx",
+        "File type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "MIME type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "File size: 2048 bytes",
+        "Sheet count: 1",
+        "Page count: 1",
+        "File hash: abc123",
+        "Content extracted: no",
+      ].join("\n");
+
+      const { chunks, quality } = service.classifyChunks([makeChunk(metadata)]);
+
+      expect(chunks[0].quality?.eligibility).toBe("ineligible");
+      expect(chunks[0].quality?.ineligibleReasons).toContain("metadata_only");
+      expect(quality.eligibleChunkCount).toBe(0);
+    });
+
+    it("does not reject learner prose merely because it starts with Filename", () => {
+      const text =
+        "Filename: my-report.pdf is the artifact I analyzed. The results demonstrate a consistent improvement across all validation datasets.";
+      const { chunks } = service.classifyChunks([makeChunk(text)]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+
+    it("does not reject learner answers that discuss file metadata", () => {
+      const text =
+        "Filename: quarterly-report.pdf\nFile type: PDF document submitted for analysis";
+      const { chunks } = service.classifyChunks([makeChunk(text)]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+
+    it("keeps learner content attached to an extraction content separator", () => {
+      const text =
+        "--- CONTENT ---\nNormalization reduces database redundancy and improves integrity.";
+      const { chunks } = service.classifyChunks([makeChunk(text)]);
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
   });
 
   describe("too_short detection", () => {
@@ -129,6 +174,18 @@ describe("SubmissionQualityService", () => {
         expect(chunk.quality?.eligibility).toBe("eligible");
       }
     });
+
+    it("does not combine repetitions from different file sources", () => {
+      const text =
+        "A common introduction included once in each submitted file.";
+      const chunks = Array.from({ length: 5 }, (_, i) =>
+        makeChunk(text, 1, `c${i}`, `file-${i}`),
+      );
+      const { chunks: classified } = service.classifyChunks(chunks);
+      expect(
+        classified.every((chunk) => chunk.quality?.eligibility === "eligible"),
+      ).toBe(true);
+    });
   });
 
   describe("prompt_copy detection", () => {
@@ -150,6 +207,16 @@ describe("SubmissionQualityService", () => {
         "Data normalization is the process of organizing a relational database to reduce redundancy " +
         "and improve data integrity. It involves dividing large tables into smaller ones and defining " +
         "relationships between them.";
+      const { chunks } = service.classifyChunks([makeChunk(submissionText)], {
+        question,
+      });
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+
+    it("keeps a short answer appended to a copied question", () => {
+      const question =
+        "Identify the capital city of France from the countries discussed in this lesson.";
+      const submissionText = `${question} Paris.`;
       const { chunks } = service.classifyChunks([makeChunk(submissionText)], {
         question,
       });
@@ -296,6 +363,29 @@ describe("SubmissionQualityService", () => {
       const { chunks } = service.classifyChunks([heading, body]);
       expect(chunks[0].quality?.eligibility).toBe("eligible");
       expect(chunks[1].quality?.eligibility).toBe("eligible");
+    });
+
+    it("does not let body content in another file mask a heading-only page", () => {
+      const heading: ExtractedChunk = {
+        ...makeChunk("Results and Analysis", 1, "h1", "file-a"),
+        metadata: { blockType: "heading" },
+      };
+      const body: ExtractedChunk = {
+        ...makeChunk(
+          "The experiment improved accuracy across all validation datasets.",
+          1,
+          "b1",
+          "file-b",
+        ),
+        metadata: { blockType: "paragraph" },
+      };
+
+      const { chunks, quality } = service.classifyChunks([heading, body]);
+      expect(chunks[0].quality?.ineligibleReasons).toContain(
+        "heading_only_page",
+      );
+      expect(chunks[1].quality?.eligibility).toBe("eligible");
+      expect(quality.pageCount).toBe(2);
     });
   });
 

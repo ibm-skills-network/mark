@@ -356,6 +356,10 @@ describe("EvidenceBasedGradingService (orchestration)", () => {
       expect(result.criteriaResults.every((c) => c.evidence.length === 0)).toBe(
         true,
       );
+      expect(result.criteriaResults[2].decision).toBe("meets");
+      expect(result.criteriaResults[2].rationale).toContain(
+        "completion recorded",
+      );
 
       const audit = (result.metadata as any).auditLog;
       expect(result.metadata.modelUsed).toBe("quality_gate_fallback");
@@ -392,6 +396,7 @@ describe("EvidenceBasedGradingService (orchestration)", () => {
         0, 0,
       ]);
       expect(result.totalPoints).toBe(0);
+      expect(result.criteriaResults[1].decision).toBe("does_not_meet");
       const audit = (result.metadata as any).auditLog;
       expect(audit.submissionQuality.classification).toBe("empty");
       expect(audit.submissionQuality.gated).toBe(true);

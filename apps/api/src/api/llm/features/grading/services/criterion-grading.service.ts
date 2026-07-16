@@ -11,7 +11,11 @@ import {
   CriterionGradeSchema,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
-import { minimumRubricPoints } from "../grading-policy";
+import {
+  minimumRubricPoints,
+  noEvidenceDecision,
+  noEvidenceRationale,
+} from "../grading-policy";
 import { buildCriterionGradingPrompt } from "../prompts/criterion-grading.prompt";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
@@ -60,10 +64,10 @@ export class CriterionGradingService {
         rubricQuestion: request.criterion.rubricQuestion,
         pointsAwarded: minPoints,
         maxPoints,
-        rationale: "No supporting evidence found in the submission.",
+        rationale: noEvidenceRationale(minPoints, maxPoints),
         citations: [],
         confidence: "low",
-        decision: "does_not_meet",
+        decision: noEvidenceDecision(minPoints, maxPoints),
         evidence: [],
         attempt: request.attempt,
         gradedAt: new Date().toISOString(),

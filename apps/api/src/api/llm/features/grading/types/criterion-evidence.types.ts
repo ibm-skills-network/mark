@@ -140,7 +140,8 @@ export interface CriterionEvidence {
 
 /**
  * Outcome of LLM evidence validation:
- * - "validated": parse succeeded; selected evidence (possibly empty) is trusted
+ * - "validated": parse succeeded; selected evidence is used, while an empty
+ *   selection may still use bounded keyword fallback
  * - "rejected": parse succeeded, nothing validated, and the validator explicitly
  *   labelled candidates irrelevant/restatement_only/boilerplate_only — keyword
  *   fallback must NOT override this decision

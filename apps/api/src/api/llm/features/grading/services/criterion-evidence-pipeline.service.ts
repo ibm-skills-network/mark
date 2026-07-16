@@ -12,7 +12,12 @@ import {
   SubmissionQualityMetadata,
   rubricCriterionToText,
 } from "../types/criterion-evidence.types";
-import { NO_EVIDENCE_RATIONALE, noEvidencePoints } from "../grading-policy";
+import {
+  hasLearnerSuppliedContent,
+  noEvidenceDecision,
+  noEvidencePoints,
+  noEvidenceRationale,
+} from "../grading-policy";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
 import {
@@ -119,20 +124,21 @@ export class CriterionEvidencePipelineService {
           `ineligible=${submissionQuality.ineligibleChunkCount}`,
       );
 
-      const submissionIsEmpty = submissionQuality.rawChunkCount === 0;
+      const submissionIsEmpty = !hasLearnerSuppliedContent(qualifiedChunks);
       const grades: CriterionGrade[] = request.criteria.map((criterion) => {
+        const pointsAwarded = noEvidencePoints(
+          criterion.criteria.map((level) => level.points),
+          submissionIsEmpty,
+        );
         return {
           criterionId: criterion.id,
           rubricQuestion: criterion.rubricQuestion,
-          pointsAwarded: noEvidencePoints(
-            criterion.criteria.map((level) => level.points),
-            submissionIsEmpty,
-          ),
+          pointsAwarded,
           maxPoints: criterion.maxPoints,
-          rationale: NO_EVIDENCE_RATIONALE,
+          rationale: noEvidenceRationale(pointsAwarded, criterion.maxPoints),
           citations: [],
           confidence: "low" as const,
-          decision: "does_not_meet" as const,
+          decision: noEvidenceDecision(pointsAwarded, criterion.maxPoints),
           evidence: [],
           attempt: 1,
           gradedAt: new Date().toISOString(),

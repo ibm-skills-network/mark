@@ -1,4 +1,7 @@
-import { RubricCriterion } from "./types/criterion-evidence.types";
+import {
+  ExtractedChunk,
+  RubricCriterion,
+} from "./types/criterion-evidence.types";
 
 /**
  * Grading policy for submissions with no eligible learner evidence
@@ -10,7 +13,7 @@ import { RubricCriterion } from "./types/criterion-evidence.types";
  *    Completion-only criteria (a single point level, min === max) award their
  *    points only when the submission is NON-EMPTY: submitting something counts
  *    as completion even when it is not valid evidence for substantive
- *    criteria. A completely empty submission (no extractable content at all)
+ *    criteria. A completely empty submission (no learner-supplied content)
  *    is awarded zero on completion-only criteria so it can never reach 100%.
  *
  * 2. What counts as learner evidence:
@@ -30,6 +33,31 @@ import { RubricCriterion } from "./types/criterion-evidence.types";
  */
 export const NO_EVIDENCE_RATIONALE =
   "No substantive learner evidence found in the submission.";
+
+export const COMPLETION_ONLY_RATIONALE =
+  "Submission completion recorded; no substantive criterion evidence was found.";
+
+const SYSTEM_ARTIFACT_REASONS = new Set([
+  "metadata_only",
+  "generated_summary",
+  "non_learner_source",
+  "page_label",
+]);
+
+/**
+ * Whether extraction found learner-supplied content rather than only
+ * deterministic system artifacts. Low-quality learner content (for example,
+ * a short answer or boilerplate) still counts as a non-empty submission.
+ */
+export function hasLearnerSuppliedContent(chunks: ExtractedChunk[]): boolean {
+  return chunks.some((chunk) => {
+    const reasons = chunk.quality?.ineligibleReasons ?? [];
+    return (
+      reasons.length === 0 ||
+      reasons.some((reason) => !SYSTEM_ARTIFACT_REASONS.has(reason))
+    );
+  });
+}
 
 /**
  * Minimum point level defined by a criterion's rubric. Safe on empty level
@@ -54,4 +82,22 @@ export function noEvidencePoints(
   if (!submissionIsEmpty) return min;
   const max = pointLevels.length > 0 ? Math.max(...pointLevels) : 0;
   return min === max ? 0 : min;
+}
+
+export function noEvidenceDecision(
+  pointsAwarded: number,
+  maxPoints: number,
+): "meets" | "does_not_meet" {
+  return maxPoints > 0 && pointsAwarded === maxPoints
+    ? "meets"
+    : "does_not_meet";
+}
+
+export function noEvidenceRationale(
+  pointsAwarded: number,
+  maxPoints: number,
+): string {
+  return noEvidenceDecision(pointsAwarded, maxPoints) === "meets"
+    ? COMPLETION_ONLY_RATIONALE
+    : NO_EVIDENCE_RATIONALE;
 }

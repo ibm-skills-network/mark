@@ -38,10 +38,15 @@ import {
 import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../constants";
 import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
-import { RubricCriterion } from "../types/criterion-evidence.types";
+import {
+  RubricCriterion,
+  rubricCriterionToText,
+} from "../types/criterion-evidence.types";
 import { ContentSummarizationService } from "./content-summarization.service";
-import { noEvidencePoints } from "../grading-policy";
+import { hasLearnerSuppliedContent, noEvidencePoints } from "../grading-policy";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
+import { EvidenceChunkingService } from "./evidence-chunking.service";
+import { SubmissionQualityService } from "./submission-quality.service";
 import {
   extractExpectedFilenameFromText,
   filenamesMatch,
@@ -138,6 +143,8 @@ export class FileGradingService implements IFileGradingService {
     private readonly pdfAnnotationService: PdfAnnotationService,
     private readonly s3Service: S3Service,
     private readonly contentSummarization: ContentSummarizationService,
+    private readonly evidenceChunking: EvidenceChunkingService,
+    private readonly submissionQuality: SubmissionQualityService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: FileGradingService.name });
@@ -2619,16 +2626,74 @@ export class FileGradingService implements IFileGradingService {
       this.logger.warn(
         "Evidence-based grading failed - assigning minimum points",
       );
-      const submissionIsEmpty = !learnerResponse.some((file) =>
-        file.structuredContent?.pages?.some((page) =>
-          page.blocks?.some((b) => b.text?.trim() || b.imageData),
-        ),
+      const submissionIsEmpty = !this.hasLearnerSuppliedContent(
+        learnerResponse,
+        question,
+        scoringCriteria,
       );
       return this.createMinimumEvidenceResponse(
         maxTotalPoints,
         scoringCriteria,
         submissionIsEmpty,
       );
+    }
+  }
+
+  /**
+   * Completion-only criteria distinguish an empty upload from a learner who
+   * submitted content that was not eligible rubric evidence. Extraction
+   * banners, page labels, generated summaries, and validator reports are
+   * system artifacts, so they must not make an otherwise empty file count as
+   * a completed submission.
+   */
+  private hasLearnerSuppliedContent(
+    learnerResponse: LearnerFileUpload[],
+    question: string,
+    scoringCriteria?: ScoringDto,
+  ): boolean {
+    const submissions = learnerResponse
+      .filter((file) => this.isEvidenceBasedEligible(file))
+      .map((file) => file.structuredContent)
+      .filter((submission): submission is CanonicalSubmission => !!submission);
+
+    // An uploaded image is learner content even if image description/OCR failed
+    // before a text chunk could be produced.
+    if (
+      submissions.some((submission) =>
+        submission.pages.some((page) =>
+          page.blocks.some(
+            (block) => block.type === "image" && !!block.imageData,
+          ),
+        ),
+      )
+    ) {
+      return true;
+    }
+
+    try {
+      const criteria = this.convertToRubricCriteria(scoringCriteria);
+      const rubricTexts = criteria.map((criterion) =>
+        rubricCriterionToText(criterion),
+      );
+      const chunks = submissions.flatMap((submission) =>
+        this.evidenceChunking.extractFromSubmission(submission),
+      );
+      const classified = this.submissionQuality.classifyChunks(chunks, {
+        question,
+        rubricTexts,
+      }).chunks;
+
+      return hasLearnerSuppliedContent(classified);
+    } catch (error) {
+      // This method runs inside the last-resort grading fallback. Fail closed
+      // rather than letting another extraction error escape or awarding an
+      // empty completion-only submission full credit.
+      this.logger.warn(
+        `Unable to classify fallback submission content: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
     }
   }
 

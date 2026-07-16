@@ -137,7 +137,7 @@ describe("CriterionEvidencePipelineService", () => {
     expect(result.audit.finalSelection[0].reason).toBe("highest_support_score");
   });
 
-  it("short-circuits to minimum rubric points when the quality gate rejects all chunks", async () => {
+  it("treats system-only chunks as empty when the quality gate rejects them", async () => {
     const { SubmissionQualityService } = await import(
       "./submission-quality.service"
     );
@@ -153,7 +153,6 @@ describe("CriterionEvidencePipelineService", () => {
       maxPoints: 5,
     };
 
-    // Completion-only rubric: single level, min === max — policy awards it.
     const oneLevelCriterion: RubricCriterion = {
       id: "c-one",
       rubricQuestion: "Completion-only criterion",
@@ -204,9 +203,9 @@ describe("CriterionEvidencePipelineService", () => {
     expect(mustNotBeCalled).not.toHaveBeenCalled();
     expect(result.grades).toHaveLength(2);
     expect(result.grades[0].pointsAwarded).toBe(2); // non-zero rubric minimum
-    // Non-empty submission: completion-only criterion still awards its level.
-    expect(result.grades[1].pointsAwarded).toBe(3);
-    expect(result.summary.totalPoints).toBe(5);
+    expect(result.grades[1].pointsAwarded).toBe(0);
+    expect(result.grades[1].decision).toBe("does_not_meet");
+    expect(result.summary.totalPoints).toBe(2);
     expect(result.audit.submissionQuality?.gated).toBe(true);
     expect(result.audit.submissionQuality?.eligibleChunkCount).toBe(0);
     expect(
@@ -214,6 +213,49 @@ describe("CriterionEvidencePipelineService", () => {
         (selection) => selection.reason === "quality_gate_no_eligible_chunks",
       ),
     ).toBe(true);
+  });
+
+  it("awards completion credit for non-empty learner content rejected as too short", async () => {
+    const { SubmissionQualityService } = await import(
+      "./submission-quality.service"
+    );
+    const completionCriterion: RubricCriterion = {
+      id: "completion",
+      rubricQuestion: "Submission completed",
+      description: "",
+      criteria: [{ description: "Completed", points: 3 }],
+      maxPoints: 3,
+    };
+    const shortLearnerChunk: ExtractedChunk = {
+      chunkId: "answer",
+      text: "Yes",
+      sourceType: "text",
+      sourceId: "learner-response",
+      anchor: { type: "text", startOffset: 0, endOffset: 3 },
+      hash: "answer",
+    };
+    const mustNotBeCalled = jest.fn(() => {
+      throw new Error("must not be called when quality gate fires");
+    });
+    const pipeline = new CriterionEvidencePipelineService(
+      { retrieveEvidence: mustNotBeCalled } as any,
+      { gradeCriterion: mustNotBeCalled } as any,
+      { judge: mustNotBeCalled } as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+      new SubmissionQualityService(),
+    );
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Did the learner submit an answer?",
+      criteria: [completionCriterion],
+      chunks: [shortLearnerChunk],
+      assignmentId: 1,
+    });
+
+    expect(result.grades[0].pointsAwarded).toBe(3);
+    expect(result.grades[0].decision).toBe("meets");
+    expect(result.grades[0].rationale).toContain("completion recorded");
   });
 
   it("assigns zero to completion-only criteria for completely empty submissions", async () => {
@@ -263,6 +305,7 @@ describe("CriterionEvidencePipelineService", () => {
     expect(mustNotBeCalled).not.toHaveBeenCalled();
     expect(result.grades[0].pointsAwarded).toBe(2); // multi-level minimum kept
     expect(result.grades[1].pointsAwarded).toBe(0); // completion-only: empty ⇒ 0
+    expect(result.grades[1].decision).toBe("does_not_meet");
     expect(result.audit.submissionQuality?.classification).toBe("empty");
     expect(result.audit.submissionQuality?.gated).toBe(true);
   });

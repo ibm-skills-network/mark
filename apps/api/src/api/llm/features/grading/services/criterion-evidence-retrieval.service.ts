@@ -127,11 +127,15 @@ export class CriterionEvidenceRetrievalService {
         .sort((a, b) => b.combined - a.combined)
         .slice(0, maxEvidence);
 
-      // Cap fallback length so LLM validation always runs on a bounded candidate set.
+      // Lexical scoring can miss semantically relevant content (for example,
+      // numeric spreadsheet cells), so give validation a wider candidate pool
+      // than the final evidence limit while still keeping the prompt bounded.
       reranked =
         aboveThreshold.length > 0
           ? aboveThreshold
-          : scored.slice(0, maxEvidence);
+          : scored
+              .sort((a, b) => b.combined - a.combined)
+              .slice(0, this.config.maxCandidates);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
@@ -140,7 +144,7 @@ export class CriterionEvidenceRetrievalService {
       );
     }
 
-    let evidence: CriterionEvidence[];
+    let evidence: CriterionEvidence[] = [];
     let validatedCount = 0;
     let validationOutcome: EvidenceValidationOutcome = "disabled";
 
@@ -175,7 +179,7 @@ export class CriterionEvidenceRetrievalService {
     // restatement_only/boilerplate_only) is a validator decision and must not
     // be overridden; a technical failure or disabled validation may fall back.
     if (evidence.length === 0 && validationOutcome !== "rejected") {
-      evidence = reranked.map((item) => ({
+      evidence = reranked.slice(0, maxEvidence).map((item) => ({
         chunkId: item.chunk.chunkId,
         quote: item.chunk.text.slice(0, 220),
         anchor: item.chunk.anchor,

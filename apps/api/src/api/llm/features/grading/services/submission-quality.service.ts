@@ -94,6 +94,8 @@ const STOPWORDS = new Set([
   "both",
 ]);
 
+const COPY_LABEL_TOKENS = new Set(["answer", "response"]);
+
 const PAGE_LABEL_PATTERN =
   /^-?\s*(page\s+)?\d+(\s*[/-]\s*\d+|\s+of\s+\d+)?\s*-?\.?$/i;
 
@@ -110,6 +112,13 @@ const BANNER_REASONS: Array<{ prefix: string; reason: ChunkIneligibleReason }> =
 
 const METADATA_KEY_PATTERN =
   /^(pages|title|creator|author|subject|keywords)\s*:/i;
+
+// FileGradingService adds this deterministic block when it has to reconstruct
+// structured content from extracted text. It is system provenance, not learner
+// evidence. Match the complete set of generated keys (and every line) rather
+// than treating arbitrary learner text beginning with "Filename:" as metadata.
+const FILE_METADATA_LINE_PATTERN =
+  /^(filename|file type|mime type|file size|sheet count|page count|file hash|content extracted)\s*:/i;
 
 // "unknown" is included so unrecognised block types don't falsely trigger heading-only detection.
 const SUBSTANTIVE_BLOCK_TYPES = new Set([
@@ -190,7 +199,7 @@ export class SubmissionQualityService {
 
     // Re-mark chunks on heading-only pages as ineligible (unless already ineligible).
     const annotated: ExtractedChunk[] = perChunkAnnotated.map((chunk) => {
-      const page = this.getChunkPage(chunk);
+      const page = this.getChunkPageKey(chunk);
       if (
         page !== null &&
         headingOnlyPages.has(page) &&
@@ -232,21 +241,21 @@ export class SubmissionQualityService {
 
     // pageCount uses ALL chunks so the threshold check (>= 25 pages) works even
     // when every chunk is ineligible (e.g. poison PDFs with zero eligible content).
-    const allPageNumbers = this.extractPageNumbers(chunks);
-    const pageCount = allPageNumbers.size > 0 ? allPageNumbers.size : undefined;
+    const allPageKeys = this.extractPageKeys(chunks);
+    const pageCount = allPageKeys.size > 0 ? allPageKeys.size : undefined;
 
     // Avg tokens per page: prefer eligible-chunk pages for the density signal.
     // When all chunks are ineligible (eligibleCount === 0), fall back to all chunks
     // so the low_information classifier can still fire — otherwise it is dead code.
-    const eligiblePageNumbers = this.extractPageNumbers(eligibleChunks);
+    const eligiblePageKeys = this.extractPageKeys(eligibleChunks);
     const avgSubstantiveTokensPerPage =
-      eligiblePageNumbers.size > 0
+      eligiblePageKeys.size > 0
         ? this.computeAvgSubstantiveTokensPerPage(
             eligibleChunks,
-            eligiblePageNumbers,
+            eligiblePageKeys,
           )
-        : allPageNumbers.size > 0
-          ? this.computeAvgSubstantiveTokensPerPage(annotated, allPageNumbers)
+        : allPageKeys.size > 0
+          ? this.computeAvgSubstantiveTokensPerPage(annotated, allPageKeys)
           : undefined;
 
     const classification = this.classifySubmission({
@@ -347,7 +356,7 @@ export class SubmissionQualityService {
 
     if (
       reasons.length === 0 &&
-      boilerplateTexts.has(this.normalizeForDedup(normalizedText))
+      boilerplateTexts.has(this.getSourceTextKey(chunk))
     ) {
       reasons.push("boilerplate");
     }
@@ -376,7 +385,10 @@ export class SubmissionQualityService {
     ) {
       chunkTokens = this.tokenize(normalizedText);
       const sim = this.jaccardSimilarity(chunkTokens, questionTokens);
-      if (sim >= GRADING_QUALITY.PROMPT_COPY_SIMILARITY_THRESHOLD) {
+      if (
+        sim >= GRADING_QUALITY.PROMPT_COPY_SIMILARITY_THRESHOLD &&
+        !this.hasNovelLearnerTokens(chunkTokens, questionTokens)
+      ) {
         reasons.push("prompt_copy");
       }
     }
@@ -388,7 +400,8 @@ export class SubmissionQualityService {
       const isRubricCopy = perCriterionRubricTokenSets.some(
         (criterionTokens) =>
           this.jaccardSimilarity(chunkTokens, criterionTokens) >=
-          GRADING_QUALITY.RUBRIC_COPY_SIMILARITY_THRESHOLD,
+            GRADING_QUALITY.RUBRIC_COPY_SIMILARITY_THRESHOLD &&
+          !this.hasNovelLearnerTokens(chunkTokens, criterionTokens),
       );
       if (isRubricCopy) reasons.push("rubric_copy");
     }
@@ -409,7 +422,29 @@ export class SubmissionQualityService {
 
   private getBannerReason(lowerText: string): ChunkIneligibleReason | null {
     for (const { prefix, reason } of BANNER_REASONS) {
-      if (lowerText.startsWith(prefix)) return reason;
+      // The extraction content separator can share a paragraph with the first
+      // learner-content line. In that case the whole chunk is evidence; only
+      // the standalone separator is metadata. Other banners introduce blocks
+      // that remain system-authored in their entirety (summary/report/PDF
+      // metadata), so prefix matching is intentional for those.
+      if (
+        (prefix === "--- content ---" && lowerText === prefix) ||
+        (prefix !== "--- content ---" && lowerText.startsWith(prefix))
+      ) {
+        return reason;
+      }
+    }
+    const lines = lowerText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (
+      lines.length >= 2 &&
+      lines.every((line) => FILE_METADATA_LINE_PATTERN.test(line)) &&
+      lines.some((line) => /^filename\s*:\s*\S/i.test(line)) &&
+      lines.some((line) => /^content extracted\s*:\s*(yes|no)\s*$/i.test(line))
+    ) {
+      return "metadata_only";
     }
     // Metadata key-value lines are always short (e.g. "Title: My Doc").
     // Reject the pattern on long text to avoid false-positives on learner content
@@ -433,12 +468,12 @@ export class SubmissionQualityService {
   // Only processes chunks that have an explicit blockType in metadata —
   // chunks without blockType (text/url sources) are skipped so they never
   // trigger false heading-only flags.
-  private detectHeadingOnlyPages(chunks: ExtractedChunk[]): Set<number> {
-    const pageHasSubstantive = new Map<number, boolean>();
-    const pageHasKnownBlock = new Map<number, boolean>();
+  private detectHeadingOnlyPages(chunks: ExtractedChunk[]): Set<string> {
+    const pageHasSubstantive = new Map<string, boolean>();
+    const pageHasKnownBlock = new Map<string, boolean>();
 
     for (const chunk of chunks) {
-      const page = this.getChunkPage(chunk);
+      const page = this.getChunkPageKey(chunk);
       if (page === null) continue;
 
       const blockType = chunk.metadata?.blockType;
@@ -450,7 +485,7 @@ export class SubmissionQualityService {
       }
     }
 
-    const headingOnly = new Set<number>();
+    const headingOnly = new Set<string>();
     for (const [page] of pageHasKnownBlock) {
       if (!pageHasSubstantive.get(page)) {
         headingOnly.add(page);
@@ -461,18 +496,18 @@ export class SubmissionQualityService {
 
   private buildPageTextCounts(
     chunks: ExtractedChunk[],
-  ): Map<string, Set<number>> {
-    const pagesByText = new Map<string, Set<number>>();
+  ): Map<string, Set<string>> {
+    const pagesByText = new Map<string, Set<string>>();
 
     for (const chunk of chunks) {
-      const pageNumber = this.getChunkPage(chunk);
-      if (pageNumber === null) continue;
+      const pageKey = this.getChunkPageKey(chunk);
+      if (pageKey === null) continue;
 
-      const key = this.normalizeForDedup(chunk.text);
+      const key = this.getSourceTextKey(chunk);
       if (!key) continue;
 
-      const pages = pagesByText.get(key) ?? new Set<number>();
-      pages.add(pageNumber);
+      const pages = pagesByText.get(key) ?? new Set<string>();
+      pages.add(pageKey);
       pagesByText.set(key, pages);
     }
 
@@ -486,7 +521,7 @@ export class SubmissionQualityService {
     const counts = new Map<string, number>();
     for (const chunk of chunks) {
       if (chunk.anchor.type !== "text" && chunk.anchor.type !== "url") continue;
-      const key = this.normalizeForDedup(chunk.text);
+      const key = this.getSourceTextKey(chunk);
       if (!key) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
@@ -494,7 +529,7 @@ export class SubmissionQualityService {
   }
 
   private detectBoilerplateTexts(
-    pageTextCounts: Map<string, Set<number>>,
+    pageTextCounts: Map<string, Set<string>>,
     textRepeatCounts: Map<string, number>,
   ): Set<string> {
     const boilerplate = new Set<string>();
@@ -511,10 +546,10 @@ export class SubmissionQualityService {
     return boilerplate;
   }
 
-  private extractPageNumbers(chunks: ExtractedChunk[]): Set<number> {
-    const pages = new Set<number>();
+  private extractPageKeys(chunks: ExtractedChunk[]): Set<string> {
+    const pages = new Set<string>();
     for (const chunk of chunks) {
-      const page = this.getChunkPage(chunk);
+      const page = this.getChunkPageKey(chunk);
       if (page !== null) pages.add(page);
     }
     return pages;
@@ -527,17 +562,31 @@ export class SubmissionQualityService {
     return null;
   }
 
+  private getChunkPageKey(chunk: ExtractedChunk): string | null {
+    const page = this.getChunkPage(chunk);
+    return page === null
+      ? null
+      : `${chunk.sourceType}\u0000${chunk.sourceId}\u0000${page}`;
+  }
+
+  private getSourceTextKey(chunk: ExtractedChunk): string {
+    const text = this.normalizeForDedup(chunk.text);
+    return text
+      ? `${chunk.sourceType}\u0000${chunk.sourceId}\u0000${text}`
+      : "";
+  }
+
   private computeAvgSubstantiveTokensPerPage(
     chunks: ExtractedChunk[],
-    pageNumbers: Set<number>,
+    pageKeys: Set<string>,
   ): number {
-    if (pageNumbers.size === 0) return 0;
+    if (pageKeys.size === 0) return 0;
 
-    const tokensByPage = new Map<number, number>();
-    for (const page of pageNumbers) tokensByPage.set(page, 0);
+    const tokensByPage = new Map<string, number>();
+    for (const page of pageKeys) tokensByPage.set(page, 0);
 
     for (const chunk of chunks) {
-      const page = this.getChunkPage(chunk);
+      const page = this.getChunkPageKey(chunk);
       if (page === null || !tokensByPage.has(page)) continue;
       // Ineligible chunks (including heading-only re-marked ones) contribute 0 tokens
       // so their preserved substantiveTokenCount doesn't inflate the density average.
@@ -551,7 +600,7 @@ export class SubmissionQualityService {
 
     let total = 0;
     for (const v of tokensByPage.values()) total += v;
-    return total / pageNumbers.size;
+    return total / pageKeys.size;
   }
 
   private classifySubmission(parameters: {
@@ -633,5 +682,15 @@ export class SubmissionQualityService {
     }
     const union = a.size + b.size - intersection;
     return intersection / union;
+  }
+
+  private hasNovelLearnerTokens(
+    candidate: Set<string>,
+    reference: Set<string>,
+  ): boolean {
+    for (const token of candidate) {
+      if (!reference.has(token) && !COPY_LABEL_TOKENS.has(token)) return true;
+    }
+    return false;
   }
 }

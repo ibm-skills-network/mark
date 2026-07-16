@@ -68,13 +68,9 @@ describe("CriterionEvidenceRetrievalService", () => {
    * (not as final evidence) so a genuinely relevant chunk can still be found.
    */
   it("surfaces the full corpus as candidates to LLM validation when all are filtered by relevance", async () => {
-    const chunks = [
-      makeChunk("ch1", "100"),
-      makeChunk("ch2", "200"),
-      makeChunk("ch3", "ABC"),
-      makeChunk("ch4", "XY"),
-      makeChunk("ch5", "Q1 Sales 2024"),
-    ];
+    const chunks = Array.from({ length: 8 }, (_, index) =>
+      makeChunk(`ch${index + 1}`, String((index + 1) * 100)),
+    );
 
     const criterion: RubricCriterion = {
       id: "empty-rows",
@@ -92,7 +88,7 @@ describe("CriterionEvidenceRetrievalService", () => {
     const promptProcessor = {
       processPromptForFeature: jest.fn().mockResolvedValue(
         JSON.stringify({
-          evidence: [{ chunkId: "ch5", relevance: "supports" }],
+          evidence: [{ chunkId: "ch8", relevance: "supports" }],
         }),
       ),
     };
@@ -115,7 +111,7 @@ describe("CriterionEvidenceRetrievalService", () => {
     );
 
     expect(response.evidence).toEqual([
-      expect.objectContaining({ chunkId: "ch5" }),
+      expect.objectContaining({ chunkId: "ch8" }),
     ]);
     const promptArg = promptProcessor.processPromptForFeature.mock.calls[0][0];
     const validationPrompt = await promptArg.format({});
@@ -124,48 +120,10 @@ describe("CriterionEvidenceRetrievalService", () => {
     }
   });
 
-  /**
-   * If none of the surfaced candidates actually address the criterion, the
-   * LLM validator's "nothing relevant" verdict must be trusted as final —
-   * not overridden with the raw, unvalidated candidates. Otherwise an
-   * off-topic submission would always produce non-empty "evidence".
-   */
-  it("returns no evidence when the LLM validator finds nothing relevant", async () => {
-    const chunks = [
-      makeChunk("ch1", "This document is about something unrelated."),
-    ];
-
-    const criterion: RubricCriterion = {
-      id: "c1",
-      rubricQuestion: "Did the learner implement the required DataLoader?",
-      description: "Checks for DataLoader implementation.",
-      criteria: [
-        { description: "Implemented", points: 5 },
-        { description: "Not implemented", points: 0 },
-      ],
-      maxPoints: 5,
-    };
-
-    const service = makeService(JSON.stringify({ evidence: [] }));
-    const index = new ChunkIndex(chunks);
-
-    const response = await service.retrieveEvidence(
-      {
-        criterion,
-        question: "Grade this submission",
-        chunks,
-        assignmentId: 1,
-      },
-      index,
-    );
-
-    expect(response.evidence).toHaveLength(0);
-  });
-
   it("falls back to scored candidates when validator output cannot be parsed", async () => {
-    const chunks = [
-      makeChunk("ch1", "The DataLoader implementation loads training data."),
-    ];
+    const chunks = Array.from({ length: 8 }, (_, index) =>
+      makeChunk(`ch${index + 1}`, String((index + 1) * 100)),
+    );
 
     const criterion: RubricCriterion = {
       id: "c-parse-fail",
@@ -187,12 +145,15 @@ describe("CriterionEvidenceRetrievalService", () => {
         question: "Grade this submission",
         chunks,
         assignmentId: 1,
+        maxEvidence: 2,
       },
       index,
     );
 
-    expect(response.evidence).toEqual([
-      expect.objectContaining({ chunkId: "ch1" }),
+    expect(response.evidence).toHaveLength(2);
+    expect(response.evidence.map((item) => item.chunkId)).toEqual([
+      "ch1",
+      "ch2",
     ]);
   });
 

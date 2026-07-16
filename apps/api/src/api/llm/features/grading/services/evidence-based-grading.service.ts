@@ -34,9 +34,11 @@ import {
   rubricCriterionToText,
 } from "../types/criterion-evidence.types";
 import {
-  NO_EVIDENCE_RATIONALE,
+  hasLearnerSuppliedContent,
   minimumRubricPoints,
+  noEvidenceDecision,
   noEvidencePoints,
+  noEvidenceRationale,
 } from "../grading-policy";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
@@ -222,7 +224,7 @@ export class EvidenceBasedGradingService {
         this.logger.warn(
           `Quality gate fired on fallback path: classification=${fallbackQuality.classification}`,
         );
-        const submissionIsEmpty = fallbackQuality.rawChunkCount === 0;
+        const submissionIsEmpty = !hasLearnerSuppliedContent(classifiedChunks);
         for (const criterion of criteria) {
           const minPoints = noEvidencePoints(
             criterion.criteria.map((level) => level.points),
@@ -234,8 +236,8 @@ export class EvidenceBasedGradingService {
             pointsAwarded: minPoints,
             maxPoints: criterion.maxPoints,
             evidence: [],
-            rationale: NO_EVIDENCE_RATIONALE,
-            decision: "does_not_meet",
+            rationale: noEvidenceRationale(minPoints, criterion.maxPoints),
+            decision: noEvidenceDecision(minPoints, criterion.maxPoints),
             gradedAt: new Date().toISOString(),
           });
           totalPoints += minPoints;
