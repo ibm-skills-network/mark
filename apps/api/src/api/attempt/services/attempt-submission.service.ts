@@ -596,12 +596,35 @@ export class AttemptSubmissionService {
       cachedQuestions.map((q) => [q.id, q.totalPoints]),
     );
     const responses = assignmentAttempt.questionResponses ?? [];
-    const rawPointsEarned = responses.reduce(
+    const servedQuestionIds = assignmentAttempt.questionOrder?.length
+      ? assignmentAttempt.questionOrder
+      : assignment.questionOrder?.length
+        ? assignment.questionOrder
+        : cachedQuestions.map((q) => q.id);
+    const servedQuestionIdSet = new Set(servedQuestionIds);
+
+    // Historical rows and crafted requests can contain duplicate or unserved
+    // responses. Keep only the newest served response so the numerator covers
+    // the same question set as the denominator.
+    const servedResponseByQuestionId = new Map<
+      number,
+      (typeof responses)[number]
+    >();
+    for (const response of responses) {
+      if (!servedQuestionIdSet.has(response.questionId)) continue;
+
+      const existing = servedResponseByQuestionId.get(response.questionId);
+      if (!existing || response.id > existing.id) {
+        servedResponseByQuestionId.set(response.questionId, response);
+      }
+    }
+    const servedResponses = [...servedResponseByQuestionId.values()];
+    const rawPointsEarned = servedResponses.reduce(
       (sum, response) => sum + (response.points ?? 0),
       0,
     );
     let totalPointsEarned = 0;
-    for (const response of responses) {
+    for (const response of servedResponses) {
       const questionMax = questionMaxById.get(response.questionId);
       const points = response.points ?? 0;
       totalPointsEarned +=
@@ -619,12 +642,26 @@ export class AttemptSubmissionService {
     // cached question inflates the total to the full bank size (e.g. "15/20"
     // when only 15 were served). Mirror the served-set precedence the
     // questions mapper uses so numerator and denominator cover the same set.
-    const servedQuestionIds = assignmentAttempt.questionOrder?.length
-      ? assignmentAttempt.questionOrder
-      : assignment.questionOrder?.length
-        ? assignment.questionOrder
-        : cachedQuestions.map((q) => q.id);
-    const servedQuestionIdSet = new Set(servedQuestionIds);
+    const missingMaxQuestionIds = [...servedQuestionIdSet].filter(
+      (questionId) =>
+        !questionMaxById.has(questionId) &&
+        this.getResponseMaxPossiblePoints(
+          servedResponseByQuestionId.get(questionId)?.metadata ?? null,
+        ) === undefined,
+    );
+    const missingMaxQuestions =
+      missingMaxQuestionIds.length > 0
+        ? await this.prisma.question.findMany({
+            where: { id: { in: missingMaxQuestionIds } },
+            select: { id: true, totalPoints: true },
+          })
+        : [];
+    const deletedQuestionMaxById = new Map(
+      missingMaxQuestions.map((question) => [
+        question.id,
+        question.totalPoints,
+      ]),
+    );
     let totalPossiblePoints = 0;
     for (const questionId of servedQuestionIdSet) {
       if (questionMaxById.has(questionId)) {
@@ -632,16 +669,25 @@ export class AttemptSubmissionService {
         // stays 0, matching the historical denominator behavior).
         totalPossiblePoints += questionMaxById.get(questionId) ?? 0;
       } else {
-        // Served (in questionOrder) but absent from the cache — a question
-        // deleted after this attempt was submitted, which only happens on
-        // non-versioned assignments (versioned attempts read an immutable
-        // snapshot). The numerator still counts this response via pass-through,
-        // so mirror that here; otherwise the total could fall below the earned
-        // points and render a >100% score.
-        const deletedResponse = responses.find(
-          (r) => r.questionId === questionId,
+        // Served (in questionOrder) but absent from the cache — normally a
+        // soft-deleted question on a non-versioned assignment. Preserve its
+        // actual maximum from grading metadata or the archived database row;
+        // earned points are not a valid substitute for possible points.
+        const responseMax = this.getResponseMaxPossiblePoints(
+          servedResponseByQuestionId.get(questionId)?.metadata ?? null,
         );
-        totalPossiblePoints += deletedResponse?.points ?? 0;
+        const deletedQuestionMax = deletedQuestionMaxById.get(questionId);
+        if (responseMax !== undefined) {
+          totalPossiblePoints += responseMax;
+          continue;
+        }
+        if (deletedQuestionMax === undefined) {
+          throw new InternalServerErrorException(
+            `Cannot calculate totalPossiblePoints: served Question ${questionId} ` +
+              "is absent from the attempt snapshot and database.",
+          );
+        }
+        totalPossiblePoints += deletedQuestionMax;
       }
     }
     const effectiveGrade =
@@ -735,6 +781,32 @@ export class AttemptSubmissionService {
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
     };
+  }
+
+  private getResponseMaxPossiblePoints(
+    metadata: JsonValue | null,
+  ): number | undefined {
+    let parsedMetadata: unknown = metadata;
+    if (typeof parsedMetadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(parsedMetadata) as unknown;
+      } catch {
+        return undefined;
+      }
+    }
+
+    if (!parsedMetadata || typeof parsedMetadata !== "object") {
+      return undefined;
+    }
+
+    const maxPossiblePoints = (
+      parsedMetadata as { maxPossiblePoints?: unknown }
+    ).maxPossiblePoints;
+    return typeof maxPossiblePoints === "number" &&
+      Number.isFinite(maxPossiblePoints) &&
+      maxPossiblePoints >= 0
+      ? maxPossiblePoints
+      : undefined;
   }
 
   /**
@@ -981,20 +1053,6 @@ export class AttemptSubmissionService {
         return expiredResult;
       }
 
-      if (progressCallback) {
-        await progressCallback("Pre-translating questions...", 10);
-      }
-
-      const preTranslatedQuestions =
-        await this.translationService.preTranslateQuestions(
-          updateDto.responsesForQuestions,
-          assignmentAttempt,
-          updateDto.language,
-          effectiveCache,
-        );
-
-      updateDto.preTranslatedQuestions = preTranslatedQuestions;
-
       const assignment = await this.prisma.assignment.findUnique({
         where: { id: assignmentId },
         include: {
@@ -1009,7 +1067,67 @@ export class AttemptSubmissionService {
         },
       });
 
-      if (assignment?.requireAllQuestions) {
+      if (!assignment) {
+        throw new NotFoundException(
+          `Assignment with Id ${assignmentId} not found.`,
+        );
+      }
+
+      const servedQuestionIds = assignmentAttempt.questionOrder?.length
+        ? assignmentAttempt.questionOrder
+        : assignment.questionOrder?.length
+          ? assignment.questionOrder
+          : assignment.questions.map((question) => question.id);
+      const servedQuestionIdSet = new Set(servedQuestionIds);
+      const submittedQuestionIds = updateDto.responsesForQuestions.map(
+        (response) => response.id,
+      );
+      const invalidQuestionIds = [
+        ...new Set(
+          submittedQuestionIds.filter(
+            (questionId) => !servedQuestionIdSet.has(questionId),
+          ),
+        ),
+      ];
+      const duplicateQuestionIds = [
+        ...new Set(
+          submittedQuestionIds.filter(
+            (questionId, index) =>
+              submittedQuestionIds.indexOf(questionId) !== index,
+          ),
+        ),
+      ];
+      if (invalidQuestionIds.length > 0 || duplicateQuestionIds.length > 0) {
+        throw new BadRequestException(
+          `Invalid question responses for attempt ${attemptId}: ` +
+            [
+              invalidQuestionIds.length > 0
+                ? `unserved question IDs [${invalidQuestionIds.join(", ")}]`
+                : null,
+              duplicateQuestionIds.length > 0
+                ? `duplicate question IDs [${duplicateQuestionIds.join(", ")}]`
+                : null,
+            ]
+              .filter((message): message is string => message !== null)
+              .join("; "),
+        );
+      }
+
+      if (progressCallback) {
+        await progressCallback("Pre-translating questions...", 10);
+      }
+
+      const preTranslatedQuestions =
+        await this.translationService.preTranslateQuestions(
+          updateDto.responsesForQuestions,
+          assignmentAttempt,
+          updateDto.language,
+          effectiveCache,
+        );
+
+      updateDto.preTranslatedQuestions = preTranslatedQuestions;
+
+      if (assignment.requireAllQuestions) {
         const optionalQuestionIdsValue: unknown =
           assignment.optionalQuestionIds;
         const optionalQuestionIdList = Array.isArray(optionalQuestionIdsValue)
