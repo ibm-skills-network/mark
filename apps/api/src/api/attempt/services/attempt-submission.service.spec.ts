@@ -44,7 +44,14 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     questionResponse: {
       deleteMany: jest.fn(),
     },
+    $executeRaw: jest.fn(),
+    // Interactive transactions run the callback with the same mock as the
+    // transaction client so existing assertions on mockPrisma keep working.
+    $transaction: jest.fn(),
   };
+  mockPrisma.$transaction.mockImplementation((callback) =>
+    callback(mockPrisma),
+  );
 
   const mockValidationService = {
     validateNewAttempt: jest.fn(),
@@ -466,6 +473,63 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           questionOrder: [20, 10, 30],
         },
       });
+    });
+  });
+
+  describe("createAssignmentAttempt - phantom attempt race", () => {
+    const assignmentId = 123;
+    const userSession: UserSession = {
+      userId: "user-1",
+      role: UserRole.LEARNER,
+      assignmentId,
+      groupId: "group-1",
+    };
+
+    const baseAssignment = {
+      id: assignmentId,
+      numberOfQuestionsPerAttempt: undefined,
+      questionOrder: [],
+      displayOrder: null,
+      allotedTimeMinutes: undefined,
+      questions: [],
+      currentVersionId: 9,
+      currentVersion: { questionVersions: [] },
+    };
+
+    beforeEach(() => {
+      mockValidationService.validateNewAttempt.mockResolvedValue(undefined);
+      mockPrisma.assignment.findUnique.mockResolvedValue(baseAssignment);
+      mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
+      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+    });
+
+    it("reuses an already in-progress attempt instead of creating a duplicate", async () => {
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({ id: 77 });
+
+      const result = await service.createAssignmentAttempt(
+        assignmentId,
+        userSession,
+      );
+
+      expect(result).toEqual({ id: 77, success: true });
+      expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it("returns the concurrently created attempt when one appears between the initial check and creation", async () => {
+      // First read (before any lock): nothing in progress yet. Second read
+      // (after a concurrent request committed its attempt): the attempt is
+      // there. Creation must resolve to that attempt, not a 422 or a duplicate.
+      mockPrisma.assignmentAttempt.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 77 });
+
+      const result = await service.createAssignmentAttempt(
+        assignmentId,
+        userSession,
+      );
+
+      expect(result).toEqual({ id: 77, success: true });
+      expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
     });
   });
 

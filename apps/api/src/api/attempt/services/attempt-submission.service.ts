@@ -13,6 +13,7 @@ import {
   AssignmentAttempt,
   AssignmentQuestionDisplayOrder,
   CorrectAnswerVisibility,
+  Prisma,
   Question,
   QuestionType,
   QuestionVariant,
@@ -155,15 +156,11 @@ export class AttemptSubmissionService {
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const now = new Date();
 
-    const existingAttempt = await this.prisma.assignmentAttempt.findFirst({
-      where: {
-        assignmentId,
-        userId: userSession.userId,
-        submitted: false,
-        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const existingAttempt = await this.findResumableAttempt(
+      assignmentId,
+      userSession.userId,
+      now,
+    );
 
     if (existingAttempt) {
       return {
@@ -202,17 +199,90 @@ export class AttemptSubmissionService {
       success: true,
     } as GetAssignmentResponseDto;
 
-    await this.validationService.validateNewAttempt(
-      assignmentForAttemptFlow,
-      userSession,
-    );
+    // Attempt creation must be idempotent. The learner questions page creates
+    // an attempt as a render side effect, so overlapping renders (or an LMS
+    // iframe reload right after submit) can race this endpoint: both read an
+    // empty attempt list, both POST, and the loser used to get a 422 or mint a
+    // duplicate. Serialize creation per learner+assignment with a
+    // transaction-scoped advisory lock; the loser re-checks under the lock and
+    // resumes the winner's attempt instead.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${userSession.userId}:${assignmentId}`}, 0))`;
 
+      const concurrentAttempt = await this.findResumableAttempt(
+        assignmentId,
+        userSession.userId,
+        now,
+        tx,
+      );
+
+      if (concurrentAttempt) {
+        return {
+          id: concurrentAttempt.id,
+          success: true,
+        };
+      }
+
+      await this.validationService.validateNewAttempt(
+        assignmentForAttemptFlow,
+        userSession,
+      );
+
+      return this.createAttemptWithQuestions(
+        tx,
+        assignmentId,
+        assignment,
+        assignmentForAttemptFlow,
+        userSession,
+      );
+    });
+  }
+
+  /**
+   * The latest unsubmitted, unexpired attempt for this learner+assignment, if
+   * one exists. Backs both the pre-lock fast path and the under-lock re-check
+   * that makes attempt creation idempotent.
+   */
+  private async findResumableAttempt(
+    assignmentId: number,
+    userId: string,
+    now: Date,
+    database: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    return database.assignmentAttempt.findFirst({
+      where: {
+        assignmentId,
+        userId,
+        submitted: false,
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Inserts the attempt row and populates its question order and variant
+   * picks. Only call with the per-learner+assignment advisory lock held (see
+   * createAssignmentAttempt) so concurrent creators serialize.
+   */
+  private async createAttemptWithQuestions(
+    tx: Prisma.TransactionClient,
+    assignmentId: number,
+    assignment: Prisma.AssignmentGetPayload<{
+      include: {
+        currentVersion: { include: { questionVersions: true } };
+        questions: { include: { variants: true } };
+      };
+    }>,
+    assignmentForAttemptFlow: GetAssignmentResponseDto,
+    userSession: UserSession,
+  ): Promise<BaseAssignmentAttemptResponseDto> {
     const attemptExpiresAt = this.calculateAttemptExpiresAt(
       assignmentForAttemptFlow,
     );
     const activeVersionId = assignment.currentVersionId;
 
-    const assignmentAttempt = await this.prisma.assignmentAttempt.create({
+    const assignmentAttempt = await tx.assignmentAttempt.create({
       data: {
         expiresAt: attemptExpiresAt ?? null,
         submitted: false,
@@ -361,7 +431,7 @@ export class AttemptSubmissionService {
       orderingSeed,
     );
 
-    await this.prisma.assignmentAttempt.update({
+    await tx.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
       data: {
         questionOrder: orderedQuestions.map((q) => q.id),
@@ -371,6 +441,7 @@ export class AttemptSubmissionService {
     await this.questionVariantService.createAttemptQuestionVariants(
       assignmentAttempt.id,
       orderedQuestions,
+      tx,
     );
 
     return {

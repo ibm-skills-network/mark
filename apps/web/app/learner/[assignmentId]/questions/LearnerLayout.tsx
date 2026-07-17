@@ -75,9 +75,27 @@ async function LearnerLayout(props: Props) {
 
   const isNewAttempt = !latestInProgressAttempt;
 
-  const attemptId = latestInProgressAttempt
-    ? latestInProgressAttempt.id
-    : await createAttempt(assignmentId, cookieHeader);
+  let attemptId: Awaited<ReturnType<typeof createAttempt>> =
+    latestInProgressAttempt?.id;
+
+  if (attemptId === undefined) {
+    const created = await createAttempt(assignmentId, cookieHeader);
+    if (created === "attempt in progress") {
+      // A concurrent render of this page created the attempt between our
+      // getAttempts and createAttempt calls. Re-list and resume that attempt
+      // instead of showing a lockout — it is this learner's own usable attempt.
+      const refreshedAttempts = await getAttempts(assignmentId, cookieHeader);
+      attemptId = refreshedAttempts
+        ? getLatestAttempt(refreshedAttempts.filter(isAttemptInProgress))?.id
+        : undefined;
+      log(
+        "Resumed attempt after concurrent creation",
+        `Attempt ${attemptId ?? "not found"}`,
+      );
+    } else {
+      attemptId = created;
+    }
+  }
 
   log(
     "Attempt resolved",
@@ -137,6 +155,32 @@ async function LearnerLayout(props: Props) {
     log("AI grading temporarily disabled");
     return (
       <ServiceUnavailableNotice message="This assignment is graded with AI, which is paused for maintenance right now. Your work hasn't been started or lost." />
+    );
+  }
+
+  if (attemptId === "time range exceeded") {
+    log("Time-range attempt limit reached");
+    return (
+      <ErrorModal
+        className="h-[calc(100vh-100px)]"
+        statusCode={422}
+        error={
+          "You have exceeded the allowed number of attempts for this assignment within the allowed time period. Please wait before trying again."
+        }
+        headline="Attempt limit reached for this period"
+        userSteps={[
+          {
+            title: "Wait before retrying",
+            description:
+              "The assignment limits how many attempts can be made in a given period.",
+          },
+          {
+            title: "Return to course",
+            description: "Go back to the course home.",
+          },
+        ]}
+        stateTimeline={stateTimeline}
+      />
     );
   }
 

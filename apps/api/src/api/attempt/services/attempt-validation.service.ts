@@ -5,6 +5,9 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import {
+  ATTEMPT_IN_PROGRESS_CODE,
+  ATTEMPT_MAX_REACHED_CODE,
+  ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
   IN_COOLDOWN_PERIOD,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
@@ -64,7 +67,11 @@ export class AttemptValidationService {
     });
 
     if (activeAttempt) {
-      throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
+      throw new UnprocessableEntityException({
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ATTEMPT_IN_PROGRESS_CODE,
+        message: IN_PROGRESS_SUBMISSION_EXCEPTION,
+      });
     }
 
     if (assignment.attemptsPerTimeRange) {
@@ -80,9 +87,11 @@ export class AttemptValidationService {
       });
 
       if (attemptsInTimeRange >= assignment.attemptsPerTimeRange) {
-        throw new UnprocessableEntityException(
-          TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-        );
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
+          message: TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        });
       }
     }
 
@@ -93,9 +102,11 @@ export class AttemptValidationService {
       );
 
       if (totalAttempts >= assignment.numAttempts) {
-        throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-        );
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: ATTEMPT_MAX_REACHED_CODE,
+          message: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        });
       }
 
       const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;

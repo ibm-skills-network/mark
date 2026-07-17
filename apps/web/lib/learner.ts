@@ -24,6 +24,14 @@ import { apiClient, APIError } from "./api-client";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 
 /**
+ * Machine-readable codes the API puts in 422 bodies from
+ * validateNewAttempt. Keep in sync with
+ * apps/api/src/api/assignment/attempt/api-exceptions/exceptions.ts.
+ */
+const ATTEMPT_IN_PROGRESS_CODE = "ATTEMPT_IN_PROGRESS";
+const ATTEMPT_TIME_RANGE_EXCEEDED_CODE = "ATTEMPT_TIME_RANGE_EXCEEDED";
+
+/**
  * Creates a attempt for a given assignment.
  * @param assignmentId The id of the assignment to create the attempt for.
  * @returns The id of the created attempt.
@@ -38,6 +46,8 @@ export async function createAttempt(
   | "no more attempts"
   | "in cooldown period"
   | "ai temporarily unavailable"
+  | "attempt in progress"
+  | "time range exceeded"
 > {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
@@ -68,6 +78,16 @@ export async function createAttempt(
     }
     const status = getErrorStatus(err);
     if (status === 422) {
+      // The API throws 422 for three distinct reasons; only a real max-attempts
+      // lockout may surface as "no more attempts". Match on the body code, not
+      // the status. An uncoded 422 (older API) keeps the legacy fallback.
+      const code = getErrorCode(err);
+      if (code === ATTEMPT_IN_PROGRESS_CODE) {
+        return "attempt in progress";
+      }
+      if (code === ATTEMPT_TIME_RANGE_EXCEEDED_CODE) {
+        return "time range exceeded";
+      }
       return "no more attempts";
     } else if (status === 429) {
       return "in cooldown period";
@@ -79,6 +99,11 @@ export async function createAttempt(
 /** HTTP status off an unknown thrown error (APIError or any `{status}` shape). */
 function getErrorStatus(err: unknown): number | undefined {
   return (err as { status?: number } | undefined)?.status;
+}
+
+/** Body `code` off an unknown thrown error (APIError or any `{body}` shape). */
+function getErrorCode(err: unknown): string | undefined {
+  return (err as { body?: { code?: string } } | undefined)?.body?.code;
 }
 
 /**
