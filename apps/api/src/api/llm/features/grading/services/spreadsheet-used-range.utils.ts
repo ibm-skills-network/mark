@@ -123,16 +123,23 @@ export function compactWorksheet(
 
   assertSpreadsheetWithinBudget(rows.length, rows.length * cols.length, meta);
 
-  const rowsContiguous = rows.at(-1)! - rows[0] + 1 === rows.length;
-  const colsContiguous = cols.at(-1)! - cols[0] + 1 === cols.length;
+  const firstRow = rows[0];
+  const firstCol = cols[0];
+  const lastRow = rows.at(-1);
+  const lastCol = cols.at(-1);
+  // Unreachable in practice: a sheet with real cells always yields rows/cols.
+  if (lastRow === undefined || lastCol === undefined) return;
+
+  const rowsContiguous = lastRow - firstRow + 1 === rows.length;
+  const colsContiguous = lastCol - firstCol + 1 === cols.length;
   const colsAllKept = cols.length === allColSet.size;
 
   if (rowsContiguous && colsContiguous && colsAllKept) {
     // Identity case: no gaps, nothing pruned — just tighten !ref (the original
     // bounding-box clamp). Cells are left exactly where they are.
     ws["!ref"] = XLSX.utils.encode_range({
-      s: { r: rows[0], c: cols[0] },
-      e: { r: rows.at(-1)!, c: cols.at(-1)! },
+      s: { r: firstRow, c: firstCol },
+      e: { r: lastRow, c: lastCol },
     });
     return;
   }
@@ -147,8 +154,9 @@ export function compactWorksheet(
   const newCells: Record<string, XLSX.CellObject> = {};
   for (const { r, c, key } of realCells) {
     if (!colKept.has(c)) continue; // prune non-meaningful columns
-    const nr = rowRemap.get(r)!;
-    const nc = colRemap.get(c)!;
+    const nr = rowRemap.get(r);
+    const nc = colRemap.get(c);
+    if (nr === undefined || nc === undefined) continue;
     newCells[XLSX.utils.encode_cell({ r: nr, c: nc })] = ws[
       key
     ] as XLSX.CellObject;
@@ -160,11 +168,10 @@ export function compactWorksheet(
     newComments = {};
     for (const cAddr in comments) {
       const a = XLSX.utils.decode_cell(cAddr);
-      if (rowRemap.has(a.r) && colKept.has(a.c)) {
-        const na = XLSX.utils.encode_cell({
-          r: rowRemap.get(a.r)!,
-          c: colRemap.get(a.c)!,
-        });
+      const nr = rowRemap.get(a.r);
+      const nc = colRemap.get(a.c);
+      if (nr !== undefined && nc !== undefined) {
+        const na = XLSX.utils.encode_cell({ r: nr, c: nc });
         newComments[na] = comments[cAddr];
       }
     }
