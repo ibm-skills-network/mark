@@ -113,8 +113,10 @@ function getErrorCode(err: unknown): string | undefined {
  * duck-types so it survives the Next server-module-identity `instanceof` gotcha.
  */
 export function isAiTemporarilyDisabled(err: unknown): boolean {
-  const e = err as { status?: number; body?: { code?: string } } | undefined;
-  return e?.body?.code === "AI_TEMPORARILY_DISABLED" || e?.status === 409;
+  return (
+    getErrorCode(err) === "AI_TEMPORARILY_DISABLED" ||
+    getErrorStatus(err) === 409
+  );
 }
 
 /**

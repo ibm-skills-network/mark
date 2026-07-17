@@ -372,6 +372,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           success: true,
         }),
         userSession,
+        mockPrisma,
       );
       expect(mockPrisma.assignment.findUnique).toHaveBeenCalledWith({
         where: { id: assignmentId },
@@ -496,11 +497,32 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       currentVersion: { questionVersions: [] },
     };
 
+    // Distinct transaction client so these specs can tell tx-scoped calls
+    // apart from this.prisma ones: the advisory lock, the under-lock re-check,
+    // and the attempt writes must all go through the transaction, or the lock
+    // no longer serializes concurrent creators.
+    const mockTx = {
+      $executeRaw: jest.fn(),
+      assignmentAttempt: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+
     beforeEach(() => {
+      jest.clearAllMocks();
       mockValidationService.validateNewAttempt.mockResolvedValue(undefined);
       mockPrisma.assignment.findUnique.mockResolvedValue(baseAssignment);
-      mockPrisma.assignmentAttempt.create.mockResolvedValue({ id: 55 });
-      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+      mockPrisma.$transaction.mockImplementation((callback) =>
+        callback(mockTx),
+      );
+    });
+
+    afterEach(() => {
+      mockPrisma.$transaction.mockImplementation((callback) =>
+        callback(mockPrisma),
+      );
     });
 
     it("reuses an already in-progress attempt instead of creating a duplicate", async () => {
@@ -512,16 +534,17 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
 
       expect(result).toEqual({ id: 77, success: true });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
+      expect(mockTx.assignmentAttempt.create).not.toHaveBeenCalled();
     });
 
     it("returns the concurrently created attempt when one appears between the initial check and creation", async () => {
-      // First read (before any lock): nothing in progress yet. Second read
-      // (after a concurrent request committed its attempt): the attempt is
-      // there. Creation must resolve to that attempt, not a 422 or a duplicate.
-      mockPrisma.assignmentAttempt.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 77 });
+      // Pre-lock read: nothing in progress yet. Under-lock re-check (after a
+      // concurrent request committed its attempt): the attempt is there.
+      // Creation must resolve to that attempt, not a 422 or a duplicate.
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue(null);
+      mockTx.assignmentAttempt.findFirst.mockResolvedValue({ id: 77 });
 
       const result = await service.createAssignmentAttempt(
         assignmentId,
@@ -529,6 +552,37 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
 
       expect(result).toEqual({ id: 77, success: true });
+      expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
+      expect(mockTx.assignmentAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it("takes the per-learner advisory lock and keeps validation and writes on the transaction client", async () => {
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue(null);
+      mockTx.assignmentAttempt.findFirst.mockResolvedValue(null);
+      mockTx.assignmentAttempt.create.mockResolvedValue({ id: 55 });
+      mockTx.assignmentAttempt.update.mockResolvedValue({});
+
+      const result = await service.createAssignmentAttempt(
+        assignmentId,
+        userSession,
+      );
+
+      expect(result).toEqual({ id: 55, success: true });
+
+      const [lockSql, lockKey] = mockTx.$executeRaw.mock.calls[0] as [
+        readonly string[],
+        string,
+      ];
+      expect(lockSql.join("?")).toContain("pg_advisory_xact_lock");
+      expect(lockKey).toBe(`${userSession.userId}:${assignmentId}`);
+
+      expect(mockValidationService.validateNewAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({ id: assignmentId }),
+        userSession,
+        mockTx,
+      );
+      expect(mockTx.assignmentAttempt.create).toHaveBeenCalledTimes(1);
       expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
     });
   });

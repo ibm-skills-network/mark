@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { PrismaService } from "../../database/prisma.service";
@@ -33,8 +34,11 @@ export class GradingKillSwitchService {
   }
 
   /** Whether the assignment contains at least one LLM-graded question. */
-  async assignmentUsesAiGrading(assignmentId: number): Promise<boolean> {
-    const aiQuestion = await this.prisma.question.findFirst({
+  async assignmentUsesAiGrading(
+    assignmentId: number,
+    database: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
+    const aiQuestion = await database.question.findFirst({
       where: {
         assignmentId,
         type: { in: AI_GRADED_QUESTION_TYPES },
@@ -50,17 +54,21 @@ export class GradingKillSwitchService {
    * when grading is enabled, so the normal path is unaffected.
    *
    * @param action used only for logging context ("start" | "submit").
+   * @param database pass the transaction client when calling inside an open
+   * interactive transaction, so the AI-question lookup reuses that
+   * transaction's pool connection instead of demanding a second one.
    */
   async assertGradingAllowed(
     assignmentId: number,
     userId: string | undefined,
     action: "start" | "submit",
+    database: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
     if (this.aiFlags.isEnabled(AiFeatureComponent.GRADING)) {
       return;
     }
 
-    if (!(await this.assignmentUsesAiGrading(assignmentId))) {
+    if (!(await this.assignmentUsesAiGrading(assignmentId, database))) {
       // Non-AI assignment (e.g. MCQ-only) — unaffected by the grading switch.
       return;
     }

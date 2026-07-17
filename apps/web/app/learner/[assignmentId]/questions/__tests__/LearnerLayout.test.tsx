@@ -69,16 +69,60 @@ describe("LearnerLayout attempt resolution", () => {
     // Must render the quiz with the resumed attempt id, not an error modal.
     expect(element.type).toBe(Suspense);
     expect(element.props.children.props.attemptId).toBe(321);
+    // A resumed attempt is not a new one: QuestionPage clears the assignment's
+    // draft-answer localStorage for new attempts, and resuming must keep it.
+    expect(element.props.children.props.isNewAttempt).toBe(false);
   });
 
-  it("shows a generic creation error when the attempt cannot be resumed after 'attempt in progress'", async () => {
+  it("resumes via the latest unsubmitted attempt when clock skew hides it from the client-side in-progress filter", async () => {
+    const skewedAttempt = {
+      id: 654,
+      submitted: false,
+      // Expired by the client clock, but the server just vouched an attempt
+      // is active — the fallback must trust the server and resume it.
+      expiresAt: new Date(Date.now() - 5000).toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    getAttemptsMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([skewedAttempt]);
+    createAttemptMock.mockResolvedValue("attempt in progress");
+
+    const element = await LearnerLayout(props);
+
+    expect(element.type).toBe(Suspense);
+    expect(element.props.children.props.attemptId).toBe(654);
+    expect(element.props.children.props.isNewAttempt).toBe(false);
+  });
+
+  it("keeps draft answers when the server resumes an existing attempt the client filter missed", async () => {
+    const skewedAttempt = {
+      id: 500,
+      submitted: false,
+      expiresAt: new Date(Date.now() - 5000).toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    getAttemptsMock.mockResolvedValue([skewedAttempt]);
+    // The server's clock still considers the listed attempt active, so its
+    // idempotent fast path returns the existing id instead of creating.
+    createAttemptMock.mockResolvedValue(500);
+
+    const element = await LearnerLayout(props);
+
+    expect(element.type).toBe(Suspense);
+    expect(element.props.children.props.attemptId).toBe(500);
+    expect(element.props.children.props.isNewAttempt).toBe(false);
+  });
+
+  it("explains the in-progress state instead of a generic 500 when the attempt cannot be resumed after 'attempt in progress'", async () => {
     getAttemptsMock.mockResolvedValue([]);
     createAttemptMock.mockResolvedValue("attempt in progress");
 
     const element = await LearnerLayout(props);
 
     expect(element.type).toBe(ErrorModal);
-    expect(element.props.error).toBe("Attempt could not be created");
+    expect(element.props.headline).toBe("An attempt is already in progress");
+    expect(element.props.statusCode).toBe(422);
   });
 
   it("renders 'No more attempts available' only for a real max-attempts lockout", async () => {

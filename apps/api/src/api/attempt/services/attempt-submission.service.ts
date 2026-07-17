@@ -59,7 +59,10 @@ import {
 } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
-import { AttemptValidationService } from "./attempt-validation.service";
+import {
+  AttemptValidationService,
+  activeAttemptWhere,
+} from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { type GradingProgressDetails } from "./grading-progress.service";
 import {
@@ -205,37 +208,47 @@ export class AttemptSubmissionService {
     // empty attempt list, both POST, and the loser used to get a 422 or mint a
     // duplicate. Serialize creation per learner+assignment with a
     // transaction-scoped advisory lock; the loser re-checks under the lock and
-    // resumes the winner's attempt instead.
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${userSession.userId}:${assignmentId}`}, 0))`;
+    // resumes the winner's attempt instead. The loser's wait on the lock
+    // counts against the interactive-transaction timeout, so the budget must
+    // cover the winner's validation + creation too — the default 5s is not
+    // enough headroom under load.
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${userSession.userId}:${assignmentId}`}, 0))`;
 
-      const concurrentAttempt = await this.findResumableAttempt(
-        assignmentId,
-        userSession.userId,
-        now,
-        tx,
-      );
+        const concurrentAttempt = await this.findResumableAttempt(
+          assignmentId,
+          userSession.userId,
+          now,
+          tx,
+        );
 
-      if (concurrentAttempt) {
-        return {
-          id: concurrentAttempt.id,
-          success: true,
-        };
-      }
+        if (concurrentAttempt) {
+          this.logger.warn(
+            `createAssignmentAttempt: concurrent creation resolved by resume assignment=${assignmentId} user=${userSession.userId} attempt=${concurrentAttempt.id}`,
+          );
+          return {
+            id: concurrentAttempt.id,
+            success: true,
+          };
+        }
 
-      await this.validationService.validateNewAttempt(
-        assignmentForAttemptFlow,
-        userSession,
-      );
+        await this.validationService.validateNewAttempt(
+          assignmentForAttemptFlow,
+          userSession,
+          tx,
+        );
 
-      return this.createAttemptWithQuestions(
-        tx,
-        assignmentId,
-        assignment,
-        assignmentForAttemptFlow,
-        userSession,
-      );
-    });
+        return this.createAttemptWithQuestions(
+          tx,
+          assignmentId,
+          assignment,
+          assignmentForAttemptFlow,
+          userSession,
+        );
+      },
+      { maxWait: 5000, timeout: 15_000 },
+    );
   }
 
   /**
@@ -250,12 +263,7 @@ export class AttemptSubmissionService {
     database: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
     return database.assignmentAttempt.findFirst({
-      where: {
-        assignmentId,
-        userId,
-        submitted: false,
-        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-      },
+      where: activeAttemptWhere(assignmentId, userId, now),
       orderBy: { createdAt: "desc" },
     });
   }
