@@ -106,6 +106,7 @@ function buildService() {
   };
   service.promptProcessor = { processPromptForFeature: jest.fn() };
   service.tokenCounter = { countTokens: jest.fn().mockReturnValue(100) };
+  service.evidenceFileGradingInFlight = new Map();
 
   return service;
 }
@@ -545,5 +546,122 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
 
     // evidence-based grading must NOT be called
     expect(evidenceSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes criteria-based CODE uploads through the pinned structured-file model", async () => {
+    const { FileBasedQuestionResponseModel } = await import(
+      "src/api/llm/model/file.based.question.response.model"
+    );
+    const { FileUploadQuestionEvaluateModel } = await import(
+      "src/api/llm/model/file.based.question.evaluate.model"
+    );
+    const { ResponseType } = await import("@prisma/client");
+    const pinnedModel = "gpt-5.4-mini-2026-03-17";
+    service.llmResolver.getModelKeyWithFallback.mockResolvedValue(pinnedModel);
+    jest
+      .spyOn(service, "tryDeterministicSpreadsheetGrading")
+      .mockResolvedValue(null);
+    const evidenceSpy = jest
+      .spyOn(service, "gradeWithEvidenceBasedApproach")
+      .mockResolvedValue(
+        new FileBasedQuestionResponseModel(8, "Consistent code grade"),
+      );
+    service.scaleFileBasedModelToQuestionMax = jest
+      .fn()
+      .mockImplementation((value: any) => value);
+
+    const model = new FileUploadQuestionEvaluateModel(
+      "Implement the requested function",
+      [],
+      "",
+      [makeCodeFile("solution.py")],
+      10,
+      "CRITERIA_BASED",
+      {
+        type: "CRITERIA_BASED",
+        rubrics: [
+          {
+            rubricQuestion: "Correct implementation",
+            criteria: [{ description: "Works", points: 10 }],
+          },
+        ],
+      } as any,
+      "FILE" as any,
+      ResponseType.CODE,
+      undefined,
+      42,
+    );
+
+    const result = await service.gradeFileBasedQuestion(model, 1, "en");
+
+    expect(result.feedback).toBe("Consistent code grade");
+    expect(service.llmResolver.getModelKeyWithFallback).toHaveBeenCalledWith(
+      "file_evidence_grading",
+      pinnedModel,
+    );
+    expect(evidenceSpy).toHaveBeenCalledTimes(1);
+    const call = evidenceSpy.mock.calls[0];
+    expect(call[8]).toEqual({
+      modelOverrides: {
+        retrievalModel: pinnedModel,
+        gradingModel: pinnedModel,
+        judgeModel: pinnedModel,
+      },
+      modelOverridesAreFinal: true,
+    });
+    expect(call[9]).toBe(true);
+    expect(call[10]).toBe(true);
+    expect(call[0][0].structuredContent).toBeDefined();
+  });
+
+  it("returns one canonical score across repeated identical structured-file grades", async () => {
+    const { FileBasedQuestionResponseModel } = await import(
+      "src/api/llm/model/file.based.question.response.model"
+    );
+    let cached: any = null;
+    service.cacheService = {
+      getCachedGrading: jest.fn(async () => cached),
+      cacheGradingIfAbsent: jest.fn(async (candidate: any) => {
+        cached ??= candidate;
+        return cached;
+      }),
+    };
+    const grade = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new FileBasedQuestionResponseModel(8, "Canonical result"),
+      )
+      .mockResolvedValue(new FileBasedQuestionResponseModel(2, "Reroll"));
+    const file = makeCodeFile("submission.py");
+    (file as any).structuredContent = {
+      submissionId: "submission",
+      metadata: {
+        wordCount: 5,
+        pageCount: 1,
+        blockCount: 1,
+        sourceType: "txt",
+        checksum: "stable",
+        extractedAt: "2026-01-01T00:00:00.000Z",
+      },
+      pages: [{ pageNumber: 1, blocks: [] }],
+    };
+    const request = {
+      questionId: 42,
+      question: "Implement the function",
+      learnerResponse: [file],
+      scoringCriteria: { type: "CRITERIA_BASED", rubrics: [] },
+      questionMaxPoints: 10,
+      language: "en",
+      modelSnapshot: "gpt-5.4-mini-2026-03-17",
+      grade,
+    };
+
+    const results = [];
+    for (let index = 0; index < 5; index++) {
+      results.push(await service.gradeEvidenceFileWithCache(request));
+    }
+
+    expect(results.map((result) => result.points)).toEqual([8, 8, 8, 8, 8]);
+    expect(grade).toHaveBeenCalledTimes(1);
   });
 });

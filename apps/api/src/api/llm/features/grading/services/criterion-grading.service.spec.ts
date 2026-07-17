@@ -48,17 +48,18 @@ describe("CriterionGradingService", () => {
     expect(result.citations).toHaveLength(0);
   });
 
-  it("parses lenient JSON outputs that fail strict schema checks", async () => {
+  it("uses deterministic native structured output", async () => {
     const promptProcessor = {
-      processPromptForFeature: jest
-        .fn()
-        .mockResolvedValue(
-          '{"score":"2","rationale":"Too short.","citations":"ch1","confidence":"High"}',
-        ),
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        score: 2,
+        rationale: "The cited evidence satisfies this criterion.",
+        citations: ["ch1"],
+        confidence: "high",
+      }),
     } as unknown as IPromptProcessor;
 
     const llmResolver = {
-      getModelForGradingTask: jest.fn().mockResolvedValue("test-model"),
+      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
     } as unknown as LLMResolverService;
 
     const service = new CriterionGradingService(promptProcessor, llmResolver);
@@ -72,8 +73,20 @@ describe("CriterionGradingService", () => {
     });
 
     expect(result.pointsAwarded).toBe(2);
-    expect(result.rationale).toContain("Too short");
+    expect(result.rationale).toContain("satisfies");
     expect(result.citations).toEqual(["ch1"]);
     expect(result.confidence).toBe("high");
+    expect(promptProcessor.processStructuredPrompt).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.anything(),
+      expect.anything(),
+      "gpt-4o-mini",
+      {
+        temperature: 0,
+        maxRetries: 1,
+        modelName: "gpt-4o-mini-2024-07-18",
+      },
+    );
   });
 });

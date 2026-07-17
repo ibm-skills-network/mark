@@ -2601,6 +2601,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       question.scoring,
       questionType,
       question.responseType ?? "OTHER",
+      undefined,
+      question.id,
     );
     const model = await this.llmFacadeService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,

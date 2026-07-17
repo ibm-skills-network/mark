@@ -24,10 +24,12 @@ function makeService(
 ): CriterionEvidenceRetrievalService {
   return new CriterionEvidenceRetrievalService(
     {
-      processPromptForFeature: jest.fn().mockResolvedValue(promptReturnValue),
+      processStructuredPrompt: jest
+        .fn()
+        .mockResolvedValue(JSON.parse(promptReturnValue)),
     } as any,
     {
-      getModelForValidationTask: jest.fn().mockResolvedValue("test-model"),
+      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
     } as any,
   );
 }
@@ -90,16 +92,14 @@ describe("CriterionEvidenceRetrievalService", () => {
     };
 
     const promptProcessor = {
-      processPromptForFeature: jest.fn().mockResolvedValue(
-        JSON.stringify({
-          evidence: [{ chunkId: "ch5", relevance: "supports" }],
-        }),
-      ),
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "ch5", relevance: "supports" }],
+      }),
     };
     const service = new CriterionEvidenceRetrievalService(
       promptProcessor as any,
       {
-        getModelForValidationTask: jest.fn().mockResolvedValue("test-model"),
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
       } as any,
     );
     const index = new ChunkIndex(chunks);
@@ -117,7 +117,7 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(response.evidence).toEqual([
       expect.objectContaining({ chunkId: "ch5" }),
     ]);
-    const promptArg = promptProcessor.processPromptForFeature.mock.calls[0][0];
+    const promptArg = promptProcessor.processStructuredPrompt.mock.calls[0][0];
     const validationPrompt = await promptArg.format({});
     for (const chunk of chunks) {
       expect(validationPrompt).toContain(chunk.chunkId);
@@ -162,6 +162,52 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(response.evidence).toHaveLength(0);
   });
 
+  it("re-validates an empty verdict once before returning no evidence", async () => {
+    const chunk = makeChunk(
+      "ch1",
+      "The DataLoader implementation loads the training data.",
+    );
+    const criterion: RubricCriterion = {
+      id: "c-revalidate",
+      rubricQuestion: "Was DataLoader implemented?",
+      description: "Checks the DataLoader implementation.",
+      criteria: [
+        { description: "Implemented", points: 5 },
+        { description: "Not implemented", points: 0 },
+      ],
+      maxPoints: 5,
+    };
+    const promptProcessor = {
+      processStructuredPrompt: jest
+        .fn()
+        .mockResolvedValueOnce({ evidence: [] })
+        .mockResolvedValueOnce({
+          evidence: [{ chunkId: "ch1", relevance: "supports" }],
+        }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this submission",
+        chunks: [chunk],
+        assignmentId: 1,
+      },
+      new ChunkIndex([chunk]),
+    );
+
+    expect(promptProcessor.processStructuredPrompt).toHaveBeenCalledTimes(2);
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "ch1" }),
+    ]);
+  });
+
   it("falls back to scored candidates when validator output cannot be parsed", async () => {
     const chunks = [
       makeChunk("ch1", "The DataLoader implementation loads training data."),
@@ -178,7 +224,16 @@ describe("CriterionEvidenceRetrievalService", () => {
       maxPoints: 5,
     };
 
-    const service = makeService("not valid json");
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockRejectedValue(new Error("invalid structured output")),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
     const index = new ChunkIndex(chunks);
 
     const response = await service.retrieveEvidence(

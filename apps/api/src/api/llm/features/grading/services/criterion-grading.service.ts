@@ -10,6 +10,8 @@ import {
   CriterionEvidence,
   CriterionGrade,
   CriterionGradeSchema,
+  DEFAULT_MODEL_SELECTION,
+  getDeterministicGradingOptions,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
@@ -30,6 +32,7 @@ interface CriterionGradingRequest {
   judgeFeedback?: string;
   attempt: number;
   modelOverride?: string;
+  modelOverrideIsFinal?: boolean;
 }
 
 @Injectable()
@@ -117,29 +120,26 @@ OUTPUT RULES:
     });
 
     const selectedModel =
-      request.modelOverride ||
-      (await this.llmResolver.getModelForGradingTask(
-        "criterion_grading",
-        "text",
-        request.question.length + request.evidence.length * 200,
-        request.criterion.criteria.length,
-      ));
+      request.modelOverrideIsFinal && request.modelOverride
+        ? request.modelOverride
+        : await this.llmResolver.getModelKeyWithFallback(
+            "criterion_grading",
+            request.modelOverride ?? DEFAULT_MODEL_SELECTION.gradingModel,
+          );
 
     const start = Date.now();
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      request.assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "criterion_grading",
-      selectedModel,
-    );
+    const parsed =
+      await this.promptProcessor.processStructuredPrompt<ParsedGrade>(
+        prompt,
+        request.assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        CriterionGradeSchema,
+        selectedModel,
+        getDeterministicGradingOptions(selectedModel),
+      );
     const duration = Date.now() - start;
-    const responseText =
-      typeof response === "string" ? response : String(response);
-    const promptText =
-      typeof prompt.template === "string"
-        ? prompt.template
-        : String(prompt.template);
+    const responseText = JSON.stringify(parsed);
+    const promptText = await prompt.format({});
 
     if (recorder) {
       recorder.record({
@@ -149,29 +149,6 @@ OUTPUT RULES:
         response: responseText,
         durationMs: duration,
       });
-    }
-
-    let parsed: ParsedGrade | undefined;
-
-    parsed = await this.parseGradeResponse(
-      parser,
-      responseText,
-      allowedPoints,
-      minPoints,
-      request.evidence,
-    );
-
-    if (!parsed) {
-      this.logger.warn(
-        `Failed to parse grading output for criterion ${request.criterion.id}`,
-      );
-      parsed = {
-        score: minPoints,
-        rationale:
-          "Unable to parse grading output; defaulted to minimum points.",
-        citations: request.evidence.map((item) => item.chunkId).slice(0, 1),
-        confidence: "low",
-      };
     }
 
     const pointsAwarded = this.normalizePoints(parsed.score, allowedPoints);

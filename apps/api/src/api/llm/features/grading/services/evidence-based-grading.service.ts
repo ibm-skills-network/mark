@@ -120,6 +120,14 @@ export class EvidenceBasedGradingService {
     assignmentId: number,
     language = "en",
     judgeFeedback?: string,
+    modelConfig?: {
+      modelOverrides: {
+        retrievalModel: string;
+        gradingModel: string;
+        judgeModel: string;
+      };
+      modelOverridesAreFinal?: boolean;
+    },
   ): Promise<EvidenceBasedGradingResult> {
     this.logger.debug(
       `Starting evidence-based grading for ${submission.submissionId}: ${criteria.length} criteria`,
@@ -171,7 +179,8 @@ export class EvidenceBasedGradingService {
         judgeFeedback,
         maxConcurrency: 8,
         maxRetries: hasStructuredContent ? 0 : 2,
-        modelOverrides: DEFAULT_MODEL_SELECTION,
+        modelOverrides: modelConfig?.modelOverrides ?? DEFAULT_MODEL_SELECTION,
+        modelOverridesAreFinal: modelConfig?.modelOverridesAreFinal,
       });
 
       criteriaResults = this.mapPipelineGradesToCriterionResults(

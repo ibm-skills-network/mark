@@ -5,17 +5,18 @@ import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
-import { extractStructuredJSON } from "../../../core/utils/structured-json.util";
 import { LLM_RESOLVER_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import {
   CriterionEvidence,
   CriterionEvidenceRequest,
   CriterionEvidenceResponse,
+  DEFAULT_MODEL_SELECTION,
   EvidenceAnchor,
   EvidenceRetrievalStrategy,
   EvidenceValidationSchema,
   ExtractedChunk,
   RubricCriterion,
+  getDeterministicGradingOptions,
 } from "../types/criterion-evidence.types";
 import { ChunkIndex } from "./chunk-index.service";
 
@@ -158,11 +159,21 @@ export class CriterionEvidenceRetrievalService {
       // (which may include chunks below the lexical relevance threshold).
       // Its verdict is trusted as final — including an empty one, which
       // means none of the candidates actually address this criterion.
-      const validation = await this.validateWithLlm(
+      let validation = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
         recorder,
       );
+      if (validation?.length === 0 && reranked.length > 0) {
+        this.logger.warn(
+          `Evidence validator returned no matches for criterion ${request.criterion.id}; re-validating once before assigning minimum points`,
+        );
+        validation = await this.validateWithLlm(
+          request,
+          reranked.map((item) => item.chunk),
+          recorder,
+        );
+      }
       if (validation === undefined) {
         evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
       } else {
@@ -355,27 +366,35 @@ Return JSON listing which chunkIds are relevant.
     });
 
     const model =
-      request.modelOverride ||
-      (await this.llmResolver.getModelForValidationTask(
-        "evidence_validation",
-        request.question.length,
-      ));
+      request.modelOverrideIsFinal && request.modelOverride
+        ? request.modelOverride
+        : await this.llmResolver.getModelKeyWithFallback(
+            "evidence_validation",
+            request.modelOverride ?? DEFAULT_MODEL_SELECTION.retrievalModel,
+          );
 
     const start = Date.now();
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      request.assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "evidence_validation",
-      model,
-    );
+    let parsed: { evidence?: Array<{ chunkId?: string; relevance?: string }> };
+    try {
+      parsed = await this.promptProcessor.processStructuredPrompt(
+        prompt,
+        request.assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        EvidenceValidationSchema,
+        model,
+        getDeterministicGradingOptions(model),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Evidence validation failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    }
     const duration = Date.now() - start;
-    const responseText =
-      typeof response === "string" ? response : String(response);
-    const promptText =
-      typeof prompt.template === "string"
-        ? prompt.template
-        : String(prompt.template);
+    const responseText = JSON.stringify(parsed);
+    const promptText = await prompt.format({});
 
     if (recorder) {
       recorder.record({
@@ -387,24 +406,11 @@ Return JSON listing which chunkIds are relevant.
       });
     }
 
-    const candidates = [
-      ...new Set([responseText, extractStructuredJSON(responseText)]),
-    ];
-
-    for (const candidate of candidates) {
-      try {
-        return this.mapParsedSelections(
-          await parser.parse(candidate),
-          chunks,
-          request.maxEvidence ?? this.config.maxEvidence,
-        );
-      } catch {
-        this.logger.warn("Evidence validation parse failed");
-      }
-    }
-
-    this.logger.warn("Evidence validation parse failed for all candidates");
-    return undefined;
+    return this.mapParsedSelections(
+      parsed,
+      chunks,
+      request.maxEvidence ?? this.config.maxEvidence,
+    );
   }
 
   private mapParsedSelections(

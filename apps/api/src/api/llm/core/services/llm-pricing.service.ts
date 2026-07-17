@@ -973,6 +973,14 @@ export class LLMPricingService {
       "gpt-5": { input: 0.000_001_25, output: 0.000_01 },
       "gpt-5-mini": { input: 0.000_000_25, output: 0.000_002 },
       "gpt-5-nano": { input: 0.000_000_05, output: 0.000_000_4 },
+      "gpt-5.4-mini-2026-03-17": {
+        input: 0.000_000_75,
+        output: 0.000_004_5,
+      },
+      "gpt-5.4-nano-2026-03-17": {
+        input: 0.000_000_2,
+        output: 0.000_001_25,
+      },
       "gpt-oss-120b": { input: 0.000_000_15, output: 0.000_000_6 },
 
       o1: { input: 0.000_015, output: 0.000_06 },
@@ -1000,9 +1008,11 @@ export class LLMPricingService {
       metadata: {
         lastUpdated: new Date().toISOString(),
         source: "Fallback pricing",
-        notes: modelKey.startsWith("gpt-5")
-          ? "Estimated pricing for unreleased model"
-          : "Known pricing when registry lookup failed",
+        notes: modelKey.startsWith("gpt-5.4-")
+          ? "Official OpenAI Standard-tier snapshot pricing"
+          : modelKey.startsWith("gpt-5")
+            ? "Estimated pricing for model"
+            : "Known pricing when registry lookup failed",
       },
     };
   }
@@ -1020,6 +1030,8 @@ export class LLMPricingService {
       "gpt-5",
       "gpt-5-mini",
       "gpt-5-nano",
+      "gpt-5.4-mini-2026-03-17",
+      "gpt-5.4-nano-2026-03-17",
       "gpt-oss-120b",
       "o1",
       "o1-pro",

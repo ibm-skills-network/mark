@@ -72,6 +72,7 @@ export interface CriterionEvidenceRequest {
   maxEvidence?: number;
   strategy?: EvidenceRetrievalStrategy;
   modelOverride?: string;
+  modelOverrideIsFinal?: boolean;
 }
 
 export interface CriterionEvidence {
@@ -178,10 +179,35 @@ export interface ModelSelectionConfig {
   judgeModel: string;
 }
 
+/** Pin the backend revision as well as the provider key for stable grading. */
+export const DETERMINISTIC_GRADING_MODEL_SNAPSHOT = "gpt-4o-mini-2024-07-18";
+
+export function getDeterministicGradingOptions(modelKey: string) {
+  if (modelKey === "gpt-4o-mini") {
+    return {
+      temperature: 0,
+      maxRetries: 1,
+      modelName: DETERMINISTIC_GRADING_MODEL_SNAPSHOT,
+    };
+  }
+
+  // Original GPT-5-family reasoning models reject sampling controls. Keep
+  // admin-selected GPT-5 providers usable without pretending they are seeded
+  // or temperature-controlled.
+  if (modelKey.startsWith("gpt-5")) {
+    return { maxRetries: 1 };
+  }
+
+  return { temperature: 0, maxRetries: 1 };
+}
+
 export const DEFAULT_MODEL_SELECTION: ModelSelectionConfig = {
-  retrievalModel: "gpt-5-nano",
-  gradingModel: "gpt-5-mini",
-  judgeModel: "gpt-5-mini",
+  // This grading path requires controllable sampling. The original GPT-5
+  // mini/nano models reject temperature, so use one explicit model for all
+  // three stages and pin it at the call sites.
+  retrievalModel: "gpt-4o-mini",
+  gradingModel: "gpt-4o-mini",
+  judgeModel: "gpt-4o-mini",
 };
 
 export const CriterionGradeSchema = z.object({

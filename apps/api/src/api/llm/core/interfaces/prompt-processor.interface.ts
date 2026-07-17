@@ -33,6 +33,20 @@ export interface IPromptProcessor {
   ): Promise<T>;
 
   /**
+   * Process a structured prompt with an explicitly selected provider. Unlike
+   * the feature-routed variant, this does not allow a feature assignment to
+   * silently replace the requested model.
+   */
+  processStructuredPrompt<T>(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    schema: ZodTypeAny,
+    llmKey: string,
+    options?: LlmRequestOptions,
+  ): Promise<T>;
+
+  /**
    * Process a text prompt and return the LLM response
    */
   processPrompt(
