@@ -140,7 +140,7 @@ export class FileGradingService implements IFileGradingService {
     Promise<FileBasedQuestionResponseModel>
   >();
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
-    "structured-file-evidence-v3-gpt54-learner-feedback";
+    "structured-file-evidence-v4-stable-answer-hash";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
