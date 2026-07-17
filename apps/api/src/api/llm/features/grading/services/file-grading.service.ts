@@ -864,7 +864,9 @@ export class FileGradingService implements IFileGradingService {
         )
         .map((file) => ({
           filename: file.filename,
-          content: file.structuredContent ?? this.getFileContentForPrompt(file),
+          content: file.structuredContent
+            ? this.stableStructuredContent(file.structuredContent)
+            : this.getFileContentForPrompt(file),
         })),
     );
     const rubricHash = this.hashCanonical({
@@ -979,6 +981,20 @@ export class FileGradingService implements IFileGradingService {
         : undefined,
       response.metadata as Record<string, unknown> | undefined,
     );
+  }
+
+  /**
+   * Cache identity must depend only on submission content. `extractedAt` is
+   * re-stamped on every extraction pass, so hashing it gives every attempt a
+   * fresh cache key and the canonical-score cache never hits.
+   */
+  private stableStructuredContent(
+    content: NonNullable<LearnerFileUpload["structuredContent"]>,
+  ): Record<string, unknown> {
+    const { metadata, ...rest } = content;
+    if (!metadata) return { ...rest };
+    const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
+    return { ...rest, metadata: stableMetadata };
   }
 
   private hashCanonical(value: unknown): string {

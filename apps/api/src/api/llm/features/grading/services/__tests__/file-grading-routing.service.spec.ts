@@ -618,12 +618,18 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
     const { FileBasedQuestionResponseModel } = await import(
       "src/api/llm/model/file.based.question.response.model"
     );
-    let cached: any = null;
+    // Keyed like the real cache — a lookup with a different cacheKey must
+    // miss, otherwise key-instability bugs are invisible to this test.
+    const cachedByKey = new Map<string, any>();
     service.cacheService = {
-      getCachedGrading: jest.fn(async () => cached),
+      getCachedGrading: jest.fn(
+        async (key: string) => cachedByKey.get(key) ?? null,
+      ),
       cacheGradingIfAbsent: jest.fn(async (candidate: any) => {
-        cached ??= candidate;
-        return cached;
+        if (!cachedByKey.has(candidate.cacheKey)) {
+          cachedByKey.set(candidate.cacheKey, candidate);
+        }
+        return cachedByKey.get(candidate.cacheKey);
       }),
     };
     const grade = jest
@@ -658,6 +664,10 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
 
     const results = [];
     for (let index = 0; index < 5; index++) {
+      // Each grading pass re-runs extraction, which re-stamps extractedAt.
+      // The cache key must not change with it.
+      (file as any).structuredContent.metadata.extractedAt =
+        `2026-01-0${index + 1}T00:00:00.000Z`;
       results.push(await service.gradeEvidenceFileWithCache(request));
     }
 
