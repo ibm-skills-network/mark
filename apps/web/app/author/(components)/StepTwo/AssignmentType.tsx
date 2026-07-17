@@ -38,7 +38,9 @@ const Component: FC<Props> = ({ compact }) => {
           <p
             className={cn(
               "leading-5 transition-all cursor-pointer",
-              graded === true ? "font-bold text-violet-600 dark:text-violet-300" : "font-medium",
+              graded === true
+                ? "font-bold text-violet-600 dark:text-violet-300"
+                : "font-medium",
             )}
           >
             Graded
@@ -63,7 +65,9 @@ const Component: FC<Props> = ({ compact }) => {
           <div
             className={cn(
               "leading-5 cursor-pointer transition-all",
-              graded === false ? "font-bold text-violet-600 dark:text-violet-300" : "font-medium",
+              graded === false
+                ? "font-bold text-violet-600 dark:text-violet-300"
+                : "font-medium",
             )}
           >
             Practice

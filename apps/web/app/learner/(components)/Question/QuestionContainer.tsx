@@ -279,7 +279,9 @@ function Component(props: Props) {
             Question {questionNumber}
           </p>
           <div className="flex items-center gap-x-2">
-            <span className="hidden sm:inline text-md text-gray-600 dark:text-gray-400">|</span>
+            <span className="hidden sm:inline text-md text-gray-600 dark:text-gray-400">
+              |
+            </span>
             <span className="text-sm sm:text-md text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md sm:bg-transparent dark:sm:bg-transparent sm:px-0 sm:py-0">
               {questionTypeText}
             </span>
@@ -378,7 +380,9 @@ function Component(props: Props) {
               }`}
             />
 
-            <span className="text-sm text-gray-600 dark:text-gray-400 sm:hidden">Translation</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400 sm:hidden">
+              Translation
+            </span>
           </div>
           <button
             type="button"
@@ -389,7 +393,9 @@ function Component(props: Props) {
             }
             className={cn(
               "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-              effectiveTranslationOn ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-600",
+              effectiveTranslationOn
+                ? "bg-violet-600"
+                : "bg-gray-200 dark:bg-gray-600",
               "disabled:opacity-50 disabled:cursor-not-allowed",
             )}
             role="switch"

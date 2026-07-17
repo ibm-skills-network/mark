@@ -141,7 +141,9 @@ const Component: FC<Props> = ({ compact }) => {
               onClick={toggleStrictTimeLimit}
               className={cn(
                 "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                strictTimeLimit ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
+                strictTimeLimit
+                  ? "bg-violet-600"
+                  : "bg-gray-200 dark:bg-gray-700",
               )}
               role="switch"
               aria-checked={strictTimeLimit}
@@ -160,7 +162,9 @@ const Component: FC<Props> = ({ compact }) => {
             <p
               className={cn(
                 "leading-5 transition-all cursor-pointer justify-center self-center",
-                strictTimeLimit ? "text-gray-500 dark:text-gray-400" : "text-gray-700 dark:text-gray-200",
+                strictTimeLimit
+                  ? "text-gray-500 dark:text-gray-400"
+                  : "text-gray-700 dark:text-gray-200",
               )}
             >
               Enforce Required Questions
@@ -171,7 +175,9 @@ const Component: FC<Props> = ({ compact }) => {
               disabled={strictTimeLimit}
               className={cn(
                 "relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                requireAllQuestions ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
+                requireAllQuestions
+                  ? "bg-violet-600"
+                  : "bg-gray-200 dark:bg-gray-700",
                 strictTimeLimit && "opacity-50 cursor-not-allowed",
               )}
               role="switch"
@@ -195,7 +201,9 @@ const Component: FC<Props> = ({ compact }) => {
               <InformationCircleIcon
                 className={cn(
                   "w-5 inline-block",
-                  strictTimeLimit ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400",
+                  strictTimeLimit
+                    ? "text-gray-400 dark:text-gray-500"
+                    : "text-gray-500 dark:text-gray-400",
                 )}
               />
             </Tooltip>
@@ -292,12 +300,16 @@ const Component: FC<Props> = ({ compact }) => {
                           <p
                             className={cn(
                               "text-sm truncate",
-                              isOptional ? "text-gray-600 dark:text-gray-300" : "text-gray-800 dark:text-gray-200",
+                              isOptional
+                                ? "text-gray-600 dark:text-gray-300"
+                                : "text-gray-800 dark:text-gray-200",
                             )}
                           >
                             {questionText}
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{typeLabel}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {typeLabel}
+                          </p>
                         </div>
                         {!isOptional && (
                           <div className="flex items-center gap-1.5 flex-shrink-0">

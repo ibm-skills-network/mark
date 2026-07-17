@@ -963,7 +963,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 {isProcessing && (
                   <div className="flex items-center gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
-                    <p className="text-purple-900 dark:text-purple-200">Processing file...</p>
+                    <p className="text-purple-900 dark:text-purple-200">
+                      Processing file...
+                    </p>
                   </div>
                 )}
               </div>
@@ -998,26 +1000,34 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-purple-700 dark:text-purple-300">Questions found: </span>
+                    <span className="text-purple-700 dark:text-purple-300">
+                      Questions found:{" "}
+                    </span>
                     <span className="font-medium">
                       {parsedData.questions?.length || 0}
                     </span>
                   </div>
                   <div>
-                    <span className="text-purple-700 dark:text-purple-300">File format: </span>
+                    <span className="text-purple-700 dark:text-purple-300">
+                      File format:{" "}
+                    </span>
                     <span className="font-medium">
                       {selectedFile?.name.split(".").pop()?.toUpperCase()}
                     </span>
                   </div>
                   {parsedData.assignment && (
                     <div>
-                      <span className="text-purple-700 dark:text-purple-300">Assignment data: </span>
+                      <span className="text-purple-700 dark:text-purple-300">
+                        Assignment data:{" "}
+                      </span>
                       <span className="font-medium">Available</span>
                     </div>
                   )}
                   {parsedData.config && (
                     <div>
-                      <span className="text-purple-700 dark:text-purple-300">Configuration: </span>
+                      <span className="text-purple-700 dark:text-purple-300">
+                        Configuration:{" "}
+                      </span>
                       <span className="font-medium">Available</span>
                     </div>
                   )}
@@ -1151,7 +1161,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   </div>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {validationErrors.map((error, idx) => (
-                      <div key={idx} className="text-sm text-red-800 dark:text-red-200">
+                      <div
+                        key={idx}
+                        className="text-sm text-red-800 dark:text-red-200"
+                      >
                         <strong>Question {error.questionIndex + 1}:</strong>{" "}
                         {error.message} (field: {error.field})
                       </div>
@@ -1168,7 +1181,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                   <div className="flex items-center gap-2">
                     <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600 dark:text-yellow-300" />
-                    <h4 className="font-medium text-yellow-900 dark:text-yellow-200">Warning</h4>
+                    <h4 className="font-medium text-yellow-900 dark:text-yellow-200">
+                      Warning
+                    </h4>
                   </div>
                   <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
                     This will permanently delete all existing questions and

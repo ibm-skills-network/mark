@@ -486,7 +486,9 @@ export function AssignmentInsightsContent({
     return (
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center py-12 gap-4">
-          <div className="text-red-600 dark:text-red-400">Error: {error || "No data found"}</div>
+          <div className="text-red-600 dark:text-red-400">
+            Error: {error || "No data found"}
+          </div>
         </div>
       </div>
     );
@@ -495,1401 +497,1083 @@ export function AssignmentInsightsContent({
   return (
     <div className="min-h-screen w-full text-foreground">
       <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{data.assignment.name}</h1>
-            <Badge
-              variant={data.assignment.published ? "default" : "secondary"}
-            >
-              {data.assignment.published ? "Published" : "Draft"}
-            </Badge>
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">{data.assignment.name}</h1>
+              <Badge
+                variant={data.assignment.published ? "default" : "secondary"}
+              >
+                {data.assignment.published ? "Published" : "Draft"}
+              </Badge>
+            </div>
+            <p className="text-muted-foreground">
+              Assignment ID: {data.assignment.id}
+            </p>
           </div>
-          <p className="text-muted-foreground">
-            Assignment ID: {data.assignment.id}
-          </p>
         </div>
-      </div>
 
-      {/* Total Cost + Authors are admin/internal-only (AI spend, cross-author
+        {/* Total Cost + Authors are admin/internal-only (AI spend, cross-author
           activity); the author endpoint omits them. Drop those two cards and
           narrow the grid so it stays balanced in author mode. */}
-      <div
-        className={`grid grid-cols-1 md:grid-cols-2 ${isUserAdmin ? "lg:grid-cols-6" : "lg:grid-cols-4"} gap-4`}
-      >
-        {isUserAdmin && (
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Cost</p>
-                  <p className="text-2xl font-bold">
-                    {formatCurrency(data.analytics.totalCost ?? 0)}
-                  </p>
-                </div>
-                <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {isUserAdmin && (
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Authors</p>
-                  <p className="text-2xl font-bold">
-                    {data.authorActivity?.totalAuthors || 0}
-                  </p>
-                </div>
-                <FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Learners</p>
-                <p className="text-2xl font-bold">
-                  {data.analytics.uniqueLearners}
-                </p>
-              </div>
-              <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Completion Rate</p>
-                <p className="text-2xl font-bold">
-                  {data.analytics.totalAttempts > 0
-                    ? `${Math.round((data.analytics.completedAttempts / data.analytics.totalAttempts) * 100)}%`
-                    : "N/A"}
-                </p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Avg Grade</p>
-                <p className="text-2xl font-bold">
-                  {data.analytics.averageGrade > 0
-                    ? `${data.analytics.averageGrade.toFixed(2)}%`
-                    : "N/A"}
-                </p>
-              </div>
-              <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Rating</p>
-                <p className="text-2xl font-bold">
-                  {data.analytics.averageRating > 0
-                    ? data.analytics.averageRating.toFixed(1)
-                    : "N/A"}
-                </p>
-              </div>
-              <Star className="h-8 w-8 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="space-y-6"
-      >
-        <TabsList
-          className={`
-        grid w-full ${isUserAdmin ? "grid-cols-7" : "grid-cols-4"} border-b mb-4
-        `}
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 ${isUserAdmin ? "lg:grid-cols-6" : "lg:grid-cols-4"} gap-4`}
         >
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {/* Authors, AI Usage, and Reports carry admin-only/internal data
-              (cross-author activity + emails, model keys, AI spend) and the
-              author endpoint omits it — hide these tabs outside admin mode. */}
-          {isUserAdmin && <TabsTrigger value="authors">Authors</TabsTrigger>}
-          <TabsTrigger value="questions">Questions</TabsTrigger>
-          <TabsTrigger value="attempts">Attempts</TabsTrigger>
-          <TabsTrigger value="feedback">Feedback</TabsTrigger>
-          {isUserAdmin && <TabsTrigger value="ai-usage">AI Usage</TabsTrigger>}
-          {isUserAdmin && <TabsTrigger value="reports">Reports</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <div
-            className={`grid grid-cols-1 ${isUserAdmin ? "lg:grid-cols-2" : ""} gap-6`}
-          >
+          {isUserAdmin && (
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Assignment Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium">Type</p>
-                  <p className="text-sm text-muted-foreground">
-                    {data.assignment.type}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Time Estimate</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDuration(data.assignment.timeEstimateMinutes)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Allotted Time</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDuration(data.assignment.allotedTimeMinutes)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Passing Grade</p>
-                  <p className="text-sm text-muted-foreground">
-                    {data.assignment.passingGrade}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Total Points</p>
-                  <p className="text-sm text-muted-foreground">
-                    {data.assignment.totalPoints}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Created</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDate(data.assignment.createdAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Last Updated</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDate(data.assignment.updatedAt)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Cost figures and per-call AI usage are admin/internal-only and
-                absent from the author payload — show this card only to admins. */}
-            {isUserAdmin && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    Cost Analysis Breakdown
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="text-center">
-                      <div className="flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full mx-auto mb-3">
-                        <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-2">
-                        Cost per Attempt
-                      </div>
-                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                        {data.analytics.totalAttempts > 0
-                          ? formatCurrency(
-                              (data.analytics.totalCost ?? 0) /
-                                data.analytics.totalAttempts,
-                            )
-                          : "N/A"}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {data.analytics.totalAttempts} total attempts
-                      </div>
-                    </div>
-
-                    <div className="text-center">
-                      <div className="flex items-center justify-center w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full mx-auto mb-3">
-                        <FileText className="h-6 w-6 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-2">
-                        Authoring Costs
-                      </div>
-                      <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                        {formatCurrency(
-                          (data.aiUsage ?? [])
-                            .filter((usage) =>
-                              [
-                                "TRANSLATION",
-                                "QUESTION_GENERATION",
-                                "ASSIGNMENT_GENERATION",
-                              ].includes(usage.usageType),
-                            )
-                            .reduce(
-                              (sum, usage) => sum + (usage.totalCost || 0),
-                              0,
-                            ),
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Content creation & translation
-                      </div>
-                    </div>
-
-                    <div className="text-center">
-                      <div className="flex items-center justify-center w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full mx-auto mb-3">
-                        <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-2">
-                        Grading Costs
-                      </div>
-                      <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                        {formatCurrency(
-                          (data.aiUsage ?? [])
-                            .filter((usage) =>
-                              [
-                                "LIVE_RECORDING_FEEDBACK",
-                                "GRADING_VALIDATION",
-                                "ASSIGNMENT_GRADING",
-                              ].includes(usage.usageType),
-                            )
-                            .reduce(
-                              (sum, usage) => sum + (usage.totalCost || 0),
-                              0,
-                            ),
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Student feedback & validation
-                      </div>
-                    </div>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Cost</p>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(data.analytics.totalCost ?? 0)}
+                    </p>
                   </div>
-
-                  <div className="mt-6 pt-6 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="font-semibold text-sm mb-3 text-green-700 dark:text-green-300">
-                          Authoring Details
-                        </h4>
-                        <div className="space-y-2">
-                          {(data.aiUsage ?? [])
-                            .filter((usage) =>
-                              [
-                                "TRANSLATION",
-                                "QUESTION_GENERATION",
-                                "ASSIGNMENT_GENERATION",
-                              ].includes(usage.usageType),
-                            )
-                            .map((usage, index) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center py-1"
-                              >
-                                <span className="text-xs text-muted-foreground">
-                                  {usage.usageType
-                                    .replace("_", " ")
-                                    .toLowerCase()
-                                    .replace(/\b\w/g, (l) => l.toUpperCase())}
-                                </span>
-                                <span className="text-sm font-mono">
-                                  {formatCurrency(usage.totalCost || 0)}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="font-semibold text-sm mb-3 text-purple-700 dark:text-purple-300">
-                          Grading Details
-                        </h4>
-                        <div className="space-y-2">
-                          {(data.aiUsage ?? [])
-                            .filter((usage) =>
-                              [
-                                "LIVE_RECORDING_FEEDBACK",
-                                "GRADING_VALIDATION",
-                                "ASSIGNMENT_GRADING",
-                              ].includes(usage.usageType),
-                            )
-                            .map((usage, index) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center py-1"
-                              >
-                                <span className="text-xs text-muted-foreground">
-                                  {usage.usageType
-                                    .replace("_", " ")
-                                    .toLowerCase()
-                                    .replace(/\b\w/g, (l) => l.toUpperCase())}
-                                </span>
-                                <span className="text-sm font-mono">
-                                  {formatCurrency(usage.totalCost || 0)}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {data.analytics.performanceInsights.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Performance Insights
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {data.analytics.performanceInsights.map((insight, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm">{insight}</span>
-                    </li>
-                  ))}
-                </ul>
+                  <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
+                </div>
               </CardContent>
             </Card>
           )}
-        </TabsContent>
 
-        {isUserAdmin && (
-          <TabsContent value="authors" className="space-y-6">
-            {data.authorActivity && data.authorActivity.totalAuthors > 0 ? (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="pt-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Total Authors
-                          </p>
-                          <p className="text-2xl font-bold">
-                            {data.authorActivity.totalAuthors}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {
-                              data.authorActivity.authors.filter(
-                                (a) => a.isActiveContributor,
-                              ).length
-                            }{" "}
-                            active contributors
-                          </p>
-                        </div>
-                        <Users className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="pt-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Most Active
-                          </p>
-                          <p className="text-lg font-bold text-truncate">
-                            {data.authorActivity.authors[0]?.userId || "N/A"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {data.authorActivity.authors[0]?.totalAssignments ||
-                              0}{" "}
-                            assignments
-                          </p>
-                        </div>
-                        <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="pt-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Total Assignments
-                          </p>
-                          <p className="text-2xl font-bold">
-                            {data.authorActivity.authors.reduce(
-                              (sum, a) => sum + a.totalAssignments,
-                              0,
-                            )}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            by all authors combined
-                          </p>
-                        </div>
-                        <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                      </div>
-                    </CardContent>
-                  </Card>
+          {isUserAdmin && (
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Authors</p>
+                    <p className="text-2xl font-bold">
+                      {data.authorActivity?.totalAuthors || 0}
+                    </p>
+                  </div>
+                  <FileText className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
                 </div>
+              </CardContent>
+            </Card>
+          )}
 
-                {data.authorActivity.activityInsights.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Activity className="h-5 w-5" />
-                        Author Activity Insights
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2">
-                        {data.authorActivity.activityInsights.map(
-                          (insight, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                              <span className="text-sm">{insight}</span>
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                )}
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Learners</p>
+                  <p className="text-2xl font-bold">
+                    {data.analytics.uniqueLearners}
+                  </p>
+                </div>
+                <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Completion Rate
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {data.analytics.totalAttempts > 0
+                      ? `${Math.round((data.analytics.completedAttempts / data.analytics.totalAttempts) * 100)}%`
+                      : "N/A"}
+                  </p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Avg Grade</p>
+                  <p className="text-2xl font-bold">
+                    {data.analytics.averageGrade > 0
+                      ? `${data.analytics.averageGrade.toFixed(2)}%`
+                      : "N/A"}
+                  </p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Rating</p>
+                  <p className="text-2xl font-bold">
+                    {data.analytics.averageRating > 0
+                      ? data.analytics.averageRating.toFixed(1)
+                      : "N/A"}
+                  </p>
+                </div>
+                <Star className="h-8 w-8 text-yellow-500" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
+          <TabsList
+            className={`
+        grid w-full ${isUserAdmin ? "grid-cols-7" : "grid-cols-4"} border-b mb-4
+        `}
+          >
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            {/* Authors, AI Usage, and Reports carry admin-only/internal data
+              (cross-author activity + emails, model keys, AI spend) and the
+              author endpoint omits it — hide these tabs outside admin mode. */}
+            {isUserAdmin && <TabsTrigger value="authors">Authors</TabsTrigger>}
+            <TabsTrigger value="questions">Questions</TabsTrigger>
+            <TabsTrigger value="attempts">Attempts</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
+            {isUserAdmin && (
+              <TabsTrigger value="ai-usage">AI Usage</TabsTrigger>
+            )}
+            {isUserAdmin && <TabsTrigger value="reports">Reports</TabsTrigger>}
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <div
+              className={`grid grid-cols-1 ${isUserAdmin ? "lg:grid-cols-2" : ""} gap-6`}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Assignment Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium">Type</p>
+                    <p className="text-sm text-muted-foreground">
+                      {data.assignment.type}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Time Estimate</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDuration(data.assignment.timeEstimateMinutes)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Allotted Time</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDuration(data.assignment.allotedTimeMinutes)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Passing Grade</p>
+                    <p className="text-sm text-muted-foreground">
+                      {data.assignment.passingGrade}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Total Points</p>
+                    <p className="text-sm text-muted-foreground">
+                      {data.assignment.totalPoints}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Created</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(data.assignment.createdAt)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Last Updated</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(data.assignment.updatedAt)}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Cost figures and per-call AI usage are admin/internal-only and
+                absent from the author payload — show this card only to admins. */}
+              {isUserAdmin && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Author Activity Details</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      Cost Analysis Breakdown
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Author</TableHead>
-                          <TableHead className="text-center">
-                            Activity Score
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Assignments
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Questions published
-                          </TableHead>
-                          <TableHead className="text-center">
-                            AI Usage
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Feedback
-                          </TableHead>
-                          <TableHead className="text-center">Joined</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.authorActivity.authors.map((author) => (
-                          <TableRow key={author.userId}>
-                            <TableCell className="font-mono text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                                    {author.userId
-                                      .split("@")[0]
-                                      ?.substring(0, 2)
-                                      .toUpperCase() || "AU"}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full mx-auto mb-3">
+                          <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Cost per Attempt
+                        </div>
+                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                          {data.analytics.totalAttempts > 0
+                            ? formatCurrency(
+                                (data.analytics.totalCost ?? 0) /
+                                  data.analytics.totalAttempts,
+                              )
+                            : "N/A"}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {data.analytics.totalAttempts} total attempts
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className="flex items-center justify-center w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full mx-auto mb-3">
+                          <FileText className="h-6 w-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Authoring Costs
+                        </div>
+                        <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                          {formatCurrency(
+                            (data.aiUsage ?? [])
+                              .filter((usage) =>
+                                [
+                                  "TRANSLATION",
+                                  "QUESTION_GENERATION",
+                                  "ASSIGNMENT_GENERATION",
+                                ].includes(usage.usageType),
+                              )
+                              .reduce(
+                                (sum, usage) => sum + (usage.totalCost || 0),
+                                0,
+                              ),
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Content creation & translation
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className="flex items-center justify-center w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full mx-auto mb-3">
+                          <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Grading Costs
+                        </div>
+                        <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                          {formatCurrency(
+                            (data.aiUsage ?? [])
+                              .filter((usage) =>
+                                [
+                                  "LIVE_RECORDING_FEEDBACK",
+                                  "GRADING_VALIDATION",
+                                  "ASSIGNMENT_GRADING",
+                                ].includes(usage.usageType),
+                              )
+                              .reduce(
+                                (sum, usage) => sum + (usage.totalCost || 0),
+                                0,
+                              ),
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Student feedback & validation
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-6 border-t">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="font-semibold text-sm mb-3 text-green-700 dark:text-green-300">
+                            Authoring Details
+                          </h4>
+                          <div className="space-y-2">
+                            {(data.aiUsage ?? [])
+                              .filter((usage) =>
+                                [
+                                  "TRANSLATION",
+                                  "QUESTION_GENERATION",
+                                  "ASSIGNMENT_GENERATION",
+                                ].includes(usage.usageType),
+                              )
+                              .map((usage, index) => (
+                                <div
+                                  key={index}
+                                  className="flex justify-between items-center py-1"
+                                >
+                                  <span className="text-xs text-muted-foreground">
+                                    {usage.usageType
+                                      .replace("_", " ")
+                                      .toLowerCase()
+                                      .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </span>
+                                  <span className="text-sm font-mono">
+                                    {formatCurrency(usage.totalCost || 0)}
                                   </span>
                                 </div>
-                                <div>
-                                  <div className="font-medium">
-                                    {author.userId.split("@")[0]}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {author.userId.split("@")[1]}
-                                  </div>
+                              ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="font-semibold text-sm mb-3 text-purple-700 dark:text-purple-300">
+                            Grading Details
+                          </h4>
+                          <div className="space-y-2">
+                            {(data.aiUsage ?? [])
+                              .filter((usage) =>
+                                [
+                                  "LIVE_RECORDING_FEEDBACK",
+                                  "GRADING_VALIDATION",
+                                  "ASSIGNMENT_GRADING",
+                                ].includes(usage.usageType),
+                              )
+                              .map((usage, index) => (
+                                <div
+                                  key={index}
+                                  className="flex justify-between items-center py-1"
+                                >
+                                  <span className="text-xs text-muted-foreground">
+                                    {usage.usageType
+                                      .replace("_", " ")
+                                      .toLowerCase()
+                                      .replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </span>
+                                  <span className="text-sm font-mono">
+                                    {formatCurrency(usage.totalCost || 0)}
+                                  </span>
                                 </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge
-                                variant={
-                                  author.activityScore > 10
-                                    ? "default"
-                                    : "secondary"
-                                }
-                              >
-                                {author.activityScore}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {author.totalAssignments}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {author.totalQuestions}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {author.totalAIUsage > 1000
-                                ? "Ridiculous Usage!"
-                                : author.totalAIUsage > 500
-                                  ? "Very High Usage"
-                                  : author.totalAIUsage > 100
-                                    ? "High Usage"
-                                    : author.totalAIUsage > 50
-                                      ? "Moderate Usage"
-                                      : author.totalAIUsage > 0
-                                        ? "Low Usage"
-                                        : "No Usage"}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {author.totalFeedback}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {formatDate(author.joinedAt)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge
-                                variant={
-                                  author.isActiveContributor
-                                    ? "default"
-                                    : "outline"
-                                }
-                              >
-                                {author.isActiveContributor
-                                  ? "Active"
-                                  : "Occasional"}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-              </div>
-            ) : (
+              )}
+            </div>
+
+            {data.analytics.performanceInsights.length > 0 && (
               <Card>
-                <CardContent className="pt-4">
-                  <div className="text-center text-muted-foreground py-8">
-                    No author information available for this assignment
-                  </div>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Performance Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {data.analytics.performanceInsights.map(
+                      (insight, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm">{insight}</span>
+                        </li>
+                      ),
+                    )}
+                  </ul>
                 </CardContent>
               </Card>
             )}
           </TabsContent>
-        )}
 
-        <TabsContent value="questions">
-          <Card>
-            <CardHeader>
-              <CardTitle>Question Performance Analysis</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Question</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-center">Points</TableHead>
-                    <TableHead className="text-center">Pass Rate %</TableHead>
-                    <TableHead className="text-center">Avg Points</TableHead>
-                    <TableHead className="text-center">Responses</TableHead>
-                    <TableHead className="text-center">Variants</TableHead>
-                    <TableHead className="text-center">Languages</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.questions.map((question) => (
-                    <TableRow key={question.id}>
-                      <TableCell className="max-w-xs">
-                        <div className="truncate" title={question.question}>
-                          {question.question}
+          {isUserAdmin && (
+            <TabsContent value="authors" className="space-y-6">
+              {data.authorActivity && data.authorActivity.totalAuthors > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Total Authors
+                            </p>
+                            <p className="text-2xl font-bold">
+                              {data.authorActivity.totalAuthors}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {
+                                data.authorActivity.authors.filter(
+                                  (a) => a.isActiveContributor,
+                                ).length
+                              }{" "}
+                              active contributors
+                            </p>
+                          </div>
+                          <Users className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {question.insight}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Most Active
+                            </p>
+                            <p className="text-lg font-bold text-truncate">
+                              {data.authorActivity.authors[0]?.userId || "N/A"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {data.authorActivity.authors[0]
+                                ?.totalAssignments || 0}{" "}
+                              assignments
+                            </p>
+                          </div>
+                          <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{question.type}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {question.totalPoints}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant={
-                            question.correctPercentage < 50
-                              ? "destructive"
-                              : "default"
-                          }
-                        >
-                          {Math.round(question.correctPercentage)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {question.averagePoints.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {question.responseCount}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {question.variants}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {question.translations.length}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                      </CardContent>
+                    </Card>
 
-        <TabsContent value="attempts" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle>Assignment Attempts</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {filteredAttempts.length} of {data.attempts.length} attempts
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={clearAttemptFilters}
-                  disabled={
-                    attemptSearch === "" &&
-                    attemptStatusFilter === "all" &&
-                    attemptGradeFilter === "all"
-                  }
-                  className="flex items-center gap-2"
-                >
-                  <X className="h-4 w-4" />
-                  Clear Filters
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    placeholder="Search by user ID..."
-                    value={attemptSearch}
-                    onChange={(e) => setAttemptSearch(e.target.value)}
-                    className="pl-9"
-                  />
-
-                  {attemptSearch && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAttemptSearch("")}
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-
-                <Select
-                  value={attemptStatusFilter}
-                  onValueChange={setAttemptStatusFilter}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="submitted">Submitted</SelectItem>
-                    <SelectItem value="in-progress">In Progress</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={attemptGradeFilter}
-                  onValueChange={setAttemptGradeFilter}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filter by grade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Grades</SelectItem>
-                    <SelectItem value="passed">Passed (≥60%)</SelectItem>
-                    <SelectItem value="failed">Failed (&lt;60%)</SelectItem>
-                    <SelectItem value="ungraded">Ungraded</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="flex gap-2">
-                  <Select
-                    value={attemptSortBy}
-                    onValueChange={setAttemptSortBy}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="createdAt">Date Started</SelectItem>
-                      <SelectItem value="userId">User ID</SelectItem>
-                      <SelectItem value="grade">Grade</SelectItem>
-                      <SelectItem value="timeSpent">Time Spent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setAttemptSortOrder(
-                        attemptSortOrder === "asc" ? "desc" : "asc",
-                      )
-                    }
-                    className="flex items-center gap-1"
-                  >
-                    {attemptSortOrder === "asc" ? (
-                      <ArrowUp className="h-4 w-4" />
-                    ) : (
-                      <ArrowDown className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {filteredAttempts.length}
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Total Assignments
+                            </p>
+                            <p className="text-2xl font-bold">
+                              {data.authorActivity.authors.reduce(
+                                (sum, a) => sum + a.totalAssignments,
+                                0,
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              by all authors combined
+                            </p>
+                          </div>
+                          <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    Total Shown
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {filteredAttempts.filter((a) => a.submitted).length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Submitted</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                    {filteredAttempts.filter((a) => !a.submitted).length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    In Progress
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                    {
-                      filteredAttempts.filter(
-                        (a) => a.grade !== null && a.grade >= 0.6,
-                      ).length
-                    }
-                  </div>
-                  <div className="text-sm text-muted-foreground">Passed</div>
-                </div>
-              </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead
-                      className="cursor-pointer"
-                      onClick={() => setAttemptSortBy("userId")}
-                    >
-                      <div className="flex items-center gap-1">
-                        User ID
-                        {attemptSortBy === "userId" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
-                      </div>
-                    </TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead
-                      className="text-center cursor-pointer"
-                      onClick={() => setAttemptSortBy("grade")}
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        Grade
-                        {attemptSortBy === "grade" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
-                      </div>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer"
-                      onClick={() => setAttemptSortBy("createdAt")}
-                    >
-                      <div className="flex items-center gap-1">
-                        Started
-                        {attemptSortBy === "createdAt" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
-                      </div>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer"
-                      onClick={() => setAttemptSortBy("timeSpent")}
-                    >
-                      <div className="flex items-center gap-1">
-                        Time Spent
-                        {attemptSortBy === "timeSpent" &&
-                          (attemptSortOrder === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
-                      </div>
-                    </TableHead>
-                    {isUserAdmin && (
-                      <TableHead className="text-right w-[300px] whitespace-nowrap">
-                        Actions
-                      </TableHead>
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAttempts.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={isUserAdmin ? 6 : 5}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        No attempts match the current filters
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredAttempts.map((attempt) => (
-                      <TableRow key={attempt.id}>
-                        <TableCell className="font-mono text-xs">
-                          {attempt.userId}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              attempt.submitted ? "default" : "secondary"
-                            }
-                          >
-                            {attempt.submitted ? "Submitted" : "In Progress"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {attempt.grade !== null ? (
-                            <span
-                              className={
-                                attempt.grade >= 0.6
-                                  ? "text-green-600 dark:text-green-400 font-semibold"
-                                  : "text-red-600 dark:text-red-400 font-semibold"
-                              }
-                            >
-                              {Math.round(attempt.grade * 100)}%
-                            </span>
-                          ) : (
-                            "N/A"
+                  {data.authorActivity.activityInsights.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Activity className="h-5 w-5" />
+                          Author Activity Insights
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {data.authorActivity.activityInsights.map(
+                            (insight, index) => (
+                              <li
+                                key={index}
+                                className="flex items-start gap-2"
+                              >
+                                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                <span className="text-sm">{insight}</span>
+                              </li>
+                            ),
                           )}
-                        </TableCell>
-                        <TableCell>{formatDate(attempt.createdAt)}</TableCell>
-                        <TableCell>
-                          {attempt.timeSpent !== null &&
-                          attempt.timeSpent !== undefined
-                            ? formatDuration(attempt.timeSpent)
-                            : "N/A"}
-                        </TableCell>
-                        {isUserAdmin && (
-                          <TableCell className="text-right w-[300px] whitespace-nowrap">
-                            {isAttemptPassing(attempt.grade) ? (
-                              <span className="text-xs text-muted-foreground">
-                                —
-                              </span>
-                            ) : confirmingPassId === attempt.id ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text-xs text-muted-foreground">
-                                  Pass at 100%?
-                                </span>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  disabled={passingId === attempt.id}
-                                  onClick={() => handleForcePass(attempt.id)}
-                                >
-                                  {passingId === attempt.id
-                                    ? "Passing…"
-                                    : "Confirm"}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  disabled={passingId === attempt.id}
-                                  onClick={() => setConfirmingPassId(null)}
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-2">
-                                {passError === attempt.id && (
-                                  <span className="text-xs text-red-600 dark:text-red-400">
-                                    Failed. Try again.
-                                  </span>
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setPassError(null);
-                                    setConfirmingPassId(attempt.id);
-                                  }}
-                                >
-                                  Force Pass
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))
+                        </ul>
+                      </CardContent>
+                    </Card>
                   )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="feedback">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Feedback</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {data.feedback.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">
-                  No feedback received yet
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Author Activity Details</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Author</TableHead>
+                            <TableHead className="text-center">
+                              Activity Score
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Assignments
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Questions published
+                            </TableHead>
+                            <TableHead className="text-center">
+                              AI Usage
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Feedback
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Joined
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Status
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {data.authorActivity.authors.map((author) => (
+                            <TableRow key={author.userId}>
+                              <TableCell className="font-mono text-sm">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                                      {author.userId
+                                        .split("@")[0]
+                                        ?.substring(0, 2)
+                                        .toUpperCase() || "AU"}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">
+                                      {author.userId.split("@")[0]}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {author.userId.split("@")[1]}
+                                    </div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant={
+                                    author.activityScore > 10
+                                      ? "default"
+                                      : "secondary"
+                                  }
+                                >
+                                  {author.activityScore}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {author.totalAssignments}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {author.totalQuestions}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {author.totalAIUsage > 1000
+                                  ? "Ridiculous Usage!"
+                                  : author.totalAIUsage > 500
+                                    ? "Very High Usage"
+                                    : author.totalAIUsage > 100
+                                      ? "High Usage"
+                                      : author.totalAIUsage > 50
+                                        ? "Moderate Usage"
+                                        : author.totalAIUsage > 0
+                                          ? "Low Usage"
+                                          : "No Usage"}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {author.totalFeedback}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {formatDate(author.joinedAt)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant={
+                                    author.isActiveContributor
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                >
+                                  {author.isActiveContributor
+                                    ? "Active"
+                                    : "Occasional"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : (
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="text-center text-muted-foreground py-8">
+                      No author information available for this assignment
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          )}
+
+          <TabsContent value="questions">
+            <Card>
+              <CardHeader>
+                <CardTitle>Question Performance Analysis</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead className="text-center">
-                        Assignment Rating
-                      </TableHead>
-                      <TableHead className="text-center">AI Grading</TableHead>
-                      <TableHead className="text-center">AI Feedback</TableHead>
-                      <TableHead>Comments</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>Question</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-center">Points</TableHead>
+                      <TableHead className="text-center">Pass Rate %</TableHead>
+                      <TableHead className="text-center">Avg Points</TableHead>
+                      <TableHead className="text-center">Responses</TableHead>
+                      <TableHead className="text-center">Variants</TableHead>
+                      <TableHead className="text-center">Languages</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.feedback.map((feedback) => (
-                      <TableRow key={feedback.id}>
-                        <TableCell className="font-mono text-xs">
-                          {feedback.userId}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {feedback.assignmentRating ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                              {feedback.assignmentRating}
-                            </div>
-                          ) : (
-                            "N/A"
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {feedback.aiGradingRating ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                              {feedback.aiGradingRating}
-                            </div>
-                          ) : (
-                            "N/A"
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {feedback.aiFeedbackRating ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                              {feedback.aiFeedbackRating}
-                            </div>
-                          ) : (
-                            "N/A"
-                          )}
-                        </TableCell>
+                    {data.questions.map((question) => (
+                      <TableRow key={question.id}>
                         <TableCell className="max-w-xs">
-                          <div
-                            className="truncate"
-                            title={feedback.comments || ""}
-                          >
-                            {feedback.comments || "No comments"}
+                          <div className="truncate" title={question.question}>
+                            {question.question}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {question.insight}
                           </div>
                         </TableCell>
-                        <TableCell>{formatDate(feedback.createdAt)}</TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openFeedbackModal(feedback)}
+                          <Badge variant="outline">{question.type}</Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {question.totalPoints}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            variant={
+                              question.correctPercentage < 50
+                                ? "destructive"
+                                : "default"
+                            }
                           >
-                            View Details
-                          </Button>
+                            {Math.round(question.correctPercentage)}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {question.averagePoints.toFixed(1)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {question.responseCount}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {question.variants}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {question.translations.length}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {isUserAdmin && (
-          <TabsContent value="ai-usage" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                    <FileText className="h-5 w-5" />
-                    Authoring Costs
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-green-700 dark:text-green-300 mb-4">
-                    {formatCurrency(
-                      (data.aiUsage ?? [])
-                        .filter((usage) =>
-                          [
-                            "TRANSLATION",
-                            "QUESTION_GENERATION",
-                            "ASSIGNMENT_GENERATION",
-                          ].includes(usage.usageType),
-                        )
-                        .reduce(
-                          (sum, usage) => sum + (usage.totalCost || 0),
-                          0,
-                        ),
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    {(data.aiUsage ?? [])
-                      .filter((usage) =>
-                        [
-                          "TRANSLATION",
-                          "QUESTION_GENERATION",
-                          "ASSIGNMENT_GENERATION",
-                        ].includes(usage.usageType),
-                      )
-                      .map((usage, index) => (
-                        <div
-                          key={index}
-                          className="flex justify-between items-center"
-                        >
-                          <span className="text-sm text-muted-foreground">
-                            {usage.usageType
-                              .replace("_", " ")
-                              .toLowerCase()
-                              .replace(/\b\w/g, (l) => l.toUpperCase())}
-                          </span>
-                          <span className="font-mono text-sm">
-                            {formatCurrency(usage.totalCost || 0)}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                    <Users className="h-5 w-5" />
-                    Grading Costs
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-purple-700 dark:text-purple-300 mb-4">
-                    {formatCurrency(
-                      (data.aiUsage ?? [])
-                        .filter((usage) =>
-                          [
-                            "LIVE_RECORDING_FEEDBACK",
-                            "GRADING_VALIDATION",
-                            "ASSIGNMENT_GRADING",
-                          ].includes(usage.usageType),
-                        )
-                        .reduce(
-                          (sum, usage) => sum + (usage.totalCost || 0),
-                          0,
-                        ),
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    {(data.aiUsage ?? [])
-                      .filter((usage) =>
-                        [
-                          "LIVE_RECORDING_FEEDBACK",
-                          "GRADING_VALIDATION",
-                          "ASSIGNMENT_GRADING",
-                        ].includes(usage.usageType),
-                      )
-                      .map((usage, index) => (
-                        <div
-                          key={index}
-                          className="flex justify-between items-center"
-                        >
-                          <span className="text-sm text-muted-foreground">
-                            {usage.usageType
-                              .replace("_", " ")
-                              .toLowerCase()
-                              .replace(/\b\w/g, (l) => l.toUpperCase())}
-                          </span>
-                          <span className="font-mono text-sm">
-                            {formatCurrency(usage.totalCost || 0)}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
+          <TabsContent value="attempts" className="space-y-6">
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start">
                   <div>
-                    <CardTitle>AI Usage Details</CardTitle>
+                    <CardTitle>Assignment Attempts</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      Detailed breakdown of AI usage by type and model
+                      {filteredAttempts.length} of {data.attempts.length}{" "}
+                      attempts
                     </p>
                   </div>
                   <Button
                     variant="outline"
-                    onClick={() => setShowDetailedUsage(!showDetailedUsage)}
+                    onClick={clearAttemptFilters}
+                    disabled={
+                      attemptSearch === "" &&
+                      attemptStatusFilter === "all" &&
+                      attemptGradeFilter === "all"
+                    }
                     className="flex items-center gap-2"
                   >
-                    {showDetailedUsage ? "Hide Details" : "Show Details"}
-                    {showDetailedUsage ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+                    <X className="h-4 w-4" />
+                    Clear Filters
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                    <Input
+                      placeholder="Search by user ID..."
+                      value={attemptSearch}
+                      onChange={(e) => setAttemptSearch(e.target.value)}
+                      className="pl-9"
+                    />
+
+                    {attemptSearch && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAttemptSearch("")}
+                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+
+                  <Select
+                    value={attemptStatusFilter}
+                    onValueChange={setAttemptStatusFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="submitted">Submitted</SelectItem>
+                      <SelectItem value="in-progress">In Progress</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={attemptGradeFilter}
+                    onValueChange={setAttemptGradeFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by grade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Grades</SelectItem>
+                      <SelectItem value="passed">Passed (≥60%)</SelectItem>
+                      <SelectItem value="failed">Failed (&lt;60%)</SelectItem>
+                      <SelectItem value="ungraded">Ungraded</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <div className="flex gap-2">
+                    <Select
+                      value={attemptSortBy}
+                      onValueChange={setAttemptSortBy}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="createdAt">Date Started</SelectItem>
+                        <SelectItem value="userId">User ID</SelectItem>
+                        <SelectItem value="grade">Grade</SelectItem>
+                        <SelectItem value="timeSpent">Time Spent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        setAttemptSortOrder(
+                          attemptSortOrder === "asc" ? "desc" : "asc",
+                        )
+                      }
+                      className="flex items-center gap-1"
+                    >
+                      {attemptSortOrder === "asc" ? (
+                        <ArrowUp className="h-4 w-4" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {filteredAttempts.length}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Total Shown
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {filteredAttempts.filter((a) => a.submitted).length}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Submitted
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                      {filteredAttempts.filter((a) => !a.submitted).length}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      In Progress
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {
+                        filteredAttempts.filter(
+                          (a) => a.grade !== null && a.grade >= 0.6,
+                        ).length
+                      }
+                    </div>
+                    <div className="text-sm text-muted-foreground">Passed</div>
+                  </div>
+                </div>
+
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Usage Type</TableHead>
-                      <TableHead>Model Used</TableHead>
-                      <TableHead className="text-center">Total Cost</TableHead>
-                      {showDetailedUsage && (
-                        <>
-                          <TableHead className="text-center">
-                            Tokens In
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Tokens Out
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Input Cost
-                          </TableHead>
-                          <TableHead className="text-center">
-                            Output Cost
-                          </TableHead>
-                          <TableHead>Last Used On</TableHead>
-                        </>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => setAttemptSortBy("userId")}
+                      >
+                        <div className="flex items-center gap-1">
+                          User ID
+                          {attemptSortBy === "userId" &&
+                            (attemptSortOrder === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            ))}
+                        </div>
+                      </TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead
+                        className="text-center cursor-pointer"
+                        onClick={() => setAttemptSortBy("grade")}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Grade
+                          {attemptSortBy === "grade" &&
+                            (attemptSortOrder === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            ))}
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => setAttemptSortBy("createdAt")}
+                      >
+                        <div className="flex items-center gap-1">
+                          Started
+                          {attemptSortBy === "createdAt" &&
+                            (attemptSortOrder === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            ))}
+                        </div>
+                      </TableHead>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => setAttemptSortBy("timeSpent")}
+                      >
+                        <div className="flex items-center gap-1">
+                          Time Spent
+                          {attemptSortBy === "timeSpent" &&
+                            (attemptSortOrder === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            ))}
+                        </div>
+                      </TableHead>
+                      {isUserAdmin && (
+                        <TableHead className="text-right w-[300px] whitespace-nowrap">
+                          Actions
+                        </TableHead>
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(data.aiUsage ?? []).map((usage, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              [
-                                "TRANSLATION",
-                                "QUESTION_GENERATION",
-                                "ASSIGNMENT_GENERATION",
-                              ].includes(usage.usageType)
-                                ? "border-green-300 dark:border-green-700 text-green-700 dark:text-green-300"
-                                : [
-                                      "LIVE_RECORDING_FEEDBACK",
-                                      "GRADING_VALIDATION",
-                                      "ASSIGNMENT_GRADING",
-                                    ].includes(usage.usageType)
-                                  ? "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300"
-                                  : ""
-                            }
-                          >
-                            {usage.usageType.replace("_", " ")}
-                          </Badge>
+                    {filteredAttempts.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={isUserAdmin ? 6 : 5}
+                          className="text-center py-8 text-muted-foreground"
+                        >
+                          No attempts match the current filters
                         </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <Badge variant="secondary">{usage.modelUsed}</Badge>
-                            {showDetailedUsage && (
-                              <div className="text-xs text-muted-foreground">
-                                In:{" "}
-                                {formatPricePerMillionTokens(
-                                  usage.inputTokenPrice,
-                                )}
-                                /1M | Out:{" "}
-                                {formatPricePerMillionTokens(
-                                  usage.outputTokenPrice,
-                                )}
-                                /1M
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center font-mono font-semibold text-green-600 dark:text-green-400">
-                          {formatCurrency(usage.totalCost)}
-                        </TableCell>
-                        {showDetailedUsage && (
-                          <>
-                            <TableCell className="text-center font-mono">
-                              {usage.tokensIn.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {usage.tokensOut.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-center font-mono text-blue-600 dark:text-blue-400">
-                              {formatCurrency(usage.inputCost)}
-                            </TableCell>
-                            <TableCell className="text-center font-mono text-purple-600 dark:text-purple-400">
-                              {formatCurrency(usage.outputCost)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div>{formatDate(usage.createdAt)}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  Pricing:{" "}
-                                  {formatDate(usage.pricingEffectiveDate)}
-                                </div>
-                              </div>
-                            </TableCell>
-                          </>
-                        )}
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredAttempts.map((attempt) => (
+                        <TableRow key={attempt.id}>
+                          <TableCell className="font-mono text-xs">
+                            {attempt.userId}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                attempt.submitted ? "default" : "secondary"
+                              }
+                            >
+                              {attempt.submitted ? "Submitted" : "In Progress"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {attempt.grade !== null ? (
+                              <span
+                                className={
+                                  attempt.grade >= 0.6
+                                    ? "text-green-600 dark:text-green-400 font-semibold"
+                                    : "text-red-600 dark:text-red-400 font-semibold"
+                                }
+                              >
+                                {Math.round(attempt.grade * 100)}%
+                              </span>
+                            ) : (
+                              "N/A"
+                            )}
+                          </TableCell>
+                          <TableCell>{formatDate(attempt.createdAt)}</TableCell>
+                          <TableCell>
+                            {attempt.timeSpent !== null &&
+                            attempt.timeSpent !== undefined
+                              ? formatDuration(attempt.timeSpent)
+                              : "N/A"}
+                          </TableCell>
+                          {isUserAdmin && (
+                            <TableCell className="text-right w-[300px] whitespace-nowrap">
+                              {isAttemptPassing(attempt.grade) ? (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              ) : confirmingPassId === attempt.id ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  <span className="text-xs text-muted-foreground">
+                                    Pass at 100%?
+                                  </span>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    disabled={passingId === attempt.id}
+                                    onClick={() => handleForcePass(attempt.id)}
+                                  >
+                                    {passingId === attempt.id
+                                      ? "Passing…"
+                                      : "Confirm"}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={passingId === attempt.id}
+                                    onClick={() => setConfirmingPassId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-2">
+                                  {passError === attempt.id && (
+                                    <span className="text-xs text-red-600 dark:text-red-400">
+                                      Failed. Try again.
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setPassError(null);
+                                      setConfirmingPassId(attempt.id);
+                                    }}
+                                  >
+                                    Force Pass
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
-
-                {showDetailedUsage && (
-                  <div className="mt-6 space-y-4">
-                    <h3 className="text-lg font-semibold">
-                      Calculation Details
-                    </h3>
-                    {(data.aiUsage ?? []).map((usage, index) => (
-                      <div
-                        key={index}
-                        className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/20"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{usage.usageType}</Badge>
-                            <Badge variant="secondary">{usage.modelUsed}</Badge>
-                          </div>
-                          <span className="font-semibold text-green-600 dark:text-green-400">
-                            {formatCurrency(usage.totalCost)}
-                          </span>
-                        </div>
-                        <div className="font-mono text-sm space-y-1 text-slate-700 dark:text-slate-300">
-                          <div className="text-blue-600 dark:text-blue-400">
-                            {usage.calculationSteps.inputCalculation}
-                          </div>
-                          <div className="text-purple-600 dark:text-purple-400">
-                            {usage.calculationSteps.outputCalculation}
-                          </div>
-                          <div className="text-green-600 dark:text-green-400 font-semibold">
-                            {usage.calculationSteps.totalCalculation}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
-        )}
 
-        {isUserAdmin && (
-          <TabsContent value="reports">
+          <TabsContent value="feedback">
             <Card>
               <CardHeader>
-                <CardTitle>Issue Reports</CardTitle>
+                <CardTitle>User Feedback</CardTitle>
               </CardHeader>
               <CardContent>
-                {data.reports.length === 0 ? (
+                {data.feedback.length === 0 ? (
                   <div className="text-center text-muted-foreground py-8">
-                    No reports submitted
+                    No feedback received yet
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Issue Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead className="text-center">
+                          Assignment Rating
+                        </TableHead>
+                        <TableHead className="text-center">
+                          AI Grading
+                        </TableHead>
+                        <TableHead className="text-center">
+                          AI Feedback
+                        </TableHead>
+                        <TableHead>Comments</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.reports.map((report) => (
-                        <TableRow key={report.id}>
-                          <TableCell>
-                            <Badge variant="outline">{report.issueType}</Badge>
+                      {data.feedback.map((feedback) => (
+                        <TableRow key={feedback.id}>
+                          <TableCell className="font-mono text-xs">
+                            {feedback.userId}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {feedback.assignmentRating ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Star className="h-3 w-3 text-yellow-500 fill-current" />
+                                {feedback.assignmentRating}
+                              </div>
+                            ) : (
+                              "N/A"
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {feedback.aiGradingRating ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Star className="h-3 w-3 text-yellow-500 fill-current" />
+                                {feedback.aiGradingRating}
+                              </div>
+                            ) : (
+                              "N/A"
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {feedback.aiFeedbackRating ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Star className="h-3 w-3 text-yellow-500 fill-current" />
+                                {feedback.aiFeedbackRating}
+                              </div>
+                            ) : (
+                              "N/A"
+                            )}
                           </TableCell>
                           <TableCell className="max-w-xs">
                             <div
                               className="truncate"
-                              title={report.description}
+                              title={feedback.comments || ""}
                             >
-                              {report.description}
+                              {feedback.comments || "No comments"}
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={
-                                report.status === "OPEN"
-                                  ? "destructive"
-                                  : "default"
-                              }
-                            >
-                              {report.status}
-                            </Badge>
+                            {formatDate(feedback.createdAt)}
                           </TableCell>
-                          <TableCell>{formatDate(report.createdAt)}</TableCell>
                           <TableCell>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => openReportModal(report)}
+                              onClick={() => openFeedbackModal(feedback)}
                             >
                               View Details
                             </Button>
@@ -1902,20 +1586,370 @@ export function AssignmentInsightsContent({
               </CardContent>
             </Card>
           </TabsContent>
-        )}
-      </Tabs>
 
-      <FeedbackModal
-        feedback={selectedFeedback}
-        isOpen={isFeedbackModalOpen}
-        onClose={closeFeedbackModal}
-      />
+          {isUserAdmin && (
+            <TabsContent value="ai-usage" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                      <FileText className="h-5 w-5" />
+                      Authoring Costs
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-green-700 dark:text-green-300 mb-4">
+                      {formatCurrency(
+                        (data.aiUsage ?? [])
+                          .filter((usage) =>
+                            [
+                              "TRANSLATION",
+                              "QUESTION_GENERATION",
+                              "ASSIGNMENT_GENERATION",
+                            ].includes(usage.usageType),
+                          )
+                          .reduce(
+                            (sum, usage) => sum + (usage.totalCost || 0),
+                            0,
+                          ),
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {(data.aiUsage ?? [])
+                        .filter((usage) =>
+                          [
+                            "TRANSLATION",
+                            "QUESTION_GENERATION",
+                            "ASSIGNMENT_GENERATION",
+                          ].includes(usage.usageType),
+                        )
+                        .map((usage, index) => (
+                          <div
+                            key={index}
+                            className="flex justify-between items-center"
+                          >
+                            <span className="text-sm text-muted-foreground">
+                              {usage.usageType
+                                .replace("_", " ")
+                                .toLowerCase()
+                                .replace(/\b\w/g, (l) => l.toUpperCase())}
+                            </span>
+                            <span className="font-mono text-sm">
+                              {formatCurrency(usage.totalCost || 0)}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </CardContent>
+                </Card>
 
-      <ReportModal
-        report={selectedReport}
-        isOpen={isReportModalOpen}
-        onClose={closeReportModal}
-      />
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                      <Users className="h-5 w-5" />
+                      Grading Costs
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-purple-700 dark:text-purple-300 mb-4">
+                      {formatCurrency(
+                        (data.aiUsage ?? [])
+                          .filter((usage) =>
+                            [
+                              "LIVE_RECORDING_FEEDBACK",
+                              "GRADING_VALIDATION",
+                              "ASSIGNMENT_GRADING",
+                            ].includes(usage.usageType),
+                          )
+                          .reduce(
+                            (sum, usage) => sum + (usage.totalCost || 0),
+                            0,
+                          ),
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {(data.aiUsage ?? [])
+                        .filter((usage) =>
+                          [
+                            "LIVE_RECORDING_FEEDBACK",
+                            "GRADING_VALIDATION",
+                            "ASSIGNMENT_GRADING",
+                          ].includes(usage.usageType),
+                        )
+                        .map((usage, index) => (
+                          <div
+                            key={index}
+                            className="flex justify-between items-center"
+                          >
+                            <span className="text-sm text-muted-foreground">
+                              {usage.usageType
+                                .replace("_", " ")
+                                .toLowerCase()
+                                .replace(/\b\w/g, (l) => l.toUpperCase())}
+                            </span>
+                            <span className="font-mono text-sm">
+                              {formatCurrency(usage.totalCost || 0)}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>AI Usage Details</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Detailed breakdown of AI usage by type and model
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDetailedUsage(!showDetailedUsage)}
+                      className="flex items-center gap-2"
+                    >
+                      {showDetailedUsage ? "Hide Details" : "Show Details"}
+                      {showDetailedUsage ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Usage Type</TableHead>
+                        <TableHead>Model Used</TableHead>
+                        <TableHead className="text-center">
+                          Total Cost
+                        </TableHead>
+                        {showDetailedUsage && (
+                          <>
+                            <TableHead className="text-center">
+                              Tokens In
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Tokens Out
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Input Cost
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Output Cost
+                            </TableHead>
+                            <TableHead>Last Used On</TableHead>
+                          </>
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(data.aiUsage ?? []).map((usage, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                [
+                                  "TRANSLATION",
+                                  "QUESTION_GENERATION",
+                                  "ASSIGNMENT_GENERATION",
+                                ].includes(usage.usageType)
+                                  ? "border-green-300 dark:border-green-700 text-green-700 dark:text-green-300"
+                                  : [
+                                        "LIVE_RECORDING_FEEDBACK",
+                                        "GRADING_VALIDATION",
+                                        "ASSIGNMENT_GRADING",
+                                      ].includes(usage.usageType)
+                                    ? "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300"
+                                    : ""
+                              }
+                            >
+                              {usage.usageType.replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <Badge variant="secondary">
+                                {usage.modelUsed}
+                              </Badge>
+                              {showDetailedUsage && (
+                                <div className="text-xs text-muted-foreground">
+                                  In:{" "}
+                                  {formatPricePerMillionTokens(
+                                    usage.inputTokenPrice,
+                                  )}
+                                  /1M | Out:{" "}
+                                  {formatPricePerMillionTokens(
+                                    usage.outputTokenPrice,
+                                  )}
+                                  /1M
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-semibold text-green-600 dark:text-green-400">
+                            {formatCurrency(usage.totalCost)}
+                          </TableCell>
+                          {showDetailedUsage && (
+                            <>
+                              <TableCell className="text-center font-mono">
+                                {usage.tokensIn.toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {usage.tokensOut.toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-blue-600 dark:text-blue-400">
+                                {formatCurrency(usage.inputCost)}
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-purple-600 dark:text-purple-400">
+                                {formatCurrency(usage.outputCost)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <div>{formatDate(usage.createdAt)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Pricing:{" "}
+                                    {formatDate(usage.pricingEffectiveDate)}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  {showDetailedUsage && (
+                    <div className="mt-6 space-y-4">
+                      <h3 className="text-lg font-semibold">
+                        Calculation Details
+                      </h3>
+                      {(data.aiUsage ?? []).map((usage, index) => (
+                        <div
+                          key={index}
+                          className="border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/20"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{usage.usageType}</Badge>
+                              <Badge variant="secondary">
+                                {usage.modelUsed}
+                              </Badge>
+                            </div>
+                            <span className="font-semibold text-green-600 dark:text-green-400">
+                              {formatCurrency(usage.totalCost)}
+                            </span>
+                          </div>
+                          <div className="font-mono text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                            <div className="text-blue-600 dark:text-blue-400">
+                              {usage.calculationSteps.inputCalculation}
+                            </div>
+                            <div className="text-purple-600 dark:text-purple-400">
+                              {usage.calculationSteps.outputCalculation}
+                            </div>
+                            <div className="text-green-600 dark:text-green-400 font-semibold">
+                              {usage.calculationSteps.totalCalculation}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {isUserAdmin && (
+            <TabsContent value="reports">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Issue Reports</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {data.reports.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      No reports submitted
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Issue Type</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.reports.map((report) => (
+                          <TableRow key={report.id}>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {report.issueType}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="max-w-xs">
+                              <div
+                                className="truncate"
+                                title={report.description}
+                              >
+                                {report.description}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  report.status === "OPEN"
+                                    ? "destructive"
+                                    : "default"
+                                }
+                              >
+                                {report.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {formatDate(report.createdAt)}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openReportModal(report)}
+                              >
+                                View Details
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
+
+        <FeedbackModal
+          feedback={selectedFeedback}
+          isOpen={isFeedbackModalOpen}
+          onClose={closeFeedbackModal}
+        />
+
+        <ReportModal
+          report={selectedReport}
+          isOpen={isReportModalOpen}
+          onClose={closeReportModal}
+        />
       </div>
     </div>
   );

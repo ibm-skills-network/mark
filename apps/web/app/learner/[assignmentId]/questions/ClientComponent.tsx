@@ -138,21 +138,19 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   // from localStorage), so we key the memo on the question id list instead of
   // the array ref — otherwise the shuffle would re-run on every render.
   const questionShuffleKey = allQuestions
-    .map(
-      (q) => {
-        const choicesKey = Array.isArray(q.choices)
-          ? q.choices
-              .map((choice) =>
-                typeof choice === "object" && choice !== null
-                  ? `${choice.choice}:${choice.points}:${choice.isCorrect}:${choice.feedback ?? ""}`
-                  : String(choice),
-              )
-              .join("~")
-          : "";
+    .map((q) => {
+      const choicesKey = Array.isArray(q.choices)
+        ? q.choices
+            .map((choice) =>
+              typeof choice === "object" && choice !== null
+                ? `${choice.choice}:${choice.points}:${choice.isCorrect}:${choice.feedback ?? ""}`
+                : String(choice),
+            )
+            .join("~")
+        : "";
 
-        return `${q.id}:${q.randomizedChoices === true}:${choicesKey}`;
-      },
-    )
+      return `${q.id}:${q.randomizedChoices === true}:${choicesKey}`;
+    })
     .join("|");
   const questions: QuestionStore[] = useMemo(() => {
     const shouldShuffle =
@@ -165,8 +163,8 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
 
     const selectedQuestions =
       numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
-      ? pool.slice(0, numberOfQuestionsPerAttempt)
-      : pool;
+        ? pool.slice(0, numberOfQuestionsPerAttempt)
+        : pool;
 
     return selectedQuestions.map(maybeShuffleChoices);
   }, [questionShuffleKey, displayOrder, numberOfQuestionsPerAttempt]);
