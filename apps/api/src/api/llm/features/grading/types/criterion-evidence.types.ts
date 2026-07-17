@@ -105,6 +105,7 @@ export interface CriterionGrade {
   pointsAwarded: number;
   maxPoints: number;
   rationale: string;
+  nextStep?: string;
   citations: string[];
   confidence: ConfidenceLevel;
   decision: "meets" | "partially_meets" | "does_not_meet";
@@ -215,6 +216,7 @@ export const CriterionGradeSchema = z.object({
   rationale: z.string().min(20),
   citations: z.array(z.string()).min(1),
   confidence: z.enum(["high", "medium", "low"]),
+  nextStep: z.string().min(10).optional(),
 });
 
 export const EvidenceValidationSchema = z.object({

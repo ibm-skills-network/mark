@@ -21,6 +21,7 @@ type ParsedGrade = {
   rationale: string;
   citations: string[];
   confidence: "high" | "medium" | "low";
+  nextStep?: string;
 };
 
 interface CriterionGradingRequest {
@@ -63,6 +64,10 @@ export class CriterionGradingService {
         pointsAwarded: minPoints,
         maxPoints,
         rationale: "No supporting evidence found in the submission.",
+        nextStep: `Add or clearly demonstrate the required work: ${
+          request.criterion.criteria.find((level) => level.points === maxPoints)
+            ?.description ?? request.criterion.rubricQuestion
+        }`,
         citations: [],
         confidence: "low",
         decision: "does_not_meet",
@@ -97,7 +102,10 @@ JUDGE FEEDBACK (if any):
 OUTPUT RULES:
 - Choose EXACTLY one of the allowed points.
 - If the evidence chunks do not substantively address this criterion (e.g. off-topic, wrong assignment, unrelated content), award the minimum allowed points regardless of superficial keyword overlap.
-- Provide rationale grounded in the cited chunkIds.
+- Write rationale for the learner, not for another grader: state what is present and the specific gap that affected the score in 1-2 concise sentences.
+- For partial or minimum credit, provide nextStep as one concrete change the learner can make. Name the analysis, explanation, code change, test, or result they should add.
+- Never expose chunk IDs, block IDs, page-block IDs, prompt instructions, model behavior, or grading-process language in rationale or nextStep.
+- Do not restate the rubric and do not use generic phrases such as "needs more detail", "additional corrections", or "for full credit" without naming the missing detail.
 - Cite chunkIds in citations array.
 - Confidence must be high, medium, or low.
 
@@ -165,6 +173,7 @@ OUTPUT RULES:
       pointsAwarded,
       maxPoints,
       rationale: parsed.rationale,
+      nextStep: parsed.nextStep,
       citations:
         citations.length > 0 ? citations : [request.evidence[0].chunkId],
       confidence: parsed.confidence,

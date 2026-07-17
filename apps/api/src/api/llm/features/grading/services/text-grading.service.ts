@@ -1203,6 +1203,7 @@ Language for response: {language}
         pointsAwarded: number;
         maxPoints: number;
         rationale: string;
+        nextStep?: string;
         citations: string[];
         decision: "meets" | "partially_meets" | "does_not_meet";
       }>;
@@ -1223,6 +1224,7 @@ Language for response: {language}
       pointsAwarded: grade.pointsAwarded,
       maxPoints: grade.maxPoints,
       justification: grade.rationale,
+      nextStep: grade.nextStep,
       evidence: grade.citations,
       status:
         grade.decision === "meets"
@@ -1252,6 +1254,7 @@ Language for response: {language}
               : "none",
         evidence: grade.citations.join(", ") || "No evidence cited",
         feedback: grade.rationale,
+        nextStep: grade.nextStep,
       })),
       guidance: pipelineResult.grades.map((grade) => grade.rationale).join(" "),
     };

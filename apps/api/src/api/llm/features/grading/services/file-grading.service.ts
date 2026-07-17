@@ -140,7 +140,7 @@ export class FileGradingService implements IFileGradingService {
     Promise<FileBasedQuestionResponseModel>
   >();
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
-    "structured-file-evidence-v2-gpt54";
+    "structured-file-evidence-v3-gpt54-learner-feedback";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -2991,6 +2991,7 @@ export class FileGradingService implements IFileGradingService {
         pointsAwarded: criterion.pointsAwarded,
         maxPoints: criterion.maxPoints,
         justification: criterion.rationale,
+        nextStep: criterion.nextStep,
         evidence: criterion.evidence.map(
           (citation) =>
             `p${citation.page}:${citation.blockId} ${citation.quote}`,
