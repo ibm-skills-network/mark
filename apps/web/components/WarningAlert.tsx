@@ -35,7 +35,9 @@ const WarningAlert: React.FC<ModalProps> = ({
 
         <div className="flex items-center gap-3 mb-4">
           <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Warning</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            Warning
+          </h2>
         </div>
 
         <p className="text-gray-600 dark:text-gray-300 mb-6">{description}</p>

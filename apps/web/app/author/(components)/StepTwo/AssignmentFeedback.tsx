@@ -35,7 +35,8 @@ const FeedbackOption: React.FC<FeedbackOptionProps> = ({
         "transition-colors flex flex-1 gap-1.5 px-6 py-4 rounded-md border border-solid justify-start focus:outline-none",
         currentOption === id &&
           "bg-violet-50 dark:bg-violet-900/20 border-violet-100 dark:border-violet-800 text-violet-800 dark:text-violet-200",
-        currentOption !== id && "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700",
+        currentOption !== id &&
+          "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700",
         className,
       )}
     >

@@ -366,7 +366,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
               }`}
             >
               <input {...getInputProps()} />
-              <IconCloudUpload size={50} className="text-gray-500 dark:text-gray-400 mb-4" />
+              <IconCloudUpload
+                size={50}
+                className="text-gray-500 dark:text-gray-400 mb-4"
+              />
               {isDragActive ? (
                 <p className="text-purple-500">Drop the files here...</p>
               ) : (
@@ -406,7 +409,10 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                             setFileInspectorModalOpen(true);
                           }}
                         >
-                          <IconFile size={32} className="text-gray-500 dark:text-gray-400" />
+                          <IconFile
+                            size={32}
+                            className="text-gray-500 dark:text-gray-400"
+                          />
                           <div>
                             <p className="text-gray-700 dark:text-gray-200 font-medium text-left">
                               {file.filename}
@@ -467,7 +473,9 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="grid grid-row-2 gap-4">
               <div>
-                <h1 className="text-lg font-medium text-gray-800 dark:text-gray-200">Styles</h1>
+                <h1 className="text-lg font-medium text-gray-800 dark:text-gray-200">
+                  Styles
+                </h1>
                 <div className="mt-2 space-y-4">
                   {difficultyOptions.map((option) => (
                     <div
@@ -515,7 +523,9 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   type="button"
                   onClick={() => setReplaceExistingQuestions((prev) => !prev)}
                   className={`${
-                    replaceExistingQuestions ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700"
+                    replaceExistingQuestions
+                      ? "bg-violet-600"
+                      : "bg-gray-200 dark:bg-gray-700"
                   } relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none`}
                 >
                   <span

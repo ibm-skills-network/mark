@@ -83,7 +83,9 @@ export const FooterNavigation = () => {
               </div>
 
               <div className="mb-6">
-                <p className="text-gray-600 dark:text-gray-300">{errorMessage}</p>
+                <p className="text-gray-600 dark:text-gray-300">
+                  {errorMessage}
+                </p>
               </div>
 
               <div className="flex justify-end">

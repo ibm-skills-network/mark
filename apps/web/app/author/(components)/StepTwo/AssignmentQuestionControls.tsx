@@ -79,8 +79,12 @@ const ControlToggle: FC<ControlToggleProps> = ({
   return (
     <div className="flex items-start justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-md hover:border-gray-300 transition-colors">
       <div className="flex-1">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{description}</p>
+        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {label}
+        </h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          {description}
+        </p>
       </div>
       <button
         type="button"

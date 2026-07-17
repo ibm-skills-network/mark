@@ -41,7 +41,9 @@ function TipsView() {
             />
           </div>
           <div className="flex flex-col gap-y-2 border-y dark:border-gray-700 py-2">
-            <h1 className="text-gray-800 dark:text-gray-100 text-lg pb-2">Language Assistance</h1>
+            <h1 className="text-gray-800 dark:text-gray-100 text-lg pb-2">
+              Language Assistance
+            </h1>
             <p className="text-gray-600 dark:text-gray-300 leading-tight">
               Unsure about a question? Toggle between translations in your
               chosen language.
@@ -88,11 +90,15 @@ function TipsView() {
             <div className="flex items-center gap-x-2 px-4">
               <div className="flex items-center gap-x-1">
                 <TagIcon className="h-6 w-6 text-violet-600" />
-                <p className="text-gray-600 dark:text-gray-400 text-xs">UNTAGGED</p>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">
+                  UNTAGGED
+                </p>
               </div>
               <div className="flex items-center gap-x-1">
                 <SolidTagIcon className="h-6 w-6 text-violet-600" />
-                <p className="text-gray-600 dark:text-gray-400 text-xs">TAGGED</p>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">
+                  TAGGED
+                </p>
               </div>
             </div>
           </div>
@@ -104,7 +110,9 @@ function TipsView() {
               checked={persistTips}
             />
 
-            <p className="text-gray-600 dark:text-gray-300 text-sm">Don't Show This Again</p>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              Don't Show This Again
+            </p>
           </div>
         </div>
       </div>
@@ -121,7 +129,9 @@ function TipsView() {
         />
       </div>
       <div className="flex flex-col gap-y-2 border-y dark:border-gray-700 py-2">
-        <h1 className="text-gray-800 dark:text-gray-100 text-lg pb-2">Language Assistance</h1>
+        <h1 className="text-gray-800 dark:text-gray-100 text-lg pb-2">
+          Language Assistance
+        </h1>
         <p className="text-gray-600 dark:text-gray-300 leading-tight">
           Unsure about a question? Toggle between translations in your chosen
           language.
@@ -195,7 +205,9 @@ function TipsView() {
           checked={persistTips}
         />
 
-        <p className="text-gray-600 dark:text-gray-300 text-sm">Don't Show This Again</p>
+        <p className="text-gray-600 dark:text-gray-300 text-sm">
+          Don't Show This Again
+        </p>
       </div>
     </div>
   );

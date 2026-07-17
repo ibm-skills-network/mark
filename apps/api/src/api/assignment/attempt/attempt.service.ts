@@ -3,6 +3,7 @@ import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   ForbiddenException,
+  HttpStatus,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -54,6 +55,9 @@ import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
 import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import {
+  ATTEMPT_IN_PROGRESS_CODE,
+  ATTEMPT_MAX_REACHED_CODE,
+  ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
   GRADE_SUBMISSION_EXCEPTION,
   IN_COOLDOWN_PERIOD,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
@@ -1906,7 +1910,14 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     );
 
     if (ongoingAttempts.length > 0) {
-      throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
+      // Carry the machine-readable code (same contract as the v2 validation
+      // service) so the web client can resume instead of showing the
+      // "no more attempts" fallback it uses for uncoded 422s.
+      throw new UnprocessableEntityException({
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ATTEMPT_IN_PROGRESS_CODE,
+        message: IN_PROGRESS_SUBMISSION_EXCEPTION,
+      });
     }
     const attemptsInTimeRange = attempts.filter(
       (sub) => sub.createdAt >= timeRangeStartDate && sub.createdAt <= now,
@@ -1916,9 +1927,11 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       assignment.attemptsPerTimeRange &&
       attemptsInTimeRange.length >= assignment.attemptsPerTimeRange
     ) {
-      throw new UnprocessableEntityException(
-        TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-      );
+      throw new UnprocessableEntityException({
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
+        message: TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+      });
     }
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const totalAttempts = await this.countUserAttempts(
@@ -1927,9 +1940,11 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       );
 
       if (totalAttempts >= assignment.numAttempts) {
-        throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-        );
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: ATTEMPT_MAX_REACHED_CODE,
+          message: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        });
       }
 
       const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;
