@@ -8,11 +8,13 @@ module.exports = {
     warnOnUnsupportedTypeScriptVersion: false,
   },
   extends: [
-    "prettier",
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
     "plugin:@typescript-eslint/recommended-requiring-type-checking",
     "plugin:unicorn/recommended",
+    // Must come last so it disables every formatting rule (e.g.
+    // unicorn/number-literal-case) that fights the pre-commit prettier pass.
+    "prettier",
   ],
   rules: {
     "unicorn/prefer-top-level-await": "off",
