@@ -29,6 +29,7 @@ import { IImageGradingService } from "../interfaces/image-grading.interface";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { RubricCriterion } from "../types/criterion-evidence.types";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 
 interface ProcessedImageData {
   buffer: Buffer;
@@ -77,6 +78,7 @@ export class ImageGradingService implements IImageGradingService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       learnerImageResponse: rawImages,
+      safetyIdentifier,
     } = model;
 
     const learnerImages: LearnerImageUpload[] = this.normalizeLearnerImages(
@@ -93,7 +95,40 @@ export class ImageGradingService implements IImageGradingService {
       totalPoints,
     );
 
-    await this.moderateContent(learnerResponse);
+    const contentToModerate =
+      typeof learnerResponse === "string"
+        ? learnerResponse
+        : JSON.stringify(learnerResponse);
+    // Moderate the uploaded images too — they go to the vision model and
+    // were previously never checked. Only URL-shaped or data-URL values
+    // are accepted by the moderations endpoint.
+    const imageUrlsForModeration = [
+      topImageData,
+      ...learnerImages.map((img) => img.imageData || img.imageUrl),
+    ].filter(
+      (url): url is string =>
+        !!url && (url.startsWith("http") || url.startsWith("data:")),
+    );
+    const moderationVerdict = await this.moderationService.assessContent(
+      contentToModerate,
+      imageUrlsForModeration,
+    );
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        categories: moderationVerdict.severeCategories,
+      });
+      return {
+        points: 0,
+        feedback: MODERATION_BLOCK_FEEDBACK,
+      } as ImageBasedQuestionResponseModel;
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        categories: moderationVerdict.flaggedCategories,
+      });
+    }
 
     const maxTotalPoints = this.calculateMaxPoints(
       scoringCriteria,
@@ -307,6 +342,7 @@ Respond with a JSON object containing:
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           modelKey,
+          { safetyIdentifier },
         );
       } catch (visionError) {
         // Only the vision call's own errors can mean the provider rejected the
@@ -484,21 +520,6 @@ ${parsed.guidance}
 
     if (totalPoints == undefined || totalPoints < 0) {
       throw new HttpException("Invalid totalPoints", HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  private async moderateContent(learnerResponse: any): Promise<void> {
-    const contentToModerate =
-      typeof learnerResponse === "string"
-        ? learnerResponse
-        : JSON.stringify(learnerResponse);
-
-    // A moderation flag must not deny a learner their grade: log it and grade
-    // anyway (see the text-grading path for the rationale and precedent).
-    const passedModeration =
-      await this.moderationService.validateContent(contentToModerate);
-    if (!passedModeration) {
-      this.logger.warn("image.grading.moderation.flagged_but_proceeding");
     }
   }
 
