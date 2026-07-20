@@ -134,3 +134,8 @@ export interface AdminSweepMissingTranslationsJobPayload {
   jobId: string;
   body: SweepTranslationsJobRequest;
 }
+
+export interface FileExtractJobPayload {
+  assignmentId: number;
+  fileId: number;
+}

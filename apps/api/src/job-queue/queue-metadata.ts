@@ -47,4 +47,8 @@ export const QUEUE_METADATA: Record<string, QueueMetadata> = {
     role: "admin-maintenance",
     defaultConcurrencyPerPod: 1,
   },
+  [JOB_QUEUE_NAMES.FILE_EXTRACT]: {
+    role: "author",
+    defaultConcurrencyPerPod: 2,
+  },
 };
