@@ -98,7 +98,11 @@ function buildService() {
   service.pdfAnnotationService = {};
   service.s3Service = {};
   service.moderationService = {
-    validateContent: jest.fn().mockResolvedValue(true),
+    assessContent: jest.fn().mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    }),
   };
   service.llmResolver = {
     getModelForGradingTask: jest.fn(),
@@ -419,7 +423,11 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
       });
 
     // Need to stub all the methods used by gradeFileBasedQuestion
-    service.moderationService.validateContent.mockResolvedValue(true);
+    service.moderationService.assessContent.mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    });
     service.scaleFileBasedModelToQuestionMax = jest.fn().mockReturnValue({
       points: 5,
       feedback: "ok",
@@ -497,7 +505,11 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
 
     const evidenceSpy = jest.spyOn(service, "gradeWithEvidenceBasedApproach");
 
-    service.moderationService.validateContent.mockResolvedValue(true);
+    service.moderationService.assessContent.mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    });
     service.scaleFileBasedModelToQuestionMax = jest
       .fn()
       .mockImplementation((m: any) => m);
