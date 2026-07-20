@@ -515,6 +515,49 @@ describe("AssignmentFileService", () => {
       );
     });
 
+    it("runAssignmentFileExtraction rethrows on S3 download failure so the job retries", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({ status: AssignmentFileStatus.READY }),
+      );
+      s3.getObject.mockRejectedValue(new Error("s3 timeout"));
+
+      await expect(service.runAssignmentFileExtraction(1)).rejects.toThrow(
+        "s3 timeout",
+      );
+      expect(extractor.extractContentFromFiles).not.toHaveBeenCalled();
+      expect(prisma.assignmentFile.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+          }),
+        }),
+      );
+    });
+
+    it("runAssignmentFileExtraction rethrows when the raw fallback update also fails", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({ status: AssignmentFileStatus.READY }),
+      );
+      extractor.extractContentFromFiles.mockResolvedValue([
+        {
+          filename: "test.txt",
+          content: "extracted text",
+          fileType: "text/plain",
+        },
+      ]);
+      prisma.assignmentFile.update.mockRejectedValue(
+        new Error("bad utf8 rejected"),
+      );
+      prisma.$executeRaw = jest
+        .fn()
+        .mockRejectedValue(new Error("raw update rejected"));
+
+      await expect(service.runAssignmentFileExtraction(1)).rejects.toThrow(
+        "raw update rejected",
+      );
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    });
+
     it("runAssignmentFileExtraction retries with structured extraction disabled when oversized PDF rejects", async () => {
       prisma.assignmentFile.findUnique.mockResolvedValue(
         makeDbFile({

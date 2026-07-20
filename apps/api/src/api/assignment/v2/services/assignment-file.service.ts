@@ -311,23 +311,40 @@ export class AssignmentFileService {
       >
     >[number];
 
+    // Download failures rethrow instead of persisting FAILED: they are
+    // transient infra errors, and the job's remaining BullMQ attempts are
+    // the recovery path. Only extraction itself (deterministic parsing that
+    // a retry cannot fix) falls through to the terminal failure envelope.
+    let buffer: Buffer;
     try {
       const object = await this.s3Service.getObject({
         Bucket: file.storageBucket,
         Key: file.storageKey,
       });
-      const buffer = await this.collectBodyToBuffer(object.Body);
-      const extractionInput = [
-        {
-          filename: file.filename,
-          content: "InCos",
-          fileType: file.mimeType || "application/octet-stream",
-          bucket: file.storageBucket,
-          key: file.storageKey,
-          buffer,
-        },
-      ];
+      buffer = await this.collectBodyToBuffer(object.Body);
+    } catch (downloadError) {
+      const message =
+        downloadError instanceof Error
+          ? downloadError.message
+          : String(downloadError);
+      this.logger.error(
+        `runAssignmentFileExtraction: S3 download failed for fileId=${fileId}, rethrowing for job retry: ${message}`,
+      );
+      throw downloadError;
+    }
 
+    const extractionInput = [
+      {
+        filename: file.filename,
+        content: "InCos",
+        fileType: file.mimeType || "application/octet-stream",
+        bucket: file.storageBucket,
+        key: file.storageKey,
+        buffer,
+      },
+    ];
+
+    try {
       try {
         [extractedFile] =
           await this.fileContentExtractionService.extractContentFromFiles(
@@ -404,15 +421,26 @@ export class AssignmentFileService {
       this.logger.warn(
         `runAssignmentFileExtraction: attempting fallback raw update for fileId=${fileId}`,
       );
-      await this.prisma.$executeRaw`
-        UPDATE "AssignmentFile"
-        SET "extractedText" = NULL,
-            "extractionStatus" = 'FAILED'::"AssignmentFileExtractionStatus",
-            "extractionError" = 'Extraction output rejected by storage layer',
-            "extractedAt" = NULL,
-            "updatedAt" = NOW()
-        WHERE "id" = ${fileId}
-      `;
+      try {
+        await this.prisma.$executeRaw`
+          UPDATE "AssignmentFile"
+          SET "extractedText" = NULL,
+              "extractionStatus" = 'FAILED'::"AssignmentFileExtractionStatus",
+              "extractionError" = 'Extraction output rejected by storage layer',
+              "extractedAt" = NULL,
+              "updatedAt" = NOW()
+          WHERE "id" = ${fileId}
+        `;
+      } catch (fallbackError) {
+        const fallbackMessage =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : String(fallbackError);
+        this.logger.error(
+          `runAssignmentFileExtraction: fallback raw update ALSO failed for fileId=${fileId}, rethrowing for job retry: ${fallbackMessage}`,
+        );
+        throw fallbackError;
+      }
       this.logger.log(
         `runAssignmentFileExtraction: fallback raw update succeeded for fileId=${fileId}, row marked FAILED`,
       );
