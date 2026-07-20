@@ -381,7 +381,7 @@ export class AssignmentFileService {
       ? this.sanitizeForTextColumn(extractedFile.error ?? null)
       : null;
     this.logger.log(
-      `runAssignmentFileExtraction: fileId=${fileId} extractionFailed=${String(extractionFailed)} extractedLen=${safeExtractedText?.length ?? 0}`,
+      `runAssignmentFileExtraction: fileId=${fileId} extractionFailed=${String(extractionFailed)} extractedLen=${safeExtractedText?.length ?? 0} errorLen=${safeExtractionError?.length ?? 0}`,
     );
 
     try {
@@ -401,6 +401,9 @@ export class AssignmentFileService {
       this.logger.error(
         `runAssignmentFileExtraction: primary update failed for fileId=${fileId}: ${message}`,
       );
+      this.logger.warn(
+        `runAssignmentFileExtraction: attempting fallback raw update for fileId=${fileId}`,
+      );
       await this.prisma.$executeRaw`
         UPDATE "AssignmentFile"
         SET "extractedText" = NULL,
@@ -410,6 +413,9 @@ export class AssignmentFileService {
             "updatedAt" = NOW()
         WHERE "id" = ${fileId}
       `;
+      this.logger.log(
+        `runAssignmentFileExtraction: fallback raw update succeeded for fileId=${fileId}, row marked FAILED`,
+      );
     }
   }
 
