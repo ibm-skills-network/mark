@@ -31,6 +31,7 @@ type JobWorkerServiceTestAccessor = JobWorkerService & {
   handleAttemptJob: (job: Job) => Promise<void>;
   handleAdminTranslationJob: (job: Job) => Promise<void>;
   handleTranslationJob: (job: Job) => Promise<void>;
+  handleFileExtractJob: (job: Job) => Promise<void>;
   getConnection: () => IORedis;
   heartbeatInterval?: NodeJS.Timeout;
   createWorker: (
@@ -378,7 +379,18 @@ describe("JobWorkerService", () => {
       expect.any(Function),
       { connection: mockConnection, concurrency: 1 },
     );
-    expect(workerInstances).toHaveLength(6);
+    expect(Worker).toHaveBeenNthCalledWith(
+      7,
+      JOB_QUEUE_NAMES.FILE_EXTRACT,
+      expect.any(Function),
+      {
+        connection: mockConnection,
+        concurrency: 2,
+        lockDuration: 300_000,
+        maxStalledCount: 0,
+      },
+    );
+    expect(workerInstances).toHaveLength(7);
     // Most workers wire two listeners (completed + failed) via createWorker.
     // The ATTEMPT and ATTEMPT_HEAVY workers additionally get a third listener
     // attached after createWorker returns: the terminal-failure →
@@ -393,7 +405,7 @@ describe("JobWorkerService", () => {
           : 2;
       expect(worker.on.mock.calls.length).toBe(expectedListenerCount);
     }
-    expect(workerWaitUntilReady).toHaveBeenCalledTimes(6);
+    expect(workerWaitUntilReady).toHaveBeenCalledTimes(7);
   });
 
   // ─── Change 9: configurable GRADING_WORKER_CONCURRENCY ──────────────────────────
@@ -585,7 +597,7 @@ describe("JobWorkerService", () => {
 
     await service.onModuleDestroy();
 
-    expect(workerClose).toHaveBeenCalledTimes(6);
+    expect(workerClose).toHaveBeenCalledTimes(7);
     expect(mockConnection.del).toHaveBeenCalledWith(
       expect.stringMatching(/^mark\.jobs\.worker\.heartbeat:/),
     );
@@ -826,6 +838,35 @@ describe("JobWorkerService", () => {
     });
   });
 
+  it("routes a file-extract job to the executor when JOBS_EXECUTE_LOCALLY=true", async () => {
+    const originalFlag = process.env.JOBS_EXECUTE_LOCALLY;
+    process.env.JOBS_EXECUTE_LOCALLY = "true";
+    try {
+      await (
+        service as unknown as {
+          handleFileExtractJob: (job: unknown) => Promise<void>;
+        }
+      ).handleFileExtractJob({
+        name: JOB_NAMES.FILE_EXTRACT,
+        id: "extract:7",
+        data: encryptJobPayload({ assignmentId: 3, fileId: 7 }),
+      });
+      expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queueName: JOB_QUEUE_NAMES.FILE_EXTRACT,
+          jobName: JOB_NAMES.FILE_EXTRACT,
+          payload: { assignmentId: 3, fileId: 7 },
+        }),
+      );
+    } finally {
+      if (originalFlag === undefined) {
+        delete process.env.JOBS_EXECUTE_LOCALLY;
+      } else {
+        process.env.JOBS_EXECUTE_LOCALLY = originalFlag;
+      }
+    }
+  });
+
   it("passes an AbortSignal to fetch so the forward survives past Node's default 5-minute bodyTimeout", async () => {
     // Long-running parent publish jobs run well past the undici default
     // bodyTimeout of 300_000ms. Without an explicit signal the forward
@@ -904,7 +945,8 @@ describe("JobWorkerService", () => {
     | "handleAssignmentV1Job"
     | "handleAssignmentV2Job"
     | "handleAttemptJob"
-    | "handleAdminTranslationJob";
+    | "handleAdminTranslationJob"
+    | "handleFileExtractJob";
   it.each<[HandlerName, string, string]>([
     [
       "handleAssignmentV1Job",
@@ -925,6 +967,11 @@ describe("JobWorkerService", () => {
       "handleAdminTranslationJob",
       "unsupported.admin",
       "Unsupported admin translation job: unsupported.admin",
+    ],
+    [
+      "handleFileExtractJob",
+      "unsupported.file-extract",
+      "Unsupported file-extract job: unsupported.file-extract",
     ],
   ])(
     "rejects unsupported jobs in %s",
@@ -1262,6 +1309,27 @@ describe("JobWorkerService", () => {
             jobName: JOB_NAMES.ADMIN_SWEEP_MISSING_TRANSLATIONS,
             payload,
             bullJobId: "bull-route-4",
+          });
+          expect(fetchMock).not.toHaveBeenCalled();
+        } else {
+          expect(fetchMock).toHaveBeenCalled();
+          expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+        }
+      });
+
+      it("routes file-extract correctly", async () => {
+        const payload = { assignmentId: 3, fileId: 7 };
+        await asTestAccessor(service).handleFileExtractJob({
+          id: "bull-route-5",
+          name: JOB_NAMES.FILE_EXTRACT,
+          data: encryptJobPayload(payload),
+        });
+        if (expected === "local") {
+          expect(mockJobExecutorService.executeJob).toHaveBeenCalledWith({
+            queueName: JOB_QUEUE_NAMES.FILE_EXTRACT,
+            jobName: JOB_NAMES.FILE_EXTRACT,
+            payload,
+            bullJobId: "bull-route-5",
           });
           expect(fetchMock).not.toHaveBeenCalled();
         } else {

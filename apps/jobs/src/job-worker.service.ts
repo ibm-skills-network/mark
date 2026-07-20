@@ -198,6 +198,20 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       1,
     );
 
+    // Author reference-file extraction. Runs the same pdf-parse/pdfjs+canvas
+    // pipeline as heavy grading, so it shares that memory profile: bounded,
+    // low concurrency. Its own queue (not a job class on mark.attempt.heavy)
+    // so an extraction backlog can never delay learner grading and vice
+    // versa. ~5 min lock covers the worst realistic single-file extraction;
+    // maxStalledCount=0 means a poison file that OOMs a pod fails permanently
+    // rather than being re-delivered to more pods that OOM on the same input.
+    const FILE_EXTRACT_CONCURRENCY = this.resolveConcurrency(
+      "FILE_EXTRACT_CONCURRENCY",
+      2,
+    );
+    const FILE_EXTRACT_LOCK_DURATION_MS = 300_000;
+    const FILE_EXTRACT_NO_STALL_RECOVERY = 0;
+
     // Declarative worker table. A pod consumes the intersection of this
     // table with JOB_WORKER_QUEUES (unset = everything), which is how the
     // fast and heavy deployments share one image but drain different queues.
@@ -260,6 +274,15 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         queueName: JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
         processor: async (job) => this.handleAdminTranslationJob(job),
         concurrency: ADMIN_TRANSLATION_CONCURRENCY,
+      },
+      {
+        queueName: JOB_QUEUE_NAMES.FILE_EXTRACT,
+        processor: async (job) => this.handleFileExtractJob(job),
+        concurrency: FILE_EXTRACT_CONCURRENCY,
+        options: {
+          lockDuration: FILE_EXTRACT_LOCK_DURATION_MS,
+          maxStalledCount: FILE_EXTRACT_NO_STALL_RECOVERY,
+        },
       },
     ];
 
@@ -1014,6 +1037,33 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       }
       default: {
         throw new Error(`Unsupported admin translation job: ${job.name}`);
+      }
+    }
+  }
+
+  private async handleFileExtractJob(job: Job): Promise<void> {
+    switch (job.name) {
+      case JOB_NAMES.FILE_EXTRACT: {
+        if (this.shouldExecuteLocally()) {
+          this.logger.debug(
+            `Routing locally: queue=${JOB_QUEUE_NAMES.FILE_EXTRACT} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.jobExecutorService.executeJob({
+            queueName: JOB_QUEUE_NAMES.FILE_EXTRACT,
+            jobName: job.name as JobName,
+            payload: this.getDecryptedJobData(job),
+            bullJobId: job.id,
+          });
+        } else {
+          this.logger.debug(
+            `Forwarding to API: queue=${JOB_QUEUE_NAMES.FILE_EXTRACT} jobName=${job.name} jobId=${job.id}`,
+          );
+          await this.forwardJobToApi(JOB_QUEUE_NAMES.FILE_EXTRACT, job);
+        }
+        return;
+      }
+      default: {
+        throw new Error(`Unsupported file-extract job: ${job.name}`);
       }
     }
   }
