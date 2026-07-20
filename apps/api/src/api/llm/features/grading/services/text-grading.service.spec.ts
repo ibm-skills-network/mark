@@ -391,3 +391,83 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
     expect(processStructured).toHaveBeenCalledTimes(3);
   });
 });
+
+/*
+ * A content-moderation flag on the learner's answer must NOT deny them a grade.
+ * Legitimate coursework (e.g. a security course asking the learner to describe
+ * a rootkit) trips the general-purpose moderation classifier; the answer is
+ * only ever sent to the grading model, never republished. So a flag must log
+ * and fall through to grading, not throw the old 400 "Learner response
+ * validation failed".
+ */
+describe("TextGradingService.gradeTextBasedQuestion moderation fail-open", () => {
+  function buildGradeService(
+    processStructured: jest.Mock,
+    validateContent: jest.Mock,
+  ) {
+    const { service, mockLogger } = buildService();
+    service.maxRetries = 1;
+    service.retryDelay = 1000;
+    service.promptProcessor = {
+      processStructuredPromptForFeature: processStructured,
+    };
+    service.moderationService = { validateContent };
+    service.gradingJudgeService = { validateGrading: jest.fn() };
+    return { service, mockLogger };
+  }
+
+  function gradeModel() {
+    return {
+      question: "Define a stealthier persistence technique than cron jobs.",
+      learnerResponse:
+        "A linux kernel module rootkit that hooks kernel functions.",
+      totalPoints: 4,
+      scoringCriteriaType: "OTHER",
+      scoringCriteria: { rubrics: [] },
+      previousQuestionsAnswersContext: [],
+      assignmentInstrctions: "Follow the rubric.",
+      responseType: "OTHER",
+      questionId: 4311,
+    };
+  }
+
+  it("proceeds to grade (does not throw) when moderation flags the answer", async () => {
+    const validateContent = jest.fn().mockResolvedValue(false);
+    // The retry loop wraps a grading failure in its own post-loop throw, so the
+    // caller never sees this raw error — but processStructured being invoked at
+    // all proves we passed the moderation gate instead of the old 400.
+    const processStructured = jest
+      .fn()
+      .mockRejectedValue(new Error("downstream grading error"));
+    const { service, mockLogger } = buildGradeService(
+      processStructured,
+      validateContent,
+    );
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel(), 1736),
+    ).rejects.toThrow();
+
+    expect(validateContent).toHaveBeenCalledTimes(1);
+    // Got past moderation into the grading LLM call (0 calls would mean the
+    // moderation 400 short-circuited before grading).
+    expect(processStructured).toHaveBeenCalledTimes(1);
+    // The flag was recorded for observability.
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "text.grading.moderation.flagged_but_proceeding",
+      expect.objectContaining({ assignmentId: 1736, questionId: 4311 }),
+    );
+  });
+
+  it("never surfaces the old moderation 400 to the caller", async () => {
+    const validateContent = jest.fn().mockResolvedValue(false);
+    const processStructured = jest
+      .fn()
+      .mockRejectedValue(new Error("some downstream grading error"));
+    const { service } = buildGradeService(processStructured, validateContent);
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel(), 1736),
+    ).rejects.not.toThrow("Learner response validation failed");
+  });
+});
