@@ -47,6 +47,7 @@ export class PresentationGradingService implements IPresentationGradingService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       responseType,
+      safetyIdentifier,
     } = presentationQuestionEvaluateModel;
 
     if (!question) {
@@ -163,7 +164,7 @@ export class PresentationGradingService implements IPresentationGradingService {
       AIUsageType.ASSIGNMENT_GRADING,
       "presentation_grading",
       undefined,
-      { safetyIdentifier: presentationQuestionEvaluateModel.safetyIdentifier },
+      { safetyIdentifier },
     );
 
     try {
