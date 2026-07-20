@@ -161,14 +161,20 @@ export class TextGradingService implements ITextGradingService {
 
       const sanitizedLearnerResponse = this.sanitizeInput(learnerResponse);
 
-      const isValidResponse = await this.moderationService.validateContent(
+      // A moderation flag must not deny a learner their grade. The response is
+      // only sent to the grading model, never republished, and legitimate
+      // coursework trips the general-purpose classifier — a security course
+      // asking learners to describe a rootkit is flagged as policy-violating.
+      // Log the flag for observability and grade anyway, matching
+      // validateContent's existing fail-open behaviour when the API errors.
+      const passedModeration = await this.moderationService.validateContent(
         sanitizedLearnerResponse,
       );
-      if (!isValidResponse) {
-        throw new HttpException(
-          "Learner response validation failed",
-          HttpStatus.BAD_REQUEST,
-        );
+      if (!passedModeration) {
+        this.logger.warn("text.grading.moderation.flagged_but_proceeding", {
+          assignmentId,
+          questionId,
+        });
       }
 
       const maxPossiblePoints = this.calculateMaxPossiblePoints(

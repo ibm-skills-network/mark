@@ -493,13 +493,12 @@ ${parsed.guidance}
         ? learnerResponse
         : JSON.stringify(learnerResponse);
 
-    const isValid =
+    // A moderation flag must not deny a learner their grade: log it and grade
+    // anyway (see the text-grading path for the rationale and precedent).
+    const passedModeration =
       await this.moderationService.validateContent(contentToModerate);
-    if (!isValid) {
-      throw new HttpException(
-        "Learner response blocked",
-        HttpStatus.BAD_REQUEST,
-      );
+    if (!passedModeration) {
+      this.logger.warn("image.grading.moderation.flagged_but_proceeding");
     }
   }
 

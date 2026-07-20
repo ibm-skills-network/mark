@@ -49,14 +49,13 @@ export class VideoPresentationGradingService
       videoPresentationConfig,
     } = videoPresentationQuestionEvaluateModel;
 
-    const validateLearnerResponse =
-      await this.moderationService.validateContent(learnerResponse.transcript);
-
-    if (!validateLearnerResponse) {
-      throw new HttpException(
-        "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
-      );
+    // A moderation flag must not deny a learner their grade: log it and grade
+    // anyway (see the text-grading path for the rationale and precedent).
+    const passedModeration = await this.moderationService.validateContent(
+      learnerResponse.transcript,
+    );
+    if (!passedModeration) {
+      this.logger.warn("video.grading.moderation.flagged_but_proceeding");
     }
 
     const parser = StructuredOutputParser.fromZodSchema(
