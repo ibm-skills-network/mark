@@ -87,6 +87,24 @@ describe("ModerationService.assessContent", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it("fails open (allow) when the client cannot be constructed (missing key)", async () => {
+    const service: any = Object.create(ModerationService.prototype);
+    service.logger = mockLogger();
+    service.severeCategories = new Set(["sexual/minors"]);
+    service.getClient = jest.fn(() => {
+      throw new Error("no key");
+    });
+
+    const verdict = await service.assessContent("x");
+
+    expect(verdict).toEqual({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    });
+    expect(service.logger.error).toHaveBeenCalled();
+  });
+
   it("allows empty content without calling the API", async () => {
     const create = jest.fn();
     const { service } = buildService(create);
@@ -95,6 +113,31 @@ describe("ModerationService.assessContent", () => {
 
     expect(verdict.action).toBe("allow");
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("aggregates flagged categories across multiple results", async () => {
+    const create = jest.fn().mockResolvedValue({
+      results: [
+        {
+          flagged: false,
+          categories: {},
+          category_scores: {},
+        },
+        {
+          flagged: true,
+          categories: { "sexual/minors": true },
+          category_scores: {},
+        },
+      ],
+    });
+    const { service } = buildService(create);
+
+    const verdict = await service.assessContent("caption", [
+      "data:image/png;base64,AAAA",
+    ]);
+
+    expect(verdict.action).toBe("block_severe");
+    expect(verdict.severeCategories).toEqual(["sexual/minors"]);
   });
 
   it("includes image parts in the moderation input", async () => {
@@ -155,6 +198,14 @@ describe("parseSevereCategories", () => {
     expect(parsed).toEqual(
       new Set(["sexual/minors", "harassment/threatening"]),
     );
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it("falls back to the default set when every name is unknown", () => {
+    const logger = mockLogger();
+    const parsed = parseSevereCategories("bogus-one, bogus-two", logger);
+
+    expect(parsed).toEqual(new Set(["sexual/minors"]));
     expect(logger.warn).toHaveBeenCalled();
   });
 });

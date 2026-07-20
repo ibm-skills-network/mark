@@ -95,43 +95,16 @@ export class ModerationService implements IModerationService {
     }
     if (input.length === 0) return allow;
 
+    let response: OpenAI.ModerationCreateResponse;
     try {
-      const response = await this.getClient().moderations.create({
+      response = await this.getClient().moderations.create({
         model: MODERATION_MODEL,
         input,
       });
-
-      const flagged = new Set<string>();
-      for (const result of response.results) {
-        for (const [category, isFlagged] of Object.entries(result.categories)) {
-          if (isFlagged) flagged.add(category);
-        }
-      }
-      const flaggedCategories = [...flagged].sort();
-      const severeCategories = flaggedCategories.filter((category) =>
-        this.severeCategories.has(category),
-      );
-
-      logAiInvocation(this.logger, {
-        modelKey: MODERATION_MODEL_KEY,
-        purpose: "moderation",
-        prompt: content,
-        response: JSON.stringify(flaggedCategories),
-      });
-
-      if (severeCategories.length > 0) {
-        return { action: "block_severe", flaggedCategories, severeCategories };
-      }
-      if (flaggedCategories.length > 0) {
-        return {
-          action: "allow_with_log",
-          flaggedCategories,
-          severeCategories: [],
-        };
-      }
-      return allow;
     } catch (error) {
-      // Fail open: OpenAI being unreachable must never stop grading.
+      // Fail open: OpenAI being unreachable must never stop grading. Scoped
+      // to only the API call so a downstream error (e.g. logging) can never
+      // downgrade an already-computed severe verdict to allow.
       this.logger.error(
         `Error validating content: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -139,6 +112,36 @@ export class ModerationService implements IModerationService {
       );
       return allow;
     }
+
+    const flagged = new Set<string>();
+    for (const result of response.results) {
+      for (const [category, isFlagged] of Object.entries(result.categories)) {
+        if (isFlagged) flagged.add(category);
+      }
+    }
+    const flaggedCategories = [...flagged].sort();
+    const severeCategories = flaggedCategories.filter((category) =>
+      this.severeCategories.has(category),
+    );
+
+    logAiInvocation(this.logger, {
+      modelKey: MODERATION_MODEL_KEY,
+      purpose: "moderation",
+      prompt: content,
+      response: JSON.stringify(flaggedCategories),
+    });
+
+    if (severeCategories.length > 0) {
+      return { action: "block_severe", flaggedCategories, severeCategories };
+    }
+    if (flaggedCategories.length > 0) {
+      return {
+        action: "allow_with_log",
+        flaggedCategories,
+        severeCategories: [],
+      };
+    }
+    return allow;
   }
 
   async validateContent(content: string): Promise<boolean> {
