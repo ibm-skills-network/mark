@@ -45,3 +45,10 @@ export function resolveMaxSpreadsheetCellsPerSubmission(): number {
 
 export const MAX_SPREADSHEET_CELLS_PER_SUBMISSION =
   resolveMaxSpreadsheetCellsPerSubmission();
+
+/**
+ * Learner-facing feedback persisted when a submission trips a severe
+ * moderation category and is not sent to the grading model.
+ */
+export const MODERATION_BLOCK_FEEDBACK =
+  "Your submission was flagged by automated content review and could not be graded automatically. Please contact your instructor.";

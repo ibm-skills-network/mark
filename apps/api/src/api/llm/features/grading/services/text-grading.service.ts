@@ -35,6 +35,7 @@ import {
   PROMPT_PROCESSOR,
   RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS,
 } from "../../../llm.constants";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 import {
   IAnswerNormalizationService,
   INormalizedAnswer,
@@ -157,23 +158,31 @@ export class TextGradingService implements ITextGradingService {
         scoringCriteria,
         scoringCriteriaType,
         questionId,
+        safetyIdentifier,
       } = textBasedQuestionEvaluateModel;
 
       const sanitizedLearnerResponse = this.sanitizeInput(learnerResponse);
 
-      // A moderation flag must not deny a learner their grade. The response is
-      // only sent to the grading model, never republished, and legitimate
-      // coursework trips the general-purpose classifier — a security course
-      // asking learners to describe a rootkit is flagged as policy-violating.
-      // Log the flag for observability and grade anyway, matching
-      // validateContent's existing fail-open behaviour when the API errors.
-      const passedModeration = await this.moderationService.validateContent(
+      // A moderation flag must not deny a learner their grade — legitimate
+      // coursework trips the general-purpose classifier. Only the severe
+      // categories are withheld from the grading model; those persist a
+      // zero with instructions to contact the instructor.
+      const moderationVerdict = await this.moderationService.assessContent(
         sanitizedLearnerResponse,
       );
-      if (!passedModeration) {
-        this.logger.warn("text.grading.moderation.flagged_but_proceeding", {
+      if (moderationVerdict.action === "block_severe") {
+        this.logger.warn("grading.moderation.blocked_severe", {
           assignmentId,
           questionId,
+          categories: moderationVerdict.severeCategories,
+        });
+        return new TextBasedQuestionResponseModel(0, MODERATION_BLOCK_FEEDBACK);
+      }
+      if (moderationVerdict.action === "allow_with_log") {
+        this.logger.warn("grading.moderation.flagged", {
+          assignmentId,
+          questionId,
+          categories: moderationVerdict.flaggedCategories,
         });
       }
 
@@ -313,6 +322,7 @@ export class TextGradingService implements ITextGradingService {
             contentHash,
             assignmentId,
             language,
+            safetyIdentifier,
           );
         } catch (error) {
           // A context_length_exceeded 400 is deterministic for a given prompt:
@@ -555,6 +565,7 @@ export class TextGradingService implements ITextGradingService {
     contentHash: string,
     assignmentId: number,
     language?: string,
+    safetyIdentifier?: string,
     previousJudgeFeedback?: string | null,
   ): Promise<GradingAttempt> {
     const {
@@ -709,7 +720,13 @@ export class TextGradingService implements ITextGradingService {
         // spends its completion budget on reasoning first, and the provider
         // default of 4096 truncates the JSON on large rubrics, failing the
         // grading after all retries.
-        { temperature: 0, top_p: 0, maxRetries: 1, maxTokens: 16_384 },
+        {
+          temperature: 0,
+          top_p: 0,
+          maxRetries: 1,
+          maxTokens: 16_384,
+          safetyIdentifier,
+        },
       );
 
     this.logger.info(
