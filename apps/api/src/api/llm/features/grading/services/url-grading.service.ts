@@ -1,5 +1,5 @@
 import { PromptTemplate } from "@langchain/core/prompts";
-import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -18,6 +18,7 @@ import {
   PROMPT_PROCESSOR,
   RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS,
 } from "../../../llm.constants";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 import { IUrlGradingService } from "../interfaces/url-grading.interface";
 
 @Injectable()
@@ -55,15 +56,27 @@ export class UrlGradingService implements IUrlGradingService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       responseType,
+      safetyIdentifier,
     } = urlBasedQuestionEvaluateModel;
 
-    const validateLearnerResponse =
-      await this.moderationService.validateContent(urlProvided);
-    if (!validateLearnerResponse) {
-      throw new HttpException(
-        "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
-      );
+    const moderationVerdict =
+      await this.moderationService.assessContent(urlProvided);
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        categories: moderationVerdict.severeCategories,
+      });
+      return {
+        points: 0,
+        feedback: MODERATION_BLOCK_FEEDBACK,
+        gradingRationale: MODERATION_BLOCK_FEEDBACK,
+      } as UrlBasedQuestionResponseModel;
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        categories: moderationVerdict.flaggedCategories,
+      });
     }
 
     const rubricCriteria = this.convertToRubricCriteria(
@@ -138,6 +151,7 @@ export class UrlGradingService implements IUrlGradingService {
         prompt,
         assignmentId,
         totalPoints,
+        safetyIdentifier,
       );
     } catch (retryError) {
       this.logger.error(
@@ -248,6 +262,7 @@ export class UrlGradingService implements IUrlGradingService {
     prompt: PromptTemplate,
     assignmentId: number,
     _totalPoints: number,
+    safetyIdentifier?: string,
   ): Promise<string> {
     void _totalPoints;
     const maxRetries = 3;
@@ -262,6 +277,8 @@ export class UrlGradingService implements IUrlGradingService {
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           "url_grading",
+          undefined,
+          { safetyIdentifier },
         );
 
         if (this.isValidLLMResponse(response)) {
