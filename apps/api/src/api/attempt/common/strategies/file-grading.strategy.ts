@@ -16,6 +16,7 @@ import {
   ScoringDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { FileUploadQuestionEvaluateModel } from "src/api/llm/model/file.based.question.evaluate.model";
 import { FileBasedQuestionResponseModel } from "src/api/llm/model/file.based.question.response.model";
@@ -321,6 +322,9 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       undefined,
       question.id,
     );
+    fileUploadQuestionEvaluateModel.safetyIdentifier = context.userId
+      ? hashSafetyIdentifier(context.userId)
+      : undefined;
 
     const gradingModel = await this.llmFacadeService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
@@ -836,6 +840,9 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           judgeFeedback,
           gradingModel.questionId,
         );
+        regradeModel.safetyIdentifier = context.userId
+          ? hashSafetyIdentifier(context.userId)
+          : undefined;
 
         const regraded = await this.llmFacadeService.gradeFileBasedQuestion(
           regradeModel,
