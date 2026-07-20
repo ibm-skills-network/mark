@@ -145,4 +145,62 @@ describe("ImageGradingService moderation verdicts", () => {
       expect.objectContaining({ assignmentId: 1736 }),
     );
   });
+
+  it("moderates a primary image submitted as raw base64 (no data: prefix) that the up-front gate could not see, and never calls the vision model when it is severe", async () => {
+    // The up-front gate only accepts http/data: shaped strings. A learner
+    // (or a hostile client bypassing normal upload plumbing) can submit the
+    // primary image as bare base64 with no "data:" prefix — that string is
+    // truthy and not the "InCos" storage sentinel, so it is treated as an
+    // inline image, yet it also fails the gate's startsWith("http"/"data:")
+    // filter and is excluded from imageUrlsForModeration. Without the fix,
+    // this image would reach the vision model with no moderation at all.
+    const assessContent = jest
+      .fn()
+      .mockResolvedValueOnce({
+        action: "allow",
+        flaggedCategories: [],
+        severeCategories: [],
+      })
+      .mockResolvedValueOnce({
+        action: "block_severe",
+        flaggedCategories: ["sexual/minors"],
+        severeCategories: ["sexual/minors"],
+      });
+    const { service, mockLogger } = buildService(assessContent);
+
+    const smallPng = await sharp({
+      create: {
+        width: 4,
+        height: 4,
+        channels: 3,
+        background: { r: 4, g: 5, b: 6 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const rawBase64 = smallPng.toString("base64");
+
+    const model = {
+      ...gradeModel(),
+      imageData: rawBase64,
+      learnerImageResponse: [],
+    };
+
+    const result = await (service as any).gradeImageBasedQuestion(model, 1736);
+
+    expect(assessContent).toHaveBeenCalledTimes(2);
+    expect(assessContent).toHaveBeenNthCalledWith(1, expect.any(String), []);
+    expect(assessContent).toHaveBeenNthCalledWith(2, "", [
+      expect.stringContaining("data:image/png;base64,"),
+    ]);
+    expect(result.points).toBe(0);
+    expect(result.feedback).toContain("flagged by automated content review");
+    expect(
+      service.promptProcessor.processPromptWithImage,
+    ).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "grading.moderation.blocked_severe",
+      expect.objectContaining({ assignmentId: 1736 }),
+    );
+  });
 });

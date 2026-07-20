@@ -167,17 +167,22 @@ export class ImageGradingService implements IImageGradingService {
       );
     }
 
-    // Determine (before fetching) whether the resolved image will come from
-    // COS storage rather than an inline http/data: value — storage-backed
-    // images are exactly the ones the up-front gate above could not see
-    // (it only accepts http/data: URL shapes), so they were never actually
-    // moderated.
-    const primaryImageFromStorage = this.primaryImageComesFromStorage(
-      topImageData,
-      topBucket,
-      topKey,
-      learnerImages,
-    );
+    // Determine (before fetching) whether the specific source that will
+    // resolve as the primary image was already covered by the up-front gate
+    // above. The gate only accepts http/data: shaped strings, so it misses
+    // two distinct cases that resolve through the exact same precedence as
+    // getPrimaryImageForGrading: an image fetched from COS storage
+    // (bucket/key, arriving as the "InCos" sentinel), and a learner image
+    // submitted as raw/bare base64 with no "data:" prefix — the latter looks
+    // "inline" but was filtered out of imageUrlsForModeration and would
+    // otherwise reach the vision model unmoderated.
+    const primaryNeedsPostResolveModeration =
+      !this.primaryImageCoveredByUpfrontModeration(
+        topImageData,
+        topBucket,
+        topKey,
+        learnerImages,
+      );
 
     const primaryImage = await this.getPrimaryImageForGrading(
       topImageData,
@@ -186,23 +191,23 @@ export class ImageGradingService implements IImageGradingService {
       learnerImages,
     );
 
-    if (primaryImageFromStorage) {
-      const storageModerationVerdict =
+    if (primaryNeedsPostResolveModeration) {
+      const postResolveModerationVerdict =
         await this.moderationService.assessContent("", [primaryImage.base64]);
-      if (storageModerationVerdict.action === "block_severe") {
+      if (postResolveModerationVerdict.action === "block_severe") {
         this.logger.warn("grading.moderation.blocked_severe", {
           assignmentId,
-          categories: storageModerationVerdict.severeCategories,
+          categories: postResolveModerationVerdict.severeCategories,
         });
         return {
           points: 0,
           feedback: MODERATION_BLOCK_FEEDBACK,
         } as ImageBasedQuestionResponseModel;
       }
-      if (storageModerationVerdict.action === "allow_with_log") {
+      if (postResolveModerationVerdict.action === "allow_with_log") {
         this.logger.warn("grading.moderation.flagged", {
           assignmentId,
-          categories: storageModerationVerdict.flaggedCategories,
+          categories: postResolveModerationVerdict.flaggedCategories,
         });
       }
     }
@@ -558,29 +563,44 @@ ${parsed.guidance}
 
   /**
    * Mirrors the branch selection in getPrimaryImageForGrading, without doing
-   * any fetching, purely to know whether the image it will resolve comes
-   * from COS storage. Storage-fetched images are never present in the
-   * up-front imageUrlsForModeration list (their imageData is the "InCos"
-   * sentinel, normalized to "" — which fails that list's http/data: filter),
-   * so this flags exactly the images the up-front gate could not check.
+   * any fetching, purely to know whether the up-front imageUrlsForModeration
+   * gate (built earlier from topImageData and each learner image's
+   * imageData/imageUrl) already saw the specific value that will resolve as
+   * the primary image. That gate only accepts http/data: shaped strings, so
+   * it returns false — meaning a post-resolve moderation check is still
+   * required — for two cases that share the same resolution branch:
+   *  - COS storage (bucket/key): imageData arrives as the "InCos" sentinel
+   *    (normalized to "" by normalizeLearnerImages), which fails the filter.
+   *  - Raw/bare base64 with no "data:" prefix: a truthy, non-"InCos" string
+   *    that still fails the http/data: filter, so it was excluded from the
+   *    up-front list even though it resolves as an inline image.
    */
-  private primaryImageComesFromStorage(
+  private primaryImageCoveredByUpfrontModeration(
     topImageData: string,
     topBucket: string,
     topKey: string,
     learnerImages: LearnerImageUpload[],
   ): boolean {
-    if (topImageData && topImageData !== "InCos") return false;
+    let source: string | undefined;
 
-    if (learnerImages.length > 0) {
+    if (topImageData && topImageData !== "InCos") {
+      source = topImageData;
+    } else if (learnerImages.length > 0) {
       const firstImage = learnerImages[0];
       if (firstImage.imageData && firstImage.imageData !== "InCos") {
+        source = firstImage.imageData;
+      } else {
+        // Resolves via COS storage (bucket/key) — never in the up-front list.
         return false;
       }
-      return !!(firstImage.imageBucket && firstImage.imageKey);
+    } else {
+      // Resolves via COS storage (topBucket/topKey) — never in the up-front
+      // list. If neither is set either, there is no valid image source and
+      // getPrimaryImageForGrading throws before this value is ever used.
+      return !(topBucket && topKey);
     }
 
-    return !!(topBucket && topKey);
+    return source.startsWith("http") || source.startsWith("data:");
   }
 
   private async getPrimaryImageForGrading(
