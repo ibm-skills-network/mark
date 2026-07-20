@@ -32,6 +32,7 @@ import { GradingKillSwitchService } from "src/api/ai-feature-flags/grading-kill-
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import {
   UserRole,
   UserSession,
@@ -576,6 +577,10 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     request: UserSessionRequest,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role, userId } = request.userSession;
+    // Owner of the attempt row, when one is loaded below (LEARNER role).
+    // Preferred over the session userId for the safety identifier, since it's
+    // the actual learner the attempt belongs to.
+    let attemptOwnerUserId: string | undefined;
     // Kill-switch: block submitting/grading an AI-graded attempt while grading
     // is disabled. The attempt is left un-submitted (progress preserved) and no
     // LLM call is made. Non-AI assignments pass through untouched.
@@ -601,6 +606,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           `AssignmentAttempt with Id ${assignmentAttemptId} not found.`,
         );
       }
+      attemptOwnerUserId = assignmentAttempt.userId;
       const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
       if (
         assignmentAttempt.expiresAt &&
@@ -742,6 +748,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       updateAssignmentAttemptDto.authorQuestions,
       updateAssignmentAttemptDto.authorAssignmentDetails,
       updateAssignmentAttemptDto.preTranslatedQuestions,
+      attemptOwnerUserId ?? userId,
     );
     const { grade, totalPointsEarned, totalPossiblePoints } =
       role === UserRole.LEARNER
@@ -1584,6 +1591,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    userId?: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     let question: QuestionDto;
     let assignmentContext: {
@@ -1673,6 +1681,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       assignmentContext,
       assignmentId,
       language,
+      userId,
     );
     const learnerResponseJson = sanitizeUnicodeForJson(
       JSON.stringify(learnerResponse ?? ""),
@@ -2039,6 +2048,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    userId?: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
@@ -2053,6 +2063,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           authorQuestions,
           assignmentDetails,
           preTranslatedQuestions,
+          userId,
         );
       },
     );
@@ -2364,6 +2375,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     },
     assignmentId: number,
     language: string,
+    userId?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse:
@@ -2411,6 +2423,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           assignmentContext,
           assignmentId,
           language,
+          userId,
         );
       }
       case QuestionType.LINK_FILE: {
@@ -2421,6 +2434,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             assignmentContext,
             assignmentId,
             language,
+            userId,
           );
         } else if (
           createQuestionResponseAttemptRequestDto.learnerFileResponse
@@ -2431,6 +2445,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
             language,
+            userId,
           );
         } else {
           throw new BadRequestException(
@@ -2445,6 +2460,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
             assignmentId,
+            userId,
           );
         } else if (question.responseType === "PRESENTATION") {
           return this.handleVideoPresentationQuestionResponse(
@@ -2452,6 +2468,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
             assignmentId,
+            userId,
           );
         } else {
           return this.handleFileUploadQuestionResponse(
@@ -2459,6 +2476,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             question.type,
             createQuestionResponseAttemptRequestDto,
             assignmentContext,
+            undefined,
+            userId,
           );
         }
       }
@@ -2469,6 +2488,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           assignmentContext,
           assignmentId,
           language,
+          userId,
         );
       }
       case QuestionType.TRUE_FALSE: {
@@ -2506,6 +2526,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
+    userId?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerPresentationResponse;
@@ -2530,6 +2551,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         question.type,
         question.responseType ?? "OTHER",
       );
+    presentationQuestionEvaluateModel.safetyIdentifier = userId
+      ? hashSafetyIdentifier(userId)
+      : undefined;
 
     const model = await this.llmFacadeService.gradePresentationQuestion(
       presentationQuestionEvaluateModel,
@@ -2549,6 +2573,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       questionAnswerContext: QuestionAnswerContext[];
     },
     assignmentId: number,
+    userId?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerPresentationResponse;
@@ -2574,6 +2599,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         question.responseType ?? "OTHER",
         question.videoPresentationConfig,
       );
+    videoPresentationQuestionEvaluateModel.safetyIdentifier = userId
+      ? hashSafetyIdentifier(userId)
+      : undefined;
 
     const model = await this.llmFacadeService.gradeVideoPresentationQuestion(
       videoPresentationQuestionEvaluateModel,
@@ -2595,6 +2623,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       questionAnswerContext: QuestionAnswerContext[];
     },
     language?: string,
+    userId?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerFileUpload[];
@@ -2619,6 +2648,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       undefined,
       question.id,
     );
+    fileUploadQuestionEvaluateModel.safetyIdentifier = userId
+      ? hashSafetyIdentifier(userId)
+      : undefined;
     const model = await this.llmFacadeService.gradeFileBasedQuestion(
       fileUploadQuestionEvaluateModel,
       question.assignmentId,
@@ -2644,6 +2676,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     },
     assignmentId: number,
     language?: string,
+    userId?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -2663,6 +2696,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       question.scoring,
       question.responseType ?? "OTHER",
     );
+    textBasedQuestionEvaluateModel.safetyIdentifier = userId
+      ? hashSafetyIdentifier(userId)
+      : undefined;
 
     const model = await this.llmFacadeService.gradeTextBasedQuestion(
       textBasedQuestionEvaluateModel,
@@ -2688,6 +2724,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     },
     assignmentId: number,
     language?: string,
+    userId?: string,
   ): Promise<{
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string;
@@ -2721,6 +2758,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       question.scoring,
       question.responseType ?? "OTHER",
     );
+    urlBasedQuestionEvaluateModel.safetyIdentifier = userId
+      ? hashSafetyIdentifier(userId)
+      : undefined;
 
     const model = await this.llmFacadeService.gradeUrlBasedQuestion(
       urlBasedQuestionEvaluateModel,
