@@ -1,5 +1,6 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
+import { Gpt54MiniLlmService } from "./gpt54-llm.service";
 import { Gpt5LlmService } from "./gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./gpt5-nano-llm.service";
@@ -22,6 +23,7 @@ const PROVIDERS = [
   ["Gpt5NanoLlmService", Gpt5NanoLlmService],
   ["Gpt4VisionPreviewLlmService", Gpt4VisionPreviewLlmService],
   ["OpenAiLlmMiniService", OpenAiLlmMiniService],
+  ["Gpt54MiniLlmService", Gpt54MiniLlmService],
 ] as const;
 
 describe.each(PROVIDERS)("%s request options", (_name, Provider) => {
@@ -69,5 +71,54 @@ describe.each(PROVIDERS)("%s request options", (_name, Provider) => {
     ];
     expect(config.timeout).toBeUndefined();
     expect(config.maxRetries).toBeUndefined();
+  });
+
+  it("forwards safetyIdentifier as modelKwargs.safety_identifier", async () => {
+    const service = makeService();
+
+    await service.invoke([new HumanMessage("hi")], {
+      safetyIdentifier: "abc123",
+    });
+
+    expect(ChatOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelKwargs: expect.objectContaining({ safety_identifier: "abc123" }),
+      }),
+    );
+  });
+});
+
+describe("Gpt54MiniLlmService modelKwargs merge", () => {
+  beforeEach(() => {
+    (ChatOpenAI as unknown as jest.Mock).mockClear();
+  });
+
+  it("keeps reasoning_effort alongside safety_identifier", async () => {
+    const tokenCounter = { countTokens: jest.fn().mockReturnValue(1) };
+    const logger = {
+      child: jest.fn(),
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+    logger.child.mockReturnValue(logger);
+    const service = new Gpt54MiniLlmService(
+      tokenCounter as never,
+      logger as never,
+    );
+
+    await service.invoke([new HumanMessage("hi")], {
+      safetyIdentifier: "abc123",
+    });
+
+    expect(ChatOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelKwargs: expect.objectContaining({
+          reasoning_effort: "none",
+          safety_identifier: "abc123",
+        }),
+      }),
+    );
   });
 });
