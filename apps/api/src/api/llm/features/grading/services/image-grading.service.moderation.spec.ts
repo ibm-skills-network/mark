@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { ImageGradingService } from "./image-grading.service";
 
 function mockLogger() {
@@ -69,6 +70,71 @@ describe("ImageGradingService moderation verdicts", () => {
       1736,
     );
 
+    expect(result.points).toBe(0);
+    expect(result.feedback).toContain("flagged by automated content review");
+    expect(
+      service.promptProcessor.processPromptWithImage,
+    ).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "grading.moderation.blocked_severe",
+      expect.objectContaining({ assignmentId: 1736 }),
+    );
+  });
+
+  it("moderates a COS-stored image the up-front gate could not see, and never calls the vision model when it is severe", async () => {
+    // The up-front gate only accepts http/data: URL shapes. A COS-stored
+    // image arrives as the "InCos" sentinel, so imageUrlsForModeration is
+    // empty and the first assessContent call sees no images at all.
+    const assessContent = jest
+      .fn()
+      .mockResolvedValueOnce({
+        action: "allow",
+        flaggedCategories: [],
+        severeCategories: [],
+      })
+      .mockResolvedValueOnce({
+        action: "block_severe",
+        flaggedCategories: ["sexual/minors"],
+        severeCategories: ["sexual/minors"],
+      });
+    const { service, mockLogger } = buildService(assessContent);
+
+    const smallPng = await sharp({
+      create: {
+        width: 4,
+        height: 4,
+        channels: 3,
+        background: { r: 1, g: 2, b: 3 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const getObject = jest.fn().mockResolvedValue({ Body: smallPng });
+    service.s3Service = { getObject };
+
+    const model = {
+      ...gradeModel(),
+      imageData: "",
+      learnerImageResponse: [
+        {
+          filename: "photo.png",
+          imageData: "InCos",
+          imageBucket: "submissions",
+          imageKey: "assignments/uuid-photo.png",
+          imageUrl: "",
+          mimeType: "image/png",
+        },
+      ],
+    };
+
+    const result = await (service as any).gradeImageBasedQuestion(model, 1736);
+
+    expect(assessContent).toHaveBeenCalledTimes(2);
+    expect(assessContent).toHaveBeenNthCalledWith(1, expect.any(String), []);
+    expect(assessContent).toHaveBeenNthCalledWith(2, "", [
+      expect.stringContaining("data:image/png;base64,"),
+    ]);
+    expect(getObject).toHaveBeenCalledTimes(1);
     expect(result.points).toBe(0);
     expect(result.feedback).toContain("flagged by automated content review");
     expect(

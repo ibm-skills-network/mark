@@ -699,6 +699,14 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       return currentResponseDto;
     }
 
+    if (initialResponseDto.metadata?.moderationBlocked) {
+      this.logger?.info(
+        "Skipping outer judge loop — submission was moderation-blocked",
+        { questionId: question.id },
+      );
+      return currentResponseDto;
+    }
+
     if (initialResponseDto.metadata?.gradingAudit) {
       this.logger?.info(
         "Skipping outer judge loop — evidence pipeline already judged internally",

@@ -140,19 +140,56 @@ describe("ModerationService.assessContent", () => {
     expect(verdict.severeCategories).toEqual(["sexual/minors"]);
   });
 
-  it("includes image parts in the moderation input", async () => {
+  it("splits text and images into two separate moderation calls", async () => {
     const create = jest.fn().mockResolvedValue(moderationResponse({}));
     const { service } = buildService(create);
 
     await service.assessContent("caption", ["data:image/png;base64,AAAA"]);
 
-    expect(create).toHaveBeenCalledWith({
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(1, {
+      model: "omni-moderation-latest",
+      input: [{ type: "text", text: "caption" }],
+    });
+    expect(create).toHaveBeenNthCalledWith(2, {
       model: "omni-moderation-latest",
       input: [
-        { type: "text", text: "caption" },
         { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
       ],
     });
+  });
+
+  it("still moderates text via its own call when the image call fails, and does not fail open on the text verdict", async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValueOnce(moderationResponse({}))
+      .mockRejectedValueOnce(new Error("could not fetch image url"));
+    const { service, logger } = buildService(create);
+
+    const verdict = await service.assessContent("clean caption", [
+      "https://example.com/unreachable.png",
+    ]);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(verdict.action).toBe("allow");
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("image"));
+  });
+
+  it("still returns block_severe from the text call when the image call fails", async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValueOnce(moderationResponse({ "sexual/minors": true }))
+      .mockRejectedValueOnce(new Error("could not fetch image url"));
+    const { service, logger } = buildService(create);
+
+    const verdict = await service.assessContent("bad caption", [
+      "https://example.com/unreachable.png",
+    ]);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(verdict.action).toBe("block_severe");
+    expect(verdict.severeCategories).toEqual(["sexual/minors"]);
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("image"));
   });
 });
 

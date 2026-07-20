@@ -167,12 +167,45 @@ export class ImageGradingService implements IImageGradingService {
       );
     }
 
+    // Determine (before fetching) whether the resolved image will come from
+    // COS storage rather than an inline http/data: value — storage-backed
+    // images are exactly the ones the up-front gate above could not see
+    // (it only accepts http/data: URL shapes), so they were never actually
+    // moderated.
+    const primaryImageFromStorage = this.primaryImageComesFromStorage(
+      topImageData,
+      topBucket,
+      topKey,
+      learnerImages,
+    );
+
     const primaryImage = await this.getPrimaryImageForGrading(
       topImageData,
       topBucket,
       topKey,
       learnerImages,
     );
+
+    if (primaryImageFromStorage) {
+      const storageModerationVerdict =
+        await this.moderationService.assessContent("", [primaryImage.base64]);
+      if (storageModerationVerdict.action === "block_severe") {
+        this.logger.warn("grading.moderation.blocked_severe", {
+          assignmentId,
+          categories: storageModerationVerdict.severeCategories,
+        });
+        return {
+          points: 0,
+          feedback: MODERATION_BLOCK_FEEDBACK,
+        } as ImageBasedQuestionResponseModel;
+      }
+      if (storageModerationVerdict.action === "allow_with_log") {
+        this.logger.warn("grading.moderation.flagged", {
+          assignmentId,
+          categories: storageModerationVerdict.flaggedCategories,
+        });
+      }
+    }
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -521,6 +554,33 @@ ${parsed.guidance}
     if (totalPoints == undefined || totalPoints < 0) {
       throw new HttpException("Invalid totalPoints", HttpStatus.BAD_REQUEST);
     }
+  }
+
+  /**
+   * Mirrors the branch selection in getPrimaryImageForGrading, without doing
+   * any fetching, purely to know whether the image it will resolve comes
+   * from COS storage. Storage-fetched images are never present in the
+   * up-front imageUrlsForModeration list (their imageData is the "InCos"
+   * sentinel, normalized to "" — which fails that list's http/data: filter),
+   * so this flags exactly the images the up-front gate could not check.
+   */
+  private primaryImageComesFromStorage(
+    topImageData: string,
+    topBucket: string,
+    topKey: string,
+    learnerImages: LearnerImageUpload[],
+  ): boolean {
+    if (topImageData && topImageData !== "InCos") return false;
+
+    if (learnerImages.length > 0) {
+      const firstImage = learnerImages[0];
+      if (firstImage.imageData && firstImage.imageData !== "InCos") {
+        return false;
+      }
+      return !!(firstImage.imageBucket && firstImage.imageKey);
+    }
+
+    return !!(topBucket && topKey);
   }
 
   private async getPrimaryImageForGrading(

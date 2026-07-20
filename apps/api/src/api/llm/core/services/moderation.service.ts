@@ -88,36 +88,41 @@ export class ModerationService implements IModerationService {
       flaggedCategories: [],
       severeCategories: [],
     };
-    const input: OpenAI.ModerationMultiModalInput[] = [];
-    if (content) input.push({ type: "text", text: content });
-    for (const url of imageUrls ?? []) {
-      input.push({ type: "image_url", image_url: { url } });
-    }
-    if (input.length === 0) return allow;
 
-    let response: OpenAI.ModerationCreateResponse;
-    try {
-      response = await this.getClient().moderations.create({
-        model: MODERATION_MODEL,
-        input,
-      });
-    } catch (error) {
-      // Fail open: OpenAI being unreachable must never stop grading. Scoped
-      // to only the API call so a downstream error (e.g. logging) can never
-      // downgrade an already-computed severe verdict to allow.
-      this.logger.error(
-        `Error validating content: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+    const hasText = !!content;
+    const images = imageUrls ?? [];
+    const hasImages = images.length > 0;
+    if (!hasText && !hasImages) return allow;
+
+    // Text and images are sent as two independent moderations.create calls
+    // rather than one combined call. A single call means OpenAI failing to
+    // fetch an image URL errors the WHOLE call, and the catch's fail-open
+    // would downgrade an already-computed severe TEXT verdict to allow too.
+    // Splitting scopes each call's failure to only its own input class.
+    // Single-input callers (text-only or image-only) still make one call.
+    const flaggedByClass: string[][] = [];
+    if (hasText) {
+      flaggedByClass.push(
+        await this.runModeration([{ type: "text", text: content }], "text"),
       );
-      return allow;
+    }
+    if (hasImages) {
+      flaggedByClass.push(
+        await this.runModeration(
+          images.map(
+            (url): OpenAI.ModerationMultiModalInput => ({
+              type: "image_url",
+              image_url: { url },
+            }),
+          ),
+          "image",
+        ),
+      );
     }
 
     const flagged = new Set<string>();
-    for (const result of response.results) {
-      for (const [category, isFlagged] of Object.entries(result.categories)) {
-        if (isFlagged) flagged.add(category);
-      }
+    for (const categories of flaggedByClass) {
+      for (const category of categories) flagged.add(category);
     }
     const flaggedCategories = [...flagged].sort();
     const severeCategories = flaggedCategories.filter((category) =>
@@ -142,6 +147,38 @@ export class ModerationService implements IModerationService {
       };
     }
     return allow;
+  }
+
+  /**
+   * Runs a single moderations.create call for one input class (text or
+   * images) and fails open ONLY for that class's content on error. Scoped
+   * so a failure here (e.g. an unfetchable image URL) can never downgrade a
+   * verdict already computed from the other class's call.
+   */
+  private async runModeration(
+    input: OpenAI.ModerationMultiModalInput[],
+    inputClass: "text" | "image",
+  ): Promise<string[]> {
+    try {
+      const response = await this.getClient().moderations.create({
+        model: MODERATION_MODEL,
+        input,
+      });
+      const flagged = new Set<string>();
+      for (const result of response.results) {
+        for (const [category, isFlagged] of Object.entries(result.categories)) {
+          if (isFlagged) flagged.add(category);
+        }
+      }
+      return [...flagged];
+    } catch (error) {
+      this.logger.error(
+        `Error validating content (${inputClass}): ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      return [];
+    }
   }
 
   async validateContent(content: string): Promise<boolean> {

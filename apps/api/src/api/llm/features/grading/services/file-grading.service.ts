@@ -190,13 +190,29 @@ export class FileGradingService implements IFileGradingService {
     if (moderationVerdict.action === "block_severe") {
       this.logger.warn("grading.moderation.blocked_severe", {
         assignmentId,
+        questionId,
         categories: moderationVerdict.severeCategories,
       });
-      return new FileBasedQuestionResponseModel(0, MODERATION_BLOCK_FEEDBACK);
+      // Mark the block in metadata so the strategy layer can short-circuit
+      // its post-grade judge loop — that loop re-sends the learner's raw
+      // content to a completion model, which a severe verdict must prevent.
+      return new FileBasedQuestionResponseModel(
+        0,
+        MODERATION_BLOCK_FEEDBACK,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { moderationBlocked: true },
+      );
     }
     if (moderationVerdict.action === "allow_with_log") {
       this.logger.warn("grading.moderation.flagged", {
         assignmentId,
+        questionId,
         categories: moderationVerdict.flaggedCategories,
       });
     }
