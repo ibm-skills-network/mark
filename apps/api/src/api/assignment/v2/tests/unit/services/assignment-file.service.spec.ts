@@ -12,6 +12,8 @@ import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/ov
 import { FilesService } from "src/api/files/services/files.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import { AssignmentFileService } from "../../../services/assignment-file.service";
 
 const makeDbFile = (overrides = {}) => ({
@@ -39,6 +41,7 @@ describe("AssignmentFileService", () => {
   let s3: any;
   let extractor: any;
   let filesService: any;
+  let jobQueue: any;
 
   beforeEach(async () => {
     prisma = {
@@ -90,6 +93,8 @@ describe("AssignmentFileService", () => {
       validateUploadSize: jest.fn().mockReturnValue(100 * 1024 * 1024),
     };
 
+    jobQueue = { enqueue: jest.fn().mockResolvedValue(undefined) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AssignmentFileService,
@@ -97,6 +102,7 @@ describe("AssignmentFileService", () => {
         { provide: S3Service, useValue: s3 },
         { provide: FileContentExtractionService, useValue: extractor },
         { provide: FilesService, useValue: filesService },
+        { provide: JobQueueService, useValue: jobQueue },
       ],
     }).compile();
 
@@ -226,14 +232,14 @@ describe("AssignmentFileService", () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it("completes MPU, extracts, marks READY, clears uploadId", async () => {
+    it("completes MPU, sets PENDING extractionStatus, enqueues extraction, and does NOT extract inline", async () => {
       prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
       prisma.assignmentFile.update.mockResolvedValue(
         makeDbFile({
           status: AssignmentFileStatus.READY,
-          extractionStatus: AssignmentFileExtractionStatus.READY,
-          extractedText: "extracted content",
-          extractedAt: new Date(),
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
+          extractedText: null,
+          extractedAt: null,
           uploadId: null,
         }),
       );
@@ -252,18 +258,27 @@ describe("AssignmentFileService", () => {
           },
         }),
       );
-      expect(extractor.extractContentFromFiles).toHaveBeenCalledTimes(1);
+      expect(extractor.extractContentFromFiles).not.toHaveBeenCalled();
       expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 1 },
           data: expect.objectContaining({
             status: AssignmentFileStatus.READY,
-            extractionStatus: AssignmentFileExtractionStatus.READY,
+            extractionStatus: AssignmentFileExtractionStatus.PENDING,
             uploadId: null,
           }),
         }),
       );
+      expect(jobQueue.enqueue).toHaveBeenCalledWith(
+        JOB_QUEUE_NAMES.FILE_EXTRACT,
+        JOB_NAMES.FILE_EXTRACT,
+        { assignmentId: 1, fileId: 1 },
+        expect.objectContaining({ jobId: "extract:1" }),
+      );
       expect(result.status).toBe(AssignmentFileStatus.READY);
+      expect(result.extractionStatus).toBe(
+        AssignmentFileExtractionStatus.PENDING,
+      );
     });
 
     it("marks the row FAILED and aborts S3 when multipart completion fails and no object exists", async () => {
@@ -311,9 +326,9 @@ describe("AssignmentFileService", () => {
       prisma.assignmentFile.update.mockResolvedValue(
         makeDbFile({
           status: AssignmentFileStatus.READY,
-          extractionStatus: AssignmentFileExtractionStatus.READY,
-          extractedText: "extracted content",
-          extractedAt: new Date(),
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
+          extractedText: null,
+          extractedAt: null,
           uploadId: null,
         }),
       );
@@ -326,61 +341,17 @@ describe("AssignmentFileService", () => {
 
       expect(s3.abortMultipartUpload).not.toHaveBeenCalled();
       expect(result.status).toBe(AssignmentFileStatus.READY);
-    });
-
-    it("persists extraction error and FAILED extractionStatus when extractor returns error", async () => {
-      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
-      extractor.extractContentFromFiles.mockResolvedValue([
-        {
-          filename: "test.txt",
-          content: "[ERROR extracting test.txt]\n...",
-          error: "parse error",
-          fileType: "text/plain",
-          metadata: { size: 0 },
-        },
-      ]);
-      prisma.assignmentFile.update.mockResolvedValue(
-        makeDbFile({
-          status: AssignmentFileStatus.READY,
-          extractionStatus: AssignmentFileExtractionStatus.FAILED,
-          extractionError: "parse error",
-          extractedText: null,
-          extractedAt: null,
-          uploadId: null,
-        }),
-      );
-
-      const result = await service.completeAssignmentFileUpload(
-        1,
-        1,
-        validDto as any,
-      );
-
-      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: AssignmentFileStatus.READY,
-            extractionStatus: AssignmentFileExtractionStatus.FAILED,
-            extractionError: "parse error",
-            extractedText: null,
-          }),
-        }),
-      );
       expect(result.extractionStatus).toBe(
-        AssignmentFileExtractionStatus.FAILED,
+        AssignmentFileExtractionStatus.PENDING,
       );
     });
 
-    it("keeps the uploaded file READY when post-complete extraction throws", async () => {
+    it("does not extract inline — complete always returns PENDING and enqueues", async () => {
       prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
-      extractor.extractContentFromFiles.mockRejectedValue(
-        new Error("parser boom"),
-      );
       prisma.assignmentFile.update.mockResolvedValue(
         makeDbFile({
           status: AssignmentFileStatus.READY,
-          extractionStatus: AssignmentFileExtractionStatus.FAILED,
-          extractionError: "Post-upload extraction failed: parser boom",
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
           extractedText: null,
           extractedAt: null,
           uploadId: null,
@@ -393,30 +364,165 @@ describe("AssignmentFileService", () => {
         validDto as any,
       );
 
+      expect(extractor.extractContentFromFiles).not.toHaveBeenCalled();
+      expect(s3.deleteObject).not.toHaveBeenCalled();
+      expect(result.status).toBe(AssignmentFileStatus.READY);
+      expect(result.extractionStatus).toBe(
+        AssignmentFileExtractionStatus.PENDING,
+      );
+    });
+
+    it("complete survives when enqueue fails — row stays PENDING, upload succeeds", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      jobQueue.enqueue.mockRejectedValue(new Error("redis down"));
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
+          uploadId: null,
+        }),
+      );
+
+      const result = await service.completeAssignmentFileUpload(
+        1,
+        1,
+        validDto as any,
+      );
+
+      expect(result.extractionStatus).toBe(
+        AssignmentFileExtractionStatus.PENDING,
+      );
+    });
+
+    it("mark-pending update throws — error propagates (upload not silently swallowed)", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      prisma.assignmentFile.update.mockRejectedValueOnce(
+        new Error("db connection lost"),
+      );
+
+      await expect(
+        service.completeAssignmentFileUpload(1, 1, validDto as any),
+      ).rejects.toThrow("db connection lost");
+
+      expect(prisma.assignmentFile.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("async extraction split", () => {
+    it("complete finalizes S3, sets PENDING, enqueues, and does NOT extract inline", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
+          extractedText: null,
+          uploadId: null,
+        }),
+      );
+
+      const res = await service.completeAssignmentFileUpload(1, 1, {
+        uploadId: "upload-abc",
+        parts: [{ partNumber: 1, etag: "e" }],
+      } as never);
+
+      expect(extractor.extractContentFromFiles).not.toHaveBeenCalled();
       expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: { id: 1 },
           data: expect.objectContaining({
             status: AssignmentFileStatus.READY,
-            extractionStatus: AssignmentFileExtractionStatus.FAILED,
-            extractionError: "Post-upload extraction failed: parser boom",
+            extractionStatus: AssignmentFileExtractionStatus.PENDING,
             uploadId: null,
           }),
         }),
       );
-      expect(s3.deleteObject).not.toHaveBeenCalled();
-      expect(result.status).toBe(AssignmentFileStatus.READY);
-      expect(result.extractionStatus).toBe(
-        AssignmentFileExtractionStatus.FAILED,
+      expect(jobQueue.enqueue).toHaveBeenCalledWith(
+        JOB_QUEUE_NAMES.FILE_EXTRACT,
+        JOB_NAMES.FILE_EXTRACT,
+        { assignmentId: 1, fileId: 1 },
+        expect.objectContaining({ jobId: "extract:1" }),
+      );
+      expect(res.extractionStatus).toBe(AssignmentFileExtractionStatus.PENDING);
+    });
+
+    it("complete still succeeds (row PENDING) when enqueue fails", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+      jobQueue.enqueue.mockRejectedValue(new Error("redis down"));
+      prisma.assignmentFile.update.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
+          uploadId: null,
+        }),
+      );
+
+      const res = await service.completeAssignmentFileUpload(1, 1, {
+        uploadId: "upload-abc",
+        parts: [{ partNumber: 1, etag: "e" }],
+      } as never);
+      expect(res.extractionStatus).toBe(AssignmentFileExtractionStatus.PENDING);
+    });
+
+    it("runAssignmentFileExtraction extracts and persists READY", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({ status: AssignmentFileStatus.READY }),
+      );
+      extractor.extractContentFromFiles.mockResolvedValue([
+        {
+          filename: "test.txt",
+          content: "extracted text",
+          fileType: "text/plain",
+        },
+      ]);
+      await service.runAssignmentFileExtraction(1);
+
+      expect(extractor.extractContentFromFiles).toHaveBeenCalledTimes(1);
+      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({
+            extractedText: "extracted text",
+            extractionStatus: AssignmentFileExtractionStatus.READY,
+          }),
+        }),
       );
     });
 
-    it("retries with structured extraction disabled when an oversized author PDF rejects", async () => {
+    it("runAssignmentFileExtraction persists FAILED when extraction errors", async () => {
       prisma.assignmentFile.findUnique.mockResolvedValue(
-        makeDbFile({ filename: "reference.pdf", mimeType: "application/pdf" }),
+        makeDbFile({ status: AssignmentFileStatus.READY }),
       );
-      // First call (structured default ON) rejects with the typed error; the
-      // service must retry once with structured extraction disabled, which
-      // degrades to truncated simple extraction (pre-existing behavior).
+      extractor.extractContentFromFiles.mockRejectedValue(
+        new Error("parse blew up"),
+      );
+      await service.runAssignmentFileExtraction(1);
+
+      expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({
+            extractionStatus: AssignmentFileExtractionStatus.FAILED,
+            extractedText: null,
+          }),
+        }),
+      );
+    });
+
+    it("runAssignmentFileExtraction throws NotFound for a missing row", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(null);
+      await expect(service.runAssignmentFileExtraction(999)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("runAssignmentFileExtraction retries with structured extraction disabled when oversized PDF rejects", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({
+          status: AssignmentFileStatus.READY,
+          filename: "reference.pdf",
+          mimeType: "application/pdf",
+        }),
+      );
       extractor.extractContentFromFiles
         .mockRejectedValueOnce(
           new OversizedSubmissionError({
@@ -445,11 +551,7 @@ describe("AssignmentFileService", () => {
         }),
       );
 
-      const result = await service.completeAssignmentFileUpload(
-        1,
-        1,
-        validDto as any,
-      );
+      await service.runAssignmentFileExtraction(1);
 
       expect(extractor.extractContentFromFiles).toHaveBeenCalledTimes(2);
       expect(extractor.extractContentFromFiles.mock.calls[1][1]).toEqual({
@@ -458,24 +560,21 @@ describe("AssignmentFileService", () => {
       expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            status: AssignmentFileStatus.READY,
             extractionStatus: AssignmentFileExtractionStatus.READY,
             extractedText: "truncated reference text",
           }),
         }),
       );
-      expect(result.status).toBe(AssignmentFileStatus.READY);
-      expect(result.extractionStatus).toBe(
-        AssignmentFileExtractionStatus.READY,
-      );
     });
 
-    it("strips NUL bytes from extracted content before persisting", async () => {
-      prisma.assignmentFile.findUnique.mockResolvedValue(makeDbFile());
+    it("runAssignmentFileExtraction strips NUL bytes from extracted content before persisting", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({ status: AssignmentFileStatus.READY }),
+      );
       extractor.extractContentFromFiles.mockResolvedValue([
         {
           filename: "test.txt",
-          content: "hel lo world",
+          content: "hel lo world",
           fileType: "text/plain",
           metadata: { size: 13 },
         },
@@ -484,51 +583,41 @@ describe("AssignmentFileService", () => {
         makeDbFile({
           status: AssignmentFileStatus.READY,
           extractionStatus: AssignmentFileExtractionStatus.READY,
-          extractedText: "helloworld",
+          extractedText: "hello world",
           uploadId: null,
         }),
       );
 
-      await service.completeAssignmentFileUpload(1, 1, validDto as any);
+      await service.runAssignmentFileExtraction(1);
 
       expect(prisma.assignmentFile.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            extractedText: "helloworld",
+            extractedText: "hello world",
           }),
         }),
       );
     });
 
-    it("recovers via raw SQL fallback when the first update throws — never leaves row stuck in UPLOADING", async () => {
-      prisma.assignmentFile.findUnique
-        .mockResolvedValueOnce(makeDbFile())
-        .mockResolvedValueOnce(
-          makeDbFile({
-            status: AssignmentFileStatus.READY,
-            extractionStatus: AssignmentFileExtractionStatus.FAILED,
-            extractionError: "Extraction output rejected by storage layer",
-            extractedText: null,
-            uploadId: null,
-          }),
-        );
+    it("runAssignmentFileExtraction recovers via raw SQL fallback when primary update throws", async () => {
+      prisma.assignmentFile.findUnique.mockResolvedValue(
+        makeDbFile({ status: AssignmentFileStatus.READY }),
+      );
+      extractor.extractContentFromFiles.mockResolvedValue([
+        {
+          filename: "test.txt",
+          content: "some content",
+          fileType: "text/plain",
+        },
+      ]);
       prisma.assignmentFile.update.mockRejectedValueOnce(
         new Error("unexpected end of hex escape at line 1 column 226"),
       );
       prisma.$executeRaw = jest.fn().mockResolvedValue(1);
 
-      const result = await service.completeAssignmentFileUpload(
-        1,
-        1,
-        validDto as any,
-      );
+      await service.runAssignmentFileExtraction(1);
 
-      expect(prisma.assignmentFile.update).toHaveBeenCalledTimes(1);
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
-      expect(result.status).toBe(AssignmentFileStatus.READY);
-      expect(result.extractionStatus).toBe(
-        AssignmentFileExtractionStatus.FAILED,
-      );
     });
   });
 
