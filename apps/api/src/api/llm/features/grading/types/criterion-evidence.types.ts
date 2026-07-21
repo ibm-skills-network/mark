@@ -58,6 +58,8 @@ export interface ExtractedChunk {
     imageIndex?: number;
     structured?: boolean;
     checksum?: string;
+    /** Mirrors ContentBlock.pinnedEvidence: always reaches the LLM validator. */
+    pinned?: boolean;
   };
 }
 

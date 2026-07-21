@@ -19,6 +19,10 @@ import {
   getDeterministicGradingOptions,
 } from "../types/criterion-evidence.types";
 import { ChunkIndex } from "./chunk-index.service";
+import {
+  CODE_EVIDENCE_QUOTE_MAX_CHARS,
+  isSourceCodeFilename,
+} from "./source-code.utils";
 
 export interface LlmCallRecorder {
   record: (parameters: {
@@ -151,6 +155,21 @@ export class CriterionEvidenceRetrievalService {
       );
     }
 
+    // Pinned chunks (e.g. the whole-file block for code uploads) must always
+    // reach the validator: lexical search length-normalizes long chunks and
+    // can drop them even when their smaller sibling chunks rank. The LLM
+    // validator below remains the final relevance judge either way.
+    for (const chunk of index.getAllChunks()) {
+      if (!chunk.metadata?.pinned) continue;
+      if (reranked.some((item) => item.chunk.chunkId === chunk.chunkId))
+        continue;
+      const relevance = this.computeRelevanceScore(
+        request.criterion,
+        chunk.text,
+      );
+      reranked.push({ chunk, score: 0, relevance, combined: relevance });
+    }
+
     let evidence: CriterionEvidence[];
     let validatedCount = 0;
 
@@ -180,7 +199,7 @@ export class CriterionEvidenceRetrievalService {
         validatedCount = validation.length;
         evidence = validation.map((item) => ({
           chunkId: item.chunk.chunkId,
-          quote: item.chunk.text.slice(0, 220),
+          quote: this.buildExcerpt(item.chunk, 220),
           anchor: item.chunk.anchor,
           sourceType: item.chunk.sourceType,
           sourceId: item.chunk.sourceId,
@@ -222,13 +241,23 @@ export class CriterionEvidenceRetrievalService {
   ): CriterionEvidence[] {
     return reranked.slice(0, maxEvidence).map((item) => ({
       chunkId: item.chunk.chunkId,
-      quote: item.chunk.text.slice(0, 220),
+      quote: this.buildExcerpt(item.chunk, 220),
       anchor: item.chunk.anchor,
       sourceType: item.chunk.sourceType,
       sourceId: item.chunk.sourceId,
       relevanceScore: item.relevance,
       searchScore: item.score,
     }));
+  }
+
+  // Prose chunks keep the historical short cap; source-code chunks carry
+  // their full text (a short fragment can't show whether code works).
+  // proseCap is 220 for stored evidence quotes and 240 for validation excerpts.
+  private buildExcerpt(chunk: ExtractedChunk, proseCap: number): string {
+    const cap = isSourceCodeFilename(chunk.metadata?.filename)
+      ? CODE_EVIDENCE_QUOTE_MAX_CHARS
+      : proseCap;
+    return chunk.text.slice(0, cap);
   }
 
   private evictIfNeeded(): void {
@@ -328,6 +357,14 @@ export class CriterionEvidenceRetrievalService {
     );
     const formatInstructions = parser.getFormatInstructions();
 
+    const renderedChunks = chunks.map(
+      (chunk) =>
+        `- ${chunk.chunkId}: ${this.buildExcerpt(
+          chunk,
+          240,
+        )} | ${this.formatAnchor(chunk.anchor)}`,
+    );
+
     const prompt = new PromptTemplate({
       template: `You are validating evidence for a single grading criterion.
 
@@ -351,16 +388,7 @@ Return JSON listing which chunkIds are relevant.
         criterion: () =>
           `${request.criterion.rubricQuestion}\n${request.criterion.description}`,
         question: () => request.question,
-        chunks: () =>
-          chunks
-            .map(
-              (chunk) =>
-                `- ${chunk.chunkId}: ${chunk.text.slice(
-                  0,
-                  240,
-                )} | ${this.formatAnchor(chunk.anchor)}`,
-            )
-            .join("\n"),
+        chunks: () => renderedChunks.join("\n"),
         format_instructions: () => formatInstructions,
       },
     });

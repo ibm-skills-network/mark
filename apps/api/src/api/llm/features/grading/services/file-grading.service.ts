@@ -59,6 +59,12 @@ import {
   mentionsFilenameRequirement,
 } from "./spreadsheet-rubric.utils";
 import { readClampedWorkbook } from "./spreadsheet-used-range.utils";
+import {
+  CODE_MIN_SEGMENT_CHARS,
+  CODE_SEGMENT_MAX_CHARS,
+  CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
+  isSourceCodeFilename,
+} from "./source-code.utils";
 
 type RubricScore = {
   rubricQuestion: string;
@@ -1235,6 +1241,8 @@ export class FileGradingService implements IFileGradingService {
       return false;
     }
 
+    // Source files are structured only on the CODE/REPO route, handled by the
+    // includeCodeUploads branch in ensureStructuredContentForEvidenceGrading.
     if (this.isSourceCodeFile(file)) {
       return false;
     }
@@ -1257,10 +1265,7 @@ export class FileGradingService implements IFileGradingService {
   }
 
   private isSourceCodeFile(file: LearnerFileUpload): boolean {
-    const filename = file.filename?.toLowerCase() ?? "";
-    return /\.(py|java|cpp|cc|cxx|c|h|hpp|hh|js|jsx|mjs|cjs|ts|tsx|go|rs|rb|cs|php|swift|kt|kts|scala|sql|sh|bash|pl|pm|lua|dart|m|mm)$/.test(
-      filename,
-    );
+    return isSourceCodeFilename(file.filename);
   }
 
   private hasExtractedSubmissionText(file: LearnerFileUpload): boolean {
@@ -1274,7 +1279,10 @@ export class FileGradingService implements IFileGradingService {
     file: LearnerFileUpload,
   ): CanonicalSubmission {
     const rawText = text || "";
-    const normalized = this.normalizeSubmissionTextForEvidence(rawText);
+    const isCode = this.isSourceCodeFile(file);
+    const normalized = isCode
+      ? this.normalizeCodeSubmissionText(rawText)
+      : this.normalizeSubmissionTextForEvidence(rawText);
     const metadataBlock = this.buildFileMetadataBlock(file, normalized);
     const validatorBlock = this.buildValidatorReportBlock(rawText, file);
     const blocks: ContentBlock[] = [];
@@ -1298,14 +1306,10 @@ export class FileGradingService implements IFileGradingService {
       blockIndex += 1;
     }
 
-    const textBlocks = this.splitTextIntoEvidenceBlocks(
-      normalized,
-      blockIndex,
-      {
-        filename: file.filename,
-        questionId: file.questionId,
-      },
-    );
+    const meta = { filename: file.filename, questionId: file.questionId };
+    const textBlocks = isCode
+      ? this.buildCodeEvidenceBlocks(normalized, blockIndex, meta)
+      : this.splitTextIntoEvidenceBlocks(normalized, blockIndex, meta);
     for (const block of textBlocks) {
       blocks.push(block);
     }
@@ -1463,18 +1467,212 @@ export class FileGradingService implements IFileGradingService {
     return blocks;
   }
 
+  // Normalize line endings and strip control characters, leaving tabs and
+  // newlines intact. Shared by the prose and code normalizers, which then
+  // differ only in how they treat tabs and trimming.
+  private normalizeNewlinesAndControlChars(text: string): string {
+    return (
+      text
+        .replaceAll("\r\n", "\n")
+        .replaceAll("\r", "\n")
+        // eslint-disable-next-line no-control-regex
+        .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    );
+  }
+
   private normalizeSubmissionTextForEvidence(text: string): string {
-    const base = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    const base = this.normalizeNewlinesAndControlChars(text);
     const isSpreadsheet =
       base.includes("=== EXCEL WORKBOOK ===") || base.includes("=== SHEET:");
     const tabReplacement = isSpreadsheet ? " | " : " ";
-    return (
-      base
-        .replaceAll("\t", tabReplacement)
-        // eslint-disable-next-line no-control-regex
-        .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
-        .trim()
-    );
+    return base.replaceAll("\t", tabReplacement).trim();
+  }
+
+  // Prose normalization flattens tabs to spaces, which destroys indentation
+  // in tab-indented code. Keep tabs; only strip CR and other control chars.
+  private normalizeCodeSubmissionText(text: string): string {
+    return this.normalizeNewlinesAndControlChars(text)
+      .replace(/^\n+/, "")
+      .trimEnd();
+  }
+
+  private buildCodeEvidenceBlocks(
+    code: string,
+    startIndex: number,
+    meta?: { filename?: string; questionId?: number; attemptId?: number },
+  ): ContentBlock[] {
+    const filename = meta?.filename ?? "submission";
+    if (!code) {
+      return [
+        {
+          blockId: `p1b${startIndex}`,
+          type: "code",
+          text: "",
+          page: 1,
+        },
+      ];
+    }
+
+    const blocks: ContentBlock[] = [];
+    let index = startIndex;
+
+    // Guard on total block count (whole-file block + one per segment), mirroring
+    // splitTextIntoEvidenceBlocks' protection against pathologically large
+    // submissions overwhelming the evidence pipeline.
+    const segments = this.splitCodeIntoSegments(code);
+    const blockCount = segments.length + 1;
+    if (blockCount > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      this.logger.warn("grading.submission.oversized", {
+        blockCount,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: meta?.filename,
+        questionId: meta?.questionId,
+        attemptId: meta?.attemptId,
+        branch: "code",
+      });
+      throw new OversizedSubmissionError({
+        blockCount,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: meta?.filename,
+        questionId: meta?.questionId,
+        attemptId: meta?.attemptId,
+      });
+    }
+
+    // Pinned whole-file block: holistic criteria (correctness, style,
+    // structure) concern the entire program, so the evidence validator must
+    // always get to judge the file as one unit — per-function chunks alone
+    // would make such criteria look unsupported.
+    //
+    // The block's ENTIRE text (header + code + marker) is bounded to
+    // CODE_WHOLE_FILE_BLOCK_MAX_CHARS so it survives quoting intact (see the
+    // invariant on CODE_EVIDENCE_QUOTE_MAX_CHARS): if it were only the *code*
+    // that was bounded, the header/marker would push the total past the quote
+    // cap and the marker would be sliced off.
+    const marker = "\n... [file truncated]";
+    const truncatedHeader = `=== FILE: ${filename} (truncated) ===\n`;
+    const codeBudget =
+      CODE_WHOLE_FILE_BLOCK_MAX_CHARS - truncatedHeader.length - marker.length;
+    const wholeFileText =
+      code.length > codeBudget
+        ? `${truncatedHeader}${code.slice(0, codeBudget)}${marker}`
+        : `=== FILE: ${filename} (complete) ===\n${code}`;
+    blocks.push({
+      blockId: `p1b${index}`,
+      type: "code",
+      text: wholeFileText,
+      page: 1,
+      pinnedEvidence: true,
+    });
+    index += 1;
+
+    for (const segment of segments) {
+      blocks.push({
+        blockId: `p1b${index}`,
+        type: "code",
+        text: segment,
+        page: 1,
+      });
+      index += 1;
+    }
+
+    return blocks;
+  }
+
+  // Split source at top-level definitions (functions, classes, etc.) so each
+  // evidence block is a self-contained unit. Comment/decorator lines sitting
+  // directly above a definition travel with it. Falls back to blank-line
+  // groups — indentation preserved — when no definitions are found.
+  private splitCodeIntoSegments(code: string): string[] {
+    const definitionStart =
+      /^(?:export\s+|default\s+|declare\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|final\s+|abstract\s+|async\s+|unsafe\s+|pub(?:\([^)]*\))?\s+)*(?:def|class|function|func|fn|interface|struct|enum|impl|trait|type|namespace|module|const|let|var)\b/;
+    const attachment = /^(?:@|#|\/\/|\/\*|\*|--|'''|""")/;
+
+    const lines = code.split("\n");
+    const segments: string[] = [];
+    let current: string[] = [];
+
+    for (const line of lines) {
+      const isBoundary = !/^\s/.test(line) && definitionStart.test(line);
+      if (isBoundary && current.length > 0) {
+        const attached: string[] = [];
+        for (
+          let previous = current.at(-1);
+          previous !== undefined && attachment.test(previous.trim());
+          previous = current.at(-1)
+        ) {
+          current.pop();
+          attached.unshift(previous);
+        }
+        const text = current.join("\n").trimEnd();
+        if (text.trim()) segments.push(text);
+        current = [...attached];
+      }
+      current.push(line);
+    }
+    const tail = current.join("\n").trimEnd();
+    if (tail.trim()) segments.push(tail);
+
+    if (segments.length <= 1) {
+      const paragraphs = code
+        .split(/\n{2,}/)
+        .map((chunk) => chunk.trimEnd())
+        .filter((chunk) => chunk.trim());
+      if (paragraphs.length > 1) {
+        return this.capCodeSegments(this.mergeTinyCodeSegments(paragraphs));
+      }
+    }
+
+    return this.capCodeSegments(this.mergeTinyCodeSegments(segments));
+  }
+
+  // Fold trivially short segments (a lone import, a one-line `const`) into an
+  // adjacent segment so they don't occupy a candidate slot on their own. Small
+  // segments merge into the preceding one; a small leading segment with no
+  // predecessor is folded forward into the next.
+  private mergeTinyCodeSegments(segments: string[]): string[] {
+    const merged: string[] = [];
+    for (const segment of segments) {
+      const isTiny = segment.trim().length < CODE_MIN_SEGMENT_CHARS;
+      if (isTiny && merged.length > 0) {
+        merged[merged.length - 1] = `${merged.at(-1)}\n${segment}`;
+        continue;
+      }
+      merged.push(segment);
+    }
+
+    if (merged.length > 1 && merged[0].trim().length < CODE_MIN_SEGMENT_CHARS) {
+      merged[1] = `${merged[0]}\n${merged[1]}`;
+      merged.shift();
+    }
+
+    return merged;
+  }
+
+  private capCodeSegments(segments: string[]): string[] {
+    const capped: string[] = [];
+    for (const segment of segments) {
+      if (segment.length <= CODE_SEGMENT_MAX_CHARS) {
+        capped.push(segment);
+        continue;
+      }
+      let buffer: string[] = [];
+      let size = 0;
+      for (const line of segment.split("\n")) {
+        if (
+          size + line.length + 1 > CODE_SEGMENT_MAX_CHARS &&
+          buffer.length > 0
+        ) {
+          capped.push(buffer.join("\n"));
+          buffer = [];
+          size = 0;
+        }
+        buffer.push(line);
+        size += line.length + 1;
+      }
+      if (buffer.length > 0) capped.push(buffer.join("\n"));
+    }
+    return capped;
   }
 
   private buildValidatorReportBlock(
@@ -2796,9 +2994,10 @@ export class FileGradingService implements IFileGradingService {
     includeCodeUploads = false,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
-      // Mirror the routing gate's eligibility check so a source-code file that
-      // happens to carry structuredContent is never graded in place of the
-      // intended document in a mixed submission.
+      // Grade the first evidence-eligible file, honoring the CODE/REPO route
+      // via includeCodeUploads. Off that route source files aren't eligible, so
+      // a stray helper can't displace a document; on it, code is the intended
+      // target, so no document-over-code preference is applied.
       const structuredFile = learnerResponse.find((file) =>
         this.isEvidenceBasedEligible(file, includeCodeUploads),
       );
