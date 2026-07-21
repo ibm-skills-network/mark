@@ -10,6 +10,7 @@ import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/atte
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
@@ -205,6 +206,9 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
         question.type,
         question.responseType ?? "OTHER",
       );
+    presentationQuestionEvaluateModel.safetyIdentifier = context.userId
+      ? hashSafetyIdentifier(context.userId)
+      : undefined;
 
     const gradingModel = await this.llmFacadeService.gradePresentationQuestion(
       presentationQuestionEvaluateModel,
@@ -248,6 +252,9 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
         question.responseType ?? "OTHER",
         question.videoPresentationConfig,
       );
+    videoPresentationQuestionEvaluateModel.safetyIdentifier = context.userId
+      ? hashSafetyIdentifier(context.userId)
+      : undefined;
 
     const gradingModel =
       await this.llmFacadeService.gradeVideoPresentationQuestion(

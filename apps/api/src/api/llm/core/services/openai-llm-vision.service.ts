@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 @Injectable()
 export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
@@ -40,6 +41,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       maxTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 

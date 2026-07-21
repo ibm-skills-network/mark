@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 /**
  * Provider for the GPT-5 mini model.
@@ -39,6 +40,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       maxCompletionTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 

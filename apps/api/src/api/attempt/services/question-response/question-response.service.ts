@@ -273,6 +273,7 @@ export class QuestionResponseService {
     language: string,
     preTranslatedQuestions?: Map<number, QuestionDto>,
     cache?: JobScopedCache,
+    userId?: string,
   ): Promise<GradedItem[]> {
     // Defense-in-depth: allocate a cache if the caller did not supply one.
     // The submission entrypoint (updateLearnerAttempt) now hoists this same
@@ -399,6 +400,7 @@ export class QuestionResponseService {
           language,
           UserRole.LEARNER,
           assignmentAttemptId,
+          userId,
         );
       },
     });
@@ -529,6 +531,7 @@ export class QuestionResponseService {
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
+    userId?: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
     // ── Phase 1: Read (short transaction) ────────────────────────────────────
     const { questionDtos, sorted, adj, inDegree } =
@@ -643,6 +646,7 @@ export class QuestionResponseService {
           language,
           role,
           assignmentAttemptId,
+          userId,
         );
       },
     });
@@ -740,6 +744,7 @@ export class QuestionResponseService {
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
     tx?: PrismaTransactionalClient,
+    userId?: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const questionId = createQuestionResponseAttemptRequestDto.id;
 
@@ -777,6 +782,7 @@ export class QuestionResponseService {
       language,
       role,
       assignmentAttemptId,
+      userId,
     );
 
     if (role !== UserRole.AUTHOR) {
@@ -811,6 +817,7 @@ export class QuestionResponseService {
     language: string,
     role: UserRole,
     assignmentAttemptId: number,
+    userId?: string,
   ): Promise<{
     learnerResponse: unknown;
     responseDto: CreateQuestionResponseAttemptResponseDto;
@@ -831,6 +838,7 @@ export class QuestionResponseService {
       assignmentId,
       language,
       userRole: role,
+      userId,
       metadata: {
         attemptId: assignmentAttemptId,
         questionType: question.type,

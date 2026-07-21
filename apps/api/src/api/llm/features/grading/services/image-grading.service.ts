@@ -29,6 +29,7 @@ import { IImageGradingService } from "../interfaces/image-grading.interface";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { RubricCriterion } from "../types/criterion-evidence.types";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 
 interface ProcessedImageData {
   buffer: Buffer;
@@ -77,6 +78,7 @@ export class ImageGradingService implements IImageGradingService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       learnerImageResponse: rawImages,
+      safetyIdentifier,
     } = model;
 
     const learnerImages: LearnerImageUpload[] = this.normalizeLearnerImages(
@@ -93,7 +95,40 @@ export class ImageGradingService implements IImageGradingService {
       totalPoints,
     );
 
-    await this.moderateContent(learnerResponse);
+    const contentToModerate =
+      typeof learnerResponse === "string"
+        ? learnerResponse
+        : JSON.stringify(learnerResponse);
+    // Moderate the uploaded images too — they go to the vision model and
+    // were previously never checked. Only URL-shaped or data-URL values
+    // are accepted by the moderations endpoint.
+    const imageUrlsForModeration = [
+      topImageData,
+      ...learnerImages.map((img) => img.imageData || img.imageUrl),
+    ].filter(
+      (url): url is string =>
+        !!url && (url.startsWith("http") || url.startsWith("data:")),
+    );
+    const moderationVerdict = await this.moderationService.assessContent(
+      contentToModerate,
+      imageUrlsForModeration,
+    );
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        categories: moderationVerdict.severeCategories,
+      });
+      return {
+        points: 0,
+        feedback: MODERATION_BLOCK_FEEDBACK,
+      } as ImageBasedQuestionResponseModel;
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        categories: moderationVerdict.flaggedCategories,
+      });
+    }
 
     const maxTotalPoints = this.calculateMaxPoints(
       scoringCriteria,
@@ -132,12 +167,50 @@ export class ImageGradingService implements IImageGradingService {
       );
     }
 
+    // Determine (before fetching) whether the specific source that will
+    // resolve as the primary image was already covered by the up-front gate
+    // above. The gate only accepts http/data: shaped strings, so it misses
+    // two distinct cases that resolve through the exact same precedence as
+    // getPrimaryImageForGrading: an image fetched from COS storage
+    // (bucket/key, arriving as the "InCos" sentinel), and a learner image
+    // submitted as raw/bare base64 with no "data:" prefix — the latter looks
+    // "inline" but was filtered out of imageUrlsForModeration and would
+    // otherwise reach the vision model unmoderated.
+    const primaryNeedsPostResolveModeration =
+      !this.primaryImageCoveredByUpfrontModeration(
+        topImageData,
+        topBucket,
+        topKey,
+        learnerImages,
+      );
+
     const primaryImage = await this.getPrimaryImageForGrading(
       topImageData,
       topBucket,
       topKey,
       learnerImages,
     );
+
+    if (primaryNeedsPostResolveModeration) {
+      const postResolveModerationVerdict =
+        await this.moderationService.assessContent("", [primaryImage.base64]);
+      if (postResolveModerationVerdict.action === "block_severe") {
+        this.logger.warn("grading.moderation.blocked_severe", {
+          assignmentId,
+          categories: postResolveModerationVerdict.severeCategories,
+        });
+        return {
+          points: 0,
+          feedback: MODERATION_BLOCK_FEEDBACK,
+        } as ImageBasedQuestionResponseModel;
+      }
+      if (postResolveModerationVerdict.action === "allow_with_log") {
+        this.logger.warn("grading.moderation.flagged", {
+          assignmentId,
+          categories: postResolveModerationVerdict.flaggedCategories,
+        });
+      }
+    }
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -307,6 +380,7 @@ Respond with a JSON object containing:
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           modelKey,
+          { safetyIdentifier },
         );
       } catch (visionError) {
         // Only the vision call's own errors can mean the provider rejected the
@@ -487,20 +561,46 @@ ${parsed.guidance}
     }
   }
 
-  private async moderateContent(learnerResponse: any): Promise<void> {
-    const contentToModerate =
-      typeof learnerResponse === "string"
-        ? learnerResponse
-        : JSON.stringify(learnerResponse);
+  /**
+   * Mirrors the branch selection in getPrimaryImageForGrading, without doing
+   * any fetching, purely to know whether the up-front imageUrlsForModeration
+   * gate (built earlier from topImageData and each learner image's
+   * imageData/imageUrl) already saw the specific value that will resolve as
+   * the primary image. That gate only accepts http/data: shaped strings, so
+   * it returns false — meaning a post-resolve moderation check is still
+   * required — for two cases that share the same resolution branch:
+   *  - COS storage (bucket/key): imageData arrives as the "InCos" sentinel
+   *    (normalized to "" by normalizeLearnerImages), which fails the filter.
+   *  - Raw/bare base64 with no "data:" prefix: a truthy, non-"InCos" string
+   *    that still fails the http/data: filter, so it was excluded from the
+   *    up-front list even though it resolves as an inline image.
+   */
+  private primaryImageCoveredByUpfrontModeration(
+    topImageData: string,
+    topBucket: string,
+    topKey: string,
+    learnerImages: LearnerImageUpload[],
+  ): boolean {
+    let source: string | undefined;
 
-    const isValid =
-      await this.moderationService.validateContent(contentToModerate);
-    if (!isValid) {
-      throw new HttpException(
-        "Learner response blocked",
-        HttpStatus.BAD_REQUEST,
-      );
+    if (topImageData && topImageData !== "InCos") {
+      source = topImageData;
+    } else if (learnerImages.length > 0) {
+      const firstImage = learnerImages[0];
+      if (firstImage.imageData && firstImage.imageData !== "InCos") {
+        source = firstImage.imageData;
+      } else {
+        // Resolves via COS storage (bucket/key) — never in the up-front list.
+        return false;
+      }
+    } else {
+      // Resolves via COS storage (topBucket/topKey) — never in the up-front
+      // list. If neither is set either, there is no valid image source and
+      // getPrimaryImageForGrading throws before this value is ever used.
+      return !(topBucket && topKey);
     }
+
+    return source.startsWith("http") || source.startsWith("data:");
   }
 
   private async getPrimaryImageForGrading(

@@ -31,7 +31,11 @@ function buildService() {
   service.pdfAnnotationService = {};
   service.s3Service = {};
   service.moderationService = {
-    validateContent: jest.fn().mockResolvedValue(true),
+    assessContent: jest.fn().mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    }),
   };
   service.llmResolver = {
     getModelForGradingTask: jest.fn(),

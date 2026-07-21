@@ -12,6 +12,7 @@ import { LearnerLiveRecordingFeedback } from "../../../../assignment/attempt/dto
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 import { IPresentationGradingService } from "../interfaces/presentation-grading.interface";
 
 @Injectable()
@@ -46,6 +47,7 @@ export class PresentationGradingService implements IPresentationGradingService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       responseType,
+      safetyIdentifier,
     } = presentationQuestionEvaluateModel;
 
     if (!question) {
@@ -55,15 +57,26 @@ export class PresentationGradingService implements IPresentationGradingService {
     const hasTranscript =
       learnerResponse?.transcript &&
       typeof learnerResponse.transcript === "string";
-    const validateLearnerResponse = hasTranscript
-      ? await this.moderationService.validateContent(learnerResponse.transcript)
-      : true;
-
-    if (!validateLearnerResponse) {
-      throw new HttpException(
-        "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+    if (hasTranscript) {
+      const moderationVerdict = await this.moderationService.assessContent(
+        learnerResponse.transcript,
       );
+      if (moderationVerdict.action === "block_severe") {
+        this.logger.warn("grading.moderation.blocked_severe", {
+          assignmentId,
+          categories: moderationVerdict.severeCategories,
+        });
+        return {
+          points: 0,
+          feedback: MODERATION_BLOCK_FEEDBACK,
+        } as PresentationQuestionResponseModel;
+      }
+      if (moderationVerdict.action === "allow_with_log") {
+        this.logger.warn("grading.moderation.flagged", {
+          assignmentId,
+          categories: moderationVerdict.flaggedCategories,
+        });
+      }
     }
 
     const safeSpeechReport =
@@ -150,6 +163,8 @@ export class PresentationGradingService implements IPresentationGradingService {
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
       "presentation_grading",
+      undefined,
+      { safetyIdentifier },
     );
 
     try {

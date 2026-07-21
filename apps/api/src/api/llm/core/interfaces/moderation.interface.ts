@@ -1,6 +1,24 @@
+export type ModerationAction = "allow" | "allow_with_log" | "block_severe";
+
+export interface ModerationVerdict {
+  action: ModerationAction;
+  flaggedCategories: string[];
+  severeCategories: string[];
+}
+
 export interface IModerationService {
   /**
-   * Check if content passes moderation guidelines
+   * Get a category-level moderation verdict for content (and optionally
+   * images) using OpenAI's moderations API.
+   */
+  assessContent(
+    content: string,
+    imageUrls?: string[],
+  ): Promise<ModerationVerdict>;
+
+  /**
+   * Check if content passes moderation guidelines. Kept for authoring;
+   * resolves to false ONLY when a severe category is flagged.
    */
   validateContent(content: string): Promise<boolean>;
 
@@ -8,12 +26,4 @@ export interface IModerationService {
    * Sanitize content by removing potentially harmful elements
    */
   sanitizeContent(content: string): string;
-
-  /**
-   * Get detailed moderation results for content
-   */
-  moderateContent(content: string): Promise<{
-    flagged: boolean;
-    details: string;
-  }>;
 }

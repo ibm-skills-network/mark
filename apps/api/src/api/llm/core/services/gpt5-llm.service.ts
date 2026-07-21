@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 /**
  * GPT-5 provider service targeting the next-generation GPT-5 model.
@@ -41,6 +42,7 @@ export class Gpt5LlmService implements IMultimodalLlmProvider {
       maxCompletionTokens: options?.maxTokens,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 

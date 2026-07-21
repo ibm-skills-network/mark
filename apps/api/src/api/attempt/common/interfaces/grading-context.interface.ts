@@ -43,4 +43,10 @@ export interface GradingContext {
    * Optional Prisma transactional client
    */
   tx?: PrismaTransactionalClient;
+
+  /**
+   * Attempt owner's userId (an email in this system). Used only to derive
+   * the hashed OpenAI safety identifier — never sent raw to providers.
+   */
+  userId?: string;
 }
