@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 /**
  * GPT-5-nano provider service targeting the ultra-lightweight GPT-5-nano model.
@@ -40,6 +41,7 @@ export class Gpt5NanoLlmService implements IMultimodalLlmProvider {
       modelName: options?.modelName ?? Gpt5NanoLlmService.DEFAULT_MODEL,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 

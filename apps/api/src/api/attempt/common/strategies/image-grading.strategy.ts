@@ -12,6 +12,7 @@ import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/att
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
 import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import {
@@ -152,6 +153,9 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       primaryImage.imageData,
       textualResponse,
     );
+    imageBasedQuestionEvaluateModel.safetyIdentifier = context.userId
+      ? hashSafetyIdentifier(context.userId)
+      : undefined;
 
     const gradingResult =
       await this.imageGradingService.gradeImageBasedQuestion(

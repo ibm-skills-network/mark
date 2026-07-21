@@ -96,15 +96,6 @@ export class LlmFacadeService {
   }
 
   /**
-   * Moderate content and get detailed results
-   */
-  async moderateContent(
-    content: string,
-  ): Promise<{ flagged: boolean; details: string }> {
-    return this.moderationService.moderateContent(content);
-  }
-
-  /**
    * Generate contextual relationships between questions for grading
    */
   async generateQuestionGradingContext(

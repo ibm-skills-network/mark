@@ -1,133 +1,201 @@
-import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { sanitize } from "isomorphic-dompurify";
-import { OpenAIModerationChain } from "@langchain/classic/chains";
+import OpenAI from "openai";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { IModerationService } from "../interfaces/moderation.interface";
+import {
+  IModerationService,
+  ModerationVerdict,
+} from "../interfaces/moderation.interface";
 import { logAiInvocation } from "../utils/ai-invocation-log.util";
 
+const MODERATION_MODEL = "omni-moderation-latest";
+
 /**
- * OpenAIModerationChain does not expose which moderation model the endpoint
- * ran, so invocations are logged under this generic key.
+ * The moderations endpoint does not expose which snapshot ran, so
+ * invocations are logged under this generic key.
  */
 const MODERATION_MODEL_KEY = "openai-moderation";
+
+const KNOWN_CATEGORIES = new Set([
+  "harassment",
+  "harassment/threatening",
+  "hate",
+  "hate/threatening",
+  "illicit",
+  "illicit/violent",
+  "self-harm",
+  "self-harm/instructions",
+  "self-harm/intent",
+  "sexual",
+  "sexual/minors",
+  "violence",
+  "violence/graphic",
+]);
+
+const DEFAULT_SEVERE_CATEGORIES = ["sexual/minors"];
+
+export function parseSevereCategories(
+  raw: string,
+  logger: Logger,
+): Set<string> {
+  const names = raw
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.length === 0) return new Set(DEFAULT_SEVERE_CATEGORIES);
+
+  const severe = new Set<string>();
+  for (const name of names) {
+    if (KNOWN_CATEGORIES.has(name)) {
+      severe.add(name);
+    } else {
+      logger.warn("moderation.severe_categories.unknown_name", { name });
+    }
+  }
+  return severe.size > 0 ? severe : new Set(DEFAULT_SEVERE_CATEGORIES);
+}
 
 @Injectable()
 export class ModerationService implements IModerationService {
   private readonly logger: Logger;
+  private readonly severeCategories: Set<string>;
+  private openAiClient?: OpenAI;
 
   constructor(@Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger) {
     this.logger = parentLogger.child({ context: ModerationService.name });
+    this.severeCategories = parseSevereCategories(
+      process.env.MODERATION_SEVERE_CATEGORIES ?? "",
+      this.logger,
+    );
   }
 
   /**
-   * Check if content passes the guard rails
+   * Lazy so a missing OPENAI_API_KEY fails open per-call instead of
+   * crashing module init in environments without a key.
    */
-  async validateContent(content: string): Promise<boolean> {
-    if (!content) return true;
+  private getClient(): OpenAI {
+    this.openAiClient ??= new OpenAI();
+    return this.openAiClient;
+  }
 
-    if (this.isEducationalContent(content)) {
-      this.logger.debug(
-        "Content appears to be educational/technical, allowing with less strict moderation",
+  async assessContent(
+    content: string,
+    imageUrls?: string[],
+  ): Promise<ModerationVerdict> {
+    const allow: ModerationVerdict = {
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    };
+
+    const hasText = !!content;
+    const images = imageUrls ?? [];
+    const hasImages = images.length > 0;
+    if (!hasText && !hasImages) return allow;
+
+    // Text and images are sent as two independent moderations.create calls
+    // rather than one combined call. A single call means OpenAI failing to
+    // fetch an image URL errors the WHOLE call, and the catch's fail-open
+    // would downgrade an already-computed severe TEXT verdict to allow too.
+    // Splitting scopes each call's failure to only its own input class.
+    // Single-input callers (text-only or image-only) still make one call.
+    const flaggedByClass: string[][] = [];
+    if (hasText) {
+      flaggedByClass.push(
+        await this.runModeration([{ type: "text", text: content }], "text"),
       );
-      return true;
+    }
+    if (hasImages) {
+      flaggedByClass.push(
+        await this.runModeration(
+          images.map(
+            (url): OpenAI.ModerationMultiModalInput => ({
+              type: "image_url",
+              image_url: { url },
+            }),
+          ),
+          "image",
+        ),
+      );
     }
 
+    const flagged = new Set<string>();
+    for (const categories of flaggedByClass) {
+      for (const category of categories) flagged.add(category);
+    }
+    const flaggedCategories = [...flagged].sort();
+    const severeCategories = flaggedCategories.filter((category) =>
+      this.severeCategories.has(category),
+    );
+
+    logAiInvocation(this.logger, {
+      modelKey: MODERATION_MODEL_KEY,
+      purpose: "moderation",
+      prompt: content,
+      response: JSON.stringify(flaggedCategories),
+    });
+
+    if (severeCategories.length > 0) {
+      return { action: "block_severe", flaggedCategories, severeCategories };
+    }
+    if (flaggedCategories.length > 0) {
+      return {
+        action: "allow_with_log",
+        flaggedCategories,
+        severeCategories: [],
+      };
+    }
+    return allow;
+  }
+
+  /**
+   * Runs a single moderations.create call for one input class (text or
+   * images) and fails open ONLY for that class's content on error. Scoped
+   * so a failure here (e.g. an unfetchable image URL) can never downgrade a
+   * verdict already computed from the other class's call.
+   */
+  private async runModeration(
+    input: OpenAI.ModerationMultiModalInput[],
+    inputClass: "text" | "image",
+  ): Promise<string[]> {
     try {
-      const moderation = new OpenAIModerationChain();
-
-      const { output: guardRailsResponse } = await moderation.invoke({
-        input: content,
+      const response = await this.getClient().moderations.create({
+        model: MODERATION_MODEL,
+        input,
       });
-
-      logAiInvocation(this.logger, {
-        modelKey: MODERATION_MODEL_KEY,
-        purpose: "moderation",
-        prompt: content,
-        response: String(guardRailsResponse),
-      });
-
-      const isViolation =
-        guardRailsResponse ===
-        "Text was found that violates OpenAI's content policy.";
-
-      if (isViolation) {
-        this.logger.warn(
-          `Content flagged by moderation: ${content.slice(0, 200)}...`,
-        );
+      const flagged = new Set<string>();
+      for (const result of response.results) {
+        for (const [category, isFlagged] of Object.entries(result.categories)) {
+          if (isFlagged) flagged.add(category);
+        }
       }
-
-      return !isViolation;
+      return [...flagged];
     } catch (error) {
       this.logger.error(
-        `Error validating content: ${
+        `Error validating content (${inputClass}): ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
-
-      return true;
+      return [];
     }
   }
 
-  private isEducationalContent(content: string): boolean {
-    const educationalIndicators = [
-      "xss",
-      "cross-site scripting",
-      "security",
-      "vulnerability",
-      "penetration testing",
-      "cybersecurity",
-      "sql injection",
-      "csrf",
-      "owasp",
-      "security report",
-      "vulnerability assessment",
-      "security analysis",
-      "ethical hacking",
-
-      "algorithm",
-      "data structure",
-      "programming",
-      "software development",
-      "computer science",
-      "technical documentation",
-      "code example",
-      "tutorial",
-      "documentation",
-      "technical report",
-      "analysis",
-      "implementation",
-
-      "research",
-      "study",
-      "analysis",
-      "conclusion",
-      "methodology",
-      "findings",
-      "bibliography",
-      "references",
-      "abstract",
-      "introduction",
-    ];
-
-    const lowerContent = content.toLowerCase();
-    const matchCount = educationalIndicators.filter((indicator) =>
-      lowerContent.includes(indicator),
-    ).length;
-
-    return matchCount >= 2;
+  async validateContent(content: string): Promise<boolean> {
+    const verdict = await this.assessContent(content);
+    if (verdict.action === "allow_with_log") {
+      this.logger.warn("authoring.moderation.flagged", {
+        categories: verdict.flaggedCategories,
+      });
+    }
+    return verdict.action !== "block_severe";
   }
 
-  /**
-   * Sanitize the content by removing any potentially harmful or unnecessary elements.
-   * This method uses DOMPurify to remove scripts or other dangerous HTML content.
-   */
   sanitizeContent(content: string): string {
     if (!content) return "";
 
     try {
-      const sanitizedContent = sanitize(content);
-      return sanitizedContent;
+      return sanitize(content);
     } catch (error) {
       this.logger.error(
         `Error sanitizing content: ${
@@ -136,42 +204,6 @@ export class ModerationService implements IModerationService {
       );
 
       return content;
-    }
-  }
-
-  /**
-   * Moderate the content using OpenAI's moderation API
-   */
-  async moderateContent(
-    content: string,
-  ): Promise<{ flagged: boolean; details: string }> {
-    if (!content) {
-      return { flagged: false, details: "No content provided for moderation." };
-    }
-
-    try {
-      const moderationChain = new OpenAIModerationChain();
-      const moderationResult = await moderationChain.invoke({ input: content });
-
-      const flagged = moderationResult.output !== "No issues found.";
-      const details: string = moderationResult.output as string;
-
-      logAiInvocation(this.logger, {
-        modelKey: MODERATION_MODEL_KEY,
-        purpose: "moderation",
-        prompt: content,
-        response: details,
-      });
-
-      return { flagged, details };
-    } catch (error) {
-      this.logger.error(
-        `Content moderation failed: ${(error as Error).message}`,
-      );
-      throw new HttpException(
-        "Content moderation failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     }
   }
 }

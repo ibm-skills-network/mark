@@ -56,6 +56,20 @@ describe("OpenAiLlmService request options", () => {
     expect(config.timeout).toBeUndefined();
     expect(config.maxRetries).toBeUndefined();
   });
+
+  it("forwards safetyIdentifier as modelKwargs.safety_identifier", async () => {
+    const service = makeService();
+
+    await service.invoke([new HumanMessage("hi")], {
+      safetyIdentifier: "abc123",
+    });
+
+    expect(ChatOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelKwargs: expect.objectContaining({ safety_identifier: "abc123" }),
+      }),
+    );
+  });
 });
 
 describe("OpenAiLlmService.invokeStructured", () => {

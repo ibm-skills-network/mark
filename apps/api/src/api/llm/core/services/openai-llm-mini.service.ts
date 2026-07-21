@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 /**
  * Light-weight provider that targets the smaller/faster gpt-4o-mini model.
@@ -39,6 +40,7 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       maxTokens: options?.maxTokens,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 

@@ -15,6 +15,7 @@ import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/att
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { safeGet } from "src/api/attempt/common/utils/ssrf-safe-http";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
 import { UrlBasedQuestionResponseModel } from "src/api/llm/model/url.based.question.response.model";
@@ -202,6 +203,9 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       question.scoring,
       question.responseType ?? "OTHER",
     );
+    urlBasedQuestionEvaluateModel.safetyIdentifier = context.userId
+      ? hashSafetyIdentifier(context.userId)
+      : undefined;
 
     let gradingModel: UrlBasedQuestionResponseModel;
     try {

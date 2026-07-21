@@ -31,7 +31,11 @@ function buildService() {
   service.s3Service = { getObject };
 
   service.moderationService = {
-    validateContent: jest.fn().mockResolvedValue(true),
+    assessContent: jest.fn().mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    }),
   };
   service.chunkingService = {
     extractFromImages: jest

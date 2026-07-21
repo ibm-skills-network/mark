@@ -111,6 +111,11 @@ export class AttemptSubmissionService {
         userSession.role,
         assignmentId,
         language,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        userSession.userId,
       );
     } catch (error) {
       // The grading layers deliberately let these typed terminal errors pass
@@ -1252,6 +1257,7 @@ export class AttemptSubmissionService {
           updateDto.language,
           updateDto.preTranslatedQuestions,
           effectiveCache,
+          assignmentAttempt.userId,
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);

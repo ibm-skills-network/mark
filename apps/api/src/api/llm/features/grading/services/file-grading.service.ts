@@ -1,13 +1,7 @@
 import * as crypto from "node:crypto";
 import { Readable } from "node:stream";
 import { PromptTemplate } from "@langchain/core/prompts";
-import {
-  HttpException,
-  HttpStatus,
-  Inject,
-  Injectable,
-  Optional,
-} from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AIUsageType, ResponseType } from "@prisma/client";
 import axios from "axios";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -43,7 +37,10 @@ import {
   PROMPT_PROCESSOR,
   TOKEN_COUNTER,
 } from "../../../llm.constants";
-import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../constants";
+import {
+  MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+  MODERATION_BLOCK_FEEDBACK,
+} from "../constants";
 import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
 import {
@@ -188,18 +185,44 @@ export class FileGradingService implements IFileGradingService {
       responseType,
       judgeFeedback,
       questionId,
+      safetyIdentifier,
     } = fileBasedQuestionEvaluateModel;
 
-    const validateLearnerResponse =
-      await this.moderationService.validateContent(
-        learnerResponse.map((item) => item.content).join(" "),
+    // A moderation flag must not deny a learner their grade — legitimate
+    // coursework trips the general-purpose classifier. Only the severe
+    // categories are withheld from the grading model; those persist a
+    // zero with instructions to contact the instructor.
+    const moderationVerdict = await this.moderationService.assessContent(
+      learnerResponse.map((item) => item.content).join(" "),
+    );
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        questionId,
+        categories: moderationVerdict.severeCategories,
+      });
+      // Mark the block in metadata so the strategy layer can short-circuit
+      // its post-grade judge loop — that loop re-sends the learner's raw
+      // content to a completion model, which a severe verdict must prevent.
+      return new FileBasedQuestionResponseModel(
+        0,
+        MODERATION_BLOCK_FEEDBACK,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { moderationBlocked: true },
       );
-
-    if (!validateLearnerResponse) {
-      throw new HttpException(
-        "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
-      );
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        questionId,
+        categories: moderationVerdict.flaggedCategories,
+      });
     }
 
     const questionMaxPoints = totalPoints;
@@ -444,6 +467,7 @@ export class FileGradingService implements IFileGradingService {
           maxTotalPoints,
           rubricMaxPoints,
           isCodeUploadRoute,
+          safetyIdentifier,
         );
       } else {
         response = await this.processPromptWithRetry(
@@ -453,6 +477,7 @@ export class FileGradingService implements IFileGradingService {
           maxTotalPoints,
           rubricMaxPoints,
           isCodeUploadRoute,
+          safetyIdentifier,
         );
       }
     } catch (retryError) {
@@ -579,6 +604,7 @@ export class FileGradingService implements IFileGradingService {
     _maxTotalPoints: number,
     _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
     modelOverrideIsFinal = false,
+    safetyIdentifier?: string,
   ): Promise<string> {
     void _maxTotalPoints;
     void _rubricMaxPoints;
@@ -597,7 +623,7 @@ export class FileGradingService implements IFileGradingService {
               assignmentId,
               AIUsageType.ASSIGNMENT_GRADING,
               primaryModel,
-              { maxRetries: 1 },
+              { maxRetries: 1, safetyIdentifier },
             )
           : await this.promptProcessor.processPromptForFeature(
               prompt,
@@ -605,6 +631,7 @@ export class FileGradingService implements IFileGradingService {
               AIUsageType.ASSIGNMENT_GRADING,
               "file_grading",
               primaryModel,
+              { safetyIdentifier },
             );
 
         if (this.isValidLLMResponse(response)) {
@@ -669,6 +696,7 @@ export class FileGradingService implements IFileGradingService {
         AIUsageType.ASSIGNMENT_GRADING,
         "file_grading",
         fallbackModel,
+        { safetyIdentifier },
       );
 
       if (this.isValidLLMResponse(response)) {

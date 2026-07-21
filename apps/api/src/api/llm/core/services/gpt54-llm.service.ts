@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 abstract class PinnedGpt54LlmService implements IMultimodalLlmProvider {
   protected readonly logger: Logger;
@@ -37,7 +38,10 @@ abstract class PinnedGpt54LlmService implements IMultimodalLlmProvider {
       // LangChain's installed OpenAI SDK types predate GPT-5.4's `none`
       // effort, so pass the documented Chat Completions field through its
       // forward-compatible model kwargs bag.
-      modelKwargs: { reasoning_effort: "none" },
+      modelKwargs: {
+        reasoning_effort: "none",
+        ...safetyIdentifierKwargs(options),
+      },
       maxCompletionTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,

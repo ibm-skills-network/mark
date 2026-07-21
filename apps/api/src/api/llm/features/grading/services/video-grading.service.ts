@@ -11,6 +11,7 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IVideoPresentationGradingService } from "../interfaces/video-grading.interface";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 
 @Injectable()
 export class VideoPresentationGradingService
@@ -47,16 +48,27 @@ export class VideoPresentationGradingService
       assignmentInstrctions,
       responseType,
       videoPresentationConfig,
+      safetyIdentifier,
     } = videoPresentationQuestionEvaluateModel;
 
-    const validateLearnerResponse =
-      await this.moderationService.validateContent(learnerResponse.transcript);
-
-    if (!validateLearnerResponse) {
-      throw new HttpException(
-        "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
+    const moderationVerdict = await this.moderationService.assessContent(
+      learnerResponse.transcript,
+    );
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        categories: moderationVerdict.severeCategories,
+      });
+      return new VideoPresentationQuestionResponseModel(
+        0,
+        MODERATION_BLOCK_FEEDBACK,
       );
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        categories: moderationVerdict.flaggedCategories,
+      });
     }
 
     const parser = StructuredOutputParser.fromZodSchema(
@@ -100,6 +112,8 @@ export class VideoPresentationGradingService
       assignmentId,
       AIUsageType.ASSIGNMENT_GRADING,
       "video_grading",
+      undefined,
+      { safetyIdentifier },
     );
 
     try {
