@@ -391,4 +391,148 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(codeEvidence?.quote).toBe(longCode);
     expect(proseEvidence?.quote?.length).toBe(220);
   });
+
+  /**
+   * When the LLM validator fails outright, the no-validation fallback must
+   * still include pinned chunks: they are appended after the lexical top-N,
+   * so a purely positional slice would drop the whole-file view exactly in
+   * the degraded path where it matters most.
+   */
+  it("keeps the pinned chunk in fallback evidence when the validator errors and reranked is full", async () => {
+    const criterion: RubricCriterion = {
+      id: "c-holistic",
+      rubricQuestion: "Is the program well structured overall?",
+      description: "Program structure and organization.",
+      criteria: [{ description: "Well structured program", points: 2 }],
+      maxPoints: 2,
+    };
+
+    const strongText =
+      "the program is well structured and organized with clear program structure and organization overall";
+    const chunks = [
+      ...Array.from({ length: 6 }, (_, index) =>
+        makeChunk(`strong${index}`, strongText),
+      ),
+      {
+        ...makeChunk("whole", "def f():\n\treturn 1"),
+        metadata: { filename: "solution.py", pinned: true },
+      },
+    ];
+
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockRejectedValue(new Error("validator timeout")),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Grade this code", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    expect(response.evidence.length).toBeLessThanOrEqual(6);
+    expect(response.evidence.some((item) => item.chunkId === "whole")).toBe(
+      true,
+    );
+  });
+
+  /**
+   * The validation prompt budgets full-length code excerpts (pinned first);
+   * past the budget, chunks fall back to the short prose excerpt so the
+   * zero-relevance fallback cannot render ~100KB prompts.
+   */
+  it("bounds the validation prompt via the code render budget, pinned chunk first", async () => {
+    const pinnedText = `PINNED_HEAD ${"p".repeat(11_900)} PINNED_TAIL`;
+    const segmentText = `SEGMENT_BODY ${"s".repeat(5900)}`;
+    const chunks = [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        ...makeChunk(`seg${index}`, segmentText),
+        metadata: { filename: "solution.py" },
+      })),
+      {
+        ...makeChunk("whole", pinnedText),
+        metadata: { filename: "solution.py", pinned: true },
+      },
+    ];
+
+    let validationPrompt = "";
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockImplementation(async (prompt: any) => {
+            validationPrompt = await prompt.format({});
+            return { evidence: [{ chunkId: "whole", relevance: "supports" }] };
+          }),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const criterion: RubricCriterion = {
+      id: "c-budget",
+      rubricQuestion: "Budget check",
+      description: "Budget check.",
+      criteria: [{ description: "Level", points: 1 }],
+      maxPoints: 1,
+    };
+
+    await service.retrieveEvidence(
+      { criterion, question: "Grade", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    // Pinned chunk rendered in full despite being listed after the segments.
+    expect(validationPrompt).toContain("PINNED_TAIL");
+    // All chunks are still listed as candidates...
+    for (let index = 0; index < 10; index += 1) {
+      expect(validationPrompt).toContain(`seg${index}`);
+    }
+    // ...but total rendered size stays near the budget instead of ~72KB.
+    expect(validationPrompt.length).toBeLessThan(40_000);
+  });
+
+  it("does not truncate evidence quotes for notebook chunks", async () => {
+    const cellText = `=== CELL 2 [CODE] [1] ===\n${"x = 1\n".repeat(400)}`;
+    const chunks = [
+      {
+        ...makeChunk("cell", cellText),
+        metadata: { filename: "analysis.ipynb" },
+      },
+      makeChunk("prose", "word ".repeat(200)),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c-nb-quote",
+      rubricQuestion: "Notebook quote length check",
+      description: "Notebook quote length check.",
+      criteria: [{ description: "Level", points: 1 }],
+      maxPoints: 1,
+    };
+
+    const service = makeService(
+      JSON.stringify({
+        evidence: [
+          { chunkId: "cell", relevance: "supports" },
+          { chunkId: "prose", relevance: "supports" },
+        ],
+      }),
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Grade", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    const cellEvidence = response.evidence.find((e) => e.chunkId === "cell");
+    const proseEvidence = response.evidence.find((e) => e.chunkId === "prose");
+    expect(cellEvidence?.quote).toBe(cellText);
+    expect(proseEvidence?.quote?.length).toBe(220);
+  });
 });

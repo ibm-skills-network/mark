@@ -12,6 +12,40 @@ export function isSourceCodeFilename(filename?: string | null): boolean {
 }
 
 /**
+ * Jupyter notebooks are code submissions too, but they are deliberately NOT
+ * part of SOURCE_CODE_EXTENSION_REGEX: that regex also gates evidence
+ * eligibility off the CODE/REPO route, where notebooks must keep grading as
+ * documents. Use this alongside isSourceCodeFilename only where the question
+ * is "should this text be chunked/quoted as code?".
+ */
+export function isJupyterNotebookFilename(filename?: string | null): boolean {
+  if (!filename) return false;
+  return filename.toLowerCase().endsWith(".ipynb");
+}
+
+export function isCodeLikeFilename(filename?: string | null): boolean {
+  return isSourceCodeFilename(filename) || isJupyterNotebookFilename(filename);
+}
+
+/**
+ * The filename is learner-controlled and is spliced into the trusted
+ * `=== FILE: ... ===` evidence marker. Keep it to one line, neutralize
+ * delimiter runs so it cannot forge or close a marker, and bound its length.
+ */
+export function sanitizeFilenameForMarker(filename?: string | null): string {
+  if (!filename) return "";
+  return (
+    filename
+      // eslint-disable-next-line no-control-regex
+      .replaceAll(/[\u0000-\u001F\u007F]/g, " ")
+      .replaceAll(/={3,}/g, "=")
+      .replaceAll(/\s+/g, " ")
+      .trim()
+      .slice(0, 120)
+  );
+}
+
+/**
  * Upper bound for the *entire* text of the pinned whole-file evidence block
  * (header + code + truncation marker, all counted). The whole-file builder
  * bounds the block to exactly this length.
@@ -42,3 +76,13 @@ export const CODE_SEGMENT_MAX_CHARS = 6000;
  * definitions in the limited candidate window.
  */
 export const CODE_MIN_SEGMENT_CHARS = 200;
+
+/**
+ * Per-criterion budget for chunk text rendered into the evidence-validation
+ * prompt. Full-length code excerpts are allocated pinned-first until the
+ * budget runs out; the remaining chunks fall back to the short prose excerpt.
+ * Without this, the zero-relevance fallback (common for code, whose
+ * identifiers rarely overlap prose rubric wording) can surface up to
+ * maxCandidates chunks at full code length — ~100KB of prompt per criterion.
+ */
+export const CODE_VALIDATION_RENDER_BUDGET_CHARS = 30_000;

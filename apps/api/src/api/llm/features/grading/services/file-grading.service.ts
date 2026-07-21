@@ -63,7 +63,9 @@ import {
   CODE_MIN_SEGMENT_CHARS,
   CODE_SEGMENT_MAX_CHARS,
   CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
+  isCodeLikeFilename,
   isSourceCodeFilename,
+  sanitizeFilenameForMarker,
 } from "./source-code.utils";
 
 type RubricScore = {
@@ -1279,7 +1281,9 @@ export class FileGradingService implements IFileGradingService {
     file: LearnerFileUpload,
   ): CanonicalSubmission {
     const rawText = text || "";
-    const isCode = this.isSourceCodeFile(file);
+    // Notebooks count as code here (cell-aware chunking, indentation kept)
+    // even though they stay non-code for routing/eligibility purposes.
+    const isCode = isCodeLikeFilename(file.filename);
     const normalized = isCode
       ? this.normalizeCodeSubmissionText(rawText)
       : this.normalizeSubmissionTextForEvidence(rawText);
@@ -1501,7 +1505,9 @@ export class FileGradingService implements IFileGradingService {
     startIndex: number,
     meta?: { filename?: string; questionId?: number; attemptId?: number },
   ): ContentBlock[] {
-    const filename = meta?.filename ?? "submission";
+    // The filename feeds the trusted `=== FILE: ... ===` marker below and is
+    // learner-controlled — sanitize it so it cannot forge or break the marker.
+    const filename = sanitizeFilenameForMarker(meta?.filename) || "submission";
     if (!code) {
       return [
         {
@@ -1509,6 +1515,7 @@ export class FileGradingService implements IFileGradingService {
           type: "code",
           text: "",
           page: 1,
+          pinnedEvidence: true,
         },
       ];
     }
@@ -1553,10 +1560,14 @@ export class FileGradingService implements IFileGradingService {
     const truncatedHeader = `=== FILE: ${filename} (truncated) ===\n`;
     const codeBudget =
       CODE_WHOLE_FILE_BLOCK_MAX_CHARS - truncatedHeader.length - marker.length;
+    // A file only counts as truncated when the COMPLETE block would not fit;
+    // comparing against the (smaller) truncated-block budget would clip files
+    // that fit whole and mislabel them.
+    const completeText = `=== FILE: ${filename} (complete) ===\n${code}`;
     const wholeFileText =
-      code.length > codeBudget
-        ? `${truncatedHeader}${code.slice(0, codeBudget)}${marker}`
-        : `=== FILE: ${filename} (complete) ===\n${code}`;
+      completeText.length <= CODE_WHOLE_FILE_BLOCK_MAX_CHARS
+        ? completeText
+        : `${truncatedHeader}${code.slice(0, codeBudget)}${marker}`;
     blocks.push({
       blockId: `p1b${index}`,
       type: "code",
@@ -1581,9 +1592,16 @@ export class FileGradingService implements IFileGradingService {
 
   // Split source at top-level definitions (functions, classes, etc.) so each
   // evidence block is a self-contained unit. Comment/decorator lines sitting
-  // directly above a definition travel with it. Falls back to blank-line
-  // groups — indentation preserved — when no definitions are found.
+  // directly above a definition travel with it. Notebook extractions split at
+  // cell boundaries instead (a cell is the notebook's natural unit). Falls
+  // back to blank-line groups — indentation preserved — when no definitions
+  // are found.
   private splitCodeIntoSegments(code: string): string[] {
+    const cellSegments = this.splitNotebookIntoCellSegments(code);
+    if (cellSegments) {
+      return this.capCodeSegments(this.mergeTinyCodeSegments(cellSegments));
+    }
+
     const definitionStart =
       /^(?:export\s+|default\s+|declare\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|final\s+|abstract\s+|async\s+|unsafe\s+|pub(?:\([^)]*\))?\s+)*(?:def|class|function|func|fn|interface|struct|enum|impl|trait|type|namespace|module|const|let|var)\b/;
     const attachment = /^(?:@|#|\/\/|\/\*|\*|--|'''|""")/;
@@ -1626,6 +1644,21 @@ export class FileGradingService implements IFileGradingService {
     return this.capCodeSegments(this.mergeTinyCodeSegments(segments));
   }
 
+  // Jupyter notebook extractions carry "=== CELL N [TYPE] ===" section
+  // headers (see FileContentExtractionService.extractJupyterNotebook). Each
+  // cell — with its header and any outputs — becomes one segment. Returns
+  // null when the text is not a notebook extraction.
+  private splitNotebookIntoCellSegments(code: string): string[] | null {
+    const cellHeader = /^=== CELL \d+ \[/m;
+    if (!cellHeader.test(code)) return null;
+
+    const segments = code
+      .split(/\n(?==== CELL \d+ \[)/)
+      .map((segment) => segment.trimEnd())
+      .filter((segment) => segment.trim());
+    return segments.length > 0 ? segments : null;
+  }
+
   // Fold trivially short segments (a lone import, a one-line `const`) into an
   // adjacent segment so they don't occupy a candidate slot on their own. Small
   // segments merge into the preceding one; a small leading segment with no
@@ -1666,6 +1699,19 @@ export class FileGradingService implements IFileGradingService {
           capped.push(buffer.join("\n"));
           buffer = [];
           size = 0;
+        }
+        // A single line can exceed the cap on its own (minified bundles, long
+        // data literals) and has no line boundary to split at — hard-slice it
+        // so the "segments always fit" invariant holds.
+        if (line.length > CODE_SEGMENT_MAX_CHARS) {
+          for (
+            let offset = 0;
+            offset < line.length;
+            offset += CODE_SEGMENT_MAX_CHARS
+          ) {
+            capped.push(line.slice(offset, offset + CODE_SEGMENT_MAX_CHARS));
+          }
+          continue;
         }
         buffer.push(line);
         size += line.length + 1;
