@@ -67,10 +67,7 @@ const prisma = new PrismaClient();
         attemptId: a.id,
         submitted: a.submitted,
         grade: a.grade,
-        pointsSum: a.questionResponses.reduce(
-          (s, r) => s + (r.points ?? 0),
-          0,
-        ),
+        pointsSum: a.questionResponses.reduce((s, r) => s + (r.points ?? 0), 0),
         questions: a.questionResponses.length,
         gradedQ: a.questionResponses.filter((r) => r.gradedAt).length,
         gradingStatus: a.gradingProgress?.status ?? null,

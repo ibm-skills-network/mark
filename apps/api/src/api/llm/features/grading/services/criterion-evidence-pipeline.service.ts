@@ -44,6 +44,7 @@ interface PipelineRequest {
     gradingModel?: string;
     judgeModel?: string;
   };
+  modelOverridesAreFinal?: boolean;
 }
 
 interface PipelineResult {
@@ -190,6 +191,7 @@ export class CriterionEvidencePipelineService {
               assignmentId: request.assignmentId,
               language: request.language,
               modelOverride: request.modelOverrides?.retrievalModel,
+              modelOverrideIsFinal: request.modelOverridesAreFinal,
             },
             index,
             auditCollector,
@@ -214,6 +216,7 @@ export class CriterionEvidencePipelineService {
             judgeFeedback: request.judgeFeedback,
             attempt: 1,
             modelOverride: request.modelOverrides?.gradingModel,
+            modelOverrideIsFinal: request.modelOverridesAreFinal,
           },
           auditCollector,
         );
@@ -229,6 +232,7 @@ export class CriterionEvidencePipelineService {
         assignmentId: request.assignmentId,
         language: request.language,
         modelOverride: request.modelOverrides?.judgeModel,
+        modelOverrideIsFinal: request.modelOverridesAreFinal,
       },
       auditCollector,
     );
@@ -281,6 +285,7 @@ export class CriterionEvidencePipelineService {
                   language: request.language,
                   attempt,
                   modelOverride: request.modelOverrides?.gradingModel,
+                  modelOverrideIsFinal: request.modelOverridesAreFinal,
                 },
                 auditCollector,
               ))
@@ -302,6 +307,7 @@ export class CriterionEvidencePipelineService {
               judgeFeedback: issues || request.judgeFeedback,
               attempt,
               modelOverride: request.modelOverrides?.gradingModel,
+              modelOverrideIsFinal: request.modelOverridesAreFinal,
             },
             auditCollector,
           );
@@ -319,6 +325,7 @@ export class CriterionEvidencePipelineService {
           assignmentId: request.assignmentId,
           language: request.language,
           modelOverride: request.modelOverrides?.judgeModel,
+          modelOverrideIsFinal: request.modelOverridesAreFinal,
         },
         auditCollector,
       );

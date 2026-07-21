@@ -20,6 +20,7 @@ export interface StructuredCriterionData {
   status: "full" | "partial" | "none";
   evidence: string;
   feedback: string;
+  nextStep?: string;
 }
 
 export interface StructuredFeedbackData {

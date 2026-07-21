@@ -16,6 +16,7 @@ interface CriterionCardProps {
     maxPoints: number;
     evidence: string;
     feedback: string;
+    nextStep?: string;
     status: "full" | "partial" | "none";
   };
   showPoints?: boolean;
@@ -27,15 +28,22 @@ export default function CriterionCard({
 }: CriterionCardProps) {
   const [showEvidence, setShowEvidence] = useState(false);
 
-  const { name, pointsAwarded, maxPoints, evidence, feedback, status } =
-    criterion;
+  const {
+    name,
+    pointsAwarded,
+    maxPoints,
+    evidence,
+    feedback,
+    nextStep,
+    status,
+  } = criterion;
   const percentage = maxPoints > 0 ? (pointsAwarded / maxPoints) * 100 : 0;
 
   const statusConfig = {
     full: {
       icon: CheckCircleIcon,
       iconColor: "text-green-600",
-      bgColor: "bg-green-50",
+      bgColor: "bg-white",
       borderColor: "border-green-300",
       progressColor: "bg-green-500",
       badgeColor: "bg-green-100 text-green-800",
@@ -44,7 +52,7 @@ export default function CriterionCard({
     partial: {
       icon: MinusCircleIcon,
       iconColor: "text-amber-600",
-      bgColor: "bg-amber-50",
+      bgColor: "bg-white",
       borderColor: "border-amber-300",
       progressColor: "bg-amber-500",
       badgeColor: "bg-amber-100 text-amber-800",
@@ -53,7 +61,7 @@ export default function CriterionCard({
     none: {
       icon: XCircleIcon,
       iconColor: "text-red-600",
-      bgColor: "bg-red-50",
+      bgColor: "bg-white",
       borderColor: "border-red-300",
       progressColor: "bg-red-500",
       badgeColor: "bg-red-100 text-red-800",
@@ -71,7 +79,7 @@ export default function CriterionCard({
 
   return (
     <div
-      className={`rounded-lg border-2 ${config.borderColor} ${config.bgColor} p-4 transition-all hover:shadow-md`}
+      className={`rounded-lg border ${config.borderColor} ${config.bgColor} p-4`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
@@ -80,8 +88,8 @@ export default function CriterionCard({
             className={`w-6 h-6 ${config.iconColor} flex-shrink-0 mt-0.5`}
           />
           <div className="flex-1">
-            <h4 className="font-bold text-gray-900 text-lg mb-1">
-              Criteria #{name}
+            <h4 className="mb-1 text-base font-semibold text-slate-900">
+              {name}
             </h4>
             <span
               className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${config.badgeColor}`}
@@ -121,6 +129,15 @@ export default function CriterionCard({
       <div className="mb-3">
         <p className="text-gray-800 text-sm leading-relaxed">{feedback}</p>
       </div>
+
+      {nextStep && status !== "full" && (
+        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-900">
+            Next step
+          </p>
+          <p className="text-sm leading-relaxed text-amber-950">{nextStep}</p>
+        </div>
+      )}
 
       {/* Evidence Section - Collapsible */}
       {hasEvidence && (

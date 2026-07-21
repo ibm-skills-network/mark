@@ -4,7 +4,11 @@ import {
   Injectable,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import {
+  ATTEMPT_IN_PROGRESS_CODE,
+  ATTEMPT_MAX_REACHED_CODE,
+  ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
   IN_COOLDOWN_PERIOD,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
@@ -19,6 +23,26 @@ import { UserSession } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
 import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
 
+/**
+ * Where-clause matching this learner+assignment's active (unsubmitted,
+ * unexpired) attempt. Shared between the validation "attempt in progress"
+ * check and AttemptSubmissionService.findResumableAttempt so the two
+ * definitions of "active" cannot drift — the idempotent-resume path relies on
+ * resuming at least every attempt that validation would reject as in-progress.
+ */
+export function activeAttemptWhere(
+  assignmentId: number,
+  userId: string,
+  now: Date,
+): Prisma.AssignmentAttemptWhereInput {
+  return {
+    assignmentId,
+    userId,
+    submitted: false,
+    OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+  };
+}
+
 @Injectable()
 export class AttemptValidationService {
   constructor(
@@ -30,10 +54,16 @@ export class AttemptValidationService {
    * Validates whether a new attempt can be created for the given assignment and user session.
    * @param assignment The assignment object.
    * @param userSession The user session.
+   * @param database Pass the transaction client when calling inside an open
+   * interactive transaction: the caller already holds that transaction's pool
+   * connection, and issuing these queries through `this.prisma` instead would
+   * demand a second connection per in-flight creation — enough concurrent
+   * creators then exhaust the pool and every attempt-start times out.
    */
   async validateNewAttempt(
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
     userSession: UserSession,
+    database: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
     // Kill-switch: block starting an attempt on an AI-graded assignment while
     // grading is disabled. Non-AI assignments (e.g. MCQ-only) are unaffected.
@@ -41,34 +71,27 @@ export class AttemptValidationService {
       assignment.id,
       userSession.userId,
       "start",
+      database,
     );
 
     const now = new Date();
     const timeRangeStartDate = this.calculateTimeRangeStartDate(assignment);
 
-    const activeAttempt = await this.prisma.assignmentAttempt.findFirst({
-      where: {
-        userId: userSession.userId,
-        assignmentId: assignment.id,
-        submitted: false,
-        OR: [
-          { expiresAt: null },
-          {
-            expiresAt: {
-              gte: now,
-            },
-          },
-        ],
-      },
+    const activeAttempt = await database.assignmentAttempt.findFirst({
+      where: activeAttemptWhere(assignment.id, userSession.userId, now),
       orderBy: { createdAt: "desc" },
     });
 
     if (activeAttempt) {
-      throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
+      throw new UnprocessableEntityException({
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ATTEMPT_IN_PROGRESS_CODE,
+        message: IN_PROGRESS_SUBMISSION_EXCEPTION,
+      });
     }
 
     if (assignment.attemptsPerTimeRange) {
-      const attemptsInTimeRange = await this.prisma.assignmentAttempt.count({
+      const attemptsInTimeRange = await database.assignmentAttempt.count({
         where: {
           userId: userSession.userId,
           assignmentId: assignment.id,
@@ -80,9 +103,11 @@ export class AttemptValidationService {
       });
 
       if (attemptsInTimeRange >= assignment.attemptsPerTimeRange) {
-        throw new UnprocessableEntityException(
-          TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-        );
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
+          message: TIME_RANGE_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        });
       }
     }
 
@@ -90,12 +115,15 @@ export class AttemptValidationService {
       const totalAttempts = await this.countUserAttempts(
         userSession.userId,
         assignment.id,
+        database,
       );
 
       if (totalAttempts >= assignment.numAttempts) {
-        throw new UnprocessableEntityException(
-          MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-        );
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: ATTEMPT_MAX_REACHED_CODE,
+          message: MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
+        });
       }
 
       const attemptsBeforeCoolDown = assignment.attemptsBeforeCoolDown ?? 1;
@@ -106,15 +134,16 @@ export class AttemptValidationService {
         cooldownMinutes > 0 &&
         totalAttempts >= attemptsBeforeCoolDown
       ) {
-        const lastSubmittedAttempt =
-          await this.prisma.assignmentAttempt.findFirst({
+        const lastSubmittedAttempt = await database.assignmentAttempt.findFirst(
+          {
             where: {
               userId: userSession.userId,
               assignmentId: assignment.id,
               submitted: true,
             },
             orderBy: [{ expiresAt: "desc" }, { createdAt: "desc" }],
-          });
+          },
+        );
 
         if (lastSubmittedAttempt) {
           const lastAttemptReference =
@@ -196,8 +225,9 @@ export class AttemptValidationService {
   private async countUserAttempts(
     userId: string,
     assignmentId: number,
+    database: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<number> {
-    return this.prisma.assignmentAttempt.count({
+    return database.assignmentAttempt.count({
       where: {
         userId: userId,
         assignmentId: assignmentId,

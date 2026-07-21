@@ -27,8 +27,12 @@ const SettingItem: React.FC<SettingItemProps> = ({
       )}
     >
       <div className="flex flex-col justify-center text-base leading-6 font-[450]">
-        <div className="text-black dark:text-white max-md:max-w-full">{title}</div>
-        <div className="text-gray-600 dark:text-gray-300 max-md:max-w-full">{description}</div>
+        <div className="text-black dark:text-white max-md:max-w-full">
+          {title}
+        </div>
+        <div className="text-gray-600 dark:text-gray-300 max-md:max-w-full">
+          {description}
+        </div>
       </div>
       <button
         type="button"
@@ -91,7 +95,9 @@ const CorrectAnswerSetting: React.FC<CorrectAnswerSettingProps> = ({
   return (
     <div className="flex items-start gap-1.5 py-4 w-full max-md:flex-wrap max-md:max-w-full justify-between border-b">
       <div className="flex flex-col justify-center text-base leading-6 font-[450] flex-1">
-        <div className="text-black dark:text-white max-md:max-w-full">{title}</div>
+        <div className="text-black dark:text-white max-md:max-w-full">
+          {title}
+        </div>
         <div className="text-gray-600 dark:text-gray-300 max-md:max-w-full mb-3">
           {description}
         </div>

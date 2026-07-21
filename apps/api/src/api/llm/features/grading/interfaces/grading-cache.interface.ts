@@ -65,6 +65,9 @@ export interface ICachedGradingResult {
     gradingTimeMs?: number;
     attempts?: number;
     judgeApproved?: boolean;
+    graderVersion?: string;
+    modelSnapshot?: string;
+    fileResponse?: Record<string, unknown>;
   };
 }
 
@@ -78,6 +81,14 @@ export interface IGradingCacheService {
    * Store a grading result in the cache
    */
   cacheGrading(result: ICachedGradingResult): Promise<void>;
+
+  /**
+   * Store the first result for a key and return that canonical result.
+   * Concurrent graders therefore converge on the same persisted score.
+   */
+  cacheGradingIfAbsent(
+    result: ICachedGradingResult,
+  ): Promise<ICachedGradingResult>;
 
   /**
    * Check if a grading result is cached

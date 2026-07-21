@@ -18,6 +18,8 @@ export class ContentSummarizationService {
   private readonly logger: Logger;
   private readonly contextWindowByModel: Record<string, number> = {
     "gpt-5-mini": 128_000,
+    "gpt-5.4-mini-2026-03-17": 400_000,
+    "gpt-5.4-nano-2026-03-17": 400_000,
     "gpt-5o-mini": 128_000,
     "gpt-5": 128_000,
     "gpt-4o-mini": 128_000,

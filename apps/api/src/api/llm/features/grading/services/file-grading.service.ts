@@ -1,7 +1,13 @@
 import * as crypto from "node:crypto";
 import { Readable } from "node:stream";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { AIUsageType, ResponseType } from "@prisma/client";
 import axios from "axios";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -28,9 +34,11 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { Gpt54MiniLlmService } from "../../../core/services/gpt54-llm.service";
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   LLM_RESOLVER_SERVICE,
+  GRADING_CACHE_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
   TOKEN_COUNTER,
@@ -38,6 +46,10 @@ import {
 import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../constants";
 import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
+import {
+  ICachedGradingResult,
+  IGradingCacheService,
+} from "../interfaces/grading-cache.interface";
 import {
   RubricCriterion,
   rubricCriterionToText,
@@ -129,6 +141,12 @@ type SpreadsheetCheckDefinition = {
 @Injectable()
 export class FileGradingService implements IFileGradingService {
   private readonly logger: Logger;
+  private readonly evidenceFileGradingInFlight = new Map<
+    string,
+    Promise<FileBasedQuestionResponseModel>
+  >();
+  private static readonly EVIDENCE_FILE_GRADER_VERSION =
+    "structured-file-evidence-v4-stable-answer-hash";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -146,6 +164,9 @@ export class FileGradingService implements IFileGradingService {
     private readonly evidenceChunking: EvidenceChunkingService,
     private readonly submissionQuality: SubmissionQualityService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Optional()
+    @Inject(GRADING_CACHE_SERVICE)
+    private readonly cacheService?: IGradingCacheService,
   ) {
     this.logger = parentLogger.child({ context: FileGradingService.name });
   }
@@ -166,6 +187,7 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteria,
       responseType,
       judgeFeedback,
+      questionId,
     } = fileBasedQuestionEvaluateModel;
 
     const validateLearnerResponse =
@@ -210,8 +232,13 @@ export class FileGradingService implements IFileGradingService {
       }
     }
 
+    const isCodeUploadRoute =
+      responseType === ResponseType.CODE || responseType === ResponseType.REPO;
     const enrichedLearnerResponse =
-      this.ensureStructuredContentForEvidenceGrading(learnerResponse);
+      this.ensureStructuredContentForEvidenceGrading(
+        learnerResponse,
+        isCodeUploadRoute,
+      );
 
     const hasRubrics =
       !!scoringCriteria?.rubrics &&
@@ -219,10 +246,9 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteria.rubrics.length > 0;
 
     const evidenceEligibleFiles = enrichedLearnerResponse.filter((file) =>
-      this.isEvidenceBasedEligible(file),
+      this.isEvidenceBasedEligible(file, isCodeUploadRoute),
     );
     const hasEvidenceEligibleContent = evidenceEligibleFiles.length > 0;
-
     this.logger.info("Checking for evidence-based grading trigger", {
       hasEvidenceEligibleContent,
       hasRubrics,
@@ -255,21 +281,54 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteriaType === "CRITERIA_BASED"
     ) {
       this.logger.info("Using evidence-based grading with structured content");
-      const model = await this.gradeWithEvidenceBasedApproach(
-        enrichedLearnerResponse,
-        question,
-        maxTotalPoints,
-        scoringCriteria,
-        assignmentId,
-        language,
-        rubricMaxPoints,
-        judgeFeedback,
+      const evidenceFileModel = await this.llmResolver.getModelKeyWithFallback(
+        "file_evidence_grading",
+        Gpt54MiniLlmService.MODEL,
       );
-      return this.scaleFileBasedModelToQuestionMax(
-        model,
-        questionMaxPoints,
-        rubricMaxTotal,
-      );
+      const modelConfig = {
+        modelOverrides: {
+          retrievalModel: evidenceFileModel,
+          gradingModel: evidenceFileModel,
+          judgeModel: evidenceFileModel,
+        },
+        modelOverridesAreFinal: true,
+      };
+      const grade = async (): Promise<FileBasedQuestionResponseModel> => {
+        const model = await this.gradeWithEvidenceBasedApproach(
+          enrichedLearnerResponse,
+          question,
+          maxTotalPoints,
+          scoringCriteria,
+          assignmentId,
+          language,
+          rubricMaxPoints,
+          judgeFeedback,
+          modelConfig,
+          true,
+          isCodeUploadRoute,
+        );
+        return this.scaleFileBasedModelToQuestionMax(
+          model,
+          questionMaxPoints,
+          rubricMaxTotal,
+        );
+      };
+
+      if (questionId !== undefined && this.cacheService) {
+        return this.gradeEvidenceFileWithCache({
+          questionId,
+          question,
+          learnerResponse: enrichedLearnerResponse,
+          scoringCriteria,
+          questionMaxPoints,
+          language,
+          judgeFeedback,
+          modelSnapshot: evidenceFileModel,
+          grade,
+        });
+      }
+
+      return grade();
     }
 
     const selectedTemplate = this.getTemplateForFileType(responseType);
@@ -323,12 +382,17 @@ export class FileGradingService implements IFileGradingService {
       ? scoringCriteria.length
       : 1;
 
-    const selectedModel = await this.llmResolver.getModelForGradingTask(
-      "file_grading",
-      responseType,
-      inputLength,
-      criteriaCount,
-    );
+    const selectedModel = isCodeUploadRoute
+      ? await this.llmResolver.getModelKeyWithFallback(
+          "file_evidence_grading",
+          Gpt54MiniLlmService.MODEL,
+        )
+      : await this.llmResolver.getModelForGradingTask(
+          "file_grading",
+          responseType,
+          inputLength,
+          criteriaCount,
+        );
 
     let response: string;
     try {
@@ -379,6 +443,7 @@ export class FileGradingService implements IFileGradingService {
           selectedModel,
           maxTotalPoints,
           rubricMaxPoints,
+          isCodeUploadRoute,
         );
       } else {
         response = await this.processPromptWithRetry(
@@ -387,6 +452,7 @@ export class FileGradingService implements IFileGradingService {
           selectedModel,
           maxTotalPoints,
           rubricMaxPoints,
+          isCodeUploadRoute,
         );
       }
     } catch (retryError) {
@@ -395,6 +461,7 @@ export class FileGradingService implements IFileGradingService {
           retryError instanceof Error ? retryError.message : String(retryError)
         }`,
       );
+      if (isCodeUploadRoute) throw retryError;
       const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "All LLM models failed - using fallback grading",
@@ -487,6 +554,8 @@ export class FileGradingService implements IFileGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
+      if (isCodeUploadRoute) throw error;
+
       const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
@@ -509,6 +578,7 @@ export class FileGradingService implements IFileGradingService {
     primaryModel: string,
     _maxTotalPoints: number,
     _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
+    modelOverrideIsFinal = false,
   ): Promise<string> {
     void _maxTotalPoints;
     void _rubricMaxPoints;
@@ -521,13 +591,21 @@ export class FileGradingService implements IFileGradingService {
           `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
         );
 
-        const response = await this.promptProcessor.processPromptForFeature(
-          prompt,
-          assignmentId,
-          AIUsageType.ASSIGNMENT_GRADING,
-          "file_grading",
-          primaryModel,
-        );
+        const response = modelOverrideIsFinal
+          ? await this.promptProcessor.processPrompt(
+              prompt,
+              assignmentId,
+              AIUsageType.ASSIGNMENT_GRADING,
+              primaryModel,
+              { maxRetries: 1 },
+            )
+          : await this.promptProcessor.processPromptForFeature(
+              prompt,
+              assignmentId,
+              AIUsageType.ASSIGNMENT_GRADING,
+              "file_grading",
+              primaryModel,
+            );
 
         if (this.isValidLLMResponse(response)) {
           if (attempt > 1) {
@@ -570,6 +648,10 @@ export class FileGradingService implements IFileGradingService {
       if (attempt < maxRetries) {
         await this.delay(Math.pow(2, attempt - 1) * 1000);
       }
+    }
+
+    if (modelOverrideIsFinal) {
+      throw lastError ?? new Error(`Model ${primaryModel} failed`);
     }
 
     try {
@@ -775,6 +857,181 @@ export class FileGradingService implements IFileGradingService {
     );
   }
 
+  private async gradeEvidenceFileWithCache(parameters: {
+    questionId: number;
+    question: string;
+    learnerResponse: LearnerFileUpload[];
+    scoringCriteria: ScoringDto;
+    questionMaxPoints: number;
+    language?: string;
+    judgeFeedback?: string;
+    modelSnapshot: string;
+    grade: () => Promise<FileBasedQuestionResponseModel>;
+  }): Promise<FileBasedQuestionResponseModel> {
+    const answerHash = this.hashCanonical(
+      [...parameters.learnerResponse]
+        .sort((left, right) =>
+          (left.filename ?? "").localeCompare(right.filename ?? ""),
+        )
+        .map((file) => ({
+          filename: file.filename,
+          content: file.structuredContent
+            ? this.stableStructuredContent(file.structuredContent)
+            : this.getFileContentForPrompt(file),
+        })),
+    );
+    const rubricHash = this.hashCanonical({
+      graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+      modelSnapshot: parameters.modelSnapshot,
+      reasoningEffort: "none",
+      question: parameters.question,
+      scoringCriteria: parameters.scoringCriteria,
+      questionMaxPoints: parameters.questionMaxPoints,
+      language: parameters.language ?? "en",
+      judgeFeedback: parameters.judgeFeedback ?? null,
+    });
+    const cacheKey = this.hashCanonical({
+      questionId: parameters.questionId,
+      rubricHash,
+      answerHash,
+    });
+
+    const cached = await this.cacheService?.getCachedGrading(cacheKey);
+    const cachedResponse = this.fileResponseFromCache(cached);
+    if (cachedResponse) {
+      this.logger.info("Using deterministic structured-file grading cache", {
+        questionId: parameters.questionId,
+        cacheKey,
+        modelSnapshot: parameters.modelSnapshot,
+      });
+      return cachedResponse;
+    }
+
+    const inFlight = this.evidenceFileGradingInFlight.get(cacheKey);
+    if (inFlight !== undefined) return await inFlight;
+
+    const gradingPromise = (async () => {
+      const result = await parameters.grade();
+      const candidate: ICachedGradingResult = {
+        cacheKey,
+        questionId: parameters.questionId,
+        rubricHash,
+        answerHash,
+        totalScore: result.points,
+        maxScore: parameters.questionMaxPoints,
+        criteria: (result.rubricScores ?? []).map((score, index) => ({
+          criterionId:
+            score.criterionSelected ??
+            score.rubricQuestion ??
+            `criterion_${index + 1}`,
+          pointsAwarded: score.pointsAwarded ?? 0,
+          maxPoints: score.maxPoints ?? 0,
+          evidence: score.evidence?.join("\n") ?? null,
+          feedback: score.justification ?? "",
+        })),
+        overallFeedback: result.feedback,
+        cachedAt: new Date(),
+        hitCount: 0,
+        metadata: {
+          graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+          modelSnapshot: parameters.modelSnapshot,
+          fileResponse: this.fileResponseForCache(result),
+        },
+      };
+      const canonical = await this.cacheService.cacheGradingIfAbsent(candidate);
+      return this.fileResponseFromCache(canonical) ?? result;
+    })();
+
+    this.evidenceFileGradingInFlight.set(cacheKey, gradingPromise);
+    try {
+      return await gradingPromise;
+    } finally {
+      this.evidenceFileGradingInFlight.delete(cacheKey);
+    }
+  }
+
+  private fileResponseForCache(
+    result: FileBasedQuestionResponseModel,
+  ): Record<string, unknown> {
+    const response = {
+      points: result.points,
+      feedback: result.feedback,
+      analysis: result.analysis,
+      evaluation: result.evaluation,
+      explanation: result.explanation,
+      guidance: result.guidance,
+      rubricScores: result.rubricScores,
+      highlighting: result.highlighting,
+      annotatedPdfUrl: result.annotatedPdfUrl,
+      metadata: result.metadata,
+    };
+    return JSON.parse(JSON.stringify(response)) as Record<string, unknown>;
+  }
+
+  private fileResponseFromCache(
+    cached: ICachedGradingResult | null | undefined,
+  ): FileBasedQuestionResponseModel | null {
+    const response = cached?.metadata?.fileResponse;
+    if (!response || typeof response.points !== "number") return null;
+
+    return new FileBasedQuestionResponseModel(
+      response.points,
+      typeof response.feedback === "string"
+        ? response.feedback
+        : cached.overallFeedback,
+      typeof response.analysis === "string" ? response.analysis : undefined,
+      typeof response.evaluation === "string" ? response.evaluation : undefined,
+      typeof response.explanation === "string"
+        ? response.explanation
+        : undefined,
+      typeof response.guidance === "string" ? response.guidance : undefined,
+      response.rubricScores as FileBasedQuestionResponseModel["rubricScores"],
+      response.highlighting as FileHighlighting | undefined,
+      typeof response.annotatedPdfUrl === "string"
+        ? response.annotatedPdfUrl
+        : undefined,
+      response.metadata as Record<string, unknown> | undefined,
+    );
+  }
+
+  /**
+   * Cache identity must depend only on submission content. `extractedAt` is
+   * re-stamped on every extraction pass, so hashing it gives every attempt a
+   * fresh cache key and the canonical-score cache never hits.
+   */
+  private stableStructuredContent(
+    content: NonNullable<LearnerFileUpload["structuredContent"]>,
+  ): Record<string, unknown> {
+    const { metadata, ...rest } = content;
+    if (!metadata) return { ...rest };
+    const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
+    return { ...rest, metadata: stableMetadata };
+  }
+
+  private hashCanonical(value: unknown): string {
+    return crypto
+      .createHash("sha256")
+      .update(this.canonicalStringify(value))
+      .digest("hex");
+  }
+
+  private canonicalStringify(value: unknown): string {
+    if (value === null || typeof value !== "object") {
+      return JSON.stringify(value) ?? "undefined";
+    }
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => this.canonicalStringify(item)).join(",")}]`;
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${this.canonicalStringify(record[key])}`,
+      )
+      .join(",")}}`;
+  }
+
   private roundScaledPoints(points: number): number {
     return Math.round(points * 100) / 100;
   }
@@ -919,9 +1176,14 @@ export class FileGradingService implements IFileGradingService {
 
   private ensureStructuredContentForEvidenceGrading(
     learnerResponse: LearnerFileUpload[],
+    includeCodeUploads = false,
   ): LearnerFileUpload[] {
-    const needsRebuild = learnerResponse.some((file) =>
-      this.shouldRebuildStructuredContent(file),
+    const needsRebuild = learnerResponse.some(
+      (file) =>
+        this.shouldRebuildStructuredContent(file) ||
+        (includeCodeUploads &&
+          !file.structuredContent &&
+          this.hasExtractedSubmissionText(file)),
     );
 
     if (
@@ -932,7 +1194,14 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return learnerResponse.map((file) => {
-      if (!this.shouldRebuildStructuredContent(file)) {
+      if (
+        !this.shouldRebuildStructuredContent(file) &&
+        !(
+          includeCodeUploads &&
+          !file.structuredContent &&
+          this.hasExtractedSubmissionText(file)
+        )
+      ) {
         return { ...file };
       }
 
@@ -984,9 +1253,12 @@ export class FileGradingService implements IFileGradingService {
     return !file.structuredContent && this.hasExtractedSubmissionText(file);
   }
 
-  private isEvidenceBasedEligible(file: LearnerFileUpload): boolean {
+  private isEvidenceBasedEligible(
+    file: LearnerFileUpload,
+    includeCodeUploads = false,
+  ): boolean {
     if (!file.structuredContent) return false;
-    if (this.isSourceCodeFile(file)) return false;
+    if (!includeCodeUploads && this.isSourceCodeFile(file)) return false;
 
     // The PDF structured extractor sets structureQuality; "low" means the
     // extraction was too sparse to support evidence retrieval.
@@ -2523,13 +2795,23 @@ export class FileGradingService implements IFileGradingService {
     language: string | undefined,
     rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[],
     judgeFeedback?: string,
+    modelConfig?: {
+      modelOverrides: {
+        retrievalModel: string;
+        gradingModel: string;
+        judgeModel: string;
+      };
+      modelOverridesAreFinal?: boolean;
+    },
+    failLoudly = false,
+    includeCodeUploads = false,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
       // Mirror the routing gate's eligibility check so a source-code file that
       // happens to carry structuredContent is never graded in place of the
       // intended document in a mixed submission.
       const structuredFile = learnerResponse.find((file) =>
-        this.isEvidenceBasedEligible(file),
+        this.isEvidenceBasedEligible(file, includeCodeUploads),
       );
 
       if (!structuredFile || !structuredFile.structuredContent) {
@@ -2568,6 +2850,7 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         language || "en",
         judgeFeedback,
+        modelConfig,
       );
 
       this.logger.info(
@@ -2622,6 +2905,10 @@ export class FileGradingService implements IFileGradingService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+
+      if (failLoudly) {
+        throw error;
+      }
 
       this.logger.warn(
         "Evidence-based grading failed - assigning minimum points",
@@ -2795,6 +3082,7 @@ export class FileGradingService implements IFileGradingService {
         pointsAwarded: criterion.pointsAwarded,
         maxPoints: criterion.maxPoints,
         justification: criterion.rationale,
+        nextStep: criterion.nextStep,
         evidence: criterion.evidence.map(
           (citation) =>
             `p${citation.page}:${citation.blockId} ${citation.quote}`,

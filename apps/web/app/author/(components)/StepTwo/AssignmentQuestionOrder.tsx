@@ -210,7 +210,9 @@ const Popup: FC<{ message: string }> = ({ message }) => (
       <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center mt-0.5">
         <span className="text-white text-xs">!</span>
       </div>
-      <span className="text-orange-700 dark:text-orange-300 text-sm">{message}</span>
+      <span className="text-orange-700 dark:text-orange-300 text-sm">
+        {message}
+      </span>
     </div>
     <div className="absolute -top-1 left-4 w-2 h-2 bg-orange-50 dark:bg-orange-900/20 border-l border-t border-orange-200 dark:border-orange-800 transform rotate-45" />
   </div>

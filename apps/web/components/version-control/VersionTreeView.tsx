@@ -274,7 +274,9 @@ export function VersionTreeView({ assignmentId }: Props) {
           <div className="max-w-xs">
             <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
               {getValue() || (
-                <span className="italic text-gray-400 dark:text-gray-500">No description</span>
+                <span className="italic text-gray-400 dark:text-gray-500">
+                  No description
+                </span>
               )}
             </p>
           </div>
@@ -328,7 +330,9 @@ export function VersionTreeView({ assignmentId }: Props) {
         cell: ({ getValue }) => (
           <div className="flex items-center space-x-1">
             <Activity className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            <span className="font-medium text-gray-900 dark:text-gray-100">{getValue()}</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">
+              {getValue()}
+            </span>
           </div>
         ),
 
@@ -354,7 +358,9 @@ export function VersionTreeView({ assignmentId }: Props) {
         cell: ({ getValue }) => (
           <div className="flex items-center space-x-1">
             <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-            <span className="text-sm text-gray-700 dark:text-gray-200">{getValue()}</span>
+            <span className="text-sm text-gray-700 dark:text-gray-200">
+              {getValue()}
+            </span>
           </div>
         ),
 
@@ -698,7 +704,9 @@ export function VersionTreeView({ assignmentId }: Props) {
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2 px-2 py-1 bg-green-50 dark:bg-green-900/20 rounded-full">
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-green-700 dark:text-green-300 font-medium">Published</span>
+                  <span className="text-green-700 dark:text-green-300 font-medium">
+                    Published
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2 px-2 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-full">
                   <div className="w-2 h-2 rounded-full bg-purple-500"></div>
@@ -708,7 +716,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 </div>
                 <div className="flex items-center space-x-2 px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded-full">
                   <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                  <span className="text-gray-700 dark:text-gray-200 font-medium">Version</span>
+                  <span className="text-gray-700 dark:text-gray-200 font-medium">
+                    Version
+                  </span>
                 </div>
               </div>
             </div>
@@ -724,7 +734,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 <Hash className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Versions</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Total Versions
+                </p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.totalVersions}
                 </p>
@@ -738,7 +750,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Published</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Published
+                </p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.publishedVersions}
                 </p>
@@ -752,7 +766,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Unpublished</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Unpublished
+                </p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.unpublishedVersions}
                 </p>
@@ -766,7 +782,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 <Edit3 className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">My Private Drafts</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  My Private Drafts
+                </p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.totalDrafts}
                 </p>
@@ -780,7 +798,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Latest Version</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Latest Version
+                </p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   v{versionStats.latestVersion?.versionNumber || 0}
                 </p>
@@ -794,7 +814,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                 <Activity className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Questions</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Questions
+                </p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {versionStats.totalQuestions}
                 </p>
@@ -1326,7 +1348,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                             </label>
                             <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg space-y-3 text-sm">
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600 dark:text-gray-300">Graded:</span>
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  Graded:
+                                </span>
                                 <span
                                   className={`font-medium px-2 py-1 rounded-full text-xs ${
                                     (selectedVersionDetails || selectedVersion)
@@ -1407,7 +1431,9 @@ export function VersionTreeView({ assignmentId }: Props) {
                                 </span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600 dark:text-gray-300">Display:</span>
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  Display:
+                                </span>
                                 <span className="font-medium text-gray-900 dark:text-gray-100">
                                   {(selectedVersionDetails || selectedVersion)
                                     .questionDisplay || "Default"}

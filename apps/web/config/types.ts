@@ -417,6 +417,7 @@ export interface StructuredCriterion {
   maxPoints: number;
   evidence: string;
   feedback: string;
+  nextStep?: string;
   status: "full" | "partial" | "none";
 }
 

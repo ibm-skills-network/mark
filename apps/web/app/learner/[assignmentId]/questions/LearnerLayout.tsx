@@ -18,12 +18,98 @@ import ClientLearnerLayout from "./ClientComponent";
 import {
   getLatestAttempt,
   isAttemptInProgress,
+  isAttemptSubmitted,
 } from "@/app/learner/utils/attempts";
 
 interface Props {
   params: { assignmentId: string };
   searchParams: { authorMode?: string; lang?: string };
 }
+
+/**
+ * Attempt-creation rejections that render the standard explanatory modal,
+ * keyed by the sentinel string createAttempt resolves the API error to.
+ */
+const attemptRejectionModals: Record<
+  string,
+  {
+    logStep: string;
+    statusCode: number;
+    headline: string;
+    error: string;
+    userSteps: { title: string; description: string }[];
+  }
+> = {
+  "no more attempts": {
+    logStep: "No more attempts",
+    statusCode: 422,
+    headline: "No more attempts available",
+    error:
+      "You have reached the maximum number of attempts for this assignment, if you need more attempts, please contact the author",
+    userSteps: [
+      {
+        title: "Contact your instructor",
+        description: "Ask for an additional attempt if needed.",
+      },
+      {
+        title: "Return to course",
+        description: "Go back to the course home.",
+      },
+    ],
+  },
+  "time range exceeded": {
+    logStep: "Time-range attempt limit reached",
+    statusCode: 422,
+    headline: "Attempt limit reached for this period",
+    error:
+      "You have exceeded the allowed number of attempts for this assignment within the allowed time period. Please wait before trying again.",
+    userSteps: [
+      {
+        title: "Wait before retrying",
+        description:
+          "The assignment limits how many attempts can be made in a given period.",
+      },
+      {
+        title: "Return to course",
+        description: "Go back to the course home.",
+      },
+    ],
+  },
+  "in cooldown period": {
+    logStep: "Attempt in cooldown",
+    statusCode: 429,
+    headline: "Cooldown in effect",
+    error:
+      "You need to wait until the cooldown period is complete before being able to retake the assignment. Please wait until this period is complete before reattempting.",
+    userSteps: [
+      {
+        title: "Wait for the cooldown",
+        description: "Try again after the cooldown ends.",
+      },
+      {
+        title: "Return to course",
+        description: "Head back to the assignment list.",
+      },
+    ],
+  },
+  "attempt in progress": {
+    logStep: "Attempt in progress but could not be resumed",
+    statusCode: 422,
+    headline: "An attempt is already in progress",
+    error:
+      "You already have an attempt in progress for this assignment, but it couldn't be loaded automatically. Reload the page to resume it.",
+    userSteps: [
+      {
+        title: "Reload this page",
+        description: "Your in-progress attempt should resume.",
+      },
+      {
+        title: "Return to course",
+        description: "Go back to the course home and reopen the assignment.",
+      },
+    ],
+  },
+};
 
 async function LearnerLayout(props: Props) {
   const { params, searchParams } = props;
@@ -73,11 +159,55 @@ async function LearnerLayout(props: Props) {
   const inProgressAttempts = listOfAttempts.filter(isAttemptInProgress);
   const latestInProgressAttempt = getLatestAttempt(inProgressAttempts);
 
-  const isNewAttempt = !latestInProgressAttempt;
+  // Flipped to false on every path that resumes an existing attempt:
+  // QuestionPage wipes the assignment's draft-answer localStorage for new
+  // attempts, and a resumed attempt must keep the learner's drafts.
+  let isNewAttempt = !latestInProgressAttempt;
 
-  const attemptId = latestInProgressAttempt
-    ? latestInProgressAttempt.id
-    : await createAttempt(assignmentId, cookieHeader);
+  let attemptId: Awaited<ReturnType<typeof createAttempt>> =
+    latestInProgressAttempt?.id;
+
+  if (attemptId === undefined) {
+    const created = await createAttempt(assignmentId, cookieHeader);
+    if (created === "attempt in progress") {
+      // A concurrent render of this page created the attempt between our
+      // getAttempts and createAttempt calls. Re-list and resume that attempt
+      // instead of showing a lockout — it is this learner's own usable attempt.
+      // The server just vouched an attempt is active, so when the client-clock
+      // in-progress filter disagrees (clock skew), fall back to the latest
+      // unsubmitted attempt rather than dead-ending.
+      const refreshedAttempts = await getAttempts(assignmentId, cookieHeader);
+      const resumableAttempt = refreshedAttempts
+        ? (getLatestAttempt(refreshedAttempts.filter(isAttemptInProgress)) ??
+          getLatestAttempt(
+            refreshedAttempts.filter((attempt) => !isAttemptSubmitted(attempt)),
+          ))
+        : undefined;
+      if (resumableAttempt) {
+        attemptId = resumableAttempt.id;
+        isNewAttempt = false;
+        log(
+          "Resumed attempt after concurrent creation",
+          `Attempt ${resumableAttempt.id}`,
+        );
+      } else {
+        // Keep the sentinel: the rejection modal below explains the state
+        // instead of a generic 500.
+        attemptId = created;
+        log("Resume after concurrent creation failed", "No resumable attempt");
+      }
+    } else {
+      attemptId = created;
+      if (
+        typeof created === "number" &&
+        listOfAttempts.some((attempt) => attempt.id === created)
+      ) {
+        // The server resumed an existing attempt (its clock still considers
+        // it active even though ours does not) rather than creating one.
+        isNewAttempt = false;
+      }
+    }
+  }
 
   log(
     "Attempt resolved",
@@ -108,31 +238,6 @@ async function LearnerLayout(props: Props) {
     );
   }
 
-  if (attemptId === "no more attempts") {
-    log("No more attempts");
-    return (
-      <ErrorModal
-        className="h-[calc(100vh-100px)]"
-        statusCode={422}
-        error={
-          "You have reached the maximum number of attempts for this assignment, if you need more attempts, please contact the author"
-        }
-        headline="No more attempts available"
-        userSteps={[
-          {
-            title: "Contact your instructor",
-            description: "Ask for an additional attempt if needed.",
-          },
-          {
-            title: "Return to course",
-            description: "Go back to the course home.",
-          },
-        ]}
-        stateTimeline={stateTimeline}
-      />
-    );
-  }
-
   if (attemptId === "ai temporarily unavailable") {
     log("AI grading temporarily disabled");
     return (
@@ -140,26 +245,26 @@ async function LearnerLayout(props: Props) {
     );
   }
 
-  if (attemptId === "in cooldown period") {
-    log("Attempt in cooldown");
+  if (typeof attemptId === "string") {
+    const rejection = attemptRejectionModals[attemptId];
+    if (!rejection) {
+      log("Unhandled attempt state", attemptId);
+      return (
+        <ErrorModal
+          error={"Attempt could not be created"}
+          statusCode={500}
+          stateTimeline={stateTimeline}
+        />
+      );
+    }
+    log(rejection.logStep);
     return (
       <ErrorModal
         className="h-[calc(100vh-100px)]"
-        statusCode={429}
-        error={
-          "You need to wait until the cooldown period is complete before being able to retake the assignment. Please wait until this period is complete before reattempting."
-        }
-        headline="Cooldown in effect"
-        userSteps={[
-          {
-            title: "Wait for the cooldown",
-            description: "Try again after the cooldown ends.",
-          },
-          {
-            title: "Return to course",
-            description: "Head back to the assignment list.",
-          },
-        ]}
+        statusCode={rejection.statusCode}
+        error={rejection.error}
+        headline={rejection.headline}
+        userSteps={rejection.userSteps}
         stateTimeline={stateTimeline}
       />
     );

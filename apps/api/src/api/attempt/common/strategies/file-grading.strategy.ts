@@ -318,6 +318,8 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       scoringForModel,
       question.type,
       question.responseType ?? "OTHER",
+      undefined,
+      question.id,
     );
 
     const gradingModel = await this.llmFacadeService.gradeFileBasedQuestion(
@@ -783,7 +785,10 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           );
 
           if (judgeResult.corrections?.points !== undefined) {
-            currentResponseDto.totalPoints = judgeResult.corrections.points;
+            currentResponseDto.totalPoints = Math.min(
+              question.totalPoints,
+              Math.max(0, judgeResult.corrections.points),
+            );
           }
           if (judgeResult.corrections?.feedback) {
             currentResponseDto.feedback = [
@@ -829,6 +834,7 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           gradingModel.questionType,
           gradingModel.responseType,
           judgeFeedback,
+          gradingModel.questionId,
         );
 
         const regraded = await this.llmFacadeService.gradeFileBasedQuestion(

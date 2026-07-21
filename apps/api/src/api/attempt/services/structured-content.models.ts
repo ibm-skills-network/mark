@@ -135,6 +135,8 @@ export interface CriterionGradingResult {
 
   rationale: string;
 
+  nextStep?: string;
+
   decision: "meets" | "partially_meets" | "does_not_meet";
 
   gradedAt: string;

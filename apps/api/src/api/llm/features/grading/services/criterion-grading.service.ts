@@ -9,6 +9,8 @@ import {
   CriterionEvidence,
   CriterionGrade,
   CriterionGradeSchema,
+  DEFAULT_MODEL_SELECTION,
+  getDeterministicGradingOptions,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
 import {
@@ -24,6 +26,7 @@ type ParsedGrade = {
   rationale: string;
   citations: string[];
   confidence: "high" | "medium" | "low";
+  nextStep?: string;
 };
 
 interface CriterionGradingRequest {
@@ -35,6 +38,7 @@ interface CriterionGradingRequest {
   judgeFeedback?: string;
   attempt: number;
   modelOverride?: string;
+  modelOverrideIsFinal?: boolean;
 }
 
 @Injectable()
@@ -65,6 +69,16 @@ export class CriterionGradingService {
         pointsAwarded: minPoints,
         maxPoints,
         rationale: noEvidenceRationale(minPoints, maxPoints),
+        // Only guide the learner to add work when the criterion is unmet; a
+        // completion-only criterion awarded its max (met) must not be told to.
+        nextStep:
+          noEvidenceDecision(minPoints, maxPoints) === "does_not_meet"
+            ? `Add or clearly demonstrate the required work: ${
+                request.criterion.criteria.find(
+                  (level) => level.points === maxPoints,
+                )?.description ?? request.criterion.rubricQuestion
+              }`
+            : undefined,
         citations: [],
         confidence: "low",
         decision: noEvidenceDecision(minPoints, maxPoints),
@@ -93,29 +107,26 @@ export class CriterionGradingService {
     });
 
     const selectedModel =
-      request.modelOverride ||
-      (await this.llmResolver.getModelForGradingTask(
-        "criterion_grading",
-        "text",
-        request.question.length + request.evidence.length * 200,
-        request.criterion.criteria.length,
-      ));
+      request.modelOverrideIsFinal && request.modelOverride
+        ? request.modelOverride
+        : await this.llmResolver.getModelKeyWithFallback(
+            "criterion_grading",
+            request.modelOverride ?? DEFAULT_MODEL_SELECTION.gradingModel,
+          );
 
     const start = Date.now();
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      request.assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "criterion_grading",
-      selectedModel,
-    );
+    const parsed =
+      await this.promptProcessor.processStructuredPrompt<ParsedGrade>(
+        prompt,
+        request.assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        CriterionGradeSchema,
+        selectedModel,
+        getDeterministicGradingOptions(selectedModel),
+      );
     const duration = Date.now() - start;
-    const responseText =
-      typeof response === "string" ? response : String(response);
-    const promptText =
-      typeof prompt.template === "string"
-        ? prompt.template
-        : String(prompt.template);
+    const responseText = JSON.stringify(parsed);
+    const promptText = await prompt.format({});
 
     if (recorder) {
       recorder.record({
@@ -125,29 +136,6 @@ export class CriterionGradingService {
         response: responseText,
         durationMs: duration,
       });
-    }
-
-    let parsed: ParsedGrade | undefined;
-
-    parsed = await this.parseGradeResponse(
-      parser,
-      responseText,
-      allowedPoints,
-      minPoints,
-      request.evidence,
-    );
-
-    if (!parsed) {
-      this.logger.warn(
-        `Failed to parse grading output for criterion ${request.criterion.id}`,
-      );
-      parsed = {
-        score: minPoints,
-        rationale:
-          "Unable to parse grading output; defaulted to minimum points.",
-        citations: request.evidence.map((item) => item.chunkId).slice(0, 1),
-        confidence: "low",
-      };
     }
 
     const pointsAwarded = this.normalizePoints(parsed.score, allowedPoints);
@@ -164,6 +152,7 @@ export class CriterionGradingService {
       pointsAwarded,
       maxPoints,
       rationale: parsed.rationale,
+      nextStep: parsed.nextStep,
       citations:
         citations.length > 0 ? citations : [request.evidence[0].chunkId],
       confidence: parsed.confidence,

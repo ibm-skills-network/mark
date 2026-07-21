@@ -4,18 +4,19 @@ import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
-import { extractStructuredJSON } from "../../../core/utils/structured-json.util";
 import { LLM_RESOLVER_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import {
   CriterionEvidence,
   CriterionEvidenceRequest,
   CriterionEvidenceResponse,
+  DEFAULT_MODEL_SELECTION,
   EvidenceAnchor,
   EvidenceRetrievalStrategy,
   EvidenceValidationOutcome,
   EvidenceValidationSchema,
   ExtractedChunk,
   RubricCriterion,
+  getDeterministicGradingOptions,
 } from "../types/criterion-evidence.types";
 import { buildEvidenceValidationPrompt } from "../prompts/evidence-validation.prompt";
 import { ChunkIndex } from "./chunk-index.service";
@@ -149,11 +150,32 @@ export class CriterionEvidenceRetrievalService {
     let validationOutcome: EvidenceValidationOutcome = "disabled";
 
     if (strategy === "llm" || this.config.enableLlmValidation) {
-      const outcome = await this.validateWithLlm(
+      // The LLM validator is the actual relevance judge for these candidates
+      // (which may include chunks below the lexical relevance threshold).
+      let outcome = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
         recorder,
       );
+
+      // An empty "validated" verdict while candidates exist can be a transient
+      // miss; re-validate once before flooring to minimum points. An explicit
+      // "rejected" is a deliberate validator decision and is not retried.
+      if (
+        outcome &&
+        outcome.outcome === "validated" &&
+        outcome.evidence.length === 0 &&
+        reranked.length > 0
+      ) {
+        this.logger.warn(
+          `Evidence validator returned no matches for criterion ${request.criterion.id}; re-validating once before assigning minimum points`,
+        );
+        outcome = await this.validateWithLlm(
+          request,
+          reranked.map((item) => item.chunk),
+          recorder,
+        );
+      }
 
       if (outcome === null) {
         validationOutcome = "technical_failure";
@@ -331,27 +353,35 @@ export class CriterionEvidenceRetrievalService {
     });
 
     const model =
-      request.modelOverride ||
-      (await this.llmResolver.getModelForValidationTask(
-        "evidence_validation",
-        request.question.length,
-      ));
+      request.modelOverrideIsFinal && request.modelOverride
+        ? request.modelOverride
+        : await this.llmResolver.getModelKeyWithFallback(
+            "evidence_validation",
+            request.modelOverride ?? DEFAULT_MODEL_SELECTION.retrievalModel,
+          );
 
     const start = Date.now();
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      request.assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "evidence_validation",
-      model,
-    );
+    let parsed: { evidence?: Array<{ chunkId?: string; relevance?: string }> };
+    try {
+      parsed = await this.promptProcessor.processStructuredPrompt(
+        prompt,
+        request.assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        EvidenceValidationSchema,
+        model,
+        getDeterministicGradingOptions(model),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Evidence validation failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
     const duration = Date.now() - start;
-    const responseText =
-      typeof response === "string" ? response : String(response);
-    const promptText =
-      typeof prompt.template === "string"
-        ? prompt.template
-        : String(prompt.template);
+    const responseText = JSON.stringify(parsed);
+    const promptText = await prompt.format({});
 
     if (recorder) {
       recorder.record({
@@ -363,39 +393,25 @@ export class CriterionEvidenceRetrievalService {
       });
     }
 
-    const candidates = [
-      ...new Set([responseText, extractStructuredJSON(responseText)]),
-    ];
-
-    for (const candidate of candidates) {
-      try {
-        const parsed = await parser.parse(candidate);
-        const evidence = this.mapParsedSelections(
-          parsed,
-          chunks,
-          request.maxEvidence ?? this.config.maxEvidence,
-        );
-        // Explicit rejection labels are a validator decision; when nothing was
-        // validated and at least one such label is present, report "rejected"
-        // so the caller does not rescue the candidates via keyword fallback.
-        // Short-circuit: if evidence.length > 0 the answer is always false, so
-        // skip the .some() traversal entirely.
-        const rejected =
-          evidence.length === 0 &&
-          (parsed.evidence || []).some(
-            (item) =>
-              item.relevance === "irrelevant" ||
-              item.relevance === "restatement_only" ||
-              item.relevance === "boilerplate_only",
-          );
-        return { evidence, outcome: rejected ? "rejected" : "validated" };
-      } catch {
-        this.logger.warn("Evidence validation parse failed");
-      }
-    }
-
-    this.logger.warn("Evidence validation parse failed for all candidates");
-    return null;
+    const evidence = this.mapParsedSelections(
+      parsed,
+      chunks,
+      request.maxEvidence ?? this.config.maxEvidence,
+    );
+    // Explicit rejection labels are a validator decision; when nothing was
+    // validated and at least one such label is present, report "rejected" so
+    // the caller does not rescue the candidates via keyword fallback.
+    // Short-circuit: if evidence.length > 0 the answer is always false, so
+    // skip the .some() traversal entirely.
+    const rejected =
+      evidence.length === 0 &&
+      (parsed.evidence || []).some(
+        (item) =>
+          item.relevance === "irrelevant" ||
+          item.relevance === "restatement_only" ||
+          item.relevance === "boilerplate_only",
+      );
+    return { evidence, outcome: rejected ? "rejected" : "validated" };
   }
 
   private mapParsedSelections(

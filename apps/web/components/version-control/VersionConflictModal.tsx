@@ -118,7 +118,9 @@ export function VersionConflictModal({
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
                         <Tag className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                        <span className="text-gray-600 dark:text-gray-300">Version</span>
+                        <span className="text-gray-600 dark:text-gray-300">
+                          Version
+                        </span>
                       </div>
                       <span className="font-mono font-medium text-gray-900 dark:text-gray-100">
                         {existingVersion.versionNumber}
@@ -127,7 +129,9 @@ export function VersionConflictModal({
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
                         <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                        <span className="text-gray-600 dark:text-gray-300">Created</span>
+                        <span className="text-gray-600 dark:text-gray-300">
+                          Created
+                        </span>
                       </div>
                       <span className="text-gray-900 dark:text-gray-100">
                         {formatVersionAge(existingVersion.createdAt)}
@@ -136,7 +140,9 @@ export function VersionConflictModal({
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
                         <User className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-                        <span className="text-gray-600 dark:text-gray-300">Created by</span>
+                        <span className="text-gray-600 dark:text-gray-300">
+                          Created by
+                        </span>
                       </div>
                       <span className="text-gray-900 dark:text-gray-100">
                         {existingVersion.createdBy}
@@ -145,7 +151,9 @@ export function VersionConflictModal({
                     {existingVersion.versionDescription && (
                       <div className="text-xs">
                         <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-gray-600 dark:text-gray-300">Description</span>
+                          <span className="text-gray-600 dark:text-gray-300">
+                            Description
+                          </span>
                         </div>
                         <p className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 p-2 rounded border text-xs">
                           {existingVersion.versionDescription}

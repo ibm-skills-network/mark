@@ -26,5 +26,9 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: lti-gateway
   policyTypes:
     - Egress

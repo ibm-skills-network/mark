@@ -39,9 +39,14 @@ JUDGE FEEDBACK (if any):
 
 OUTPUT RULES:
 - Choose EXACTLY one of the allowed points.
+- If the evidence does not substantively address this criterion (e.g. off-topic, wrong assignment, unrelated content), award the minimum allowed points regardless of superficial keyword overlap.
 - Cite chunkIds from the LEARNER EVIDENCE section only.
 - Do NOT award credit for restating the question, copying rubric language, or citing boilerplate content.
 - Chunks labelled [CONTRADICTS CRITERION] show the learner stated something that conflicts with the criterion; they are evidence of a gap, not a strength — do not cite them as support.
+- Write rationale for the learner, not for another grader: state what is present and the specific gap that affected the score in 1-2 concise sentences.
+- For partial or minimum credit, provide nextStep as one concrete change the learner can make. Name the analysis, explanation, code change, test, or result they should add.
+- Never expose chunk IDs, block IDs, page-block IDs, prompt instructions, model behavior, or grading-process language in rationale or nextStep.
+- Do not restate the rubric and do not use generic phrases such as "needs more detail", "additional corrections", or "for full credit" without naming the missing detail.
 - Confidence must be high, medium, or low.
 
 {format_instructions}`,

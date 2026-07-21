@@ -228,13 +228,17 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
           <tr className="border-b border-gray-200 dark:border-gray-700 w-full">
             <th className="py-2 px-4 text-left bg-gray-100 dark:bg-gray-700 w-1/6 h-min border-r border-gray-200 dark:border-gray-700">
               <div className="flex flex-col">
-                <p className="typography-body text-gray-600 dark:text-gray-300">Points</p>
+                <p className="typography-body text-gray-600 dark:text-gray-300">
+                  Points
+                </p>
               </div>
             </th>
             <th className="py-2 px-4 text-left bg-gray-100 dark:bg-gray-700 w-full h-min">
               <div className="flex justify-between">
                 <div className="flex flex-col">
-                  <p className="typography-body text-gray-600 dark:text-gray-300">Criteria</p>
+                  <p className="typography-body text-gray-600 dark:text-gray-300">
+                    Criteria
+                  </p>
                 </div>
 
                 {criteriaMode && !preview && (
@@ -304,7 +308,9 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
                         <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                         Generate a rubric with AI
                       </button>
-                      <span className="text-gray-500 dark:text-gray-400">OR</span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        OR
+                      </span>
                       <button
                         className="text-gray-500 dark:text-gray-400"
                         onClick={() => {

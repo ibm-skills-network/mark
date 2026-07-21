@@ -290,7 +290,8 @@ export class GradingJudgeService implements IGradingJudgeService {
 
       if (
         typeof parsedResponse.suggestedPoints === "number" &&
-        parsedResponse.suggestedPoints >= 0
+        parsedResponse.suggestedPoints >= 0 &&
+        parsedResponse.suggestedPoints <= input.proposedGrading.maxPoints
       ) {
         result.corrections.points = parsedResponse.suggestedPoints;
       }
