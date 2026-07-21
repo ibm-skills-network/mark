@@ -18,6 +18,17 @@ function makeChunk(
   };
 }
 
+function makeTextChunk(text: string): ExtractedChunk {
+  return {
+    chunkId: `text-${text}`,
+    text,
+    sourceType: "text",
+    sourceId: "learner-response",
+    anchor: { type: "text", startOffset: 0, endOffset: text.length },
+    hash: `hash-${text}`,
+  };
+}
+
 describe("SubmissionQualityService", () => {
   let service: SubmissionQualityService;
 
@@ -57,6 +68,15 @@ describe("SubmissionQualityService", () => {
       const { chunks } = service.classifyChunks([makeChunk(text)]);
       expect(chunks[0].quality?.eligibility).toBe("eligible");
     });
+
+    it.each(["42", "1/2", "-1"])(
+      'keeps unpaged numeric learner response "%s" eligible',
+      (text) => {
+        const { chunks } = service.classifyChunks([makeTextChunk(text)]);
+        expect(chunks[0].quality?.eligibility).toBe("eligible");
+        expect(chunks[0].quality?.ineligibleReasons).toBeUndefined();
+      },
+    );
   });
 
   describe("metadata banner detection", () => {

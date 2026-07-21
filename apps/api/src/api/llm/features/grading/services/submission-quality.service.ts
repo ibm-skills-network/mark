@@ -350,7 +350,7 @@ export class SubmissionQualityService {
       reasons.push(bannerReason);
     }
 
-    if (this.isPageLabel(normalizedText)) {
+    if (this.isPageLabel(chunk, normalizedText)) {
       reasons.push("page_label");
     }
 
@@ -371,6 +371,7 @@ export class SubmissionQualityService {
       reasons.length === 0 &&
       !this.isStructuralChunk(chunk) &&
       !this.isVisualChunk(chunk) &&
+      !this.hasUnpagedNumericSignal(chunk, normalizedText) &&
       substantiveTokenCount < GRADING_QUALITY.MIN_SUBSTANTIVE_TOKENS
     ) {
       reasons.push("too_short");
@@ -416,8 +417,25 @@ export class SubmissionQualityService {
     };
   }
 
-  private isPageLabel(text: string): boolean {
-    return PAGE_LABEL_PATTERN.test(text.trim());
+  private isPageLabel(chunk: ExtractedChunk, text: string): boolean {
+    const hasPageContext =
+      chunk.anchor.type === "file" ||
+      (chunk.anchor.type === "image" && chunk.anchor.page !== undefined);
+    return hasPageContext && PAGE_LABEL_PATTERN.test(text.trim());
+  }
+
+  /**
+   * Numeric short answers have no lexical tokens after tokenization, but can
+   * still be complete learner evidence. Let the criterion validator judge
+   * them for unpaged text/URL submissions instead of dropping them as noise.
+   */
+  private hasUnpagedNumericSignal(
+    chunk: ExtractedChunk,
+    text: string,
+  ): boolean {
+    const isUnpagedSource =
+      chunk.anchor.type === "text" || chunk.anchor.type === "url";
+    return isUnpagedSource && /\d/.test(text);
   }
 
   private getBannerReason(lowerText: string): ChunkIneligibleReason | null {
