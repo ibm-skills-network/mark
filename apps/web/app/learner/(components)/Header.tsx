@@ -56,6 +56,7 @@ function LearnerHeader() {
   // can still contain the previous assignment during SPA navigation, before
   // the current assignment has finished loading.
   const { assignmentId, assignmentIdParam } = useAssignmentId();
+  const isAuthorPreview = searchParams.get("authorMode") === "true";
   const authorPreviewPayload = assignmentId
     ? readAuthorPreviewPayload(assignmentId)
     : null;
@@ -95,7 +96,7 @@ function LearnerHeader() {
     state.setGrade,
   ]);
   const assignmentDetails =
-    authorPreviewPayload?.assignmentDetails ??
+    (isAuthorPreview ? authorPreviewPayload?.assignmentDetails : null) ??
     (storedAssignmentDetails?.id === assignmentId
       ? storedAssignmentDetails
       : null);
@@ -133,8 +134,6 @@ function LearnerHeader() {
   const getUserPreferedLanguageFromLTI = useLearnerStore(
     (state) => state.getUserPreferedLanguageFromLTI,
   );
-
-  const isAuthorPreview = searchParams.get("authorMode") === "true";
 
   useEffect(() => {
     let cancelled = false;
