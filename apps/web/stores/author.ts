@@ -1201,6 +1201,7 @@ export const useAuthorStore = createWithEqualityFn<
                   }
                   return q;
                 }),
+                hasUnsavedChanges: true,
               };
             } else {
               return {
@@ -1213,6 +1214,7 @@ export const useAuthorStore = createWithEqualityFn<
                   }
                   return q;
                 }),
+                hasUnsavedChanges: true,
               };
             }
           });
@@ -1244,6 +1246,7 @@ export const useAuthorStore = createWithEqualityFn<
               }
               return { ...q, variants };
             }),
+            hasUnsavedChanges: true,
           }));
         },
         addTrueFalseChoice: (questionId, isTrue, variantId) => {
