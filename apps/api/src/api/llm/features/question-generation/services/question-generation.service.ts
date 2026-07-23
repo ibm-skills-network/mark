@@ -879,8 +879,12 @@ FORMAT INSTRUCTIONS:
 
   QUANTITATIVE QUESTION RULES:
   - The question MUST require the learner to interpret or apply a statistic from the content — not recall it. Frame it as what a number indicates or why it matters.
-  - The answer is a specific number or measure from the content, but the question tests comprehension of its meaning.
-  - DO NOT start with "What percentage" or "How many".
+  - STATE the relevant statistic INSIDE the question stem (give the learner the number), then ask what it demonstrates, implies, or enables. The learner reasons about the number's meaning; they must never have to retrieve the number itself.
+  - CRITICAL: The correct answer and every wrong answer must be a short CONCEPTUAL interpretation of the statistic — a business or technical implication. NEVER make a bare number, percentage, figure, or measure an answer choice.
+  - Do NOT ask what value a metric has, how much something changed, or what result a specific company achieved — those force a numeric answer and will be rejected. The number is already in the stem; the answer is what that number means.
+  - Do NOT start with, or embed mid-sentence, "What percentage", "How many", "How much", "What number", or "How often".
+  - GOOD: "Instana cut the bank's mean incident-response time by 45%. What does this improvement indicate?" → answers are short implications (e.g., "Faster operational recovery at scale").
+  - BAD (never do this): "What reduction in incident-response time did the bank achieve?" → forces a numeric answer.
 
   QUANTITATIVE ANSWER LENGTH: at MOST 5-8 words for both the correct answer and each wrong answer.
 
