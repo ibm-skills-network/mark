@@ -13,6 +13,7 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 @Injectable()
 export class OpenAiLlmService implements IMultimodalLlmProvider {
@@ -41,6 +42,7 @@ export class OpenAiLlmService implements IMultimodalLlmProvider {
       // and outlives every caller-side deadline.
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 

@@ -22,6 +22,11 @@ export interface LlmRequestOptions {
    * should set this low so attempts do not multiply.
    */
   maxRetries?: number;
+  /**
+   * Hashed end-user id forwarded to OpenAI as safety_identifier so abuse
+   * attributes to one end user instead of the whole org account.
+   */
+  safetyIdentifier?: string;
 }
 
 export interface LlmResponse {

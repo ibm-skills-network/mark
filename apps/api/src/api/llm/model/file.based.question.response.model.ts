@@ -9,6 +9,7 @@ export type RubricScore = {
   evidence?: string[];
   status?: "full" | "partial" | "none" | "unknown";
   manualReviewRequired?: boolean;
+  nextStep?: string;
 };
 
 export class FileBasedQuestionResponseModel {

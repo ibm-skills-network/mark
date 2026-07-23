@@ -13,6 +13,7 @@ import {
   AssignmentAttempt,
   AssignmentQuestionDisplayOrder,
   CorrectAnswerVisibility,
+  Prisma,
   Question,
   QuestionType,
   QuestionVariant,
@@ -58,7 +59,10 @@ import {
 } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
-import { AttemptValidationService } from "./attempt-validation.service";
+import {
+  AttemptValidationService,
+  activeAttemptWhere,
+} from "./attempt-validation.service";
 import { LtiGradeSyncService } from "./lti-grade-sync.service";
 import { type GradingProgressDetails } from "./grading-progress.service";
 import {
@@ -107,6 +111,11 @@ export class AttemptSubmissionService {
         userSession.role,
         assignmentId,
         language,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        userSession.userId,
       );
     } catch (error) {
       // The grading layers deliberately let these typed terminal errors pass
@@ -155,15 +164,11 @@ export class AttemptSubmissionService {
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const now = new Date();
 
-    const existingAttempt = await this.prisma.assignmentAttempt.findFirst({
-      where: {
-        assignmentId,
-        userId: userSession.userId,
-        submitted: false,
-        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const existingAttempt = await this.findResumableAttempt(
+      assignmentId,
+      userSession.userId,
+      now,
+    );
 
     if (existingAttempt) {
       return {
@@ -202,17 +207,95 @@ export class AttemptSubmissionService {
       success: true,
     } as GetAssignmentResponseDto;
 
-    await this.validationService.validateNewAttempt(
-      assignmentForAttemptFlow,
-      userSession,
-    );
+    // Attempt creation must be idempotent. The learner questions page creates
+    // an attempt as a render side effect, so overlapping renders (or an LMS
+    // iframe reload right after submit) can race this endpoint: both read an
+    // empty attempt list, both POST, and the loser used to get a 422 or mint a
+    // duplicate. Serialize creation per learner+assignment with a
+    // transaction-scoped advisory lock; the loser re-checks under the lock and
+    // resumes the winner's attempt instead. The loser's wait on the lock
+    // counts against the interactive-transaction timeout, so the budget must
+    // cover the winner's validation + creation too — the default 5s is not
+    // enough headroom under load.
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${userSession.userId}:${assignmentId}`}, 0))`;
 
+        const concurrentAttempt = await this.findResumableAttempt(
+          assignmentId,
+          userSession.userId,
+          now,
+          tx,
+        );
+
+        if (concurrentAttempt) {
+          this.logger.warn(
+            `createAssignmentAttempt: concurrent creation resolved by resume assignment=${assignmentId} user=${userSession.userId} attempt=${concurrentAttempt.id}`,
+          );
+          return {
+            id: concurrentAttempt.id,
+            success: true,
+          };
+        }
+
+        await this.validationService.validateNewAttempt(
+          assignmentForAttemptFlow,
+          userSession,
+          tx,
+        );
+
+        return this.createAttemptWithQuestions(
+          tx,
+          assignmentId,
+          assignment,
+          assignmentForAttemptFlow,
+          userSession,
+        );
+      },
+      { maxWait: 5000, timeout: 15_000 },
+    );
+  }
+
+  /**
+   * The latest unsubmitted, unexpired attempt for this learner+assignment, if
+   * one exists. Backs both the pre-lock fast path and the under-lock re-check
+   * that makes attempt creation idempotent.
+   */
+  private async findResumableAttempt(
+    assignmentId: number,
+    userId: string,
+    now: Date,
+    database: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    return database.assignmentAttempt.findFirst({
+      where: activeAttemptWhere(assignmentId, userId, now),
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Inserts the attempt row and populates its question order and variant
+   * picks. Only call with the per-learner+assignment advisory lock held (see
+   * createAssignmentAttempt) so concurrent creators serialize.
+   */
+  private async createAttemptWithQuestions(
+    tx: Prisma.TransactionClient,
+    assignmentId: number,
+    assignment: Prisma.AssignmentGetPayload<{
+      include: {
+        currentVersion: { include: { questionVersions: true } };
+        questions: { include: { variants: true } };
+      };
+    }>,
+    assignmentForAttemptFlow: GetAssignmentResponseDto,
+    userSession: UserSession,
+  ): Promise<BaseAssignmentAttemptResponseDto> {
     const attemptExpiresAt = this.calculateAttemptExpiresAt(
       assignmentForAttemptFlow,
     );
     const activeVersionId = assignment.currentVersionId;
 
-    const assignmentAttempt = await this.prisma.assignmentAttempt.create({
+    const assignmentAttempt = await tx.assignmentAttempt.create({
       data: {
         expiresAt: attemptExpiresAt ?? null,
         submitted: false,
@@ -361,7 +444,7 @@ export class AttemptSubmissionService {
       orderingSeed,
     );
 
-    await this.prisma.assignmentAttempt.update({
+    await tx.assignmentAttempt.update({
       where: { id: assignmentAttempt.id },
       data: {
         questionOrder: orderedQuestions.map((q) => q.id),
@@ -371,6 +454,7 @@ export class AttemptSubmissionService {
     await this.questionVariantService.createAttemptQuestionVariants(
       assignmentAttempt.id,
       orderedQuestions,
+      tx,
     );
 
     return {
@@ -596,12 +680,35 @@ export class AttemptSubmissionService {
       cachedQuestions.map((q) => [q.id, q.totalPoints]),
     );
     const responses = assignmentAttempt.questionResponses ?? [];
-    const rawPointsEarned = responses.reduce(
+    const servedQuestionIds = assignmentAttempt.questionOrder?.length
+      ? assignmentAttempt.questionOrder
+      : assignment.questionOrder?.length
+        ? assignment.questionOrder
+        : cachedQuestions.map((q) => q.id);
+    const servedQuestionIdSet = new Set(servedQuestionIds);
+
+    // Historical rows and crafted requests can contain duplicate or unserved
+    // responses. Keep only the newest served response so the numerator covers
+    // the same question set as the denominator.
+    const servedResponseByQuestionId = new Map<
+      number,
+      (typeof responses)[number]
+    >();
+    for (const response of responses) {
+      if (!servedQuestionIdSet.has(response.questionId)) continue;
+
+      const existing = servedResponseByQuestionId.get(response.questionId);
+      if (!existing || response.id > existing.id) {
+        servedResponseByQuestionId.set(response.questionId, response);
+      }
+    }
+    const servedResponses = [...servedResponseByQuestionId.values()];
+    const rawPointsEarned = servedResponses.reduce(
       (sum, response) => sum + (response.points ?? 0),
       0,
     );
     let totalPointsEarned = 0;
-    for (const response of responses) {
+    for (const response of servedResponses) {
       const questionMax = questionMaxById.get(response.questionId);
       const points = response.points ?? 0;
       totalPointsEarned +=
@@ -612,10 +719,61 @@ export class AttemptSubmissionService {
     // Compute score totals before applyVisibilitySettings so they survive
     // even when showQuestions=false strips the questions array. Without this
     // the success page shows "0 / 0" because it can't sum the (empty) array.
-    const totalPossiblePoints = cachedQuestions.reduce(
-      (sum, q) => sum + (q.totalPoints ?? 0),
-      0,
+    //
+    // Scope the denominator to the questions actually served to this attempt.
+    // Question-bank assignments draw numberOfQuestionsPerAttempt (< bank size)
+    // questions, recorded in assignmentAttempt.questionOrder. Summing every
+    // cached question inflates the total to the full bank size (e.g. "15/20"
+    // when only 15 were served). Mirror the served-set precedence the
+    // questions mapper uses so numerator and denominator cover the same set.
+    const missingMaxQuestionIds = [...servedQuestionIdSet].filter(
+      (questionId) =>
+        !questionMaxById.has(questionId) &&
+        this.getResponseMaxPossiblePoints(
+          servedResponseByQuestionId.get(questionId)?.metadata ?? null,
+        ) === undefined,
     );
+    const missingMaxQuestions =
+      missingMaxQuestionIds.length > 0
+        ? await this.prisma.question.findMany({
+            where: { id: { in: missingMaxQuestionIds } },
+            select: { id: true, totalPoints: true },
+          })
+        : [];
+    const deletedQuestionMaxById = new Map(
+      missingMaxQuestions.map((question) => [
+        question.id,
+        question.totalPoints,
+      ]),
+    );
+    let totalPossiblePoints = 0;
+    for (const questionId of servedQuestionIdSet) {
+      if (questionMaxById.has(questionId)) {
+        // Question is in the cache: use its defined max (null totalPoints
+        // stays 0, matching the historical denominator behavior).
+        totalPossiblePoints += questionMaxById.get(questionId) ?? 0;
+      } else {
+        // Served (in questionOrder) but absent from the cache — normally a
+        // soft-deleted question on a non-versioned assignment. Preserve its
+        // actual maximum from grading metadata or the archived database row;
+        // earned points are not a valid substitute for possible points.
+        const responseMax = this.getResponseMaxPossiblePoints(
+          servedResponseByQuestionId.get(questionId)?.metadata ?? null,
+        );
+        const deletedQuestionMax = deletedQuestionMaxById.get(questionId);
+        if (responseMax !== undefined) {
+          totalPossiblePoints += responseMax;
+          continue;
+        }
+        if (deletedQuestionMax === undefined) {
+          throw new InternalServerErrorException(
+            `Cannot calculate totalPossiblePoints: served Question ${questionId} ` +
+              "is absent from the attempt snapshot and database.",
+          );
+        }
+        totalPossiblePoints += deletedQuestionMax;
+      }
+    }
     const effectiveGrade =
       totalPointsEarned < rawPointsEarned && totalPossiblePoints > 0
         ? totalPointsEarned / totalPossiblePoints
@@ -707,6 +865,32 @@ export class AttemptSubmissionService {
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
     };
+  }
+
+  private getResponseMaxPossiblePoints(
+    metadata: JsonValue | null,
+  ): number | undefined {
+    let parsedMetadata: unknown = metadata;
+    if (typeof parsedMetadata === "string") {
+      try {
+        parsedMetadata = JSON.parse(parsedMetadata) as unknown;
+      } catch {
+        return undefined;
+      }
+    }
+
+    if (!parsedMetadata || typeof parsedMetadata !== "object") {
+      return undefined;
+    }
+
+    const maxPossiblePoints = (
+      parsedMetadata as { maxPossiblePoints?: unknown }
+    ).maxPossiblePoints;
+    return typeof maxPossiblePoints === "number" &&
+      Number.isFinite(maxPossiblePoints) &&
+      maxPossiblePoints >= 0
+      ? maxPossiblePoints
+      : undefined;
   }
 
   /**
@@ -953,20 +1137,6 @@ export class AttemptSubmissionService {
         return expiredResult;
       }
 
-      if (progressCallback) {
-        await progressCallback("Pre-translating questions...", 10);
-      }
-
-      const preTranslatedQuestions =
-        await this.translationService.preTranslateQuestions(
-          updateDto.responsesForQuestions,
-          assignmentAttempt,
-          updateDto.language,
-          effectiveCache,
-        );
-
-      updateDto.preTranslatedQuestions = preTranslatedQuestions;
-
       const assignment = await this.prisma.assignment.findUnique({
         where: { id: assignmentId },
         include: {
@@ -981,7 +1151,67 @@ export class AttemptSubmissionService {
         },
       });
 
-      if (assignment?.requireAllQuestions) {
+      if (!assignment) {
+        throw new NotFoundException(
+          `Assignment with Id ${assignmentId} not found.`,
+        );
+      }
+
+      const servedQuestionIds = assignmentAttempt.questionOrder?.length
+        ? assignmentAttempt.questionOrder
+        : assignment.questionOrder?.length
+          ? assignment.questionOrder
+          : assignment.questions.map((question) => question.id);
+      const servedQuestionIdSet = new Set(servedQuestionIds);
+      const submittedQuestionIds = updateDto.responsesForQuestions.map(
+        (response) => response.id,
+      );
+      const invalidQuestionIds = [
+        ...new Set(
+          submittedQuestionIds.filter(
+            (questionId) => !servedQuestionIdSet.has(questionId),
+          ),
+        ),
+      ];
+      const duplicateQuestionIds = [
+        ...new Set(
+          submittedQuestionIds.filter(
+            (questionId, index) =>
+              submittedQuestionIds.indexOf(questionId) !== index,
+          ),
+        ),
+      ];
+      if (invalidQuestionIds.length > 0 || duplicateQuestionIds.length > 0) {
+        throw new BadRequestException(
+          `Invalid question responses for attempt ${attemptId}: ` +
+            [
+              invalidQuestionIds.length > 0
+                ? `unserved question IDs [${invalidQuestionIds.join(", ")}]`
+                : null,
+              duplicateQuestionIds.length > 0
+                ? `duplicate question IDs [${duplicateQuestionIds.join(", ")}]`
+                : null,
+            ]
+              .filter((message): message is string => message !== null)
+              .join("; "),
+        );
+      }
+
+      if (progressCallback) {
+        await progressCallback("Pre-translating questions...", 10);
+      }
+
+      const preTranslatedQuestions =
+        await this.translationService.preTranslateQuestions(
+          updateDto.responsesForQuestions,
+          assignmentAttempt,
+          updateDto.language,
+          effectiveCache,
+        );
+
+      updateDto.preTranslatedQuestions = preTranslatedQuestions;
+
+      if (assignment.requireAllQuestions) {
         const optionalQuestionIdsValue: unknown =
           assignment.optionalQuestionIds;
         const optionalQuestionIdList = Array.isArray(optionalQuestionIdsValue)
@@ -1027,6 +1257,7 @@ export class AttemptSubmissionService {
           updateDto.language,
           updateDto.preTranslatedQuestions,
           effectiveCache,
+          assignmentAttempt.userId,
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
@@ -1241,10 +1472,10 @@ export class AttemptSubmissionService {
         success: true,
         totalPointsEarned,
         totalPossiblePoints,
-        // showAssignmentScore hides the score from learners, not from the
-        // author previewing their own quiz — withholding it here made the
-        // success page render a null grade as 0% / Failed.
-        grade,
+        // The preview must mirror the learner submit response (including
+        // withholding the grade when the score is hidden) — it's often the
+        // author's only way to see what learners actually experience.
+        grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:

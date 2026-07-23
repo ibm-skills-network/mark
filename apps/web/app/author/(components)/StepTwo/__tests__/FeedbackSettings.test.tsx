@@ -65,27 +65,27 @@ describe("FeedbackSettings", () => {
 
     // The correct-answers toggle is the only checkbox besides the radios.
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(
-      useAssignmentFeedbackConfig.getState().correctAnswerVisibility,
-    ).toBe("NEVER");
+    expect(useAssignmentFeedbackConfig.getState().correctAnswerVisibility).toBe(
+      "NEVER",
+    );
     expect(screen.queryByText("Always show")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(
-      useAssignmentFeedbackConfig.getState().correctAnswerVisibility,
-    ).toBe("ALWAYS");
+    expect(useAssignmentFeedbackConfig.getState().correctAnswerVisibility).toBe(
+      "ALWAYS",
+    );
   });
 
   it("switches visibility to on-pass via the radio options", () => {
     render(<FeedbackSettings />);
     fireEvent.click(screen.getByLabelText(/Show only on pass/));
-    expect(
-      useAssignmentFeedbackConfig.getState().correctAnswerVisibility,
-    ).toBe("ON_PASS");
+    expect(useAssignmentFeedbackConfig.getState().correctAnswerVisibility).toBe(
+      "ON_PASS",
+    );
     fireEvent.click(screen.getByLabelText(/Always show/));
-    expect(
-      useAssignmentFeedbackConfig.getState().correctAnswerVisibility,
-    ).toBe("ALWAYS");
+    expect(useAssignmentFeedbackConfig.getState().correctAnswerVisibility).toBe(
+      "ALWAYS",
+    );
   });
 
   it("clears cached question state when correct-answer visibility changes", () => {

@@ -4,6 +4,7 @@ import { GradingCacheService } from "./grading-cache.service";
 import { PrismaService } from "src/database/prisma.service";
 import { ICachedGradingResult } from "../interfaces/grading-cache.interface";
 import { createRedisConnection } from "src/job-queue/redis.connection";
+import { Prisma } from "@prisma/client";
 
 jest.mock("src/job-queue/redis.connection", () => ({
   createRedisConnection: jest.fn(),
@@ -80,6 +81,7 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
     gradingCache: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
+      create: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
       count: jest.fn(),
       findMany: jest.fn(),
@@ -216,6 +218,42 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
       mockPrisma.gradingCache.upsert.mockResolvedValue(undefined);
 
       await expect(service.cacheGrading(makeResult())).resolves.not.toThrow();
+    });
+  });
+
+  describe("cacheGradingIfAbsent", () => {
+    it("creates and returns the first canonical result", async () => {
+      const result = makeResult({ cacheKey: "canonical-new" });
+      mockPrisma.gradingCache.create.mockResolvedValue(undefined);
+
+      await expect(service.cacheGradingIfAbsent(result)).resolves.toBe(result);
+      expect(mockPrisma.gradingCache.create).toHaveBeenCalledTimes(1);
+      expect(fakeRedis.data.has("mark:grading-cache:canonical-new")).toBe(true);
+    });
+
+    it("returns the existing result when another worker wins insertion", async () => {
+      const attempted = makeResult({
+        cacheKey: "canonical-race",
+        totalScore: 3,
+      });
+      mockPrisma.gradingCache.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError("unique conflict", {
+          code: "P2002",
+          clientVersion: "test",
+        }),
+      );
+      mockPrisma.gradingCache.findUnique.mockResolvedValue({
+        ...attempted,
+        totalScore: 8,
+        metadata: null,
+      });
+
+      const canonical = await service.cacheGradingIfAbsent(attempted);
+
+      expect(canonical.totalScore).toBe(8);
+      expect(mockPrisma.gradingCache.findUnique).toHaveBeenCalledWith({
+        where: { cacheKey: "canonical-race" },
+      });
     });
   });
 

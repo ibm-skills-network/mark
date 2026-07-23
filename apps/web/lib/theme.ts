@@ -39,7 +39,7 @@ export function resolveDark(theme: Theme): boolean {
 
 /**
  * Apply a theme to the document without persisting it. Flips the `dark` class
- * on <html> and mirrors it onto the `data-color-mode` attribute. 
+ * on <html> and mirrors it onto the `data-color-mode` attribute.
  * set on <html> so the pre-paint head script and this function stay consistent.
  */
 export function applyTheme(theme: Theme): void {

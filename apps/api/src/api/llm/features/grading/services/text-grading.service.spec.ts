@@ -286,7 +286,11 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
       processStructuredPromptForFeature: processStructured,
     };
     service.moderationService = {
-      validateContent: jest.fn().mockResolvedValue(true),
+      assessContent: jest.fn().mockResolvedValue({
+        action: "allow",
+        flaggedCategories: [],
+        severeCategories: [],
+      }),
     };
     // No normalization / cache / judge needed to reach the loop, but the judge
     // is referenced after a successful grade; these paths are never hit here
@@ -389,5 +393,121 @@ describe("TextGradingService.gradeTextBasedQuestion context-length fail-fast", (
 
     // A generic error keeps retrying, so the loop uses the full raised budget.
     expect(processStructured).toHaveBeenCalledTimes(3);
+  });
+});
+
+/*
+ * Content moderation now returns a category-level verdict instead of a bare
+ * pass/fail. An ordinary flag (allow_with_log) must NOT deny the learner a
+ * grade — legitimate coursework (e.g. a security course asking the learner to
+ * describe a rootkit) trips the general-purpose classifier, so it logs and
+ * falls through to grading. Only a severe category (block_severe) withholds
+ * the submission from the grading model entirely, returning a zero with
+ * instructions to contact the instructor.
+ */
+describe("TextGradingService.gradeTextBasedQuestion moderation verdicts", () => {
+  function buildGradeService(
+    processStructured: jest.Mock,
+    assessContent: jest.Mock,
+  ) {
+    const { service, mockLogger } = buildService();
+    service.maxRetries = 1;
+    service.retryDelay = 1000;
+    service.promptProcessor = {
+      processStructuredPromptForFeature: processStructured,
+    };
+    service.moderationService = { assessContent };
+    service.gradingJudgeService = { validateGrading: jest.fn() };
+    return { service, mockLogger };
+  }
+
+  function gradeModel() {
+    return {
+      question: "Define a stealthier persistence technique than cron jobs.",
+      learnerResponse:
+        "A linux kernel module rootkit that hooks kernel functions.",
+      totalPoints: 4,
+      scoringCriteriaType: "OTHER",
+      scoringCriteria: { rubrics: [] },
+      previousQuestionsAnswersContext: [],
+      assignmentInstrctions: "Follow the rubric.",
+      responseType: "OTHER",
+      questionId: 4311,
+    };
+  }
+
+  it("grades normally on an allow verdict", async () => {
+    const assessContent = jest.fn().mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    });
+    const processStructured = jest
+      .fn()
+      .mockRejectedValue(new Error("downstream grading error"));
+    const { service } = buildGradeService(processStructured, assessContent);
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel(), 1736),
+    ).rejects.toThrow();
+    expect(processStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs and proceeds on an ordinary flag", async () => {
+    const assessContent = jest.fn().mockResolvedValue({
+      action: "allow_with_log",
+      flaggedCategories: ["violence"],
+      severeCategories: [],
+    });
+    const processStructured = jest
+      .fn()
+      .mockRejectedValue(new Error("downstream grading error"));
+    const { service, mockLogger } = buildGradeService(
+      processStructured,
+      assessContent,
+    );
+
+    await expect(
+      (service as any).gradeTextBasedQuestion(gradeModel(), 1736),
+    ).rejects.toThrow();
+    expect(processStructured).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "grading.moderation.flagged",
+      expect.objectContaining({
+        assignmentId: 1736,
+        questionId: 4311,
+        categories: ["violence"],
+      }),
+    );
+  });
+
+  it("returns a 0-point result without calling the LLM on a severe flag", async () => {
+    const assessContent = jest.fn().mockResolvedValue({
+      action: "block_severe",
+      flaggedCategories: ["sexual/minors"],
+      severeCategories: ["sexual/minors"],
+    });
+    const processStructured = jest.fn();
+    const { service, mockLogger } = buildGradeService(
+      processStructured,
+      assessContent,
+    );
+
+    const result = await (service as any).gradeTextBasedQuestion(
+      gradeModel(),
+      1736,
+    );
+
+    expect(result.points).toBe(0);
+    expect(result.feedback).toContain("flagged by automated content review");
+    expect(processStructured).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "grading.moderation.blocked_severe",
+      expect.objectContaining({
+        assignmentId: 1736,
+        questionId: 4311,
+        categories: ["sexual/minors"],
+      }),
+    );
   });
 });

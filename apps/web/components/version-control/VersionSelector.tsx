@@ -42,7 +42,9 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
         <span>
           v{currentVersion?.versionNumber || "1"}
           {currentVersion?.isDraft && (
-            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(draft)</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+              (draft)
+            </span>
           )}
         </span>
       </div>
@@ -95,7 +97,9 @@ export function VersionSelector({ className = "" }: VersionSelectorProps) {
       </Select>
 
       {isLoadingVersions && (
-        <div className="text-xs text-gray-500 dark:text-gray-400">Loading...</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          Loading...
+        </div>
       )}
 
       {versionsLoadFailed && (

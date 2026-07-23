@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto";
 import { Readable } from "node:stream";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AIUsageType, ResponseType } from "@prisma/client";
 import axios from "axios";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -28,16 +28,25 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { Gpt54MiniLlmService } from "../../../core/services/gpt54-llm.service";
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   LLM_RESOLVER_SERVICE,
+  GRADING_CACHE_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
   TOKEN_COUNTER,
 } from "../../../llm.constants";
-import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../constants";
+import {
+  MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+  MODERATION_BLOCK_FEEDBACK,
+} from "../constants";
 import { OversizedSubmissionError } from "../errors/oversized-submission.error";
 import { IFileGradingService } from "../interfaces/file-grading.interface";
+import {
+  ICachedGradingResult,
+  IGradingCacheService,
+} from "../interfaces/grading-cache.interface";
 import { RubricCriterion } from "../types/criterion-evidence.types";
 import { ContentSummarizationService } from "./content-summarization.service";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
@@ -47,6 +56,14 @@ import {
   mentionsFilenameRequirement,
 } from "./spreadsheet-rubric.utils";
 import { readClampedWorkbook } from "./spreadsheet-used-range.utils";
+import {
+  CODE_MIN_SEGMENT_CHARS,
+  CODE_SEGMENT_MAX_CHARS,
+  CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
+  isCodeLikeFilename,
+  isSourceCodeFilename,
+  sanitizeFilenameForMarker,
+} from "./source-code.utils";
 
 type RubricScore = {
   rubricQuestion: string;
@@ -123,6 +140,12 @@ type SpreadsheetCheckDefinition = {
 @Injectable()
 export class FileGradingService implements IFileGradingService {
   private readonly logger: Logger;
+  private readonly evidenceFileGradingInFlight = new Map<
+    string,
+    Promise<FileBasedQuestionResponseModel>
+  >();
+  private static readonly EVIDENCE_FILE_GRADER_VERSION =
+    "structured-file-evidence-v4-stable-answer-hash";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -138,6 +161,9 @@ export class FileGradingService implements IFileGradingService {
     private readonly s3Service: S3Service,
     private readonly contentSummarization: ContentSummarizationService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    @Optional()
+    @Inject(GRADING_CACHE_SERVICE)
+    private readonly cacheService?: IGradingCacheService,
   ) {
     this.logger = parentLogger.child({ context: FileGradingService.name });
   }
@@ -158,18 +184,45 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteria,
       responseType,
       judgeFeedback,
+      questionId,
+      safetyIdentifier,
     } = fileBasedQuestionEvaluateModel;
 
-    const validateLearnerResponse =
-      await this.moderationService.validateContent(
-        learnerResponse.map((item) => item.content).join(" "),
+    // A moderation flag must not deny a learner their grade — legitimate
+    // coursework trips the general-purpose classifier. Only the severe
+    // categories are withheld from the grading model; those persist a
+    // zero with instructions to contact the instructor.
+    const moderationVerdict = await this.moderationService.assessContent(
+      learnerResponse.map((item) => item.content).join(" "),
+    );
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        questionId,
+        categories: moderationVerdict.severeCategories,
+      });
+      // Mark the block in metadata so the strategy layer can short-circuit
+      // its post-grade judge loop — that loop re-sends the learner's raw
+      // content to a completion model, which a severe verdict must prevent.
+      return new FileBasedQuestionResponseModel(
+        0,
+        MODERATION_BLOCK_FEEDBACK,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { moderationBlocked: true },
       );
-
-    if (!validateLearnerResponse) {
-      throw new HttpException(
-        "Learner response validation failed",
-        HttpStatus.BAD_REQUEST,
-      );
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        questionId,
+        categories: moderationVerdict.flaggedCategories,
+      });
     }
 
     const questionMaxPoints = totalPoints;
@@ -202,8 +255,13 @@ export class FileGradingService implements IFileGradingService {
       }
     }
 
+    const isCodeUploadRoute =
+      responseType === ResponseType.CODE || responseType === ResponseType.REPO;
     const enrichedLearnerResponse =
-      this.ensureStructuredContentForEvidenceGrading(learnerResponse);
+      this.ensureStructuredContentForEvidenceGrading(
+        learnerResponse,
+        isCodeUploadRoute,
+      );
 
     const hasRubrics =
       !!scoringCriteria?.rubrics &&
@@ -211,10 +269,9 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteria.rubrics.length > 0;
 
     const evidenceEligibleFiles = enrichedLearnerResponse.filter((file) =>
-      this.isEvidenceBasedEligible(file),
+      this.isEvidenceBasedEligible(file, isCodeUploadRoute),
     );
     const hasEvidenceEligibleContent = evidenceEligibleFiles.length > 0;
-
     this.logger.info("Checking for evidence-based grading trigger", {
       hasEvidenceEligibleContent,
       hasRubrics,
@@ -247,21 +304,54 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteriaType === "CRITERIA_BASED"
     ) {
       this.logger.info("Using evidence-based grading with structured content");
-      const model = await this.gradeWithEvidenceBasedApproach(
-        enrichedLearnerResponse,
-        question,
-        maxTotalPoints,
-        scoringCriteria,
-        assignmentId,
-        language,
-        rubricMaxPoints,
-        judgeFeedback,
+      const evidenceFileModel = await this.llmResolver.getModelKeyWithFallback(
+        "file_evidence_grading",
+        Gpt54MiniLlmService.MODEL,
       );
-      return this.scaleFileBasedModelToQuestionMax(
-        model,
-        questionMaxPoints,
-        rubricMaxTotal,
-      );
+      const modelConfig = {
+        modelOverrides: {
+          retrievalModel: evidenceFileModel,
+          gradingModel: evidenceFileModel,
+          judgeModel: evidenceFileModel,
+        },
+        modelOverridesAreFinal: true,
+      };
+      const grade = async (): Promise<FileBasedQuestionResponseModel> => {
+        const model = await this.gradeWithEvidenceBasedApproach(
+          enrichedLearnerResponse,
+          question,
+          maxTotalPoints,
+          scoringCriteria,
+          assignmentId,
+          language,
+          rubricMaxPoints,
+          judgeFeedback,
+          modelConfig,
+          true,
+          isCodeUploadRoute,
+        );
+        return this.scaleFileBasedModelToQuestionMax(
+          model,
+          questionMaxPoints,
+          rubricMaxTotal,
+        );
+      };
+
+      if (questionId !== undefined && this.cacheService) {
+        return this.gradeEvidenceFileWithCache({
+          questionId,
+          question,
+          learnerResponse: enrichedLearnerResponse,
+          scoringCriteria,
+          questionMaxPoints,
+          language,
+          judgeFeedback,
+          modelSnapshot: evidenceFileModel,
+          grade,
+        });
+      }
+
+      return grade();
     }
 
     const selectedTemplate = this.getTemplateForFileType(responseType);
@@ -315,12 +405,17 @@ export class FileGradingService implements IFileGradingService {
       ? scoringCriteria.length
       : 1;
 
-    const selectedModel = await this.llmResolver.getModelForGradingTask(
-      "file_grading",
-      responseType,
-      inputLength,
-      criteriaCount,
-    );
+    const selectedModel = isCodeUploadRoute
+      ? await this.llmResolver.getModelKeyWithFallback(
+          "file_evidence_grading",
+          Gpt54MiniLlmService.MODEL,
+        )
+      : await this.llmResolver.getModelForGradingTask(
+          "file_grading",
+          responseType,
+          inputLength,
+          criteriaCount,
+        );
 
     let response: string;
     try {
@@ -371,6 +466,8 @@ export class FileGradingService implements IFileGradingService {
           selectedModel,
           maxTotalPoints,
           rubricMaxPoints,
+          isCodeUploadRoute,
+          safetyIdentifier,
         );
       } else {
         response = await this.processPromptWithRetry(
@@ -379,6 +476,8 @@ export class FileGradingService implements IFileGradingService {
           selectedModel,
           maxTotalPoints,
           rubricMaxPoints,
+          isCodeUploadRoute,
+          safetyIdentifier,
         );
       }
     } catch (retryError) {
@@ -387,6 +486,7 @@ export class FileGradingService implements IFileGradingService {
           retryError instanceof Error ? retryError.message : String(retryError)
         }`,
       );
+      if (isCodeUploadRoute) throw retryError;
       const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "All LLM models failed - using fallback grading",
@@ -479,6 +579,8 @@ export class FileGradingService implements IFileGradingService {
         }. Response: "${response?.slice(0, 200)}..."`,
       );
 
+      if (isCodeUploadRoute) throw error;
+
       const fallback = this.createFallbackResponse(
         maxTotalPoints,
         "Failed to parse LLM response - using fallback grading",
@@ -501,6 +603,8 @@ export class FileGradingService implements IFileGradingService {
     primaryModel: string,
     _maxTotalPoints: number,
     _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
+    modelOverrideIsFinal = false,
+    safetyIdentifier?: string,
   ): Promise<string> {
     void _maxTotalPoints;
     void _rubricMaxPoints;
@@ -513,13 +617,22 @@ export class FileGradingService implements IFileGradingService {
           `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
         );
 
-        const response = await this.promptProcessor.processPromptForFeature(
-          prompt,
-          assignmentId,
-          AIUsageType.ASSIGNMENT_GRADING,
-          "file_grading",
-          primaryModel,
-        );
+        const response = modelOverrideIsFinal
+          ? await this.promptProcessor.processPrompt(
+              prompt,
+              assignmentId,
+              AIUsageType.ASSIGNMENT_GRADING,
+              primaryModel,
+              { maxRetries: 1, safetyIdentifier },
+            )
+          : await this.promptProcessor.processPromptForFeature(
+              prompt,
+              assignmentId,
+              AIUsageType.ASSIGNMENT_GRADING,
+              "file_grading",
+              primaryModel,
+              { safetyIdentifier },
+            );
 
         if (this.isValidLLMResponse(response)) {
           if (attempt > 1) {
@@ -564,6 +677,10 @@ export class FileGradingService implements IFileGradingService {
       }
     }
 
+    if (modelOverrideIsFinal) {
+      throw lastError ?? new Error(`Model ${primaryModel} failed`);
+    }
+
     try {
       const fallbackModel = await this.llmResolver.getModelKeyWithFallback(
         "file_grading_fallback",
@@ -579,6 +696,7 @@ export class FileGradingService implements IFileGradingService {
         AIUsageType.ASSIGNMENT_GRADING,
         "file_grading",
         fallbackModel,
+        { safetyIdentifier },
       );
 
       if (this.isValidLLMResponse(response)) {
@@ -764,6 +882,181 @@ export class FileGradingService implements IFileGradingService {
     );
   }
 
+  private async gradeEvidenceFileWithCache(parameters: {
+    questionId: number;
+    question: string;
+    learnerResponse: LearnerFileUpload[];
+    scoringCriteria: ScoringDto;
+    questionMaxPoints: number;
+    language?: string;
+    judgeFeedback?: string;
+    modelSnapshot: string;
+    grade: () => Promise<FileBasedQuestionResponseModel>;
+  }): Promise<FileBasedQuestionResponseModel> {
+    const answerHash = this.hashCanonical(
+      [...parameters.learnerResponse]
+        .sort((left, right) =>
+          (left.filename ?? "").localeCompare(right.filename ?? ""),
+        )
+        .map((file) => ({
+          filename: file.filename,
+          content: file.structuredContent
+            ? this.stableStructuredContent(file.structuredContent)
+            : this.getFileContentForPrompt(file),
+        })),
+    );
+    const rubricHash = this.hashCanonical({
+      graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+      modelSnapshot: parameters.modelSnapshot,
+      reasoningEffort: "none",
+      question: parameters.question,
+      scoringCriteria: parameters.scoringCriteria,
+      questionMaxPoints: parameters.questionMaxPoints,
+      language: parameters.language ?? "en",
+      judgeFeedback: parameters.judgeFeedback ?? null,
+    });
+    const cacheKey = this.hashCanonical({
+      questionId: parameters.questionId,
+      rubricHash,
+      answerHash,
+    });
+
+    const cached = await this.cacheService?.getCachedGrading(cacheKey);
+    const cachedResponse = this.fileResponseFromCache(cached);
+    if (cachedResponse) {
+      this.logger.info("Using deterministic structured-file grading cache", {
+        questionId: parameters.questionId,
+        cacheKey,
+        modelSnapshot: parameters.modelSnapshot,
+      });
+      return cachedResponse;
+    }
+
+    const inFlight = this.evidenceFileGradingInFlight.get(cacheKey);
+    if (inFlight !== undefined) return await inFlight;
+
+    const gradingPromise = (async () => {
+      const result = await parameters.grade();
+      const candidate: ICachedGradingResult = {
+        cacheKey,
+        questionId: parameters.questionId,
+        rubricHash,
+        answerHash,
+        totalScore: result.points,
+        maxScore: parameters.questionMaxPoints,
+        criteria: (result.rubricScores ?? []).map((score, index) => ({
+          criterionId:
+            score.criterionSelected ??
+            score.rubricQuestion ??
+            `criterion_${index + 1}`,
+          pointsAwarded: score.pointsAwarded ?? 0,
+          maxPoints: score.maxPoints ?? 0,
+          evidence: score.evidence?.join("\n") ?? null,
+          feedback: score.justification ?? "",
+        })),
+        overallFeedback: result.feedback,
+        cachedAt: new Date(),
+        hitCount: 0,
+        metadata: {
+          graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+          modelSnapshot: parameters.modelSnapshot,
+          fileResponse: this.fileResponseForCache(result),
+        },
+      };
+      const canonical = await this.cacheService.cacheGradingIfAbsent(candidate);
+      return this.fileResponseFromCache(canonical) ?? result;
+    })();
+
+    this.evidenceFileGradingInFlight.set(cacheKey, gradingPromise);
+    try {
+      return await gradingPromise;
+    } finally {
+      this.evidenceFileGradingInFlight.delete(cacheKey);
+    }
+  }
+
+  private fileResponseForCache(
+    result: FileBasedQuestionResponseModel,
+  ): Record<string, unknown> {
+    const response = {
+      points: result.points,
+      feedback: result.feedback,
+      analysis: result.analysis,
+      evaluation: result.evaluation,
+      explanation: result.explanation,
+      guidance: result.guidance,
+      rubricScores: result.rubricScores,
+      highlighting: result.highlighting,
+      annotatedPdfUrl: result.annotatedPdfUrl,
+      metadata: result.metadata,
+    };
+    return JSON.parse(JSON.stringify(response)) as Record<string, unknown>;
+  }
+
+  private fileResponseFromCache(
+    cached: ICachedGradingResult | null | undefined,
+  ): FileBasedQuestionResponseModel | null {
+    const response = cached?.metadata?.fileResponse;
+    if (!response || typeof response.points !== "number") return null;
+
+    return new FileBasedQuestionResponseModel(
+      response.points,
+      typeof response.feedback === "string"
+        ? response.feedback
+        : cached.overallFeedback,
+      typeof response.analysis === "string" ? response.analysis : undefined,
+      typeof response.evaluation === "string" ? response.evaluation : undefined,
+      typeof response.explanation === "string"
+        ? response.explanation
+        : undefined,
+      typeof response.guidance === "string" ? response.guidance : undefined,
+      response.rubricScores as FileBasedQuestionResponseModel["rubricScores"],
+      response.highlighting as FileHighlighting | undefined,
+      typeof response.annotatedPdfUrl === "string"
+        ? response.annotatedPdfUrl
+        : undefined,
+      response.metadata as Record<string, unknown> | undefined,
+    );
+  }
+
+  /**
+   * Cache identity must depend only on submission content. `extractedAt` is
+   * re-stamped on every extraction pass, so hashing it gives every attempt a
+   * fresh cache key and the canonical-score cache never hits.
+   */
+  private stableStructuredContent(
+    content: NonNullable<LearnerFileUpload["structuredContent"]>,
+  ): Record<string, unknown> {
+    const { metadata, ...rest } = content;
+    if (!metadata) return { ...rest };
+    const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
+    return { ...rest, metadata: stableMetadata };
+  }
+
+  private hashCanonical(value: unknown): string {
+    return crypto
+      .createHash("sha256")
+      .update(this.canonicalStringify(value))
+      .digest("hex");
+  }
+
+  private canonicalStringify(value: unknown): string {
+    if (value === null || typeof value !== "object") {
+      return JSON.stringify(value) ?? "undefined";
+    }
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => this.canonicalStringify(item)).join(",")}]`;
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${this.canonicalStringify(record[key])}`,
+      )
+      .join(",")}}`;
+  }
+
   private roundScaledPoints(points: number): number {
     return Math.round(points * 100) / 100;
   }
@@ -908,9 +1201,14 @@ export class FileGradingService implements IFileGradingService {
 
   private ensureStructuredContentForEvidenceGrading(
     learnerResponse: LearnerFileUpload[],
+    includeCodeUploads = false,
   ): LearnerFileUpload[] {
-    const needsRebuild = learnerResponse.some((file) =>
-      this.shouldRebuildStructuredContent(file),
+    const needsRebuild = learnerResponse.some(
+      (file) =>
+        this.shouldRebuildStructuredContent(file) ||
+        (includeCodeUploads &&
+          !file.structuredContent &&
+          this.hasExtractedSubmissionText(file)),
     );
 
     if (
@@ -921,7 +1219,14 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return learnerResponse.map((file) => {
-      if (!this.shouldRebuildStructuredContent(file)) {
+      if (
+        !this.shouldRebuildStructuredContent(file) &&
+        !(
+          includeCodeUploads &&
+          !file.structuredContent &&
+          this.hasExtractedSubmissionText(file)
+        )
+      ) {
         return { ...file };
       }
 
@@ -966,6 +1271,8 @@ export class FileGradingService implements IFileGradingService {
       return false;
     }
 
+    // Source files are structured only on the CODE/REPO route, handled by the
+    // includeCodeUploads branch in ensureStructuredContentForEvidenceGrading.
     if (this.isSourceCodeFile(file)) {
       return false;
     }
@@ -973,9 +1280,12 @@ export class FileGradingService implements IFileGradingService {
     return !file.structuredContent && this.hasExtractedSubmissionText(file);
   }
 
-  private isEvidenceBasedEligible(file: LearnerFileUpload): boolean {
+  private isEvidenceBasedEligible(
+    file: LearnerFileUpload,
+    includeCodeUploads = false,
+  ): boolean {
     if (!file.structuredContent) return false;
-    if (this.isSourceCodeFile(file)) return false;
+    if (!includeCodeUploads && this.isSourceCodeFile(file)) return false;
 
     // The PDF structured extractor sets structureQuality; "low" means the
     // extraction was too sparse to support evidence retrieval.
@@ -985,10 +1295,7 @@ export class FileGradingService implements IFileGradingService {
   }
 
   private isSourceCodeFile(file: LearnerFileUpload): boolean {
-    const filename = file.filename?.toLowerCase() ?? "";
-    return /\.(py|java|cpp|cc|cxx|c|h|hpp|hh|js|jsx|mjs|cjs|ts|tsx|go|rs|rb|cs|php|swift|kt|kts|scala|sql|sh|bash|pl|pm|lua|dart|m|mm)$/.test(
-      filename,
-    );
+    return isSourceCodeFilename(file.filename);
   }
 
   private hasExtractedSubmissionText(file: LearnerFileUpload): boolean {
@@ -1002,7 +1309,12 @@ export class FileGradingService implements IFileGradingService {
     file: LearnerFileUpload,
   ): CanonicalSubmission {
     const rawText = text || "";
-    const normalized = this.normalizeSubmissionTextForEvidence(rawText);
+    // Notebooks count as code here (cell-aware chunking, indentation kept)
+    // even though they stay non-code for routing/eligibility purposes.
+    const isCode = isCodeLikeFilename(file.filename);
+    const normalized = isCode
+      ? this.normalizeCodeSubmissionText(rawText)
+      : this.normalizeSubmissionTextForEvidence(rawText);
     const metadataBlock = this.buildFileMetadataBlock(file, normalized);
     const validatorBlock = this.buildValidatorReportBlock(rawText, file);
     const blocks: ContentBlock[] = [];
@@ -1026,14 +1338,10 @@ export class FileGradingService implements IFileGradingService {
       blockIndex += 1;
     }
 
-    const textBlocks = this.splitTextIntoEvidenceBlocks(
-      normalized,
-      blockIndex,
-      {
-        filename: file.filename,
-        questionId: file.questionId,
-      },
-    );
+    const meta = { filename: file.filename, questionId: file.questionId };
+    const textBlocks = isCode
+      ? this.buildCodeEvidenceBlocks(normalized, blockIndex, meta)
+      : this.splitTextIntoEvidenceBlocks(normalized, blockIndex, meta);
     for (const block of textBlocks) {
       blocks.push(block);
     }
@@ -1191,18 +1499,254 @@ export class FileGradingService implements IFileGradingService {
     return blocks;
   }
 
+  // Normalize line endings and strip control characters, leaving tabs and
+  // newlines intact. Shared by the prose and code normalizers, which then
+  // differ only in how they treat tabs and trimming.
+  private normalizeNewlinesAndControlChars(text: string): string {
+    return (
+      text
+        .replaceAll("\r\n", "\n")
+        .replaceAll("\r", "\n")
+        // eslint-disable-next-line no-control-regex
+        .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    );
+  }
+
   private normalizeSubmissionTextForEvidence(text: string): string {
-    const base = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    const base = this.normalizeNewlinesAndControlChars(text);
     const isSpreadsheet =
       base.includes("=== EXCEL WORKBOOK ===") || base.includes("=== SHEET:");
     const tabReplacement = isSpreadsheet ? " | " : " ";
-    return (
-      base
-        .replaceAll("\t", tabReplacement)
-        // eslint-disable-next-line no-control-regex
-        .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
-        .trim()
-    );
+    return base.replaceAll("\t", tabReplacement).trim();
+  }
+
+  // Prose normalization flattens tabs to spaces, which destroys indentation
+  // in tab-indented code. Keep tabs; only strip CR and other control chars.
+  private normalizeCodeSubmissionText(text: string): string {
+    return this.normalizeNewlinesAndControlChars(text)
+      .replace(/^\n+/, "")
+      .trimEnd();
+  }
+
+  private buildCodeEvidenceBlocks(
+    code: string,
+    startIndex: number,
+    meta?: { filename?: string; questionId?: number; attemptId?: number },
+  ): ContentBlock[] {
+    // The filename feeds the trusted `=== FILE: ... ===` marker below and is
+    // learner-controlled — sanitize it so it cannot forge or break the marker.
+    const filename = sanitizeFilenameForMarker(meta?.filename) || "submission";
+    if (!code) {
+      return [
+        {
+          blockId: `p1b${startIndex}`,
+          type: "code",
+          text: "",
+          page: 1,
+          pinnedEvidence: true,
+        },
+      ];
+    }
+
+    const blocks: ContentBlock[] = [];
+    let index = startIndex;
+
+    // Guard on total block count (whole-file block + one per segment), mirroring
+    // splitTextIntoEvidenceBlocks' protection against pathologically large
+    // submissions overwhelming the evidence pipeline.
+    const segments = this.splitCodeIntoSegments(code);
+    const blockCount = segments.length + 1;
+    if (blockCount > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      this.logger.warn("grading.submission.oversized", {
+        blockCount,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: meta?.filename,
+        questionId: meta?.questionId,
+        attemptId: meta?.attemptId,
+        branch: "code",
+      });
+      throw new OversizedSubmissionError({
+        blockCount,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: meta?.filename,
+        questionId: meta?.questionId,
+        attemptId: meta?.attemptId,
+      });
+    }
+
+    // Pinned whole-file block: holistic criteria (correctness, style,
+    // structure) concern the entire program, so the evidence validator must
+    // always get to judge the file as one unit — per-function chunks alone
+    // would make such criteria look unsupported.
+    //
+    // The block's ENTIRE text (header + code + marker) is bounded to
+    // CODE_WHOLE_FILE_BLOCK_MAX_CHARS so it survives quoting intact (see the
+    // invariant on CODE_EVIDENCE_QUOTE_MAX_CHARS): if it were only the *code*
+    // that was bounded, the header/marker would push the total past the quote
+    // cap and the marker would be sliced off.
+    const marker = "\n... [file truncated]";
+    const truncatedHeader = `=== FILE: ${filename} (truncated) ===\n`;
+    const codeBudget =
+      CODE_WHOLE_FILE_BLOCK_MAX_CHARS - truncatedHeader.length - marker.length;
+    // A file only counts as truncated when the COMPLETE block would not fit;
+    // comparing against the (smaller) truncated-block budget would clip files
+    // that fit whole and mislabel them.
+    const completeText = `=== FILE: ${filename} (complete) ===\n${code}`;
+    const wholeFileText =
+      completeText.length <= CODE_WHOLE_FILE_BLOCK_MAX_CHARS
+        ? completeText
+        : `${truncatedHeader}${code.slice(0, codeBudget)}${marker}`;
+    blocks.push({
+      blockId: `p1b${index}`,
+      type: "code",
+      text: wholeFileText,
+      page: 1,
+      pinnedEvidence: true,
+    });
+    index += 1;
+
+    for (const segment of segments) {
+      blocks.push({
+        blockId: `p1b${index}`,
+        type: "code",
+        text: segment,
+        page: 1,
+      });
+      index += 1;
+    }
+
+    return blocks;
+  }
+
+  // Split source at top-level definitions (functions, classes, etc.) so each
+  // evidence block is a self-contained unit. Comment/decorator lines sitting
+  // directly above a definition travel with it. Notebook extractions split at
+  // cell boundaries instead (a cell is the notebook's natural unit). Falls
+  // back to blank-line groups — indentation preserved — when no definitions
+  // are found.
+  private splitCodeIntoSegments(code: string): string[] {
+    const cellSegments = this.splitNotebookIntoCellSegments(code);
+    if (cellSegments) {
+      return this.capCodeSegments(this.mergeTinyCodeSegments(cellSegments));
+    }
+
+    const definitionStart =
+      /^(?:export\s+|default\s+|declare\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|final\s+|abstract\s+|async\s+|unsafe\s+|pub(?:\([^)]*\))?\s+)*(?:def|class|function|func|fn|interface|struct|enum|impl|trait|type|namespace|module|const|let|var)\b/;
+    const attachment = /^(?:@|#|\/\/|\/\*|\*|--|'''|""")/;
+
+    const lines = code.split("\n");
+    const segments: string[] = [];
+    let current: string[] = [];
+
+    for (const line of lines) {
+      const isBoundary = !/^\s/.test(line) && definitionStart.test(line);
+      if (isBoundary && current.length > 0) {
+        const attached: string[] = [];
+        for (
+          let previous = current.at(-1);
+          previous !== undefined && attachment.test(previous.trim());
+          previous = current.at(-1)
+        ) {
+          current.pop();
+          attached.unshift(previous);
+        }
+        const text = current.join("\n").trimEnd();
+        if (text.trim()) segments.push(text);
+        current = [...attached];
+      }
+      current.push(line);
+    }
+    const tail = current.join("\n").trimEnd();
+    if (tail.trim()) segments.push(tail);
+
+    if (segments.length <= 1) {
+      const paragraphs = code
+        .split(/\n{2,}/)
+        .map((chunk) => chunk.trimEnd())
+        .filter((chunk) => chunk.trim());
+      if (paragraphs.length > 1) {
+        return this.capCodeSegments(this.mergeTinyCodeSegments(paragraphs));
+      }
+    }
+
+    return this.capCodeSegments(this.mergeTinyCodeSegments(segments));
+  }
+
+  // Jupyter notebook extractions carry "=== CELL N [TYPE] ===" section
+  // headers (see FileContentExtractionService.extractJupyterNotebook). Each
+  // cell — with its header and any outputs — becomes one segment. Returns
+  // null when the text is not a notebook extraction.
+  private splitNotebookIntoCellSegments(code: string): string[] | null {
+    const cellHeader = /^=== CELL \d+ \[/m;
+    if (!cellHeader.test(code)) return null;
+
+    const segments = code
+      .split(/\n(?==== CELL \d+ \[)/)
+      .map((segment) => segment.trimEnd())
+      .filter((segment) => segment.trim());
+    return segments.length > 0 ? segments : null;
+  }
+
+  // Fold trivially short segments (a lone import, a one-line `const`) into an
+  // adjacent segment so they don't occupy a candidate slot on their own. Small
+  // segments merge into the preceding one; a small leading segment with no
+  // predecessor is folded forward into the next.
+  private mergeTinyCodeSegments(segments: string[]): string[] {
+    const merged: string[] = [];
+    for (const segment of segments) {
+      const isTiny = segment.trim().length < CODE_MIN_SEGMENT_CHARS;
+      if (isTiny && merged.length > 0) {
+        merged[merged.length - 1] = `${merged.at(-1)}\n${segment}`;
+        continue;
+      }
+      merged.push(segment);
+    }
+
+    if (merged.length > 1 && merged[0].trim().length < CODE_MIN_SEGMENT_CHARS) {
+      merged[1] = `${merged[0]}\n${merged[1]}`;
+      merged.shift();
+    }
+
+    return merged;
+  }
+
+  private capCodeSegments(segments: string[]): string[] {
+    const capped: string[] = [];
+    for (const segment of segments) {
+      if (segment.length <= CODE_SEGMENT_MAX_CHARS) {
+        capped.push(segment);
+        continue;
+      }
+      let buffer: string[] = [];
+      let size = 0;
+      for (const line of segment.split("\n")) {
+        if (
+          size + line.length + 1 > CODE_SEGMENT_MAX_CHARS &&
+          buffer.length > 0
+        ) {
+          capped.push(buffer.join("\n"));
+          buffer = [];
+          size = 0;
+        }
+        // A single line can exceed the cap on its own (minified bundles, long
+        // data literals) and has no line boundary to split at — hard-slice it
+        // so the "segments always fit" invariant holds.
+        if (line.length > CODE_SEGMENT_MAX_CHARS) {
+          for (
+            let offset = 0;
+            offset < line.length;
+            offset += CODE_SEGMENT_MAX_CHARS
+          ) {
+            capped.push(line.slice(offset, offset + CODE_SEGMENT_MAX_CHARS));
+          }
+          continue;
+        }
+        buffer.push(line);
+        size += line.length + 1;
+      }
+      if (buffer.length > 0) capped.push(buffer.join("\n"));
+    }
+    return capped;
   }
 
   private buildValidatorReportBlock(
@@ -2512,13 +3056,24 @@ export class FileGradingService implements IFileGradingService {
     language: string | undefined,
     rubricMaxPoints: { rubricQuestion: string; maxPoints: number }[],
     judgeFeedback?: string,
+    modelConfig?: {
+      modelOverrides: {
+        retrievalModel: string;
+        gradingModel: string;
+        judgeModel: string;
+      };
+      modelOverridesAreFinal?: boolean;
+    },
+    failLoudly = false,
+    includeCodeUploads = false,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
-      // Mirror the routing gate's eligibility check so a source-code file that
-      // happens to carry structuredContent is never graded in place of the
-      // intended document in a mixed submission.
+      // Grade the first evidence-eligible file, honoring the CODE/REPO route
+      // via includeCodeUploads. Off that route source files aren't eligible, so
+      // a stray helper can't displace a document; on it, code is the intended
+      // target, so no document-over-code preference is applied.
       const structuredFile = learnerResponse.find((file) =>
-        this.isEvidenceBasedEligible(file),
+        this.isEvidenceBasedEligible(file, includeCodeUploads),
       );
 
       if (!structuredFile || !structuredFile.structuredContent) {
@@ -2557,6 +3112,7 @@ export class FileGradingService implements IFileGradingService {
         assignmentId,
         language || "en",
         judgeFeedback,
+        modelConfig,
       );
 
       this.logger.info(
@@ -2611,6 +3167,10 @@ export class FileGradingService implements IFileGradingService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+
+      if (failLoudly) {
+        throw error;
+      }
 
       this.logger.warn(
         "Evidence-based grading failed - assigning minimum points",
@@ -2720,6 +3280,7 @@ export class FileGradingService implements IFileGradingService {
         pointsAwarded: criterion.pointsAwarded,
         maxPoints: criterion.maxPoints,
         justification: criterion.rationale,
+        nextStep: criterion.nextStep,
         evidence: criterion.evidence.map(
           (citation) =>
             `p${citation.page}:${citation.blockId} ${citation.quote}`,

@@ -313,6 +313,44 @@ export class GradingCacheService
     }
   }
 
+  async cacheGradingIfAbsent(
+    result: ICachedGradingResult,
+  ): Promise<ICachedGradingResult> {
+    if (!this.prisma) {
+      this.logger.warn("Prisma service not available, cache disabled");
+      return result;
+    }
+
+    try {
+      await this.prisma.gradingCache.create({
+        data: {
+          cacheKey: result.cacheKey,
+          questionId: result.questionId,
+          rubricHash: result.rubricHash,
+          answerHash: result.answerHash,
+          totalScore: result.totalScore,
+          maxScore: result.maxScore,
+          criteria: result.criteria as Prisma.InputJsonValue,
+          overallFeedback: result.overallFeedback,
+          cachedAt: result.cachedAt,
+          hitCount: result.hitCount,
+          metadata: result.metadata as Prisma.InputJsonValue,
+        },
+      });
+      await this.redisSet(result);
+      return result;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const canonical = await this.getCachedGrading(result.cacheKey);
+        if (canonical) return canonical;
+      }
+      throw error;
+    }
+  }
+
   /**
    * Check if a grading result is cached
    */

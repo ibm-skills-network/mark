@@ -125,7 +125,9 @@ const IssuesModal = ({
                       <h3 className="font-medium text-red-900 dark:text-red-200 mb-1">
                         Configuration Error
                       </h3>
-                      <p className="text-sm text-red-700 dark:text-red-300">{message}</p>
+                      <p className="text-sm text-red-700 dark:text-red-300">
+                        {message}
+                      </p>
                     </div>
                   </div>
                   <button
@@ -150,7 +152,9 @@ const IssuesModal = ({
                 <div className="flex items-start gap-3">
                   <InformationCircleIcon className="w-5 h-5 text-blue-500 mt-0.5" />
                   <div>
-                    <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-1">Note</h3>
+                    <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-1">
+                      Note
+                    </h3>
                     <p className="text-sm text-blue-700 dark:text-blue-300">
                       The validation system also detected this issue, but it's
                       shown below as a question-specific issue with fix options.
@@ -197,7 +201,9 @@ const IssuesModal = ({
                       >
                         <div className="flex items-start gap-2">
                           <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <span className="text-sm text-red-700 dark:text-red-300">{issue}</span>
+                          <span className="text-sm text-red-700 dark:text-red-300">
+                            {issue}
+                          </span>
                         </div>
 
                         {canAutoFix(issue) && (
@@ -273,7 +279,9 @@ const ChangeComparison = ({
 
   const renderValue = (value: any, isOld = false) => {
     if (value === null || value === undefined || value === "") {
-      return <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>;
+      return (
+        <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>
+      );
     }
 
     if (type === "boolean") {
@@ -281,7 +289,9 @@ const ChangeComparison = ({
         <span
           className={cn(
             "font-medium",
-            isOld ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300",
+            isOld
+              ? "text-red-700 dark:text-red-300"
+              : "text-green-700 dark:text-green-300",
           )}
         >
           {value ? "Yes" : "No"}
@@ -292,14 +302,28 @@ const ChangeComparison = ({
     if (type === "markdown") {
       const cleanValue = value.replace(/<\/?[^>]+(>|$)/g, "").trim();
       if (cleanValue === "" || cleanValue === "Not set") {
-        return <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>;
+        return (
+          <span className="text-gray-400 dark:text-gray-500 italic">
+            Not set
+          </span>
+        );
       }
       return (
         <div
-          className={cn("rounded-md p-3", isOld ? "bg-red-50 dark:bg-red-900/20" : "bg-green-50 dark:bg-green-900/20")}
+          className={cn(
+            "rounded-md p-3",
+            isOld
+              ? "bg-red-50 dark:bg-red-900/20"
+              : "bg-green-50 dark:bg-green-900/20",
+          )}
         >
           <MarkdownViewer
-            className={cn("text-sm", isOld ? "text-red-900 dark:text-red-200" : "text-green-900 dark:text-green-200")}
+            className={cn(
+              "text-sm",
+              isOld
+                ? "text-red-900 dark:text-red-200"
+                : "text-green-900 dark:text-green-200",
+            )}
           >
             {value}
           </MarkdownViewer>
@@ -309,7 +333,12 @@ const ChangeComparison = ({
 
     return (
       <span
-        className={cn("font-medium", isOld ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300")}
+        className={cn(
+          "font-medium",
+          isOld
+            ? "text-red-700 dark:text-red-300"
+            : "text-green-700 dark:text-green-300",
+        )}
       >
         {String(value)}
       </span>
@@ -319,7 +348,9 @@ const ChangeComparison = ({
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
-        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300">{label}</h6>
+        <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300">
+          {label}
+        </h6>
         {onNavigate && (
           <button
             onClick={onNavigate}
@@ -333,7 +364,9 @@ const ChangeComparison = ({
       <div className="flex flex-col">
         <div className="flex items-center gap-2 mb-1">
           <MinusIcon className="w-4 h-4 text-red-500" />
-          <span className="text-xs font-medium text-red-600 dark:text-red-300">Before</span>
+          <span className="text-xs font-medium text-red-600 dark:text-red-300">
+            Before
+          </span>
         </div>
         <div
           className={cn(
@@ -349,7 +382,9 @@ const ChangeComparison = ({
       <div className="flex flex-col">
         <div className="flex items-center gap-2 mb-1">
           <PlusIcon className="w-4 h-4 text-green-500" />
-          <span className="text-xs font-medium text-green-600 dark:text-green-300">After</span>
+          <span className="text-xs font-medium text-green-600 dark:text-green-300">
+            After
+          </span>
         </div>
         <div
           className={cn(
@@ -381,7 +416,9 @@ const ChangesSection = ({
     <div className="flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border border-violet-200 dark:border-violet-800 hover:shadow-sm transition-all">
       <div className="flex items-center justify-between w-full mb-4">
         <div className="flex items-center gap-2">
-          <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">{title}</h4>
+          <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">
+            {title}
+          </h4>
           <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
             <PencilIcon className="w-3 h-3" />
             Modified
@@ -422,14 +459,18 @@ const Section = ({
     <div
       className={cn(
         "flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border hover:shadow-sm transition-all",
-        hasChanges && "border-violet-300 dark:border-violet-700 bg-white dark:bg-gray-800",
-        !isValid && "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/20",
+        hasChanges &&
+          "border-violet-300 dark:border-violet-700 bg-white dark:bg-gray-800",
+        !isValid &&
+          "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/20",
         isValid && !hasChanges && "border-gray-200 dark:border-gray-700",
       )}
     >
       <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-2">
-          <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">{title}</h4>
+          <h4 className="text-gray-900 dark:text-gray-100 text-xl font-bold">
+            {title}
+          </h4>
           {hasChanges && (
             <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 rounded-full">
               <PencilIcon className="w-3 h-3" />
@@ -592,12 +633,16 @@ const QuestionChanges = ({
     if (hasActualChanges) {
       changes.push(
         <div key="choices" className="mb-4">
-          <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Choices</h6>
+          <h6 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">
+            Choices
+          </h6>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <MinusIcon className="w-4 h-4 text-red-500" />
-                <span className="text-xs font-medium text-red-600 dark:text-red-300">Before</span>
+                <span className="text-xs font-medium text-red-600 dark:text-red-300">
+                  Before
+                </span>
               </div>
               <div className="space-y-2">
                 {originalChoices.length > 0 ? (
@@ -1979,7 +2024,8 @@ function Component() {
                   key={question.id}
                   className={cn(
                     "flex flex-col gap-y-4 px-8 py-6 bg-white dark:bg-gray-800 rounded border hover:shadow-sm transition-all mb-4",
-                    hasIssues && "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/20",
+                    hasIssues &&
+                      "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/20",
                     questionChanges.length > 0 &&
                       !hasIssues &&
                       "border-violet-300 dark:border-violet-700 bg-violet-50/30 dark:bg-violet-900/20",
@@ -2033,7 +2079,9 @@ function Component() {
               );
             })
           ) : (
-            <p className="text-gray-500 dark:text-gray-400">No questions added yet.</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              No questions added yet.
+            </p>
           )
         ) : (
           <>

@@ -100,6 +100,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // captured from the createWorker calls so the heartbeat reports the live
   // values rather than a separate copy that could drift.
   private concurrencyByQueue: Record<string, number> = {};
+  // Queues this pod actually consumes (the resolveConsumedQueues() result),
+  // captured so the heartbeat reports what this pod is really draining
+  // rather than the full queue list regardless of JOB_WORKER_QUEUES.
+  private consumedQueues: string[] = [];
 
   constructor(
     private readonly jobExecutorService: JobExecutorService,
@@ -189,79 +193,135 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       4,
     );
     const ADMIN_TRANSLATION_CONCURRENCY = 1;
+    const HEAVY_GRADING_WORKER_CONCURRENCY = this.resolveConcurrency(
+      "HEAVY_GRADING_WORKER_CONCURRENCY",
+      1,
+    );
 
-    this.concurrencyByQueue = {
-      [JOB_QUEUE_NAMES.ASSIGNMENT_V1]: ASSIGNMENT_V1_CONCURRENCY,
-      [JOB_QUEUE_NAMES.ASSIGNMENT_V2]: ASSIGNMENT_V2_CONCURRENCY,
-      [JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS]: TRANSLATION_CONCURRENCY,
-      [JOB_QUEUE_NAMES.ATTEMPT]: GRADING_WORKER_CONCURRENCY,
-      [JOB_QUEUE_NAMES.ADMIN_TRANSLATION]: ADMIN_TRANSLATION_CONCURRENCY,
-    };
-
-    this.workers.push(
-      this.createWorker(
-        JOB_QUEUE_NAMES.ASSIGNMENT_V1,
-        async (job) => this.handleAssignmentV1Job(job),
-        ASSIGNMENT_V1_CONCURRENCY,
-        {
+    // Declarative worker table. A pod consumes the intersection of this
+    // table with JOB_WORKER_QUEUES (unset = everything), which is how the
+    // fast and heavy deployments share one image but drain different queues.
+    const workerSpecs: Array<{
+      queueName: string;
+      processor: (job: Job) => Promise<void>;
+      concurrency: number;
+      options?: { lockDuration?: number; maxStalledCount?: number };
+    }> = [
+      {
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V1,
+        processor: async (job) => this.handleAssignmentV1Job(job),
+        concurrency: ASSIGNMENT_V1_CONCURRENCY,
+        options: {
           lockDuration: ASSIGNMENT_PUBLISH_LOCK_DURATION_MS,
           maxStalledCount: ASSIGNMENT_NO_STALL_RECOVERY,
         },
-      ),
-      this.createWorker(
-        JOB_QUEUE_NAMES.ASSIGNMENT_V2,
-        async (job) => this.handleAssignmentV2Job(job),
-        ASSIGNMENT_V2_CONCURRENCY,
-        {
+      },
+      {
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2,
+        processor: async (job) => this.handleAssignmentV2Job(job),
+        concurrency: ASSIGNMENT_V2_CONCURRENCY,
+        options: {
           lockDuration: ASSIGNMENT_PUBLISH_LOCK_DURATION_MS,
           maxStalledCount: ASSIGNMENT_NO_STALL_RECOVERY,
         },
-      ),
-      this.createWorker(
-        JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
-        async (job) => this.handleTranslationJob(job),
-        TRANSLATION_CONCURRENCY,
-        {
+      },
+      {
+        queueName: JOB_QUEUE_NAMES.ASSIGNMENT_V2_TRANSLATIONS,
+        processor: async (job) => this.handleTranslationJob(job),
+        concurrency: TRANSLATION_CONCURRENCY,
+        options: {
           lockDuration: TRANSLATION_LOCK_DURATION_MS,
           maxStalledCount: TRANSLATION_NO_STALL_RECOVERY,
         },
-      ),
-      this.createWorker(
-        JOB_QUEUE_NAMES.ATTEMPT,
-        async (job) => this.handleAttemptJob(job),
-        GRADING_WORKER_CONCURRENCY,
-        {
+      },
+      {
+        queueName: JOB_QUEUE_NAMES.ATTEMPT,
+        processor: async (job) =>
+          this.handleAttemptJob(job, JOB_QUEUE_NAMES.ATTEMPT),
+        concurrency: GRADING_WORKER_CONCURRENCY,
+        options: {
           lockDuration: ATTEMPT_LOCK_DURATION_MS,
           maxStalledCount: ATTEMPT_NO_STALL_RECOVERY,
         },
-      ),
-      this.createWorker(
-        JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
-        async (job) => this.handleAdminTranslationJob(job),
-        ADMIN_TRANSLATION_CONCURRENCY,
-      ),
+      },
+      {
+        // Same handler and lock policy as mark.attempt — the job shape is
+        // identical; only the pod (and its memory budget) differs.
+        queueName: JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+        processor: async (job) =>
+          this.handleAttemptJob(job, JOB_QUEUE_NAMES.ATTEMPT_HEAVY),
+        concurrency: HEAVY_GRADING_WORKER_CONCURRENCY,
+        options: {
+          lockDuration: ATTEMPT_LOCK_DURATION_MS,
+          maxStalledCount: ATTEMPT_NO_STALL_RECOVERY,
+        },
+      },
+      {
+        queueName: JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
+        processor: async (job) => this.handleAdminTranslationJob(job),
+        concurrency: ADMIN_TRANSLATION_CONCURRENCY,
+      },
+    ];
+
+    const consumedQueues = this.resolveConsumedQueues(
+      workerSpecs.map((spec) => spec.queueName),
+    );
+    const activeSpecs = workerSpecs.filter((spec) =>
+      consumedQueues.has(spec.queueName),
     );
 
-    // Wire terminal-failure notifications onto the ATTEMPT worker only.
-    // The generic on('failed') in createWorker logs every failure (including
-    // ones BullMQ will retry); this listener fires the additional
-    // GradingProgress + JobState side-effects only when the job is truly
-    // terminal — either an UnrecoverableError rewrap (no more retries
-    // regardless of attemptsMade) or a natural attemptsMade-exhaustion.
-    // Without this, GradingProgress stays at PROCESSING forever after a
-    // permanent fail and the learner's modal sits on "Initializing grading
-    // process…" with no way to know the job is dead.
-    const attemptWorker = this.workers.find(
-      (worker) => worker.name === JOB_QUEUE_NAMES.ATTEMPT,
+    // Sourced from activeSpecs (what actually gets a Worker registered below),
+    // not the raw env-resolution set. If a queue is ever added to
+    // JOB_QUEUE_NAMES without a matching workerSpecs entry, a pod listing it
+    // in JOB_WORKER_QUEUES would otherwise pass validation and claim it as
+    // consumed in the heartbeat while starting no worker for it.
+    this.consumedQueues = activeSpecs.map((spec) => spec.queueName);
+
+    this.concurrencyByQueue = Object.fromEntries(
+      activeSpecs.map((spec) => [spec.queueName, spec.concurrency]),
     );
-    attemptWorker?.on("failed", (job, error) => {
-      // BullMQ's event signature is `(job, error) => void` — wrap the
-      // async work in a fire-and-forget so we don't return a Promise to
-      // EventEmitter (which would discard it but trips
-      // no-misused-promises). Errors inside are already caught and
-      // logged in handleAttemptWorkerFailure.
-      void this.handleAttemptWorkerFailure(job, error);
+
+    this.structuredLogger.info("worker.queues.resolved", {
+      consumedQueues: this.consumedQueues,
+      concurrencyByQueue: this.concurrencyByQueue,
     });
+
+    for (const spec of activeSpecs) {
+      this.workers.push(
+        this.createWorker(
+          spec.queueName,
+          spec.processor,
+          spec.concurrency,
+          spec.options ?? {},
+        ),
+      );
+    }
+
+    // Wire terminal-failure notifications onto the attempt workers (both the
+    // fast ATTEMPT queue and the ATTEMPT_HEAVY queue). The generic
+    // on('failed') in createWorker logs every failure (including ones BullMQ
+    // will retry); this listener fires the additional GradingProgress +
+    // JobState side-effects only when the job is truly terminal — either an
+    // UnrecoverableError rewrap (no more retries regardless of attemptsMade)
+    // or a natural attemptsMade-exhaustion. Without this, GradingProgress
+    // stays at PROCESSING forever after a permanent fail and the learner's
+    // modal sits on "Initializing grading process…" with no way to know the
+    // job is dead.
+    for (const worker of this.workers) {
+      if (
+        worker.name === JOB_QUEUE_NAMES.ATTEMPT ||
+        worker.name === JOB_QUEUE_NAMES.ATTEMPT_HEAVY
+      ) {
+        worker.on("failed", (job, error) => {
+          // BullMQ's event signature is `(job, error) => void` — wrap the
+          // async work in a fire-and-forget so we don't return a Promise to
+          // EventEmitter (which would discard it but trips
+          // no-misused-promises). Errors inside are already caught and
+          // logged in handleAttemptWorkerFailure.
+          void this.handleAttemptWorkerFailure(job, error);
+        });
+      }
+    }
 
     await Promise.all(
       this.workers.map(async (worker) => worker.waitUntilReady()),
@@ -374,7 +434,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         startedAt: this.startedAt,
         updatedAt: new Date().toISOString(),
         workerCount: this.workers.length,
-        queues: Object.values(JOB_QUEUE_NAMES),
+        queues: this.consumedQueues,
         concurrencyByQueue: this.concurrencyByQueue,
       }),
       "EX",
@@ -412,6 +472,32 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       fallback: defaultValue,
     });
     return defaultValue;
+  }
+
+  // Parses JOB_WORKER_QUEUES into the set of queues this pod consumes.
+  // Unset/blank means ALL queues this pod has a worker for (local dev and
+  // single-deployment envs keep today's behavior). Validation is against the
+  // caller-supplied queues that actually have a worker spec — not the raw
+  // JOB_QUEUE_NAMES list — so a queue name that exists but has no worker spec
+  // cannot pass validation and be claimed as consumed while starting no
+  // worker (a silent no-op). An unknown queue name throws so the pod
+  // crash-loops loudly at boot rather than stranding a queue with no worker.
+  private resolveConsumedQueues(knownQueues: string[]): Set<string> {
+    const raw = process.env.JOB_WORKER_QUEUES;
+    if (raw === undefined || raw.trim() === "") {
+      return new Set(knownQueues);
+    }
+    const requested = raw
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+    const unknown = requested.filter((name) => !knownQueues.includes(name));
+    if (unknown.length > 0) {
+      throw new Error(
+        `JOB_WORKER_QUEUES contains unknown queue name(s): ${unknown.join(", ")}`,
+      );
+    }
+    return new Set(requested);
   }
 
   private getHeartbeatIntervalMs(): number {
@@ -490,26 +576,29 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleAttemptJob(job: Job): Promise<void> {
+  private async handleAttemptJob(
+    job: Job,
+    queueName: JobQueueName = JOB_QUEUE_NAMES.ATTEMPT,
+  ): Promise<void> {
     try {
       switch (job.name) {
         case JOB_NAMES.ATTEMPT_GRADE:
         case JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW: {
           if (this.shouldExecuteLocally()) {
             this.logger.debug(
-              `Routing locally: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
+              `Routing locally: queue=${queueName} jobName=${job.name} jobId=${job.id}`,
             );
             await this.jobExecutorService.executeJob({
-              queueName: JOB_QUEUE_NAMES.ATTEMPT,
+              queueName,
               jobName: job.name as JobName,
               payload: this.getDecryptedJobData(job),
               bullJobId: job.id,
             });
           } else {
             this.logger.debug(
-              `Forwarding to API: queue=${JOB_QUEUE_NAMES.ATTEMPT} jobName=${job.name} jobId=${job.id}`,
+              `Forwarding to API: queue=${queueName} jobName=${job.name} jobId=${job.id}`,
             );
-            await this.forwardJobToApi(JOB_QUEUE_NAMES.ATTEMPT, job);
+            await this.forwardJobToApi(queueName, job);
           }
           return;
         }

@@ -12,6 +12,7 @@ import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/att
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { GradingConsistencyService } from "src/api/assignment/v2/services/grading-consistency.service";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
@@ -115,6 +116,9 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         question.scoring,
         question.responseType ?? "OTHER",
       );
+      textBasedQuestionEvaluateModel.safetyIdentifier = context.userId
+        ? hashSafetyIdentifier(context.userId)
+        : undefined;
 
       const gradingModel = await this.llmFacadeService.gradeTextBasedQuestion(
         textBasedQuestionEvaluateModel,

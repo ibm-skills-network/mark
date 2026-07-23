@@ -679,7 +679,9 @@ function Section({
                         <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
                         Generate choices with AI
                       </button>
-                      <span className="text-gray-500 dark:text-gray-400">OR</span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        OR
+                      </span>
                       <button
                         className="text-gray-500 dark:text-gray-400"
                         onClick={() => {

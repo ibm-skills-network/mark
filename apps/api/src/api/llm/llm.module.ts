@@ -3,6 +3,10 @@ import { S3Service } from "../files/services/s3.service";
 import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./core/services/gpt5-nano-llm.service";
+import {
+  Gpt54MiniLlmService,
+  Gpt54NanoLlmService,
+} from "./core/services/gpt54-llm.service";
 import { GptOss120bLlmService } from "./core/services/gpt-oss-120b-llm-service";
 import { Granite4HSmallLlmService } from "./core/services/granite-4-h-small-llm-service";
 import { GraniteVision322bLlmService } from "./core/services/granite-vision-3-2-2b-llm-service";
@@ -86,6 +90,8 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     Gpt5LlmService,
     Gpt5MiniLlmService,
     Gpt5NanoLlmService,
+    Gpt54MiniLlmService,
+    Gpt54NanoLlmService,
     GptOss120bLlmService,
     Granite4HSmallLlmService,
     GraniteVision322bLlmService,
@@ -108,8 +114,10 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
         p10: Llama3370bInstructLlmService,
         p11: Llama4MaverickLlmService,
         p12: MistralMedium2505LlmService,
+        p13: Gpt54MiniLlmService,
+        p14: Gpt54NanoLlmService,
       ) => {
-        return [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12];
+        return [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14];
       },
       inject: [
         OpenAiLlmService,
@@ -124,6 +132,8 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
         Llama3370bInstructLlmService,
         Llama4MaverickLlmService,
         MistralMedium2505LlmService,
+        Gpt54MiniLlmService,
+        Gpt54NanoLlmService,
       ],
     },
     S3Service,

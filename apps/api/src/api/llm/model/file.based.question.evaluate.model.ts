@@ -19,6 +19,7 @@ export class FileUploadQuestionEvaluateModel
   readonly questionType: QuestionType;
   readonly responseType: ResponseType;
   readonly judgeFeedback?: string;
+  readonly questionId?: number;
 
   constructor(
     question: string,
@@ -31,6 +32,7 @@ export class FileUploadQuestionEvaluateModel
     questionType: QuestionType,
     responseType: ResponseType,
     judgeFeedback?: string,
+    questionId?: number,
   ) {
     this.question = question;
     this.previousQuestionsAnswersContext = previousQuestionsAnswersContext;
@@ -42,5 +44,13 @@ export class FileUploadQuestionEvaluateModel
     this.questionType = questionType;
     this.responseType = responseType;
     this.judgeFeedback = judgeFeedback;
+    this.questionId = questionId;
   }
+
+  /**
+   * Hashed learner id for OpenAI safety attribution. Set by the attempt
+   * flow after construction; optional because authoring/preview paths
+   * have no learner.
+   */
+  safetyIdentifier?: string;
 }

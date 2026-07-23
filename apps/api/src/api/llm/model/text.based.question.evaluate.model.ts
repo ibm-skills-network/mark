@@ -38,4 +38,11 @@ export class TextBasedQuestionEvaluateModel
     this.responseType = responseType;
     this.questionId = questionId;
   }
+
+  /**
+   * Hashed learner id for OpenAI safety attribution. Set by the attempt
+   * flow after construction; optional because authoring/preview paths
+   * have no learner.
+   */
+  safetyIdentifier?: string;
 }

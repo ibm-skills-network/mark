@@ -42,7 +42,10 @@ const Component: FC<Props> = ({ compact }) => {
       compact={compact}
     >
       <div className="flex flex-col gap-y-1">
-        <label htmlFor="attempts" className="text-gray-600 dark:text-gray-300 flex gap-x-1">
+        <label
+          htmlFor="attempts"
+          className="text-gray-600 dark:text-gray-300 flex gap-x-1"
+        >
           How many attempts do learners have for this assignment?
           <Tooltip content="The number of times a student can submit this assignment">
             <InformationCircleIcon className="w-5 inline-block text-gray-500 dark:text-gray-400" />

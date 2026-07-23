@@ -137,6 +137,53 @@ export class PromptProcessorService implements IPromptProcessor {
     return (await parser.parse(raw)) as T;
   }
 
+  async processStructuredPrompt<T>(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    schema: ZodTypeAny,
+    llmKey: string,
+    options?: LlmRequestOptions,
+  ): Promise<T> {
+    this.aiFlags.assertUsageEnabled(usageType);
+    const llm = this.router.get(llmKey);
+
+    if (typeof llm.invokeStructured === "function") {
+      const input = await this.formatPromptInput(prompt);
+      const { parsed, tokenUsage } = await llm.invokeStructured<T>(
+        [new HumanMessage(input)],
+        schema,
+        options,
+      );
+      logAiInvocation(this.logger, {
+        modelKey: llm.key,
+        purpose: "structured_prompt",
+        prompt: input,
+        response: JSON.stringify(parsed),
+        context: { assignment_id: assignmentId, usage_type: usageType },
+      });
+      await this.trackUsageSafely(
+        assignmentId,
+        usageType,
+        tokenUsage.input,
+        tokenUsage.output,
+        llm.key,
+      );
+      return parsed;
+    }
+
+    const raw = await this._processPromptWithProvider(
+      prompt,
+      assignmentId,
+      usageType,
+      llm,
+      options,
+      "structured_prompt",
+    );
+    const parser = StructuredOutputParser.fromZodSchema(schema);
+    return (await parser.parse(raw)) as T;
+  }
+
   /**
    * Process a text prompt and return the LLM response
    */

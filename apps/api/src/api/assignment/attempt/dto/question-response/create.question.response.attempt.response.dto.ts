@@ -8,6 +8,7 @@ export interface StructuredCriterion {
   status: "full" | "partial" | "none";
   evidence: string;
   feedback: string;
+  nextStep?: string;
 }
 
 export interface StructuredFeedback {

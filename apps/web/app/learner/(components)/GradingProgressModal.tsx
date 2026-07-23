@@ -734,7 +734,8 @@ const ROW_STYLES: Record<
   }
 > = {
   pending: {
-    container: "bg-gray-50 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300",
+    container:
+      "bg-gray-50 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300",
     icon: "text-gray-400",
     label: "text-gray-500 dark:text-gray-400",
     glyph: "○",

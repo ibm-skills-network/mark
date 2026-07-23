@@ -11,6 +11,10 @@ import { FileBasedQuestionResponseModel } from "../../../llm/model/file.based.qu
 import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
 import { TrueFalseBasedQuestionResponseModel } from "../../../llm/model/true.false.based.question.response.model";
 import { UrlBasedQuestionResponseModel } from "../../../llm/model/url.based.question.response.model";
+import {
+  buildLearnerStructuredFeedback,
+  sanitizeLearnerFeedback,
+} from "../../../llm/features/grading/utils/learner-feedback.util";
 import { CreateQuestionResponseAttemptRequestDto } from "../dto/question-response/create.question.response.attempt.request.dto";
 import {
   ChoiceBasedFeedbackDto,
@@ -44,7 +48,15 @@ export const AttemptHelper = {
       ] as TrueFalseBasedFeedbackDto[];
     } else if (model instanceof FileBasedQuestionResponseModel) {
       const generalFeedbackDto = new GeneralFeedbackDto();
-      generalFeedbackDto.feedback = model.feedback;
+      generalFeedbackDto.feedback = sanitizeLearnerFeedback(model.feedback);
+
+      if (model.rubricScores?.length) {
+        generalFeedbackDto.structuredFeedback = buildLearnerStructuredFeedback(
+          model.points,
+          model.rubricScores,
+          model.feedback,
+        );
+      }
 
       if ((model as any).highlighting) {
         generalFeedbackDto.highlighting = (model as any).highlighting;
@@ -55,10 +67,11 @@ export const AttemptHelper = {
       }
 
       if (
-        model.analysis ||
-        model.evaluation ||
-        model.explanation ||
-        model.guidance
+        !generalFeedbackDto.structuredFeedback &&
+        (model.analysis ||
+          model.evaluation ||
+          model.explanation ||
+          model.guidance)
       ) {
         const feedbackLower = generalFeedbackDto.feedback.toLowerCase();
         const hasExistingStructure =
@@ -104,17 +117,35 @@ export const AttemptHelper = {
       }
     } else if (model instanceof TextBasedQuestionResponseModel) {
       const generalFeedbackDto = new GeneralFeedbackDto();
-      generalFeedbackDto.feedback = model.feedback;
+      generalFeedbackDto.feedback = sanitizeLearnerFeedback(model.feedback);
 
-      if (model.structuredFeedback) {
-        generalFeedbackDto.structuredFeedback = model.structuredFeedback;
+      if (model.rubricScores?.length) {
+        generalFeedbackDto.structuredFeedback = buildLearnerStructuredFeedback(
+          model.points,
+          model.rubricScores,
+          model.feedback,
+        );
+      } else if (model.structuredFeedback) {
+        generalFeedbackDto.structuredFeedback = {
+          ...model.structuredFeedback,
+          summary: sanitizeLearnerFeedback(model.structuredFeedback.summary),
+          guidance: sanitizeLearnerFeedback(model.structuredFeedback.guidance),
+          criteria: model.structuredFeedback.criteria.map((criterion) => ({
+            ...criterion,
+            name: sanitizeLearnerFeedback(criterion.name),
+            evidence: sanitizeLearnerFeedback(criterion.evidence),
+            feedback: sanitizeLearnerFeedback(criterion.feedback),
+            nextStep: sanitizeLearnerFeedback(criterion.nextStep),
+          })),
+        };
       }
 
       if (
-        model.analysis ||
-        model.evaluation ||
-        model.explanation ||
-        model.guidance
+        !generalFeedbackDto.structuredFeedback &&
+        (model.analysis ||
+          model.evaluation ||
+          model.explanation ||
+          model.guidance)
       ) {
         const feedbackLower = generalFeedbackDto.feedback.toLowerCase();
         const hasExistingStructure =
@@ -159,7 +190,7 @@ export const AttemptHelper = {
       }
     } else {
       const generalFeedbackDto = new GeneralFeedbackDto();
-      generalFeedbackDto.feedback = model.feedback;
+      generalFeedbackDto.feedback = sanitizeLearnerFeedback(model.feedback);
       responseDto.feedback = [generalFeedbackDto];
 
       if ((model as any).metadata) {

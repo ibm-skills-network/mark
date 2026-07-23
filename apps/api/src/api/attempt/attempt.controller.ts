@@ -29,6 +29,7 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { AttemptTier } from "src/job-queue/attempt-tier";
 import { Logger } from "winston";
 import {
   GRADE_SUBMISSION_EXCEPTION,
@@ -276,17 +277,26 @@ export class AttemptControllerV2 {
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
 
-    const needsLongRunningGrading = true;
     const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
+    // Deterministic-only learner attempts grade synchronously in-request —
+    // no queue, no SSE. Author previews always queue (the sync path is the
+    // learner pipeline), and any classification gap degrades to the queued
+    // path, never the other way.
+    const attemptTier: AttemptTier | null = isAuthorMode
+      ? null
+      : await this.attemptService.classifyLearnerAttemptTier(parsedAttemptId);
+    const needsLongRunningGrading = attemptTier !== "inline";
 
     if (needsLongRunningGrading && !isAuthorMode) {
-      const { gradingJobId, message } =
+      const queuedTier = attemptTier === "heavy" ? "heavy" : "standard";
+      const { gradingJobId, message, queueName } =
         await this.attemptService.createGradingJob(
           parsedAttemptId,
           parsedAssignmentId,
           learnerUpdateAssignmentAttemptDto,
           authCookie,
           request,
+          queuedTier,
         );
 
       await this.attemptService.enqueueGradingJob(
@@ -296,11 +306,12 @@ export class AttemptControllerV2 {
         learnerUpdateAssignmentAttemptDto,
         authCookie,
         request,
+        queueName,
       );
 
       return { gradingJobId, message };
     } else if (needsLongRunningGrading && isAuthorMode) {
-      const { gradingJobId, message } =
+      const { gradingJobId, message, queueName } =
         await this.attemptService.createAuthorGradingJob(
           parsedAssignmentId,
           learnerUpdateAssignmentAttemptDto,
@@ -314,6 +325,7 @@ export class AttemptControllerV2 {
         learnerUpdateAssignmentAttemptDto,
         authCookie,
         request,
+        queueName,
       );
 
       return { gradingJobId, message };

@@ -1,5 +1,6 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { PrismaService } from "../../../../database/prisma.service";
@@ -12,10 +13,14 @@ export class QuestionVariantService {
    * Create question variants for an attempt
    * @param attemptId Assignment attempt ID
    * @param questions Array of questions
+   * @param tx Optional transaction client — pass it when the attempt row is
+   *   being created in the same transaction so the variant rows commit (and
+   *   roll back) together with it.
    */
   async createAttemptQuestionVariants(
     attemptId: number,
     questions: QuestionDto[],
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const attemptQuestionVariantsData = questions.map((question) => {
       const variants = question.variants || [];
@@ -51,7 +56,7 @@ export class QuestionVariantService {
       };
     });
 
-    await this.prisma.assignmentAttemptQuestionVariant.createMany({
+    await (tx ?? this.prisma).assignmentAttemptQuestionVariant.createMany({
       data: attemptQuestionVariantsData,
     });
   }

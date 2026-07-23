@@ -160,7 +160,7 @@ const FileUploadSection = ({
       case "IMAGES":
         return {
           "image/png": [".png"],
-          "image/jpeg": [".jpeg"],
+          "image/jpeg": [".jpg", ".jpeg"],
           "image/gif": [".gif"],
           "image/webp": [".webp"],
         };
@@ -168,6 +168,14 @@ const FileUploadSection = ({
       case "REPORT":
       case "SPREADSHEET":
         return {
+          // ponytail: image types included here so image-upload questions still
+          // accept PNG/JPEG when responseType arrives missing/not "IMAGES" and
+          // falls back to questionType "UPLOAD". Server doesn't enforce learner
+          // MIME types anyway; grading keys off responseType.
+          "image/png": [".png"],
+          "image/jpeg": [".jpg", ".jpeg"],
+          "image/gif": [".gif"],
+          "image/webp": [".webp"],
           "text/plain": [".txt"],
           "application/pdf": [".pdf"],
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document":

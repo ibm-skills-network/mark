@@ -85,7 +85,14 @@ const EvidenceOutputSchema = z.object({
     .string()
     .min(20)
     .describe(
-      "Justification referencing specific evidence by blockId. Must cite evidence.",
+      "Learner-facing explanation grounded in the cited evidence without exposing internal IDs.",
+    ),
+  nextStep: z
+    .string()
+    .min(10)
+    .optional()
+    .describe(
+      "One concrete learner action that would address the identified gap",
     ),
 });
 
@@ -120,6 +127,14 @@ export class EvidenceBasedGradingService {
     assignmentId: number,
     language = "en",
     judgeFeedback?: string,
+    modelConfig?: {
+      modelOverrides: {
+        retrievalModel: string;
+        gradingModel: string;
+        judgeModel: string;
+      };
+      modelOverridesAreFinal?: boolean;
+    },
   ): Promise<EvidenceBasedGradingResult> {
     this.logger.debug(
       `Starting evidence-based grading for ${submission.submissionId}: ${criteria.length} criteria`,
@@ -171,7 +186,8 @@ export class EvidenceBasedGradingService {
         judgeFeedback,
         maxConcurrency: 8,
         maxRetries: hasStructuredContent ? 0 : 2,
-        modelOverrides: DEFAULT_MODEL_SELECTION,
+        modelOverrides: modelConfig?.modelOverrides ?? DEFAULT_MODEL_SELECTION,
+        modelOverridesAreFinal: modelConfig?.modelOverridesAreFinal,
       });
 
       criteriaResults = this.mapPipelineGradesToCriterionResults(
@@ -357,13 +373,13 @@ GRADING PROCESS (FOLLOW IN ORDER):
    - The points must match one of: {allowed_points_list}
 
 4. WRITE RATIONALE
-   - Provide constructive, learner-focused feedback that references evidence by blockId
+   - Provide constructive, learner-focused feedback without exposing block IDs
    - Focus on what the learner DID or DID NOT include in their submission
-   - If fully met: Point out what specific content was found (e.g., "Block p1b3 includes X, and block p2b7 shows Y")
-   - If partially met: State what was found AND what specific elements are missing (e.g., "Block p1b3 addresses X, but lacks coverage of Y and Z")
+   - If fully met: Point out what specific work was found
+   - If partially met: State what was found AND what specific elements are missing
    - If not met: Explain what specific content is absent (e.g., "No evidence found for X or Y in the submission")
    - Be specific about gaps: name the missing concepts, explanations, or details
-   - Frame as actionable guidance when applicable: "The submission should include..." or "Consider adding..."
+   - Put the single most useful concrete revision in nextStep
    - Do NOT state criterion requirements or start with "Criterion requires..."
    - Focus on the work itself, not what the rubric asks for
 
@@ -377,7 +393,8 @@ OUTPUT REQUIREMENTS:
 - evidence: Array of citations (minimum 1 required)
 - decision: Must be one of: meets, partially_meets, does_not_meet
 - pointsAwarded: Must be from allowed points: {allowed_points_list}
-- rationale: Must reference blockIds from evidence
+- rationale: Learner-facing explanation grounded in evidence; never mention block IDs
+- nextStep: For partial or minimum credit, one specific edit or addition; never mention block IDs
 
 IMPORTANT:
 - Think step-by-step internally but ONLY output the JSON response.
@@ -458,6 +475,11 @@ LANGUAGE: {language}
         maxPoints: criterion.maxPoints,
         evidence: [],
         rationale: "No supporting evidence found in the submission.",
+        nextStep: `Add or clearly demonstrate: ${
+          criterion.criteria.find(
+            (level) => level.points === criterion.maxPoints,
+          )?.description ?? criterion.rubricQuestion
+        }`,
         decision: "does_not_meet",
         gradedAt: new Date().toISOString(),
       };
@@ -470,6 +492,7 @@ LANGUAGE: {language}
       maxPoints: criterion.maxPoints,
       evidence: validatedEvidence,
       rationale: parsedOutput.rationale,
+      nextStep: parsedOutput.nextStep,
       decision: parsedOutput.decision,
       gradedAt: new Date().toISOString(),
     };
@@ -499,6 +522,7 @@ LANGUAGE: {language}
         maxPoints: grade.maxPoints,
         evidence,
         rationale: grade.rationale,
+        nextStep: grade.nextStep,
         decision: grade.decision,
         gradedAt: grade.gradedAt,
       };
@@ -934,12 +958,7 @@ LANGUAGE: {language}
         .replace(/current content:.*$/i, "")
         .trim();
 
-      let guidance = "";
-      if (r.decision === "does_not_meet") {
-        guidance = " Missing required evidence or corrections.";
-      } else if (r.decision === "partially_meets") {
-        guidance = " Additional corrections needed for full credit.";
-      }
+      const guidance = r.nextStep ? ` Next step: ${r.nextStep}` : "";
 
       const evidenceReference = this.formatEvidenceReference(r.evidence);
 
@@ -963,10 +982,6 @@ LANGUAGE: {language}
 
     if (cellReference) {
       return ` (e.g., ${cellReference})`;
-    }
-
-    if (first.blockId) {
-      return ` (e.g., ${first.blockId})`;
     }
 
     return "";

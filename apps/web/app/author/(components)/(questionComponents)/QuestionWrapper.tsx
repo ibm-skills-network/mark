@@ -931,7 +931,9 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                   }
                   className={cn(
                     "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                    showSubQuestionsToLearner ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
+                    showSubQuestionsToLearner
+                      ? "bg-violet-600"
+                      : "bg-gray-200 dark:bg-gray-700",
                   )}
                   role="switch"
                   aria-checked={showSubQuestionsToLearner}
@@ -966,7 +968,9 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                     }
                     className={cn(
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                      showRubricsToLearner ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
+                      showRubricsToLearner
+                        ? "bg-violet-600"
+                        : "bg-gray-200 dark:bg-gray-700",
                     )}
                     role="switch"
                     aria-checked={showRubricsToLearner}
@@ -1007,7 +1011,9 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
                     }}
                     className={cn(
                       "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                      showPoints ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700",
+                      showPoints
+                        ? "bg-violet-600"
+                        : "bg-gray-200 dark:bg-gray-700",
                     )}
                     role="switch"
                     aria-checked={showPoints}

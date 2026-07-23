@@ -29,6 +29,7 @@ import { IImageGradingService } from "../interfaces/image-grading.interface";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { RubricCriterion } from "../types/criterion-evidence.types";
+import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 
 interface ProcessedImageData {
   buffer: Buffer;
@@ -77,6 +78,7 @@ export class ImageGradingService implements IImageGradingService {
       previousQuestionsAnswersContext,
       assignmentInstrctions,
       learnerImageResponse: rawImages,
+      safetyIdentifier,
     } = model;
 
     const learnerImages: LearnerImageUpload[] = this.normalizeLearnerImages(
@@ -93,7 +95,40 @@ export class ImageGradingService implements IImageGradingService {
       totalPoints,
     );
 
-    await this.moderateContent(learnerResponse);
+    const contentToModerate =
+      typeof learnerResponse === "string"
+        ? learnerResponse
+        : JSON.stringify(learnerResponse);
+    // Moderate the uploaded images too — they go to the vision model and
+    // were previously never checked. Only URL-shaped or data-URL values
+    // are accepted by the moderations endpoint.
+    const imageUrlsForModeration = [
+      topImageData,
+      ...learnerImages.map((img) => img.imageData || img.imageUrl),
+    ].filter(
+      (url): url is string =>
+        !!url && (url.startsWith("http") || url.startsWith("data:")),
+    );
+    const moderationVerdict = await this.moderationService.assessContent(
+      contentToModerate,
+      imageUrlsForModeration,
+    );
+    if (moderationVerdict.action === "block_severe") {
+      this.logger.warn("grading.moderation.blocked_severe", {
+        assignmentId,
+        categories: moderationVerdict.severeCategories,
+      });
+      return {
+        points: 0,
+        feedback: MODERATION_BLOCK_FEEDBACK,
+      } as ImageBasedQuestionResponseModel;
+    }
+    if (moderationVerdict.action === "allow_with_log") {
+      this.logger.warn("grading.moderation.flagged", {
+        assignmentId,
+        categories: moderationVerdict.flaggedCategories,
+      });
+    }
 
     const maxTotalPoints = this.calculateMaxPoints(
       scoringCriteria,
@@ -132,12 +167,50 @@ export class ImageGradingService implements IImageGradingService {
       );
     }
 
+    // Determine (before fetching) whether the specific source that will
+    // resolve as the primary image was already covered by the up-front gate
+    // above. The gate only accepts http/data: shaped strings, so it misses
+    // two distinct cases that resolve through the exact same precedence as
+    // getPrimaryImageForGrading: an image fetched from COS storage
+    // (bucket/key, arriving as the "InCos" sentinel), and a learner image
+    // submitted as raw/bare base64 with no "data:" prefix — the latter looks
+    // "inline" but was filtered out of imageUrlsForModeration and would
+    // otherwise reach the vision model unmoderated.
+    const primaryNeedsPostResolveModeration =
+      !this.primaryImageCoveredByUpfrontModeration(
+        topImageData,
+        topBucket,
+        topKey,
+        learnerImages,
+      );
+
     const primaryImage = await this.getPrimaryImageForGrading(
       topImageData,
       topBucket,
       topKey,
       learnerImages,
     );
+
+    if (primaryNeedsPostResolveModeration) {
+      const postResolveModerationVerdict =
+        await this.moderationService.assessContent("", [primaryImage.base64]);
+      if (postResolveModerationVerdict.action === "block_severe") {
+        this.logger.warn("grading.moderation.blocked_severe", {
+          assignmentId,
+          categories: postResolveModerationVerdict.severeCategories,
+        });
+        return {
+          points: 0,
+          feedback: MODERATION_BLOCK_FEEDBACK,
+        } as ImageBasedQuestionResponseModel;
+      }
+      if (postResolveModerationVerdict.action === "allow_with_log") {
+        this.logger.warn("grading.moderation.flagged", {
+          assignmentId,
+          categories: postResolveModerationVerdict.flaggedCategories,
+        });
+      }
+    }
 
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
@@ -307,6 +380,7 @@ Respond with a JSON object containing:
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           modelKey,
+          { safetyIdentifier },
         );
       } catch (visionError) {
         // Only the vision call's own errors can mean the provider rejected the
@@ -487,20 +561,46 @@ ${parsed.guidance}
     }
   }
 
-  private async moderateContent(learnerResponse: any): Promise<void> {
-    const contentToModerate =
-      typeof learnerResponse === "string"
-        ? learnerResponse
-        : JSON.stringify(learnerResponse);
+  /**
+   * Mirrors the branch selection in getPrimaryImageForGrading, without doing
+   * any fetching, purely to know whether the up-front imageUrlsForModeration
+   * gate (built earlier from topImageData and each learner image's
+   * imageData/imageUrl) already saw the specific value that will resolve as
+   * the primary image. That gate only accepts http/data: shaped strings, so
+   * it returns false — meaning a post-resolve moderation check is still
+   * required — for two cases that share the same resolution branch:
+   *  - COS storage (bucket/key): imageData arrives as the "InCos" sentinel
+   *    (normalized to "" by normalizeLearnerImages), which fails the filter.
+   *  - Raw/bare base64 with no "data:" prefix: a truthy, non-"InCos" string
+   *    that still fails the http/data: filter, so it was excluded from the
+   *    up-front list even though it resolves as an inline image.
+   */
+  private primaryImageCoveredByUpfrontModeration(
+    topImageData: string,
+    topBucket: string,
+    topKey: string,
+    learnerImages: LearnerImageUpload[],
+  ): boolean {
+    let source: string | undefined;
 
-    const isValid =
-      await this.moderationService.validateContent(contentToModerate);
-    if (!isValid) {
-      throw new HttpException(
-        "Learner response blocked",
-        HttpStatus.BAD_REQUEST,
-      );
+    if (topImageData && topImageData !== "InCos") {
+      source = topImageData;
+    } else if (learnerImages.length > 0) {
+      const firstImage = learnerImages[0];
+      if (firstImage.imageData && firstImage.imageData !== "InCos") {
+        source = firstImage.imageData;
+      } else {
+        // Resolves via COS storage (bucket/key) — never in the up-front list.
+        return false;
+      }
+    } else {
+      // Resolves via COS storage (topBucket/topKey) — never in the up-front
+      // list. If neither is set either, there is no valid image source and
+      // getPrimaryImageForGrading throws before this value is ever used.
+      return !(topBucket && topKey);
     }
+
+    return source.startsWith("http") || source.startsWith("data:");
   }
 
   private async getPrimaryImageForGrading(
@@ -631,6 +731,109 @@ ${parsed.guidance}
       stream.on("end", () => resolve(Buffer.concat(chunks)));
       stream.on("error", reject);
     });
+  }
+
+  /**
+   * The vision model rejects images past its per-image size/dimension limits —
+   * a large lossless PNG screenshot base64-encodes past the provider's cap and
+   * comes back as an "unsupported image" error, which the caller then relabels
+   * as a format problem and tells the learner to upload a PNG they already
+   * uploaded. Downscale oversized pass-through rasters here so the model always
+   * receives a within-limits image. Images already within limits, or ones sharp
+   * can't process, are returned untouched.
+   */
+  private async normalizeOversizedImage(
+    buffer: Buffer,
+    detected: string,
+    filename?: string,
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    // Vision providers downscale beyond ~1568px on the long edge anyway; staying
+    // under ~4MB keeps the base64 payload below the per-image ceiling.
+    const MAX_EDGE_PX = 1568;
+    const MAX_BYTES = 4 * 1024 * 1024;
+    // Escalating lossy fallback for the rare image that stays over the byte cap
+    // even after the dimension clamp — a dense photo or near-incompressible
+    // content whose lossless PNG is still too large at 1568px. At that size a
+    // JPEG lands well under the cap; the descending steps are a backstop.
+    const JPEG_QUALITY_STEPS = [80, 60];
+
+    try {
+      const metadata = await sharp(buffer).metadata();
+      const longestEdge = Math.max(metadata.width ?? 0, metadata.height ?? 0);
+      if (buffer.length <= MAX_BYTES && longestEdge <= MAX_EDGE_PX) {
+        return { buffer, mimeType: detected };
+      }
+
+      const resized = await sharp(buffer)
+        .resize(MAX_EDGE_PX, MAX_EDGE_PX, {
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer();
+
+      // The dimension clamp satisfies the pixel limit but never shrinks the
+      // bytes of an image that was already within the edge cap, so a lossless
+      // PNG can still exceed the byte ceiling. Re-encode the downscaled raster
+      // as JPEG at descending quality until it fits. The lossless PNG is kept
+      // for the common case; we go lossy only when losslessness cannot meet the
+      // byte cap, where a rejected image would be the alternative.
+      if (resized.length > MAX_BYTES) {
+        let lossy = resized;
+        // Tracks the quality that produced the returned buffer; the loop always
+        // overwrites it, starting from the first (highest-quality) step.
+        let jpegQuality = JPEG_QUALITY_STEPS[0];
+        for (const quality of JPEG_QUALITY_STEPS) {
+          // JPEG has no alpha channel; flatten a transparent PNG onto white
+          // (the neutral background for a screenshot) so it does not composite
+          // onto black.
+          lossy = await sharp(resized)
+            .flatten({ background: "#ffffff" })
+            .jpeg({ quality })
+            .toBuffer();
+          jpegQuality = quality;
+          if (lossy.length <= MAX_BYTES) {
+            break;
+          }
+        }
+        this.logger.info("image.grading.downscaled", {
+          filename,
+          detectedFormat: detected,
+          outputFormat: "image/jpeg",
+          jpegQuality,
+          fromBytes: buffer.length,
+          toBytes: lossy.length,
+        });
+        if (lossy.length > MAX_BYTES) {
+          // Not reachable for a 1568px image at these qualities, but never
+          // silently hand the model an over-cap image without a trace.
+          this.logger.warn("image.grading.downscale.over.cap", {
+            filename,
+            detectedFormat: detected,
+            toBytes: lossy.length,
+          });
+        }
+        return { buffer: lossy, mimeType: "image/jpeg" };
+      }
+
+      this.logger.info("image.grading.downscaled", {
+        filename,
+        detectedFormat: detected,
+        outputFormat: "image/png",
+        fromBytes: buffer.length,
+        toBytes: resized.length,
+      });
+      return { buffer: resized, mimeType: "image/png" };
+    } catch (error) {
+      // Fall back to the original bytes rather than newly failing an image that
+      // would otherwise have been sent to the model as-is.
+      this.logger.warn("image.grading.downscale.failed", {
+        filename,
+        detectedFormat: detected,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { buffer, mimeType: detected };
+    }
   }
 
   /**
@@ -766,7 +969,7 @@ ${parsed.guidance}
       detected === "image/gif" ||
       detected === "image/webp"
     ) {
-      return { buffer, mimeType: detected };
+      return await this.normalizeOversizedImage(buffer, detected, filename);
     }
 
     if (

@@ -12,12 +12,16 @@ echo "Running Prisma migrations (will retry up to $MAX_RETRIES times on advisory
 while [ $attempt -le $MAX_RETRIES ]; do
   echo "Migration attempt $attempt of $MAX_RETRIES..."
 
-  if npx prisma migrate deploy 2>&1 | tee /tmp/migrate-output.log; then
+  # No pipe here: `prisma | tee` would make the if test tee's exit code, so a
+  # failed migrate (e.g. P3009 unresolved failed migration) reports success.
+  EXIT_CODE=0
+  npx prisma migrate deploy > /tmp/migrate-output.log 2>&1 || EXIT_CODE=$?
+  cat /tmp/migrate-output.log
+
+  if [ "$EXIT_CODE" -eq 0 ]; then
     echo "Migrations completed successfully on attempt $attempt"
     break
   else
-    EXIT_CODE=$?
-
     if grep -q "P1002" /tmp/migrate-output.log && grep -q "advisory lock" /tmp/migrate-output.log; then
       if [ $attempt -lt $MAX_RETRIES ]; then
         echo "Advisory lock timeout detected. Waiting ${RETRY_DELAY}s before retry..."

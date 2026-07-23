@@ -12,6 +12,7 @@ import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/att
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
 import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import {
@@ -152,6 +153,9 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       primaryImage.imageData,
       textualResponse,
     );
+    imageBasedQuestionEvaluateModel.safetyIdentifier = context.userId
+      ? hashSafetyIdentifier(context.userId)
+      : undefined;
 
     const gradingResult =
       await this.imageGradingService.gradeImageBasedQuestion(
@@ -449,14 +453,14 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
 
     const firstBytes = buffer.subarray(0, 12);
 
-    if (firstBytes[0] === 0xFF && firstBytes[1] === 0xD8) {
+    if (firstBytes[0] === 0xff && firstBytes[1] === 0xd8) {
       return "image/jpeg";
     }
 
     if (
       firstBytes[0] === 0x89 &&
       firstBytes[1] === 0x50 &&
-      firstBytes[2] === 0x4E &&
+      firstBytes[2] === 0x4e &&
       firstBytes[3] === 0x47
     ) {
       return "image/png";
@@ -484,7 +488,7 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       return "image/webp";
     }
 
-    if (firstBytes[0] === 0x42 && firstBytes[1] === 0x4D) {
+    if (firstBytes[0] === 0x42 && firstBytes[1] === 0x4d) {
       return "image/bmp";
     }
 
@@ -492,12 +496,12 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     if (
       (firstBytes[0] === 0x49 &&
         firstBytes[1] === 0x49 &&
-        firstBytes[2] === 0x2A &&
+        firstBytes[2] === 0x2a &&
         firstBytes[3] === 0x00) ||
-      (firstBytes[0] === 0x4D &&
-        firstBytes[1] === 0x4D &&
+      (firstBytes[0] === 0x4d &&
+        firstBytes[1] === 0x4d &&
         firstBytes[2] === 0x00 &&
-        firstBytes[3] === 0x2A)
+        firstBytes[3] === 0x2a)
     ) {
       return "image/tiff";
     }

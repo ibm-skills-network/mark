@@ -13,16 +13,15 @@ import {
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
+import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
 /**
- * GPT-4o-mini provider service targeting the lightweight/faster GPT-4o-mini model.
- * This service offers enhanced performance with better efficiency
- * and cost-effectiveness for simpler tasks.
+ * Provider for the GPT-5 mini model.
  */
 @Injectable()
 export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
   private readonly logger: Logger;
-  static readonly DEFAULT_MODEL = "gpt-4o-mini";
+  static readonly DEFAULT_MODEL = "gpt-5-mini";
   readonly key = "gpt-5-mini";
 
   constructor(
@@ -41,6 +40,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       maxCompletionTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
+      modelKwargs: safetyIdentifierKwargs(options),
     });
   }
 
@@ -60,7 +60,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
-    this.logger.debug(`Invoking GPT-5o-mini with ${inputTokens} input tokens`);
+    this.logger.debug(`Invoking GPT-5-mini with ${inputTokens} input tokens`);
 
     try {
       const result = await model.invoke(messages);
@@ -68,7 +68,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-5o-mini responded with ${outputTokens} output tokens`,
+        `GPT-5-mini responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -80,7 +80,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `GPT-5o-mini API error: ${
+        `GPT-5-mini API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );

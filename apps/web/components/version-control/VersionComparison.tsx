@@ -67,7 +67,9 @@ export function VersionComparison({ isOpen, onClose }: VersionComparisonProps) {
 
   const formatValue = (value: any) => {
     if (value === null || value === undefined) {
-      return <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>;
+      return (
+        <span className="text-gray-400 dark:text-gray-500 italic">Not set</span>
+      );
     }
 
     if (typeof value === "boolean") {
