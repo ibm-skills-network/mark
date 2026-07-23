@@ -16,6 +16,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.ltiSyncDrain.activeDeadlineSeconds }}
       ttlSecondsAfterFinished: 7200
       template:
         metadata:
