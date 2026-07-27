@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -38,6 +37,7 @@ import {
   VariantDto,
 } from "../../dto/update.questions.request.dto";
 import { applyQuestionOrder } from "../../utils/question-order.util";
+import { clampQuestionsPerAttempt } from "../../utils/questions-per-attempt.util";
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
 import type {
@@ -289,29 +289,36 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     );
 
     // Asking for more questions per attempt than the pool contains makes
-    // attempt creation serve the whole pool instead of the random subset the
-    // author configured (see
-    // AttemptSubmissionService.createAssignmentAttempt), so reject the payload
-    // here. Validated again at version-snapshot time in
-    // VersionManagementService for paths that bypass this handler.
+    // attempt creation serve the whole pool anyway (see
+    // AttemptSubmissionService.createAssignmentAttempt), so fold the count
+    // down here rather than rejecting the payload — that keeps the stored
+    // config honest about what learners will actually get instead of leaving
+    // an unpublishable assignment behind. The clamped value is what gets
+    // enqueued and persisted. Re-applied at version-snapshot time in
+    // VersionManagementService, which is also what covers a null
+    // updateDto.questions (pool unchanged) and any path that bypasses this
+    // handler.
     const requestedPerAttempt = updateDto.numberOfQuestionsPerAttempt;
     if (requestedPerAttempt && requestedPerAttempt > 0 && updateDto.questions) {
       const availableQuestions = updateDto.questions.filter(
         (question) => !question.isDeleted,
       ).length;
-      if (requestedPerAttempt > availableQuestions) {
+      const clampedPerAttempt = clampQuestionsPerAttempt(
+        requestedPerAttempt,
+        availableQuestions,
+      );
+      if (clampedPerAttempt !== requestedPerAttempt) {
         this.logger.warn(
-          `Publish rejected: numberOfQuestionsPerAttempt exceeds question pool`,
+          `Publish: numberOfQuestionsPerAttempt clamped to the question pool`,
           {
             assignmentId,
             requestedPerAttempt,
             availableQuestions,
+            clampedPerAttempt,
             requestedByUserId: userId,
           },
         );
-        throw new BadRequestException(
-          `numberOfQuestionsPerAttempt (${requestedPerAttempt}) exceeds the number of available questions (${availableQuestions}). Reduce it or add more questions before publishing.`,
-        );
+        updateDto.numberOfQuestionsPerAttempt = clampedPerAttempt;
       }
     }
 

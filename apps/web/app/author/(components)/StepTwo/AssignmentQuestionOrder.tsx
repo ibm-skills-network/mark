@@ -12,6 +12,7 @@ import {
   useEffect,
 } from "react";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
+import { describeQuestionsPerAttemptClamp } from "@/app/Helpers/questionsPerAttemptClamp";
 
 type Props = ComponentPropsWithoutRef<"div"> & { compact?: boolean };
 
@@ -40,6 +41,15 @@ const Component: FC<Props> = ({ compact }) => {
 
   const totalQuestions = useAuthorStore(
     (s) => s.questions.filter((question) => !question.isDeleted).length,
+  );
+
+  // The input below refuses a count larger than the pool, so this only fires
+  // for assignments that already carry one: authored before that cap existed,
+  // or had questions deleted afterwards. Publishing corrects it server-side
+  // rather than failing, so this is a heads-up, not an error.
+  const clampNotice = describeQuestionsPerAttemptClamp(
+    numberOfQuestionsPerAttempt,
+    totalQuestions,
   );
 
   const [popupMessage, setPopupMessage] = useState("");
@@ -188,6 +198,20 @@ const Component: FC<Props> = ({ compact }) => {
           )}
         </p>
       </button>
+
+      {clampNotice && (
+        <div
+          role="status"
+          className="flex items-start gap-x-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3"
+        >
+          <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500">
+            <span className="text-xs text-white">!</span>
+          </div>
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            {clampNotice}
+          </p>
+        </div>
+      )}
 
       {errors.displayOrder && (
         <p className="text-red-500 text-sm">{errors.displayOrder}</p>
