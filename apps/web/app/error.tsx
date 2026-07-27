@@ -46,7 +46,8 @@ export default function Error({
         },
         {
           title: "Report issue",
-          description: "Use the Report button to send details to support.",
+          description:
+            "Use the red 'Report this issue' button above — the error details are attached automatically.",
         },
       ]}
       debugDetails={[]}

@@ -1,5 +1,5 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { getFfmpeg } from "@/lib/ffmpeg-client";
 import * as posenet from "@tensorflow-models/posenet";
 import nlp from "compromise";
 import React, { useEffect, useRef, useState } from "react";
@@ -15,7 +15,6 @@ import {
 import { getLiveRecordingFeedback } from "@/lib/talkToBackend";
 import { useLearnerStore, useVideoRecorderStore } from "@/stores/learner";
 
-const ffmpeg = new FFmpeg();
 
 /** ------------------------------------------------------------------
  * HOOK #1: Manage camera stream, recording, and a manual timer
@@ -121,6 +120,7 @@ const useVideoProcessor = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractAudio = async (videoBlob: Blob) => {
+    const ffmpeg = getFfmpeg();
     try {
       await ffmpeg.writeFile("input.webm", await fetchFile(videoBlob));
 
@@ -164,6 +164,7 @@ const useVideoProcessor = () => {
     segments: TranscriptSegment[];
   }> => {
     setProcessing(true);
+    const ffmpeg = getFfmpeg();
     try {
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
@@ -533,6 +534,7 @@ export default function PresentationGrader({
 
   useEffect(() => {
     const loadFFmpeg = async () => {
+      const ffmpeg = getFfmpeg();
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
           coreURL: await toBlobURL(

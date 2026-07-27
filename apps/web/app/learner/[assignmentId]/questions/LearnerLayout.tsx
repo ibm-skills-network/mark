@@ -148,7 +148,18 @@ async function LearnerLayout(props: Props) {
     return <ClientLearnerLayout assignmentId={assignmentId} role={role} />;
   }
 
-  const listOfAttempts = await getAttempts(assignmentId, cookieHeader);
+  let listOfAttempts;
+  try {
+    listOfAttempts = await getAttempts(assignmentId, cookieHeader, {
+      throwOnAuthError: true,
+    });
+  } catch (error) {
+    // An expired session or revoked access is the learner's situation, not a
+    // server fault — route it to the matching screen instead of a 500 modal.
+    const status = statusFromError(error);
+    log("Attempts fetch unauthorized", `Status ${status}`);
+    return <ErrorScreen status={status} />;
+  }
   if (!listOfAttempts) {
     log("Attempts fetch failed");
     return (
@@ -299,16 +310,23 @@ async function AttemptLoader({
   lang?: string;
   isNewAttempt: boolean;
 }) {
-  const attempt = await getAttempt(
-    Number(assignmentId),
-    Number(attemptId),
-    cookieHeader,
-    lang,
-  );
+  let attempt;
+  try {
+    attempt = await getAttempt(
+      Number(assignmentId),
+      Number(attemptId),
+      cookieHeader,
+      lang,
+      { throwOnAuthError: true },
+    );
+  } catch (error) {
+    return <ErrorScreen status={statusFromError(error)} />;
+  }
   if (!attempt) {
-    // getAttempt swallows the underlying status and returns undefined, so we
-    // can't distinguish a 401 here. Render a contained error instead of throwing
-    // to Next's error boundary (which would show the generic app crash page).
+    // Transient failures were already retried inside getAttempt and auth
+    // failures threw above, so this is a genuine repeated failure. Render a
+    // contained error instead of throwing to Next's error boundary (which
+    // would show the generic app crash page).
     return (
       <ErrorModal error={"Attempt could not be fetched"} statusCode={500} />
     );

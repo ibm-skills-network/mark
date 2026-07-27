@@ -21,6 +21,7 @@ import type {
 import { toast } from "sonner";
 import { submitReportAuthor } from "@/lib/talkToBackend";
 import { apiClient, APIError } from "./api-client";
+import { isAuthApiError, withTransientRetry } from "./api-retry";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 
 /**
@@ -154,17 +155,20 @@ export async function getAttempt(
   attemptId: number,
   cookies?: string,
   language = "en",
+  options?: { throwOnAuthError?: boolean },
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}?lang=${language}`;
 
   try {
-    const attempt = await apiClient.get<AssignmentAttemptWithQuestions>(
-      endpointURL,
-      {
+    // quiet: a momentary failure must not flash an error toast — it either
+    // recovers on the retry below or the caller renders a real error screen.
+    const attempt = await withTransientRetry(() =>
+      apiClient.get<AssignmentAttemptWithQuestions>(endpointURL, {
+        quiet: true,
         headers: {
           ...(cookies ? { Cookie: cookies } : {}),
         },
-      },
+      }),
     );
     if (!attempt) {
       return undefined;
@@ -178,6 +182,13 @@ export async function getAttempt(
 
     return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
+    if (options?.throwOnAuthError && isAuthApiError(err)) {
+      throw err;
+    }
+    console.error(
+      `getAttempt failed for assignment ${assignmentId}, attempt ${attemptId}:`,
+      err,
+    );
     return undefined;
   }
 }
