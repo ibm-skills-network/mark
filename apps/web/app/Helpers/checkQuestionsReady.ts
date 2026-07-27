@@ -354,6 +354,21 @@ export const useQuestionsAreReadyToBePublished = (
         step = 1;
         isValid = false;
       }
+      // Assignments published before the Random Subset input was capped can
+      // still carry a count larger than their pool. Attempt creation falls
+      // back to serving every question, which is not the randomized subset
+      // the author configured, so surface it here instead of letting it
+      // publish quietly.
+      const activeQuestionCount = questions.filter((q) => !q.isDeleted).length;
+      if (
+        typeof assignmentConfig.numberOfQuestionsPerAttempt === "number" &&
+        assignmentConfig.numberOfQuestionsPerAttempt > activeQuestionCount
+      ) {
+        message = `Random Subset is set to ${assignmentConfig.numberOfQuestionsPerAttempt} but only ${activeQuestionCount} question(s) exist. Lower it or add more questions.`;
+        debugLog(message);
+        step = 1;
+        isValid = false;
+      }
       if (!assignmentConfig.questionDisplay) {
         message = `Question display type is required.`;
         debugLog(message);

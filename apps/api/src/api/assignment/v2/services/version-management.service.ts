@@ -178,9 +178,11 @@ export class VersionManagementService {
     }
 
     // A non-draft version is what learners get served. If it demands more
-    // questions per attempt than the pool holds, attempt creation throws for
-    // every learner (see AttemptSubmissionService.createAssignmentAttempt),
-    // so fail the snapshot instead. Drafts stay editable mid-authoring.
+    // questions per attempt than the pool holds, attempt creation falls back
+    // to serving every question (see
+    // AttemptSubmissionService.createAssignmentAttempt) — not what an author
+    // who configured a random subset asked for, so fail the snapshot and make
+    // them pick a real number. Drafts stay editable mid-authoring.
     if (
       !createVersionDto.isDraft &&
       assignment.numberOfQuestionsPerAttempt &&
@@ -835,8 +837,9 @@ export class VersionManagementService {
     }
 
     // Same invariant as createVersion, but against this version's own
-    // snapshot: publishing a version whose numberOfQuestionsPerAttempt
-    // exceeds its snapshotted pool would make it unstartable for learners.
+    // snapshot. Attempt creation clamps an oversized count to the pool, so
+    // learners are not locked out; reject anyway rather than silently serving
+    // every question when the author asked for a random subset.
     if (
       version.numberOfQuestionsPerAttempt &&
       version.numberOfQuestionsPerAttempt > version._count.questionVersions

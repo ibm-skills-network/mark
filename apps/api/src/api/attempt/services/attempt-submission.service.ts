@@ -371,25 +371,24 @@ export class AttemptSubmissionService {
       })) as QuestionDto[];
     }
 
-    if (
-      assignment.numberOfQuestionsPerAttempt &&
-      assignment.numberOfQuestionsPerAttempt > 0
-    ) {
-      const shuffledQuestions = this.deterministicShuffle(
-        questions,
-        selectionSeed,
-      );
-      const selectedQuestions = shuffledQuestions.slice(
-        0,
-        assignment.numberOfQuestionsPerAttempt,
-      );
-      if (selectedQuestions.length < assignment.numberOfQuestionsPerAttempt) {
-        throw new NotFoundException(
-          `Not enough questions available for the assignment with Id ${assignmentId}.`,
+    const requestedPerAttempt = assignment.numberOfQuestionsPerAttempt ?? 0;
+    if (requestedPerAttempt > 0) {
+      // The pool can be smaller than the requested subset: assignments
+      // published before the authoring guards landed still carry oversized
+      // counts, and any pool can shrink afterwards (soft-deleted questions, a
+      // version snapshot with fewer questions than the live pool). Serving
+      // every question is exactly what 0/null already means, so clamp instead
+      // of throwing — the old NotFoundException locked every learner out of
+      // the assignment with nothing they could do about it.
+      if (requestedPerAttempt > questions.length) {
+        this.logger.warn(
+          `createAssignmentAttempt: numberOfQuestionsPerAttempt (${requestedPerAttempt}) exceeds the ${questions.length}-question pool for assignment=${assignmentId}; serving the whole pool`,
         );
       }
-      questions.length = 0;
-      questions.push(...selectedQuestions);
+      questions = this.deterministicShuffle(questions, selectionSeed).slice(
+        0,
+        Math.min(requestedPerAttempt, questions.length),
+      );
     }
     const questionDtos: QuestionDto[] = questions.map((q: QuestionDto) => ({
       id: q.id,

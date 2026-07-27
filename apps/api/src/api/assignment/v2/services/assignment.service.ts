@@ -288,11 +288,12 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
       `📦 PUBLISH REQUEST: Received updateDto with versionNumber: ${updateDto.versionNumber}, versionDescription: ${updateDto.versionDescription}`,
     );
 
-    // Reject configurations no learner could ever start: asking for more
-    // questions per attempt than the pool contains makes attempt creation
-    // throw for everyone (see AttemptSubmissionService.createAssignmentAttempt).
-    // Validated again at version-snapshot time in VersionManagementService for
-    // paths that bypass this handler.
+    // Asking for more questions per attempt than the pool contains makes
+    // attempt creation serve the whole pool instead of the random subset the
+    // author configured (see
+    // AttemptSubmissionService.createAssignmentAttempt), so reject the payload
+    // here. Validated again at version-snapshot time in
+    // VersionManagementService for paths that bypass this handler.
     const requestedPerAttempt = updateDto.numberOfQuestionsPerAttempt;
     if (requestedPerAttempt && requestedPerAttempt > 0 && updateDto.questions) {
       const availableQuestions = updateDto.questions.filter(

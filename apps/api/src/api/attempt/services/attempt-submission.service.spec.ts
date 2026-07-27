@@ -441,6 +441,63 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(orderedQuestions[0].variants).toHaveLength(0);
     });
 
+    it("serves the whole pool when numberOfQuestionsPerAttempt exceeds it", async () => {
+      // Legacy config: 5 questions per attempt against a 2-question pool. This
+      // used to throw NotFoundException and lock every learner out.
+      const questionVersions = [
+        makeQuestionVersion({ id: 4001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({ id: 4002, questionId: 20, question: "Q2" }),
+      ];
+
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        numberOfQuestionsPerAttempt: 5,
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [],
+      });
+
+      const result = await service.createAssignmentAttempt(
+        assignmentId,
+        userSession,
+      );
+
+      expect(result).toEqual({ id: 55, success: true });
+      const [, orderedQuestions] = mockQuestionVariantService
+        .createAttemptQuestionVariants.mock.calls[0] as [
+        number,
+        Array<{ id: number }>,
+      ];
+      expect(orderedQuestions.map((question) => question.id).sort()).toEqual([
+        10, 20,
+      ]);
+    });
+
+    it("still serves a random subset when the pool is large enough", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 5001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({ id: 5002, questionId: 20, question: "Q2" }),
+        makeQuestionVersion({ id: 5003, questionId: 30, question: "Q3" }),
+      ];
+
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        numberOfQuestionsPerAttempt: 2,
+        currentVersionId: 9,
+        currentVersion: { questionVersions },
+        questions: [],
+      });
+
+      await service.createAssignmentAttempt(assignmentId, userSession);
+
+      const [, orderedQuestions] = mockQuestionVariantService
+        .createAttemptQuestionVariants.mock.calls[0] as [
+        number,
+        Array<{ id: number }>,
+      ];
+      expect(orderedQuestions).toHaveLength(2);
+    });
+
     it("appends questions missing from questionOrder when creating learner attempts", async () => {
       const questionVersions = [
         makeQuestionVersion({ id: 3001, questionId: 10, question: "Q1" }),
