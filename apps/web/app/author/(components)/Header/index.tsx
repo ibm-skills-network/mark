@@ -563,30 +563,13 @@ function AuthorHeader() {
     removeEphemeralFields(clonedOriginalQuestions);
 
     clonedCurrentQuestions = calculateTotalPoints(clonedCurrentQuestions);
-    const activeQuestionCount = clonedCurrentQuestions.filter(
-      (question) => !question.isDeleted,
-    ).length;
 
-    const normalizedQuestionsPerAttempt =
-      typeof numberOfQuestionsPerAttempt === "number" &&
-      numberOfQuestionsPerAttempt > activeQuestionCount
-        ? activeQuestionCount > 0
-          ? activeQuestionCount
-          : null
-        : numberOfQuestionsPerAttempt;
-
-    if (normalizedQuestionsPerAttempt !== numberOfQuestionsPerAttempt) {
-      useAssignmentConfig
-        .getState()
-        .setNumberOfQuestionsPerAttempt?.(normalizedQuestionsPerAttempt);
-      const normalizedLabel =
-        normalizedQuestionsPerAttempt === null
-          ? "unlimited"
-          : normalizedQuestionsPerAttempt;
-      toast.warning(
-        `Questions per attempt was reduced from ${numberOfQuestionsPerAttempt} to ${normalizedLabel} because only ${activeQuestionCount} active question(s) are available.`,
-      );
-    }
+    // numberOfQuestionsPerAttempt is sent as the author set it. The server
+    // clamps an oversized count to the question pool and persists the
+    // corrected value (see clampQuestionsPerAttempt), so normalizing it here
+    // would only be a second, unenforceable copy of that rule — and one that
+    // silently rewrote the author's config on the way out. The config screen
+    // warns ahead of time that publishing will correct it.
 
     const questionsAreDifferent =
       JSON.stringify(clonedCurrentQuestions) !==
@@ -621,7 +604,7 @@ function AuthorHeader() {
       showQuestionScore,
       showAssignmentScore,
       correctAnswerVisibility,
-      numberOfQuestionsPerAttempt: normalizedQuestionsPerAttempt,
+      numberOfQuestionsPerAttempt,
       requireAllQuestions,
       optionalQuestionIds,
       questionControls,

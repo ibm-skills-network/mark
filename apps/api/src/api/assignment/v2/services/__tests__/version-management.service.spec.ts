@@ -423,24 +423,85 @@ describe("VersionManagementService", () => {
       versions: [],
     });
 
-    it("createVersion rejects a non-draft version when numberOfQuestionsPerAttempt exceeds the pool", async () => {
+    const buildVersionTx = () => ({
+      assignmentVersion: {
+        create: jest.fn().mockResolvedValue({
+          id: 10,
+          versionNumber: "1.0.0",
+          versionDescription: "v1",
+          isDraft: false,
+          isActive: true,
+          published: true,
+          createdBy: "author@example.com",
+          createdAt: new Date(),
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      questionVersion: { create: jest.fn().mockResolvedValue({ id: 100 }) },
+      assignment: { update: jest.fn().mockResolvedValue({}) },
+      versionHistory: { create: jest.fn().mockResolvedValue({}) },
+    });
+
+    it("createVersion snapshots a clamped numberOfQuestionsPerAttempt instead of rejecting", async () => {
       mockPrismaService.assignment.findUnique.mockResolvedValue(
         buildAssignmentWithPool(15, 5),
       );
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      const tx = buildVersionTx();
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
 
-      await expect(
-        service.createVersion(
-          1,
-          {
-            versionNumber: "1.0.0",
-            versionDescription: "v1",
-            isDraft: false,
-            shouldActivate: true,
-          },
-          authorSession,
-        ),
-      ).rejects.toThrow(BadRequestException);
-      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+      await service.createVersion(
+        1,
+        {
+          versionNumber: "1.0.0",
+          versionDescription: "v1",
+          isDraft: false,
+          shouldActivate: true,
+        },
+        authorSession,
+      );
+
+      expect(
+        tx.assignmentVersion.create.mock.calls[0][0].data
+          .numberOfQuestionsPerAttempt,
+      ).toBe(5);
+      // The correction is carried back so the author's config stops
+      // advertising a subset size that no longer exists.
+      expect(tx.assignment.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { numberOfQuestionsPerAttempt: 5 },
+        }),
+      );
+    });
+
+    it("createVersion leaves a count the pool can satisfy untouched", async () => {
+      mockPrismaService.assignment.findUnique.mockResolvedValue(
+        buildAssignmentWithPool(3, 5),
+      );
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      const tx = buildVersionTx();
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.createVersion(
+        1,
+        {
+          versionNumber: "1.0.0",
+          versionDescription: "v1",
+          isDraft: false,
+          shouldActivate: false,
+        },
+        authorSession,
+      );
+
+      expect(
+        tx.assignmentVersion.create.mock.calls[0][0].data
+          .numberOfQuestionsPerAttempt,
+      ).toBe(3);
+      expect(tx.assignment.update).not.toHaveBeenCalled();
     });
 
     it("createVersion allows a draft version even when the pool is too small", async () => {
@@ -480,9 +541,15 @@ describe("VersionManagementService", () => {
           authorSession,
         ),
       ).resolves.toBeDefined();
+      // Drafts keep the author's number so mid-authoring edits are not
+      // rewritten under them; publishing is what corrects it.
+      expect(
+        (tx.assignmentVersion.create as jest.Mock).mock.calls[0][0].data
+          .numberOfQuestionsPerAttempt,
+      ).toBe(15);
     });
 
-    it("publishVersion rejects when the version's numberOfQuestionsPerAttempt exceeds its snapshot pool", async () => {
+    it("publishVersion clamps the version's numberOfQuestionsPerAttempt to its snapshot pool", async () => {
       const version = {
         id: 20,
         assignmentId: 1,
@@ -498,8 +565,6 @@ describe("VersionManagementService", () => {
       };
       mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(version);
       mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
-      // Functional tx so the un-guarded flow completes; the guard must reject
-      // before the transaction ever runs.
       const tx = {
         assignmentVersion: {
           update: jest
@@ -514,10 +579,53 @@ describe("VersionManagementService", () => {
         callback(tx),
       );
 
-      await expect(
-        service.publishVersion(1, 20, { userSession: authorSession }),
-      ).rejects.toThrow(BadRequestException);
-      expect(tx.assignmentVersion.update).not.toHaveBeenCalled();
+      await service.publishVersion(1, 20, { userSession: authorSession });
+
+      // Publishing corrects the row rather than failing, so the stored value
+      // matches what attempt creation will actually serve.
+      expect(tx.assignmentVersion.update.mock.calls[0][0].data).toEqual(
+        expect.objectContaining({
+          published: true,
+          numberOfQuestionsPerAttempt: 5,
+        }),
+      );
+    });
+
+    it("publishVersion leaves a count the snapshot can satisfy untouched", async () => {
+      const version = {
+        id: 21,
+        assignmentId: 1,
+        versionNumber: "1.0.0",
+        versionDescription: "v1",
+        published: false,
+        isDraft: true,
+        isActive: false,
+        createdBy: "author@example.com",
+        createdAt: new Date(),
+        numberOfQuestionsPerAttempt: 3,
+        _count: { questionVersions: 5 },
+      };
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(version);
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      const tx = {
+        assignmentVersion: {
+          update: jest
+            .fn()
+            .mockResolvedValue({ ...version, published: true, isActive: true }),
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+        assignment: { update: jest.fn().mockResolvedValue({}) },
+        versionHistory: { create: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.publishVersion(1, 21, { userSession: authorSession });
+
+      expect(
+        tx.assignmentVersion.update.mock.calls[0][0].data,
+      ).not.toHaveProperty("numberOfQuestionsPerAttempt");
     });
   });
 
