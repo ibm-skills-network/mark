@@ -216,7 +216,7 @@ function SuccessPage() {
           }
           setAssignmentDetails({
             passingGrade: submissionDetails.passingGrade,
-            id: submissionDetails.id,
+            id: assignmentId,
             name: submissionDetails.name,
           });
           const response = await getFeedback(assignmentId, attemptId);

@@ -56,6 +56,13 @@ export interface ContentBlock {
   latex?: string;
   level?: number;
 
+  /**
+   * Always surface this block to the evidence validator, even when lexical
+   * retrieval doesn't rank it (e.g. the whole-file block for code uploads,
+   * whose correctness/style criteria concern the entire submission).
+   */
+  pinnedEvidence?: boolean;
+
   imageData?: string;
   imageDescription?: string;
   imageMetadata?: {

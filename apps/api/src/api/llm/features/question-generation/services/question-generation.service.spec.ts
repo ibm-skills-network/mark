@@ -465,6 +465,61 @@ describe("QuestionGenerationService", () => {
     },
   );
 
+  it("instructs the quantitative prompt to put the number in the stem and forbid numeric answer choices", async () => {
+    // Regression guard for the generator<->review contradiction: the review
+    // pass removes questions whose answer is a bare number, so the quantitative
+    // generator must produce conceptual-interpretation answers with the
+    // statistic stated in the stem — otherwise every quantitative question is
+    // rejected and falls back to a generic template.
+    promptProcessor.processPromptForFeature
+      .mockResolvedValueOnce(buildGenerationResponse(1))
+      .mockResolvedValueOnce(
+        buildReviewResponse([
+          {
+            question: "Which practice keeps code reviews focused 0?",
+            type: MCSubtype.QUANTITATIVE,
+            page: 0,
+          },
+        ]),
+      );
+
+    await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          [MCSubtype.SHORT]: 0,
+          [MCSubtype.QUANTITATIVE]: 1,
+          [MCSubtype.LONG]: 0,
+          [MCSubtype.SCENARIO]: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    const generationPrompt = promptProcessor.processPromptForFeature.mock
+      .calls[0][0] as PromptTemplate;
+    const formattedPrompt = await generationPrompt.format({});
+
+    expect(formattedPrompt).toContain(
+      "STATE the relevant statistic INSIDE the question stem",
+    );
+    expect(formattedPrompt).toContain(
+      "NEVER make a bare number, percentage, figure, or measure an answer choice.",
+    );
+    // The old contradictory instruction must be gone.
+    expect(formattedPrompt).not.toContain(
+      "The answer is a specific number or measure from the content",
+    );
+  });
+
   // ────────────────────────────────────────────────────────────────────────
   // New coverage: review edge cases and parallel shortfall
   // ────────────────────────────────────────────────────────────────────────

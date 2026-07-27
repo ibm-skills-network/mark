@@ -3,13 +3,30 @@ name: Publish Helm Chart
 on:
     push:
         branches:
-            - main
+            - master
         paths:
             - helm-chart/**
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+# Serialize runs so two merges can't race each other's gh-pages push
+concurrency:
+    group: helm-chart-publish
 
 jobs:
     release:
         runs-on: ubuntu-latest
+        env:
+            # Read access to ibm-skills-network/helm-chart-releases (private),
+            # needed to resolve the mark chart's dependencies. GITHUB_TOKEN
+            # cannot read other private repos, so this must come from an
+            # org/repo secret.
+            CHARTS_READ_TOKEN: ${{ secrets.GHEC_TOKEN || secrets.GH_TOKEN_MIRROR_TO_ICR }}
+            # Empty on workflow_dispatch; used to detect which charts the
+            # pushed commits actually touched.
+            BEFORE_SHA: ${{ github.event.before || '' }}
         steps:
             - uses: actions/checkout@v4
               with:
@@ -18,18 +35,71 @@ jobs:
             - name: Set up Helm
               uses: azure/setup-helm@v4
 
-            - name: Build chart
+            - name: Package new chart versions
               run: |
-                  cd helm-chart/mark
-                  helm dependency update .
-                  helm package .
-                  mv *.tgz ../../chart-releases/
+                  mkdir -p /tmp/chart-releases
+                  : > /tmp/package-failures
+                  published_files=$(git ls-tree --name-only origin/gh-pages)
+                  for chart in helm-chart/*/; do
+                      name=$(helm show chart "$chart" | awk '/^name:/ {print $2}')
+                      version=$(helm show chart "$chart" | awk '/^version:/ {print $2}')
+                      chart_changed=false
+                      if [ -n "$BEFORE_SHA" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+                          git diff --quiet "$BEFORE_SHA" HEAD -- "$chart" || chart_changed=true
+                      fi
+                      # Never repackage a published version: the tgz bytes (and
+                      # digest) would change under a version helmfile may
+                      # already have pinned. A chart that changed in this push
+                      # without a version bump is an error; a chart that is
+                      # simply already current (e.g. only the other chart was
+                      # bumped) is a normal skip.
+                      if echo "$published_files" | grep -qx "$name-$version.tgz"; then
+                          if [ "$chart_changed" = true ]; then
+                              echo "::error::$name changed in this push but version $version is already published — bump the chart version in $chart/Chart.yaml"
+                              echo "$name (version not bumped)" >> /tmp/package-failures
+                          else
+                              echo "$name-$version already published — skipping"
+                          fi
+                          continue
+                      fi
+                      if grep -q '^dependencies:' "$chart/Chart.yaml"; then
+                          helm repo add helm-chart-releases \
+                              https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master \
+                              --username dummy --password "$CHARTS_READ_TOKEN" --force-update
+                          if ! helm dependency update "$chart"; then
+                              echo "::error::could not resolve dependencies for $name — does the configured token have read access to helm-chart-releases?"
+                              echo "$name" >> /tmp/package-failures
+                              continue
+                          fi
+                      fi
+                      helm package "$chart" -d /tmp/chart-releases || echo "$name" >> /tmp/package-failures
+                  done
 
             - name: Publish to gh-pages
               run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
                   git checkout gh-pages
-                  cp chart-releases/*.tgz .
-                  helm repo index . --merge index.yaml
-                  git add .
-                  git commit -m "Publish chart"
-                  git push origin gh-pages
+                  new_charts=""
+                  for tgz in /tmp/chart-releases/*.tgz; do
+                      [ -e "$tgz" ] || continue
+                      cp "$tgz" .
+                      git add "$(basename "$tgz")"
+                      new_charts="$new_charts $(basename "$tgz" .tgz)"
+                  done
+                  if [ -n "$new_charts" ]; then
+                      helm repo index . --merge index.yaml \
+                          --url https://raw.githubusercontent.com/ibm-skills-network/mark/gh-pages
+                      git add index.yaml
+                      git commit --no-verify -m "Publish$new_charts"
+                      git push origin gh-pages
+                  else
+                      echo "No new chart versions to publish"
+                  fi
+                  # Publish what we can, but leave the run red if any chart
+                  # failed to package — a silent skip is how releases went
+                  # missing before.
+                  if [ -s /tmp/package-failures ]; then
+                      echo "::error::failed to package: $(tr '\n' ' ' < /tmp/package-failures)"
+                      exit 1
+                  fi

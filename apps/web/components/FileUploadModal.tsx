@@ -671,6 +671,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   placeholder="0"
                   value={toDisplayValue(selectedQuestionTypes.multipleSelect)}
                   onFocus={(e) => e.currentTarget.select()}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
@@ -692,6 +693,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   placeholder="0"
                   value={toDisplayValue(selectedQuestionTypes.textResponse)}
                   onFocus={(e) => e.currentTarget.select()}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
@@ -713,6 +715,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   placeholder="0"
                   value={toDisplayValue(selectedQuestionTypes.trueFalse)}
                   onFocus={(e) => e.currentTarget.select()}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
@@ -734,6 +737,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   placeholder="0"
                   value={toDisplayValue(selectedQuestionTypes.url)}
                   onFocus={(e) => e.currentTarget.select()}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
@@ -765,6 +769,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   placeholder="0"
                   value={toDisplayValue(selectedQuestionTypes.upload)}
                   onFocus={(e) => e.currentTarget.select()}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,
@@ -796,6 +801,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   placeholder="0"
                   value={toDisplayValue(selectedQuestionTypes.linkFile)}
                   onFocus={(e) => e.currentTarget.select()}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setSelectedQuestionTypes((prev) => ({
                       ...prev,

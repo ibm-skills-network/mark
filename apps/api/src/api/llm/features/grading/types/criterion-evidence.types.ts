@@ -111,6 +111,8 @@ export interface ExtractedChunk {
     checksum?: string;
     /** Preserved from ContentBlock.type so the quality service can detect heading-only pages. */
     blockType?: string;
+    /** Mirrors ContentBlock.pinnedEvidence: always reaches the LLM validator. */
+    pinned?: boolean;
   };
 }
 

@@ -9,6 +9,7 @@ import type {
   RepoType,
   slideMetaData,
 } from "@/config/types";
+import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
 import { getUser } from "@/lib/talkToBackend";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
@@ -1037,7 +1038,13 @@ export const useAssignmentDetails = createWithEqualityFn<
     ),
     {
       name: "assignmentDetails",
-      storage: createJSONStorage(() => createSafeStorage()),
+      // Assignment details contain the title and are rendered by the shared
+      // learner header. Keep this persisted state scoped to the assignment
+      // in the URL so a different assignment cannot hydrate an old title
+      // while its fresh data is loading.
+      storage: createJSONStorage(() =>
+        createAssignmentScopedStorage("learnerDetails", "assignmentDetails"),
+      ),
       partialize: (state) => ({
         assignmentDetails: state.assignmentDetails,
       }),

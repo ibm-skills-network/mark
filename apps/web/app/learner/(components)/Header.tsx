@@ -52,6 +52,14 @@ function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // The URL is authoritative for the assignment. The persisted details store
+  // can still contain the previous assignment during SPA navigation, before
+  // the current assignment has finished loading.
+  const { assignmentId, assignmentIdParam } = useAssignmentId();
+  const isAuthorPreview = searchParams.get("authorMode") === "true";
+  const authorPreviewPayload = assignmentId
+    ? readAuthorPreviewPayload(assignmentId)
+    : null;
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
@@ -83,10 +91,15 @@ function LearnerHeader() {
     setUserRole("learner");
   }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
+  const [storedAssignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
   ]);
+  const assignmentDetails =
+    (isAuthorPreview ? authorPreviewPayload?.assignmentDetails : null) ??
+    (storedAssignmentDetails?.id === assignmentId
+      ? storedAssignmentDetails
+      : null);
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
@@ -100,13 +113,6 @@ function LearnerHeader() {
   );
 
   const [returnUrl, setReturnUrl] = useState<string>("");
-  // The URL is authoritative for the assignment id. Reading it from a store
-  // populated only on the overview route leaves deep links / hard refreshes
-  // with a null id and silently drops the submit.
-  const { assignmentId, assignmentIdParam } = useAssignmentId();
-  const authorPreviewPayload = assignmentId
-    ? readAuthorPreviewPayload(assignmentId)
-    : null;
   const authorQuestions = authorPreviewPayload?.questions ?? questions;
   const authorAssignmentDetails: ReplaceAssignmentRequest | undefined =
     authorPreviewPayload?.assignmentDetails
@@ -128,8 +134,6 @@ function LearnerHeader() {
   const getUserPreferedLanguageFromLTI = useLearnerStore(
     (state) => state.getUserPreferedLanguageFromLTI,
   );
-
-  const isAuthorPreview = searchParams.get("authorMode") === "true";
 
   useEffect(() => {
     let cancelled = false;

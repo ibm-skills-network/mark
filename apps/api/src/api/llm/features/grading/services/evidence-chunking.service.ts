@@ -54,6 +54,7 @@ export class EvidenceChunkingService {
             structured: true,
             checksum: submission.metadata.checksum,
             blockType: block.type,
+            ...(block.pinnedEvidence ? { pinned: true } : {}),
           },
         });
 
