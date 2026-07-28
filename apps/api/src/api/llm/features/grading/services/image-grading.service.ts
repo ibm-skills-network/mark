@@ -31,6 +31,50 @@ import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.
 import { RubricCriterion } from "../types/criterion-evidence.types";
 import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 
+const ImageGradeSchema = z.object({
+  points: z
+    .number()
+    .describe("Total points awarded based on all rubric criteria"),
+  feedback: z
+    .string()
+    .describe(
+      "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
+    )
+    .optional(),
+  analysis: z
+    .string()
+    .describe(
+      "Detailed analysis of what is observed in the submitted image, including technical quality, composition, and content",
+    ),
+  evaluation: z
+    .string()
+    .describe(
+      "Evaluation of how well the image meets each rubric criterion with specific scores",
+    ),
+  explanation: z
+    .string()
+    .describe(
+      "Clear reasons for the grade based on specific visual evidence from the image",
+    ),
+  guidance: z
+    .string()
+    .describe(
+      "Concrete suggestions for improvement in future image submissions",
+    ),
+  rubricScores: z
+    .array(
+      z.object({
+        rubricQuestion: z.string(),
+        pointsAwarded: z.number(),
+        maxPoints: z.number(),
+        justification: z.string(),
+      }),
+    )
+    .describe("Individual scores for each rubric criterion")
+    .optional(),
+});
+type ImageGrade = z.infer<typeof ImageGradeSchema>;
+
 interface ProcessedImageData {
   buffer: Buffer;
   mimeType: string;
@@ -212,50 +256,10 @@ export class ImageGradingService implements IImageGradingService {
       }
     }
 
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z
-          .number()
-          .describe("Total points awarded based on all rubric criteria"),
-        feedback: z
-          .string()
-          .describe(
-            "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
-          )
-          .optional(),
-        analysis: z
-          .string()
-          .describe(
-            "Detailed analysis of what is observed in the submitted image, including technical quality, composition, and content",
-          ),
-        evaluation: z
-          .string()
-          .describe(
-            "Evaluation of how well the image meets each rubric criterion with specific scores",
-          ),
-        explanation: z
-          .string()
-          .describe(
-            "Clear reasons for the grade based on specific visual evidence from the image",
-          ),
-        guidance: z
-          .string()
-          .describe(
-            "Concrete suggestions for improvement in future image submissions",
-          ),
-        rubricScores: z
-          .array(
-            z.object({
-              rubricQuestion: z.string(),
-              pointsAwarded: z.number(),
-              maxPoints: z.number(),
-              justification: z.string(),
-            }),
-          )
-          .describe("Individual scores for each rubric criterion")
-          .optional(),
-      }),
-    );
+    // Parser kept only to inject {format_instructions} for the watsonx
+    // vision text-parse fallback; the OpenAI vision provider uses native
+    // multimodal structured output.
+    const parser = StructuredOutputParser.fromZodSchema(ImageGradeSchema);
 
     const formatInstructions = parser.getFormatInstructions();
     const templateVariables = {
@@ -372,16 +376,18 @@ Respond with a JSON object containing:
         `Using model ${modelKey} for image_grading feature (assignment ${assignmentId})`,
       );
 
-      let llmOut: string;
+      let parsed: ImageGrade;
       try {
-        llmOut = await this.promptProcessor.processPromptWithImage(
-          gradingPrompt,
-          primaryImage.base64,
-          assignmentId,
-          AIUsageType.ASSIGNMENT_GRADING,
-          modelKey,
-          { safetyIdentifier },
-        );
+        parsed =
+          await this.promptProcessor.processStructuredPromptWithImage<ImageGrade>(
+            gradingPrompt,
+            primaryImage.base64,
+            assignmentId,
+            AIUsageType.ASSIGNMENT_GRADING,
+            ImageGradeSchema,
+            modelKey,
+            { safetyIdentifier },
+          );
       } catch (visionError) {
         // Only the vision call's own errors can mean the provider rejected the
         // image. Scope the unsupported-format remap to here so a downstream
@@ -401,8 +407,6 @@ Respond with a JSON object containing:
         }
         throw visionError;
       }
-
-      const parsed = await parser.parse(llmOut);
 
       let finalPoints = parsed.points;
       if (finalPoints > maxTotalPoints) {

@@ -13,6 +13,16 @@ import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IVideoPresentationGradingService } from "../interfaces/video-grading.interface";
 import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 
+const VideoGradeSchema = z.object({
+  points: z.number().describe("Points awarded based on the criteria"),
+  feedback: z
+    .string()
+    .describe(
+      "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
+    ),
+});
+type VideoGradeResult = z.infer<typeof VideoGradeSchema>;
+
 @Injectable()
 export class VideoPresentationGradingService
   implements IVideoPresentationGradingService
@@ -71,16 +81,9 @@ export class VideoPresentationGradingService
       });
     }
 
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z.number().describe("Points awarded based on the criteria"),
-        feedback: z
-          .string()
-          .describe(
-            "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
-          ),
-      }),
-    );
+    // Parser kept only to inject {format_instructions} for the watsonx
+    // text-parse fallback; OpenAI providers use native structured output.
+    const parser = StructuredOutputParser.fromZodSchema(VideoGradeSchema);
 
     const formatInstructions = parser.getFormatInstructions();
 
@@ -107,19 +110,18 @@ export class VideoPresentationGradingService
       },
     });
 
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "video_grading",
-      undefined,
-      { safetyIdentifier },
-    );
-
     try {
-      const videoPresentationQuestionResponseModel =
-        await parser.parse(response);
-      return videoPresentationQuestionResponseModel as VideoPresentationQuestionResponseModel;
+      const result =
+        await this.promptProcessor.processStructuredPromptForFeature<VideoGradeResult>(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          "video_grading",
+          VideoGradeSchema,
+          undefined,
+          { safetyIdentifier },
+        );
+      return result as unknown as VideoPresentationQuestionResponseModel;
     } catch (error) {
       this.logger.error(
         `Error parsing video presentation grading response: ${

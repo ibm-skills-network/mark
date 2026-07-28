@@ -15,6 +15,54 @@ import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 import { IPresentationGradingService } from "../interfaces/presentation-grading.interface";
 
+const PresentationGradeSchema = z.object({
+  points: z.number().describe("Points awarded based on the criteria"),
+  feedback: z
+    .string()
+    .describe(
+      "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
+    ),
+  analysis: z
+    .string()
+    .describe("Detailed analysis of what is observed in the presentation data"),
+  evaluation: z
+    .string()
+    .describe(
+      "Evaluation of how well the presentation meets each assessment aspect",
+    ),
+  explanation: z
+    .string()
+    .describe("Clear reasons for the grade based on specific observations"),
+  guidance: z
+    .string()
+    .describe("Concrete suggestions for improvement in future presentations"),
+  rubricScores: z
+    .array(
+      z.object({
+        rubricQuestion: z.string(),
+        pointsAwarded: z.number(),
+        maxPoints: z.number(),
+        justification: z.string(),
+      }),
+    )
+    .describe("Individual scores for each rubric criterion")
+    .optional(),
+});
+type PresentationGrade = z.infer<typeof PresentationGradeSchema>;
+
+const LiveRecordingFeedbackSchema = z.object({
+  feedback: z.string().nonempty("Feedback cannot be empty"),
+  analysis: z
+    .string()
+    .describe("Detailed analysis of the presentation elements"),
+  evaluation: z.string().describe("Evaluation of presentation effectiveness"),
+  explanation: z
+    .string()
+    .describe("Clear explanation of strengths and areas for improvement"),
+  guidance: z.string().describe("Specific recommendations for improvement"),
+});
+type LiveRecordingFeedbackResult = z.infer<typeof LiveRecordingFeedbackSchema>;
+
 @Injectable()
 export class PresentationGradingService implements IPresentationGradingService {
   private readonly logger: Logger;
@@ -90,46 +138,10 @@ export class PresentationGradingService implements IPresentationGradingService {
     const safeBodyLangExplanation =
       learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
 
+    // Parser kept only to inject {format_instructions} for the watsonx
+    // text-parse fallback; OpenAI providers use native structured output.
     const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z.number().describe("Points awarded based on the criteria"),
-        feedback: z
-          .string()
-          .describe(
-            "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
-          ),
-        analysis: z
-          .string()
-          .describe(
-            "Detailed analysis of what is observed in the presentation data",
-          ),
-        evaluation: z
-          .string()
-          .describe(
-            "Evaluation of how well the presentation meets each assessment aspect",
-          ),
-        explanation: z
-          .string()
-          .describe(
-            "Clear reasons for the grade based on specific observations",
-          ),
-        guidance: z
-          .string()
-          .describe(
-            "Concrete suggestions for improvement in future presentations",
-          ),
-        rubricScores: z
-          .array(
-            z.object({
-              rubricQuestion: z.string(),
-              pointsAwarded: z.number(),
-              maxPoints: z.number(),
-              justification: z.string(),
-            }),
-          )
-          .describe("Individual scores for each rubric criterion")
-          .optional(),
-      }),
+      PresentationGradeSchema,
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -158,17 +170,17 @@ export class PresentationGradingService implements IPresentationGradingService {
       },
     });
 
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "presentation_grading",
-      undefined,
-      { safetyIdentifier },
-    );
-
     try {
-      const parsedResponse = await parser.parse(response);
+      const parsedResponse =
+        await this.promptProcessor.processStructuredPromptForFeature<PresentationGrade>(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          "presentation_grading",
+          PresentationGradeSchema,
+          undefined,
+          { safetyIdentifier },
+        );
 
       const aeegFeedback = `
 **Analysis:**
@@ -208,22 +220,10 @@ ${parsedResponse.guidance}
     liveRecordingData: LearnerLiveRecordingFeedback,
     assignmentId: number,
   ): Promise<string> {
+    // Parser kept only to inject {format_instructions} for the watsonx
+    // text-parse fallback; OpenAI providers use native structured output.
     const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        feedback: z.string().nonempty("Feedback cannot be empty"),
-        analysis: z
-          .string()
-          .describe("Detailed analysis of the presentation elements"),
-        evaluation: z
-          .string()
-          .describe("Evaluation of presentation effectiveness"),
-        explanation: z
-          .string()
-          .describe("Clear explanation of strengths and areas for improvement"),
-        guidance: z
-          .string()
-          .describe("Specific recommendations for improvement"),
-      }),
+      LiveRecordingFeedbackSchema,
     );
 
     const formatInstructions = parser.getFormatInstructions();
@@ -267,14 +267,14 @@ ${parsedResponse.guidance}
     });
 
     try {
-      const response = await this.promptProcessor.processPromptForFeature(
-        prompt,
-        assignmentId,
-        AIUsageType.LIVE_RECORDING_FEEDBACK,
-        "live_recording_feedback",
-      );
-
-      const parsedResponse = await parser.parse(response);
+      const parsedResponse =
+        await this.promptProcessor.processStructuredPromptForFeature<LiveRecordingFeedbackResult>(
+          prompt,
+          assignmentId,
+          AIUsageType.LIVE_RECORDING_FEEDBACK,
+          "live_recording_feedback",
+          LiveRecordingFeedbackSchema,
+        );
 
       const aeegFeedback = `
 **Analysis:**

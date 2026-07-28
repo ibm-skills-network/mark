@@ -185,6 +185,75 @@ export class PromptProcessorService implements IPromptProcessor {
   }
 
   /**
+   * Process a prompt with image data and return a value validated against
+   * `schema`, preferring the provider's native multimodal structured output.
+   * Falls back to parsing free-form text from invokeWithImage for multimodal
+   * providers that do not implement native structured output.
+   */
+  async processStructuredPromptWithImage<T>(
+    prompt: PromptTemplate,
+    imageData: string,
+    assignmentId: number,
+    usageType: AIUsageType,
+    schema: ZodTypeAny,
+    llmKey = "gpt-4.1-mini",
+    options?: LlmRequestOptions,
+  ): Promise<T> {
+    // Kill-switch backstop (see processPromptForFeature).
+    this.aiFlags.assertUsageEnabled(usageType);
+    const llm = this.router.get(llmKey ?? "gpt-4.1-mini");
+
+    const textContent = await this.formatPromptInput(prompt);
+    const decodedImageData = decodeIfBase64(imageData) || imageData;
+
+    if (typeof llm.invokeStructuredWithImage === "function") {
+      const { parsed, tokenUsage } = await llm.invokeStructuredWithImage<T>(
+        textContent,
+        decodedImageData,
+        schema,
+        options,
+      );
+      logAiInvocation(this.logger, {
+        modelKey: llm.key,
+        purpose: "structured_prompt_with_image",
+        prompt: `${textContent} [image omitted]`,
+        response: JSON.stringify(parsed),
+        context: { assignment_id: assignmentId, usage_type: usageType },
+      });
+      await this.trackUsageSafely(
+        assignmentId,
+        usageType,
+        tokenUsage.input,
+        tokenUsage.output,
+        llm.key,
+      );
+      return parsed;
+    }
+
+    // Fallback: providers without native multimodal structured output return
+    // free-form text; parse it. Brittle by nature, so only reached for vision
+    // providers we have not wired for structured output.
+    this.logger.warn(
+      `Provider ${llm.key} has no native structured image output; falling back to text parsing`,
+    );
+    const result = await llm.invokeWithImage(
+      textContent,
+      decodedImageData,
+      options,
+    );
+    const response = this.cleanResponse(result.content);
+    await this.trackUsageSafely(
+      assignmentId,
+      usageType,
+      result.tokenUsage?.input ?? 0,
+      result.tokenUsage?.output ?? 0,
+      llm.key,
+    );
+    const parser = StructuredOutputParser.fromZodSchema(schema);
+    return (await parser.parse(response)) as T;
+  }
+
+  /**
    * Process a text prompt and return the LLM response
    */
   async processPrompt(

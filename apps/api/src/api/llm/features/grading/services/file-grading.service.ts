@@ -86,6 +86,25 @@ type GradingOutput = {
   rubricScores?: RubricScore[];
 };
 
+const FileGradingSchema = z.object({
+  points: z.number(),
+  feedback: z.string(),
+  analysis: z.string(),
+  evaluation: z.string(),
+  explanation: z.string(),
+  guidance: z.string(),
+  rubricScores: z
+    .array(
+      z.object({
+        rubricQuestion: z.string(),
+        pointsAwarded: z.number(),
+        maxPoints: z.number(),
+        justification: z.string(),
+      }),
+    )
+    .optional(),
+});
+
 type SpreadsheetCheckType =
   | "file_open"
   | "filename_match"
@@ -356,26 +375,9 @@ export class FileGradingService implements IFileGradingService {
 
     const selectedTemplate = this.getTemplateForFileType(responseType);
 
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z.number(),
-        feedback: z.string(),
-        analysis: z.string(),
-        evaluation: z.string(),
-        explanation: z.string(),
-        guidance: z.string(),
-        rubricScores: z
-          .array(
-            z.object({
-              rubricQuestion: z.string(),
-              pointsAwarded: z.number(),
-              maxPoints: z.number(),
-              justification: z.string(),
-            }),
-          )
-          .optional(),
-      }),
-    );
+    // Parser kept only to inject {format_instructions} for the watsonx
+    // text-parse fallback; OpenAI providers use native structured output.
+    const parser = StructuredOutputParser.fromZodSchema(FileGradingSchema);
 
     const formatInstructions = parser.getFormatInstructions();
 
@@ -417,7 +419,7 @@ export class FileGradingService implements IFileGradingService {
           criteriaCount,
         );
 
-    let response: string;
+    let parsedResponse: GradingOutput;
     try {
       const estimatedTokens = this.estimateTokensForFileGrading(
         question,
@@ -460,22 +462,18 @@ export class FileGradingService implements IFileGradingService {
           judgeFeedback,
         });
 
-        response = await this.processPromptWithRetry(
+        parsedResponse = await this.processStructuredWithRetry(
           summarizedPrompt,
           assignmentId,
           selectedModel,
-          maxTotalPoints,
-          rubricMaxPoints,
           isCodeUploadRoute,
           safetyIdentifier,
         );
       } else {
-        response = await this.processPromptWithRetry(
+        parsedResponse = await this.processStructuredWithRetry(
           prompt,
           assignmentId,
           selectedModel,
-          maxTotalPoints,
-          rubricMaxPoints,
           isCodeUploadRoute,
           safetyIdentifier,
         );
@@ -500,8 +498,6 @@ export class FileGradingService implements IFileGradingService {
     }
 
     try {
-      let parsedResponse = (await parser.parse(response)) as GradingOutput;
-
       let calculatedTotalPoints = 0;
 
       if (
@@ -574,9 +570,9 @@ export class FileGradingService implements IFileGradingService {
       );
     } catch (error) {
       this.logger.error(
-        `Error parsing LLM response: ${
+        `Error post-processing structured grade: ${
           error instanceof Error ? error.message : "Unknown error"
-        }. Response: "${response?.slice(0, 200)}..."`,
+        }`,
       );
 
       if (isCodeUploadRoute) throw error;
@@ -595,19 +591,19 @@ export class FileGradingService implements IFileGradingService {
   }
 
   /**
-   * Process prompt with retry mechanism and fallback model
+   * Process prompt with retry mechanism and fallback model, returning a
+   * schema-validated grade via native structured output. Preserves the prior
+   * ladder: 3 primary-model attempts with backoff, immediate throw on
+   * context_length_exceeded, then one fallback-model attempt (skipped when the
+   * model override is final).
    */
-  private async processPromptWithRetry(
+  private async processStructuredWithRetry(
     prompt: PromptTemplate,
     assignmentId: number,
     primaryModel: string,
-    _maxTotalPoints: number,
-    _rubricMaxPoints?: { rubricQuestion: string; maxPoints: number }[],
     modelOverrideIsFinal = false,
     safetyIdentifier?: string,
-  ): Promise<string> {
-    void _maxTotalPoints;
-    void _rubricMaxPoints;
+  ): Promise<GradingOutput> {
     const maxRetries = 3;
     let lastError: Error | null = null;
 
@@ -617,41 +613,38 @@ export class FileGradingService implements IFileGradingService {
           `LLM attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
         );
 
-        const response = modelOverrideIsFinal
-          ? await this.promptProcessor.processPrompt(
+        const result = modelOverrideIsFinal
+          ? await this.promptProcessor.processStructuredPrompt<GradingOutput>(
               prompt,
               assignmentId,
               AIUsageType.ASSIGNMENT_GRADING,
+              FileGradingSchema,
               primaryModel,
               { maxRetries: 1, safetyIdentifier },
             )
-          : await this.promptProcessor.processPromptForFeature(
+          : await this.promptProcessor.processStructuredPromptForFeature<GradingOutput>(
               prompt,
               assignmentId,
               AIUsageType.ASSIGNMENT_GRADING,
               "file_grading",
+              FileGradingSchema,
               primaryModel,
               { safetyIdentifier },
             );
 
-        if (this.isValidLLMResponse(response)) {
+        if (this.isValidGrade(result)) {
           if (attempt > 1) {
             this.logger.info(
               `LLM succeeded on attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
             );
           }
-          return response;
+          return result;
         }
 
         this.logger.warn(
-          `LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(
-            0,
-            100,
-          )}..."`,
+          `LLM returned invalid grade on attempt ${attempt}/${maxRetries}`,
         );
-        lastError = new Error(
-          `Invalid LLM response: ${response?.slice(0, 100)}`,
-        );
+        lastError = new Error("Invalid LLM grade: missing numeric points");
       } catch (error) {
         // A context_length_exceeded 400 is deterministic for a given prompt:
         // neither a same-model retry nor the fallback-model resend below can
@@ -690,22 +683,24 @@ export class FileGradingService implements IFileGradingService {
         `Primary model ${primaryModel} failed after ${maxRetries} attempts, trying fallback model ${fallbackModel}`,
       );
 
-      const response = await this.promptProcessor.processPromptForFeature(
-        prompt,
-        assignmentId,
-        AIUsageType.ASSIGNMENT_GRADING,
-        "file_grading",
-        fallbackModel,
-        { safetyIdentifier },
-      );
+      const result =
+        await this.promptProcessor.processStructuredPromptForFeature<GradingOutput>(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          "file_grading",
+          FileGradingSchema,
+          fallbackModel,
+          { safetyIdentifier },
+        );
 
-      if (this.isValidLLMResponse(response)) {
+      if (this.isValidGrade(result)) {
         this.logger.info(`Fallback model ${fallbackModel} succeeded`);
-        return response;
+        return result;
       }
 
       this.logger.error(
-        `Fallback model ${fallbackModel} also returned invalid response`,
+        `Fallback model ${fallbackModel} also returned invalid grade`,
       );
     } catch (fallbackError) {
       this.logger.error(
@@ -721,10 +716,10 @@ export class FileGradingService implements IFileGradingService {
   }
 
   /**
-   * Check if LLM response is valid
+   * Check if a structured grade result is usable
    */
-  private isValidLLMResponse(response: string): boolean {
-    return !!(response && response.trim() && response.length >= 10);
+  private isValidGrade(result: GradingOutput | undefined | null): boolean {
+    return !!result && typeof result.points === "number";
   }
 
   /**

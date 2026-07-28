@@ -82,4 +82,21 @@ export interface IMultimodalLlmProvider extends ILlmProvider {
     imageData: string,
     options?: LlmRequestOptions,
   ): Promise<LlmResponse>;
+
+  /**
+   * Send a request with image content and have the provider return a value
+   * already validated against `schema`, using native structured output. The
+   * multimodal analogue of `invokeStructured`: the model fills schema fields
+   * over an image + text prompt and the SDK serializes the JSON, so the output
+   * cannot be syntactically invalid.
+   *
+   * Optional: multimodal providers without native structured output omit it,
+   * and callers fall back to parsing free-form text from `invokeWithImage`.
+   */
+  invokeStructuredWithImage?<T>(
+    textContent: string,
+    imageData: string,
+    schema: ZodTypeAny,
+    options?: LlmRequestOptions,
+  ): Promise<LlmStructuredResponse<T>>;
 }
