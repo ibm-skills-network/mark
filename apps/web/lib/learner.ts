@@ -349,6 +349,11 @@ export async function submitQuestion(
       attemptId,
       questionId,
       status: getErrorStatus(err),
+      // The underlying failure reason, not the request/response payload:
+      // a generic Error.message (e.g. "Failed to fetch", "Internal Server
+      // Error") is safe to log and is exactly what this catch block would
+      // otherwise discard on translation to a SubmitQuestionResult.
+      error: err instanceof Error ? err.message : String(err),
     });
     return {
       ok: false,
