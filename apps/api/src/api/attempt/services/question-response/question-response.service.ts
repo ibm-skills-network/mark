@@ -519,8 +519,14 @@ export class QuestionResponseService {
    * learner their grade is readable, so it must not become visible until
    * commitAttemptWithResponses has durably written the QuestionResponse rows
    * and the AssignmentAttempt grade. Callers invoke this immediately after
-   * that commit succeeds; when the commit fails they must not call it at all,
-   * leaving the row at PROCESSING for the failure handler to move to FAILED.
+   * that commit succeeds; when the commit fails they must not call it at all.
+   *
+   * On the queued grading path, a commit failure leaves the row at
+   * PROCESSING and the job's own failure handler is what moves it to
+   * FAILED. The inline (non-queued, synchronous) submission path has no
+   * equivalent repair today, so a commit failure there currently strands
+   * the row at PROCESSING rather than FAILED — a known gap, not something
+   * this method papers over.
    */
   async markGradingComplete(assignmentAttemptId: number): Promise<void> {
     await this.progressService?.markComplete(assignmentAttemptId);
