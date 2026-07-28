@@ -20,6 +20,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { applyQuestionOrder } from "../../utils/question-order.util";
+import { clampQuestionsPerAttempt } from "../../utils/questions-per-attempt.util";
 import { PrismaService } from "../../../../database/prisma.service";
 import { AttemptAccessCacheService } from "../../../attempt/services/attempt-access-cache.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
@@ -177,26 +178,33 @@ export class VersionManagementService {
       );
     }
 
-    // A non-draft version is what learners get served. If it demands more
-    // questions per attempt than the pool holds, attempt creation throws for
-    // every learner (see AttemptSubmissionService.createAssignmentAttempt),
-    // so fail the snapshot instead. Drafts stay editable mid-authoring.
-    if (
-      !createVersionDto.isDraft &&
-      assignment.numberOfQuestionsPerAttempt &&
-      assignment.numberOfQuestionsPerAttempt > assignment.questions.length
-    ) {
+    // A non-draft version is what learners get served, so snapshot a subset
+    // size the snapshot can actually honour: attempt creation would otherwise
+    // serve every question (see
+    // AttemptSubmissionService.createAssignmentAttempt) while the stored
+    // config still advertises the larger number. Clamping rather than
+    // rejecting is what lets an author who deleted questions publish at all.
+    // Drafts keep the author's number so mid-authoring edits are not rewritten
+    // under them.
+    const questionsPerAttempt = createVersionDto.isDraft
+      ? assignment.numberOfQuestionsPerAttempt
+      : clampQuestionsPerAttempt(
+          assignment.numberOfQuestionsPerAttempt,
+          assignment.questions.length,
+        );
+    const questionsPerAttemptWasClamped =
+      questionsPerAttempt !== assignment.numberOfQuestionsPerAttempt;
+
+    if (questionsPerAttemptWasClamped) {
       this.logger.warn(
-        `Version creation rejected: numberOfQuestionsPerAttempt exceeds question pool`,
+        `Version creation: numberOfQuestionsPerAttempt clamped to the question pool`,
         {
           assignmentId,
           numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
           availableQuestions: assignment.questions.length,
+          clampedPerAttempt: questionsPerAttempt,
           userId: userSession.userId,
         },
-      );
-      throw new BadRequestException(
-        `numberOfQuestionsPerAttempt (${assignment.numberOfQuestionsPerAttempt}) exceeds the number of available questions (${assignment.questions.length}). Reduce it or add more questions before publishing.`,
       );
     }
 
@@ -317,7 +325,7 @@ export class VersionManagementService {
           passingGrade: assignment.passingGrade,
           displayOrder: assignment.displayOrder,
           questionDisplay: assignment.questionDisplay,
-          numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
+          numberOfQuestionsPerAttempt: questionsPerAttempt,
           questionOrder: assignment.questionOrder,
           published: !createVersionDto.isDraft,
           showAssignmentScore: assignment.showAssignmentScore,
@@ -382,6 +390,16 @@ export class VersionManagementService {
       this.logger.info(
         `Successfully created all ${orderedQuestions.length} question versions`,
       );
+
+      // Carry the correction back to the assignment itself, so the author's
+      // config screen stops advertising a subset size that no longer exists
+      // and the next version snapshots the corrected number.
+      if (questionsPerAttemptWasClamped) {
+        await tx.assignment.update({
+          where: { id: assignmentId },
+          data: { numberOfQuestionsPerAttempt: questionsPerAttempt },
+        });
+      }
 
       if (createVersionDto.shouldActivate) {
         await tx.assignmentVersion.updateMany({
@@ -834,25 +852,29 @@ export class VersionManagementService {
       );
     }
 
-    // Same invariant as createVersion, but against this version's own
-    // snapshot: publishing a version whose numberOfQuestionsPerAttempt
-    // exceeds its snapshotted pool would make it unstartable for learners.
-    if (
-      version.numberOfQuestionsPerAttempt &&
-      version.numberOfQuestionsPerAttempt > version._count.questionVersions
-    ) {
+    // Same correction as createVersion, but against this version's own
+    // snapshot — a version can reach publish without going through
+    // createVersion's clamp (restored versions, drafts promoted later). Fold
+    // it down as part of publishing so the row matches what attempt creation
+    // will actually serve.
+    const clampedPerAttempt = clampQuestionsPerAttempt(
+      version.numberOfQuestionsPerAttempt,
+      version._count.questionVersions,
+    );
+    const perAttemptWasClamped =
+      clampedPerAttempt !== version.numberOfQuestionsPerAttempt;
+
+    if (perAttemptWasClamped) {
       this.logger.warn(
-        `Publish rejected: version's numberOfQuestionsPerAttempt exceeds its question pool`,
+        `Publish: version's numberOfQuestionsPerAttempt clamped to its question pool`,
         {
           assignmentId,
           versionId,
           numberOfQuestionsPerAttempt: version.numberOfQuestionsPerAttempt,
           availableQuestions: version._count.questionVersions,
+          clampedPerAttempt,
           userId: userSession?.userId,
         },
-      );
-      throw new BadRequestException(
-        `numberOfQuestionsPerAttempt (${version.numberOfQuestionsPerAttempt}) exceeds the number of questions in this version (${version._count.questionVersions}). Reduce it or add more questions before publishing.`,
       );
     }
 
@@ -928,6 +950,9 @@ export class VersionManagementService {
           published: true,
           isDraft: false,
           versionNumber: publishedVersionNumber,
+          ...(perAttemptWasClamped
+            ? { numberOfQuestionsPerAttempt: clampedPerAttempt }
+            : {}),
           versionDescription: wasAutoIncremented
             ? `${
                 version.versionDescription || ""

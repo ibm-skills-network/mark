@@ -2,20 +2,13 @@
 
 import { FlagIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
-import { getBaseApiPath } from "@/config/constants";
 import type { User } from "@/config/types";
+import {
+  submitBugReport,
+  type BugReportSubmission,
+} from "@/lib/report-client";
 import { getUser } from "@/lib/talkToBackend";
-
-interface ReportSubmission {
-  issueType?: string;
-  description?: string;
-  severity?: string;
-  screenshot?: File | null;
-  userEmail?: string;
-  assignmentId?: number;
-}
 
 /**
  * Floating flag button that lets users report a bug from any main screen,
@@ -49,52 +42,12 @@ export default function ReportBugButton() {
   );
 
   const handleSubmit = useCallback(
-    async (action: string, value?: ReportSubmission) => {
+    async (action: string, value?: BugReportSubmission) => {
       if (action !== "submit" || !value) return;
-
-      try {
-        const formData = new FormData();
-        formData.append("issueType", value.issueType || "technical");
-        formData.append("description", value.description || "");
-        formData.append("severity", value.severity || "info");
-        formData.append("category", "Flag Button Report");
-        formData.append("userRole", user?.role || "learner");
-
-        const resolvedEmail = value.userEmail || user?.userId;
-        if (resolvedEmail) {
-          formData.append("userEmail", resolvedEmail);
-        }
-
-        const assignmentId = value.assignmentId ?? user?.assignmentId;
-        if (assignmentId) {
-          formData.append("assignmentId", String(assignmentId));
-        }
-
-        if (value.screenshot) {
-          formData.append("screenshot", value.screenshot);
-          toast.info("Submitting report with screenshot...");
-        } else {
-          toast.info("Submitting report...");
-        }
-
-        const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
-          method: "POST",
-          credentials: "include",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorBody = (await response.json().catch(() => ({}))) as {
-            message?: string;
-          };
-          throw new Error(errorBody.message || `HTTP error ${response.status}`);
-        }
-
-        toast.success("Bug report submitted. Thank you!");
-      } catch (error) {
-        console.error("ReportBugButton: report submit failed:", error);
-        toast.error("Failed to submit report. Please try again.");
-      }
+      await submitBugReport(value, {
+        category: "Flag Button Report",
+        user,
+      });
     },
     [user],
   );

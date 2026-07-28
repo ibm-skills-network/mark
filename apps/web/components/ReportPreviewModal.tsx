@@ -111,6 +111,8 @@ interface ReportPreviewModalProps {
     severity?: string;
     screenshot?: File | null;
     userEmail?: string;
+    /** Per-field prefills keyed by description-field key (e.g. "steps"). */
+    fieldPrefills?: Record<string, string>;
   };
   isAuthor?: boolean;
   attemptId?: number;
@@ -375,11 +377,11 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   }
 
   const initializeDescriptionFields = useCallback(
-    (prefill?: string) => {
+    (prefill?: string, fieldPrefills?: Record<string, string>) => {
       const fields = getDescriptionFields(reportType);
       const initialValues: Record<string, string> = {};
       fields.forEach((field) => {
-        initialValues[field.key] = "";
+        initialValues[field.key] = fieldPrefills?.[field.key] ?? "";
       });
       if (prefill) {
         const contextField = fields.find((field) => field.key === "context");
@@ -393,8 +395,15 @@ const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   );
 
   useEffect(() => {
-    initializeDescriptionFields(initialData?.description);
-  }, [initialData?.description, initializeDescriptionFields]);
+    initializeDescriptionFields(
+      initialData?.description,
+      initialData?.fieldPrefills,
+    );
+  }, [
+    initialData?.description,
+    initialData?.fieldPrefills,
+    initializeDescriptionFields,
+  ]);
 
   const handleFieldChange = (key: string, value: string) => {
     setDescriptionFields((prev) => ({ ...prev, [key]: value }));

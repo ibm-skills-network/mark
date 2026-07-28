@@ -3,7 +3,6 @@
 /* eslint-disable unicorn/no-useless-undefined */
 /* eslint-disable @typescript-eslint/unbound-method */
 
-import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -285,20 +284,26 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  describe("publishAssignment question-pool validation", () => {
-    it("rejects publish when numberOfQuestionsPerAttempt exceeds the question pool", async () => {
+  describe("publishAssignment question-pool clamping", () => {
+    const enqueuedDto = () =>
+      (jobQueueService.enqueue as jest.Mock).mock.calls[0][2]
+        .updateDto as UpdateAssignmentQuestionsDto;
+
+    it("clamps numberOfQuestionsPerAttempt to the question pool instead of rejecting", async () => {
       const dto = createMockUpdateAssignmentQuestionsDto({
         numberOfQuestionsPerAttempt: 15,
       });
 
-      await expect(
-        service.publishAssignment(1, dto, "author-123"),
-      ).rejects.toThrow(BadRequestException);
-      expect(jobStatusService.createPublishJob).not.toHaveBeenCalled();
-      expect(jobQueueService.enqueue).not.toHaveBeenCalled();
+      const response = await service.publishAssignment(1, dto, "author-123");
+
+      expect(response).toEqual({ jobId: 1, message: "Publishing started" });
+      // The clamped value is what gets enqueued, so runPublishJob persists it.
+      expect(enqueuedDto().numberOfQuestionsPerAttempt).toBe(
+        dto.questions.filter((question) => !question.isDeleted).length,
+      );
     });
 
-    it("counts only non-deleted questions when validating the pool", async () => {
+    it("counts only non-deleted questions when clamping", async () => {
       const dto = createMockUpdateAssignmentQuestionsDto({
         numberOfQuestionsPerAttempt: 2,
         questions: [
@@ -307,13 +312,12 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         ],
       });
 
-      await expect(
-        service.publishAssignment(1, dto, "author-123"),
-      ).rejects.toThrow(BadRequestException);
-      expect(jobQueueService.enqueue).not.toHaveBeenCalled();
+      await service.publishAssignment(1, dto, "author-123");
+
+      expect(enqueuedDto().numberOfQuestionsPerAttempt).toBe(1);
     });
 
-    it("allows publish when numberOfQuestionsPerAttempt is within the pool", async () => {
+    it("leaves numberOfQuestionsPerAttempt alone when the pool can satisfy it", async () => {
       const dto = createMockUpdateAssignmentQuestionsDto({
         numberOfQuestionsPerAttempt: 2,
       });
@@ -321,7 +325,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       const response = await service.publishAssignment(1, dto, "author-123");
 
       expect(response).toEqual({ jobId: 1, message: "Publishing started" });
-      expect(jobQueueService.enqueue).toHaveBeenCalled();
+      expect(enqueuedDto().numberOfQuestionsPerAttempt).toBe(2);
     });
   });
 
