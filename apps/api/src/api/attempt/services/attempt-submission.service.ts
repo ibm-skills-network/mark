@@ -1335,6 +1335,13 @@ export class AttemptSubmissionService {
           updateDto,
         );
 
+      // Only now is the grade readable, so only now may the progress row say
+      // COMPLETED. Everything above — grade computation, the external LTI
+      // callback, the commit transaction itself — used to run after the row
+      // had already been flipped, which let a client see "done" and then read
+      // an unsubmitted, ungraded attempt.
+      await this.questionResponseService.markGradingComplete(attemptId);
+
       await this.pruneAutoSavedResponses(
         attemptId,
         successfulQuestionResponses,

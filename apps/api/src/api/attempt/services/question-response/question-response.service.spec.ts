@@ -316,7 +316,71 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
       1,
       "Grading question 1 of 1...",
     );
+    // Grading no longer flips the progress row; the caller does that after
+    // the responses and grade commit.
+    expect(mockProgressService.markComplete).not.toHaveBeenCalled();
+  });
+
+  it("exposes markGradingComplete so the caller can flip the row post-commit", async () => {
+    await service.markGradingComplete(20);
+
     expect(mockProgressService.markComplete).toHaveBeenCalledWith(20);
+  });
+
+  it("marks the legacy submitQuestions path complete only after its write phase", async () => {
+    const callOrder: string[] = [];
+
+    const questionDto = {
+      id: 3,
+      question: "Explain entropy",
+      type: QuestionType.TEXT,
+      gradingContextQuestionIds: [],
+      totalPoints: 10,
+      responseType: "TEXT",
+    };
+
+    spyPrivate("getLearnerQuestion", async () => ({
+      question: questionDto,
+      assignmentContext: {
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      },
+    }));
+    spyPrivate("buildAndSortDependencies", () => ({
+      sorted: [3],
+      adj: new Map(),
+      inDegree: new Map([[3, 0]]),
+    }));
+    spyPrivate("getAssignmentContext", async () => ({
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+    }));
+    spyPrivate("gradeQuestionNoSave", async () => ({
+      learnerResponse: "disorder increases",
+      responseDto: {
+        questionId: 3,
+        question: "Explain entropy",
+        points: 10,
+        totalPoints: 10,
+        feedback: [],
+      },
+    }));
+    spyPrivate("saveResponseToDatabase", async () => {
+      callOrder.push("write");
+    });
+    mockProgressService.markComplete.mockImplementation(async () => {
+      callOrder.push("markComplete");
+    });
+
+    await service.submitQuestions(
+      [{ id: 3, language: "en" }] as any[],
+      30,
+      UserRole.LEARNER,
+      5,
+      "en",
+    );
+
+    expect(callOrder).toEqual(["write", "markComplete"]);
   });
 
   it("stores context responses in-memory so subsequent questions can reference them without a DB call", async () => {

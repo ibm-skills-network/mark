@@ -405,10 +405,12 @@ export class QuestionResponseService {
       },
     });
 
-    if (this.progressService) {
-      await this.progressService.markComplete(assignmentAttemptId);
-    }
-
+    // Deliberately does NOT mark grading complete. The progress row is the
+    // learner-facing "your grade is ready" signal, and at this point nothing
+    // has been written: the grade still has to be computed, the LTI callback
+    // still has to run, and commitAttemptWithResponses still has to persist
+    // the responses and the grade. The caller flips the row once that commit
+    // returns — see markGradingComplete.
     return gradedItems;
   }
 
@@ -508,6 +510,20 @@ export class QuestionResponseService {
       },
       { timeout: 60_000 },
     );
+  }
+
+  /**
+   * Flip the attempt's grading progress to COMPLETED.
+   *
+   * Split out of the grading phase on purpose: COMPLETED is what tells a
+   * learner their grade is readable, so it must not become visible until
+   * commitAttemptWithResponses has durably written the QuestionResponse rows
+   * and the AssignmentAttempt grade. Callers invoke this immediately after
+   * that commit succeeds; when the commit fails they must not call it at all,
+   * leaving the row at PROCESSING for the failure handler to move to FAILED.
+   */
+  async markGradingComplete(assignmentAttemptId: number): Promise<void> {
+    await this.progressService?.markComplete(assignmentAttemptId);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -651,10 +667,6 @@ export class QuestionResponseService {
       },
     });
 
-    if (reportProgress && this.progressService) {
-      await this.progressService.markComplete(assignmentAttemptId);
-    }
-
     // ── Phase 3: Write (short transaction) — LEARNER only ────────────────────
     if (role !== UserRole.AUTHOR) {
       await this.prisma.$transaction(
@@ -676,6 +688,13 @@ export class QuestionResponseService {
         },
         { timeout: 60_000 },
       );
+    }
+
+    // COMPLETED after the write, for the same reason as the split learner
+    // flow. Author preview has no write phase and no persisted progress row
+    // (its attempt id is negative), so this is simply the end of its pipeline.
+    if (reportProgress && this.progressService) {
+      await this.progressService.markComplete(assignmentAttemptId);
     }
 
     return gradedItems.map((g) => g.responseDto);
