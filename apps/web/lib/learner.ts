@@ -275,8 +275,37 @@ export async function getSuccessPageData(
   }
 }
 
+export type SubmitQuestionResult =
+  | { ok: true; data: QuestionAttemptResponse }
+  | { ok: false; status?: number; message?: string };
+
+/**
+ * A message straight from a 4xx response body, safe to show a learner
+ * verbatim — e.g. `OversizedSubmissionError.learnerMessage`, which the API
+ * wraps in a `BadRequestException` specifically so this route can surface it.
+ * Never read for 5xx: those bodies are not written with a learner audience in
+ * mind and may contain internal detail.
+ */
+function getSafeErrorMessage(err: unknown): string | undefined {
+  const status = getErrorStatus(err);
+  if (status === undefined || status >= 500) {
+    return undefined;
+  }
+  const message = (err as { body?: { message?: string } } | undefined)?.body
+    ?.message;
+  return typeof message === "string" && message.length > 0
+    ? message
+    : undefined;
+}
+
 /**
  * Submits an answer for a given assignment, attempt, and question.
+ *
+ * Returns a discriminated result instead of throwing or returning `undefined`
+ * on failure: `ok: false` always carries whatever the server told us — the
+ * HTTP status, and (for 4xx responses only) a learner-safe `message` — so the
+ * caller can tell a real failure from a real success instead of treating
+ * every outcome as saved.
  */
 export async function submitQuestion(
   assignmentId: number,
@@ -284,7 +313,7 @@ export async function submitQuestion(
   questionId: number,
   requestBody: QuestionAttemptRequest,
   cookies?: string,
-): Promise<QuestionAttemptResponse | undefined> {
+): Promise<SubmitQuestionResult> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
   try {
@@ -305,11 +334,27 @@ export async function submitQuestion(
           "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
+        // The caller (the auto-save hook) is the sole owner of user-facing
+        // messaging for this endpoint — it needs to tell a real failure from
+        // a real success and show its own honest toast. Suppress apiClient's
+        // generic status-code toast so the learner doesn't see a vague
+        // "Client Error: 400 Bad Request" moments before that honest toast.
+        quiet: true,
       },
     );
-    return data;
+    return { ok: true, data };
   } catch (err) {
-    return undefined;
+    console.error("submitQuestion failed", {
+      assignmentId,
+      attemptId,
+      questionId,
+      status: getErrorStatus(err),
+    });
+    return {
+      ok: false,
+      status: getErrorStatus(err),
+      message: getSafeErrorMessage(err),
+    };
   }
 }
 
