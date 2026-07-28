@@ -335,7 +335,6 @@ export class FileGradingService implements IFileGradingService {
           rubricMaxPoints,
           judgeFeedback,
           modelConfig,
-          true,
           isCodeUploadRoute,
         );
         return this.scaleFileBasedModelToQuestionMax(
@@ -821,6 +820,12 @@ export class FileGradingService implements IFileGradingService {
       "No supporting evidence could be verified for the rubric criteria.",
       "Provide clear, explicit evidence in the submission that matches each rubric criterion.",
       rubricScores,
+      undefined,
+      undefined,
+      // This response stands in for a grading run that failed, so it must not
+      // be persisted: caching it would freeze a transient LLM outage into a
+      // permanent minimum grade that survives every regrade.
+      { gradingFallback: true },
     );
   }
 
@@ -948,6 +953,9 @@ export class FileGradingService implements IFileGradingService {
 
     const gradingPromise = (async () => {
       const result = await parameters.grade();
+      // A fallback response means grading failed, not that the learner earned
+      // these points. Return it without caching so the next attempt re-grades.
+      if (result.metadata?.gradingFallback) return result;
       const candidate: ICachedGradingResult = {
         cacheKey,
         questionId: parameters.questionId,
@@ -3075,7 +3083,6 @@ export class FileGradingService implements IFileGradingService {
       };
       modelOverridesAreFinal?: boolean;
     },
-    failLoudly = false,
     includeCodeUploads = false,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
@@ -3179,10 +3186,6 @@ export class FileGradingService implements IFileGradingService {
         }`,
       );
 
-      if (failLoudly) {
-        throw error;
-      }
-
       this.logger.warn(
         "Evidence-based grading failed - assigning minimum points",
       );
@@ -3190,6 +3193,7 @@ export class FileGradingService implements IFileGradingService {
         learnerResponse,
         question,
         scoringCriteria,
+        includeCodeUploads,
       );
       return this.createMinimumEvidenceResponse(
         maxTotalPoints,
@@ -3210,9 +3214,10 @@ export class FileGradingService implements IFileGradingService {
     learnerResponse: LearnerFileUpload[],
     question: string,
     scoringCriteria?: ScoringDto,
+    includeCodeUploads = false,
   ): boolean {
     const submissions = learnerResponse
-      .filter((file) => this.isEvidenceBasedEligible(file))
+      .filter((file) => this.isEvidenceBasedEligible(file, includeCodeUploads))
       .map((file) => file.structuredContent)
       .filter((submission): submission is CanonicalSubmission => !!submission);
 

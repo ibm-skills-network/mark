@@ -426,4 +426,24 @@ describe("SubmissionQualityService", () => {
       expect(quality.classification).toBe("needs_visual_evidence");
     });
   });
+
+  describe("pinned whole-file code blocks", () => {
+    // The quality gate (this service) and pinned code chunks arrived from
+    // different branches. A short program must stay eligible: if the gate
+    // rejects it, ChunkIndex drops it and the pinned whole-file view never
+    // reaches the validator, so holistic code criteria score zero.
+    it("keeps a short whole-file code block eligible", () => {
+      const wholeFile: ExtractedChunk = {
+        ...makeChunk(
+          "=== FILE: solution.py (complete) ===\ndef f():\n\treturn 1",
+        ),
+        metadata: { filename: "solution.py", blockType: "code", pinned: true },
+      };
+
+      const { chunks } = service.classifyChunks([wholeFile], {
+        question: "Write a function that returns 1",
+      });
+      expect(chunks[0].quality?.eligibility).toBe("eligible");
+    });
+  });
 });
