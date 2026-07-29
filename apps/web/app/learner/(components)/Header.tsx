@@ -44,9 +44,32 @@ import Button from "../../../components/Button";
 import GradingProgressModal, {
   type ProgressState,
 } from "./GradingProgressModal";
+import type { GradingProgressStatus } from "@/lib/learner";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
+
+/**
+ * Bridges the grading stream's five-state status vocabulary onto the modal's
+ * current four states. The modal does not yet have dedicated "stalled" /
+ * "disconnected" treatments, so this keeps behavior identical to before that
+ * type widened: a stall stays in the ordinary "processing" look (the stream
+ * is still open, nothing destructive happened) and a lost stream reuses the
+ * existing "failed" state so the learner sees the same error affordance a
+ * real grading failure would show.
+ */
+function toModalStatus(
+  status: GradingProgressStatus,
+): ProgressState["status"] {
+  switch (status) {
+    case "stalled":
+      return "processing";
+    case "disconnected":
+      return "failed";
+    default:
+      return status;
+  }
+}
 
 function LearnerHeader() {
   const pathname = usePathname();
@@ -328,7 +351,7 @@ function LearnerHeader() {
         undefined,
         (status, progress, message, metadata) => {
           setProgressData({
-            status,
+            status: toModalStatus(status),
             progress: status === "completed" ? 100 : progress,
             currentStage:
               status === "completed" ? "Grading complete!" : message,
