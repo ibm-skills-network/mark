@@ -212,8 +212,13 @@ export function useAutoSaveResponse(
       // fail the same way) or every retry is exhausted: this is the point
       // where silence would look exactly like a false "Response saved" to
       // the learner, so a real, specific failure toast always fires here.
+      // A stable per-question id keeps a terminal failure from stacking a
+      // fresh toast on every debounce cycle while the learner keeps typing
+      // an answer that still won't save — sonner updates the existing
+      // toast in place instead of piling up a new one.
       toast.error(result.message ?? AUTOSAVE_GIVE_UP_MESSAGE, {
         duration: 8000,
+        id: `autosave-failure-${currentQuestionId}`,
       });
     },
     [showToast],
@@ -308,6 +313,13 @@ export function useAutoSaveResponse(
   ]);
 
   useEffect(() => {
+    // React StrictMode (dev only) double-invokes this effect on mount —
+    // setup, cleanup, setup again — reusing the same refs across both
+    // invocations. Without resetting this here, the first (churned)
+    // cleanup below would leave isUnmountedRef stuck true forever, making
+    // every future save resolution silently no-op.
+    isUnmountedRef.current = false;
+
     return () => {
       isUnmountedRef.current = true;
       if (saveTimeoutRef.current) {
@@ -321,6 +333,16 @@ export function useAutoSaveResponse(
   }, []);
 
   return {
+    /**
+     * Triggers an immediate save, bypassing the debounce.
+     *
+     * The returned promise resolving does NOT mean the data was saved — it
+     * always resolves to `undefined`, and can resolve well before the
+     * server has confirmed anything: e.g. immediately, if this save gets
+     * queued behind an already-in-flight attempt, or as soon as a
+     * transient failure schedules a retry. Rely on the success/failure
+     * toast (or `isSaving`) to know the actual outcome, not this promise.
+     */
     saveNow: () => saveResponse(true),
     isSaving: isSavingRef.current,
   };

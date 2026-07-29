@@ -500,7 +500,7 @@ describe("useAutoSaveResponse", () => {
     expect(toast.success).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith(
       "Your submission is too large for automatic grading. Try reducing its length and submit it again.",
-      { duration: 8000 },
+      { duration: 8000, id: `autosave-failure-${questionId}` },
     );
   });
 
@@ -530,6 +530,48 @@ describe("useAutoSaveResponse", () => {
     // failure must not produce a second call.
     jest.advanceTimersByTime(30_000);
     expect(mockSubmitQuestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a stable per-question toast id so repeated terminal failures don't stack up a new toast every debounce cycle", async () => {
+    const assignmentId = 123;
+    const attemptId = 456;
+    const questionId = 789;
+
+    mockSubmitQuestion.mockResolvedValue({ ok: false, status: 400 });
+
+    const { rerender } = renderHook(() =>
+      useAutoSaveResponse(assignmentId, attemptId, questionId, {
+        enabled: true,
+        debounceMs: 1000,
+      }),
+    );
+
+    // A learner who keeps typing an answer that still won't save (e.g. it
+    // stays oversized) triggers a fresh terminal failure on every debounce
+    // cycle — each one must reuse the same toast id.
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abc" });
+    rerender();
+    jest.advanceTimersByTime(1000);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abcd" });
+    rerender();
+    jest.advanceTimersByTime(1000);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abcde" });
+    rerender();
+    jest.advanceTimersByTime(1000);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(3));
+
+    const idsUsed = (toast.error as jest.Mock).mock.calls.map(
+      (call) => call[1]?.id,
+    );
+    expect(idsUsed).toEqual([
+      `autosave-failure-${questionId}`,
+      `autosave-failure-${questionId}`,
+      `autosave-failure-${questionId}`,
+    ]);
   });
 
   it("retries a transient failure on the documented backoff schedule, then gives up honestly", async () => {
@@ -566,7 +608,7 @@ describe("useAutoSaveResponse", () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
         "We couldn't save your last response after several tries. Copy it somewhere safe, then reload the page and try again.",
-        { duration: 8000 },
+        { duration: 8000, id: `autosave-failure-${questionId}` },
       );
     });
 
@@ -847,5 +889,42 @@ describe("useAutoSaveResponse", () => {
     expect(mockSubmitQuestion).toHaveBeenCalledTimes(1);
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("still auto-saves under React StrictMode's double-invoked mount effects", async () => {
+    // Regression test: StrictMode (React 19 dev) runs setup -> cleanup ->
+    // setup on mount for every effect, reusing the same refs across both
+    // invocations. If the mount effect never re-arms isUnmountedRef back to
+    // false, the first (churned) cleanup leaves it permanently true and
+    // every future save resolution silently no-ops. A plain <StrictMode>
+    // wrapper around the rendered element does not reproduce this timing;
+    // the `reactStrictMode` render option is what's required.
+    const assignmentId = 123;
+    const attemptId = 456;
+    const questionId = 789;
+
+    mockSubmitQuestion.mockResolvedValue({ ok: true, data: {} as any });
+
+    const { rerender } = renderHook(
+      () =>
+        useAutoSaveResponse(assignmentId, attemptId, questionId, {
+          enabled: true,
+          debounceMs: 1000,
+        }),
+      { reactStrictMode: true },
+    );
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "Test answer" });
+    rerender();
+    jest.advanceTimersByTime(1000);
+
+    await waitFor(() => {
+      expect(mockSubmitQuestion).toHaveBeenCalledWith(
+        assignmentId,
+        attemptId,
+        questionId,
+        expect.objectContaining({ learnerTextResponse: "Test answer" }),
+      );
+    });
   });
 });
