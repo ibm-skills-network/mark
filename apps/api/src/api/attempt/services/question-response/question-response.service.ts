@@ -12,7 +12,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-import * as cheerio from "cheerio";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   authorAssignmentDetailsDTO,
@@ -30,7 +29,10 @@ import {
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
-import { safeGet } from "src/api/attempt/common/utils/ssrf-safe-http";
+import {
+  convertGitHubUrlToRaw,
+  fetchUrlContentForGrading,
+} from "src/api/attempt/common/utils/github-content-fetch.util";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
 import { Logger } from "winston";
@@ -991,7 +993,7 @@ export class QuestionResponseService {
         QuestionType.URL,
       );
       const url = requestDto.learnerUrlResponse;
-      const rawUrl = this.convertGitHubUrlToRaw(url);
+      const rawUrl = convertGitHubUrlToRaw(url);
       if (rawUrl) {
         requestDto.learnerUrlResponse = rawUrl;
       }
@@ -1381,7 +1383,10 @@ export class QuestionResponseService {
             const url =
               typeof urlValue === "object" ? urlValue.url : String(urlValue);
 
-            const content = await this.fetchUrlContent(String(url));
+            const content = await fetchUrlContentForGrading(String(url), {
+              assignmentId,
+              questionId: contextQuestion.id,
+            });
 
             learnerResponse = JSON.stringify({
               url,
@@ -1481,168 +1486,5 @@ export class QuestionResponseService {
     }
 
     return field;
-  }
-
-  /**
-   * Convert GitHub blob URL to raw content URL
-   */
-  private convertGitHubUrlToRaw(url: string): string | null {
-    const match = url.match(
-      /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
-    );
-    if (!match) {
-      return null;
-    }
-    const [, user, repo, path] = match;
-    return `https://raw.githubusercontent.com/${user}/${repo}/${path}`;
-  }
-
-  /**
-   * Fetch content from a URL
-   */
-  private async fetchUrlContent(
-    url: string,
-  ): Promise<{ body: string; isFunctional: boolean }> {
-    const MAX_CONTENT_SIZE = 100_000;
-    try {
-      if (url.includes("github.com")) {
-        if (url.includes("/blob/")) {
-          const rawUrl = this.convertGitHubUrlToRaw(url);
-          if (!rawUrl) {
-            return { body: "", isFunctional: false };
-          }
-
-          const rawContentResponse = await safeGet<string>(rawUrl);
-          if (rawContentResponse.status === 200) {
-            let body = rawContentResponse.data;
-            if (body.length > MAX_CONTENT_SIZE) {
-              body = body.slice(0, MAX_CONTENT_SIZE);
-            }
-            return { body, isFunctional: true };
-          }
-        } else {
-          try {
-            const repoMatch = url.match(
-              /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
-            );
-            if (repoMatch) {
-              const [, user, repo] = repoMatch;
-
-              const readmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/main/README.md`;
-              try {
-                const readmeResponse = await safeGet<string>(readmeUrl);
-                if (readmeResponse.status === 200) {
-                  let body = readmeResponse.data;
-                  if (body.length > MAX_CONTENT_SIZE) {
-                    body = body.slice(0, MAX_CONTENT_SIZE);
-                  }
-                  return { body, isFunctional: true };
-                }
-              } catch {
-                try {
-                  const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
-                  const masterReadmeResponse =
-                    await safeGet<string>(masterReadmeUrl);
-                  if (masterReadmeResponse.status === 200) {
-                    let body = masterReadmeResponse.data;
-                    if (body.length > MAX_CONTENT_SIZE) {
-                      body = body.slice(0, MAX_CONTENT_SIZE);
-                    }
-                    return { body, isFunctional: true };
-                  }
-                } catch {
-                  const apiUrl = `https://api.github.com/repos/${user}/${repo}`;
-                  try {
-                    const apiResponse = await safeGet<{
-                      full_name?: string;
-                      description?: string;
-                      stargazers_count?: number;
-                      forks_count?: number;
-                      language?: string;
-                      updated_at?: string;
-                    }>(apiUrl);
-                    if (apiResponse.status === 200) {
-                      const repoInfo = apiResponse.data;
-                      const body = `Repository: ${
-                        repoInfo.full_name
-                      }\nDescription: ${
-                        repoInfo.description || "No description"
-                      }\nStars: ${repoInfo.stargazers_count}\nForks: ${
-                        repoInfo.forks_count
-                      }\nLanguage: ${
-                        repoInfo.language || "Not specified"
-                      }\nLast Updated: ${repoInfo.updated_at}`;
-                      return { body, isFunctional: true };
-                    }
-                  } catch {
-                    return { body: "", isFunctional: false };
-                  }
-                }
-              }
-            }
-          } catch {
-            return { body: "", isFunctional: false };
-          }
-
-          try {
-            const response = await safeGet<string>(url);
-            const $ = cheerio.load(response.data);
-
-            $(
-              "script, style, noscript, iframe, noembed, embed, object",
-            ).remove();
-
-            let content = "";
-            const readmeElement = $("article.markdown-body");
-            if (readmeElement.length > 0) {
-              content = readmeElement.text().trim();
-            } else {
-              const aboutSection = $(".Box-body");
-              if (aboutSection.length > 0) {
-                content += aboutSection.text().trim() + "\n\n";
-              }
-
-              const fileList = $(
-                "div.js-details-container div.js-navigation-container tr.js-navigation-item",
-              );
-              if (fileList.length > 0) {
-                content += "Repository Files:\n";
-                fileList.each((index, element) => {
-                  const fileName = $(element)
-                    .find(".js-navigation-open")
-                    .text()
-                    .trim();
-                  if (fileName) {
-                    content += `- ${fileName}\n`;
-                  }
-                });
-              }
-            }
-
-            if (content) {
-              return {
-                body: content.replaceAll(/\s+/g, " ").trim(),
-                isFunctional: true,
-              };
-            }
-          } catch {
-            // Ignore HTTP parsing failures and fall back to an empty response.
-          }
-        }
-
-        return { body: "", isFunctional: false };
-      } else {
-        const response = await safeGet<string>(url);
-        const $ = cheerio.load(response.data);
-
-        $("script, style, noscript, iframe, noembed, embed, object").remove();
-
-        const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
-
-        return { body: plainText, isFunctional: true };
-      }
-    } catch {
-      return { body: "", isFunctional: false };
-    }
   }
 }
