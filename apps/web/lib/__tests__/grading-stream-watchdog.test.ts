@@ -30,7 +30,8 @@ describe("watchdog budgets", () => {
     // Worst case = idle timeout per attempt plus the linear reconnect backoff
     // between them. This is the number that used to be ~15 minutes.
     const backoff = 2000 + 4000;
-    const worstCase = SSE_IDLE_TIMEOUT_MS * SSE_MAX_CONNECTION_ATTEMPTS + backoff;
+    const worstCase =
+      SSE_IDLE_TIMEOUT_MS * SSE_MAX_CONNECTION_ATTEMPTS + backoff;
 
     expect(worstCase).toBeLessThanOrEqual(180_000);
   });
@@ -72,7 +73,11 @@ describe("connection idle clock", () => {
     watchdog.startGradingClock();
     watchdog.noteStreamActivity();
 
-    for (let elapsed = 0; elapsed < GRADING_STALL_WARNING_MS; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < GRADING_STALL_WARNING_MS;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       watchdog.noteStreamActivity();
     }
@@ -99,7 +104,11 @@ describe("grading stall clock", () => {
 
     watchdog.startGradingClock();
 
-    for (let elapsed = 0; elapsed < GRADING_STALL_WARNING_MS; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < GRADING_STALL_WARNING_MS;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       watchdog.noteStreamActivity();
     }

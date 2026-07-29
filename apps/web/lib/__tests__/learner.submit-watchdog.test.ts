@@ -119,16 +119,29 @@ const flush = async () => {
 describe("submitAssignment connection watchdog", () => {
   it("does not give up while heartbeats keep arriving", async () => {
     const statuses: GradingProgressStatus[] = [];
-    const pending = submitAssignment(1, 2, [], "en", undefined, undefined, undefined, (status) => {
-      statuses.push(status);
-    });
+    const pending = submitAssignment(
+      1,
+      2,
+      [],
+      "en",
+      undefined,
+      undefined,
+      undefined,
+      (status) => {
+        statuses.push(status);
+      },
+    );
     void pending.catch(() => undefined);
 
     await flush();
     const source = FakeEventSource.instances[0];
     source.open();
 
-    for (let elapsed = 0; elapsed < SSE_IDLE_TIMEOUT_MS * 3; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < SSE_IDLE_TIMEOUT_MS * 3;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       source.emit("heartbeat", heartbeat());
     }
@@ -139,9 +152,18 @@ describe("submitAssignment connection watchdog", () => {
 
   it("reconnects and then reports a lost stream once the retries run out", async () => {
     const statuses: GradingProgressStatus[] = [];
-    const pending = submitAssignment(1, 2, [], "en", undefined, undefined, undefined, (status) => {
-      statuses.push(status);
-    });
+    const pending = submitAssignment(
+      1,
+      2,
+      [],
+      "en",
+      undefined,
+      undefined,
+      undefined,
+      (status) => {
+        statuses.push(status);
+      },
+    );
     const settled = pending.catch((error: unknown) => error);
 
     await flush();
@@ -173,9 +195,18 @@ describe("submitAssignment connection watchdog", () => {
 
   it("surfaces a stall without closing a connection that is still alive, carrying the last-known progress forward instead of resetting it", async () => {
     const calls: ProgressCall[] = [];
-    const pending = submitAssignment(1, 2, [], "en", undefined, undefined, undefined, (status, progress, message, metadata) => {
-      calls.push({ status, progress, message, metadata });
-    });
+    const pending = submitAssignment(
+      1,
+      2,
+      [],
+      "en",
+      undefined,
+      undefined,
+      undefined,
+      (status, progress, message, metadata) => {
+        calls.push({ status, progress, message, metadata });
+      },
+    );
     void pending.catch(() => undefined);
 
     await flush();
@@ -184,9 +215,16 @@ describe("submitAssignment connection watchdog", () => {
 
     // Real progress arrives before the stall — this is what the warning
     // must not wipe out.
-    source.emit("update", progressFrame(55, { currentQuestion: 3, totalQuestions: 10 }));
+    source.emit(
+      "update",
+      progressFrame(55, { currentQuestion: 3, totalQuestions: 10 }),
+    );
 
-    for (let elapsed = 0; elapsed < GRADING_STALL_WARNING_MS; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < GRADING_STALL_WARNING_MS;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       source.emit("heartbeat", heartbeat());
     }
@@ -205,16 +243,29 @@ describe("submitAssignment connection watchdog", () => {
 
   it("clears the stall once real progress resumes, and genuinely re-arms the grading clock rather than just reporting a status once", async () => {
     const statuses: GradingProgressStatus[] = [];
-    const pending = submitAssignment(1, 2, [], "en", undefined, undefined, undefined, (status) => {
-      statuses.push(status);
-    });
+    const pending = submitAssignment(
+      1,
+      2,
+      [],
+      "en",
+      undefined,
+      undefined,
+      undefined,
+      (status) => {
+        statuses.push(status);
+      },
+    );
     void pending.catch(() => undefined);
 
     await flush();
     const source = FakeEventSource.instances[0];
     source.open();
 
-    for (let elapsed = 0; elapsed < GRADING_STALL_WARNING_MS; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < GRADING_STALL_WARNING_MS;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       source.emit("heartbeat", heartbeat());
     }
@@ -234,7 +285,11 @@ describe("submitAssignment connection watchdog", () => {
       (s) => s === "stalled",
     ).length;
 
-    for (let elapsed = 0; elapsed < GRADING_STALL_WARNING_MS; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < GRADING_STALL_WARNING_MS;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       source.emit("heartbeat", heartbeat());
     }
@@ -255,9 +310,18 @@ describe("submitAssignment connection watchdog", () => {
     (apiClient.post as jest.Mock).mockReturnValue(new Promise(() => undefined));
 
     const statuses: GradingProgressStatus[] = [];
-    const pending = submitAssignment(1, 2, [], "en", undefined, undefined, undefined, (status) => {
-      statuses.push(status);
-    });
+    const pending = submitAssignment(
+      1,
+      2,
+      [],
+      "en",
+      undefined,
+      undefined,
+      undefined,
+      (status) => {
+        statuses.push(status);
+      },
+    );
     const settled = pending.catch((error: unknown) => error);
 
     await flush();
@@ -283,16 +347,29 @@ describe("submitAssignment connection watchdog", () => {
 
   it("hard-stops a wedged grade with a lost-stream error", async () => {
     const statuses: GradingProgressStatus[] = [];
-    const pending = submitAssignment(1, 2, [], "en", undefined, undefined, undefined, (status) => {
-      statuses.push(status);
-    });
+    const pending = submitAssignment(
+      1,
+      2,
+      [],
+      "en",
+      undefined,
+      undefined,
+      undefined,
+      (status) => {
+        statuses.push(status);
+      },
+    );
     const settled = pending.catch((error: unknown) => error);
 
     await flush();
     const source = FakeEventSource.instances[0];
     source.open();
 
-    for (let elapsed = 0; elapsed < GRADING_STALL_TIMEOUT_MS; elapsed += 10_000) {
+    for (
+      let elapsed = 0;
+      elapsed < GRADING_STALL_TIMEOUT_MS;
+      elapsed += 10_000
+    ) {
       jest.advanceTimersByTime(10_000);
       source.emit("heartbeat", heartbeat());
     }

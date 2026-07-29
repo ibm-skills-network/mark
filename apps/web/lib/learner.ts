@@ -716,7 +716,12 @@ export async function submitAssignment(
               };
               lastKnownProgress = data.percentage;
               lastKnownMetadata = metadata;
-              onProgress?.("processing", data.percentage, data.progress, metadata);
+              onProgress?.(
+                "processing",
+                data.percentage,
+                data.progress,
+                metadata,
+              );
             }
           } catch (error) {
             console.warn("SSE update event parse failed:", error);
@@ -895,10 +900,7 @@ export async function submitAssignment(
               cookies,
             );
           } catch (fallbackError) {
-            console.error(
-              "Author fallback report also failed:",
-              fallbackError,
-            );
+            console.error("Author fallback report also failed:", fallbackError);
           }
         }
       };
