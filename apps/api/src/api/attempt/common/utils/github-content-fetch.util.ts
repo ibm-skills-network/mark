@@ -1,4 +1,5 @@
 import { Logger } from "@nestjs/common";
+import * as cheerio from "cheerio";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { getGithubGradingApiToken } from "src/config/github-grading-token";
 import {
@@ -171,5 +172,308 @@ export async function fetchReadmeForBranch(
       }`,
     );
     return undefined;
+  }
+}
+
+export interface GithubFetchResult {
+  body: string;
+  isFunctional: boolean;
+}
+
+export interface GithubFetchLogContext {
+  assignmentId?: number;
+  questionId?: number;
+}
+
+interface GithubRepoMetadata {
+  full_name?: string;
+  description?: string;
+  stargazers_count?: number;
+  forks_count?: number;
+  language?: string;
+  updated_at?: string;
+}
+
+function formatRepoMetadataSummary(metadata: GithubRepoMetadata): string {
+  return `Repository: ${metadata.full_name}\nDescription: ${
+    metadata.description || "No description"
+  }\nStars: ${metadata.stargazers_count}\nForks: ${
+    metadata.forks_count
+  }\nLanguage: ${metadata.language || "Not specified"}\nLast Updated: ${
+    metadata.updated_at
+  }`;
+}
+
+async function fetchRepoMetadataSummary(
+  owner: string,
+  repo: string,
+): Promise<string | undefined> {
+  const requestUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const metadata = await githubApiGet<GithubRepoMetadata>(
+    requestUrl,
+    owner,
+    repo,
+  );
+  return formatRepoMetadataSummary(metadata);
+}
+
+function stripNoiseNodes($: ReturnType<typeof cheerio.load>): void {
+  $("script, style, noscript, iframe, noembed, embed, object").remove();
+}
+
+/** DOM-scrape fallback for a GitHub page (repo root or otherwise). Last resort, unchanged selectors from the pre-existing implementation. */
+async function scrapeGithubPage(url: string): Promise<string | undefined> {
+  try {
+    const response = await safeGet<string>(url);
+    const $ = cheerio.load(response.data);
+    stripNoiseNodes($);
+
+    let content = "";
+    const readmeElement = $("article.markdown-body");
+    if (readmeElement.length > 0) {
+      content = readmeElement.text().trim();
+    } else {
+      const aboutSection = $(".Box-body");
+      if (aboutSection.length > 0) {
+        content += `${aboutSection.text().trim()}\n\n`;
+      }
+
+      const fileList = $(
+        "div.js-details-container div.js-navigation-container tr.js-navigation-item",
+      );
+      if (fileList.length > 0) {
+        content += "Repository Files:\n";
+        fileList.each((_index, element) => {
+          const fileName = $(element).find(".js-navigation-open").text().trim();
+          if (fileName) {
+            content += `- ${fileName}\n`;
+          }
+        });
+      }
+    }
+
+    return content ? content.replaceAll(/\s+/g, " ").trim() : undefined;
+  } catch (error) {
+    logger.warn(
+      `GitHub HTML-scrape fallback failed for ${url}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
+
+async function fetchGithubBlobContent(
+  rawUrl: string,
+): Promise<GithubFetchResult> {
+  try {
+    const response = await safeGet<string>(rawUrl);
+    if (response.status === 200) {
+      return { body: truncate(response.data), isFunctional: true };
+    }
+    return { body: "", isFunctional: false };
+  } catch (error) {
+    logger.warn(
+      `Failed to fetch GitHub blob raw content from ${rawUrl}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return { body: "", isFunctional: false };
+  }
+}
+
+const REPO_ROOT_RE = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/;
+
+async function fetchGithubRepoRootContent(
+  url: string,
+  owner: string,
+  repo: string,
+): Promise<GithubFetchResult> {
+  let apiRateLimited = false;
+  let defaultBranch: string | undefined;
+
+  try {
+    defaultBranch = await resolveGithubDefaultBranch(owner, repo);
+  } catch (error) {
+    if (!(error instanceof GithubRateLimitedError)) {
+      throw error;
+    }
+    apiRateLimited = true;
+  }
+
+  const candidateBranches = defaultBranch
+    ? [defaultBranch]
+    : ["main", "master"];
+
+  for (const branch of candidateBranches) {
+    const body = await fetchReadmeForBranch(owner, repo, branch);
+    if (body) {
+      return { body, isFunctional: true };
+    }
+  }
+
+  if (apiRateLimited) {
+    // Already know the api.github.com surface is exhausted — skip straight
+    // to the retryable failure instead of burning another call on the
+    // metadata fallback below.
+    throw new GithubRateLimitedError({
+      owner,
+      repo,
+      requestUrl: `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    });
+  }
+
+  try {
+    const summary = await fetchRepoMetadataSummary(owner, repo);
+    if (summary) {
+      return { body: summary, isFunctional: true };
+    }
+  } catch (error) {
+    if (error instanceof GithubRateLimitedError) {
+      throw error;
+    }
+    logger.warn(
+      `GitHub repository metadata fallback failed for ${owner}/${repo}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  const scraped = await scrapeGithubPage(url);
+  return scraped
+    ? { body: scraped, isFunctional: true }
+    : { body: "", isFunctional: false };
+}
+
+async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
+  try {
+    const response = await safeGet<string>(url);
+    const $ = cheerio.load(response.data);
+    stripNoiseNodes($);
+    const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
+    return { body: plainText, isFunctional: true };
+  } catch (error) {
+    logger.warn(
+      `Failed to fetch non-GitHub URL for grading: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return { body: "", isFunctional: false };
+  }
+}
+
+/**
+ * Routes a learner-submitted URL to the right fetch strategy: GitHub blob
+ * URLs are converted to their raw form; GitHub repo-root URLs resolve the
+ * real default branch before guessing main/master, with an authenticated
+ * metadata fallback and a DOM-scrape last resort; any other GitHub page is
+ * scraped directly; any non-GitHub URL is scraped as plain text. Pure
+ * routing/fetch logic — entry/outcome logging lives in the exported
+ * `fetchUrlContentForGrading` wrapper below.
+ */
+async function dispatchUrlContentFetch(
+  url: string,
+): Promise<GithubFetchResult> {
+  if (!url.includes("github.com")) {
+    return scrapeGenericUrl(url);
+  }
+
+  if (url.includes("/blob/")) {
+    const rawUrl = convertGitHubUrlToRaw(url);
+    if (!rawUrl) {
+      return { body: "", isFunctional: false };
+    }
+    return fetchGithubBlobContent(rawUrl);
+  }
+
+  const repoMatch = url.match(REPO_ROOT_RE);
+  if (repoMatch) {
+    const [, owner, repo] = repoMatch;
+    return fetchGithubRepoRootContent(url, owner, repo);
+  }
+
+  // A github.com URL that's neither a blob nor a bare repo root (an issue,
+  // PR, or directory listing) — scrape it directly, unchanged from the
+  // pre-existing behavior.
+  const scraped = await scrapeGithubPage(url);
+  return scraped
+    ? { body: scraped, isFunctional: true }
+    : { body: "", isFunctional: false };
+}
+
+const GITHUB_OWNER_REPO_RE = /^https:\/\/github\.com\/([^/]+)\/([^/]+)/;
+
+/** Best-effort owner/repo extraction for log context only — never gates fetch behavior. */
+function extractOwnerRepoForLogging(url: string): {
+  owner?: string;
+  repo?: string;
+} {
+  const match = url.match(GITHUB_OWNER_REPO_RE);
+  return match ? { owner: match[1], repo: match[2] } : {};
+}
+
+function buildLogContextSuffix(
+  url: string,
+  logContext: GithubFetchLogContext,
+): string {
+  const { owner, repo } = extractOwnerRepoForLogging(url);
+  const parts = [
+    `url=${url}`,
+    owner ? `owner=${owner}` : undefined,
+    repo ? `repo=${repo}` : undefined,
+    `assignmentId=${logContext.assignmentId ?? "unknown"}`,
+    `questionId=${logContext.questionId ?? "unknown"}`,
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
+/**
+ * Fetches gradeable content from a learner-submitted URL. This is the single
+ * entry point for the three call sites that used to hand-roll this pipeline
+ * independently — see the module doc comment at the top of this file.
+ *
+ * Owns entry/outcome structured logging for the whole pipeline (url, best-
+ * effort owner/repo, assignmentId/questionId as supplied by the caller).
+ * Never logs tokens or fetched content bodies. The individual fetch/scrape
+ * helpers above additionally log their own narrower misses (rate limits,
+ * branch-resolution failures, per-branch README misses) — this wrapper adds
+ * the top-level entry and final outcome the caller needs for correlating a
+ * grading failure back to an assignment/question.
+ *
+ * Throws GithubRateLimitedError when the api.github.com surface is
+ * exhausted and no README guess landed — callers must NOT swallow this into
+ * a 0-point "invalid URL" response; it is a retryable system failure, not a
+ * problem with the learner's submission (see the error class doc comment).
+ */
+export async function fetchUrlContentForGrading(
+  url: string,
+  logContext?: GithubFetchLogContext,
+): Promise<GithubFetchResult> {
+  const resolvedLogContext = logContext ?? {};
+  const logSuffix = buildLogContextSuffix(url, resolvedLogContext);
+
+  logger.debug(`Fetching URL content for grading (${logSuffix})`);
+
+  try {
+    const result = await dispatchUrlContentFetch(url);
+    if (result.isFunctional) {
+      logger.debug(`URL content fetch succeeded (${logSuffix})`);
+    } else {
+      logger.warn(
+        `URL content fetch returned no functional content (${logSuffix})`,
+      );
+    }
+    return result;
+  } catch (error) {
+    // Re-thrown deliberately: GithubRateLimitedError (the only expected
+    // throw here) must propagate to the caller as a retryable failure, not
+    // be swallowed into a graded-0 outcome. This is the outcome log for that
+    // path.
+    logger.warn(
+      `URL content fetch failed with a retryable error (${logSuffix}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    throw error;
   }
 }

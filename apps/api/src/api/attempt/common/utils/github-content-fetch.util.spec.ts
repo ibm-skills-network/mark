@@ -4,6 +4,7 @@ import { safeGet } from "./ssrf-safe-http";
 import {
   convertGitHubUrlToRaw,
   fetchReadmeForBranch,
+  fetchUrlContentForGrading,
   githubApiGet,
   resolveGithubDefaultBranch,
 } from "./github-content-fetch.util";
@@ -243,5 +244,221 @@ describe("convertGitHubUrlToRaw", () => {
     expect(
       convertGitHubUrlToRaw("https://github.com/octocat/hello-world"),
     ).toBeNull();
+  });
+});
+
+describe("fetchUrlContentForGrading", () => {
+  describe("blob URLs", () => {
+    it("fetches raw content for a blob URL", async () => {
+      mockedSafeGet.mockResolvedValue({
+        data: "console.log(1)",
+        status: 200,
+      } as any);
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world/blob/main/index.js",
+      );
+
+      expect(result).toEqual({ body: "console.log(1)", isFunctional: true });
+    });
+
+    it("returns isFunctional:false when the blob fetch fails, without throwing", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(404));
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world/blob/main/missing.js",
+      );
+
+      expect(result).toEqual({ body: "", isFunctional: false });
+    });
+  });
+
+  describe("repo-root URLs — the reported bug", () => {
+    it("resolves a non-main/master default branch and fetches its README", async () => {
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://api.github.com/repos/octocat/hello-world") {
+          return { data: { default_branch: "develop" }, status: 200 } as any;
+        }
+        if (
+          url ===
+          "https://raw.githubusercontent.com/octocat/hello-world/develop/README.md"
+        ) {
+          return { data: "# Develop branch readme", status: 200 } as any;
+        }
+        throw axiosError(404);
+      });
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world",
+      );
+
+      expect(result).toEqual({
+        body: "# Develop branch readme",
+        isFunctional: true,
+      });
+      // Must not have guessed main/master when the real branch resolved.
+      expect(mockedSafeGet).not.toHaveBeenCalledWith(
+        expect.stringContaining("/main/README.md"),
+      );
+    });
+
+    it("falls back to main/master guesses when branch resolution fails for a non-rate-limit reason", async () => {
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://api.github.com/repos/octocat/hello-world") {
+          throw axiosError(500);
+        }
+        if (
+          url ===
+          "https://raw.githubusercontent.com/octocat/hello-world/main/README.md"
+        ) {
+          throw axiosError(404);
+        }
+        if (
+          url ===
+          "https://raw.githubusercontent.com/octocat/hello-world/master/README.md"
+        ) {
+          return { data: "# Master readme", status: 200 } as any;
+        }
+        throw axiosError(404);
+      });
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world",
+      );
+
+      expect(result).toEqual({ body: "# Master readme", isFunctional: true });
+    });
+
+    it("throws GithubRateLimitedError instead of silently grading 0 when rate-limited and no README guess lands", async () => {
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://api.github.com/repos/octocat/hello-world") {
+          throw axiosError(403, { "x-ratelimit-remaining": "0" });
+        }
+        // main/master guesses also miss (private repo, or genuinely no readme)
+        throw axiosError(404);
+      });
+
+      await expect(
+        fetchUrlContentForGrading("https://github.com/octocat/hello-world"),
+      ).rejects.toThrow(GithubRateLimitedError);
+    });
+
+    it("skips the metadata fallback call once rate-limiting is already known", async () => {
+      let metadataCallCount = 0;
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://api.github.com/repos/octocat/hello-world") {
+          metadataCallCount++;
+          throw axiosError(403, { "x-ratelimit-remaining": "0" });
+        }
+        throw axiosError(404);
+      });
+
+      await expect(
+        fetchUrlContentForGrading("https://github.com/octocat/hello-world"),
+      ).rejects.toThrow(GithubRateLimitedError);
+      // One call for default-branch resolution; the metadata-fallback call
+      // (the same endpoint) must NOT fire a second time once we already
+      // know the surface is exhausted.
+      expect(metadataCallCount).toBe(1);
+    });
+
+    it("falls through to the metadata summary, then the DOM scrape, when README lookups miss for a non-rate-limit reason", async () => {
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://api.github.com/repos/octocat/hello-world") {
+          return {
+            data: {
+              full_name: "octocat/hello-world",
+              description: "A test repo",
+              stargazers_count: 5,
+              forks_count: 1,
+              language: "JavaScript",
+              updated_at: "2026-01-01T00:00:00Z",
+            },
+            status: 200,
+          } as any;
+        }
+        throw axiosError(404); // README misses on the resolved branch
+      });
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world",
+      );
+
+      expect(result.isFunctional).toBe(true);
+      expect(result.body).toContain("octocat/hello-world");
+      expect(result.body).toContain("JavaScript");
+    });
+
+    it("scrapes the repo page as a true last resort when every API path fails without rate-limiting", async () => {
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://github.com/octocat/hello-world") {
+          return {
+            data: '<html><body><article class="markdown-body">Scraped readme text</article></body></html>',
+            status: 200,
+          } as any;
+        }
+        throw axiosError(404);
+      });
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world",
+      );
+
+      expect(result).toEqual({
+        body: "Scraped readme text",
+        isFunctional: true,
+      });
+    });
+
+    it("returns isFunctional:false when every path — including the scrape — fails, and it is not a rate limit", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(404));
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world",
+      );
+
+      expect(result).toEqual({ body: "", isFunctional: false });
+    });
+  });
+
+  describe("non-repo-root github.com URLs (e.g. an issue page)", () => {
+    it("scrapes directly without attempting branch/README resolution", async () => {
+      mockedSafeGet.mockResolvedValue({
+        data: '<html><body><div class="Box-body">Issue content</div></body></html>',
+        status: 200,
+      } as any);
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world/issues/5",
+      );
+
+      expect(result.isFunctional).toBe(true);
+      expect(result.body).toContain("Issue content");
+    });
+  });
+
+  describe("non-GitHub URLs", () => {
+    it("scrapes the page body as plain text", async () => {
+      mockedSafeGet.mockResolvedValue({
+        data: "<html><body>Hello <b>world</b></body></html>",
+        status: 200,
+      } as any);
+
+      const result = await fetchUrlContentForGrading(
+        "https://example.com/portfolio",
+      );
+
+      expect(result).toEqual({ body: "Hello world", isFunctional: true });
+    });
+
+    it("returns isFunctional:false (does not throw) when the fetch fails", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(500));
+
+      const result = await fetchUrlContentForGrading(
+        "https://example.com/unreachable",
+      );
+
+      expect(result).toEqual({ body: "", isFunctional: false });
+    });
   });
 });
