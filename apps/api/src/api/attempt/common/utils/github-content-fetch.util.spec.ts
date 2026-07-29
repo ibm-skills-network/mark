@@ -419,6 +419,36 @@ describe("fetchUrlContentForGrading", () => {
 
       expect(result).toEqual({ body: "", isFunctional: false });
     });
+
+    it("propagates GithubRateLimitedError when the metadata-fallback call itself is rate-limited after README misses", async () => {
+      // Default-branch resolution succeeds (not rate-limited) on the first
+      // call; the README for that branch misses; the metadata-fallback call
+      // reuses the exact same api.github.com endpoint and is rate-limited on
+      // its own second, independent attempt. This exercises the
+      // `fetchRepoMetadataSummary` catch's GithubRateLimitedError rethrow,
+      // which is a different path than the default-branch-resolution
+      // rate-limit case covered above.
+      let metadataEndpointCallCount = 0;
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url === "https://api.github.com/repos/octocat/hello-world") {
+          metadataEndpointCallCount++;
+          if (metadataEndpointCallCount === 1) {
+            return { data: { default_branch: "develop" }, status: 200 } as any;
+          }
+          throw axiosError(403, { "x-ratelimit-remaining": "0" });
+        }
+        // README lookup on the resolved "develop" branch misses.
+        throw axiosError(404);
+      });
+
+      await expect(
+        fetchUrlContentForGrading("https://github.com/octocat/hello-world"),
+      ).rejects.toThrow(GithubRateLimitedError);
+
+      // First call resolves the default branch; second is the metadata
+      // fallback attempt that hits the rate limit.
+      expect(metadataEndpointCallCount).toBe(2);
+    });
   });
 
   describe("non-repo-root github.com URLs (e.g. an issue page)", () => {
@@ -459,6 +489,90 @@ describe("fetchUrlContentForGrading", () => {
       );
 
       expect(result).toEqual({ body: "", isFunctional: false });
+    });
+  });
+
+  describe("entry/outcome logging", () => {
+    function messagesContaining(
+      spy: jest.SpyInstance,
+      substrings: string[],
+    ): boolean {
+      return spy.mock.calls.some((call) =>
+        substrings.every((substring) => String(call[0]).includes(substring)),
+      );
+    }
+
+    it("logs entry and outcome lines carrying the url, assignmentId, and questionId from logContext", async () => {
+      const debugSpy = jest
+        .spyOn(Logger.prototype, "debug")
+        .mockImplementation(() => undefined);
+      mockedSafeGet.mockResolvedValue({
+        data: "console.log(1)",
+        status: 200,
+      } as any);
+
+      const url = "https://github.com/octocat/hello-world/blob/main/index.js";
+
+      await fetchUrlContentForGrading(url, {
+        assignmentId: 4242,
+        questionId: 77,
+      });
+
+      // Entry log, before dispatch even runs.
+      expect(
+        messagesContaining(debugSpy, [
+          "Fetching URL content for grading",
+          url,
+          "assignmentId=4242",
+          "questionId=77",
+        ]),
+      ).toBe(true);
+
+      // Outcome log, after a successful fetch.
+      expect(
+        messagesContaining(debugSpy, [
+          "succeeded",
+          url,
+          "assignmentId=4242",
+          "questionId=77",
+        ]),
+      ).toBe(true);
+
+      debugSpy.mockRestore();
+    });
+
+    it("never logs the fetched content body, even though it appears in the result", async () => {
+      const debugSpy = jest
+        .spyOn(Logger.prototype, "debug")
+        .mockImplementation(() => undefined);
+      const warnSpy = jest
+        .spyOn(Logger.prototype, "warn")
+        .mockImplementation(() => undefined);
+
+      const sentinelBody = "SENTINEL_CONTENT_9f27ac_never_log_me";
+      mockedSafeGet.mockResolvedValue({
+        data: sentinelBody,
+        status: 200,
+      } as any);
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world/blob/main/index.js",
+        { assignmentId: 1, questionId: 2 },
+      );
+
+      // Sanity check: the sentinel really did flow through into the result.
+      expect(result.body).toBe(sentinelBody);
+
+      const allLoggedMessages = [
+        ...debugSpy.mock.calls,
+        ...warnSpy.mock.calls,
+      ].map((call) => String(call[0]));
+      expect(
+        allLoggedMessages.some((message) => message.includes(sentinelBody)),
+      ).toBe(false);
+
+      debugSpy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 });
