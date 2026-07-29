@@ -1,6 +1,9 @@
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { safeGet } from "./ssrf-safe-http";
-import { githubApiGet } from "./github-content-fetch.util";
+import {
+  githubApiGet,
+  resolveGithubDefaultBranch,
+} from "./github-content-fetch.util";
 
 jest.mock("./ssrf-safe-http", () => ({
   safeGet: jest.fn(),
@@ -119,5 +122,54 @@ describe("githubApiGet", () => {
       ),
     ).rejects.toThrow("githubApiGet requires an api.github.com URL");
     expect(mockedSafeGet).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveGithubDefaultBranch", () => {
+  it("returns the repo's actual default_branch on success", async () => {
+    mockedSafeGet.mockResolvedValue({
+      data: { default_branch: "develop" },
+      status: 200,
+    } as any);
+
+    const branch = await resolveGithubDefaultBranch("octocat", "hello-world");
+
+    expect(branch).toBe("develop");
+    expect(mockedSafeGet).toHaveBeenCalledWith(
+      "https://api.github.com/repos/octocat/hello-world",
+      expect.anything(),
+    );
+  });
+
+  it("returns undefined (does not throw) on a non-rate-limit failure", async () => {
+    mockedSafeGet.mockRejectedValue(axiosError(404));
+
+    await expect(
+      resolveGithubDefaultBranch("octocat", "does-not-exist"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rethrows GithubRateLimitedError instead of swallowing it", async () => {
+    mockedSafeGet.mockRejectedValue(
+      axiosError(403, { "x-ratelimit-remaining": "0" }),
+    );
+
+    await expect(
+      resolveGithubDefaultBranch("octocat", "hello-world"),
+    ).rejects.toThrow(GithubRateLimitedError);
+  });
+
+  it("URL-encodes owner/repo before building the request", async () => {
+    mockedSafeGet.mockResolvedValue({
+      data: { default_branch: "main" },
+      status: 200,
+    } as any);
+
+    await resolveGithubDefaultBranch("owner name", "repo#1");
+
+    expect(mockedSafeGet).toHaveBeenCalledWith(
+      "https://api.github.com/repos/owner%20name/repo%231",
+      expect.anything(),
+    );
   });
 });

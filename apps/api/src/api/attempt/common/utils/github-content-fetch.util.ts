@@ -88,3 +88,40 @@ export async function githubApiGet<T>(
     throw error;
   }
 }
+
+interface GithubRepoDescriptor {
+  default_branch?: string;
+}
+
+/**
+ * Resolves a GitHub repository's actual default branch via
+ * `GET /repos/{owner}/{repo}`. Returns undefined (never throws, other than
+ * GithubRateLimitedError) when the lookup fails for any other reason —
+ * network hiccup, private/nonexistent repo, unexpected response shape — so
+ * callers can fall back to guessing main/master exactly like before this
+ * function existed.
+ */
+export async function resolveGithubDefaultBranch(
+  owner: string,
+  repo: string,
+): Promise<string | undefined> {
+  const requestUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  try {
+    const data = await githubApiGet<GithubRepoDescriptor>(
+      requestUrl,
+      owner,
+      repo,
+    );
+    return data.default_branch;
+  } catch (error) {
+    if (error instanceof GithubRateLimitedError) {
+      throw error;
+    }
+    logger.warn(
+      `Could not resolve default branch for ${owner}/${repo}; falling back to main/master guesses: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
