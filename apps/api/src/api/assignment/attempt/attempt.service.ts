@@ -3623,12 +3623,16 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             groupedResponses[contextQuestion.id]?.learnerResponse || "";
 
           if (contextQuestion.type === "URL" && learnerResponse) {
-            const urlContent =
-              await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
-            learnerResponse = JSON.stringify({
-              url: learnerResponse,
-              ...urlContent,
-            });
+            try {
+              const urlContent =
+                await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
+              learnerResponse = JSON.stringify({
+                url: learnerResponse,
+                ...urlContent,
+              });
+            } catch {
+              // Ignore URL fetch failures while building learner context.
+            }
           }
 
           return {
