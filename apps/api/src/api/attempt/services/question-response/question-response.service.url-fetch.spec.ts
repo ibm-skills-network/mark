@@ -2,6 +2,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
 import { LocalizationService } from "../../common/utils/localization.service";
@@ -143,7 +144,13 @@ describe("QuestionResponseService URL-fetch delegation", () => {
         learnerResponse: "https://github.com/octocat/hello-world",
       },
     ]);
-    mockedFetch.mockRejectedValue(new Error("GithubRateLimitedError"));
+    mockedFetch.mockRejectedValue(
+      new GithubRateLimitedError({
+        owner: "octocat",
+        repo: "hello-world",
+        requestUrl: "https://api.github.com/repos/octocat/hello-world",
+      }),
+    );
 
     await expect(
       (service as any).getAssignmentContext(5, 20, 10, undefined, new Map()),

@@ -7,6 +7,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import {
@@ -51,6 +52,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { GithubRateLimitedError } from "../../llm/features/grading/errors/github-rate-limited.error";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import {
   AssignmentAttemptWithRelations,
@@ -126,6 +128,14 @@ export class AttemptSubmissionService {
       // filter.
       if (error instanceof LearnerFacingGradingError) {
         throw new BadRequestException(error.learnerMessage);
+      }
+      // A rate-limited GitHub fetch is a temporary system fault, not a
+      // problem with the learner's submission — surface it as a retryable
+      // 503 instead of letting it fall through to a generic 500.
+      if (error instanceof GithubRateLimitedError) {
+        throw new ServiceUnavailableException(
+          "Temporarily unable to fetch the submitted URL's content. Please try again shortly.",
+        );
       }
       throw error;
     }

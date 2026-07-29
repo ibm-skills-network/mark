@@ -34,6 +34,7 @@ import {
   fetchUrlContentForGrading,
 } from "src/api/attempt/common/utils/github-content-fetch.util";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
+import { GithubRateLimitedError } from "../../../llm/features/grading/errors/github-rate-limited.error";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
@@ -952,6 +953,14 @@ export class QuestionResponseService {
       // retries and surface their learner-facing message. Wrapping them in
       // BadRequestException erased that.
       if (error instanceof LearnerFacingGradingError) {
+        throw error;
+      }
+
+      // Same reasoning as above: a rate-limited GitHub fetch is a transient
+      // system fault the caller must be able to retry, not a 400. Wrapping
+      // it here would erase the class identity the retry classification
+      // depends on.
+      if (error instanceof GithubRateLimitedError) {
         throw error;
       }
 

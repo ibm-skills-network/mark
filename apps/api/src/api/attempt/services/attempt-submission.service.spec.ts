@@ -2,6 +2,7 @@ import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   InternalServerErrorException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
@@ -10,6 +11,7 @@ import {
   UserSession,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { GithubRateLimitedError } from "../../llm/features/grading/errors/github-rate-limited.error";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
@@ -726,6 +728,29 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           "en",
         ),
       ).rejects.toBe(boom);
+    });
+
+    it("maps a GithubRateLimitedError into a ServiceUnavailableException (retryable 503)", async () => {
+      const rateLimited = new GithubRateLimitedError({
+        owner: "octocat",
+        repo: "hello-world",
+        requestUrl: "https://api.github.com/repos/octocat/hello-world",
+      });
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        rateLimited,
+      );
+
+      const rejection = await service
+        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
+        .then(
+          () => {
+            throw new Error("expected autoSaveQuestionResponse to reject");
+          },
+          (error: unknown) => error,
+        );
+
+      expect(rejection).toBeInstanceOf(ServiceUnavailableException);
+      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
     });
   });
 
