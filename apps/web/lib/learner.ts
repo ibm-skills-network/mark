@@ -541,15 +541,31 @@ export async function submitAssignment(
         url?: string;
       }> = [];
 
+      // The stall warning is non-destructive by design: the stream is still
+      // alive, so the learner should keep seeing whatever real progress they
+      // last had, not have it wiped back to zero just because the clock that
+      // reports it fired. Remember the last substantive update so the
+      // warning can carry it forward instead of 0/undefined.
+      let lastKnownProgress = 0;
+      let lastKnownMetadata:
+        | {
+            currentQuestion?: number;
+            totalQuestions?: number;
+            gradingState?: GradingProgressDetails;
+          }
+        | undefined;
+
       const watchdog = new GradingWatchdog({
         onIdleTimeout: () => handleIdleTimeout(),
         onStallWarning: () => {
           // Non-destructive: the stream is alive, so keep it open and keep
-          // grading. The learner just stops being lied to by a spinner.
+          // grading. The learner just stops being lied to by a spinner —
+          // and keeps seeing the progress they already had, not a reset.
           onProgress?.(
             "stalled",
-            0,
+            lastKnownProgress,
             "This is taking longer than usual. Your answers are submitted and grading is still running.",
+            lastKnownMetadata,
           );
         },
         onStallTimeout: () => {
@@ -641,11 +657,14 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.("processing", percentage, progress, {
+              const metadata = {
                 currentQuestion: data.currentQuestion,
                 totalQuestions: data.totalQuestions,
                 gradingState: parseGradingState(data.result),
-              });
+              };
+              lastKnownProgress = percentage;
+              lastKnownMetadata = metadata;
+              onProgress?.("processing", percentage, progress, metadata);
             } else if (data.status === "Completed") {
               if (!settle()) return;
               onProgress?.("completed", 100, "Grading completed successfully!");
@@ -690,11 +709,14 @@ export async function submitAssignment(
             watchdog.noteGradingUpdate();
 
             if (data.progress && data.percentage !== undefined) {
-              onProgress?.("processing", data.percentage, data.progress, {
+              const metadata = {
                 currentQuestion: data.currentQuestion,
                 totalQuestions: data.totalQuestions,
                 gradingState: parseGradingState(data.result),
-              });
+              };
+              lastKnownProgress = data.percentage;
+              lastKnownMetadata = metadata;
+              onProgress?.("processing", data.percentage, data.progress, metadata);
             }
           } catch (error) {
             console.warn("SSE update event parse failed:", error);
@@ -806,14 +828,36 @@ export async function submitAssignment(
 
       /**
        * Terminal, but not a claim that grading failed: the job may still be
-       * running. File the diagnostic report, tell the caller what happened,
-       * and let the UI offer a re-check rather than declaring a lost
-       * submission.
+       * running. Tell the caller what happened and let the UI offer a
+       * re-check rather than declaring a lost submission — and do it before
+       * filing the diagnostic report, not after. The report is a network
+       * call (with its own author-report fallback network call behind it),
+       * and on a genuinely dead connection either can hang indefinitely; the
+       * whole point of this watchdog is a bounded time-to-honest-state, so
+       * the learner cannot be left waiting on a report that may never land.
+       * The report is best-effort from here on — its failure already falls
+       * back silently (see the catch below) and is not something the caller
+       * awaits.
        */
       const handleStreamLost = async (
         reason: "disconnected" | "stalled",
       ): Promise<void> => {
         if (!settle()) return;
+
+        const learnerMessage =
+          reason === "stalled"
+            ? "Grading stopped responding. Your answers were submitted — check your results in a moment."
+            : "We lost contact with the grading service. Your answers were submitted — check your results in a moment.";
+
+        onProgress?.("disconnected", 0, learnerMessage);
+        reject(
+          new GradingStreamLostError(
+            learnerMessage,
+            assignmentId,
+            attemptId,
+            reason,
+          ),
+        );
 
         const detailedErrorReport = {
           assignmentId,
@@ -857,21 +901,6 @@ export async function submitAssignment(
             );
           }
         }
-
-        const learnerMessage =
-          reason === "stalled"
-            ? "Grading stopped responding. Your answers were submitted — check your results in a moment."
-            : "We lost contact with the grading service. Your answers were submitted — check your results in a moment.";
-
-        onProgress?.("disconnected", 0, learnerMessage);
-        reject(
-          new GradingStreamLostError(
-            learnerMessage,
-            assignmentId,
-            attemptId,
-            reason,
-          ),
-        );
       };
 
       watchdog.startGradingClock();
