@@ -163,7 +163,13 @@ export async function fetchReadmeForBranch(
   try {
     const response = await safeGet<string>(readmeUrl);
     return response.status === 200 ? truncate(response.data) : undefined;
-  } catch {
+  } catch (error) {
+    // swallow: caller tries the next branch candidate
+    logger.debug(
+      `No README for ${owner}/${repo}@${branch}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     return undefined;
   }
 }

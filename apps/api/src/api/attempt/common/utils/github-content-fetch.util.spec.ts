@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { safeGet } from "./ssrf-safe-http";
 import {
@@ -209,6 +210,21 @@ describe("fetchReadmeForBranch", () => {
     const body = await fetchReadmeForBranch("octocat", "hello-world", "main");
 
     expect(body).toHaveLength(100_000);
+  });
+
+  it("logs a debug entry with owner/repo/branch context on a miss", async () => {
+    const debugSpy = jest
+      .spyOn(Logger.prototype, "debug")
+      .mockImplementation(() => undefined);
+    mockedSafeGet.mockRejectedValue(axiosError(404));
+
+    await fetchReadmeForBranch("octocat", "hello-world", "develop");
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining("octocat/hello-world@develop"),
+    );
+
+    debugSpy.mockRestore();
   });
 });
 
