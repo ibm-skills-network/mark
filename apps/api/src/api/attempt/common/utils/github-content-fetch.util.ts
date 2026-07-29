@@ -36,6 +36,21 @@ export async function githubApiGet<T>(
   owner: string,
   repo: string,
 ): Promise<T> {
+  // Defense in depth: this helper exists specifically to attach the server's
+  // GitHub token, so a caller-constructed URL that resolves anywhere other
+  // than api.github.com must never reach safeGet. This is a programmer-error
+  // guard (every call site builds requestUrl from a literal
+  // "https://api.github.com/..." template), not a learner-facing error.
+  let host: string;
+  try {
+    host = new URL(requestUrl).hostname;
+  } catch {
+    throw new Error("githubApiGet requires an api.github.com URL");
+  }
+  if (host !== "api.github.com") {
+    throw new Error("githubApiGet requires an api.github.com URL");
+  }
+
   const token = getGithubGradingApiToken();
   try {
     const response = await safeGet<T>(requestUrl, {

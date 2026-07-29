@@ -96,4 +96,28 @@ describe("githubApiGet", () => {
       ),
     ).rejects.toBe(notFound);
   });
+
+  it("throws for a non-api.github.com host and never reaches safeGet", async () => {
+    await expect(
+      githubApiGet(
+        "https://evil.example.com/repos/octocat/hello-world",
+        "octocat",
+        "hello-world",
+      ),
+    ).rejects.toThrow("githubApiGet requires an api.github.com URL");
+    expect(mockedSafeGet).not.toHaveBeenCalled();
+  });
+
+  it("never attaches the token off-host when the host guard rejects the URL", async () => {
+    process.env.GITHUB_GRADING_API_TOKEN = "test-token-value";
+
+    await expect(
+      githubApiGet(
+        "https://evil.example.com/repos/octocat/hello-world",
+        "octocat",
+        "hello-world",
+      ),
+    ).rejects.toThrow("githubApiGet requires an api.github.com URL");
+    expect(mockedSafeGet).not.toHaveBeenCalled();
+  });
 });
