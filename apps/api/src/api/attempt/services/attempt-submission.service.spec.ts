@@ -1958,6 +1958,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           request,
         );
 
+        expect(callOrder).toContain("lti");
         expect(callOrder.indexOf("markGradingComplete")).toBeGreaterThan(
           callOrder.indexOf("lti"),
         );
