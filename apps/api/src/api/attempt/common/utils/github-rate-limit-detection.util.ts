@@ -31,10 +31,10 @@ function parseIntHeader(raw: string | undefined): number | undefined {
 
 /**
  * True when a response looks like a GitHub primary or secondary rate-limit
- * rejection: a 403 (or 429, which GitHub has been rolling out for some
- * rate-limited endpoints) with `x-ratelimit-remaining: 0`, or a 403 carrying
- * a `retry-after` header (the secondary/abuse-detection limit, which does
- * not always report ratelimit-remaining).
+ * rejection: a 403 or 429 with `x-ratelimit-remaining: 0`, or a 403 or 429
+ * carrying a `retry-after` header (the secondary/abuse-detection limit,
+ * which does not always report ratelimit-remaining; GitHub documents this
+ * limit as returning either status).
  */
 export function isGithubRateLimitResponse(
   status: number,
@@ -47,7 +47,7 @@ export function isGithubRateLimitResponse(
   if (normalized["x-ratelimit-remaining"] === "0") {
     return true;
   }
-  return status === 403 && "retry-after" in normalized;
+  return "retry-after" in normalized;
 }
 
 /** Extracts retry-timing hints from a rate-limited response's headers. */

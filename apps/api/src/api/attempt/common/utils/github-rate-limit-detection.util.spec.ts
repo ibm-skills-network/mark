@@ -20,6 +20,15 @@ describe("isGithubRateLimitResponse", () => {
     expect(isGithubRateLimitResponse(403, { "retry-after": "30" })).toBe(true);
   });
 
+  it("is true for a secondary/abuse-detection 429 carrying retry-after with no ratelimit-remaining", () => {
+    expect(isGithubRateLimitResponse(429, { "retry-after": "30" })).toBe(true);
+  });
+
+  it("is false for a plain 429 with no rate-limit headers at all", () => {
+    expect(isGithubRateLimitResponse(429, {})).toBe(false);
+    expect(isGithubRateLimitResponse(429, undefined)).toBe(false);
+  });
+
   it("is case-insensitive on header keys", () => {
     expect(
       isGithubRateLimitResponse(403, { "X-RateLimit-Remaining": "0" }),
