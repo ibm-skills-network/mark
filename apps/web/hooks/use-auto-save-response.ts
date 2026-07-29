@@ -24,6 +24,17 @@ const AUTOSAVE_TERMINAL_STATUSES = new Set([400, 401, 403, 404, 413, 422]);
 const AUTOSAVE_GIVE_UP_MESSAGE =
   "We couldn't save your last response after several tries. Copy it somewhere safe, then reload the page and try again.";
 
+// A save request that arrived while a previous attempt (or its retry chain)
+// was still running, captured with everything a standalone save needs so it
+// can be replayed with no dependency on the call that originally queued it.
+interface QueuedSave {
+  assignmentId: number;
+  attemptId: number;
+  questionId: number;
+  payload: QuestionAttemptRequest;
+  serializedData: string;
+}
+
 /**
  * Hook to automatically save question responses to the backend.
  * This ensures that if the timer expires, the learner's work is preserved
@@ -33,7 +44,10 @@ const AUTOSAVE_GIVE_UP_MESSAGE =
  * in-memory data as saved / shows a success toast — when the server actually
  * confirms it. A failed save keeps the data dirty, retries transient
  * failures with backoff, and eventually shows an honest failure toast
- * instead of silently giving up.
+ * instead of silently giving up. A save that arrives while a previous
+ * attempt is still in flight is queued and replayed the instant that
+ * attempt settles, so the latest edit is never silently dropped in favor of
+ * a stale one.
  *
  * @param assignmentId - The ID of the assignment
  * @param attemptId - The ID of the current attempt
@@ -53,12 +67,156 @@ export function useAutoSaveResponse(
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
   const isSavingRef = useRef(false);
   const lastSavedDataRef = useRef<string>("");
+  // Set the moment a fresh save arrives while a previous attempt is still
+  // in flight (awaiting the network, not merely a scheduled retry timer).
+  // The in-flight attempt's completion handler checks this and — if set —
+  // runs the queued save immediately instead of trusting its own (by then
+  // stale) result, so a fresher edit is never silently dropped.
+  const queuedSaveRef = useRef<QueuedSave | null>(null);
+  // Flipped once in the unmount cleanup effect. An in-flight submitQuestion
+  // call has no way to be cancelled, so its resolution is checked against
+  // this ref before it's allowed to touch any ref, schedule a retry, run a
+  // queued save, or show a toast — a resolution arriving after unmount must
+  // be completely inert.
+  const isUnmountedRef = useRef(false);
 
   const question = useLearnerStore((state) =>
     state.questions.find((q) => q.id === questionId),
   );
   const userPreferedLanguage = useLearnerStore(
     (state) => state.userPreferedLanguage,
+  );
+
+  const performSave = useCallback(
+    async (
+      currentAssignmentId: number,
+      currentAttemptId: number,
+      currentQuestionId: number,
+      payload: QuestionAttemptRequest,
+      serializedData: string,
+      attempt = 0,
+    ) => {
+      // A fresh save attempt (a new edit's debounce firing, or an immediate
+      // saveNow()) always supersedes a stale retry that was scheduled for an
+      // older payload — cancel it rather than let both fire.
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = undefined;
+      }
+
+      if (isSavingRef.current) {
+        // A different (now-stale) attempt is currently awaiting the network
+        // — queue this newer request rather than dropping it. Whichever
+        // outcome the in-flight attempt reaches, its completion handler
+        // below will see this queued save and run it immediately instead.
+        queuedSaveRef.current = {
+          assignmentId: currentAssignmentId,
+          attemptId: currentAttemptId,
+          questionId: currentQuestionId,
+          payload,
+          serializedData,
+        };
+        return;
+      }
+
+      isSavingRef.current = true;
+      let result: SubmitQuestionResult;
+      try {
+        result = await submitQuestion(
+          currentAssignmentId,
+          currentAttemptId,
+          currentQuestionId,
+          payload,
+        );
+      } catch (error) {
+        // submitQuestion is contracted to resolve, never reject. This is a
+        // defensive net against a genuinely unexpected throw so it still
+        // drives the same honest failure/retry path below instead of an
+        // unhandled rejection.
+        console.error("Auto-save threw unexpectedly:", error);
+        result = { ok: false };
+      } finally {
+        isSavingRef.current = false;
+      }
+
+      if (isUnmountedRef.current) {
+        // The component is gone. Do not touch lastSavedDataRef, do not
+        // schedule a retry, do not run a queued save, do not show a toast —
+        // this resolution has nothing left to affect.
+        return;
+      }
+
+      // A fresher edit arrived while this attempt was in flight. It always
+      // wins: run it now, with its own fresh attempt count, and let it
+      // decide this data's fate instead of trusting this now-stale result.
+      const queued = queuedSaveRef.current;
+      if (queued) {
+        queuedSaveRef.current = null;
+        await performSave(
+          queued.assignmentId,
+          queued.attemptId,
+          queued.questionId,
+          queued.payload,
+          queued.serializedData,
+          0,
+        );
+        return;
+      }
+
+      // Compared against the literal `true` (not a truthy check) because
+      // this project builds with strictNullChecks disabled, under which
+      // TypeScript does not reliably narrow a discriminated union from a
+      // plain `if (result.ok)` — the explicit literal comparison is what
+      // actually narrows `result` to the `ok: false` branch below.
+      if (result.ok === true) {
+        lastSavedDataRef.current = serializedData;
+        if (showToast) {
+          toast.success("Response saved", {
+            duration: 2000,
+          });
+        }
+        return;
+      }
+
+      // Failure path: lastSavedDataRef is deliberately left untouched so
+      // this payload stays "dirty" — a later identical edit still gets a
+      // fresh save attempt instead of being silently treated as saved.
+      console.error("Auto-save failed:", {
+        assignmentId: currentAssignmentId,
+        attemptId: currentAttemptId,
+        questionId: currentQuestionId,
+        status: result.status,
+        attempt,
+      });
+
+      const isTerminal =
+        result.status !== undefined &&
+        AUTOSAVE_TERMINAL_STATUSES.has(result.status);
+
+      if (!isTerminal && attempt < RETRY_DELAYS_MS.length) {
+        retryTimeoutRef.current = setTimeout(() => {
+          if (isUnmountedRef.current) return;
+          void performSave(
+            currentAssignmentId,
+            currentAttemptId,
+            currentQuestionId,
+            payload,
+            serializedData,
+            attempt + 1,
+          );
+        }, RETRY_DELAYS_MS[attempt]);
+        return;
+      }
+
+      // Either a terminal failure (retrying the same payload would just
+      // fail the same way) or every retry is exhausted: this is the point
+      // where silence would look exactly like a false "Response saved" to
+      // the learner, so a real, specific failure toast always fires here.
+      toast.error(result.message ?? AUTOSAVE_GIVE_UP_MESSAGE, {
+        duration: 8000,
+      });
+    },
+    [showToast],
   );
 
   const saveResponse = useCallback(
@@ -104,89 +262,22 @@ export function useAutoSaveResponse(
         clearTimeout(saveTimeoutRef.current);
       }
 
-      const performSave = async (attempt = 0) => {
-        // A fresh save attempt (a new edit's debounce firing, or an
-        // immediate saveNow()) always supersedes a stale retry that was
-        // scheduled for an older payload — cancel it rather than let both
-        // fire.
-        if (retryTimeoutRef.current) {
-          clearTimeout(retryTimeoutRef.current);
-          retryTimeoutRef.current = undefined;
-        }
-
-        if (isSavingRef.current) return;
-
-        isSavingRef.current = true;
-        let result: SubmitQuestionResult;
-        try {
-          result = await submitQuestion(
-            assignmentId,
-            attemptId,
-            questionId,
-            responsePayload,
-          );
-        } catch (error) {
-          // submitQuestion is contracted to resolve, never reject. This is a
-          // defensive net against a genuinely unexpected throw so it still
-          // drives the same honest failure/retry path below instead of an
-          // unhandled rejection.
-          console.error("Auto-save threw unexpectedly:", error);
-          result = { ok: false };
-        } finally {
-          isSavingRef.current = false;
-        }
-
-        // Compared against the literal `true` (not a truthy check) because
-        // this project builds with strictNullChecks disabled, under which
-        // TypeScript does not reliably narrow a discriminated union from a
-        // plain `if (result.ok)` — the explicit literal comparison is what
-        // actually narrows `result` to the `ok: false` branch below.
-        if (result.ok === true) {
-          lastSavedDataRef.current = currentData;
-          if (showToast) {
-            toast.success("Response saved", {
-              duration: 2000,
-            });
-          }
-          return;
-        }
-
-        // Failure path: lastSavedDataRef is deliberately left untouched so
-        // this payload stays "dirty" — a later identical edit still gets a
-        // fresh save attempt instead of being silently treated as saved.
-        console.error("Auto-save failed:", {
+      const runSave = () =>
+        performSave(
           assignmentId,
           attemptId,
           questionId,
-          status: result.status,
-          attempt,
-        });
-
-        const isTerminal =
-          result.status !== undefined &&
-          AUTOSAVE_TERMINAL_STATUSES.has(result.status);
-
-        if (!isTerminal && attempt < RETRY_DELAYS_MS.length) {
-          retryTimeoutRef.current = setTimeout(
-            () => void performSave(attempt + 1),
-            RETRY_DELAYS_MS[attempt],
-          );
-          return;
-        }
-
-        // Either a terminal failure (retrying the same payload would just
-        // fail the same way) or every retry is exhausted: this is the point
-        // where silence would look exactly like a false "Response saved" to
-        // the learner, so a real, specific failure toast always fires here.
-        toast.error(result.message ?? AUTOSAVE_GIVE_UP_MESSAGE, {
-          duration: 8000,
-        });
-      };
+          responsePayload,
+          currentData,
+        );
 
       if (immediate) {
-        await performSave();
+        await runSave();
       } else {
-        saveTimeoutRef.current = setTimeout(() => void performSave(), debounceMs);
+        saveTimeoutRef.current = setTimeout(() => {
+          if (isUnmountedRef.current) return;
+          void runSave();
+        }, debounceMs);
       }
     },
     [
@@ -197,7 +288,7 @@ export function useAutoSaveResponse(
       question,
       userPreferedLanguage,
       debounceMs,
-      showToast,
+      performSave,
     ],
   );
 
@@ -218,12 +309,14 @@ export function useAutoSaveResponse(
 
   useEffect(() => {
     return () => {
+      isUnmountedRef.current = true;
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
+      queuedSaveRef.current = null;
     };
   }, []);
 

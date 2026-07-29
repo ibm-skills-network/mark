@@ -657,4 +657,195 @@ describe("useAutoSaveResponse", () => {
       );
     });
   });
+
+  it("cancels a stale pending retry when a fresh edit arrives, and saves the fresh payload instead", async () => {
+    const assignmentId = 123;
+    const attemptId = 456;
+    const questionId = 789;
+
+    mockSubmitQuestion
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValue({ ok: true, data: {} as any });
+
+    const { rerender } = renderHook(() =>
+      useAutoSaveResponse(assignmentId, attemptId, questionId, {
+        enabled: true,
+        debounceMs: 1000,
+      }),
+    );
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abc" });
+    rerender();
+    jest.advanceTimersByTime(1000);
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(1));
+
+    // The first attempt just failed transiently and is now waiting to
+    // retry at +2000ms. Before that fires, a fresh edit arrives.
+    jest.advanceTimersByTime(500);
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abcd" });
+    rerender();
+    jest.advanceTimersByTime(1000);
+
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(2));
+    expect(mockSubmitQuestion).toHaveBeenLastCalledWith(
+      assignmentId,
+      attemptId,
+      questionId,
+      expect.objectContaining({ learnerTextResponse: "abcd" }),
+    );
+
+    // Advance well past when the original retry (scheduled for the stale
+    // "abc" attempt) would have fired — it must have been cancelled, not
+    // merely delayed.
+    jest.advanceTimersByTime(10_000);
+    expect(mockSubmitQuestion).toHaveBeenCalledTimes(2);
+  });
+
+  it("queues a fresh edit that arrives while a save is in flight, and saves it once the stale attempt settles", async () => {
+    const assignmentId = 123;
+    const attemptId = 456;
+    const questionId = 789;
+
+    let resolveFirstSave: (value: unknown) => void;
+    const firstSavePromise = new Promise((resolve) => {
+      resolveFirstSave = resolve;
+    });
+
+    mockSubmitQuestion
+      .mockReturnValueOnce(firstSavePromise as any)
+      .mockResolvedValue({ ok: true, data: {} as any });
+
+    const { rerender } = renderHook(() =>
+      useAutoSaveResponse(assignmentId, attemptId, questionId, {
+        enabled: true,
+        debounceMs: 100,
+      }),
+    );
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abc" });
+    rerender();
+    jest.advanceTimersByTime(100);
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(1));
+
+    // A fresh edit arrives while the first attempt is still awaiting the
+    // network. It must be queued, not dropped.
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abcd" });
+    rerender();
+    jest.advanceTimersByTime(100);
+
+    // Still only one call: the queued save does not run until the
+    // in-flight attempt settles.
+    expect(mockSubmitQuestion).toHaveBeenCalledTimes(1);
+
+    // The stale attempt now succeeds — its own outcome is superseded by the
+    // queued fresh save, which fires immediately instead.
+    resolveFirstSave({ ok: true, data: {} as any });
+
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(2));
+    expect(mockSubmitQuestion).toHaveBeenLastCalledWith(
+      assignmentId,
+      attemptId,
+      questionId,
+      expect.objectContaining({ learnerTextResponse: "abcd" }),
+    );
+
+    // lastSavedDataRef must reflect the fresh payload, not the stale one: a
+    // later save of the exact same "abcd" text is skipped as unchanged
+    // rather than firing a third call.
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abcd" });
+    rerender();
+    jest.advanceTimersByTime(100);
+    expect(mockSubmitQuestion).toHaveBeenCalledTimes(2);
+  });
+
+  it("supersedes a stale attempt's retry chain with a queued fresh save when the stale attempt fails", async () => {
+    const assignmentId = 123;
+    const attemptId = 456;
+    const questionId = 789;
+
+    let resolveFirstSave: (value: unknown) => void;
+    const firstSavePromise = new Promise((resolve) => {
+      resolveFirstSave = resolve;
+    });
+
+    mockSubmitQuestion
+      .mockReturnValueOnce(firstSavePromise as any)
+      .mockResolvedValue({ ok: true, data: {} as any });
+
+    const { rerender } = renderHook(() =>
+      useAutoSaveResponse(assignmentId, attemptId, questionId, {
+        enabled: true,
+        debounceMs: 100,
+      }),
+    );
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abc" });
+    rerender();
+    jest.advanceTimersByTime(100);
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(1));
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "abcd" });
+    rerender();
+    jest.advanceTimersByTime(100);
+    expect(mockSubmitQuestion).toHaveBeenCalledTimes(1);
+
+    // The stale attempt fails transiently. Ordinarily this would schedule a
+    // retry of the stale "abc" payload, but the queued fresh edit
+    // supersedes it entirely — no retry of "abc" is ever scheduled.
+    resolveFirstSave({ ok: false, status: 503 });
+
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(2));
+    expect(mockSubmitQuestion).toHaveBeenLastCalledWith(
+      assignmentId,
+      attemptId,
+      questionId,
+      expect.objectContaining({ learnerTextResponse: "abcd" }),
+    );
+
+    // No retry of the stale "abc" payload ever fires, even after every
+    // backoff window in the schedule elapses.
+    jest.advanceTimersByTime(30_000);
+    expect(mockSubmitQuestion).toHaveBeenCalledTimes(2);
+  });
+
+  it("makes an in-flight save's resolution a no-op after unmount: no retry scheduled, no toast shown", async () => {
+    const assignmentId = 123;
+    const attemptId = 456;
+    const questionId = 789;
+
+    let resolveSave: (value: unknown) => void;
+    const savePromise = new Promise((resolve) => {
+      resolveSave = resolve;
+    });
+
+    mockSubmitQuestion.mockReturnValueOnce(savePromise as any);
+
+    const { rerender, unmount } = renderHook(() =>
+      useAutoSaveResponse(assignmentId, attemptId, questionId, {
+        enabled: true,
+        debounceMs: 100,
+      }),
+    );
+
+    mockStoreWithQuestion(questionId, { learnerTextResponse: "Test answer" });
+    rerender();
+    jest.advanceTimersByTime(100);
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(1));
+
+    unmount();
+
+    // The in-flight attempt resolves as a transient failure after the
+    // component is already gone.
+    resolveSave({ ok: false, status: 503 });
+    await waitFor(() => expect(mockSubmitQuestion).toHaveBeenCalledTimes(1));
+
+    // A live component would have scheduled a retry at +2000ms — advance
+    // past the entire backoff schedule to prove none of that happened.
+    jest.advanceTimersByTime(30_000);
+
+    expect(mockSubmitQuestion).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
 });
