@@ -207,7 +207,7 @@ describe("LearnerHeader submit path", () => {
     );
   });
 
-  it("keeps the grading modal open when the grading stream is lost", async () => {
+  it("keeps the grading modal open showing disconnected when the grading stream is lost", async () => {
     const { isGradingStreamLostError } = jest.requireActual("@/lib/learner");
     expect(isGradingStreamLostError).toBeDefined();
 
@@ -220,7 +220,26 @@ describe("LearnerHeader submit path", () => {
 
     mockUseParams.mockReturnValue({ assignmentId: "3428" });
     seedLearnerState(null);
-    mockSubmitAssignment.mockRejectedValue(new GradingStreamLostError());
+
+    // Mirrors the real watchdog (lib/learner.ts's handleStreamLost): it
+    // reports the terminal "disconnected" frame through onProgress before
+    // rejecting with GradingStreamLostError. Capturing the real onProgress
+    // closure and driving it the same way proves the full chain — rejection
+    // sets the status, and the modal stays up showing it — rather than only
+    // asserting the modal is still mounted.
+    mockSubmitAssignment.mockImplementation((...args: unknown[]) => {
+      const onProgress = args[7] as (
+        status: string,
+        progress: number,
+        message: string,
+      ) => void;
+      onProgress(
+        "disconnected",
+        0,
+        "We lost contact with the grading service. Your answers were submitted — check your results in a moment.",
+      );
+      return Promise.reject(new GradingStreamLostError());
+    });
 
     jest.useFakeTimers();
     try {
@@ -233,7 +252,9 @@ describe("LearnerHeader submit path", () => {
         jest.advanceTimersByTime(5000);
       });
 
-      expect(screen.getByTestId("grading-modal")).toBeInTheDocument();
+      const modal = screen.getByTestId("grading-modal");
+      expect(modal).toBeInTheDocument();
+      expect(modal).toHaveAttribute("data-status", "disconnected");
     } finally {
       jest.useRealTimers();
     }
