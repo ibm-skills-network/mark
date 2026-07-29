@@ -80,6 +80,24 @@ describe("GradingProgressService.markComplete", () => {
     );
   });
 
+  it("emails a genuine 0% grade rather than treating it as missing", async () => {
+    mockPrisma.gradingProgress.findUnique.mockResolvedValue({
+      attemptId: 77,
+      notifyOnComplete: true,
+      notificationEmail: "learner@example.com",
+      attempt: { assignmentId: 12, grade: 0, submitted: true },
+    });
+
+    await service.markComplete(77);
+
+    expect(mockEmailService.sendGradingCompletionEmail).toHaveBeenCalledWith(
+      "learner@example.com",
+      12,
+      77,
+      0,
+    );
+  });
+
   it("warns when it is reached before the attempt has been committed", async () => {
     const warn = jest
       .spyOn(

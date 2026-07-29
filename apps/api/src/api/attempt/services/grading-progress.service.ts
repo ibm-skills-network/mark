@@ -282,9 +282,10 @@ export class GradingProgressService {
 
           try {
             const assignmentId = gradingProgress.attempt.assignmentId;
-            const grade = gradingProgress.attempt.grade
-              ? gradingProgress.attempt.grade * 100
-              : undefined;
+            const grade =
+              gradingProgress.attempt.grade === null
+                ? undefined
+                : gradingProgress.attempt.grade * 100;
 
             await this.emailService.sendGradingCompletionEmail(
               gradingProgress.notificationEmail,
