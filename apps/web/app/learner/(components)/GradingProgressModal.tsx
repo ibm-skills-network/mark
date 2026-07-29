@@ -245,15 +245,24 @@ export default function GradingProgressModal({
     }
   };
 
-  const errorReportContext = {
-    statusCode: 0,
-    headline:
-      status === "stalled"
-        ? "Grading stopped responding"
-        : "Lost contact with the grading service",
-    message: progressData.currentStage,
-    context: `Assignment ${assignmentId}, attempt ${attemptId ?? "unknown"}`,
-  };
+  // Memoized so the identity only changes when the content actually does.
+  // ReportErrorButton feeds this straight into a useMemo keyed on this
+  // object, which feeds ReportPreviewModal's field-reset effects — a fresh
+  // object here on every render (this modal re-renders on several store
+  // subscriptions upstream) silently wipes whatever the learner has typed
+  // into an open report form.
+  const errorReportContext = useMemo(
+    () => ({
+      statusCode: 0,
+      headline:
+        status === "stalled"
+          ? "Grading stopped responding"
+          : "Lost contact with the grading service",
+      message: progressData.currentStage,
+      context: `Assignment ${assignmentId}, attempt ${attemptId ?? "unknown"}`,
+    }),
+    [status, progressData.currentStage, assignmentId, attemptId],
+  );
 
   return (
     <AnimatePresence>

@@ -24,10 +24,22 @@ jest.mock("@/components/GradeSyncStatus", () => ({
   default: () => null,
 }));
 
+// Captures every `error` prop ReportErrorButton receives so tests can assert
+// on its referential identity across re-renders. Name must start with
+// "mock" — Jest's module-factory hoisting only allows out-of-scope
+// references to identifiers matching that prefix.
+const mockReportErrorProps: unknown[] = [];
+
 jest.mock("@/components/ReportErrorButton", () => ({
   __esModule: true,
-  default: () =>
-    createElement("button", { "data-testid": "report-error" }, "Report this issue"),
+  default: (props: { error: unknown }) => {
+    mockReportErrorProps.push(props.error);
+    return createElement(
+      "button",
+      { "data-testid": "report-error" },
+      "Report this issue",
+    );
+  },
 }));
 
 const baseState: ProgressState = {
@@ -50,6 +62,32 @@ const renderModal = (
     />,
   );
 
+beforeEach(() => {
+  mockReportErrorProps.length = 0;
+});
+
+describe("GradingProgressModal error report context identity", () => {
+  it("keeps the report context reference stable across a re-render that leaves status and stage unchanged", () => {
+    const { rerender } = renderModal({ status: "stalled" });
+
+    // Simulates the real trigger: the modal re-renders (e.g. progress ticking
+    // up) while the status and stage the learner is looking at haven't
+    // changed. Before the fix, the inline object literal was recreated on
+    // every render regardless, which reset any in-progress report form.
+    rerender(
+      <GradingProgressModal
+        isOpen
+        assignmentId={11}
+        attemptId={22}
+        progressData={{ ...baseState, status: "stalled", progress: 55 }}
+      />,
+    );
+
+    expect(mockReportErrorProps).toHaveLength(2);
+    expect(mockReportErrorProps[1]).toBe(mockReportErrorProps[0]);
+  });
+});
+
 describe("GradingProgressModal stalled state", () => {
   it("keeps the spinner and tells the learner grading is still running", () => {
     renderModal({
@@ -59,9 +97,7 @@ describe("GradingProgressModal stalled state", () => {
     });
 
     expect(screen.getByText("Still Grading")).toBeInTheDocument();
-    expect(
-      screen.getByText(/taking longer than usual/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/taking longer than usual/i)).toBeInTheDocument();
     expect(screen.getByTestId("report-error")).toBeInTheDocument();
   });
 
@@ -80,7 +116,9 @@ describe("GradingProgressModal disconnected state", () => {
         "We lost contact with the grading service. Your answers were submitted — check your results in a moment.",
     });
 
-    expect(screen.getByText("We Lost Contact With Grading")).toBeInTheDocument();
+    expect(
+      screen.getByText("We Lost Contact With Grading"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Grading Failed")).not.toBeInTheDocument();
     expect(screen.getByText(/answers were submitted/i)).toBeInTheDocument();
   });
