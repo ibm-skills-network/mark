@@ -95,8 +95,77 @@ interface GithubRepoDescriptor {
 }
 
 /**
+ * A grading run that asks the same URL-context question for K learners (or
+ * a single assignment with K questions sharing one repo-root URL) previously
+ * cost K identical `GET /repos/{owner}/{repo}` calls. Memoize the resolved
+ * branch per owner/repo for a short window so repeated lookups within the
+ * same grading burst reuse one API call instead of amplifying rate-limit
+ * pressure. Only successful resolutions are cached — a rate-limited or
+ * otherwise-failed lookup must be retried on the next call, never served
+ * stale-failed from here.
+ */
+const DEFAULT_BRANCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_BRANCH_CACHE_MAX_ENTRIES = 500;
+
+interface DefaultBranchCacheEntry {
+  branch: string;
+  expiresAt: number;
+}
+
+const defaultBranchCache = new Map<string, DefaultBranchCacheEntry>();
+
+function defaultBranchCacheKey(owner: string, repo: string): string {
+  return `${owner}/${repo}`;
+}
+
+function getCachedDefaultBranch(
+  owner: string,
+  repo: string,
+): string | undefined {
+  const key = defaultBranchCacheKey(owner, repo);
+  const entry = defaultBranchCache.get(key);
+  if (!entry) {
+    return undefined;
+  }
+  if (entry.expiresAt <= Date.now()) {
+    defaultBranchCache.delete(key);
+    return undefined;
+  }
+  return entry.branch;
+}
+
+function setCachedDefaultBranch(
+  owner: string,
+  repo: string,
+  branch: string,
+): void {
+  const key = defaultBranchCacheKey(owner, repo);
+  if (
+    !defaultBranchCache.has(key) &&
+    defaultBranchCache.size >= DEFAULT_BRANCH_CACHE_MAX_ENTRIES
+  ) {
+    // Bound memory with simple FIFO eviction: Map iteration order is
+    // insertion order, so the first key is the oldest entry.
+    const oldestKey = defaultBranchCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      defaultBranchCache.delete(oldestKey);
+    }
+  }
+  defaultBranchCache.set(key, {
+    branch,
+    expiresAt: Date.now() + DEFAULT_BRANCH_CACHE_TTL_MS,
+  });
+}
+
+/** Test-only escape hatch: clears the module-level default-branch cache so specs don't leak state across cases. Not called from production code paths. */
+export function clearGithubDefaultBranchCache(): void {
+  defaultBranchCache.clear();
+}
+
+/**
  * Resolves a GitHub repository's actual default branch via
- * `GET /repos/{owner}/{repo}`. Returns undefined (never throws, other than
+ * `GET /repos/{owner}/{repo}`, memoized per owner/repo (see cache doc
+ * comment above). Returns undefined (never throws, other than
  * GithubRateLimitedError) when the lookup fails for any other reason —
  * network hiccup, private/nonexistent repo, unexpected response shape — so
  * callers can fall back to guessing main/master exactly like before this
@@ -106,6 +175,11 @@ export async function resolveGithubDefaultBranch(
   owner: string,
   repo: string,
 ): Promise<string | undefined> {
+  const cached = getCachedDefaultBranch(owner, repo);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const requestUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
   try {
     const data = await githubApiGet<GithubRepoDescriptor>(
@@ -113,6 +187,9 @@ export async function resolveGithubDefaultBranch(
       owner,
       repo,
     );
+    if (data.default_branch) {
+      setCachedDefaultBranch(owner, repo, data.default_branch);
+    }
     return data.default_branch;
   } catch (error) {
     if (error instanceof GithubRateLimitedError) {
@@ -160,7 +237,15 @@ export async function fetchReadmeForBranch(
   repo: string,
   branch: string,
 ): Promise<string | undefined> {
-  const readmeUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/README.md`;
+  // Encode each path segment separately: a branch name like "release/2.0"
+  // contains a literal slash that's part of the path, not a character to
+  // percent-encode — encoding the whole string turns it into "release%2F2.0"
+  // and raw.githubusercontent.com 404s on the mangled path.
+  const encodedBranch = branch
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const readmeUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodedBranch}/README.md`;
   try {
     const response = await safeGet<string>(readmeUrl);
     return response.status === 200 ? truncate(response.data) : undefined;
@@ -289,7 +374,7 @@ async function fetchGithubRepoRootContent(
   owner: string,
   repo: string,
 ): Promise<GithubFetchResult> {
-  let apiRateLimited = false;
+  let rateLimitError: GithubRateLimitedError | undefined;
   let defaultBranch: string | undefined;
 
   try {
@@ -298,7 +383,7 @@ async function fetchGithubRepoRootContent(
     if (!(error instanceof GithubRateLimitedError)) {
       throw error;
     }
-    apiRateLimited = true;
+    rateLimitError = error;
   }
 
   const candidateBranches = defaultBranch
@@ -312,15 +397,14 @@ async function fetchGithubRepoRootContent(
     }
   }
 
-  if (apiRateLimited) {
+  if (rateLimitError) {
     // Already know the api.github.com surface is exhausted — skip straight
     // to the retryable failure instead of burning another call on the
-    // metadata fallback below.
-    throw new GithubRateLimitedError({
-      owner,
-      repo,
-      requestUrl: `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
-    });
+    // metadata fallback below. Rethrow the error caught above rather than
+    // constructing a new one, so resetAt/retryAfterSeconds (populated from
+    // the actual response headers) survive to the caller instead of coming
+    // back undefined.
+    throw rateLimitError;
   }
 
   try {

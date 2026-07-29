@@ -2,6 +2,7 @@ import { Logger } from "@nestjs/common";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { safeGet } from "./ssrf-safe-http";
 import {
+  clearGithubDefaultBranchCache,
   convertGitHubUrlToRaw,
   fetchReadmeForBranch,
   fetchUrlContentForGrading,
@@ -14,6 +15,13 @@ jest.mock("./ssrf-safe-http", () => ({
 }));
 
 const mockedSafeGet = safeGet as jest.MockedFunction<typeof safeGet>;
+
+// The default-branch cache is module-level state shared across every test in
+// this file (many reuse "octocat/hello-world"); clear it after each case so
+// a resolution cached by one test can't change another's expected call count.
+afterEach(() => {
+  clearGithubDefaultBranchCache();
+});
 
 function axiosError(status: number, headers: Record<string, string> = {}) {
   return {
@@ -178,6 +186,94 @@ describe("resolveGithubDefaultBranch", () => {
   });
 });
 
+describe("resolveGithubDefaultBranch caching", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("makes one API call for two fetches of the same owner/repo", async () => {
+    mockedSafeGet.mockResolvedValue({
+      data: { default_branch: "develop" },
+      status: 200,
+    } as any);
+
+    const first = await resolveGithubDefaultBranch("octocat", "hello-world");
+    const second = await resolveGithubDefaultBranch("octocat", "hello-world");
+
+    expect(first).toBe("develop");
+    expect(second).toBe("develop");
+    expect(mockedSafeGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not serve a cached entry past its TTL", async () => {
+    let now = 1_700_000_000_000;
+    jest.spyOn(Date, "now").mockImplementation(() => now);
+    mockedSafeGet.mockResolvedValue({
+      data: { default_branch: "develop" },
+      status: 200,
+    } as any);
+
+    await resolveGithubDefaultBranch("octocat", "hello-world");
+    expect(mockedSafeGet).toHaveBeenCalledTimes(1);
+
+    // Still within the 5-minute TTL: served from cache, no second call.
+    now += 4 * 60 * 1000;
+    await resolveGithubDefaultBranch("octocat", "hello-world");
+    expect(mockedSafeGet).toHaveBeenCalledTimes(1);
+
+    // Past the TTL: must re-fetch.
+    now += 2 * 60 * 1000;
+    await resolveGithubDefaultBranch("octocat", "hello-world");
+    expect(mockedSafeGet).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache a rate-limited lookup — the next call retries", async () => {
+    mockedSafeGet.mockRejectedValue(
+      axiosError(403, { "x-ratelimit-remaining": "0" }),
+    );
+
+    await expect(
+      resolveGithubDefaultBranch("octocat", "hello-world"),
+    ).rejects.toThrow(GithubRateLimitedError);
+    await expect(
+      resolveGithubDefaultBranch("octocat", "hello-world"),
+    ).rejects.toThrow(GithubRateLimitedError);
+
+    expect(mockedSafeGet).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache a non-rate-limit failure — the next call retries", async () => {
+    mockedSafeGet.mockRejectedValue(axiosError(500));
+
+    await resolveGithubDefaultBranch("octocat", "hello-world");
+    await resolveGithubDefaultBranch("octocat", "hello-world");
+
+    expect(mockedSafeGet).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps separate cache entries per owner/repo", async () => {
+    mockedSafeGet.mockImplementation(async (url: string) => {
+      if (url === "https://api.github.com/repos/octocat/hello-world") {
+        return { data: { default_branch: "develop" }, status: 200 } as any;
+      }
+      if (url === "https://api.github.com/repos/other/repo") {
+        return { data: { default_branch: "trunk" }, status: 200 } as any;
+      }
+      throw axiosError(404);
+    });
+
+    expect(await resolveGithubDefaultBranch("octocat", "hello-world")).toBe(
+      "develop",
+    );
+    expect(await resolveGithubDefaultBranch("other", "repo")).toBe("trunk");
+    expect(await resolveGithubDefaultBranch("octocat", "hello-world")).toBe(
+      "develop",
+    );
+
+    expect(mockedSafeGet).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("fetchReadmeForBranch", () => {
   it("returns the README body for the given branch", async () => {
     mockedSafeGet.mockResolvedValue({ data: "# Hello", status: 200 } as any);
@@ -200,6 +296,24 @@ describe("fetchReadmeForBranch", () => {
     await expect(
       fetchReadmeForBranch("octocat", "hello-world", "develop"),
     ).resolves.toBeUndefined();
+  });
+
+  it("encodes each segment of a slash-containing branch name without escaping the slash itself", async () => {
+    mockedSafeGet.mockResolvedValue({
+      data: "# Release readme",
+      status: 200,
+    } as any);
+
+    const body = await fetchReadmeForBranch(
+      "octocat",
+      "hello-world",
+      "release/2.0",
+    );
+
+    expect(body).toBe("# Release readme");
+    expect(mockedSafeGet).toHaveBeenCalledWith(
+      "https://raw.githubusercontent.com/octocat/hello-world/release/2.0/README.md",
+    );
   });
 
   it("truncates content over 100000 characters", async () => {
@@ -332,15 +446,30 @@ describe("fetchUrlContentForGrading", () => {
     it("throws GithubRateLimitedError instead of silently grading 0 when rate-limited and no README guess lands", async () => {
       mockedSafeGet.mockImplementation(async (url: string) => {
         if (url === "https://api.github.com/repos/octocat/hello-world") {
-          throw axiosError(403, { "x-ratelimit-remaining": "0" });
+          throw axiosError(403, {
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": "1800000000",
+            "retry-after": "45",
+          });
         }
         // main/master guesses also miss (private repo, or genuinely no readme)
         throw axiosError(404);
       });
 
-      await expect(
-        fetchUrlContentForGrading("https://github.com/octocat/hello-world"),
-      ).rejects.toThrow(GithubRateLimitedError);
+      const rejection = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world",
+      ).then(
+        () => {
+          throw new Error("expected fetchUrlContentForGrading to reject");
+        },
+        (error: unknown) => error,
+      );
+
+      expect(rejection).toBeInstanceOf(GithubRateLimitedError);
+      // The primary rate-limit path must carry the real timing fields from
+      // the response headers, not a fresh error constructed with none.
+      expect((rejection as GithubRateLimitedError).resetAt).toBe(1_800_000_000);
+      expect((rejection as GithubRateLimitedError).retryAfterSeconds).toBe(45);
     });
 
     it("skips the metadata fallback call once rate-limiting is already known", async () => {
