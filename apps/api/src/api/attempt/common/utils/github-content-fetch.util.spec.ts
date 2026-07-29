@@ -1,6 +1,8 @@
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { safeGet } from "./ssrf-safe-http";
 import {
+  convertGitHubUrlToRaw,
+  fetchReadmeForBranch,
   githubApiGet,
   resolveGithubDefaultBranch,
 } from "./github-content-fetch.util";
@@ -171,5 +173,59 @@ describe("resolveGithubDefaultBranch", () => {
       "https://api.github.com/repos/owner%20name/repo%231",
       expect.anything(),
     );
+  });
+});
+
+describe("fetchReadmeForBranch", () => {
+  it("returns the README body for the given branch", async () => {
+    mockedSafeGet.mockResolvedValue({ data: "# Hello", status: 200 } as any);
+
+    const body = await fetchReadmeForBranch(
+      "octocat",
+      "hello-world",
+      "develop",
+    );
+
+    expect(body).toBe("# Hello");
+    expect(mockedSafeGet).toHaveBeenCalledWith(
+      "https://raw.githubusercontent.com/octocat/hello-world/develop/README.md",
+    );
+  });
+
+  it("returns undefined on a 404 without throwing", async () => {
+    mockedSafeGet.mockRejectedValue(axiosError(404));
+
+    await expect(
+      fetchReadmeForBranch("octocat", "hello-world", "develop"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("truncates content over 100000 characters", async () => {
+    mockedSafeGet.mockResolvedValue({
+      data: "x".repeat(150_000),
+      status: 200,
+    } as any);
+
+    const body = await fetchReadmeForBranch("octocat", "hello-world", "main");
+
+    expect(body).toHaveLength(100_000);
+  });
+});
+
+describe("convertGitHubUrlToRaw", () => {
+  it("converts a blob URL to its raw-content equivalent", () => {
+    expect(
+      convertGitHubUrlToRaw(
+        "https://github.com/octocat/hello-world/blob/main/src/index.js",
+      ),
+    ).toBe(
+      "https://raw.githubusercontent.com/octocat/hello-world/main/src/index.js",
+    );
+  });
+
+  it("returns null for a non-blob URL", () => {
+    expect(
+      convertGitHubUrlToRaw("https://github.com/octocat/hello-world"),
+    ).toBeNull();
   });
 });

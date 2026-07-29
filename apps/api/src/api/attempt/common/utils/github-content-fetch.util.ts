@@ -125,3 +125,45 @@ export async function resolveGithubDefaultBranch(
     return undefined;
   }
 }
+
+const MAX_CONTENT_SIZE = 100_000;
+
+function truncate(body: string): string {
+  return body.length > MAX_CONTENT_SIZE
+    ? body.slice(0, MAX_CONTENT_SIZE)
+    : body;
+}
+
+/** Converts a GitHub blob URL to its raw-content equivalent, or null if the URL isn't a blob URL. */
+export function convertGitHubUrlToRaw(url: string): string | null {
+  const match = url.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
+  );
+  if (!match) {
+    return null;
+  }
+  const [, owner, repo, path] = match;
+  return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${path}`;
+}
+
+/**
+ * Fetches README.md from a specific branch's raw content. Never throws for
+ * an ordinary miss (404, network hiccup) — returns undefined so callers can
+ * try the next candidate branch. raw.githubusercontent.com is a separate
+ * surface from api.github.com and is not subject to the same rate limit, so
+ * this is safe to try even when the default-branch API call was itself
+ * rate-limited.
+ */
+export async function fetchReadmeForBranch(
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<string | undefined> {
+  const readmeUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/README.md`;
+  try {
+    const response = await safeGet<string>(readmeUrl);
+    return response.status === 200 ? truncate(response.data) : undefined;
+  } catch {
+    return undefined;
+  }
+}
