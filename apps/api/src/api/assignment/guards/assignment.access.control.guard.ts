@@ -79,6 +79,15 @@ export class AssignmentAccessControlGuard implements CanActivate {
       // provisioning (context-manager, hand-wired Studio embeds) sometimes
       // skips the admin link call; heal the link here instead of locking
       // every learner out.
+      //
+      // This makes AssignmentGroup rows a materialization of course embeds,
+      // not an independent authorization root: deleting a row does not revoke
+      // access while still-valid launch sessions for the pair exist — the
+      // next request re-creates it. Revoking a course's access means removing
+      // the embed so no new sessions are minted; a hard block while the embed
+      // remains would need an explicit revocation marker checked before the
+      // heal, since row state alone cannot distinguish "never linked" from
+      // "unlinked".
       const launchDeclaresThisAssignment =
         userSession.assignmentId === assignmentId &&
         typeof userSession.groupId === "string" &&
@@ -144,7 +153,10 @@ export class AssignmentAccessControlGuard implements CanActivate {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        // A concurrent launch won the insert race; the link exists.
+        // Lost a unique race to a concurrent launch. Either the link row or
+        // the Group row (via connectOrCreate) was just created by the other
+        // request; if only the Group row landed, the next request completes
+        // the link. Allow this one either way.
         return;
       }
       this.logger.error(

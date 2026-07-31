@@ -143,15 +143,13 @@ describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
   });
 
   it("keeps allowing access through an existing group link without writing", async () => {
-    mockPrisma.$transaction = jest
-      .fn()
-      .mockResolvedValue([
-        {
-          assignmentId: 4535,
-          groupId: "autogen-faculty-v1-course-v1-Org-Course-v1",
-        },
-        { id: 4535 },
-      ]);
+    mockPrisma.$transaction = jest.fn().mockResolvedValue([
+      {
+        assignmentId: 4535,
+        groupId: "autogen-faculty-v1-course-v1-Org-Course-v1",
+      },
+      { id: 4535 },
+    ]);
 
     const context = createContext({}, { id: "4535" });
 
