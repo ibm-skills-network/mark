@@ -111,7 +111,7 @@
     "tar-fs": "^3.1.1",
     "tmp": "^0.2.6",
     "tsparticles": "^3.5.0",
-    "undici": "7.28.0",
+    "undici": "7.29.0",
     "zod": "^3.23.5"
   },
   "devDependencies": {
@@ -157,7 +157,7 @@
     "mongoose": "8.24.0",
     "socket.io-parser": "4.2.6",
     "@ai-sdk/provider-utils": "^3.0.26",
-    "undici": "7.28.0",
+    "undici": "7.29.0",
     "ws": "^8.21.0",
     "tar": "7.5.16",
     "**/reflect-metadata": "0.2.0",
