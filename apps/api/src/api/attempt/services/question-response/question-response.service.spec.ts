@@ -10,6 +10,7 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { QuestionService } from "../../../assignment/question/question.service";
+import { GithubRateLimitedError } from "../../../llm/features/grading/errors/github-rate-limited.error";
 import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
 import { UnsupportedImageFormatError } from "../../../llm/features/grading/errors/unsupported-image-format.error";
 import { LocalizationService } from "../../common/utils/localization.service";
@@ -316,7 +317,71 @@ describe("QuestionResponseService — gradeQuestionsForLearner", () => {
       1,
       "Grading question 1 of 1...",
     );
+    // Grading no longer flips the progress row; the caller does that after
+    // the responses and grade commit.
+    expect(mockProgressService.markComplete).not.toHaveBeenCalled();
+  });
+
+  it("exposes markGradingComplete so the caller can flip the row post-commit", async () => {
+    await service.markGradingComplete(20);
+
     expect(mockProgressService.markComplete).toHaveBeenCalledWith(20);
+  });
+
+  it("marks the legacy submitQuestions path complete only after its write phase", async () => {
+    const callOrder: string[] = [];
+
+    const questionDto = {
+      id: 3,
+      question: "Explain entropy",
+      type: QuestionType.TEXT,
+      gradingContextQuestionIds: [],
+      totalPoints: 10,
+      responseType: "TEXT",
+    };
+
+    spyPrivate("getLearnerQuestion", async () => ({
+      question: questionDto,
+      assignmentContext: {
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      },
+    }));
+    spyPrivate("buildAndSortDependencies", () => ({
+      sorted: [3],
+      adj: new Map(),
+      inDegree: new Map([[3, 0]]),
+    }));
+    spyPrivate("getAssignmentContext", async () => ({
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+    }));
+    spyPrivate("gradeQuestionNoSave", async () => ({
+      learnerResponse: "disorder increases",
+      responseDto: {
+        questionId: 3,
+        question: "Explain entropy",
+        points: 10,
+        totalPoints: 10,
+        feedback: [],
+      },
+    }));
+    spyPrivate("saveResponseToDatabase", async () => {
+      callOrder.push("write");
+    });
+    mockProgressService.markComplete.mockImplementation(async () => {
+      callOrder.push("markComplete");
+    });
+
+    await service.submitQuestions(
+      [{ id: 3, language: "en" }] as any[],
+      30,
+      UserRole.LEARNER,
+      5,
+      "en",
+    );
+
+    expect(callOrder).toEqual(["write", "markComplete"]);
   });
 
   it("stores context responses in-memory so subsequent questions can reference them without a DB call", async () => {
@@ -774,5 +839,47 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
     await expect(callGradeQuestionNoSave()).rejects.toThrow(
       "Failed to process question response: model exploded",
     );
+  });
+
+  it("rethrows GithubRateLimitedError unchanged (same instance)", async () => {
+    const rateLimited = new GithubRateLimitedError({
+      owner: "octocat",
+      repo: "hello-world",
+      requestUrl: "https://api.github.com/repos/octocat/hello-world",
+    });
+    mockStrategy.gradeResponse.mockRejectedValue(rateLimited);
+
+    await expect(callGradeQuestionNoSave()).rejects.toBe(rateLimited);
+  });
+
+  it("surfaces GithubRateLimitedError out of the public createQuestionResponse entry point with its class intact", async () => {
+    const rateLimited = new GithubRateLimitedError({
+      owner: "octocat",
+      repo: "hello-world",
+      requestUrl: "https://api.github.com/repos/octocat/hello-world",
+    });
+    mockStrategy.gradeResponse.mockRejectedValue(rateLimited);
+
+    // Author path avoids the DB lookups the learner path needs — the point
+    // here is the error's class survives the createQuestionResponse ->
+    // gradeQuestionNoSave boundary, not the question-loading mechanics.
+    const rejection = await service
+      .createQuestionResponse(
+        10, // assignmentAttemptId
+        { ...requestDto, id: question.id },
+        UserRole.AUTHOR,
+        5, // assignmentId
+        "en",
+        [question], // authorQuestions
+      )
+      .then(
+        () => {
+          throw new Error("expected createQuestionResponse to reject");
+        },
+        (error: unknown) => error,
+      );
+
+    expect(rejection).toBe(rateLimited);
+    expect(rejection).toBeInstanceOf(GithubRateLimitedError);
   });
 });

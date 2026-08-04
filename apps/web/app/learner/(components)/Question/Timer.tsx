@@ -5,6 +5,7 @@ import type {
 } from "@/config/types";
 import { useAssignmentId } from "@/hooks/use-assignment-id";
 import useCountdown from "@/hooks/use-countdown";
+import { isGradingStreamLostError } from "@/lib/learner";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import {
@@ -165,6 +166,20 @@ function Timer(props: Props) {
       // Auto-submit runs from a fire-and-forget setTimeout; without this catch a
       // 401/network rejection is an unhandled promise and the learner is told
       // their work "will be graded automatically" while it was silently lost.
+      if (isGradingStreamLostError(error)) {
+        // The submission itself went through — only the grading status
+        // stream gave up watching it. Telling the learner to resubmit here
+        // would be actively wrong (their answers are already in) and risks
+        // a duplicate attempt, so this reuses the stream's own honest
+        // message instead of the generic "try again" copy below.
+        console.error("[learner] auto-submit lost the grading stream", {
+          assignmentId,
+          activeAttemptId,
+          reason: error.reason,
+        });
+        toast.error(error.message);
+        return;
+      }
       console.error("[learner] auto-submit failed", {
         assignmentId,
         activeAttemptId,
