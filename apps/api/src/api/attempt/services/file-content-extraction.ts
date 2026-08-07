@@ -99,6 +99,14 @@ interface JupyterOutput {
   execution_count?: number;
 }
 
+/**
+ * A high surrogate not followed by a low one, or a low surrogate not preceded
+ * by a high one. Deliberately not global: a /g regex carries lastIndex between
+ * .test() calls and would alternate between hits and misses.
+ */
+const LONE_SURROGATE_RE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/;
+
 @Injectable()
 export class FileContentExtractionService {
   private readonly logger = new Logger(FileContentExtractionService.name);
@@ -978,6 +986,28 @@ export class FileContentExtractionService {
       this.logger.warn(
         `extractTextFromBuffer rejected: filename=${filename} ` +
           `extension=${extension} encoding=${encoding} reason=binary_content`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "binary_content",
+        extension,
+        extractedLength: result.text.length,
+      });
+    }
+
+    // Arbitrary bytes decoded as UTF-16LE almost never produce the replacement
+    // characters that guard the other encodings, so binary sails through as
+    // hundreds of kilobytes of plausible-looking CJK. The tell is unpaired
+    // surrogates: valid text never carries them, and they cannot be encoded to
+    // UTF-8 — which is what made the model provider reject the whole request
+    // body and, in turn, zero every criterion. Length and encoding checks both
+    // miss this, so it is tested on its own.
+    if (LONE_SURROGATE_RE.test(result.text)) {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${extension} encoding=${encoding} ` +
+          `extractedLength=${result.text.length} reason=binary_content ` +
+          `detail=lone_surrogates`,
       );
       throw new UnextractableSubmissionError({
         filename,

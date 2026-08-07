@@ -99,4 +99,47 @@ describe("FileContentExtractionService — unextractable uploads are rejected", 
 
     expect(result.text).toContain("actual submitted answer");
   });
+
+  /**
+   * The production failure that neither the length nor the encoding check
+   * catches. UTF-16LE decoding does not produce the replacement characters
+   * that disqualify the other encodings, so an 800KB archive decoded into
+   * ~400k characters of plausible-looking CJK and was graded as the learner's
+   * work. Unpaired surrogates are the part that cannot survive UTF-8 encoding,
+   * which is what made the model provider reject the request outright.
+   */
+  it("rejects binary that UTF-16LE decoding turned into plausible text", async () => {
+    // Repeating U+D800 (bytes 00 D8 little-endian) then "A": a lone high
+    // surrogate. Invalid as UTF-8, so extraction falls through to UTF-16LE.
+    const pattern = Buffer.from([0x00, 0xd8, 0x41, 0x00]);
+    const buffer = Buffer.concat(Array.from({ length: 1000 }, () => pattern));
+
+    const error = await internals()
+      .extractTextFromBuffer(
+        buffer,
+        "coursework.dat",
+        "application/octet-stream",
+      )
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UnextractableSubmissionError);
+    const typed = error as UnextractableSubmissionError;
+    expect(typed.reason).toBe("binary_content");
+    // Length alone would have passed this: it is far above the floor.
+    expect(typed.extractedLength).toBeGreaterThan(100);
+  });
+
+  it("does not mistake genuine non-Latin text for decoded binary", async () => {
+    // Well-formed CJK has no unpaired surrogates and must survive the guard,
+    // otherwise the check would reject real submissions in these languages.
+    const japanese =
+      "これは学習者が提出した実際の解答です。採点できる長さがあります。";
+    const result = await internals().extractTextFromBuffer(
+      Buffer.from(japanese, "utf8"),
+      "coursework.dat",
+      "application/octet-stream",
+    );
+
+    expect(result.text).toContain("学習者");
+  });
 });
