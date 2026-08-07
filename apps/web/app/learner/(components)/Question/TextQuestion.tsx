@@ -20,11 +20,6 @@ function TextQuestion(props: Props) {
   const maxWords = question?.maxWords || null;
   const maxCharacters = question?.maxCharacters || null;
 
-  // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {
-  //   enabled: true,
-  //   debounceMs: 3000,
-  // });
-
   return (
     <MarkdownEditor
       value={question?.learnerTextResponse || ""}

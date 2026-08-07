@@ -17,11 +17,6 @@ function URLQuestion(props: Props) {
   const { id, learnerUrlResponse: url } = question;
   const [validURL, setValidURL] = useState<boolean>(true);
 
-  // useAutoSaveResponse(assignmentId, activeAttemptId, id, {
-  //   enabled: true,
-  //   debounceMs: 2000,
-  // });
-
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUrl = e.target.value;
     setURLResponse(newUrl, id);
