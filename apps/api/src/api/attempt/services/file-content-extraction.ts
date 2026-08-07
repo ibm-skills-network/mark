@@ -216,31 +216,19 @@ export class FileContentExtractionService {
 
           return result;
         } catch (error) {
-          // Learner-facing failures are verdicts about the submission itself,
-          // so they must reach the learner. Degrading one into the placeholder
-          // below would hand the grader a note about a missing file and let it
-          // score the criteria zero — the silent wrong grade this class exists
-          // to prevent.
-          if (error instanceof LearnerFacingGradingError) {
-            throw error;
-          }
+          // Every failure propagates. Learner-facing errors are verdicts about
+          // the submission itself and must reach the learner; anything else —
+          // a COS blip, a parser crash — must fail the job so it retries or
+          // lands in triage. Returning a placeholder here would hand the
+          // grader a note about a missing file and let it score the criteria
+          // zero: a silent wrong grade for a fault that was never the
+          // learner's. Callers that prefer to degrade (author reference
+          // uploads, chat) already catch around this call.
           this.logger.error(
             `Failed to extract content from ${file.filename}:`,
             error,
           );
-
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          return {
-            filename: file.filename,
-            content:
-              `[ERROR extracting ${file.filename}: ${errorMessage}]\n` +
-              `File type: ${file.fileType}\n` +
-              `This file could not be processed, but it exists in the submission.`,
-            error: errorMessage,
-            fileType: file.fileType,
-            metadata: { size: 0 },
-          };
+          throw error;
         }
       }),
     );
@@ -896,7 +884,14 @@ export class FileContentExtractionService {
         `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex}`,
     );
 
-    if (this.UNSUPPORTED_EXTENSIONS.has(fileExtension)) {
+    // iWork documents are always ZIP containers, so require the ZIP signature
+    // before trusting the extension token: a PEM-style .key file or a dotless
+    // file that happens to be named "numbers" is not an iWork document and
+    // deserves normal extraction, not export guidance for the wrong app.
+    if (
+      this.UNSUPPORTED_EXTENSIONS.has(fileExtension) &&
+      magicBytesHex.startsWith("504b")
+    ) {
       this.logger.warn(
         `extractTextFromBuffer rejected: filename=${filename} ` +
           `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +

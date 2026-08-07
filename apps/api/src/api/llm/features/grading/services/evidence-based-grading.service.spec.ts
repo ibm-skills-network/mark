@@ -54,17 +54,13 @@ describe("EvidenceBasedGradingService — criterion failures never become scores
 
   function buildService(promptProcessor: IPromptProcessor): {
     service: EvidenceBasedGradingService;
-    errorLogs: string[];
   } {
-    const errorLogs: string[] = [];
     const logger = {
       child: () => logger,
       debug: jest.fn(),
       info: jest.fn(),
       warn: jest.fn(),
-      error: jest.fn((message: string) => {
-        errorLogs.push(message);
-      }),
+      error: jest.fn(),
     } as unknown as Logger;
 
     // The pipeline always throws here, which is what routes grading onto the
@@ -92,7 +88,7 @@ describe("EvidenceBasedGradingService — criterion failures never become scores
       logger,
     );
 
-    return { service, errorLogs };
+    return { service };
   }
 
   const grade = (service: EvidenceBasedGradingService) =>

@@ -142,4 +142,95 @@ describe("FileContentExtractionService — unextractable uploads are rejected", 
 
     expect(result.text).toContain("学習者");
   });
+
+  it("keeps astral characters that arrive as correctly paired surrogates", async () => {
+    // Emoji and CJK extension characters live above the BMP and are encoded
+    // as surrogate *pairs* in JavaScript strings. The guard exists to catch
+    // lone halves; a paired one is ordinary text and must pass, or the check
+    // would start rejecting real submissions that merely contain an emoji.
+    const astral = "The answer 🎓 also cites 𠀀 from the reading list.";
+    const result = await internals().extractTextFromBuffer(
+      Buffer.from(astral, "utf8"),
+      "coursework.dat",
+      "application/octet-stream",
+    );
+
+    expect(result.text).toContain("🎓");
+    expect(result.text).toContain("𠀀");
+  });
+
+  it("accepts fallback text exactly at the minimum length", async () => {
+    const twentyChars = "a".repeat(20);
+    const result = await internals().extractTextFromBuffer(
+      Buffer.from(twentyChars, "utf8"),
+      "coursework.dat",
+      "application/octet-stream",
+    );
+
+    expect(result.text.trim()).toHaveLength(20);
+  });
+
+  it("rejects fallback text one character below the minimum", async () => {
+    const nineteenChars = "a".repeat(19);
+    const error = await internals()
+      .extractTextFromBuffer(
+        Buffer.from(nineteenChars, "utf8"),
+        "coursework.dat",
+        "application/octet-stream",
+      )
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UnextractableSubmissionError);
+    expect((error as UnextractableSubmissionError).reason).toBe(
+      "insufficient_text",
+    );
+  });
+
+  it("does not reject a .key file that is not an iWork container", async () => {
+    // The unsupported-extension list names iWork suffixes, but "key" also
+    // means PEM key files in CS coursework, and a dotless filename makes its
+    // whole name the extension token. iWork documents are ZIP containers, so
+    // only the ZIP signature makes the extension token trustworthy.
+    const pem =
+      "-----BEGIN PUBLIC KEY-----\n" +
+      "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7bq0\n" +
+      "-----END PUBLIC KEY-----\n";
+    const result = await internals().extractTextFromBuffer(
+      Buffer.from(pem, "utf8"),
+      "server.key",
+      "application/octet-stream",
+    );
+
+    expect(result.text).toContain("BEGIN PUBLIC KEY");
+  });
+});
+
+/**
+ * A file the service cannot even fetch is a different failure class from one
+ * it cannot read: the learner did nothing wrong and the bytes may be fine.
+ * Turning that into placeholder "content" hands the grader a note about a
+ * missing file to score — the job must fail and retry instead.
+ */
+describe("FileContentExtractionService — infrastructure failures fail the job", () => {
+  it("propagates a storage failure instead of returning gradable placeholder text", async () => {
+    const failingS3 = {
+      getObject: jest.fn().mockRejectedValue(new Error("connection reset")),
+    } as unknown as S3Service;
+    const service = new FileContentExtractionService(
+      failingS3,
+      {} as PdfStructureExtractorService,
+    );
+
+    await expect(
+      service.extractContentFromFiles([
+        {
+          filename: "essay.txt",
+          content: "",
+          fileType: "text/plain",
+          bucket: "submissions",
+          key: "attempt-1/essay.txt",
+        },
+      ]),
+    ).rejects.toThrow("Could not retrieve file");
+  });
 });
