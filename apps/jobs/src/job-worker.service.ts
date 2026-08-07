@@ -886,6 +886,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   private static readonly TERMINAL_GRADING_ERROR_NAMES = new Set([
     "OversizedSubmissionError",
     "UnsupportedImageFormatError",
+    "UnextractableSubmissionError",
   ]);
 
   // Matches the two ConflictException messages a duplicate submit produces:

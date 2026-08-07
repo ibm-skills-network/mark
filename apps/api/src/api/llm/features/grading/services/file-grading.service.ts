@@ -3064,7 +3064,9 @@ export class FileGradingService implements IFileGradingService {
       };
       modelOverridesAreFinal?: boolean;
     },
-    failLoudly = false,
+    // Defaults to throwing: the silent branch scores minimum points on any
+    // failure, which a caller must opt into knowingly rather than inherit.
+    failLoudly = true,
     includeCodeUploads = false,
   ): Promise<FileBasedQuestionResponseModel> {
     try {

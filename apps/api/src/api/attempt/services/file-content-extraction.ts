@@ -10,7 +10,9 @@ import { S3Service } from "src/api/files/services/s3.service";
 import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
+import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { UnextractableSubmissionError } from "../../llm/features/grading/errors/unextractable-submission.error";
 import { compactWorksheet } from "../../llm/features/grading/services/spreadsheet-used-range.utils";
 import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
@@ -97,12 +99,39 @@ interface JupyterOutput {
   execution_count?: number;
 }
 
+/**
+ * A high surrogate not followed by a low one, or a low surrogate not preceded
+ * by a high one. Deliberately not global: a /g regex carries lastIndex between
+ * .test() calls and would alternate between hits and misses.
+ */
+const LONE_SURROGATE_RE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/;
+
 @Injectable()
 export class FileContentExtractionService {
   private readonly logger = new Logger(FileContentExtractionService.name);
   private readonly MAX_CONTENT_LENGTH = 500_000;
   private readonly CHUNK_SIZE = 10_000;
   private readonly BINARY_SAMPLE_SIZE = 5000;
+
+  /**
+   * Container formats with no extractor here. They are ZIP archives, so the
+   * fallback strategies happily scrape a few ASCII fragments out of their
+   * internals and return them as if they were the learner's work. Reject them
+   * up front, where we can name the format and tell the learner what to export.
+   */
+  private readonly UNSUPPORTED_EXTENSIONS = new Set([
+    "numbers",
+    "pages",
+    "key",
+  ]);
+
+  /**
+   * Below this many characters, an unrecognized file's extracted text is
+   * fragments rather than content. Applied only on the fallback path, so
+   * recognized formats keep their existing behaviour at any length.
+   */
+  private readonly MIN_FALLBACK_TEXT_LENGTH = 20;
 
   private readonly mimeTypeMap: Record<string, string[]> = {
     "text/plain": ["txt", "log", "md", "markdown", "rst", "asc", "text"],
@@ -187,26 +216,19 @@ export class FileContentExtractionService {
 
           return result;
         } catch (error) {
-          if (error instanceof OversizedSubmissionError) {
-            throw error;
-          }
+          // Every failure propagates. Learner-facing errors are verdicts about
+          // the submission itself and must reach the learner; anything else —
+          // a COS blip, a parser crash — must fail the job so it retries or
+          // lands in triage. Returning a placeholder here would hand the
+          // grader a note about a missing file and let it score the criteria
+          // zero: a silent wrong grade for a fault that was never the
+          // learner's. Callers that prefer to degrade (author reference
+          // uploads, chat) already catch around this call.
           this.logger.error(
             `Failed to extract content from ${file.filename}:`,
             error,
           );
-
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          return {
-            filename: file.filename,
-            content:
-              `[ERROR extracting ${file.filename}: ${errorMessage}]\n` +
-              `File type: ${file.fileType}\n` +
-              `This file could not be processed, but it exists in the submission.`,
-            error: errorMessage,
-            fileType: file.fileType,
-            metadata: { size: 0 },
-          };
+          throw error;
         }
       }),
     );
@@ -862,6 +884,26 @@ export class FileContentExtractionService {
         `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex}`,
     );
 
+    // iWork documents are always ZIP containers, so require the ZIP signature
+    // before trusting the extension token: a PEM-style .key file or a dotless
+    // file that happens to be named "numbers" is not an iWork document and
+    // deserves normal extraction, not export guidance for the wrong app.
+    if (
+      this.UNSUPPORTED_EXTENSIONS.has(fileExtension) &&
+      magicBytesHex.startsWith("504b")
+    ) {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
+          `reason=unsupported_format`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "unsupported_format",
+        extension: fileExtension,
+      });
+    }
+
     try {
       const result = await this.extractByExtension(
         buffer,
@@ -892,6 +934,7 @@ export class FileContentExtractionService {
       }
 
       const fallbackResult = await this.extractWithFallback(buffer, filename);
+      this.assertFallbackIsGradable(fallbackResult, filename, fileExtension);
       this.logger.log(
         `extractTextFromBuffer completed: filename=${filename} ` +
           `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
@@ -899,6 +942,12 @@ export class FileContentExtractionService {
       );
       return fallbackResult;
     } catch (error) {
+      // A learner-facing error is a verdict, not a fault to recover from —
+      // retrying the fallback would only re-derive the garbage it rejected.
+      if (error instanceof LearnerFacingGradingError) {
+        throw error;
+      }
+
       this.logger.warn(
         `Primary extraction failed: filename=${filename} ` +
           `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
@@ -906,7 +955,76 @@ export class FileContentExtractionService {
           `error=${error instanceof Error ? error.message : String(error)}`,
         error instanceof Error ? error.stack : undefined,
       );
-      return await this.extractWithFallback(buffer, filename);
+      const fallbackResult = await this.extractWithFallback(buffer, filename);
+      this.assertFallbackIsGradable(fallbackResult, filename, fileExtension);
+      return fallbackResult;
+    }
+  }
+
+  /**
+   * Gate the fallback path's output before it can reach a grader.
+   *
+   * Reaching the fallback already means neither the extension nor the MIME type
+   * was recognized. When that path then yields a binary dump, an unrecognized-
+   * bytes summary, or a few stray characters, there is nothing to grade — and
+   * handing it to the model produces a confident zero against content the
+   * learner never wrote. Only the fallback path is checked, so recognized
+   * formats keep their existing behaviour no matter how short their text.
+   */
+  private assertFallbackIsGradable(
+    result: { text: string; encoding?: string },
+    filename: string,
+    extension: string,
+  ): void {
+    const encoding = result.encoding ?? "";
+    if (encoding === "binary" || encoding === "unknown") {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${extension} encoding=${encoding} reason=binary_content`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "binary_content",
+        extension,
+        extractedLength: result.text.length,
+      });
+    }
+
+    // Arbitrary bytes decoded as UTF-16LE almost never produce the replacement
+    // characters that guard the other encodings, so binary sails through as
+    // hundreds of kilobytes of plausible-looking CJK. The tell is unpaired
+    // surrogates: valid text never carries them, and they cannot be encoded to
+    // UTF-8 — which is what made the model provider reject the whole request
+    // body and, in turn, zero every criterion. Length and encoding checks both
+    // miss this, so it is tested on its own.
+    if (LONE_SURROGATE_RE.test(result.text)) {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${extension} encoding=${encoding} ` +
+          `extractedLength=${result.text.length} reason=binary_content ` +
+          `detail=lone_surrogates`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "binary_content",
+        extension,
+        extractedLength: result.text.length,
+      });
+    }
+
+    const usableLength = result.text.trim().length;
+    if (usableLength < this.MIN_FALLBACK_TEXT_LENGTH) {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${extension} extractedLength=${usableLength} ` +
+          `reason=insufficient_text`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "insufficient_text",
+        extension,
+        extractedLength: usableLength,
+      });
     }
   }
 

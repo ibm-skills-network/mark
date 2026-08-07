@@ -26,6 +26,7 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { LearnerFacingGradingError } from "../errors/learner-facing-grading.error";
 import {
   CriterionGrade,
   DEFAULT_MODEL_SELECTION,
@@ -101,6 +102,16 @@ type EvidenceOutput = z.infer<typeof EvidenceOutputSchema>;
 @Injectable()
 export class EvidenceBasedGradingService {
   private readonly logger: Logger;
+
+  /**
+   * Total tries per criterion on the legacy fallback path. The evidence
+   * pipeline does its own retrying; this path had none, so a single transient
+   * provider error used to be enough to lose the criterion.
+   */
+  private static readonly CRITERION_MAX_ATTEMPTS = 3;
+
+  /** Multiplied by the attempt number for a linear backoff between tries. */
+  private static readonly CRITERION_RETRY_BASE_MS = 500;
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -214,49 +225,25 @@ export class EvidenceBasedGradingService {
       );
 
       for (const criterion of criteria) {
-        try {
-          this.logger.debug(
-            `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
-          );
+        this.logger.debug(
+          `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
+        );
 
-          const result = await this.gradeOneCriterion(
-            submission,
-            criterion,
-            questionText,
-            assignmentId,
-            language,
-            judgeFeedback,
-          );
+        // Deliberately unguarded: a criterion that cannot be graded must fail
+        // the job. Scoring it zero would hand the learner a wrong grade for an
+        // infrastructure fault, indistinguishable from work that earned zero.
+        const result = await this.gradeOneCriterionWithRetry(
+          submission,
+          criterion,
+          questionText,
+          assignmentId,
+          language,
+          judgeFeedback,
+        );
 
-          criteriaResults.push(result);
-          totalPoints += result.pointsAwarded;
-          maxPossiblePoints += result.maxPoints;
-        } catch (criterionError) {
-          this.logger.error(
-            `Failed to grade criterion ${criterion.id}: ${
-              criterionError instanceof Error
-                ? criterionError.message
-                : String(criterionError)
-            }`,
-          );
-
-          criteriaResults.push({
-            criterionId: criterion.id,
-            rubricQuestion: criterion.rubricQuestion,
-            pointsAwarded: 0,
-            maxPoints: criterion.maxPoints,
-            evidence: [],
-            rationale: `Grading failed: ${
-              criterionError instanceof Error
-                ? criterionError.message
-                : "Unknown error"
-            }`,
-            decision: "does_not_meet",
-            gradedAt: new Date().toISOString(),
-          });
-
-          maxPossiblePoints += criterion.maxPoints;
-        }
+        criteriaResults.push(result);
+        totalPoints += result.pointsAwarded;
+        maxPossiblePoints += result.maxPoints;
       }
     }
 
@@ -294,6 +281,97 @@ export class EvidenceBasedGradingService {
         determinismChecksum: submission.metadata.checksum,
       },
     };
+  }
+
+  /**
+   * Grade one criterion, retrying transient faults.
+   *
+   * Every exit is either a real grade or a throw. There is no third outcome
+   * that produces a score, because the only score available to invent here is
+   * zero — and a zero the learner cannot distinguish from a judged zero is
+   * worse than a failed job they can retry.
+   *
+   * Learner-facing errors are terminal by definition (the same submission will
+   * fail the same way), so they short-circuit rather than burn attempts.
+   */
+  private async gradeOneCriterionWithRetry(
+    submission: CanonicalSubmission,
+    criterion: RubricCriterion,
+    questionText: string,
+    assignmentId: number,
+    language: string,
+    judgeFeedback?: string,
+  ): Promise<CriterionGradingResult> {
+    const maxAttempts = EvidenceBasedGradingService.CRITERION_MAX_ATTEMPTS;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.gradeOneCriterion(
+          submission,
+          criterion,
+          questionText,
+          assignmentId,
+          language,
+          judgeFeedback,
+        );
+      } catch (criterionError) {
+        lastError = criterionError;
+
+        if (criterionError instanceof LearnerFacingGradingError) {
+          this.logger.warn(
+            `Criterion ${criterion.id} is terminal for this submission: ${criterionError.message}`,
+            {
+              submissionId: submission.submissionId,
+              assignmentId,
+              criterionId: criterion.id,
+              errorClass: criterionError.name,
+            },
+          );
+          throw criterionError;
+        }
+
+        const message =
+          criterionError instanceof Error
+            ? criterionError.message
+            : String(criterionError);
+
+        if (attempt < maxAttempts) {
+          this.logger.warn(
+            `Criterion ${criterion.id} failed (attempt ${attempt}/${maxAttempts}), retrying: ${message}`,
+            {
+              submissionId: submission.submissionId,
+              assignmentId,
+              criterionId: criterion.id,
+              attempt,
+            },
+          );
+          await this.delay(
+            EvidenceBasedGradingService.CRITERION_RETRY_BASE_MS * attempt,
+          );
+        }
+      }
+    }
+
+    this.logger.error(
+      `Criterion ${criterion.id} failed after ${maxAttempts} attempts; failing the grading job rather than scoring it zero: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`,
+      {
+        submissionId: submission.submissionId,
+        assignmentId,
+        criterionId: criterion.id,
+        attempts: maxAttempts,
+      },
+    );
+
+    // Rethrow the original so the worker's error taxonomy still classifies it
+    // (retryable vs terminal); wrapping would flatten every cause into one.
+    throw lastError;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
