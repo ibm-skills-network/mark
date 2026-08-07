@@ -10,7 +10,9 @@ import { S3Service } from "src/api/files/services/s3.service";
 import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
+import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { UnextractableSubmissionError } from "../../llm/features/grading/errors/unextractable-submission.error";
 import { compactWorksheet } from "../../llm/features/grading/services/spreadsheet-used-range.utils";
 import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
@@ -104,6 +106,25 @@ export class FileContentExtractionService {
   private readonly CHUNK_SIZE = 10_000;
   private readonly BINARY_SAMPLE_SIZE = 5000;
 
+  /**
+   * Container formats with no extractor here. They are ZIP archives, so the
+   * fallback strategies happily scrape a few ASCII fragments out of their
+   * internals and return them as if they were the learner's work. Reject them
+   * up front, where we can name the format and tell the learner what to export.
+   */
+  private readonly UNSUPPORTED_EXTENSIONS = new Set([
+    "numbers",
+    "pages",
+    "key",
+  ]);
+
+  /**
+   * Below this many characters, an unrecognized file's extracted text is
+   * fragments rather than content. Applied only on the fallback path, so
+   * recognized formats keep their existing behaviour at any length.
+   */
+  private readonly MIN_FALLBACK_TEXT_LENGTH = 20;
+
   private readonly mimeTypeMap: Record<string, string[]> = {
     "text/plain": ["txt", "log", "md", "markdown", "rst", "asc", "text"],
     "application/json": ["json", "jsonl", "geojson", "topojson"],
@@ -187,7 +208,12 @@ export class FileContentExtractionService {
 
           return result;
         } catch (error) {
-          if (error instanceof OversizedSubmissionError) {
+          // Learner-facing failures are verdicts about the submission itself,
+          // so they must reach the learner. Degrading one into the placeholder
+          // below would hand the grader a note about a missing file and let it
+          // score the criteria zero — the silent wrong grade this class exists
+          // to prevent.
+          if (error instanceof LearnerFacingGradingError) {
             throw error;
           }
           this.logger.error(
@@ -862,6 +888,19 @@ export class FileContentExtractionService {
         `byteSize=${byteSize} sha256=${sha256Short} magicBytes=${magicBytesHex}`,
     );
 
+    if (this.UNSUPPORTED_EXTENSIONS.has(fileExtension)) {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
+          `reason=unsupported_format`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "unsupported_format",
+        extension: fileExtension,
+      });
+    }
+
     try {
       const result = await this.extractByExtension(
         buffer,
@@ -892,6 +931,7 @@ export class FileContentExtractionService {
       }
 
       const fallbackResult = await this.extractWithFallback(buffer, filename);
+      this.assertFallbackIsGradable(fallbackResult, filename, fileExtension);
       this.logger.log(
         `extractTextFromBuffer completed: filename=${filename} ` +
           `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
@@ -899,6 +939,12 @@ export class FileContentExtractionService {
       );
       return fallbackResult;
     } catch (error) {
+      // A learner-facing error is a verdict, not a fault to recover from —
+      // retrying the fallback would only re-derive the garbage it rejected.
+      if (error instanceof LearnerFacingGradingError) {
+        throw error;
+      }
+
       this.logger.warn(
         `Primary extraction failed: filename=${filename} ` +
           `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
@@ -906,7 +952,54 @@ export class FileContentExtractionService {
           `error=${error instanceof Error ? error.message : String(error)}`,
         error instanceof Error ? error.stack : undefined,
       );
-      return await this.extractWithFallback(buffer, filename);
+      const fallbackResult = await this.extractWithFallback(buffer, filename);
+      this.assertFallbackIsGradable(fallbackResult, filename, fileExtension);
+      return fallbackResult;
+    }
+  }
+
+  /**
+   * Gate the fallback path's output before it can reach a grader.
+   *
+   * Reaching the fallback already means neither the extension nor the MIME type
+   * was recognized. When that path then yields a binary dump, an unrecognized-
+   * bytes summary, or a few stray characters, there is nothing to grade — and
+   * handing it to the model produces a confident zero against content the
+   * learner never wrote. Only the fallback path is checked, so recognized
+   * formats keep their existing behaviour no matter how short their text.
+   */
+  private assertFallbackIsGradable(
+    result: { text: string; encoding?: string },
+    filename: string,
+    extension: string,
+  ): void {
+    const encoding = result.encoding ?? "";
+    if (encoding === "binary" || encoding === "unknown") {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${extension} encoding=${encoding} reason=binary_content`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "binary_content",
+        extension,
+        extractedLength: result.text.length,
+      });
+    }
+
+    const usableLength = result.text.trim().length;
+    if (usableLength < this.MIN_FALLBACK_TEXT_LENGTH) {
+      this.logger.warn(
+        `extractTextFromBuffer rejected: filename=${filename} ` +
+          `extension=${extension} extractedLength=${usableLength} ` +
+          `reason=insufficient_text`,
+      );
+      throw new UnextractableSubmissionError({
+        filename,
+        reason: "insufficient_text",
+        extension,
+        extractedLength: usableLength,
+      });
     }
   }
 
