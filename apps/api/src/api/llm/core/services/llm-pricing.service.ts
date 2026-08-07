@@ -981,6 +981,12 @@ export class LLMPricingService {
         input: 0.000_000_2,
         output: 0.000_001_25,
       },
+      // GPT-5.6, short-context tier. Above 272K input the whole request bills
+      // at ~2x these rates, which one price pair can't express -- analytics
+      // undercount those. Cache writes aren't modelled either.
+      "gpt-5.6-luna": { input: 0.000_000_2, output: 0.000_001_2 },
+      "gpt-5.6-terra": { input: 0.000_002, output: 0.000_012 },
+      "gpt-5.6-sol": { input: 0.000_005, output: 0.000_03 },
       "gpt-oss-120b": { input: 0.000_000_15, output: 0.000_000_6 },
 
       o1: { input: 0.000_015, output: 0.000_06 },
@@ -1010,9 +1016,11 @@ export class LLMPricingService {
         source: "Fallback pricing",
         notes: modelKey.startsWith("gpt-5.4-")
           ? "Official OpenAI Standard-tier snapshot pricing"
-          : modelKey.startsWith("gpt-5")
-            ? "Estimated pricing for model"
-            : "Known pricing when registry lookup failed",
+          : modelKey.startsWith("gpt-5.6-")
+            ? "Official OpenAI Standard-tier pricing, short-context (<=272K input) rate"
+            : modelKey.startsWith("gpt-5")
+              ? "Estimated pricing for model"
+              : "Known pricing when registry lookup failed",
       },
     };
   }
@@ -1032,6 +1040,9 @@ export class LLMPricingService {
       "gpt-5-nano",
       "gpt-5.4-mini-2026-03-17",
       "gpt-5.4-nano-2026-03-17",
+      "gpt-5.6-luna",
+      "gpt-5.6-terra",
+      "gpt-5.6-sol",
       "gpt-oss-120b",
       "o1",
       "o1-pro",

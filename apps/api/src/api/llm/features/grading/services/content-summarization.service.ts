@@ -20,6 +20,12 @@ export class ContentSummarizationService {
     "gpt-5-mini": 128_000,
     "gpt-5.4-mini-2026-03-17": 400_000,
     "gpt-5.4-nano-2026-03-17": 400_000,
+    // Keep above "gpt-5": lookup is substring-based, so that key would
+    // otherwise claim these at 128k. (0.8 * 1.05M stays under the 922k
+    // max-input ceiling.)
+    "gpt-5.6-luna": 1_050_000,
+    "gpt-5.6-terra": 1_050_000,
+    "gpt-5.6-sol": 1_050_000,
     "gpt-5o-mini": 128_000,
     "gpt-5": 128_000,
     "gpt-4o-mini": 128_000,
