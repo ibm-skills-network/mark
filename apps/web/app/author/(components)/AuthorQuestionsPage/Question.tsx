@@ -40,6 +40,14 @@ import {
   IconDeviceComputerCamera,
   IconPhotoScan,
 } from "@tabler/icons-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { FC, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -443,6 +451,14 @@ const Question: FC<QuestionProps> = ({
   const toggleRandomizedChoicesMode = useAuthorStore(
     (state) => state.toggleRandomizedChoicesMode,
   );
+  const setAllRandomizedChoices = useAuthorStore(
+    (state) => state.setAllRandomizedChoices,
+  );
+
+  const [applyAllDialog, setApplyAllDialog] = useState<{
+    open: boolean;
+    newValue: boolean;
+  }>({ open: false, newValue: false });
 
   const randomizedChoices = (
     questionId: number,
@@ -465,6 +481,7 @@ const Question: FC<QuestionProps> = ({
         randomizedMode ? "ENABLED" : "DISABLED"
       }`,
     );
+    setApplyAllDialog({ open: true, newValue: randomizedMode });
   };
   const handleEditClick = (id: number) => {
     setFocusedQuestionId(id);
@@ -1248,6 +1265,44 @@ const Question: FC<QuestionProps> = ({
           </div>
         </div>
       )}
+
+      <Dialog
+        open={applyAllDialog.open}
+        onOpenChange={(open) => setApplyAllDialog((s) => ({ ...s, open }))}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apply to all questions?</DialogTitle>
+            <DialogDescription>
+              {applyAllDialog.newValue
+                ? "Enable randomized choice order for all multiple choice and single choice questions?"
+                : "Disable randomized choice order for all multiple choice and single choice questions?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <button
+              type="button"
+              onClick={() => setApplyAllDialog((s) => ({ ...s, open: false }))}
+              className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors dark:text-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              Just this one
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAllRandomizedChoices(applyAllDialog.newValue);
+                setApplyAllDialog((s) => ({ ...s, open: false }));
+                toast.info(
+                  `Randomized choice order ${applyAllDialog.newValue ? "enabled" : "disabled"} for all choice questions`,
+                );
+              }}
+              className="px-4 py-2 text-sm text-white bg-violet-600 rounded-md hover:bg-violet-700 transition-colors"
+            >
+              Yes, apply to all
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

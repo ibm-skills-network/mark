@@ -252,6 +252,7 @@ export type AuthorActions = {
     questionId: number,
     variantId?: number,
   ) => boolean;
+  setAllRandomizedChoices: (value: boolean) => void;
 
   loadVersions: () => Promise<void>;
   createVersion: (
@@ -1200,6 +1201,7 @@ export const useAuthorStore = createWithEqualityFn<
                   }
                   return q;
                 }),
+                hasUnsavedChanges: true,
               };
             } else {
               return {
@@ -1212,6 +1214,7 @@ export const useAuthorStore = createWithEqualityFn<
                   }
                   return q;
                 }),
+                hasUnsavedChanges: true,
               };
             }
           });
@@ -1227,6 +1230,24 @@ export const useAuthorStore = createWithEqualityFn<
             get().questions.find((q) => q.id === questionId)
               ?.randomizedChoices || false
           );
+        },
+        setAllRandomizedChoices: (value: boolean) => {
+          const isChoiceType = (type: string) =>
+            type === "SINGLE_CORRECT" || type === "MULTIPLE_CORRECT";
+          set((state) => ({
+            questions: state.questions.map((q) => {
+              const variants = q.variants?.map((variant) =>
+                isChoiceType(variant.type)
+                  ? { ...variant, randomizedChoices: value }
+                  : variant,
+              );
+              if (isChoiceType(q.type)) {
+                return { ...q, randomizedChoices: value, variants };
+              }
+              return { ...q, variants };
+            }),
+            hasUnsavedChanges: true,
+          }));
         },
         addTrueFalseChoice: (questionId, isTrue, variantId) => {
           return set((state) => ({

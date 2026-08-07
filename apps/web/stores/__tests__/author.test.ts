@@ -76,6 +76,56 @@ describe("useAuthorStore question order syncing", () => {
   });
 });
 
+describe("setAllRandomizedChoices", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAuthorStore.getState().deleteStore();
+  });
+
+  it("flips only choice-type questions and leaves others untouched", () => {
+    const single = { ...makeQuestion(1, 1), type: "SINGLE_CORRECT" as const };
+    const multiple = {
+      ...makeQuestion(2, 2),
+      type: "MULTIPLE_CORRECT" as const,
+    };
+    const text = makeQuestion(3, 3); // type: "TEXT"
+    useAuthorStore.getState().setQuestions([single, multiple, text]);
+
+    useAuthorStore.getState().setAllRandomizedChoices(true);
+
+    const [q1, q2, q3] = useAuthorStore.getState().questions;
+    expect(q1.randomizedChoices).toBe(true);
+    expect(q2.randomizedChoices).toBe(true);
+    expect(q3.randomizedChoices).toBe(false); // unchanged
+  });
+
+  it("also flips randomizedChoices on choice-type variants", () => {
+    const question = {
+      ...makeQuestion(1, 1),
+      type: "SINGLE_CORRECT" as const,
+      variants: [
+        {
+          id: 10,
+          questionId: 1,
+          type: "SINGLE_CORRECT" as const,
+          variantContent: "v",
+          choices: [],
+          createdAt: "",
+          randomizedChoices: false,
+          variantType: "REWORDED" as const,
+        },
+      ],
+    };
+    useAuthorStore.getState().setQuestions([question]);
+
+    useAuthorStore.getState().setAllRandomizedChoices(true);
+
+    expect(
+      useAuthorStore.getState().questions[0].variants?.[0].randomizedChoices,
+    ).toBe(true);
+  });
+});
+
 describe("hydrateAuthorStore", () => {
   beforeEach(() => {
     localStorage.clear();
