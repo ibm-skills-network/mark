@@ -23,6 +23,11 @@ import { submitReportAuthor } from "@/lib/talkToBackend";
 import { apiClient, APIError } from "./api-client";
 import { isAuthApiError, withTransientRetry } from "./api-retry";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
+import {
+  GradingWatchdog,
+  SSE_MAX_CONNECTION_ATTEMPTS,
+  SSE_RECONNECT_BACKOFF_STEP_MS,
+} from "./grading-stream-watchdog";
 
 /**
  * Machine-readable codes the API puts in 422 bodies from
@@ -118,6 +123,49 @@ export function isAiTemporarilyDisabled(err: unknown): boolean {
     getErrorCode(err) === "AI_TEMPORARILY_DISABLED" ||
     getErrorStatus(err) === 409
   );
+}
+
+/**
+ * States the grading spinner can be in. `stalled` means the stream is alive
+ * but grading has stopped advancing — the learner is told, nothing is torn
+ * down. `disconnected` is terminal: either the stream is gone or the stall
+ * outlasted its hard window.
+ */
+export type GradingProgressStatus =
+  | "processing"
+  | "completed"
+  | "failed"
+  | "stalled"
+  | "disconnected";
+
+/**
+ * Thrown when the grading stream stops being a usable source of truth. It is
+ * NOT a statement that grading failed — the job may well still be running
+ * server-side — so callers should keep the learner's context and offer a way
+ * to re-check, not report a failed submission.
+ */
+export class GradingStreamLostError extends Error {
+  constructor(
+    message: string,
+    readonly assignmentId: number,
+    readonly attemptId: number,
+    readonly reason: "disconnected" | "stalled",
+  ) {
+    super(message);
+    this.name = "GradingStreamLostError";
+  }
+}
+
+/**
+ * Duck-typed on purpose. `instanceof` is unreliable across Next's module
+ * boundary (the same reason the kill-switch check above does not use it), and
+ * a missed match here would close the modal on the learner instead of showing
+ * them the recovery actions.
+ */
+export function isGradingStreamLostError(
+  error: unknown,
+): error is GradingStreamLostError {
+  return error instanceof Error && error.name === "GradingStreamLostError";
 }
 
 /**
@@ -275,8 +323,37 @@ export async function getSuccessPageData(
   }
 }
 
+export type SubmitQuestionResult =
+  | { ok: true; data: QuestionAttemptResponse }
+  | { ok: false; status?: number; message?: string };
+
+/**
+ * A message straight from a 4xx response body, safe to show a learner
+ * verbatim — e.g. `OversizedSubmissionError.learnerMessage`, which the API
+ * wraps in a `BadRequestException` specifically so this route can surface it.
+ * Never read for 5xx: those bodies are not written with a learner audience in
+ * mind and may contain internal detail.
+ */
+function getSafeErrorMessage(err: unknown): string | undefined {
+  const status = getErrorStatus(err);
+  if (status === undefined || status >= 500) {
+    return undefined;
+  }
+  const message = (err as { body?: { message?: string } } | undefined)?.body
+    ?.message;
+  return typeof message === "string" && message.length > 0
+    ? message
+    : undefined;
+}
+
 /**
  * Submits an answer for a given assignment, attempt, and question.
+ *
+ * Returns a discriminated result instead of throwing or returning `undefined`
+ * on failure: `ok: false` always carries whatever the server told us — the
+ * HTTP status, and (for 4xx responses only) a learner-safe `message` — so the
+ * caller can tell a real failure from a real success instead of treating
+ * every outcome as saved.
  */
 export async function submitQuestion(
   assignmentId: number,
@@ -284,7 +361,7 @@ export async function submitQuestion(
   questionId: number,
   requestBody: QuestionAttemptRequest,
   cookies?: string,
-): Promise<QuestionAttemptResponse | undefined> {
+): Promise<SubmitQuestionResult> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
 
   try {
@@ -305,11 +382,32 @@ export async function submitQuestion(
           "Content-Type": "application/json",
           ...(cookies ? { Cookie: cookies } : {}),
         },
+        // The caller (the auto-save hook) is the sole owner of user-facing
+        // messaging for this endpoint — it needs to tell a real failure from
+        // a real success and show its own honest toast. Suppress apiClient's
+        // generic status-code toast so the learner doesn't see a vague
+        // "Client Error: 400 Bad Request" moments before that honest toast.
+        quiet: true,
       },
     );
-    return data;
+    return { ok: true, data };
   } catch (err) {
-    return undefined;
+    console.error("submitQuestion failed", {
+      assignmentId,
+      attemptId,
+      questionId,
+      status: getErrorStatus(err),
+      // The underlying failure reason, not the request/response payload:
+      // a generic Error.message (e.g. "Failed to fetch", "Internal Server
+      // Error") is safe to log and is exactly what this catch block would
+      // otherwise discard on translation to a SubmitQuestionResult.
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return {
+      ok: false,
+      status: getErrorStatus(err),
+      message: getSafeErrorMessage(err),
+    };
   }
 }
 
@@ -399,7 +497,7 @@ export async function submitAssignment(
   authorAssignmentDetails?: ReplaceAssignmentRequest,
   cookies?: string,
   onProgress?: (
-    status: "processing" | "completed" | "failed",
+    status: GradingProgressStatus,
     progress: number,
     message: string,
     metadata?: {
@@ -483,8 +581,9 @@ export async function submitAssignment(
 
     return new Promise((resolve, reject) => {
       let retryCount = 0;
-      const maxRetries = 3;
-      let allErrors: Array<{
+      let settled = false;
+      let activeSource: EventSource | undefined;
+      const allErrors: Array<{
         attempt: number;
         error: string;
         timestamp: string;
@@ -492,50 +591,89 @@ export async function submitAssignment(
         url?: string;
       }> = [];
 
+      // The stall warning is non-destructive by design: the stream is still
+      // alive, so the learner should keep seeing whatever real progress they
+      // last had, not have it wiped back to zero just because the clock that
+      // reports it fired. Remember the last substantive update so the
+      // warning can carry it forward instead of 0/undefined.
+      let lastKnownProgress = 0;
+      let lastKnownMetadata:
+        | {
+            currentQuestion?: number;
+            totalQuestions?: number;
+            gradingState?: GradingProgressDetails;
+          }
+        | undefined;
+
+      const watchdog = new GradingWatchdog({
+        onIdleTimeout: () => handleIdleTimeout(),
+        onStallWarning: () => {
+          // Non-destructive: the stream is alive, so keep it open and keep
+          // grading. The learner just stops being lied to by a spinner —
+          // and keeps seeing the progress they already had, not a reset.
+          onProgress?.(
+            "stalled",
+            lastKnownProgress,
+            "This is taking longer than usual. Your answers are submitted and grading is still running.",
+            lastKnownMetadata,
+          );
+        },
+        onStallTimeout: () => {
+          void handleStreamLost("stalled");
+        },
+      });
+
+      const settle = (): boolean => {
+        if (settled) return false;
+        settled = true;
+        watchdog.stop();
+        activeSource?.close();
+        return true;
+      };
+
+      const handleIdleTimeout = () => {
+        if (settled) return;
+        const currentAttempt = retryCount;
+        allErrors.push({
+          attempt: currentAttempt,
+          error: "Grading stream went silent",
+          timestamp: new Date().toISOString(),
+          readyState: activeSource?.readyState,
+          url: sseUrl,
+        });
+
+        watchdog.clearStreamActivity();
+        activeSource?.close();
+
+        if (currentAttempt < SSE_MAX_CONNECTION_ATTEMPTS) {
+          onProgress?.(
+            "processing",
+            0,
+            `Reconnecting to the grading service... (${currentAttempt}/${SSE_MAX_CONNECTION_ATTEMPTS})`,
+          );
+          setTimeout(
+            () => attemptConnection(),
+            SSE_RECONNECT_BACKOFF_STEP_MS * currentAttempt,
+          );
+        } else {
+          void handleStreamLost("disconnected");
+        }
+      };
+
       const attemptConnection = () => {
+        if (settled) return;
         retryCount++;
         const currentAttempt = retryCount;
 
         const eventSource = new EventSource(sseUrl, {
           withCredentials: true,
         });
-
-        let timeout: NodeJS.Timeout;
-        let isCompleted = false;
-
-        const resetTimeout = () => {
-          if (timeout) clearTimeout(timeout);
-          timeout = setTimeout(() => {
-            if (!isCompleted) {
-              const timeoutError = "Grading timeout - no updates received";
-              allErrors.push({
-                attempt: currentAttempt,
-                error: timeoutError,
-                timestamp: new Date().toISOString(),
-                readyState: eventSource.readyState,
-                url: sseUrl,
-              });
-
-              eventSource.close();
-
-              if (currentAttempt < maxRetries) {
-                onProgress?.(
-                  "processing",
-                  0,
-                  `Connection timed out. Retrying... (${currentAttempt}/${maxRetries})`,
-                );
-                setTimeout(() => attemptConnection(), 2000 * currentAttempt);
-              } else {
-                onProgress?.("failed", 0, timeoutError);
-                handleFinalFailure();
-              }
-            }
-          }, 300000);
-        };
-
-        resetTimeout();
+        activeSource = eventSource;
+        watchdog.noteStreamActivity();
 
         eventSource.onopen = () => {
+          if (settled) return;
+          watchdog.noteStreamActivity();
           onProgress?.(
             "processing",
             0,
@@ -544,7 +682,8 @@ export async function submitAssignment(
         };
 
         eventSource.onmessage = (event) => {
-          resetTimeout();
+          if (settled) return;
+          watchdog.noteStreamActivity();
 
           try {
             let data;
@@ -558,6 +697,8 @@ export async function submitAssignment(
               return;
             }
 
+            watchdog.noteGradingUpdate();
+
             if (data.message && data.connectionId) {
               onProgress?.("processing", 0, data.message);
               return;
@@ -566,17 +707,17 @@ export async function submitAssignment(
             if (data.status === "Processing" || data.status === "Pending") {
               const percentage = data.percentage || 0;
               const progress = data.progress || "Processing...";
-              onProgress?.("processing", percentage, progress, {
+              const metadata = {
                 currentQuestion: data.currentQuestion,
                 totalQuestions: data.totalQuestions,
                 gradingState: parseGradingState(data.result),
-              });
-            } else if (data.status === "Completed" && !isCompleted) {
-              isCompleted = true;
+              };
+              lastKnownProgress = percentage;
+              lastKnownMetadata = metadata;
+              onProgress?.("processing", percentage, progress, metadata);
+            } else if (data.status === "Completed") {
+              if (!settle()) return;
               onProgress?.("completed", 100, "Grading completed successfully!");
-
-              eventSource.close();
-              clearTimeout(timeout);
 
               let result = data.result;
               if (typeof result === "string") {
@@ -590,16 +731,14 @@ export async function submitAssignment(
                 }
               }
               resolve(result);
-            } else if (data.status === "Failed" && !isCompleted) {
-              isCompleted = true;
-              onProgress?.("failed", 0, data.progress || "Grading failed");
-
-              eventSource.close();
-              clearTimeout(timeout);
+            } else if (data.status === "Failed") {
+              if (!settle()) return;
+              const failureMessage = data.progress || "Grading failed";
+              onProgress?.("failed", 0, failureMessage);
 
               setTimeout(() => {
-                toast.error(data.progress || "Grading failed");
-                reject(new Error(data.progress || "Grading failed"));
+                toast.error(failureMessage);
+                reject(new Error(failureMessage));
               }, 2000);
             }
           } catch (error) {
@@ -608,125 +747,126 @@ export async function submitAssignment(
         };
 
         eventSource.addEventListener("update", (event: any) => {
-          if (!isCompleted) {
-            resetTimeout();
-            try {
-              const data = JSON.parse(event.data);
+          if (settled) return;
+          watchdog.noteStreamActivity();
+          try {
+            const data = JSON.parse(event.data);
 
-              if (data.heartbeat) {
-                return;
-              }
-
-              if (data.progress && data.percentage !== undefined) {
-                onProgress?.("processing", data.percentage, data.progress, {
-                  currentQuestion: data.currentQuestion,
-                  totalQuestions: data.totalQuestions,
-                  gradingState: parseGradingState(data.result),
-                });
-              }
-            } catch (error) {
-              console.warn("SSE update event parse failed:", error);
+            if (data.heartbeat) {
+              return;
             }
+
+            watchdog.noteGradingUpdate();
+
+            if (data.progress && data.percentage !== undefined) {
+              const metadata = {
+                currentQuestion: data.currentQuestion,
+                totalQuestions: data.totalQuestions,
+                gradingState: parseGradingState(data.result),
+              };
+              lastKnownProgress = data.percentage;
+              lastKnownMetadata = metadata;
+              onProgress?.(
+                "processing",
+                data.percentage,
+                data.progress,
+                metadata,
+              );
+            }
+          } catch (error) {
+            console.warn("SSE update event parse failed:", error);
           }
         });
 
         eventSource.addEventListener("heartbeat", (event: any) => {
-          if (!isCompleted) {
-            resetTimeout();
-            try {
-              JSON.parse(event.data);
-            } catch (error) {
-              console.warn("SSE heartbeat parse failed:", error);
-            }
+          if (settled) return;
+          // Heartbeats prove the pipe is alive and nothing more, so they
+          // deliberately touch only the connection clock.
+          watchdog.noteStreamActivity();
+          try {
+            JSON.parse(event.data);
+          } catch (error) {
+            console.warn("SSE heartbeat parse failed:", error);
           }
         });
 
         eventSource.addEventListener("finalize", (event: any) => {
-          if (!isCompleted) {
-            try {
-              isCompleted = true;
-              const data = JSON.parse(event.data);
-              onProgress?.("completed", 100, "Grading completed successfully!");
+          if (settled) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (!settle()) return;
+            onProgress?.("completed", 100, "Grading completed successfully!");
 
-              eventSource.close();
-              clearTimeout(timeout);
-
-              let result = data.result;
-              if (typeof result === "string") {
-                try {
-                  result = JSON.parse(result);
-                } catch (e) {
-                  console.warn(
-                    "SSE finalize: failed to JSON.parse result, returning raw string:",
-                    e,
-                  );
-                }
+            let result = data.result;
+            if (typeof result === "string") {
+              try {
+                result = JSON.parse(result);
+              } catch (e) {
+                console.warn(
+                  "SSE finalize: failed to JSON.parse result, returning raw string:",
+                  e,
+                );
               }
-              resolve(result);
-            } catch (error) {
-              reject(error);
             }
+            resolve(result);
+          } catch (error) {
+            if (!settle()) return;
+            reject(error);
           }
         });
 
         const handleConnectionError = () => {
-          if (!isCompleted) {
-            const errorDetails = {
-              attempt: currentAttempt,
-              error:
-                eventSource.readyState === EventSource.CLOSED
-                  ? "Connection to grading service lost"
-                  : "Grading stream error",
-              timestamp: new Date().toISOString(),
-              readyState: eventSource.readyState,
-              url: sseUrl,
-            };
+          if (settled) return;
+          allErrors.push({
+            attempt: currentAttempt,
+            error:
+              eventSource.readyState === EventSource.CLOSED
+                ? "Connection to grading service lost"
+                : "Grading stream error",
+            timestamp: new Date().toISOString(),
+            readyState: eventSource.readyState,
+            url: sseUrl,
+          });
 
-            allErrors.push(errorDetails);
+          watchdog.clearStreamActivity();
+          eventSource.close();
 
-            eventSource.close();
-            clearTimeout(timeout);
-
-            if (currentAttempt < maxRetries) {
-              const retryDelay = 2000 * currentAttempt;
-              onProgress?.(
-                "processing",
-                0,
-                `Connection lost. Retrying in ${retryDelay / 1000} seconds...`,
-              );
-              setTimeout(() => attemptConnection(), retryDelay);
-            } else {
-              handleFinalFailure();
-            }
+          if (currentAttempt < SSE_MAX_CONNECTION_ATTEMPTS) {
+            const retryDelay = SSE_RECONNECT_BACKOFF_STEP_MS * currentAttempt;
+            onProgress?.(
+              "processing",
+              0,
+              `Connection lost. Retrying in ${retryDelay / 1000} seconds...`,
+            );
+            setTimeout(() => attemptConnection(), retryDelay);
           } else {
-            eventSource.close();
+            void handleStreamLost("disconnected");
           }
         };
 
         eventSource.addEventListener("error", (event: any) => {
-          if (isCompleted) {
+          if (settled) {
+            eventSource.close();
             return;
           }
 
           if (event?.data) {
-            resetTimeout();
+            watchdog.noteStreamActivity();
             try {
               const data = JSON.parse(event.data);
 
               if (data?.status === "Failed") {
-                isCompleted = true;
+                if (!settle()) return;
                 const errorMessage =
                   data.progress || data.error || "Grading failed";
                 onProgress?.("failed", 0, errorMessage);
-
-                eventSource.close();
-                clearTimeout(timeout);
 
                 setTimeout(() => {
                   toast.error(errorMessage);
                   reject(new Error(errorMessage));
                 }, 2000);
               } else if (data?.error) {
+                watchdog.noteGradingUpdate();
                 const streamErrorMessage =
                   data.error || "Grading stream reported an error";
                 onProgress?.("processing", 0, streamErrorMessage);
@@ -741,25 +881,64 @@ export async function submitAssignment(
         });
       };
 
-      const handleFinalFailure = async () => {
+      /**
+       * Terminal, but not a claim that grading failed: the job may still be
+       * running. Tell the caller what happened and let the UI offer a
+       * re-check rather than declaring a lost submission — and do it before
+       * filing the diagnostic report, not after. The report is a network
+       * call (with its own author-report fallback network call behind it),
+       * and on a genuinely dead connection either can hang indefinitely; the
+       * whole point of this watchdog is a bounded time-to-honest-state, so
+       * the learner cannot be left waiting on a report that may never land.
+       * The report is best-effort from here on — its failure already falls
+       * back silently (see the catch below) and is not something the caller
+       * awaits.
+       */
+      const handleStreamLost = async (
+        reason: "disconnected" | "stalled",
+      ): Promise<void> => {
+        if (!settle()) return;
+
+        const learnerMessage =
+          reason === "stalled"
+            ? "Grading stopped responding. Your answers were submitted — check your results in a moment."
+            : "We lost contact with the grading service. Your answers were submitted — check your results in a moment.";
+
+        onProgress?.("disconnected", 0, learnerMessage);
+        reject(
+          new GradingStreamLostError(
+            learnerMessage,
+            assignmentId,
+            attemptId,
+            reason,
+          ),
+        );
+
         const detailedErrorReport = {
           assignmentId,
           attemptId,
           gradingJobId,
           sseUrl,
-          totalAttempts: maxRetries,
+          reason,
+          totalAttempts: retryCount,
           allErrors,
           finalFailureTime: new Date().toISOString(),
-          userAgent: navigator.userAgent,
-          url: window.location.href,
+          userAgent:
+            typeof navigator === "undefined" ? undefined : navigator.userAgent,
+          url: typeof window === "undefined" ? undefined : window.location.href,
         };
+
+        const summary =
+          reason === "stalled"
+            ? "Grading stream stalled with no progress"
+            : "Grading stream lost after all reconnect attempts";
 
         try {
           await submitReportLearner(
             assignmentId,
             attemptId,
             "TECHNICAL_ISSUE" as REPORT_TYPE,
-            `SSE Connection Failed After ${maxRetries} Attempts\n\nDetailed Error Report:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
+            `${summary}\n\nDetailed Error Report:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
             cookies,
           );
         } catch (reportError) {
@@ -767,27 +946,16 @@ export async function submitAssignment(
             await submitReportAuthor(
               assignmentId,
               "TECHNICAL_ISSUE" as REPORT_TYPE,
-              `SSE Connection Failed - Learner Report Fallback\n\nAttempt ID: ${attemptId}\nError Details:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
+              `${summary} — learner report fallback\n\nAttempt ID: ${attemptId}\nError Details:\n${JSON.stringify(detailedErrorReport, null, 2)}`,
               cookies,
             );
           } catch (fallbackError) {
-            console.error(
-              "💥 Author fallback report also failed:",
-              fallbackError,
-            );
+            console.error("Author fallback report also failed:", fallbackError);
           }
         }
-
-        const finalErrorMessage = `Connection failed after ${maxRetries} attempts. Error details have been automatically reported.`;
-        onProgress?.("failed", 0, finalErrorMessage);
-        toast.error(finalErrorMessage);
-        reject(
-          new Error(
-            `SSE connection failed after ${maxRetries} attempts. Last error: ${allErrors[allErrors.length - 1]?.error || "Unknown error"}`,
-          ),
-        );
       };
 
+      watchdog.startGradingClock();
       attemptConnection();
     });
   } catch (err) {
