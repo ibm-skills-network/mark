@@ -37,6 +37,19 @@ function scheduleDraftSave(
   }, DRAFT_SAVE_DEBOUNCE_MS);
 }
 
+/**
+ * A scheduled write captured its attempt id and answers when the edit
+ * happened. Once the active attempt changes or the answers are deliberately
+ * dropped, letting it land would recreate a draft that cleanup just removed —
+ * so every transition away from an attempt cancels it.
+ */
+function cancelPendingDraftSave(): void {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+}
+
 type GitHubQuestionState = {
   repos: RepoType[];
   owner: string | null;
@@ -834,14 +847,11 @@ export const useLearnerStore = createWithEqualityFn<
         activeAttemptId: null,
         totalPointsEarned: 0,
         totalPointsPossible: 0,
+        // Attempt-change side effects live in setLearnerStore, which is the
+        // path the page hydration actually takes; this named setter routes
+        // through it so both entries behave identically.
         setActiveAttemptId: (id) => {
-          set({ activeAttemptId: id });
-          // Starting or resuming an attempt is the one moment we know which
-          // draft is still wanted. Dropping the rest here caps storage at a
-          // single entry and stops a new attempt inheriting an old one's
-          // answers — createAttempt itself runs server-side, where there is
-          // no localStorage to clean up.
-          clearOtherDrafts(id);
+          get().setLearnerStore({ activeAttemptId: id });
         },
         activeQuestionNumber: 1,
         setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
@@ -1001,9 +1011,23 @@ export const useLearnerStore = createWithEqualityFn<
             return { questions: updatedQuestions };
           });
           get().setQuestionStatus(questionId);
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
         setRole: (role) => set({ role }),
-        setLearnerStore: (learnerState) => set(learnerState),
+        setLearnerStore: (learnerState) => {
+          const previousAttemptId = get().activeAttemptId;
+          set(learnerState);
+          const nextAttemptId = get().activeAttemptId;
+          if (nextAttemptId !== previousAttemptId) {
+            // Moving onto an attempt (or off one, after the timer submits) is
+            // the moment we know which draft is still wanted. A write already
+            // scheduled for the previous attempt must not land afterwards, and
+            // dropping every other entry caps storage at a single draft and
+            // stops a new attempt inheriting an old one's answers.
+            cancelPendingDraftSave();
+            clearOtherDrafts(nextAttemptId);
+          }
+        },
         setTotalPointsEarned: (totalPointsEarned) => set({ totalPointsEarned }),
         setTotalPointsPossible: (totalPointsPossible) =>
           set({ totalPointsPossible }),
@@ -1011,10 +1035,7 @@ export const useLearnerStore = createWithEqualityFn<
           // Runs once the submission is safely in. Cancel any pending write
           // first — a debounced save landing after this would resurrect the
           // answers we are deliberately dropping.
-          if (draftSaveTimer) {
-            clearTimeout(draftSaveTimer);
-            draftSaveTimer = null;
-          }
+          cancelPendingDraftSave();
           clearDraft(get().activeAttemptId);
           set((state) => ({
             questions: state.questions.map((q) => ({

@@ -6,9 +6,10 @@
  * far. This mirrors the answer fields into localStorage as they change and
  * merges them back when the attempt is reopened.
  *
- * Deliberately client-only: no request, no schema change, and nothing for two
- * mounted copies of the same question to race over — both write identical data
- * under the same key.
+ * Deliberately client-only: no request and no schema change. Two tabs on the
+ * same attempt overwrite each other's draft whole — last writer wins, so one
+ * tab's newer answer can lose. Acceptable for crash recovery; the submitted
+ * answers still come from whichever tab submits.
  *
  * Uploads are out of scope. A File cannot be revived from localStorage, so
  * storing its name would only promise a recovery that never happens.
@@ -19,11 +20,21 @@ const KEY_PREFIX = "mark:draft:v1:";
 /** Drafts older than this are dropped on read rather than restored. */
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Reading a draft back is parsing user-editable input: anything in
+ * localStorage can be hand-crafted. A field longer than any real answer is
+ * dropped rather than restored, so a crafted entry cannot wedge the page or
+ * blow the storage quota on every save.
+ */
+const MAX_DRAFT_FIELD_CHARS = 100_000;
+const MAX_DRAFT_CHOICES = 200;
+
 /** Answer fields worth persisting — everything a learner types or picks. */
 export interface DraftAnswer {
   learnerTextResponse?: string;
   learnerUrlResponse?: string;
   learnerChoices?: string[];
+  learnerAnswerChoice?: boolean;
 }
 
 interface DraftPayload {
@@ -70,21 +81,40 @@ function safeRemove(key: string): void {
   }
 }
 
-/** Keep only the answer fields; question text and rubric are not ours to cache. */
+/**
+ * Keep only the answer fields; question text and rubric are not ours to cache.
+ * Empty strings and empty arrays are skipped, not stored: they are what the
+ * store holds after a learner erases an answer, and keeping them would leave a
+ * draft entry behind for work that no longer exists. `false` stays — it is a
+ * real true/false answer.
+ */
 function pickAnswer(question: {
   learnerTextResponse?: string | null;
   learnerUrlResponse?: string | null;
   learnerChoices?: string[] | null;
+  learnerAnswerChoice?: boolean | null;
 }): DraftAnswer | null {
   const answer: DraftAnswer = {};
-  if (typeof question.learnerTextResponse === "string") {
+  if (
+    typeof question.learnerTextResponse === "string" &&
+    question.learnerTextResponse.length > 0
+  ) {
     answer.learnerTextResponse = question.learnerTextResponse;
   }
-  if (typeof question.learnerUrlResponse === "string") {
+  if (
+    typeof question.learnerUrlResponse === "string" &&
+    question.learnerUrlResponse.length > 0
+  ) {
     answer.learnerUrlResponse = question.learnerUrlResponse;
   }
-  if (Array.isArray(question.learnerChoices)) {
+  if (
+    Array.isArray(question.learnerChoices) &&
+    question.learnerChoices.length > 0
+  ) {
     answer.learnerChoices = question.learnerChoices;
+  }
+  if (typeof question.learnerAnswerChoice === "boolean") {
+    answer.learnerAnswerChoice = question.learnerAnswerChoice;
   }
   return Object.keys(answer).length > 0 ? answer : null;
 }
@@ -96,6 +126,7 @@ export function saveDraft(
     learnerTextResponse?: string | null;
     learnerUrlResponse?: string | null;
     learnerChoices?: string[] | null;
+    learnerAnswerChoice?: boolean | null;
   }>,
 ): void {
   if (typeof attemptId !== "number") return;
@@ -116,6 +147,58 @@ export function saveDraft(
 
   const payload: DraftPayload = { savedAt: Date.now(), answers };
   safeWrite(keyFor(attemptId), JSON.stringify(payload));
+}
+
+/**
+ * Rebuild one stored answer from untrusted bytes, field by field. A draft the
+ * app wrote always passes; anything else — an object where a string should
+ * be, a non-string choice, an absurdly long value — is dropped so it can
+ * never reach the store and break rendering on every visit until the TTL
+ * finally expires it.
+ */
+function sanitizeStoredAnswer(value: unknown): DraftAnswer | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const answer: DraftAnswer = {};
+
+  const text = record.learnerTextResponse;
+  if (
+    typeof text === "string" &&
+    text.length > 0 &&
+    text.length <= MAX_DRAFT_FIELD_CHARS
+  ) {
+    answer.learnerTextResponse = text;
+  }
+
+  const url = record.learnerUrlResponse;
+  if (
+    typeof url === "string" &&
+    url.length > 0 &&
+    url.length <= MAX_DRAFT_FIELD_CHARS
+  ) {
+    answer.learnerUrlResponse = url;
+  }
+
+  const choices = record.learnerChoices;
+  if (
+    Array.isArray(choices) &&
+    choices.length > 0 &&
+    choices.length <= MAX_DRAFT_CHOICES &&
+    choices.every(
+      (choice): choice is string =>
+        typeof choice === "string" && choice.length <= MAX_DRAFT_FIELD_CHARS,
+    )
+  ) {
+    answer.learnerChoices = choices;
+  }
+
+  if (typeof record.learnerAnswerChoice === "boolean") {
+    answer.learnerAnswerChoice = record.learnerAnswerChoice;
+  }
+
+  return Object.keys(answer).length > 0 ? answer : null;
 }
 
 export function loadDraft(
@@ -146,12 +229,23 @@ export function loadDraft(
     return null;
   }
 
-  if (Date.now() - payload.savedAt > DRAFT_TTL_MS) {
+  // A timestamp from the future is as untrustworthy as one past the TTL —
+  // nothing the app wrote can produce it.
+  const age = Date.now() - payload.savedAt;
+  if (age > DRAFT_TTL_MS || age < 0) {
     safeRemove(keyFor(attemptId));
     return null;
   }
 
-  return payload.answers;
+  // Question ids are numbers; any other key shape was not written by us.
+  const answers: Record<string, DraftAnswer> = {};
+  for (const [key, value] of Object.entries(payload.answers)) {
+    if (!/^\d+$/.test(key)) continue;
+    const answer = sanitizeStoredAnswer(value);
+    if (answer) answers[key] = answer;
+  }
+
+  return Object.keys(answers).length > 0 ? answers : null;
 }
 
 export function clearDraft(attemptId: number | null | undefined): void {
@@ -201,6 +295,7 @@ export function mergeDraftIntoQuestions<
     learnerTextResponse?: string | null;
     learnerUrlResponse?: string | null;
     learnerChoices?: string[] | null;
+    learnerAnswerChoice?: boolean | null;
   },
 >(questions: T[], draft: Record<string, DraftAnswer> | null): T[] {
   if (!draft) return questions;
@@ -227,6 +322,15 @@ export function mergeDraftIntoQuestions<
       saved.learnerChoices.length > 0
     ) {
       merged.learnerChoices = saved.learnerChoices;
+      changed = true;
+    }
+    // Checked by type, not truthiness: a server-held `false` is a real
+    // true/false answer and must win over the draft like any other field.
+    if (
+      typeof merged.learnerAnswerChoice !== "boolean" &&
+      typeof saved.learnerAnswerChoice === "boolean"
+    ) {
+      merged.learnerAnswerChoice = saved.learnerAnswerChoice;
       changed = true;
     }
 
