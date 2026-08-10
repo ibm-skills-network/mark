@@ -2,6 +2,7 @@ import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   InternalServerErrorException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Question } from "@prisma/client";
@@ -10,6 +11,7 @@ import {
   UserSession,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { GithubRateLimitedError } from "../../llm/features/grading/errors/github-rate-limited.error";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
@@ -90,6 +92,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
   const mockQuestionResponseService = {
     submitQuestions: jest.fn(),
     createQuestionResponse: jest.fn(),
+    gradeQuestionsForLearner: jest.fn(),
+    commitAttemptWithResponses: jest.fn(),
+    markGradingComplete: jest.fn(),
   };
 
   const mockTranslationService = {
@@ -726,6 +731,29 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           "en",
         ),
       ).rejects.toBe(boom);
+    });
+
+    it("maps a GithubRateLimitedError into a ServiceUnavailableException (retryable 503)", async () => {
+      const rateLimited = new GithubRateLimitedError({
+        owner: "octocat",
+        repo: "hello-world",
+        requestUrl: "https://api.github.com/repos/octocat/hello-world",
+      });
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
+        rateLimited,
+      );
+
+      const rejection = await service
+        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
+        .then(
+          () => {
+            throw new Error("expected autoSaveQuestionResponse to reject");
+          },
+          (error: unknown) => error,
+        );
+
+      expect(rejection).toBeInstanceOf(ServiceUnavailableException);
+      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
     });
   });
 
@@ -1816,6 +1844,150 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         mockTranslationService.preTranslateQuestions,
       ).not.toHaveBeenCalled();
       expect(mockLtiGradeSyncService.createAndSync).not.toHaveBeenCalled();
+    });
+
+    describe("grading progress ordering", () => {
+      type LearnerAttemptRunner = {
+        updateLearnerAttempt: (
+          attemptId: number,
+          assignmentId: number,
+          updateDto: unknown,
+          authCookie: string,
+          gradingCallbackRequired: boolean,
+          request: unknown,
+        ) => Promise<unknown>;
+      };
+
+      const callOrder: string[] = [];
+
+      beforeEach(() => {
+        callOrder.length = 0;
+
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 555,
+          userId: "learner@example.com",
+          submitted: false,
+          expiresAt: new Date(Date.now() + 60_000),
+          questionOrder: [101],
+          questionVariants: [],
+        });
+        mockPrisma.assignmentAttempt.findMany.mockResolvedValue([]);
+        mockPrisma.assignment.findUnique.mockResolvedValue({
+          id: 2580,
+          questionOrder: [101],
+          questions: [{ id: 101, totalPoints: 10 }],
+          requireAllQuestions: false,
+          showAssignmentScore: true,
+          showQuestions: true,
+          showSubmissionFeedback: true,
+          currentVersion: { correctAnswerVisibility: "ALWAYS" },
+        });
+        mockValidationService.isAttemptExpired.mockReturnValue(false);
+        mockTranslationService.preTranslateQuestions.mockResolvedValue(
+          new Map(),
+        );
+
+        mockQuestionResponseService.gradeQuestionsForLearner.mockImplementation(
+          async () => {
+            callOrder.push("grade");
+            return [
+              {
+                questionId: 101,
+                learnerResponse: "an answer",
+                responseDto: makeResponse({
+                  id: 9001,
+                  questionId: 101,
+                  points: 8,
+                  totalPoints: 10,
+                }),
+              },
+            ];
+          },
+        );
+        mockQuestionResponseService.commitAttemptWithResponses.mockImplementation(
+          async () => {
+            callOrder.push("commit");
+            return { id: 555, submitted: true, grade: 0.8 };
+          },
+        );
+        mockQuestionResponseService.markGradingComplete.mockImplementation(
+          async () => {
+            callOrder.push("markGradingComplete");
+          },
+        );
+
+        mockGradingService.calculateGradeForLearner.mockReturnValue({
+          grade: 0.8,
+          totalPointsEarned: 8,
+        });
+        mockGradingService.constructFeedbacksForQuestions.mockReturnValue([]);
+      });
+
+      const updateDto = {
+        responsesForQuestions: [{ id: 101 }],
+        language: "en",
+      } as never;
+      const request = {
+        userSession: { userId: "learner@example.com", role: "Learner" },
+      } as never;
+
+      it("marks grading complete only after the responses and grade commit", async () => {
+        await (service as unknown as LearnerAttemptRunner).updateLearnerAttempt(
+          555,
+          2580,
+          updateDto,
+          "cookie",
+          false,
+          request,
+        );
+
+        expect(callOrder).toEqual(["grade", "commit", "markGradingComplete"]);
+      });
+
+      it("never marks grading complete when the commit fails", async () => {
+        mockQuestionResponseService.commitAttemptWithResponses.mockImplementation(
+          async () => {
+            callOrder.push("commit");
+            throw new Error("Attempt 555 was concurrently submitted.");
+          },
+        );
+
+        await expect(
+          (service as unknown as LearnerAttemptRunner).updateLearnerAttempt(
+            555,
+            2580,
+            updateDto,
+            "cookie",
+            false,
+            request,
+          ),
+        ).rejects.toThrow("concurrently submitted");
+
+        expect(
+          mockQuestionResponseService.markGradingComplete,
+        ).not.toHaveBeenCalled();
+      });
+
+      it("marks grading complete after the LTI callback, not before it", async () => {
+        mockLtiGradeSyncService.createAndSync.mockImplementation(async () => {
+          callOrder.push("lti");
+          return undefined;
+        });
+
+        await (service as unknown as LearnerAttemptRunner).updateLearnerAttempt(
+          555,
+          2580,
+          updateDto,
+          "cookie",
+          true,
+          request,
+        );
+
+        expect(callOrder).toContain("lti");
+        expect(callOrder.indexOf("markGradingComplete")).toBeGreaterThan(
+          callOrder.indexOf("lti"),
+        );
+      });
     });
   });
 });

@@ -3,15 +3,17 @@ import { motion, AnimatePresence, useTransform } from "framer-motion";
 import { subscribeToGradingNotification } from "@/lib/learner";
 import type {
   GradingProgressDetails,
+  GradingProgressStatus,
   QuestionGradingState,
   QuestionGradingStatus,
 } from "@/lib/learner";
 import { toast } from "sonner";
 import GradeSyncStatus from "@/components/GradeSyncStatus";
+import ReportErrorButton from "@/components/ReportErrorButton";
 import { useCreepingProgress } from "./useCreepingProgress";
 
 export interface ProgressState {
-  status: "processing" | "completed" | "failed" | "idle";
+  status: GradingProgressStatus | "idle";
   progress: number;
   currentStage: string;
   currentQuestion?: number;
@@ -87,6 +89,11 @@ interface GradingProgressModalProps {
   assignmentId: number;
   attemptId: number | null;
   progressData: ProgressState;
+  /**
+   * Navigates the learner to their results. Supplied only when there is
+   * somewhere to go; the re-check action is hidden without it.
+   */
+  onCheckResults?: () => void;
 }
 
 export default function GradingProgressModal({
@@ -94,6 +101,7 @@ export default function GradingProgressModal({
   assignmentId,
   attemptId,
   progressData,
+  onCheckResults,
 }: GradingProgressModalProps) {
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [emailNotified, setEmailNotified] = useState(false);
@@ -159,13 +167,20 @@ export default function GradingProgressModal({
     (v) => `${v * 2.64} 264`,
   );
   const barWidth = useTransform(displayProgress, (v) => `${Math.round(v)}%`);
+  // `stalled` keeps the working presentation on purpose: grading really is
+  // still running, so anything red would be a lie.
+  const isWorking = status === "processing" || status === "stalled";
+
   const getStatusColor = () => {
     switch (status) {
       case "completed":
         return "bg-green-500";
       case "failed":
         return "bg-red-500";
+      case "disconnected":
+        return "bg-amber-500";
       case "processing":
+      case "stalled":
         return "bg-purple-500";
       default:
         return "bg-gray-400";
@@ -208,10 +223,46 @@ export default function GradingProgressModal({
           </svg>
         );
 
+      case "disconnected":
+        return (
+          <svg
+            className="w-16 h-16 text-white"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+            />
+          </svg>
+        );
+
       default:
         return null;
     }
   };
+
+  // Memoized so the identity only changes when the content actually does.
+  // ReportErrorButton feeds this straight into a useMemo keyed on this
+  // object, which feeds ReportPreviewModal's field-reset effects — a fresh
+  // object here on every render (this modal re-renders on several store
+  // subscriptions upstream) silently wipes whatever the learner has typed
+  // into an open report form.
+  const errorReportContext = useMemo(
+    () => ({
+      statusCode: 0,
+      headline:
+        status === "stalled"
+          ? "Grading stopped responding"
+          : "Lost contact with the grading service",
+      message: progressData.currentStage,
+      context: `Assignment ${assignmentId}, attempt ${attemptId ?? "unknown"}`,
+    }),
+    [status, progressData.currentStage, assignmentId, attemptId],
+  );
 
   return (
     <AnimatePresence>
@@ -262,7 +313,7 @@ export default function GradingProgressModal({
             >
               <div className="text-center relative">
                 {/* Floating particles */}
-                {status === "processing" && (
+                {isWorking && (
                   <>
                     {[...Array(6)].map((_, i) => (
                       <motion.div
@@ -290,7 +341,7 @@ export default function GradingProgressModal({
                 )}
 
                 <div className="mb-8 relative">
-                  {status === "processing" ? (
+                  {isWorking ? (
                     <div className="relative w-40 h-40 mx-auto">
                       {/* Outer glow ring */}
                       <motion.div
@@ -416,7 +467,9 @@ export default function GradingProgressModal({
                           className={`absolute inset-0 rounded-full blur-2xl ${
                             status === "completed"
                               ? "bg-green-500/40"
-                              : "bg-red-500/40"
+                              : status === "disconnected"
+                                ? "bg-amber-500/40"
+                                : "bg-red-500/40"
                           }`}
                           animate={{
                             scale: [1, 1.2, 1],
@@ -489,8 +542,10 @@ export default function GradingProgressModal({
                   className="text-2xl font-bold mb-3 bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 dark:from-gray-100 dark:via-white dark:to-gray-100 bg-clip-text text-transparent"
                 >
                   {status === "processing" && "Grading Your Assignment"}
+                  {status === "stalled" && "Still Grading"}
                   {status === "completed" && "🎉 Grading Complete!"}
                   {status === "failed" && "Grading Failed"}
+                  {status === "disconnected" && "We Lost Contact With Grading"}
                 </motion.h3>
 
                 <motion.p
@@ -501,6 +556,58 @@ export default function GradingProgressModal({
                 >
                   {message}
                 </motion.p>
+
+                {status === "stalled" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-200 text-left"
+                    role="status"
+                  >
+                    <p className="font-semibold mb-1">
+                      Grading is running long
+                    </p>
+                    <p>
+                      Your answers are submitted and grading is still running.
+                      You can keep waiting, ask for an email when it finishes,
+                      or tell us about it.
+                    </p>
+                    <div className="mt-3">
+                      <ReportErrorButton error={errorReportContext} />
+                    </div>
+                  </motion.div>
+                )}
+
+                {status === "disconnected" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 space-y-3 text-left"
+                  >
+                    <div className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-200">
+                      <p className="font-semibold mb-1">
+                        Your submission is safe
+                      </p>
+                      <p>
+                        We stopped receiving updates, so we can&apos;t show you
+                        live progress. Grading may have finished — check your
+                        results, and report this if the grade isn&apos;t there.
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      {onCheckResults && (
+                        <button
+                          type="button"
+                          onClick={onCheckResults}
+                          className="inline-flex items-center justify-center rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                        >
+                          Check my results
+                        </button>
+                      )}
+                      <ReportErrorButton error={errorReportContext} />
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* Show grade sync status when grading is complete */}
                 {status === "completed" && attemptId && (
@@ -517,11 +624,11 @@ export default function GradingProgressModal({
                   </motion.div>
                 )}
 
-                {status === "processing" && progressData.gradingState && (
+                {isWorking && progressData.gradingState && (
                   <QuestionGradingList state={progressData.gradingState} />
                 )}
 
-                {status === "processing" && (
+                {isWorking && (
                   <>
                     {/* Modern linear progress bar */}
                     <motion.div

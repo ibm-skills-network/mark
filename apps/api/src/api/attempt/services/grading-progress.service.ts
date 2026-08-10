@@ -239,13 +239,6 @@ export class GradingProgressService {
   async markComplete(attemptId: number): Promise<void> {
     try {
       if (attemptId > 0) {
-        const gradingProgress = await this.prisma.gradingProgress.findUnique({
-          where: { attemptId },
-          include: {
-            attempt: true,
-          },
-        });
-
         await this.prisma.gradingProgress.update({
           where: { attemptId },
           data: {
@@ -255,6 +248,29 @@ export class GradingProgressService {
             completedAt: new Date(),
           },
         });
+
+        // Read the attempt AFTER the status write, not before. Callers reach
+        // this method only once the grade and question responses are
+        // committed, so this read sees the durable grade; reading first
+        // captured the pre-commit row and mailed learners a completion notice
+        // with no score in it.
+        const gradingProgress = await this.prisma.gradingProgress.findUnique({
+          where: { attemptId },
+          include: {
+            attempt: true,
+          },
+        });
+
+        if (gradingProgress && !gradingProgress.attempt.submitted) {
+          // Tripwire, not an abort. COMPLETED is the learner's "your grade is
+          // ready" signal and must never precede the commit; if a future
+          // caller reintroduces that ordering this is how we find out.
+          // Throwing here would strand the row at PROCESSING, which is worse
+          // for the learner than a momentarily early COMPLETED.
+          this.logger.warn(
+            `grading.progress.completed.before.commit attemptId=${attemptId}`,
+          );
+        }
 
         if (
           gradingProgress?.notifyOnComplete &&
@@ -266,9 +282,10 @@ export class GradingProgressService {
 
           try {
             const assignmentId = gradingProgress.attempt.assignmentId;
-            const grade = gradingProgress.attempt.grade
-              ? gradingProgress.attempt.grade * 100
-              : undefined;
+            const grade =
+              gradingProgress.attempt.grade === null
+                ? undefined
+                : gradingProgress.attempt.grade * 100;
 
             await this.emailService.sendGradingCompletionEmail(
               gradingProgress.notificationEmail,

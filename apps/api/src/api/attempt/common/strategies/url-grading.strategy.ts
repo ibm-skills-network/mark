@@ -8,13 +8,16 @@ import {
   Injectable,
   Optional,
 } from "@nestjs/common";
-import * as cheerio from "cheerio";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { safeGet } from "src/api/attempt/common/utils/ssrf-safe-http";
+import {
+  fetchUrlContentForGrading,
+  GithubFetchResult,
+} from "src/api/attempt/common/utils/github-content-fetch.util";
+import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
@@ -141,22 +144,32 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       return responseDto;
     }
 
-    let urlFetchResponse: { body: string; isFunctional: boolean };
+    let urlFetchResponse: GithubFetchResult;
 
     try {
-      urlFetchResponse = await this.fetchUrlContent(learnerResponse);
-    } catch {
-      try {
-        urlFetchResponse =
-          await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
-      } catch {
-        return this.createFallbackResponse(
-          question,
-          learnerResponse,
-          context,
-          "url_fetch_completely_failed",
+      urlFetchResponse = await fetchUrlContentForGrading(learnerResponse, {
+        assignmentId: context.assignmentId,
+        questionId: question.id,
+      });
+    } catch (error) {
+      if (error instanceof GithubRateLimitedError) {
+        this.logger?.warn(
+          "GitHub rate limit hit while fetching a learner URL for grading; propagating as retryable",
+          {
+            url: learnerResponse,
+            assignmentId: context.assignmentId,
+            questionId: question.id,
+            resetAt: error.resetAt,
+          },
         );
+        throw error;
       }
+      return this.createFallbackResponse(
+        question,
+        learnerResponse,
+        context,
+        "url_fetch_completely_failed",
+      );
     }
 
     if (!urlFetchResponse.isFunctional) {
@@ -308,169 +321,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       return true;
     } catch {
       return false;
-    }
-  }
-
-  /**
-   * Convert GitHub blob URL to raw content URL
-   */
-  private convertGitHubUrlToRaw(url: string): string | null {
-    const match = url.match(
-      /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/,
-    );
-    if (!match) {
-      return;
-    }
-    const [, user, repo, path] = match;
-    return `https://raw.githubusercontent.com/${user}/${repo}/${path}`;
-  }
-
-  /**
-   * Fetch content from a URL
-   */
-  private async fetchUrlContent(
-    url: string,
-  ): Promise<{ body: string; isFunctional: boolean }> {
-    const MAX_CONTENT_SIZE = 100_000;
-    try {
-      if (url.includes("github.com")) {
-        if (url.includes("/blob/")) {
-          const rawUrl = this.convertGitHubUrlToRaw(url);
-          if (!rawUrl) {
-            return { body: "", isFunctional: false };
-          }
-
-          const rawContentResponse = await safeGet<string>(rawUrl);
-          if (rawContentResponse.status === 200) {
-            let body = rawContentResponse.data;
-            if (body.length > MAX_CONTENT_SIZE) {
-              body = body.slice(0, MAX_CONTENT_SIZE);
-            }
-            return { body, isFunctional: true };
-          }
-        } else {
-          const repoMatch = url.match(
-            /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
-          );
-          if (repoMatch) {
-            const [, user, repo] = repoMatch;
-
-            const readmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/main/README.md`;
-            try {
-              const readmeResponse = await safeGet<string>(readmeUrl);
-              if (readmeResponse.status === 200) {
-                let body = readmeResponse.data;
-                if (body.length > MAX_CONTENT_SIZE) {
-                  body = body.slice(0, MAX_CONTENT_SIZE);
-                }
-                return { body, isFunctional: true };
-              }
-            } catch {
-              try {
-                const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
-                const masterReadmeResponse =
-                  await safeGet<string>(masterReadmeUrl);
-                if (masterReadmeResponse.status === 200) {
-                  let body = masterReadmeResponse.data;
-                  if (body.length > MAX_CONTENT_SIZE) {
-                    body = body.slice(0, MAX_CONTENT_SIZE);
-                  }
-                  return { body, isFunctional: true };
-                }
-              } catch {
-                const apiUrl = `https://api.github.com/repos/${user}/${repo}`;
-                try {
-                  const apiResponse = await safeGet<{
-                    full_name?: string;
-                    description?: string;
-                    stargazers_count?: number;
-                    forks_count?: number;
-                    language?: string;
-                    updated_at?: string;
-                  }>(apiUrl);
-                  if (apiResponse.status === 200) {
-                    const repoInfo = apiResponse.data;
-                    const body = `Repository: ${
-                      repoInfo.full_name
-                    }\nDescription: ${
-                      repoInfo.description || "No description"
-                    }\nStars: ${repoInfo.stargazers_count}\nForks: ${
-                      repoInfo.forks_count
-                    }\nLanguage: ${
-                      repoInfo.language || "Not specified"
-                    }\nLast Updated: ${repoInfo.updated_at}`;
-                    return { body, isFunctional: true };
-                  }
-                } catch {
-                  return { body: "", isFunctional: false };
-                }
-              }
-            }
-          }
-
-          try {
-            const response = await safeGet<string>(url);
-            const $ = cheerio.load(response.data);
-
-            $(
-              "script, style, noscript, iframe, noembed, embed, object",
-            ).remove();
-
-            let content = "";
-            const readmeElement = $("article.markdown-body");
-            if (readmeElement.length > 0) {
-              content = readmeElement.text().trim();
-            } else {
-              const aboutSection = $(".Box-body");
-              if (aboutSection.length > 0) {
-                content += aboutSection.text().trim() + "\n\n";
-              }
-
-              const fileList = $(
-                "div.js-details-container div.js-navigation-container tr.js-navigation-item",
-              );
-              if (fileList.length > 0) {
-                content += "Repository Files:\n";
-                fileList.each((index, element) => {
-                  const fileName = $(element)
-                    .find(".js-navigation-open")
-                    .text()
-                    .trim();
-                  if (fileName) {
-                    content += `- ${fileName}\n`;
-                  }
-                });
-              }
-            }
-
-            if (content) {
-              return {
-                body: content.replaceAll(/\s+/g, " ").trim(),
-                isFunctional: true,
-              };
-            }
-          } catch (error) {
-            this.logger?.error("Error fetching GitHub content", {
-              url,
-              error: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-            });
-          }
-        }
-
-        return { body: "", isFunctional: false };
-      } else {
-        const response = await safeGet<string>(url);
-        const $ = cheerio.load(response.data);
-
-        $("script, style, noscript, iframe, noembed, embed, object").remove();
-
-        const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
-
-        return { body: plainText, isFunctional: true };
-      }
-    } catch {
-      return { body: "", isFunctional: false };
     }
   }
 }

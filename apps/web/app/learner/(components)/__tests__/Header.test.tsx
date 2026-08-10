@@ -36,6 +36,11 @@ jest.mock("@/lib/talkToBackend", () => ({
   getUser: jest.fn().mockResolvedValue({ role: "learner", returnUrl: "" }),
 }));
 
+jest.mock("@/lib/learner", () => ({
+  ...jest.requireActual("@/lib/learner"),
+  subscribeToGradingNotification: jest.fn(),
+}));
+
 jest.mock("sonner", () => ({
   toast: {
     error: jest.fn(),
@@ -52,11 +57,18 @@ jest.mock("@/app/chatbot/store/useMarkChatStore", () => ({
 }));
 
 // --- presentational children stubbed to keep the render tree light ---
+// The status is surfaced as a data attribute (not just isOpen) so tests can
+// prove the widened "stalled"/"disconnected" statuses actually reach this
+// component through Header's onProgress callsite, rather than only checking
+// that the modal itself renders them correctly in isolation.
 jest.mock("../GradingProgressModal", () => ({
   __esModule: true,
-  default: (props: { isOpen?: boolean }) =>
+  default: (props: { isOpen?: boolean; progressData?: { status?: string } }) =>
     props.isOpen
-      ? createElement("div", { "data-testid": "grading-modal" })
+      ? createElement("div", {
+          "data-testid": "grading-modal",
+          "data-status": props.progressData?.status,
+        })
       : null,
 }));
 jest.mock("@/components/Button", () => ({
@@ -150,5 +162,101 @@ describe("LearnerHeader submit path", () => {
     expect(screen.queryByTestId("grading-modal")).not.toBeInTheDocument();
     expect(toast.error).toHaveBeenCalled();
     expect(mockSubmitAssignment).not.toHaveBeenCalled();
+  });
+
+  it("passes the widened stalled/disconnected statuses through to the modal untouched", async () => {
+    // Guards against a regression to the old bridge that collapsed
+    // stalled -> processing and disconnected -> failed at this callsite: if
+    // that mapping ever comes back, the modal would never see its dedicated
+    // states even though GradingProgressModal itself renders them correctly.
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+
+    let capturedOnProgress:
+      | ((
+          status: string,
+          progress: number,
+          message: string,
+          metadata?: unknown,
+        ) => void)
+      | undefined;
+    mockSubmitAssignment.mockImplementation(
+      (...args: unknown[]) =>
+        new Promise(() => {
+          capturedOnProgress = args[7] as typeof capturedOnProgress;
+        }),
+    );
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    act(() => {
+      capturedOnProgress?.("stalled", 40, "still going");
+    });
+    expect(screen.getByTestId("grading-modal")).toHaveAttribute(
+      "data-status",
+      "stalled",
+    );
+
+    act(() => {
+      capturedOnProgress?.("disconnected", 0, "lost contact");
+    });
+    expect(screen.getByTestId("grading-modal")).toHaveAttribute(
+      "data-status",
+      "disconnected",
+    );
+  });
+
+  it("keeps the grading modal open showing disconnected when the grading stream is lost", async () => {
+    const { isGradingStreamLostError } = jest.requireActual("@/lib/learner");
+    expect(isGradingStreamLostError).toBeDefined();
+
+    class GradingStreamLostError extends Error {
+      constructor() {
+        super("We lost contact with the grading service.");
+        this.name = "GradingStreamLostError";
+      }
+    }
+
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+
+    // Mirrors the real watchdog (lib/learner.ts's handleStreamLost): it
+    // reports the terminal "disconnected" frame through onProgress before
+    // rejecting with GradingStreamLostError. Capturing the real onProgress
+    // closure and driving it the same way proves the full chain — rejection
+    // sets the status, and the modal stays up showing it — rather than only
+    // asserting the modal is still mounted.
+    mockSubmitAssignment.mockImplementation((...args: unknown[]) => {
+      const onProgress = args[7] as (
+        status: string,
+        progress: number,
+        message: string,
+      ) => void;
+      onProgress(
+        "disconnected",
+        0,
+        "We lost contact with the grading service. Your answers were submitted — check your results in a moment.",
+      );
+      return Promise.reject(new GradingStreamLostError());
+    });
+
+    jest.useFakeTimers();
+    try {
+      render(<LearnerHeader />);
+
+      await act(async () => {
+        window.dispatchEvent(new Event("triggerAssignmentSubmission"));
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      const modal = screen.getByTestId("grading-modal");
+      expect(modal).toBeInTheDocument();
+      expect(modal).toHaveAttribute("data-status", "disconnected");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

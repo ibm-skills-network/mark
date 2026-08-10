@@ -77,6 +77,7 @@ export const getAttempt = apiLearner.getAttempt;
 export const getCompletedAttempt = apiLearner.getCompletedAttempt;
 export const getSuccessPageData = apiLearner.getSuccessPageData;
 export const submitQuestion = apiLearner.submitQuestion;
+export type { SubmitQuestionResult } from "./learner";
 export const getLiveRecordingFeedback = apiLearner.getLiveRecordingFeedback;
 export const submitAssignment = apiLearner.submitAssignment;
 export const getFeedback = apiLearner.getFeedback;
