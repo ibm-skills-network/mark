@@ -32,6 +32,7 @@ import { CriterionJudgeService } from "./features/grading/services/criterion-jud
 import { CriterionRetryManagerService } from "./features/grading/services/criterion-retry-manager.service";
 import { CriterionGradeCompilerService } from "./features/grading/services/criterion-grade-compiler.service";
 import { CriterionEvidencePipelineService } from "./features/grading/services/criterion-evidence-pipeline.service";
+import { SubmissionQualityService } from "./features/grading/services/submission-quality.service";
 import { FileGradingService } from "./features/grading/services/file-grading.service";
 import { ContentSummarizationService } from "./features/grading/services/content-summarization.service";
 import { EvidenceBasedGradingService } from "./features/grading/services/evidence-based-grading.service";
@@ -74,12 +75,11 @@ import {
   USAGE_TRACKER,
   VALIDATOR_SERVICE,
   VIDEO_PRESENTATION_GRADING_SERVICE,
+  isGradingJudgeEnabled,
 } from "./llm.constants";
 import { PdfAnnotationService } from "../attempt/services/pdf-annotation.service";
 
-const shouldDisableJudge = !["1", "true", "yes"].includes(
-  (process.env.ENABLE_GRADING_JUDGE || "").toLowerCase(),
-);
+const shouldDisableJudge = !isGradingJudgeEnabled();
 
 @Global()
 @Module({
@@ -192,6 +192,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     ContentSummarizationService,
     EvidenceBasedGradingService,
     EvidenceChunkingService,
+    SubmissionQualityService,
     CriterionEvidenceRetrievalService,
     CriterionGradingService,
     CriterionJudgeService,
@@ -262,6 +263,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     QUESTION_GENERATION_SERVICE,
     RUBRIC_SERVICE,
     TRANSLATION_SERVICE,
+    SubmissionQualityService,
   ],
 })
 export class LlmModule {}

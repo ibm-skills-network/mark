@@ -53,6 +53,7 @@ export class EvidenceChunkingService {
             pageCount: submission.metadata.pageCount,
             structured: true,
             checksum: submission.metadata.checksum,
+            blockType: block.type,
             ...(block.pinnedEvidence ? { pinned: true } : {}),
           },
         });

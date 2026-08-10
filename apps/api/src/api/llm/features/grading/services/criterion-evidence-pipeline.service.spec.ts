@@ -98,12 +98,31 @@ describe("CriterionEvidencePipelineService", () => {
       }),
     };
 
+    const qualityService = {
+      classifyChunks: jest
+        .fn()
+        .mockImplementation((chunks: ExtractedChunk[]) => ({
+          chunks,
+          quality: {
+            classification: "clean",
+            gated: false,
+            qualityWarnings: [],
+            rawChunkCount: chunks.length,
+            eligibleChunkCount: chunks.length,
+            ineligibleChunkCount: 0,
+            boilerplateRatio: 0,
+            ineligibleReasonBreakdown: {},
+          },
+        })),
+    };
+
     const pipeline = new CriterionEvidencePipelineService(
       evidenceRetrieval as any,
       gradingService as any,
       judgeService as any,
       new CriterionRetryManagerService(),
       new CriterionGradeCompilerService(),
+      qualityService as any,
     );
 
     const result = await pipeline.gradeWithEvidence({
@@ -116,5 +135,178 @@ describe("CriterionEvidencePipelineService", () => {
 
     expect(result.grades[0].attempt).toBe(1);
     expect(result.audit.finalSelection[0].reason).toBe("highest_support_score");
+  });
+
+  it("treats system-only chunks as empty when the quality gate rejects them", async () => {
+    const { SubmissionQualityService } = await import(
+      "./submission-quality.service"
+    );
+
+    const twoLevelCriterion: RubricCriterion = {
+      id: "c-two",
+      rubricQuestion: "Two-level criterion",
+      description: "",
+      criteria: [
+        { description: "Not met", points: 2 },
+        { description: "Met", points: 5 },
+      ],
+      maxPoints: 5,
+    };
+
+    const oneLevelCriterion: RubricCriterion = {
+      id: "c-one",
+      rubricQuestion: "Completion-only criterion",
+      description: "",
+      criteria: [{ description: "Completed", points: 3 }],
+      maxPoints: 3,
+    };
+
+    const ineligibleChunks: ExtractedChunk[] = [
+      {
+        chunkId: "meta",
+        text: "=== PDF DOCUMENT ===",
+        sourceType: "file",
+        sourceId: "sub",
+        anchor: { type: "file", page: 1, blockId: "b1" },
+        hash: "meta",
+      },
+      {
+        chunkId: "label",
+        text: "Page 1 of 3",
+        sourceType: "file",
+        sourceId: "sub",
+        anchor: { type: "file", page: 1, blockId: "b2" },
+        hash: "label",
+      },
+    ];
+
+    const mustNotBeCalled = jest.fn(() => {
+      throw new Error("must not be called when quality gate fires");
+    });
+
+    const pipeline = new CriterionEvidencePipelineService(
+      { retrieveEvidence: mustNotBeCalled } as any,
+      { gradeCriterion: mustNotBeCalled } as any,
+      { judge: mustNotBeCalled } as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+      new SubmissionQualityService(),
+    );
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Question text for the assignment",
+      criteria: [twoLevelCriterion, oneLevelCriterion],
+      chunks: ineligibleChunks,
+      assignmentId: 1,
+    });
+
+    expect(mustNotBeCalled).not.toHaveBeenCalled();
+    expect(result.grades).toHaveLength(2);
+    expect(result.grades[0].pointsAwarded).toBe(2); // non-zero rubric minimum
+    expect(result.grades[1].pointsAwarded).toBe(0);
+    expect(result.grades[1].decision).toBe("does_not_meet");
+    expect(result.summary.totalPoints).toBe(2);
+    expect(result.audit.submissionQuality?.gated).toBe(true);
+    expect(result.audit.submissionQuality?.eligibleChunkCount).toBe(0);
+    expect(
+      result.audit.finalSelection.every(
+        (selection) => selection.reason === "quality_gate_no_eligible_chunks",
+      ),
+    ).toBe(true);
+  });
+
+  it("awards completion credit for non-empty learner content rejected as too short", async () => {
+    const { SubmissionQualityService } = await import(
+      "./submission-quality.service"
+    );
+    const completionCriterion: RubricCriterion = {
+      id: "completion",
+      rubricQuestion: "Submission completed",
+      description: "",
+      criteria: [{ description: "Completed", points: 3 }],
+      maxPoints: 3,
+    };
+    const shortLearnerChunk: ExtractedChunk = {
+      chunkId: "answer",
+      text: "Yes",
+      sourceType: "text",
+      sourceId: "learner-response",
+      anchor: { type: "text", startOffset: 0, endOffset: 3 },
+      hash: "answer",
+    };
+    const mustNotBeCalled = jest.fn(() => {
+      throw new Error("must not be called when quality gate fires");
+    });
+    const pipeline = new CriterionEvidencePipelineService(
+      { retrieveEvidence: mustNotBeCalled } as any,
+      { gradeCriterion: mustNotBeCalled } as any,
+      { judge: mustNotBeCalled } as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+      new SubmissionQualityService(),
+    );
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Did the learner submit an answer?",
+      criteria: [completionCriterion],
+      chunks: [shortLearnerChunk],
+      assignmentId: 1,
+    });
+
+    expect(result.grades[0].pointsAwarded).toBe(3);
+    expect(result.grades[0].decision).toBe("meets");
+    expect(result.grades[0].rationale).toContain("completion recorded");
+  });
+
+  it("assigns zero to completion-only criteria for completely empty submissions", async () => {
+    const { SubmissionQualityService } = await import(
+      "./submission-quality.service"
+    );
+
+    const twoLevelCriterion: RubricCriterion = {
+      id: "c-two",
+      rubricQuestion: "Two-level criterion",
+      description: "",
+      criteria: [
+        { description: "Not met", points: 2 },
+        { description: "Met", points: 5 },
+      ],
+      maxPoints: 5,
+    };
+
+    const oneLevelCriterion: RubricCriterion = {
+      id: "c-one",
+      rubricQuestion: "Completion-only criterion",
+      description: "",
+      criteria: [{ description: "Completed", points: 3 }],
+      maxPoints: 3,
+    };
+
+    const mustNotBeCalled = jest.fn(() => {
+      throw new Error("must not be called when quality gate fires");
+    });
+
+    const pipeline = new CriterionEvidencePipelineService(
+      { retrieveEvidence: mustNotBeCalled } as any,
+      { gradeCriterion: mustNotBeCalled } as any,
+      { judge: mustNotBeCalled } as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+      new SubmissionQualityService(),
+    );
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Question text for the assignment",
+      criteria: [twoLevelCriterion, oneLevelCriterion],
+      chunks: [], // completely empty submission
+      assignmentId: 1,
+    });
+
+    expect(mustNotBeCalled).not.toHaveBeenCalled();
+    expect(result.grades[0].pointsAwarded).toBe(2); // multi-level minimum kept
+    expect(result.grades[1].pointsAwarded).toBe(0); // completion-only: empty ⇒ 0
+    expect(result.grades[1].decision).toBe("does_not_meet");
+    expect(result.audit.submissionQuality?.classification).toBe("empty");
+    expect(result.audit.submissionQuality?.gated).toBe(true);
   });
 });

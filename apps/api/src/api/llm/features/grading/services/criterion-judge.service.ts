@@ -1,5 +1,4 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { PromptTemplate } from "@langchain/core/prompts";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { AIUsageType } from "@prisma/client";
 import {
@@ -12,8 +11,13 @@ import {
   getDeterministicGradingOptions,
 } from "../types/criterion-evidence.types";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { LLM_RESOLVER_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
+import {
+  LLM_RESOLVER_SERVICE,
+  PROMPT_PROCESSOR,
+  isGradingJudgeEnabled,
+} from "../../../llm.constants";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { buildCriterionJudgePrompt } from "../prompts/criterion-judge.prompt";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
 interface JudgeRequest {
@@ -29,6 +33,8 @@ interface JudgeRequest {
 
 @Injectable()
 export class CriterionJudgeService {
+  private readonly logger = new Logger(CriterionJudgeService.name);
+
   constructor(
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
@@ -40,61 +46,26 @@ export class CriterionJudgeService {
     request: JudgeRequest,
     recorder?: LlmCallRecorder,
   ): Promise<JudgeCritique> {
+    if (!isGradingJudgeEnabled()) {
+      this.logger.debug(
+        `Criterion judge disabled via ENABLE_GRADING_JUDGE; auto-approving grades for assignment ${request.assignmentId}`,
+      );
+      return {
+        approved: true,
+        issues: [],
+        summary: "Judge disabled (ENABLE_GRADING_JUDGE)",
+      };
+    }
+
     const parser = StructuredOutputParser.fromZodSchema(JudgeCritiqueSchema);
     const formatInstructions = parser.getFormatInstructions();
 
-    const prompt = new PromptTemplate({
-      template: `You are a grading judge. Review rubric criteria, grader outputs, and evidence citations.
-
-QUESTION:
-{question}
-
-RUBRIC:
-{rubric}
-
-CRITERION OUTPUTS:
-{outputs}
-
-EVIDENCE SUMMARY:
-{evidence}
-
-CHECKS:
-- Evidence quality (anchored, relevant, not hallucinated).
-- Rationale consistency with evidence and rubric.
-- Score alignment with rubric points.
-
-Return issues per criterionId if any.
-
-{format_instructions}`,
-      inputVariables: [],
-      partialVariables: {
-        question: () => request.question,
-        rubric: () =>
-          request.criteria
-            .map(
-              (criterion) =>
-                `${criterion.id}: ${criterion.rubricQuestion} (${criterion.maxPoints} pts)`,
-            )
-            .join("\n"),
-        outputs: () =>
-          request.grades
-            .map(
-              (grade) =>
-                `${grade.criterionId}: ${grade.pointsAwarded}/${grade.maxPoints} | citations: ${grade.citations.join(", ")} | rationale: ${grade.rationale}`,
-            )
-            .join("\n"),
-        evidence: () =>
-          request.evidence
-            .map((item) => {
-              const citations = item.evidence
-                .map((event) => `${event.chunkId}: ${event.quote}`)
-                .slice(0, 3)
-                .join(" | ");
-              return `${item.criterionId}: ${citations}`;
-            })
-            .join("\n"),
-        format_instructions: () => formatInstructions,
-      },
+    const prompt = buildCriterionJudgePrompt({
+      question: request.question,
+      criteria: request.criteria,
+      grades: request.grades,
+      evidence: request.evidence,
+      formatInstructions,
     });
 
     const selectedModel =

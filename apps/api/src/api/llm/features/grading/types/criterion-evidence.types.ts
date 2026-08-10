@@ -14,7 +14,57 @@ export interface RubricCriterion {
   maxPoints: number;
 }
 
+/**
+ * Flattens a single RubricCriterion into a single whitespace-separated token
+ * string used for Jaccard rubric-copy detection.  Centralised here so both the
+ * pipeline and the legacy fallback path produce identical strings.
+ */
+export function rubricCriterionToText(c: RubricCriterion): string {
+  return `${c.rubricQuestion} ${c.description} ${c.criteria.map((l) => l.description).join(" ")}`;
+}
+
 export type EvidenceSourceType = "text" | "file" | "image" | "url" | "unknown";
+
+export type ChunkEligibility = "eligible" | "ineligible";
+
+export type ChunkIneligibleReason =
+  | "boilerplate"
+  | "page_label"
+  | "metadata_only"
+  | "prompt_copy"
+  | "rubric_copy"
+  | "too_short"
+  | "generated_summary"
+  | "non_learner_source"
+  | "heading_only_page";
+
+export interface ChunkQuality {
+  eligibility: ChunkEligibility;
+  ineligibleReasons?: ChunkIneligibleReason[];
+  substantiveTokenCount?: number;
+}
+
+export type SubmissionQualityClassification =
+  | "clean"
+  | "boilerplate_many_pages"
+  | "low_information"
+  | "needs_visual_evidence"
+  | "empty";
+
+export interface SubmissionQualityMetadata {
+  classification: SubmissionQualityClassification;
+  /** True when the pipeline short-circuited to minimum points due to this quality result. */
+  gated: boolean;
+  /** Human-readable warnings for the audit log; present when quality is degraded but grading still ran. */
+  qualityWarnings: string[];
+  rawChunkCount: number;
+  eligibleChunkCount: number;
+  ineligibleChunkCount: number;
+  boilerplateRatio: number;
+  pageCount?: number;
+  avgSubstantiveTokensPerPage?: number;
+  ineligibleReasonBreakdown: Partial<Record<ChunkIneligibleReason, number>>;
+}
 
 export type EvidenceAnchor =
   | {
@@ -50,6 +100,7 @@ export interface ExtractedChunk {
   sourceId: string;
   anchor: EvidenceAnchor;
   hash: string;
+  quality?: ChunkQuality;
   metadata?: {
     filename?: string;
     mimeType?: string;
@@ -58,6 +109,8 @@ export interface ExtractedChunk {
     imageIndex?: number;
     structured?: boolean;
     checksum?: string;
+    /** Preserved from ContentBlock.type so the quality service can detect heading-only pages. */
+    blockType?: string;
     /** Mirrors ContentBlock.pinnedEvidence: always reaches the LLM validator. */
     pinned?: boolean;
   };
@@ -88,11 +141,28 @@ export interface CriterionEvidence {
   contradiction?: boolean;
 }
 
+/**
+ * Outcome of LLM evidence validation:
+ * - "validated": parse succeeded; selected evidence is used, while an empty
+ *   selection may still use bounded keyword fallback
+ * - "rejected": parse succeeded, nothing validated, and the validator explicitly
+ *   labelled candidates irrelevant/restatement_only/boilerplate_only — keyword
+ *   fallback must NOT override this decision
+ * - "technical_failure": response could not be parsed — keyword fallback allowed
+ * - "disabled": validation was intentionally not run — keyword fallback allowed
+ */
+export type EvidenceValidationOutcome =
+  | "validated"
+  | "rejected"
+  | "technical_failure"
+  | "disabled";
+
 export interface CriterionEvidenceResponse {
   criterionId: string;
   evidence: CriterionEvidence[];
   strategyUsed: EvidenceRetrievalStrategy;
   retrievedAt: string;
+  validationOutcome?: EvidenceValidationOutcome;
   debug?: {
     candidateCount: number;
     validatedCount: number;
@@ -173,6 +243,7 @@ export interface EvidenceAuditLog {
     responseHash: string;
     durationMs: number;
   }>;
+  submissionQuality?: SubmissionQualityMetadata;
   createdAt: string;
 }
 
@@ -216,7 +287,7 @@ export const DEFAULT_MODEL_SELECTION: ModelSelectionConfig = {
 export const CriterionGradeSchema = z.object({
   score: z.number().min(0),
   rationale: z.string().min(20),
-  citations: z.array(z.string()).min(1),
+  citations: z.array(z.string()),
   confidence: z.enum(["high", "medium", "low"]),
   nextStep: z.string().min(10).optional(),
 });
@@ -226,7 +297,14 @@ export const EvidenceValidationSchema = z.object({
     .array(
       z.object({
         chunkId: z.string(),
-        relevance: z.enum(["supports", "partial", "contradicts", "irrelevant"]),
+        relevance: z.enum([
+          "supports",
+          "partial",
+          "contradicts",
+          "restatement_only",
+          "boilerplate_only",
+          "irrelevant",
+        ]),
         note: z.string().optional(),
       }),
     )

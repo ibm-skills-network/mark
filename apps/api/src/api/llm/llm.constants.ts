@@ -29,6 +29,17 @@ export const VALIDATOR_SERVICE = "VALIDATOR_SERVICE";
 
 export const DEFAULT_LLM_MODEL = "gpt-4o";
 
+/**
+ * Single kill switch for BOTH grading judges: the legacy GradingJudgeService
+ * (swapped for a noop in llm.module) and the pipeline CriterionJudgeService
+ * (auto-approves without an LLM call). Off unless explicitly enabled.
+ */
+export function isGradingJudgeEnabled(): boolean {
+  return ["1", "true", "yes"].includes(
+    (process.env.ENABLE_GRADING_JUDGE || "").toLowerCase(),
+  );
+}
+
 export const AVAILABLE_MODELS = {
   OPENAI_GPT4O: "gpt-4o",
   OPENAI_GPT4O_MINI: "gpt-4o-mini",

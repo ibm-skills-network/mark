@@ -31,9 +31,18 @@ import {
   DEFAULT_MODEL_SELECTION,
   ExtractedChunk,
   RubricCriterion,
+  rubricCriterionToText,
 } from "../types/criterion-evidence.types";
+import {
+  hasLearnerSuppliedContent,
+  minimumRubricPoints,
+  noEvidenceDecision,
+  noEvidencePoints,
+  noEvidenceRationale,
+} from "../grading-policy";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
+import { SubmissionQualityService } from "./submission-quality.service";
 import { HighlightingGeneratorService } from "./highlighting-generator.service";
 import { ImageDescriptionService } from "./image-description.service";
 import {
@@ -109,6 +118,7 @@ export class EvidenceBasedGradingService {
     private readonly highlightingGenerator: HighlightingGeneratorService,
     private readonly chunkingService: EvidenceChunkingService,
     private readonly evidencePipeline: CriterionEvidencePipelineService,
+    private readonly qualityService: SubmissionQualityService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({
@@ -156,9 +166,12 @@ export class EvidenceBasedGradingService {
         })
       | null = null;
 
-    try {
-      const chunks = this.chunkingService.extractFromSubmission(submission);
+    // Extract once so the fallback catch block can reuse the same chunks without
+    // a second parse/OCR pass.  If extraction itself throws, the outer catch
+    // (further up the call stack) handles it — nothing below needs chunks yet.
+    const chunks = this.chunkingService.extractFromSubmission(submission);
 
+    try {
       this.logger.info(
         `Extracted ${chunks.length} chunks from submission (${submission.pages.length} pages, ` +
           `${submission.pages.reduce(
@@ -207,55 +220,122 @@ export class EvidenceBasedGradingService {
         `Evidence pipeline complete: ${totalPoints}/${maxPossiblePoints} points (${criteriaResults.length} criteria)`,
       );
     } catch (error) {
+      const pipelineFailureReason =
+        error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `Evidence pipeline failed, falling back to legacy grading: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Evidence pipeline failed, falling back to legacy grading: ${pipelineFailureReason}`,
       );
 
-      for (const criterion of criteria) {
-        try {
-          this.logger.debug(
-            `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
-          );
+      // Run the quality gate on the fallback path so boilerplate/empty submissions
+      // can't bypass it via a pipeline failure.  chunks was extracted before the
+      // try block so we reuse it here rather than parsing the submission a second time.
+      const rubricTexts = criteria.map((c) => rubricCriterionToText(c));
+      const { chunks: classifiedChunks, quality: fallbackQuality } =
+        this.qualityService.classifyChunks(chunks, {
+          question: questionText,
+          rubricTexts,
+        });
 
-          const result = await this.gradeOneCriterion(
-            submission,
-            criterion,
-            questionText,
-            assignmentId,
-            language,
-            judgeFeedback,
+      if (fallbackQuality.eligibleChunkCount === 0) {
+        this.logger.warn(
+          `Quality gate fired on fallback path: classification=${fallbackQuality.classification}`,
+        );
+        const submissionIsEmpty = !hasLearnerSuppliedContent(classifiedChunks);
+        for (const criterion of criteria) {
+          const minPoints = noEvidencePoints(
+            criterion.criteria.map((level) => level.points),
+            submissionIsEmpty,
           );
-
-          criteriaResults.push(result);
-          totalPoints += result.pointsAwarded;
-          maxPossiblePoints += result.maxPoints;
-        } catch (criterionError) {
-          this.logger.error(
-            `Failed to grade criterion ${criterion.id}: ${
-              criterionError instanceof Error
-                ? criterionError.message
-                : String(criterionError)
-            }`,
-          );
-
           criteriaResults.push({
             criterionId: criterion.id,
             rubricQuestion: criterion.rubricQuestion,
-            pointsAwarded: 0,
+            pointsAwarded: minPoints,
             maxPoints: criterion.maxPoints,
             evidence: [],
-            rationale: `Grading failed: ${
-              criterionError instanceof Error
-                ? criterionError.message
-                : "Unknown error"
-            }`,
-            decision: "does_not_meet",
+            rationale: noEvidenceRationale(minPoints, criterion.maxPoints),
+            decision: noEvidenceDecision(minPoints, criterion.maxPoints),
             gradedAt: new Date().toISOString(),
           });
-
+          totalPoints += minPoints;
           maxPossiblePoints += criterion.maxPoints;
+        }
+        auditLog = {
+          gradedAt: new Date().toISOString(),
+          modelUsed: "quality_gate_fallback",
+          determinismChecksum: submission.metadata.checksum,
+          auditLog: {
+            fallbackReason: pipelineFailureReason,
+            finalSelection: criteria.map((criterion) => ({
+              criterionId: criterion.id,
+              reason: "quality_gate_no_eligible_chunks",
+            })),
+            submissionQuality: { ...fallbackQuality, gated: true },
+          },
+        };
+      } else {
+        // Legacy fallback must see only quality-eligible content — a transient
+        // pipeline error must not re-open grading of excluded chunks.
+        const qualifiedSubmission = this.buildQualifiedSubmission(
+          submission,
+          classifiedChunks,
+        );
+        auditLog = {
+          gradedAt: new Date().toISOString(),
+          modelUsed: "legacy_fallback_qualified",
+          determinismChecksum: submission.metadata.checksum,
+          auditLog: {
+            fallbackReason: pipelineFailureReason,
+            finalSelection: criteria.map((criterion) => ({
+              criterionId: criterion.id,
+              reason: "pipeline_failure_legacy_fallback",
+            })),
+            submissionQuality: fallbackQuality,
+          },
+        };
+        for (const criterion of criteria) {
+          try {
+            this.logger.debug(
+              `Grading criterion (legacy): ${criterion.rubricQuestion} (max ${criterion.maxPoints} points)`,
+            );
+
+            const result = await this.gradeOneCriterion(
+              qualifiedSubmission,
+              criterion,
+              questionText,
+              assignmentId,
+              language,
+              judgeFeedback,
+            );
+
+            criteriaResults.push(result);
+            totalPoints += result.pointsAwarded;
+            maxPossiblePoints += result.maxPoints;
+          } catch (criterionError) {
+            this.logger.error(
+              `Failed to grade criterion ${criterion.id}: ${
+                criterionError instanceof Error
+                  ? criterionError.message
+                  : String(criterionError)
+              }`,
+            );
+
+            criteriaResults.push({
+              criterionId: criterion.id,
+              rubricQuestion: criterion.rubricQuestion,
+              pointsAwarded: 0,
+              maxPoints: criterion.maxPoints,
+              evidence: [],
+              rationale: `Grading failed: ${
+                criterionError instanceof Error
+                  ? criterionError.message
+                  : "Unknown error"
+              }`,
+              decision: "does_not_meet",
+              gradedAt: new Date().toISOString(),
+            });
+
+            maxPossiblePoints += criterion.maxPoints;
+          }
         }
       }
     }
@@ -324,17 +404,16 @@ export class EvidenceBasedGradingService {
     const prompt = new PromptTemplate({
       template: `You are grading a single criterion from a rubric. You MUST provide evidence before making any decision.
 
-QUESTION:
+[QUESTION — this is the task prompt, do not cite it as evidence]
 {question}
 
-CRITERION TO EVALUATE:
+[RUBRIC CRITERION — use this to decide the score, do not cite it as evidence]
 {criterion_name}
 {criterion_description}
 
-ALLOWED POINTS:
-{allowed_points_list}
+ALLOWED POINTS: {allowed_points_list}
 
-SUBMISSION CONTENT:
+[LEARNER SUBMISSION — cite only from this section as evidence]
 {submission_context}
 
 JUDGE FEEDBACK (if any):
@@ -460,9 +539,7 @@ LANGUAGE: {language}
       submission,
     );
 
-    const minPoints = Math.min(
-      ...criterion.criteria.map((level) => level.points),
-    );
+    const minPoints = minimumRubricPoints(criterion);
 
     if (validatedEvidence.length === 0) {
       this.logger.warn(
@@ -613,6 +690,55 @@ LANGUAGE: {language}
     this.logger.debug(
       `Updated ${updatedCount} image blocks with criterion-aware descriptions`,
     );
+  }
+
+  /**
+   * Copy of the submission containing only blocks whose chunks passed the
+   * quality gate, so legacy fallback grading (and its citation validation)
+   * can never see or credit excluded content.
+   *
+   * The system-generated spreadsheet validator report (always blockId "p1b0",
+   * classified non_learner_source) is deliberately kept: the deterministic
+   * validator overrides depend on it, and learner-embedded lookalike banners
+   * arrive under other blockIds so they stay filtered out.
+   */
+  private buildQualifiedSubmission(
+    submission: CanonicalSubmission,
+    classifiedChunks: ExtractedChunk[],
+  ): CanonicalSubmission {
+    const eligibleBlockIds = new Set<string>();
+    for (const chunk of classifiedChunks) {
+      if (chunk.quality?.eligibility === "ineligible") continue;
+      if (chunk.anchor.type === "file" && chunk.anchor.blockId) {
+        eligibleBlockIds.add(chunk.anchor.blockId);
+      } else if (chunk.anchor.type === "image" && chunk.anchor.imageId) {
+        eligibleBlockIds.add(chunk.anchor.imageId);
+      }
+    }
+
+    const pages = submission.pages
+      .map((page) => ({
+        ...page,
+        blocks: page.blocks.filter(
+          (block) =>
+            eligibleBlockIds.has(block.blockId) ||
+            (block.blockId === "p1b0" &&
+              block.text.startsWith("=== VALIDATOR REPORT ===")),
+        ),
+      }))
+      .filter((page) => page.blocks.length > 0);
+
+    const blockCount = pages.reduce((sum, page) => sum + page.blocks.length, 0);
+
+    return {
+      ...submission,
+      pages,
+      metadata: {
+        ...submission.metadata,
+        pageCount: pages.length,
+        blockCount,
+      },
+    };
   }
 
   /**
@@ -1045,9 +1171,7 @@ LANGUAGE: {language}
       criterion.description
     } ${criteriaText}`.trim();
     const rubricText = rawRubricText.toLowerCase();
-    const minPoints = Math.min(
-      ...criterion.criteria.map((level) => level.points),
-    );
+    const minPoints = minimumRubricPoints(criterion);
     const maxPoints = criterion.maxPoints;
 
     const readValue = (key: string): string | undefined =>

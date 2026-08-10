@@ -9,7 +9,15 @@ import {
   GradeSummary,
   JudgeCritique,
   RubricCriterion,
+  SubmissionQualityMetadata,
+  rubricCriterionToText,
 } from "../types/criterion-evidence.types";
+import {
+  hasLearnerSuppliedContent,
+  noEvidenceDecision,
+  noEvidencePoints,
+  noEvidenceRationale,
+} from "../grading-policy";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
 import {
@@ -20,6 +28,7 @@ import { CriterionGradingService } from "./criterion-grading.service";
 import { CriterionJudgeService } from "./criterion-judge.service";
 import { CriterionRetryManagerService } from "./criterion-retry-manager.service";
 import { CriterionGradeCompilerService } from "./criterion-grade-compiler.service";
+import { SubmissionQualityService } from "./submission-quality.service";
 
 interface PipelineRequest {
   question: string;
@@ -89,11 +98,85 @@ export class CriterionEvidencePipelineService {
     private readonly judgeService: CriterionJudgeService,
     private readonly retryManager: CriterionRetryManagerService,
     private readonly compiler: CriterionGradeCompilerService,
+    private readonly qualityService: SubmissionQualityService,
   ) {}
 
   async gradeWithEvidence(request: PipelineRequest): Promise<PipelineResult> {
     const auditCollector = new AuditCollector();
-    const index = new ChunkIndex(request.chunks);
+
+    // Per-criterion texts so rubric_copy Jaccard is checked against each criterion
+    // individually — concatenating all criteria into one token set inflates the
+    // denominator and makes the threshold unreachable for multi-criterion rubrics.
+    const rubricTexts = request.criteria.map((c) => rubricCriterionToText(c));
+
+    const { chunks: qualifiedChunks, quality: submissionQuality } =
+      this.qualityService.classifyChunks(request.chunks, {
+        question: request.question,
+        rubricTexts,
+      });
+
+    const index = new ChunkIndex(qualifiedChunks);
+
+    if (!index.hasEligibleChunks) {
+      this.logger.warn(
+        `Quality gate: zero eligible chunks for assignment ${request.assignmentId}. ` +
+          `classification=${submissionQuality.classification}, ` +
+          `raw=${submissionQuality.rawChunkCount}, ` +
+          `ineligible=${submissionQuality.ineligibleChunkCount}`,
+      );
+
+      const submissionIsEmpty = !hasLearnerSuppliedContent(qualifiedChunks);
+      const grades: CriterionGrade[] = request.criteria.map((criterion) => {
+        const pointsAwarded = noEvidencePoints(
+          criterion.criteria.map((level) => level.points),
+          submissionIsEmpty,
+        );
+        return {
+          criterionId: criterion.id,
+          rubricQuestion: criterion.rubricQuestion,
+          pointsAwarded,
+          maxPoints: criterion.maxPoints,
+          rationale: noEvidenceRationale(pointsAwarded, criterion.maxPoints),
+          citations: [],
+          confidence: "low" as const,
+          decision: noEvidenceDecision(pointsAwarded, criterion.maxPoints),
+          evidence: [],
+          attempt: 1,
+          gradedAt: new Date().toISOString(),
+          modelUsed: "quality_gate",
+        };
+      });
+
+      const summary = this.compiler.compile(grades);
+
+      const gatedQuality: SubmissionQualityMetadata = {
+        ...submissionQuality,
+        gated: true,
+      };
+      const audit = this.buildAuditLog(
+        request,
+        [],
+        new Map(),
+        [],
+        [],
+        grades.map((g) => ({
+          criterionId: g.criterionId,
+          attempt: 1,
+          supportScore: 0,
+          reason: "quality_gate_no_eligible_chunks",
+        })),
+        gatedQuality,
+      );
+
+      return {
+        grades,
+        evidence: [],
+        judgeCritiques: [],
+        summary,
+        audit,
+      };
+    }
+
     const limiter = new ConcurrencyLimiter(request.maxConcurrency ?? 6);
     const maxRetries = request.maxRetries ?? 3;
 
@@ -104,7 +187,7 @@ export class CriterionEvidencePipelineService {
             {
               criterion,
               question: request.question,
-              chunks: request.chunks,
+              chunks: qualifiedChunks,
               assignmentId: request.assignmentId,
               language: request.language,
               modelOverride: request.modelOverrides?.retrievalModel,
@@ -304,6 +387,7 @@ export class CriterionEvidencePipelineService {
       judgeCritiques,
       auditCollector.getCalls(),
       finalSelection,
+      submissionQuality,
     );
 
     return {
@@ -322,6 +406,7 @@ export class CriterionEvidencePipelineService {
     judgeCritiques: JudgeCritique[],
     llmCalls: EvidenceAuditLog["llmCalls"],
     finalSelection: EvidenceAuditLog["finalSelection"],
+    submissionQuality?: EvidenceAuditLog["submissionQuality"],
   ): EvidenceAuditLog {
     const rubricHash = crypto
       .createHash("sha256")
@@ -340,6 +425,7 @@ export class CriterionEvidencePipelineService {
       judgeCritiques,
       finalSelection,
       llmCalls,
+      submissionQuality,
       createdAt: new Date().toISOString(),
     };
   }

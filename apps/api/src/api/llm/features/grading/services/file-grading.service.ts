@@ -47,9 +47,15 @@ import {
   ICachedGradingResult,
   IGradingCacheService,
 } from "../interfaces/grading-cache.interface";
-import { RubricCriterion } from "../types/criterion-evidence.types";
+import {
+  RubricCriterion,
+  rubricCriterionToText,
+} from "../types/criterion-evidence.types";
 import { ContentSummarizationService } from "./content-summarization.service";
+import { hasLearnerSuppliedContent, noEvidencePoints } from "../grading-policy";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
+import { EvidenceChunkingService } from "./evidence-chunking.service";
+import { SubmissionQualityService } from "./submission-quality.service";
 import {
   extractExpectedFilenameFromText,
   filenamesMatch,
@@ -160,6 +166,8 @@ export class FileGradingService implements IFileGradingService {
     private readonly pdfAnnotationService: PdfAnnotationService,
     private readonly s3Service: S3Service,
     private readonly contentSummarization: ContentSummarizationService,
+    private readonly evidenceChunking: EvidenceChunkingService,
+    private readonly submissionQuality: SubmissionQualityService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     @Optional()
     @Inject(GRADING_CACHE_SERVICE)
@@ -327,7 +335,6 @@ export class FileGradingService implements IFileGradingService {
           rubricMaxPoints,
           judgeFeedback,
           modelConfig,
-          true,
           isCodeUploadRoute,
         );
         return this.scaleFileBasedModelToQuestionMax(
@@ -765,21 +772,24 @@ export class FileGradingService implements IFileGradingService {
     );
   }
 
+  // No-evidence scoring follows the shared policy in ../grading-policy.ts:
+  // each criterion gets its minimum rubric level; one-level completion
+  // criteria award their points only for non-empty submissions.
   private createMinimumEvidenceResponse(
     maxTotalPoints: number,
     scoringCriteria?: ScoringDto,
+    submissionIsEmpty = false,
   ): FileBasedQuestionResponseModel {
     const rubricScores: RubricScore[] = [];
 
     if (scoringCriteria?.rubrics && Array.isArray(scoringCriteria.rubrics)) {
       for (const rubric of scoringCriteria.rubrics) {
         const pointsList = rubric.criteria?.map((c) => c.points) ?? [];
-        const minPoints = pointsList.length > 0 ? Math.min(...pointsList) : 0;
         const maxPoints = pointsList.length > 0 ? Math.max(...pointsList) : 0;
 
         rubricScores.push({
           rubricQuestion: rubric.rubricQuestion || "Unnamed rubric",
-          pointsAwarded: minPoints,
+          pointsAwarded: noEvidencePoints(pointsList, submissionIsEmpty),
           maxPoints,
           justification: "No supporting evidence found in the submission.",
           evidence: [],
@@ -810,6 +820,12 @@ export class FileGradingService implements IFileGradingService {
       "No supporting evidence could be verified for the rubric criteria.",
       "Provide clear, explicit evidence in the submission that matches each rubric criterion.",
       rubricScores,
+      undefined,
+      undefined,
+      // This response stands in for a grading run that failed, so it must not
+      // be persisted: caching it would freeze a transient LLM outage into a
+      // permanent minimum grade that survives every regrade.
+      { gradingFallback: true },
     );
   }
 
@@ -937,6 +953,9 @@ export class FileGradingService implements IFileGradingService {
 
     const gradingPromise = (async () => {
       const result = await parameters.grade();
+      // A fallback response means grading failed, not that the learner earned
+      // these points. Return it without caching so the next attempt re-grades.
+      if (result.metadata?.gradingFallback) return result;
       const candidate: ICachedGradingResult = {
         cacheKey,
         questionId: parameters.questionId,
@@ -3064,7 +3083,6 @@ export class FileGradingService implements IFileGradingService {
       };
       modelOverridesAreFinal?: boolean;
     },
-    failLoudly = false,
     includeCodeUploads = false,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
@@ -3168,17 +3186,79 @@ export class FileGradingService implements IFileGradingService {
         }`,
       );
 
-      if (failLoudly) {
-        throw error;
-      }
-
       this.logger.warn(
         "Evidence-based grading failed - assigning minimum points",
+      );
+      const submissionIsEmpty = !this.hasLearnerSuppliedContent(
+        learnerResponse,
+        question,
+        scoringCriteria,
+        includeCodeUploads,
       );
       return this.createMinimumEvidenceResponse(
         maxTotalPoints,
         scoringCriteria,
+        submissionIsEmpty,
       );
+    }
+  }
+
+  /**
+   * Completion-only criteria distinguish an empty upload from a learner who
+   * submitted content that was not eligible rubric evidence. Extraction
+   * banners, page labels, generated summaries, and validator reports are
+   * system artifacts, so they must not make an otherwise empty file count as
+   * a completed submission.
+   */
+  private hasLearnerSuppliedContent(
+    learnerResponse: LearnerFileUpload[],
+    question: string,
+    scoringCriteria?: ScoringDto,
+    includeCodeUploads = false,
+  ): boolean {
+    const submissions = learnerResponse
+      .filter((file) => this.isEvidenceBasedEligible(file, includeCodeUploads))
+      .map((file) => file.structuredContent)
+      .filter((submission): submission is CanonicalSubmission => !!submission);
+
+    // An uploaded image is learner content even if image description/OCR failed
+    // before a text chunk could be produced.
+    if (
+      submissions.some((submission) =>
+        submission.pages.some((page) =>
+          page.blocks.some(
+            (block) => block.type === "image" && !!block.imageData,
+          ),
+        ),
+      )
+    ) {
+      return true;
+    }
+
+    try {
+      const criteria = this.convertToRubricCriteria(scoringCriteria);
+      const rubricTexts = criteria.map((criterion) =>
+        rubricCriterionToText(criterion),
+      );
+      const chunks = submissions.flatMap((submission) =>
+        this.evidenceChunking.extractFromSubmission(submission),
+      );
+      const classified = this.submissionQuality.classifyChunks(chunks, {
+        question,
+        rubricTexts,
+      }).chunks;
+
+      return hasLearnerSuppliedContent(classified);
+    } catch (error) {
+      // This method runs inside the last-resort grading fallback. Fail closed
+      // rather than letting another extraction error escape or awarding an
+      // empty completion-only submission full credit.
+      this.logger.warn(
+        `Unable to classify fallback submission content: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
     }
   }
 

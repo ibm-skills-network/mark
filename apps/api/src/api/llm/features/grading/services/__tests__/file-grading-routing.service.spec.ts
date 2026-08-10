@@ -19,6 +19,8 @@
 
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
 import { CanonicalSubmission } from "src/api/attempt/services/structured-content.models";
+import { EvidenceChunkingService } from "../evidence-chunking.service";
+import { SubmissionQualityService } from "../submission-quality.service";
 
 // ── Helper to build a minimal LearnerFileUpload ────────────────────────────
 
@@ -95,6 +97,8 @@ function buildService() {
 
   // Stub the methods that call external services (LLM, S3, etc.)
   service.evidenceBasedGrading = { gradeSubmission: jest.fn() };
+  service.evidenceChunking = new EvidenceChunkingService();
+  service.submissionQuality = new SubmissionQualityService();
   service.pdfAnnotationService = {};
   service.s3Service = {};
   service.moderationService = {
@@ -114,6 +118,175 @@ function buildService() {
 
   return service;
 }
+
+describe("FileGradingService - evidence fallback completion scoring", () => {
+  it("does not count a generated validator report as learner content", async () => {
+    const service = buildService();
+    service.evidenceBasedGrading.gradeSubmission.mockRejectedValue(
+      new Error("grading failed"),
+    );
+
+    const structure: CanonicalSubmission = {
+      submissionId: "empty.xlsx",
+      metadata: {
+        wordCount: 0,
+        pageCount: 1,
+        blockCount: 1,
+        sourceType: "txt",
+        checksum: "empty",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: "p1b0",
+              type: "paragraph",
+              text: "=== VALIDATOR REPORT ===\nduplicate_rows: 0",
+              page: 1,
+            },
+          ],
+        },
+      ],
+    };
+    const file = makeFile("empty.xlsx", {
+      content: "",
+      extractedText: "",
+      structuredContent: structure,
+    });
+    const scoringCriteria = {
+      type: "CRITERIA_BASED",
+      rubrics: [
+        {
+          rubricQuestion: "Submission completed",
+          criteria: [{ description: "Completed", points: 3 }],
+        },
+      ],
+    };
+
+    const result = await service.gradeWithEvidenceBasedApproach(
+      [file],
+      "Upload the completed workbook.",
+      3,
+      scoringCriteria,
+      1,
+      "en",
+      [{ rubricQuestion: "Submission completed", maxPoints: 3 }],
+    );
+
+    expect(result.points).toBe(0);
+    expect(result.rubricScores[0].pointsAwarded).toBe(0);
+  });
+
+  // On the CODE/REPO route source files ARE the submission. Classifying them
+  // as ineligible here would report a real code upload as an empty one, and
+  // completion-only criteria would award 0 instead of their points.
+  it("counts a source file as learner content on the code upload route", async () => {
+    const service = buildService();
+    service.evidenceBasedGrading.gradeSubmission.mockRejectedValue(
+      new Error("grading failed"),
+    );
+
+    const code = "def solve(n):\n    return n * 2\n";
+    const file = makeFile("solution.py", {
+      content: code,
+      extractedText: code,
+      structuredContent: {
+        submissionId: "solution.py",
+        metadata: {
+          wordCount: 6,
+          pageCount: 1,
+          blockCount: 1,
+          sourceType: "txt",
+          checksum: "code",
+          extractedAt: new Date().toISOString(),
+        },
+        pages: [
+          {
+            pageNumber: 1,
+            blocks: [{ blockId: "p1b0", type: "code", text: code, page: 1 }],
+          },
+        ],
+      } as CanonicalSubmission,
+    });
+    const scoringCriteria = {
+      type: "CRITERIA_BASED",
+      rubrics: [
+        {
+          rubricQuestion: "Submission completed",
+          criteria: [{ description: "Completed", points: 3 }],
+        },
+      ],
+    };
+
+    const result = await service.gradeWithEvidenceBasedApproach(
+      [file],
+      "Upload your solution.",
+      3,
+      scoringCriteria,
+      1,
+      "en",
+      [{ rubricQuestion: "Submission completed", maxPoints: 3 }],
+      undefined,
+      undefined,
+      true, // includeCodeUploads — the CODE/REPO route
+    );
+
+    expect(result.rubricScores[0].pointsAwarded).toBe(3);
+  });
+
+  // The fallback stands in for a failed grading run, so the cache wrapper must
+  // not persist it — otherwise one transient LLM outage pins the learner to
+  // minimum points across every future regrade.
+  it("marks the fallback response so it is never cached", async () => {
+    const service = buildService();
+    service.evidenceBasedGrading.gradeSubmission.mockRejectedValue(
+      new Error("grading failed"),
+    );
+
+    const result = await service.gradeWithEvidenceBasedApproach(
+      [makeFile("essay.pdf", { structuredContent: undefined })],
+      "Write an essay.",
+      3,
+      {
+        type: "CRITERIA_BASED",
+        rubrics: [
+          {
+            rubricQuestion: "Argument quality",
+            criteria: [
+              { description: "Weak", points: 0 },
+              { description: "Strong", points: 3 },
+            ],
+          },
+        ],
+      },
+      1,
+      "en",
+      [{ rubricQuestion: "Argument quality", maxPoints: 3 }],
+    );
+
+    expect(result.metadata?.gradingFallback).toBe(true);
+
+    const cacheService = {
+      getCachedGrading: jest.fn(),
+      cacheGradingIfAbsent: jest.fn(),
+    };
+    service.cacheService = cacheService;
+    const cached = await service.gradeEvidenceFileWithCache({
+      questionId: 1,
+      question: "Write an essay.",
+      learnerResponse: [makeFile("essay.pdf")],
+      scoringCriteria: { type: "CRITERIA_BASED", rubrics: [] },
+      questionMaxPoints: 3,
+      modelSnapshot: "test-model",
+      grade: async () => result,
+    });
+
+    expect(cached).toBe(result);
+    expect(cacheService.cacheGradingIfAbsent).not.toHaveBeenCalled();
+  });
+});
 
 // ─── shouldRebuildStructuredContent ───────────────────────────────────────
 
@@ -972,8 +1145,8 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
       },
       modelOverridesAreFinal: true,
     });
+    // includeCodeUploads — the CODE/REPO route
     expect(call[9]).toBe(true);
-    expect(call[10]).toBe(true);
     expect(call[0][0].structuredContent).toBeDefined();
   });
 

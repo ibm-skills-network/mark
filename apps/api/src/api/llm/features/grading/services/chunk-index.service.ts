@@ -14,9 +14,17 @@ interface SearchResult {
 export class ChunkIndex {
   private readonly index: MiniSearch<SearchDocument>;
   private readonly chunkMap: Map<string, ExtractedChunk>;
+  private readonly _eligibleCount: number;
 
   constructor(chunks: ExtractedChunk[]) {
-    this.chunkMap = new Map(chunks.map((chunk) => [chunk.chunkId, chunk]));
+    // Only index eligible chunks; ineligible ones cannot be retrieved as evidence.
+    // Chunks without a quality annotation (pre-classification callers) are treated as eligible.
+    const eligible = chunks.filter(
+      (chunk) => chunk.quality?.eligibility !== "ineligible",
+    );
+    this.chunkMap = new Map(eligible.map((chunk) => [chunk.chunkId, chunk]));
+    this._eligibleCount = eligible.length;
+
     this.index = new MiniSearch<SearchDocument>({
       fields: ["text"],
       storeFields: ["text"],
@@ -28,12 +36,20 @@ export class ChunkIndex {
       processTerm: (term: string) => term.toLowerCase(),
     });
 
-    const documents = chunks.map((chunk) => ({
+    const documents = eligible.map((chunk) => ({
       id: chunk.chunkId,
       text: chunk.text,
     }));
 
     this.index.addAll(documents);
+  }
+
+  get eligibleCount(): number {
+    return this._eligibleCount;
+  }
+
+  get hasEligibleChunks(): boolean {
+    return this._eligibleCount > 0;
   }
 
   search(
