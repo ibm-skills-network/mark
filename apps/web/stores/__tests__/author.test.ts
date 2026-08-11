@@ -1,5 +1,17 @@
 import { QuestionAuthorStore } from "@/config/types";
+import {
+  getAssignmentVersion,
+  listAssignmentVersions,
+  restoreAssignmentVersion,
+} from "@/lib/author";
+import { useAssignmentConfig } from "../assignmentConfig";
 import { useAuthorStore } from "../author";
+
+jest.mock("@/lib/author", () => ({
+  getAssignmentVersion: jest.fn(),
+  listAssignmentVersions: jest.fn(),
+  restoreAssignmentVersion: jest.fn(),
+}));
 
 const makeQuestion = (id: number, index: number): QuestionAuthorStore => ({
   id,
@@ -146,5 +158,56 @@ describe("hydrateAuthorStore", () => {
     expect(state.questions).toHaveLength(1);
     expect(state.questions[0].id).toBe(10);
     expect(state.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe("restoreVersion", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+    useAuthorStore.getState().deleteStore();
+    useAssignmentConfig.getState().deleteStore();
+  });
+
+  it("preserves zero-valued retake settings when hydrating restored assignments", async () => {
+    useAuthorStore.getState().hydrateAuthorStore({
+      activeAssignmentId: 123,
+      name: "Current assignment",
+    });
+    useAuthorStore.getState().setVersions([
+      { id: 7, versionNumber: "1.0.0", isActive: true } as any,
+    ]);
+    useAssignmentConfig.getState().setAssignmentConfigStore({
+      attemptsBeforeCoolDown: 3,
+      retakeAttemptCoolDownMinutes: 10,
+    });
+
+    (restoreAssignmentVersion as jest.Mock).mockResolvedValue({
+      id: 7,
+      versionNumber: "1.0.0",
+      isActive: true,
+    });
+    (getAssignmentVersion as jest.Mock).mockResolvedValue({
+      assignment: {
+        id: 123,
+        name: "Restored assignment",
+        introduction: "Intro",
+        instructions: "Instructions",
+        gradingCriteriaOverview: "Criteria",
+        questions: [],
+        numAttempts: 0,
+        attemptsBeforeCoolDown: 0,
+        retakeAttemptCoolDownMinutes: 0,
+      },
+    });
+    (listAssignmentVersions as jest.Mock).mockResolvedValue([
+      { id: 7, versionNumber: "1.0.0", isActive: true },
+    ]);
+
+    await useAuthorStore.getState().restoreVersion(7);
+
+    const configState = useAssignmentConfig.getState();
+    expect(configState.attemptsBeforeCoolDown).toBe(0);
+    expect(configState.retakeAttemptCoolDownMinutes).toBe(0);
   });
 });

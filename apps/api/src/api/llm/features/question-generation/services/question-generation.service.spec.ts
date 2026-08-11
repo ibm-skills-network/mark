@@ -520,6 +520,114 @@ describe("QuestionGenerationService", () => {
     );
   });
 
+  it("keeps the review pass from starving the short and quantitative buckets", async () => {
+    // Rule 12 capped statistic-based questions (all quantitative ones) and rule
+    // 13 retyped short -> long, which finalizeSubtypeQuestions drops entirely.
+    promptProcessor.processPromptForFeature
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Short stem"))
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Quantitative stem"))
+      .mockResolvedValueOnce(
+        buildReviewResponse([
+          { question: "Short stem 0?", type: MCSubtype.SHORT, page: 0 },
+          {
+            question: "Quantitative stem 0?",
+            type: MCSubtype.QUANTITATIVE,
+            page: 1,
+          },
+        ]),
+      );
+
+    await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 1,
+          quantitative: 1,
+          long: 0,
+          scenario: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    const reviewPrompt = promptProcessor.processPromptForFeature.mock
+      .calls[2][0] as PromptTemplate;
+    const formattedReview = await reviewPrompt.format({});
+
+    // Quantitative questions are exempt from the stat-recall sweep and uncapped.
+    expect(formattedReview).toContain(
+      'a question of type "quantitative" is REQUIRED to state a statistic in its stem',
+    );
+    expect(formattedReview).not.toContain(
+      "no more than 2 out of every 10 questions rely on recalling a specific statistic",
+    );
+    // No retype authority: a retyped question is dropped, never moved.
+    expect(formattedReview).toContain("REWRITE — never retype");
+    expect(formattedReview).toContain(
+      'NEVER change the "type" or "page" field of any question',
+    );
+    expect(formattedReview).not.toContain(
+      'CHANGE the type field from "short" to "long"',
+    );
+  });
+
+  it("forbids numeric answer choices when refreshing a quantitative question's choices", async () => {
+    // Runs whenever review rewrites a stem. Must agree with the generator, or
+    // the regenerated choices come back as bare numbers and review kills them.
+    promptProcessor.processPromptForFeature
+      .mockResolvedValueOnce(buildGenerationResponse(1, "Quantitative stem"))
+      .mockResolvedValueOnce(
+        buildReviewResponse([
+          {
+            question: "Rewritten quantitative stem?",
+            type: MCSubtype.QUANTITATIVE,
+            page: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(buildChoicesResponse());
+
+    await service.generateAssignmentQuestions(
+      1,
+      AssignmentTypeEnum.QUIZ,
+      {
+        multipleChoice: 0,
+        multipleSelect: 0,
+        textResponse: 0,
+        trueFalse: 0,
+        url: 0,
+        upload: 0,
+        linkFile: 0,
+        multipleChoiceSubtypes: {
+          short: 0,
+          quantitative: 1,
+          long: 0,
+          scenario: 0,
+        },
+      },
+      "IBM product content",
+    );
+
+    const refreshPrompt = promptProcessor.processPromptForFeature.mock
+      .calls[2][0] as PromptTemplate;
+    const formattedRefresh = await refreshPrompt.format({});
+
+    expect(formattedRefresh).toContain(
+      "NEVER make a bare number, percentage, figure, or measure a choice.",
+    );
+    expect(formattedRefresh).not.toContain(
+      "a specific number or measure plus brief context",
+    );
+  });
+
   // ────────────────────────────────────────────────────────────────────────
   // New coverage: review edge cases and parallel shortfall
   // ────────────────────────────────────────────────────────────────────────
