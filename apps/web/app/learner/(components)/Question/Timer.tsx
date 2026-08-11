@@ -273,8 +273,13 @@ function Timer(props: Props) {
       <div className="text-gray-600 dark:text-gray-300 text-base font-medium leading-tight">
         Time Remaining:
       </div>
+      {/* The clock changes every second. RouteUiTranslator would never rewrite
+          it (digits contain no letters), but its MutationObserver still fires on
+          each tick and re-scans the whole route, so opt the subtree out. The
+          "Time Remaining:" label above stays translatable. */}
       {hasCountdown ? (
         <div
+          data-no-ui-translate="true"
           className={cn(
             "text-base font-bold leading-tight",
             hours === 0 && minutes < 5 ? "text-red-500" : "text-purple-600",
@@ -283,7 +288,10 @@ function Timer(props: Props) {
           {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}
         </div>
       ) : (
-        <div className="text-base font-bold leading-tight text-gray-400">
+        <div
+          data-no-ui-translate="true"
+          className="text-base font-bold leading-tight text-gray-400"
+        >
           --:--:--
         </div>
       )}

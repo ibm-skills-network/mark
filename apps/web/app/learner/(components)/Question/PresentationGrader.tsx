@@ -602,7 +602,12 @@ export default function PresentationGrader({
         )}
 
         {recording && (
-          <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+          // Updates 5x a second while recording; unguarded that is five
+          // whole-route translation passes per second.
+          <div
+            data-no-ui-translate="true"
+            className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded"
+          >
             {currentRecordingTime.toFixed(1)}s / {maxDuration}s
           </div>
         )}

@@ -27,6 +27,7 @@ import React, { FC, useEffect, useState } from "react";
 import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 import PromoBanner from "@/components/promo/PromoBanner";
+import { useUiTranslation } from "@/hooks/use-ui-translation";
 import {
   getExpiresAtMs,
   getLatestAttempt,
@@ -136,6 +137,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     ]);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useUiTranslation();
   const isAuthorPreview = searchParams.get("authorMode") === "true";
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
@@ -192,7 +194,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const latestAttempt = getLatestAttempt(attempts || []);
 
   const attemptsCount = attempts.length;
-  const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
+  const [cooldownTime, setCooldownTime] = useState<string | null>(null);
   const [isCooldown, setIsCooldown] = useState(false);
 
   useEffect(() => {
@@ -206,7 +208,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       assignmentState === "in-progress" ||
       !isAttemptSubmitted(latestAttempt)
     ) {
-      setCooldownMessage(null);
+      setCooldownTime(null);
       setIsCooldown(false);
       return;
     }
@@ -231,7 +233,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     }
 
     if (finishedAt === undefined || Number.isNaN(finishedAt)) {
-      setCooldownMessage(null);
+      setCooldownTime(null);
       setIsCooldown(false);
       return;
     }
@@ -243,7 +245,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       const remainingMs = nextEligibleAt - Date.now();
 
       if (remainingMs <= 0) {
-        setCooldownMessage(null);
+        setCooldownTime(null);
         setIsCooldown(false);
         return;
       }
@@ -264,7 +266,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       if (seconds) parts.push(`${seconds}s`);
 
       const timeString = parts.length > 0 ? parts.join(" ") : "a moment";
-      setCooldownMessage(`Please wait ${timeString} before retrying`);
+      setCooldownTime(timeString);
     }
 
     updateCountdown();
@@ -311,8 +313,17 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       ? `/learner/${assignmentId}/questions`
       : `/learner/${assignmentId}/questions?authorMode=true`;
 
+  // Resolved during render, so the whole sentence is one translatable key and
+  // each language orders it however it needs. The elements rendering it carry
+  // `data-no-ui-translate` because it is already translated here — that stops
+  // RouteUiTranslator both from overwriting it and from re-scanning the route
+  // every second as the duration ticks.
+  const cooldownMessage = cooldownTime
+    ? t("Please wait {time} before retrying", { time: cooldownTime })
+    : null;
+
   const buttonLabel = assignmentState === "in-progress" ? "Resume" : "Begin";
-  let buttonMessage = "";
+  let buttonMessage: React.ReactNode = "";
   let buttonDisabled = false;
 
   if (!role) {
@@ -364,7 +375,15 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                   <BeginTheAssignmentButton
                     className="w-full"
                     disabled={isCooldown || buttonDisabled}
-                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    message={
+                      isCooldown && cooldownMessage ? (
+                        <span data-no-ui-translate="true">
+                          {cooldownMessage}
+                        </span>
+                      ) : (
+                        buttonMessage
+                      )
+                    }
                     label={buttonLabel}
                     href={url}
                   />
@@ -373,14 +392,25 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                   <BeginTheAssignmentButton
                     className="w-auto"
                     disabled={isCooldown || buttonDisabled}
-                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    message={
+                      isCooldown && cooldownMessage ? (
+                        <span data-no-ui-translate="true">
+                          {cooldownMessage}
+                        </span>
+                      ) : (
+                        buttonMessage
+                      )
+                    }
                     label={buttonLabel}
                     href={url}
                   />
                 </div>
               </div>
               {isCooldown && cooldownMessage && (
-                <span className="text-red-600 font-semibold">
+                <span
+                  className="text-red-600 font-semibold"
+                  data-no-ui-translate="true"
+                >
                   ({cooldownMessage})
                 </span>
               )}
@@ -558,7 +588,13 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
             <BeginTheAssignmentButton
               className="w-full sm:w-auto"
               disabled={isCooldown || buttonDisabled}
-              message={isCooldown ? cooldownMessage : buttonMessage}
+              message={
+                isCooldown && cooldownMessage ? (
+                  <span data-no-ui-translate="true">{cooldownMessage}</span>
+                ) : (
+                  buttonMessage
+                )
+              }
               label={buttonLabel}
               href={url}
             />

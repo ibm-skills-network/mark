@@ -31,6 +31,14 @@ const NORMALIZED_STATIC_TRANSLATIONS = new Map<
 const originalTextByNode = new WeakMap<Text, string>();
 const originalAttrsByElement = new WeakMap<Element, Map<string, string>>();
 
+// What this translator last wrote into each node/attribute. Anything that does
+// not match is content the app rewrote (a countdown ticking, a live status),
+// which must be adopted as the new source text. Without this the first text a
+// node ever had is treated as its source forever, and every translation pass
+// restores it — silently reverting live UI to its first-rendered value.
+const lastWrittenTextByNode = new WeakMap<Text, string>();
+const lastWrittenAttrsByElement = new WeakMap<Element, Map<string, string>>();
+
 interface RouteUiTranslatorProps {
   scopeSelector?: string;
 }
@@ -40,6 +48,12 @@ function isTranslatableText(value: string): boolean {
   if (!trimmed) return false;
   if (!/\p{L}/u.test(trimmed)) return false;
   return trimmed.length <= 1000;
+}
+
+export function isInsideOptedOutSubtree(node: Node | null): boolean {
+  const element =
+    node instanceof Element ? node : (node?.parentElement ?? null);
+  return Boolean(element?.closest("[data-no-ui-translate='true']"));
 }
 
 function shouldSkipElement(element: Element | null): boolean {
@@ -487,10 +501,25 @@ function ensureTranslationCache(
 }
 
 function readTextOriginal(node: Text): string {
-  if (!originalTextByNode.has(node)) {
-    originalTextByNode.set(node, node.textContent || "");
+  const currentText = node.textContent || "";
+  const lastWritten = lastWrittenTextByNode.get(node);
+  // Re-baseline when the app changed this node since our last write. Skipping
+  // this pins the node to its first-ever text and makes every later pass
+  // overwrite live updates with it.
+  const wasRewrittenByApp =
+    lastWritten !== undefined && currentText !== lastWritten;
+
+  if (!originalTextByNode.has(node) || wasRewrittenByApp) {
+    originalTextByNode.set(node, currentText);
   }
   return originalTextByNode.get(node) || "";
+}
+
+function writeTextTranslation(node: Text, value: string): void {
+  if (node.textContent !== value) {
+    node.textContent = value;
+  }
+  lastWrittenTextByNode.set(node, value);
 }
 
 function readAttrOriginal(element: Element, attribute: string): string {
@@ -499,29 +528,47 @@ function readAttrOriginal(element: Element, attribute: string): string {
   if (!originalAttrsByElement.has(element)) {
     originalAttrsByElement.set(element, existingMap);
   }
-  if (!existingMap.has(attribute)) {
-    existingMap.set(attribute, element.getAttribute(attribute) || "");
+
+  const currentValue = element.getAttribute(attribute) || "";
+  const lastWritten = lastWrittenAttrsByElement.get(element)?.get(attribute);
+  const wasRewrittenByApp =
+    lastWritten !== undefined && currentValue !== lastWritten;
+
+  if (!existingMap.has(attribute) || wasRewrittenByApp) {
+    existingMap.set(attribute, currentValue);
   }
   return existingMap.get(attribute) || "";
 }
 
-function translateScope(root: HTMLElement, languageCode: string) {
+function writeAttrTranslation(
+  element: Element,
+  attribute: string,
+  value: string,
+): void {
+  if (element.getAttribute(attribute) !== value) {
+    element.setAttribute(attribute, value);
+  }
+  const written =
+    lastWrittenAttrsByElement.get(element) || new Map<string, string>();
+  written.set(attribute, value);
+  lastWrittenAttrsByElement.set(element, written);
+}
+
+export function translateScope(root: HTMLElement, languageCode: string) {
   const textNodes = collectTextNodes(root);
   const attrTargets = collectAttrTargets(root);
 
   if (languageCode === DEFAULT_UI_LANGUAGE) {
     for (const textNode of textNodes) {
-      const originalText = readTextOriginal(textNode);
-      if (textNode.textContent !== originalText) {
-        textNode.textContent = originalText;
-      }
+      writeTextTranslation(textNode, readTextOriginal(textNode));
     }
 
     for (const { element, attribute } of attrTargets) {
-      const originalValue = readAttrOriginal(element, attribute);
-      if (element.getAttribute(attribute) !== originalValue) {
-        element.setAttribute(attribute, originalValue);
-      }
+      writeAttrTranslation(
+        element,
+        attribute,
+        readAttrOriginal(element, attribute),
+      );
     }
 
     return;
@@ -561,9 +608,7 @@ function translateScope(root: HTMLElement, languageCode: string) {
       translatedText,
     );
 
-    if (textNode.textContent !== translatedWithPadding) {
-      textNode.textContent = translatedWithPadding;
-    }
+    writeTextTranslation(textNode, translatedWithPadding);
   }
 
   for (const { element, attribute } of attrTargets) {
@@ -573,9 +618,7 @@ function translateScope(root: HTMLElement, languageCode: string) {
     const translatedValue =
       TRANSLATION_CACHE.get(getCacheKey(languageCode, originalValue)) ||
       normalizedOriginalValue;
-    if (element.getAttribute(attribute) !== translatedValue) {
-      element.setAttribute(attribute, translatedValue);
-    }
+    writeAttrTranslation(element, attribute, translatedValue);
   }
 }
 
@@ -652,8 +695,17 @@ export default function RouteUiTranslator({
       }
     };
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((records) => {
       if (isApplyingRef.current) return;
+
+      // Opted-out subtrees hold content we will never rewrite (a ticking
+      // countdown, a live counter). Scheduling a pass for them means walking
+      // and re-translating the entire route on every tick to produce no change
+      // at all, so ignore records that come only from inside them.
+      if (records.every((record) => isInsideOptedOutSubtree(record.target))) {
+        return;
+      }
+
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
       }

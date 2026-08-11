@@ -55,3 +55,12 @@ export async function getStaticUiTranslations(
 ): Promise<UiTranslationMap> {
   return staticUiTranslations[languageCode] || {};
 }
+
+// Every catalog is statically imported above, so a lookup needs no await. This
+// is what lets translation resolve during render (see `useUiTranslation`)
+// instead of being applied to the DOM afterwards.
+export function getStaticUiTranslationsSync(
+  languageCode: string,
+): UiTranslationMap {
+  return staticUiTranslations[languageCode] || {};
+}
