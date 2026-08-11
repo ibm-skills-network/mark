@@ -22,6 +22,7 @@ import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 export abstract class EffortNoneOpenAiLlmService
   implements IMultimodalLlmProvider
 {
+  private static readonly FALLBACK_IMAGE_TOKENS = 200;
   protected readonly logger: Logger;
   abstract readonly key: string;
 
@@ -62,15 +63,37 @@ export abstract class EffortNoneOpenAiLlmService
           : JSON.stringify(message.content),
       )
       .join("\n");
-    const inputTokens = this.tokenCounter.countTokens(inputText);
+    return this.invokeWithUsageFallback(
+      messages,
+      this.tokenCounter.countTokens(inputText),
+      options,
+    );
+  }
+
+  private async invokeWithUsageFallback(
+    messages: HumanMessage[],
+    fallbackInputTokens: number,
+    options?: LlmRequestOptions,
+  ): Promise<LlmResponse> {
     const result = await this.createChatModel(options).invoke(messages);
     const content = result.content.toString();
+    const usage = result.usage_metadata as
+      | { input_tokens?: unknown; output_tokens?: unknown }
+      | undefined;
+    const inputTokens =
+      typeof usage?.input_tokens === "number"
+        ? usage.input_tokens
+        : fallbackInputTokens;
+    const outputTokens =
+      typeof usage?.output_tokens === "number"
+        ? usage.output_tokens
+        : this.tokenCounter.countTokens(content);
 
     return {
       content,
       tokenUsage: {
         input: inputTokens,
-        output: this.tokenCounter.countTokens(content),
+        output: outputTokens,
       },
     };
   }
@@ -100,21 +123,26 @@ export abstract class EffortNoneOpenAiLlmService
       ? imageData
       : `data:image/jpeg;base64,${imageData}`;
 
-    return this.invoke(
-      [
-        new HumanMessage({
-          content: [
-            { type: "text", text: textContent },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageUrl,
-                detail: options?.imageDetail ?? "auto",
-              },
-            },
-          ],
-        }),
+    const message = new HumanMessage({
+      content: [
+        { type: "text", text: textContent },
+        {
+          type: "image_url",
+          image_url: {
+            url: imageUrl,
+            detail: options?.imageDetail ?? "auto",
+          },
+        },
       ],
+    });
+
+    // API usage includes the model's image-token calculation. If an SDK or
+    // mocked response omits it, use a bounded estimate without ever tokenizing
+    // the Base64 payload as if it were prompt text.
+    return this.invokeWithUsageFallback(
+      [message],
+      this.tokenCounter.countTokens(textContent) +
+        EffortNoneOpenAiLlmService.FALLBACK_IMAGE_TOKENS,
       options,
     );
   }

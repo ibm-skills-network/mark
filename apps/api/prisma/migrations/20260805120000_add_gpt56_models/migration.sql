@@ -11,8 +11,8 @@ ON CONFLICT ("modelKey") DO UPDATE SET
   "isActive" = true,
   "updatedAt" = NOW();
 
--- Short-context pricing. Long-context and cache-write rates go in metadata so
--- thresholded pricing can be added later without re-sourcing the numbers.
+-- Short-context pricing. Long-context and cache-write rates go in metadata;
+-- LLMPricingService selects the long-context pair for requests above 272K.
 WITH gpt56 AS (
   SELECT * FROM (VALUES
     ('gpt-5.6-luna',  0.00000020::numeric, 0.00000120::numeric, 0.00000040::numeric, 0.00000180::numeric, 0.00000025::numeric),

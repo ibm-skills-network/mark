@@ -139,6 +139,70 @@ it("gives the three GPT-5.6 variants distinct provider keys", () => {
   expect(new Set(keys).size).toBe(3);
 });
 
+describe("GPT-5.6 token usage", () => {
+  const makeLunaService = (countTokens: jest.Mock) => {
+    const logger = {
+      child: jest.fn(),
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+    logger.child.mockReturnValue(logger);
+    return new Gpt56LunaLlmService({ countTokens } as never, logger as never);
+  };
+
+  beforeEach(() => {
+    (ChatOpenAI as unknown as jest.Mock).mockClear();
+  });
+
+  it("uses provider-reported image tokens instead of counting Base64 as text", async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      content: "ok",
+      usage_metadata: { input_tokens: 4321, output_tokens: 17 },
+    });
+    (ChatOpenAI as unknown as jest.Mock).mockImplementationOnce(() => ({
+      invoke,
+    }));
+    const countTokens = jest.fn().mockReturnValue(3);
+    const service = makeLunaService(countTokens);
+
+    const result = await service.invokeWithImage(
+      "Describe the image",
+      "A".repeat(20_000),
+    );
+
+    expect(result.tokenUsage).toEqual({ input: 4321, output: 17 });
+    expect(countTokens).toHaveBeenCalledTimes(1);
+    expect(countTokens).toHaveBeenCalledWith("Describe the image");
+  });
+
+  it("uses a bounded image estimate when the provider omits usage metadata", async () => {
+    const invoke = jest.fn().mockResolvedValue({ content: "ok" });
+    (ChatOpenAI as unknown as jest.Mock).mockImplementationOnce(() => ({
+      invoke,
+    }));
+    const countTokens = jest
+      .fn()
+      .mockImplementation((value: string) =>
+        value === "Describe the image" ? 7 : 2,
+      );
+    const service = makeLunaService(countTokens);
+
+    const result = await service.invokeWithImage(
+      "Describe the image",
+      "B".repeat(20_000),
+    );
+
+    expect(result.tokenUsage).toEqual({ input: 207, output: 2 });
+    expect(
+      countTokens.mock.calls.every(
+        ([value]) => typeof value === "string" && !value.includes("BBBB"),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("Gpt54MiniLlmService modelKwargs merge", () => {
   beforeEach(() => {
     (ChatOpenAI as unknown as jest.Mock).mockClear();

@@ -13,7 +13,7 @@ import { EffortNoneOpenAiLlmService } from "./openai-effort-none-llm.base";
  * before making one a default:
  *
  * - These are rolling slugs with no dated snapshot, so a backend can change
- *   under a stable cache key. Bump the grader version at that point.
+ *   under a stable slug. Bump GRADING_CACHE_REVISION at that point.
  * - Sol costs 25x Luna on output. Check pricing before a high-volume feature.
  */
 @Injectable()

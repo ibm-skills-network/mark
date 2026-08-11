@@ -32,6 +32,63 @@ const HELICONE_REGISTRY_URL =
   "https://api.helicone.ai/v1/public/model-registry/models";
 const PRICING_CACHE_KEY = "llm_pricing_registry";
 
+const GPT56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000;
+
+function getGpt56TieredPricingMetadata(
+  modelKey: string,
+  inputTokenPrice: number,
+  outputTokenPrice: number,
+): Record<string, number> {
+  if (!modelKey.startsWith("gpt-5.6-")) return {};
+
+  return {
+    longContextInputTokenPrice: inputTokenPrice * 2,
+    longContextOutputTokenPrice: outputTokenPrice * 1.5,
+    longContextInputThresholdTokens: GPT56_LONG_CONTEXT_THRESHOLD_TOKENS,
+    cacheWriteTokenPrice: inputTokenPrice * 1.25,
+  };
+}
+
+function positiveMetadataNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const parsed = Number(metadata[key]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function resolveTokenPrices(
+  pricing: ModelPricing,
+  inputTokens: number,
+): { input: number; output: number } {
+  const base = {
+    input: pricing.inputTokenPrice,
+    output: pricing.outputTokenPrice,
+  };
+  if (
+    !pricing.metadata ||
+    typeof pricing.metadata !== "object" ||
+    Array.isArray(pricing.metadata)
+  ) {
+    return base;
+  }
+
+  const metadata = pricing.metadata as Record<string, unknown>;
+  const threshold = positiveMetadataNumber(
+    metadata,
+    "longContextInputThresholdTokens",
+  );
+  if (threshold === null || inputTokens <= threshold) return base;
+
+  const input = positiveMetadataNumber(metadata, "longContextInputTokenPrice");
+  const output = positiveMetadataNumber(
+    metadata,
+    "longContextOutputTokenPrice",
+  );
+
+  return input === null || output === null ? base : { input, output };
+}
+
 const REGISTRY_PROVIDER_PRIORITY: Record<string, number> = {
   openai: 0,
   azure: 1,
@@ -918,6 +975,11 @@ export class LLMPricingService {
               pricingSource: "helicone_registry",
               registryProvider: resolvedModel.registryProvider,
               canonicalModelId: resolvedModel.canonicalModelId,
+              ...getGpt56TieredPricingMetadata(
+                resolvedModel.modelKey,
+                resolvedModel.inputPerToken,
+                resolvedModel.outputPerToken,
+              ),
             },
           });
 
@@ -981,9 +1043,8 @@ export class LLMPricingService {
         input: 0.000_000_2,
         output: 0.000_001_25,
       },
-      // GPT-5.6, short-context tier. Above 272K input the whole request bills
-      // at ~2x these rates, which one price pair can't express -- analytics
-      // undercount those. Cache writes aren't modelled either.
+      // GPT-5.6 short-context tier. Long-context rates are added to metadata
+      // below and selected for the whole request above the 272K threshold.
       "gpt-5.6-luna": { input: 0.000_000_2, output: 0.000_001_2 },
       "gpt-5.6-terra": { input: 0.000_002, output: 0.000_012 },
       "gpt-5.6-sol": { input: 0.000_005, output: 0.000_03 },
@@ -1021,6 +1082,11 @@ export class LLMPricingService {
             : modelKey.startsWith("gpt-5")
               ? "Estimated pricing for model"
               : "Known pricing when registry lookup failed",
+        ...getGpt56TieredPricingMetadata(
+          modelKey,
+          pricing.input,
+          pricing.output,
+        ),
       },
     };
   }
@@ -1498,8 +1564,9 @@ export class LLMPricingService {
     >,
     usageType?: string,
   ): CostBreakdown {
-    let finalInputPrice = basePricing.inputTokenPrice;
-    let finalOutputPrice = basePricing.outputTokenPrice;
+    const tokenPrices = resolveTokenPrices(basePricing, inputTokens);
+    let finalInputPrice = tokenPrices.input;
+    let finalOutputPrice = tokenPrices.output;
 
     if (upscaling) {
       if (upscaling.globalFactor && upscaling.globalFactor > 0) {
