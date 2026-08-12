@@ -20,6 +20,7 @@ const make = () =>
     prisma as never,
     undefined as never,
     adminEmailService as never,
+    undefined as never,
   );
 
 const baseReport = {
@@ -102,5 +103,57 @@ describe("ReportsService.sendBugRenewalEmail", () => {
     await expect(
       make().sendBugRenewalEmail({ issueNumber: 1639 }),
     ).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe("ReportsService.reportIssue", () => {
+  it("forwards the report to SN Support with Mark context", async () => {
+    const forwardPrisma = {
+      report: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    };
+    const snSupportService = {
+      createTicket: jest.fn().mockRejectedValue(new Error("forwarded")),
+    };
+    const service = new ReportsService(
+      undefined as never,
+      forwardPrisma as never,
+      undefined as never,
+      undefined as never,
+      snSupportService as never,
+    );
+
+    await expect(
+      service.reportIssue(
+        {
+          issueType: "technical",
+          description: "The assignment submission fails",
+          attemptId: 84,
+          additionalDetails: {
+            category: "Submission",
+            portalName: "Coursera",
+          },
+        },
+        {
+          assignmentId: 42,
+          attemptId: 84,
+          userId: "employee@ibm.com",
+        },
+      ),
+    ).rejects.toThrow("forwarded");
+
+    expect(snSupportService.createTicket).toHaveBeenCalledWith({
+      title: expect.stringContaining("Assignment 42 - Attempt 84"),
+      description: expect.stringContaining("The assignment submission fails"),
+      reporterEmail: "employee@ibm.com",
+      issueType: "Submission",
+      pageUrl: undefined,
+      portalName: "Coursera",
+      courseTitle: undefined,
+      toolName: "Mark",
+      browser: undefined,
+      chatHistoryUrl: undefined,
+    });
   });
 });

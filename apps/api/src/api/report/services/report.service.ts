@@ -30,6 +30,7 @@ import {
 } from "../helpers/issue-template";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
+import { SnSupportService } from "./sn-support.service";
 
 interface FeedbackFilterParameters {
   page: number;
@@ -63,6 +64,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
     private readonly adminEmailService: AdminEmailService,
+    private readonly snSupportService: SnSupportService,
   ) {}
 
   private async getGithubConfig(
@@ -1099,6 +1101,47 @@ export class ReportsService {
     };
     const issueTitle = buildChatIssueTitle(issueTemplateInput);
     let issueBody = buildChatIssueBody(issueTemplateInput);
+
+    const supportDescription = [
+      description.trim(),
+      "",
+      `Issue type: ${issueType}`,
+      `Reporter role: ${role}`,
+      `Severity: ${issueSeverity}`,
+      `Assignment ID: ${assignmentId ?? "N/A"}`,
+      `Attempt ID: ${attemptId ?? "N/A"}`,
+    ].join("\n");
+
+    await this.snSupportService.createTicket({
+      title: issueTitle,
+      description: supportDescription,
+      reporterEmail: safeUserEmail === "Unknown" ? undefined : safeUserEmail,
+      issueType:
+        typeof additionalDetails?.category === "string"
+          ? additionalDetails.category
+          : issueType,
+      pageUrl:
+        typeof additionalDetails?.pageUrl === "string"
+          ? additionalDetails.pageUrl
+          : undefined,
+      portalName:
+        typeof additionalDetails?.portalName === "string"
+          ? additionalDetails.portalName
+          : undefined,
+      courseTitle:
+        typeof additionalDetails?.courseTitle === "string"
+          ? additionalDetails.courseTitle
+          : undefined,
+      toolName: "Mark",
+      browser:
+        typeof additionalDetails?.browser === "string"
+          ? additionalDetails.browser
+          : undefined,
+      chatHistoryUrl:
+        typeof additionalDetails?.chatHistoryUrl === "string"
+          ? additionalDetails.chatHistoryUrl
+          : undefined,
+    });
 
     const finalScreenshotUrl =
       screenshotUrl || additionalDetails?.screenshotUrl;
