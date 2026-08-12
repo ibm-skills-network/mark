@@ -1469,3 +1469,96 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
     });
   });
 });
+
+// ─── Archive source-file extraction ────────────────────────────────────────
+
+describe("FileContentExtractionService.extractArchiveContent source files", () => {
+  const fixturePath = require("path").join(
+    __dirname,
+    "fixtures",
+    "fixture-xcode.zip",
+  );
+  const fixture = require("fs").readFileSync(fixturePath) as Buffer;
+
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  async function extract(
+    filename = "SmartTravelJournal.zip",
+    mime = "application/zip",
+  ) {
+    return (service as any).extractTextFromBuffer(fixture, filename, mime);
+  }
+
+  it("extracts Swift source contents past the legacy per-entry cap", async () => {
+    const result = await extract();
+    const text: string = result.extractedText;
+    expect(text).toContain(
+      "--- CONTENT: SmartTravelJournal/SmartTravelJournal/Trip.swift ---",
+    );
+    expect(text).toContain("@Model");
+    expect(text).toContain("final class Trip");
+    // Lives ~5KB into the file — proves the 1000-char cap no longer applies.
+    expect(text).toContain("sentinelBeyondFirstThousandChars");
+  });
+
+  it("bounds a single source entry at the whole-file block limit", async () => {
+    const result = await extract();
+    const text: string = result.extractedText;
+    expect(text).toContain(
+      "--- CONTENT: SmartTravelJournal/SmartTravelJournal/HugeViewModel.swift ---",
+    );
+    expect(text).toContain("[...truncated...]");
+    expect(text).not.toContain("tailSentinelPastTwelveThousand");
+  });
+
+  it("keeps junk entries out of extracted contents but in the listing", async () => {
+    const result = await extract();
+    const text: string = result.extractedText;
+    const contentHeaders = [...text.matchAll(/^--- CONTENT: (.+) ---$/gm)].map(
+      (m) => m[1],
+    );
+    for (const header of contentHeaders) {
+      expect(header).not.toMatch(/__MACOSX\//);
+      expect(header).not.toMatch(/(^|\/)\.git\//);
+      expect(header).not.toMatch(/(^|\/)\._/);
+      expect(header).not.toMatch(/\.DS_Store$/);
+    }
+    // The listing itself stays complete.
+    expect(text).toMatch(/^SmartTravelJournal\/\.DS_Store \(/m);
+  });
+
+  it("returns per-entry contents and a standalone listing for grading", async () => {
+    const result = await extract();
+    expect(Array.isArray(result.archiveEntries)).toBe(true);
+    const paths = result.archiveEntries.map((e: { path: string }) => e.path);
+    expect(paths).toContain("SmartTravelJournal/SmartTravelJournal/Trip.swift");
+    expect(paths).toContain("SmartTravelJournal/README.md");
+    expect(paths).not.toContain(
+      "__MACOSX/SmartTravelJournal/SmartTravelJournal/._Trip.swift",
+    );
+
+    const trip = result.archiveEntries.find((e: { path: string }) =>
+      e.path.endsWith("Trip.swift"),
+    );
+    expect(trip.text).toContain("sentinelBeyondFirstThousandChars");
+    expect(trip.truncated).toBe(false);
+
+    const huge = result.archiveEntries.find((e: { path: string }) =>
+      e.path.endsWith("HugeViewModel.swift"),
+    );
+    expect(huge.truncated).toBe(true);
+
+    expect(result.archiveListing).toContain("--- FILE LISTING ---");
+    expect(result.archiveListing).not.toContain("--- CONTENT:");
+  });
+
+  it("routes zip MIME aliases without a usable extension to the archive extractor", async () => {
+    const result = await extract("project", "application/x-zip-compressed");
+    expect(result.text).toContain("=== ARCHIVE:");
+    expect(result.text).toContain("--- FILE LISTING ---");
+  });
+});

@@ -1206,6 +1206,7 @@ export class FileGradingService implements IFileGradingService {
     const needsRebuild = learnerResponse.some(
       (file) =>
         this.shouldRebuildStructuredContent(file) ||
+        this.isArchiveUploadNeedingStructure(file) ||
         (includeCodeUploads &&
           !file.structuredContent &&
           this.hasExtractedSubmissionText(file)),
@@ -1219,6 +1220,13 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return learnerResponse.map((file) => {
+      if (this.isArchiveUploadNeedingStructure(file)) {
+        return {
+          ...file,
+          structuredContent: this.buildCanonicalSubmissionForArchive(file),
+        };
+      }
+
       if (
         !this.shouldRebuildStructuredContent(file) &&
         !(
@@ -1240,6 +1248,91 @@ export class FileGradingService implements IFileGradingService {
 
       return { ...file, structuredContent };
     });
+  }
+
+  private isArchiveUploadNeedingStructure(file: LearnerFileUpload): boolean {
+    return Boolean(file.archiveEntries?.length) && !file.structuredContent;
+  }
+
+  /**
+   * An archive grades as ONE submission (the pipeline grades the first
+   * eligible file), so its members must become blocks of a single canonical
+   * submission: the listing as structure evidence, then each extracted entry
+   * under its own filename — source entries get the pinned whole-file code
+   * treatment that a bare upload of the same file would get. Without this,
+   * the whole archive is prose-chunked under the .zip filename and evidence
+   * quotes collapse to the short prose cap.
+   */
+  private buildCanonicalSubmissionForArchive(
+    file: LearnerFileUpload,
+  ): CanonicalSubmission {
+    const entries = file.archiveEntries ?? [];
+    const listingText = this.normalizeSubmissionTextForEvidence(
+      file.archiveListing || file.extractedText || file.content || "",
+    );
+
+    const blocks: ContentBlock[] = [];
+    let blockIndex = 1;
+
+    const metadataBlock = this.buildFileMetadataBlock(file, listingText);
+    if (metadataBlock) {
+      blocks.push({
+        ...metadataBlock,
+        blockId: `p1b${blockIndex}`,
+        page: 1,
+      });
+      blockIndex += 1;
+    }
+
+    for (const block of this.splitTextIntoEvidenceBlocks(
+      listingText,
+      blockIndex,
+      { filename: file.filename, questionId: file.questionId },
+    )) {
+      blocks.push(block);
+      blockIndex += 1;
+    }
+
+    for (const entry of entries) {
+      const isCode = isCodeLikeFilename(entry.path);
+      const normalized = isCode
+        ? this.normalizeCodeSubmissionText(entry.text)
+        : this.normalizeSubmissionTextForEvidence(entry.text);
+      if (!normalized.trim()) continue;
+
+      const meta = { filename: entry.path, questionId: file.questionId };
+      const entryBlocks = isCode
+        ? this.buildCodeEvidenceBlocks(normalized, blockIndex, meta)
+        : this.splitTextIntoEvidenceBlocks(normalized, blockIndex, meta);
+      for (const block of entryBlocks) {
+        blocks.push({ ...block, sourceFilename: entry.path });
+        blockIndex += 1;
+      }
+    }
+
+    const combined = [listingText, ...entries.map((entry) => entry.text)].join(
+      "\n",
+    );
+    const wordCount = combined.split(/\s+/).filter(Boolean).length;
+    const checksum = crypto.createHash("sha256").update(combined).digest("hex");
+
+    return {
+      submissionId: file.filename,
+      metadata: {
+        wordCount,
+        pageCount: 1,
+        blockCount: blocks.length,
+        sourceType: "txt",
+        checksum,
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks,
+        },
+      ],
+    };
   }
 
   private shouldRebuildStructuredContent(file: LearnerFileUpload): boolean {
