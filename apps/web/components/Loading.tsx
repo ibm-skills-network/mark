@@ -26,7 +26,11 @@ const Loading: React.FC<LoadingProps> = ({ animationData }) => {
           animationData={animationData}
         />
       ) : (
-        <div className="h-44 w-44 scale-150" aria-label="Loading" role="status" />
+        <div
+          className="h-44 w-44 scale-150"
+          aria-label="Loading"
+          role="status"
+        />
       )}
     </div>
   );

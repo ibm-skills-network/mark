@@ -2,10 +2,7 @@
  * @jest-environment jsdom
  */
 
-import {
-  buildErrorReportPrefills,
-  submitBugReport,
-} from "../report-client";
+import { buildErrorReportPrefills, submitBugReport } from "../report-client";
 
 jest.mock("sonner", () => ({
   toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() },
