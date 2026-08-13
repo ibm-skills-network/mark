@@ -5,6 +5,7 @@
 import { render, act } from "@testing-library/react";
 import { toast } from "sonner";
 import type { QuestionStore } from "@/config/types";
+import { GradingStreamLostError } from "@/lib/learner";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Timer from "../Timer";
 
@@ -95,5 +96,29 @@ describe("Timer auto-submit", () => {
 
     expect(mockSubmitAssignment).toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalled();
+  });
+
+  it("tells the learner their answers were submitted when the grading stream is lost, instead of prompting a resubmission", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    // The submission succeeded server-side; only the watchdog gave up on the
+    // stream. The generic "use the Submit button to try again" copy would be
+    // actively wrong here and risks a duplicate attempt.
+    const lostStreamMessage =
+      "We lost contact with the grading service. Your answers were submitted — check your results in a moment.";
+    mockSubmitAssignment.mockRejectedValue(
+      new GradingStreamLostError(lostStreamMessage, 3428, 999, "disconnected"),
+    );
+
+    render(<Timer />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(2100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockSubmitAssignment).toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(lostStreamMessage);
   });
 });

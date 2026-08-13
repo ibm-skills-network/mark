@@ -498,6 +498,8 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         fileUrl: extracted.fileUrl,
         useVisionMode: extracted.useVisionMode,
         structuredContent: extracted.structuredContent,
+        archiveListing: extracted.archiveListing,
+        archiveEntries: extracted.archiveEntries,
         contentSummary: this.generateContentSummary(extracted),
         metadata: {
           ...extracted.metadata,

@@ -63,6 +63,13 @@ export interface ContentBlock {
    */
   pinnedEvidence?: boolean;
 
+  /**
+   * For submissions that bundle several files (archives), the member file
+   * this block came from. Evidence chunking prefers it over the
+   * submission-level id so per-file handling (code quote caps) applies.
+   */
+  sourceFilename?: string;
+
   imageData?: string;
   imageDescription?: string;
   imageMetadata?: {

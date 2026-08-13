@@ -7,11 +7,14 @@ import {
 import { Test, TestingModule } from "@nestjs/testing";
 import { LtiSyncStatus } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
+import { UserRole } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
 import { LlmFacadeService } from "../../llm/llm-facade.service";
 import { QuestionService } from "../question/question.service";
 import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import { AttemptServiceV1 } from "./attempt.service";
+import { AttemptHelper } from "./helper/attempts.helper";
 import { LtiGradeSyncService } from "../../attempt/services/lti-grade-sync.service";
 import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
 
@@ -33,6 +36,7 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
     },
     question: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
     },
     questionResponse: {
       findMany: jest.fn(),
@@ -666,6 +670,76 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       await expect(service.getAssignmentAttempt(555, "en")).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe("getAssignmentContext - v1 URL context enrichment", () => {
+    const callGetAssignmentContext = () =>
+      (
+        service as unknown as {
+          getAssignmentContext: (
+            assignmentId: number,
+            questionId: number,
+            assignmentAttemptId: number,
+            role: UserRole,
+          ) => Promise<{
+            assignmentInstructions: string;
+            questionAnswerContext: { question: string; answer: string }[];
+          }>;
+        }
+      ).getAssignmentContext(42, 10, 555, UserRole.LEARNER);
+
+    beforeEach(() => {
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        instructions: "do the assignment",
+      });
+      mockPrismaService.question.findUnique.mockResolvedValue({
+        gradingContextQuestionIds: [30],
+      });
+      mockPrismaService.question.findMany.mockResolvedValue([
+        { id: 30, question: "Link your repo", type: "URL" },
+      ]);
+      mockPrismaService.questionResponse.findMany.mockResolvedValue([
+        {
+          questionId: 30,
+          learnerResponse: "https://github.com/octocat/hello-world",
+        },
+      ]);
+    });
+
+    it("degrades to the raw response (no fetched content) when the context URL fetch is rate-limited, instead of failing the caller", async () => {
+      const fetchSpy = jest
+        .spyOn(AttemptHelper, "fetchPlainTextFromUrl")
+        .mockRejectedValue(
+          new GithubRateLimitedError({
+            owner: "octocat",
+            repo: "hello-world",
+            requestUrl: "https://api.github.com/repos/octocat/hello-world",
+          }),
+        );
+
+      const context = await callGetAssignmentContext();
+
+      expect(context.questionAnswerContext).toEqual([
+        {
+          question: "Link your repo",
+          answer: "https://github.com/octocat/hello-world",
+        },
+      ]);
+
+      fetchSpy.mockRestore();
+    });
+
+    it("still includes the fetched content when the URL fetch succeeds", async () => {
+      const fetchSpy = jest
+        .spyOn(AttemptHelper, "fetchPlainTextFromUrl")
+        .mockResolvedValue({ body: "# Readme", isFunctional: true });
+
+      const context = await callGetAssignmentContext();
+
+      expect(context.questionAnswerContext[0].answer).toContain("# Readme");
+
+      fetchSpy.mockRestore();
     });
   });
 });

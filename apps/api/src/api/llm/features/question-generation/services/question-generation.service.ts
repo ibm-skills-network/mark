@@ -980,15 +980,15 @@ Your task is to:
 2. REMOVE irrelevant, unsupported, or low-quality questions that do not come directly from the provided content.
 3. FIX unclear, poorly written, or ambiguous questions to ensure clarity and correctness.
 4. KEEP all existing metadata intact (question text, type, and page number).
-5. DO NOT change the question type or the page number unless it is wrong.
+5. NEVER change the "type" or "page" field of any question. The type was fixed by the generation request and you have no authority to change it — a retyped question is discarded rather than moved, so relabelling silently destroys it. If a question is wrong for its type, REWRITE the stem to fit the type it already has, or REMOVE it.
 6. ENSURE every question strictly follows the quiz-style rules used in question generation.
 7. ENSURE every question is fully derived from the provided content.
 8. REMOVE any question that starts with "What percentage", "How many", "How much", "What number of", "How often", "What is the name of", "Can you", "Can clients", or "Can the". The first five are trivial stat-lookup questions; the last four are yes/no or naming questions with no learning value. If the underlying concept is valuable, REWRITE the question to ask what the statistic indicates or why it matters.
 9. REMOVE any question that contains a URL, website address, API endpoint, or file path.
 10. REMOVE any question whose correct answer would obviously be a single word or bare acronym (e.g., "What does X stand for?").
 11. REMOVE any Scenario question that is a definition lookup rather than a client-interaction decision.
-12. REMOVE any stat-recall question regardless of how it is phrased. A question is stat-recall if: (a) it embeds "what percentage", "what number", or "how much" mid-sentence (e.g., "According to research, what percentage of..."); (b) its trailing clause forces a numeric answer (e.g., "...in terms of incident response time reduction?"); or (c) it asks about a specific company's measurable outcome (e.g., "What reduction did Mizuho Bank achieve?"). These produce trivial number-guessing items where wrong answers are just different percentages. Ensure no more than 2 out of every 10 questions rely on recalling a specific statistic — remove the weakest ones if exceeded.
-13. CHANGE the type field from "short" to "long" for any question whose stem is "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify". These require explanation answers. Example: {{"question": "How does Instana help teams resolve incidents?", "type": "short"}} MUST become {{"question": "How does Instana help teams resolve incidents?", "type": "long"}}. This is a mandatory field change, not optional.
+12. REMOVE any stat-recall question regardless of how it is phrased. A question is stat-recall if: (a) it embeds "what percentage", "what number", or "how much" mid-sentence (e.g., "According to research, what percentage of..."); (b) its trailing clause forces a numeric answer (e.g., "...in terms of incident response time reduction?"); or (c) it asks about a specific company's measurable outcome (e.g., "What reduction did Mizuho Bank achieve?"). These produce trivial number-guessing items where wrong answers are just different percentages. EXEMPTION: a question of type "quantitative" is REQUIRED to state a statistic in its stem and ask what that number indicates, implies, or enables — that is the correct shape, NOT stat-recall. Never remove a "quantitative" question merely for containing a statistic, and never cap how many questions may mention one. Remove a "quantitative" question only if the learner must still supply the number themselves.
+13. REWRITE — never retype — any question of type "short" whose stem is "How does X help", "How does X work", "How does X contribute", "How does X impact", or "How does X simplify". These need explanation answers, so they are not valid Short questions. Recast the stem so the same concept is answerable in a 2-8 word noun phrase, keeping the type as "short". Example: {{"question": "How does Instana help teams resolve incidents?", "type": "short"}} MUST become {{"question": "Which Instana capability shortens incident resolution?", "type": "short"}} — the stem changes, the type field does not.
 
 {contentSection}
 QUESTIONS TO REVIEW:
@@ -1281,7 +1281,8 @@ Rules:
         return "Answer length: MAXIMUM 5-8 words per choice — noun phrases only, never full sentences.";
       }
       case MCSubtype.QUANTITATIVE: {
-        return "Answer length: MAXIMUM 5-8 words per choice — a specific number or measure plus brief context.";
+        // Statistic lives in the stem, so numeric choices get rejected by review.
+        return "Answer length: MAXIMUM 5-8 words per choice — each choice is a short CONCEPTUAL interpretation of the statistic in the stem. NEVER make a bare number, percentage, figure, or measure a choice.";
       }
       case MCSubtype.LONG: {
         return "Answer length: MINIMUM 10 words per choice — full explanatory sentences.";

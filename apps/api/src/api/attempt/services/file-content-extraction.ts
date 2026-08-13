@@ -11,8 +11,15 @@ import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import {
+  CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
+  isCodeLikeFilename,
+} from "../../llm/features/grading/services/source-code.utils";
 import { compactWorksheet } from "../../llm/features/grading/services/spreadsheet-used-range.utils";
-import { LearnerFileUpload } from "../common/interfaces/attempt.interface";
+import {
+  ArchiveEntryContent,
+  LearnerFileUpload,
+} from "../common/interfaces/attempt.interface";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
 import { CanonicalSubmission } from "./structured-content.models";
@@ -28,6 +35,8 @@ export interface ExtractedFileContent {
   fileUrl?: string;
   useVisionMode?: boolean;
   structuredContent?: CanonicalSubmission;
+  archiveListing?: string;
+  archiveEntries?: ArchiveEntryContent[];
   metadata?: {
     size: number;
     encoding?: string;
@@ -103,6 +112,9 @@ export class FileContentExtractionService {
   private readonly MAX_CONTENT_LENGTH = 500_000;
   private readonly CHUNK_SIZE = 10_000;
   private readonly BINARY_SAMPLE_SIZE = 5000;
+  private readonly ARCHIVE_ENTRY_MAX_BYTES = 100_000;
+  private readonly ARCHIVE_TEXT_ENTRY_MAX_CHARS = 1000;
+  private readonly ARCHIVE_TOTAL_CONTENT_BUDGET = 2_000_000;
 
   private readonly mimeTypeMap: Record<string, string[]> = {
     "text/plain": ["txt", "log", "md", "markdown", "rst", "asc", "text"],
@@ -125,6 +137,7 @@ export class FileContentExtractionService {
     "application/vnd.ms-powerpoint": ["ppt"],
     "text/csv": ["csv", "tsv"],
     "application/zip": ["zip", "zipx"],
+    "application/x-zip-compressed": ["zip"],
     "application/x-tar": ["tar"],
     "application/gzip": ["gz", "gzip"],
     "application/x-7z-compressed": ["7z"],
@@ -774,6 +787,8 @@ export class FileContentExtractionService {
       content: downloadedContent,
       fileType: file.fileType,
       extractedText: extractedContent.extractedText,
+      archiveListing: extractedContent.archiveListing,
+      archiveEntries: extractedContent.archiveEntries,
       metadata: {
         size: fileContent.length,
         encoding: extractedContent.encoding,
@@ -838,6 +853,8 @@ export class FileContentExtractionService {
     extractedText?: string;
     encoding?: string;
     detectedLanguage?: string;
+    archiveListing?: string;
+    archiveEntries?: ArchiveEntryContent[];
     additionalMetadata?: Record<string, number | boolean | string>;
   }> {
     const fileExtension = filename.split(".").pop()?.toLowerCase() || "";
@@ -918,6 +935,8 @@ export class FileContentExtractionService {
     text: string;
     extractedText?: string;
     encoding?: string;
+    archiveListing?: string;
+    archiveEntries?: ArchiveEntryContent[];
     additionalMetadata?: Record<string, number | boolean | string>;
   } | null> {
     switch (extension) {
@@ -1145,6 +1164,8 @@ export class FileContentExtractionService {
     text: string;
     extractedText?: string;
     encoding?: string;
+    archiveListing?: string;
+    archiveEntries?: ArchiveEntryContent[];
     additionalMetadata?: Record<string, number | boolean | string>;
   } | null> {
     for (const [mime, extensions] of Object.entries(this.mimeTypeMap)) {
@@ -1812,40 +1833,77 @@ export class FileContentExtractionService {
   ): Promise<{
     text: string;
     extractedText: string;
+    archiveListing?: string;
+    archiveEntries?: ArchiveEntryContent[];
     additionalMetadata: { fileCount: number };
   }> {
     try {
       let fileList: string[] = [];
-      let extractedContent = `=== ARCHIVE: ${filename} (${type.toUpperCase()}) ===\n`;
+      const header = `=== ARCHIVE: ${filename} (${type.toUpperCase()}) ===\n`;
+      let extractedContent = header;
+      let archiveListing: string | undefined;
+      let archiveEntries: ArchiveEntryContent[] | undefined;
 
       if (type === "zip") {
         try {
           const zip = await unzipper.Open.buffer(buffer);
 
-          extractedContent += `Total files: ${zip.files.length}\n\n`;
-          extractedContent += "--- FILE LISTING ---\n";
+          let listing = `Total files: ${zip.files.length}\n\n`;
+          listing += "--- FILE LISTING ---\n";
+
+          const entries: ArchiveEntryContent[] = [];
+          let contentChars = 0;
+          let budgetExhausted = false;
 
           for (const entry of zip.files) {
             const size = entry.uncompressedSize || 0;
-            extractedContent += `${entry.path} (${this.formatFileSize(
-              size,
-            )})\n`;
+            listing += `${entry.path} (${this.formatFileSize(size)})\n`;
             fileList.push(entry.path);
 
-            if (this.isTextFile(entry.path) && size < 100000) {
-              try {
-                const fileBuffer = await entry.buffer();
-                const textResult = this.extractPlainText(fileBuffer);
-                if (textResult.text && !textResult.text.includes("[BINARY")) {
-                  extractedContent += `\n--- CONTENT: ${entry.path} ---\n`;
-                  extractedContent += textResult.text.substring(0, 1000);
-                  if (textResult.text.length > 1000) {
-                    extractedContent += "\n[...truncated...]";
-                  }
-                  extractedContent += "\n";
-                }
-              } catch {}
+            if (this.isArchiveJunkEntry(entry.path)) continue;
+            const isCode = isCodeLikeFilename(entry.path);
+            if (!isCode && !this.isTextFile(entry.path)) continue;
+            if (size >= this.ARCHIVE_ENTRY_MAX_BYTES) continue;
+            if (contentChars >= this.ARCHIVE_TOTAL_CONTENT_BUDGET) {
+              budgetExhausted = true;
+              continue;
             }
+
+            try {
+              const fileBuffer = await entry.buffer();
+              const textResult = this.extractPlainText(fileBuffer);
+              if (!textResult.text || textResult.text.includes("[BINARY")) {
+                continue;
+              }
+              const cap = isCode
+                ? CODE_WHOLE_FILE_BLOCK_MAX_CHARS
+                : this.ARCHIVE_TEXT_ENTRY_MAX_CHARS;
+              const truncated = textResult.text.length > cap;
+              entries.push({
+                path: entry.path,
+                text: textResult.text.substring(0, cap),
+                truncated,
+              });
+              contentChars += Math.min(textResult.text.length, cap);
+            } catch {
+              // Unreadable entry: stays in the listing, contributes no content.
+            }
+          }
+
+          archiveListing = header + listing;
+          archiveEntries = entries;
+
+          extractedContent += listing;
+          for (const item of entries) {
+            extractedContent += `\n--- CONTENT: ${item.path} ---\n${item.text}`;
+            if (item.truncated) {
+              extractedContent += "\n[...truncated...]";
+            }
+            extractedContent += "\n";
+          }
+          if (budgetExhausted) {
+            extractedContent +=
+              "\n[Additional file contents omitted: archive content budget reached]\n";
           }
         } catch (error) {
           extractedContent += `Error reading archive: ${error}\n`;
@@ -1873,11 +1931,33 @@ export class FileContentExtractionService {
       return {
         text: extractedContent,
         extractedText: extractedContent,
+        archiveListing,
+        archiveEntries,
         additionalMetadata: { fileCount: fileList.length },
       };
     } catch (error) {
       throw new Error(`Archive extraction failed: ${error}`);
     }
+  }
+
+  /**
+   * Junk carried inside learner archives that must never become graded
+   * content: macOS resource forks, VCS internals, dependency trees. Junk
+   * stays visible in the file listing; only content extraction skips it.
+   */
+  private isArchiveJunkEntry(entryPath: string): boolean {
+    const segments = entryPath.split("/").filter(Boolean);
+    const basename = segments.at(-1) ?? "";
+    return (
+      segments.some(
+        (segment) =>
+          segment === "__MACOSX" ||
+          segment === ".git" ||
+          segment === "node_modules",
+      ) ||
+      basename === ".DS_Store" ||
+      basename.startsWith("._")
+    );
   }
 
   private isTextFile(filename: string): boolean {
