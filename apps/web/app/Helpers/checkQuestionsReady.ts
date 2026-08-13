@@ -354,6 +354,11 @@ export const useQuestionsAreReadyToBePublished = (
         step = 1;
         isValid = false;
       }
+      // A Random Subset larger than the pool is deliberately not a validation
+      // failure: the server clamps it to the pool on publish, so blocking here
+      // would strand assignments that predate the input cap on a config the
+      // author cannot publish. The config screen warns that publishing will
+      // correct it (see describeQuestionsPerAttemptClamp).
       if (!assignmentConfig.questionDisplay) {
         message = `Question display type is required.`;
         debugLog(message);

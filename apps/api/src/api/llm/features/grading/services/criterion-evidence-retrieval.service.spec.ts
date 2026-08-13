@@ -287,4 +287,252 @@ describe("CriterionEvidenceRetrievalService", () => {
 
     expect(response.evidence.length).toBeGreaterThan(0);
   });
+
+  /**
+   * Pinned chunks (the whole-file block for code uploads) must always be
+   * offered to the LLM validator, even when lexical search ranks other
+   * chunks and drops them — the validator remains the final judge.
+   */
+  it("always surfaces pinned chunks as candidates to the validator", async () => {
+    const criterion: RubricCriterion = {
+      id: "c-style",
+      rubricQuestion: "Is the program well structured overall?",
+      description: "Program structure and organization.",
+      criteria: [
+        { description: "Well structured program", points: 2 },
+        { description: "Poorly structured program", points: 0 },
+      ],
+      maxPoints: 2,
+    };
+
+    // Lexically strong chunks that match the criterion wording, plus a
+    // pinned whole-file chunk with no lexical overlap at all.
+    const chunks = [
+      makeChunk("fn1", "structured program organization well structured"),
+      makeChunk("fn2", "the program is well structured and organized"),
+      {
+        ...makeChunk("whole", "def f():\n\treturn 1"),
+        metadata: { filename: "solution.py", pinned: true },
+      },
+    ];
+
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "whole", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this code submission",
+        chunks,
+        assignmentId: 1,
+      },
+      index,
+    );
+
+    const promptArg = promptProcessor.processStructuredPrompt.mock.calls[0][0];
+    const validationPrompt = await promptArg.format({});
+    expect(validationPrompt).toContain("whole");
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "whole" }),
+    ]);
+  });
+
+  /**
+   * Source-code chunks keep their full text as the evidence quote (a
+   * 220-char fragment can't show whether a function works); prose chunks
+   * keep the historical 220-char cap.
+   */
+  it("does not truncate evidence quotes for source-code chunks", async () => {
+    const longCode = `def f():\n${"    x = 1\n".repeat(100)}`;
+    const longProse = "word ".repeat(200);
+    const chunks = [
+      {
+        ...makeChunk("code", longCode),
+        metadata: { filename: "solution.py" },
+      },
+      makeChunk("prose", longProse),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c-quote",
+      rubricQuestion: "Quote length check",
+      description: "Quote length check.",
+      criteria: [{ description: "Level", points: 1 }],
+      maxPoints: 1,
+    };
+
+    const service = makeService(
+      JSON.stringify({
+        evidence: [
+          { chunkId: "code", relevance: "supports" },
+          { chunkId: "prose", relevance: "supports" },
+        ],
+      }),
+    );
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Grade", chunks, assignmentId: 1 },
+      index,
+    );
+
+    const codeEvidence = response.evidence.find((e) => e.chunkId === "code");
+    const proseEvidence = response.evidence.find((e) => e.chunkId === "prose");
+    expect(codeEvidence?.quote).toBe(longCode);
+    expect(proseEvidence?.quote?.length).toBe(220);
+  });
+
+  /**
+   * When the LLM validator fails outright, the no-validation fallback must
+   * still include pinned chunks: they are appended after the lexical top-N,
+   * so a purely positional slice would drop the whole-file view exactly in
+   * the degraded path where it matters most.
+   */
+  it("keeps the pinned chunk in fallback evidence when the validator errors and reranked is full", async () => {
+    const criterion: RubricCriterion = {
+      id: "c-holistic",
+      rubricQuestion: "Is the program well structured overall?",
+      description: "Program structure and organization.",
+      criteria: [{ description: "Well structured program", points: 2 }],
+      maxPoints: 2,
+    };
+
+    const strongText =
+      "the program is well structured and organized with clear program structure and organization overall";
+    const chunks = [
+      ...Array.from({ length: 6 }, (_, index) =>
+        makeChunk(`strong${index}`, strongText),
+      ),
+      {
+        ...makeChunk("whole", "def f():\n\treturn 1"),
+        metadata: { filename: "solution.py", pinned: true },
+      },
+    ];
+
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockRejectedValue(new Error("validator timeout")),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Grade this code", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    expect(response.evidence.length).toBeLessThanOrEqual(6);
+    expect(response.evidence.some((item) => item.chunkId === "whole")).toBe(
+      true,
+    );
+  });
+
+  /**
+   * The validation prompt budgets full-length code excerpts (pinned first);
+   * past the budget, chunks fall back to the short prose excerpt so the
+   * zero-relevance fallback cannot render ~100KB prompts.
+   */
+  it("bounds the validation prompt via the code render budget, pinned chunk first", async () => {
+    const pinnedText = `PINNED_HEAD ${"p".repeat(11_900)} PINNED_TAIL`;
+    const segmentText = `SEGMENT_BODY ${"s".repeat(5900)}`;
+    const chunks = [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        ...makeChunk(`seg${index}`, segmentText),
+        metadata: { filename: "solution.py" },
+      })),
+      {
+        ...makeChunk("whole", pinnedText),
+        metadata: { filename: "solution.py", pinned: true },
+      },
+    ];
+
+    let validationPrompt = "";
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockImplementation(async (prompt: any) => {
+            validationPrompt = await prompt.format({});
+            return { evidence: [{ chunkId: "whole", relevance: "supports" }] };
+          }),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const criterion: RubricCriterion = {
+      id: "c-budget",
+      rubricQuestion: "Budget check",
+      description: "Budget check.",
+      criteria: [{ description: "Level", points: 1 }],
+      maxPoints: 1,
+    };
+
+    await service.retrieveEvidence(
+      { criterion, question: "Grade", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    // Pinned chunk rendered in full despite being listed after the segments.
+    expect(validationPrompt).toContain("PINNED_TAIL");
+    // All chunks are still listed as candidates...
+    for (let index = 0; index < 10; index += 1) {
+      expect(validationPrompt).toContain(`seg${index}`);
+    }
+    // ...but total rendered size stays near the budget instead of ~72KB.
+    expect(validationPrompt.length).toBeLessThan(40_000);
+  });
+
+  it("does not truncate evidence quotes for notebook chunks", async () => {
+    const cellText = `=== CELL 2 [CODE] [1] ===\n${"x = 1\n".repeat(400)}`;
+    const chunks = [
+      {
+        ...makeChunk("cell", cellText),
+        metadata: { filename: "analysis.ipynb" },
+      },
+      makeChunk("prose", "word ".repeat(200)),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c-nb-quote",
+      rubricQuestion: "Notebook quote length check",
+      description: "Notebook quote length check.",
+      criteria: [{ description: "Level", points: 1 }],
+      maxPoints: 1,
+    };
+
+    const service = makeService(
+      JSON.stringify({
+        evidence: [
+          { chunkId: "cell", relevance: "supports" },
+          { chunkId: "prose", relevance: "supports" },
+        ],
+      }),
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Grade", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    const cellEvidence = response.evidence.find((e) => e.chunkId === "cell");
+    const proseEvidence = response.evidence.find((e) => e.chunkId === "prose");
+    expect(cellEvidence?.quote).toBe(cellText);
+    expect(proseEvidence?.quote?.length).toBe(220);
+  });
 });

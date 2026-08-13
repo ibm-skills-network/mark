@@ -33,6 +33,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { QuestionAuthorStore } from "@/config/types";
 import ExportModal, { ExportOptions } from "../../(components)/ExportModal";
+import { validationMessageNeedsOwnPanel } from "./validationMessage";
 import { omit } from "../../../../lib/utils";
 
 const CONFIG_KEYS_TO_OMIT = [
@@ -51,22 +52,6 @@ const CONFIG_KEYS_TO_OMIT = [
   "questions",
 ];
 
-const isQuestionRelatedValidationError = (message: string): boolean => {
-  const questionRelatedErrors = [
-    "question",
-    "rubric",
-    "choice",
-    "variant",
-    "description",
-    "text",
-  ];
-
-  const hasQuestionIssue = questionRelatedErrors.some((error) =>
-    message.toLowerCase().includes(error.toLowerCase()),
-  );
-  return hasQuestionIssue;
-};
-
 const IssuesModal = ({
   isOpen,
   onClose,
@@ -74,6 +59,7 @@ const IssuesModal = ({
   questions,
   isValid,
   message,
+  invalidQuestionId,
   onNavigateToFix,
   onAutoFix,
   onNavigateToConfig,
@@ -91,9 +77,15 @@ const IssuesModal = ({
 }) => {
   if (!isOpen) return null;
 
-  const totalIssues = Object.keys(questionIssues).length;
-  const hasValidationError = !isValid && message;
-  const totalAllIssues = totalIssues + (hasValidationError ? 1 : 0);
+  const showMessagePanel = validationMessageNeedsOwnPanel(
+    isValid,
+    message,
+    invalidQuestionId,
+    questionIssues,
+  );
+  const isConfigMessage = invalidQuestionId === null;
+  const totalAllIssues =
+    Object.keys(questionIssues).length + (showMessagePanel ? 1 : 0);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -114,40 +106,44 @@ const IssuesModal = ({
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {!isValid &&
-            message &&
-            !isQuestionRelatedValidationError(message) && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3">
-                    <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mt-0.5" />
-                    <div>
-                      <h3 className="font-medium text-red-900 dark:text-red-200 mb-1">
-                        Configuration Error
-                      </h3>
-                      <p className="text-sm text-red-700 dark:text-red-300">
-                        {message}
-                      </p>
-                    </div>
+          {showMessagePanel && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-red-900 dark:text-red-200 mb-1">
+                      {isConfigMessage
+                        ? "Configuration Error"
+                        : "Question Error"}
+                    </h3>
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {message}
+                    </p>
                   </div>
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onNavigateToConfig();
-                    }}
-                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 rounded-md transition-colors flex-shrink-0 ml-4"
-                  >
-                    Go to Config
-                    <ArrowRightIcon className="w-3 h-3" />
-                  </button>
                 </div>
+                <button
+                  onClick={() => {
+                    onClose();
+                    if (isConfigMessage) {
+                      onNavigateToConfig();
+                    } else {
+                      onNavigateToFix(invalidQuestionId);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 rounded-md transition-colors flex-shrink-0 ml-4"
+                >
+                  {isConfigMessage ? "Go to Config" : "Go to Fix"}
+                  <ArrowRightIcon className="w-3 h-3" />
+                </button>
               </div>
-            )}
+            </div>
+          )}
 
           {!isValid &&
             message &&
-            Object.keys(questionIssues).length > 0 &&
-            isQuestionRelatedValidationError(message) && (
+            !showMessagePanel &&
+            invalidQuestionId !== null && (
               <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-3">
                   <InformationCircleIcon className="w-5 h-5 text-blue-500 mt-0.5" />
@@ -1544,18 +1540,22 @@ function Component() {
                 <ExclamationTriangleIcon className="w-5 h-5" />
                 {(() => {
                   const questionIssueCount = Object.keys(questionIssues).length;
-                  const hasValidationError = !isValid && message;
+                  const standaloneMessage = validationMessageNeedsOwnPanel(
+                    isValid,
+                    message,
+                    invalidQuestionId,
+                    questionIssues,
+                  );
                   const hasConfigError =
-                    hasValidationError &&
-                    !isQuestionRelatedValidationError(message);
+                    standaloneMessage && invalidQuestionId === null;
                   const totalIssues =
-                    questionIssueCount + (hasConfigError ? 1 : 0);
+                    questionIssueCount + (standaloneMessage ? 1 : 0);
 
                   if (totalIssues === 0) {
                     return "Issues found";
                   }
 
-                  if (questionIssueCount > 0 && hasConfigError) {
+                  if (questionIssueCount > 0 && standaloneMessage) {
                     return `${totalIssues} issues found`;
                   } else if (questionIssueCount > 0) {
                     return `${questionIssueCount} question issue${questionIssueCount !== 1 ? "s" : ""} found`;

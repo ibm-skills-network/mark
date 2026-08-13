@@ -4,12 +4,21 @@ import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { Logger } from "winston";
+import * as githubContentFetch from "src/api/attempt/common/utils/github-content-fetch.util";
 import { GradingAuditService } from "../../../services/question-response/grading-audit.service";
 import { GRADING_AUDIT_SERVICE } from "../../../attempt.constants";
 import { LocalizationService } from "../../utils/localization.service";
 import { UrlGradingStrategy } from "../url-grading.strategy";
+
+jest.mock("src/api/attempt/common/utils/github-content-fetch.util");
+
+const mockedFetch =
+  githubContentFetch.fetchUrlContentForGrading as jest.MockedFunction<
+    typeof githubContentFetch.fetchUrlContentForGrading
+  >;
 
 describe("UrlGradingStrategy - Type Safety Tests", () => {
   let strategy: UrlGradingStrategy;
@@ -266,6 +275,79 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
 
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toBe("https://example.com");
+    });
+  });
+
+  describe("UrlGradingStrategy - GitHub fetch behavior", () => {
+    const mockQuestion: QuestionDto = {
+      id: 1,
+      question: "Submit your project URL",
+      type: "URL" as any,
+      totalPoints: 10,
+    } as QuestionDto;
+
+    const context = {
+      language: "en",
+      assignmentId: 42,
+      questionAnswerContext: [],
+      assignmentInstructions: "",
+    } as any;
+
+    beforeEach(() => {
+      mockedFetch.mockReset();
+    });
+
+    it("delegates to the shared fetchUrlContentForGrading helper", async () => {
+      mockedFetch.mockResolvedValue({ body: "# Readme", isFunctional: true });
+      llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+        points: 8,
+        feedback: "Good work",
+        gradingRationale: "Looks complete",
+      } as any);
+
+      await strategy.gradeResponse(
+        mockQuestion,
+        "https://github.com/octocat/hello-world",
+        context,
+      );
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        "https://github.com/octocat/hello-world",
+        expect.objectContaining({ assignmentId: 42, questionId: 1 }),
+      );
+    });
+
+    it("returns a 0-point fallback response when the fetch reports isFunctional:false", async () => {
+      mockedFetch.mockResolvedValue({ body: "", isFunctional: false });
+
+      const result = await strategy.gradeResponse(
+        mockQuestion,
+        "https://github.com/octocat/private-or-broken",
+        context,
+      );
+
+      expect(result.totalPoints).toBe(0);
+      expect(JSON.stringify(result)).toMatch(/unable to fetch/i);
+      expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
+    });
+
+    it("propagates GithubRateLimitedError instead of grading a silent 0", async () => {
+      mockedFetch.mockRejectedValue(
+        new GithubRateLimitedError({
+          owner: "octocat",
+          repo: "hello-world",
+          requestUrl: "https://api.github.com/repos/octocat/hello-world",
+        }),
+      );
+
+      await expect(
+        strategy.gradeResponse(
+          mockQuestion,
+          "https://github.com/octocat/hello-world",
+          context,
+        ),
+      ).rejects.toThrow(GithubRateLimitedError);
+      expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
     });
   });
 });

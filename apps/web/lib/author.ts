@@ -18,6 +18,7 @@ import type {
 } from "@config/types";
 import type { PublishJobResult } from "@/types/publish-job-result";
 import { apiClient } from "./api-client";
+import { isAuthApiError, withTransientRetry } from "./api-retry";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 
 function isPublishJobResult(value: unknown): value is PublishJobResult {
@@ -622,17 +623,27 @@ export async function deleteQuestion(
 export async function getAttempts(
   assignmentId: number,
   cookies?: string,
+  options?: { throwOnAuthError?: boolean },
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
 
   try {
-    const attempts = (await apiClient.get(endpointURL, {
-      headers: {
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    })) as AssignmentAttempt[];
+    // quiet: a momentary failure must not flash an error toast — it either
+    // recovers on the retry below or the caller renders a real error screen.
+    const attempts = (await withTransientRetry(() =>
+      apiClient.get(endpointURL, {
+        quiet: true,
+        headers: {
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      }),
+    )) as AssignmentAttempt[];
     return attempts.map((attempt) => normalizeAttemptTimestamps(attempt));
   } catch (err) {
+    if (options?.throwOnAuthError && isAuthApiError(err)) {
+      throw err;
+    }
+    console.error(`getAttempts failed for assignment ${assignmentId}:`, err);
     return undefined;
   }
 }

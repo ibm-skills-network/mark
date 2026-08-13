@@ -56,6 +56,20 @@ export interface ContentBlock {
   latex?: string;
   level?: number;
 
+  /**
+   * Always surface this block to the evidence validator, even when lexical
+   * retrieval doesn't rank it (e.g. the whole-file block for code uploads,
+   * whose correctness/style criteria concern the entire submission).
+   */
+  pinnedEvidence?: boolean;
+
+  /**
+   * For submissions that bundle several files (archives), the member file
+   * this block came from. Evidence chunking prefers it over the
+   * submission-level id so per-file handling (code quote caps) applies.
+   */
+  sourceFilename?: string;
+
   imageData?: string;
   imageDescription?: string;
   imageMetadata?: {

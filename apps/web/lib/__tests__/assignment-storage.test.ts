@@ -35,6 +35,16 @@ describe("createAssignmentScopedStorage", () => {
       expect(localStorage.getItem("assignmentFeedbackConfig-789")).toBe("v");
     });
 
+    it("generates assignment-{id}-learner-details for learner details", () => {
+      setPathname("/learner/321/questions");
+      const storage = createAssignmentScopedStorage(
+        "learnerDetails",
+        "fallback",
+      );
+      storage.setItem("ignored-name", "v");
+      expect(localStorage.getItem("assignment-321-learner-details")).toBe("v");
+    });
+
     it("resolves key from a learner route", () => {
       setPathname("/learner/999/questions");
       const storage = createAssignmentScopedStorage("author", "fallback");

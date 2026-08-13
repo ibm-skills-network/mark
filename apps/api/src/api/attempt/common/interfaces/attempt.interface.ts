@@ -46,6 +46,17 @@ export type RepoType = {
   default_branch?: string;
 };
 /**
+ * One extracted member of an uploaded archive. `text` is bounded at
+ * extraction time (source files get the whole-file evidence budget, other
+ * text the legacy short cap); `truncated` records that the bound was hit.
+ */
+export interface ArchiveEntryContent {
+  path: string;
+  text: string;
+  truncated: boolean;
+}
+
+/**
  * Interface for learner file upload
  */
 export interface LearnerFileUpload {
@@ -67,6 +78,10 @@ export interface LearnerFileUpload {
   contentSummary?: string;
   metadata?: Record<string, unknown>;
   structuredContent?: CanonicalSubmission;
+  /** Archive header + entry listing, without any file contents. */
+  archiveListing?: string;
+  /** Per-entry extracted contents when this upload is an archive. */
+  archiveEntries?: ArchiveEntryContent[];
   buffer?: Buffer;
 }
 

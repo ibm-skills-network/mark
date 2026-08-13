@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import ReportErrorButton from "@/components/ReportErrorButton";
 import { cn } from "@/lib/strings";
 
 type UserStep = {
@@ -167,6 +168,22 @@ export default function ErrorPage({
                 <p className="text-sm text-gray-500">{context}</p>
               ) : null}
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+            <ReportErrorButton
+              error={{
+                statusCode,
+                headline: resolvedHeadline,
+                message: errorMessage,
+                context,
+                stateTimeline,
+              }}
+            />
+            <p className="text-sm text-red-900/80">
+              Something wrong? Send this error to our team — the details are
+              attached automatically.
+            </p>
           </div>
 
           {resolvedSteps.length > 0 ? (

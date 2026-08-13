@@ -3,7 +3,17 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import ErrorPage from "../ErrorPage";
+
+jest.mock("@/lib/talkToBackend", () => ({
+  getUser: jest.fn().mockResolvedValue({
+    userId: "learner@example.com",
+    role: "learner",
+    assignmentId: 42,
+    returnUrl: "",
+  }),
+}));
 
 describe("ErrorPage", () => {
   it("renders the headline, message and steps for a status", () => {
@@ -54,5 +64,33 @@ describe("ErrorPage", () => {
     );
     expect(screen.getByText(/recent activity/i)).toBeInTheDocument();
     expect(screen.getByText("Loaded page")).toBeInTheDocument();
+  });
+
+  it("always renders a prominent report button", () => {
+    render(<ErrorPage error="Something broke" statusCode={500} />);
+    expect(
+      screen.getByRole("button", { name: /report this issue/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the report form prefilled from the error", async () => {
+    const user = userEvent.setup();
+    render(
+      <ErrorPage
+        error="Attempts could not be fetched"
+        statusCode={500}
+        stateTimeline={[{ step: "Attempts fetch failed" }]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /report this issue/i }),
+    );
+
+    expect(await screen.findByText(/report issue/i)).toBeInTheDocument();
+    // The required "Actual result" field arrives prefilled with the error.
+    expect(
+      screen.getByDisplayValue(/Attempts could not be fetched/),
+    ).toBeInTheDocument();
   });
 });

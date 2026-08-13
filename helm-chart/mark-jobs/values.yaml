@@ -90,6 +90,12 @@ ltiSyncDrain:
   schedule: "*/5 * * * *"
   concurrency: 2
   apiBase: "http://mark-api/api"
+  # Backstop for wedged runs: if the main container dies but the
+  # linkerd-proxy sidecar keeps running, the pod never terminates, the Job
+  # stays active, and concurrencyPolicy: Forbid skips every later tick.
+  # Force-fail the Job after this long — a killed drain is safe to restart
+  # (each run re-reads SCHEDULED rows from scratch).
+  activeDeadlineSeconds: 3600
   resources:
     limits:
       cpu: "1"

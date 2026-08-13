@@ -33,6 +33,10 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
+// Set by the kubelet in every k8s pod; gates the linkerd-proxy handshakes
+// below so local/manual runs skip them entirely.
+const IN_CLUSTER = Boolean(process.env.KUBERNETES_SERVICE_HOST);
+
 function parseArgs(argv) {
   const args = {
     dryRun: true,
@@ -137,6 +141,8 @@ async function main() {
   );
   console.log("  batch size :", args.batchSize);
   console.log("");
+
+  await awaitLinkerdProxy();
 
   const counts = { success: 0, retried: 0, failed: 0, alreadyOk: 0 };
   let processed = 0;
@@ -271,20 +277,52 @@ async function main() {
   console.log("  elapsed     :", `${elapsedSec}s`);
 }
 
+// The kubelet does not wait for the injected linkerd-proxy to be ready
+// before starting this container, and outbound traffic is already
+// iptables-redirected to the proxy port. A drain that starts first fails
+// its DB connection instantly — and its exit-path /shutdown POST hits a
+// proxy that isn't listening yet, so the sidecar outlives the main
+// container and the Job wedges. Wait for the proxy before doing any
+// work; proceed after the deadline so a missing sidecar can't block a
+// run forever.
+async function awaitLinkerdProxy() {
+  if (!IN_CLUSTER) return;
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch("http://localhost:4191/ready", {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (response.ok) return;
+    } catch {
+      // proxy not listening yet
+    }
+    await sleep(1000);
+  }
+  console.warn("linkerd-proxy not ready after 120s; proceeding without it");
+}
+
 // When running inside a Linkerd-meshed K8s pod (e.g. our CronJob), the
 // linkerd-proxy sidecar does NOT exit when the main container does, so
 // the Job stays in "Running" forever and the CronJob's concurrencyPolicy:
 // Forbid would skip every subsequent tick. POSTing to the proxy admin
-// endpoint tells it to shut down cleanly. Best-effort: failures are
-// ignored (e.g. when running locally without a sidecar).
+// endpoint tells it to shut down cleanly. In-cluster the POST retries
+// until the deadline: if this process crashed before the proxy was even
+// up, the shutdown must outwait the proxy's startup or the Job wedges.
+// Locally (no sidecar) it stays single-attempt best-effort.
 async function shutdownLinkerdProxy() {
-  try {
-    await fetch("http://localhost:4191/shutdown", {
-      method: "POST",
-      signal: AbortSignal.timeout(2000),
-    });
-  } catch {
-    // no sidecar, or already shut down — fine
+  const deadline = Date.now() + (IN_CLUSTER ? 120_000 : 0);
+  for (;;) {
+    try {
+      await fetch("http://localhost:4191/shutdown", {
+        method: "POST",
+        signal: AbortSignal.timeout(2000),
+      });
+      return;
+    } catch {
+      if (Date.now() >= deadline) return; // no sidecar, or already shut down — fine
+      await sleep(2000);
+    }
   }
 }
 

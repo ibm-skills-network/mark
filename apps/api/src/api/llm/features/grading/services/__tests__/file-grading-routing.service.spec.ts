@@ -2,9 +2,9 @@
 /**
  * Regression tests for grading routing fixes:
  *
- * 1. Code files (Python, Java, C++, JS/TS) must NOT receive synthetic
- *    structured content and must be routed to template-based grading,
- *    not evidence-based grading.
+ * 1. Code files (Python, Java, C++, JS/TS) receive code-aware structured
+ *    content (per-definition blocks + a pinned whole-file block, indentation
+ *    preserved) and are routed to evidence-based grading.
  *
  * 2. Spreadsheet files (.xlsx, .xls, .csv, .tsv, .ods) must receive
  *    rebuilt structured content and be routed to evidence-based or
@@ -124,7 +124,9 @@ describe("FileGradingService.shouldRebuildStructuredContent", () => {
     service = buildService();
   });
 
-  // Code files – must NOT be rebuilt
+  // Code files are NOT rebuilt via this method — they are structured only on
+  // the CODE/REPO route, handled by ensureStructuredContentForEvidenceGrading's
+  // includeCodeUploads branch. So shouldRebuildStructuredContent returns false.
   const codeFiles = [
     "solution.py",
     "Main.java",
@@ -141,15 +143,27 @@ describe("FileGradingService.shouldRebuildStructuredContent", () => {
   ];
 
   for (const filename of codeFiles) {
-    it(`returns false for code file: ${filename}`, () => {
+    it(`returns false for code file (structured on the code route instead): ${filename}`, () => {
       const file = makeCodeFile(filename);
+      expect(file.structuredContent).toBeUndefined();
       expect(service.shouldRebuildStructuredContent(file)).toBe(false);
     });
   }
 
-  it("returns false for code file even when it has no existing structuredContent", () => {
+  it("returns false for a code file that already has structuredContent", () => {
     const file = makeCodeFile("main.py");
-    expect(file.structuredContent).toBeUndefined();
+    (file as any).structuredContent = {
+      submissionId: "main.py",
+      metadata: {
+        wordCount: 3,
+        pageCount: 1,
+        blockCount: 2,
+        sourceType: "txt",
+        checksum: "code",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [{ pageNumber: 1, blocks: [] }],
+    };
     expect(service.shouldRebuildStructuredContent(file)).toBe(false);
   });
 
@@ -239,15 +253,37 @@ describe("FileGradingService.ensureStructuredContentForEvidenceGrading", () => {
     service = buildService();
   });
 
-  it("does NOT add structuredContent to code files", () => {
+  it("adds code-aware structuredContent to code files on the code route", () => {
     const pyFile = makeCodeFile("solution.py");
-    const result = service.ensureStructuredContentForEvidenceGrading([pyFile]);
-    expect(result[0].structuredContent).toBeUndefined();
+    const result = service.ensureStructuredContentForEvidenceGrading(
+      [pyFile],
+      true,
+    );
+    const content = result[0].structuredContent;
+    expect(content).toBeDefined();
+    expect(content?.submissionId).toBe("solution.py");
+    const codeBlocks = content!.pages[0].blocks.filter(
+      (b: any) => b.type === "code",
+    );
+    expect(codeBlocks.length).toBeGreaterThan(0);
+    expect(codeBlocks[0].pinnedEvidence).toBe(true);
+    expect(codeBlocks[0].text).toContain(
+      "=== FILE: solution.py (complete) ===",
+    );
   });
 
-  it("does NOT add structuredContent to JS/TS files", () => {
+  it("adds structuredContent to JS/TS files on the code route", () => {
     const tsFile = makeCodeFile("app.ts");
-    const result = service.ensureStructuredContentForEvidenceGrading([tsFile]);
+    const result = service.ensureStructuredContentForEvidenceGrading(
+      [tsFile],
+      true,
+    );
+    expect(result[0].structuredContent).toBeDefined();
+  });
+
+  it("does NOT structure code files off the code route", () => {
+    const pyFile = makeCodeFile("solution.py");
+    const result = service.ensureStructuredContentForEvidenceGrading([pyFile]);
     expect(result[0].structuredContent).toBeUndefined();
   });
 
@@ -289,15 +325,15 @@ describe("FileGradingService.ensureStructuredContentForEvidenceGrading", () => {
     expect(result[0].structuredContent).toBe(realStructure); // same reference
   });
 
-  it("mixed submission: code file stays without structuredContent, spreadsheet gets it", () => {
+  it("mixed submission on the code route: both code file and spreadsheet get structuredContent", () => {
     const pyFile = makeCodeFile("helper.py");
     const xlsxFile = makeSpreadsheetFile("data.xlsx");
     delete (xlsxFile as any).structuredContent;
 
-    const result = service.ensureStructuredContentForEvidenceGrading([
-      pyFile,
-      xlsxFile,
-    ]);
+    const result = service.ensureStructuredContentForEvidenceGrading(
+      [pyFile, xlsxFile],
+      true,
+    );
 
     const resultPy = result.find((f: LearnerFileUpload) =>
       f.filename.endsWith(".py"),
@@ -306,30 +342,31 @@ describe("FileGradingService.ensureStructuredContentForEvidenceGrading", () => {
       f.filename.endsWith(".xlsx"),
     );
 
-    expect(resultPy?.structuredContent).toBeUndefined();
+    expect(resultPy?.structuredContent).toBeDefined();
     expect(resultXlsx?.structuredContent).toBeDefined();
   });
 });
 
 // ─── hasStructuredContent gate ─────────────────────────────────────────────
-// Verifies that code files do NOT trigger evidence-based grading.
+// Verifies that code files trigger evidence-based grading on the CODE route.
 
-describe("FileGradingService - code files use template-based grading", () => {
+describe("FileGradingService - code files use evidence-based grading", () => {
   let service: any;
 
   beforeEach(() => {
     service = buildService();
   });
 
-  it("code file results in hasStructuredContent = false after enrichment", () => {
+  it("code file results in hasStructuredContent = true after enrichment on the code route", () => {
     const pyFile = makeCodeFile("solution.py");
-    const enriched = service.ensureStructuredContentForEvidenceGrading([
-      pyFile,
-    ]);
+    const enriched = service.ensureStructuredContentForEvidenceGrading(
+      [pyFile],
+      true,
+    );
     const hasStructuredContent = enriched.some(
       (f: LearnerFileUpload) => f.structuredContent,
     );
-    expect(hasStructuredContent).toBe(false);
+    expect(hasStructuredContent).toBe(true);
   });
 
   it("spreadsheet results in hasStructuredContent = true after enrichment", () => {
@@ -375,22 +412,336 @@ describe("FileGradingService - code files use template-based grading", () => {
     expect(service.isEvidenceBasedEligible(enriched)).toBe(true);
   });
 
-  it("code file is not evidence eligible even if structuredContent exists", () => {
-    const structure: CanonicalSubmission = {
-      submissionId: "solution.py",
-      metadata: {
-        wordCount: 3,
-        pageCount: 1,
-        blockCount: 2,
-        sourceType: "txt",
-        checksum: "code",
-        extractedAt: new Date().toISOString(),
-      },
-      pages: [{ pageNumber: 1, blocks: [] }],
-    };
+  it("code file is evidence eligible on the code route once structuredContent exists", () => {
     const pyFile = makeCodeFile("solution.py");
-    (pyFile as any).structuredContent = structure;
-    expect(service.isEvidenceBasedEligible(pyFile)).toBe(false);
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading(
+      [pyFile],
+      true,
+    );
+    expect(service.isEvidenceBasedEligible(enriched, true)).toBe(true);
+  });
+
+  it("code file is NOT evidence eligible off the code route", () => {
+    const pyFile = makeCodeFile("solution.py");
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading(
+      [pyFile],
+      true,
+    );
+    expect(service.isEvidenceBasedEligible(enriched)).toBe(false);
+  });
+});
+
+// ─── code-aware evidence blocks ────────────────────────────────────────────
+
+describe("FileGradingService.buildCodeEvidenceBlocks", () => {
+  let service: any;
+
+  beforeEach(() => {
+    service = buildService();
+  });
+
+  // Bodies are intentionally > CODE_MIN_SEGMENT_CHARS (200) so each definition
+  // stays its own segment rather than being merged as "tiny".
+  const pythonCode = [
+    "import math",
+    "",
+    "",
+    "# Compute the area of a circle given its radius",
+    "def area(radius):",
+    "    if radius < 0:",
+    "        raise ValueError('radius must be non-negative')",
+    "    # area of a circle is pi times the radius squared",
+    "    computed = math.pi * radius * radius",
+    "    return round(computed, 4)",
+    "",
+    "",
+    "class Shape:",
+    "    def __init__(self, name, sides):",
+    "        self.name = name",
+    "        self.sides = sides",
+    "",
+    "    def describe(self):",
+    "        # build a human-readable description of the shape",
+    "        return f'A shape called {self.name} with {self.sides} sides'",
+    "",
+    "    def is_polygon(self):",
+    "        return self.sides >= 3",
+  ].join("\n");
+
+  function codeBlocksFor(code: string, filename = "solution.py") {
+    const file = makeCodeFile(filename, code);
+    // Code is structured only on the CODE/REPO route (includeCodeUploads=true).
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading(
+      [file],
+      true,
+    );
+    return enriched.structuredContent.pages[0].blocks.filter(
+      (b: any) => b.type === "code",
+    );
+  }
+
+  it("emits a pinned whole-file block first", () => {
+    const blocks = codeBlocksFor(pythonCode);
+    expect(blocks[0].pinnedEvidence).toBe(true);
+    expect(blocks[0].text).toContain("def area(radius):");
+    expect(blocks[0].text).toContain("class Shape:");
+  });
+
+  it("splits at top-level definitions, keeping the preceding comment attached", () => {
+    const blocks = codeBlocksFor(pythonCode);
+    const segments = blocks.slice(1).map((b: any) => b.text);
+    const areaSegment = segments.find((s: string) =>
+      s.includes("def area(radius):"),
+    );
+    expect(areaSegment).toContain("# Compute the area of a circle");
+    expect(areaSegment).not.toContain("class Shape:");
+    const classSegment = segments.find((s: string) =>
+      s.includes("class Shape:"),
+    );
+    expect(classSegment).toContain("def describe(self):");
+  });
+
+  it("keeps indentation inside function bodies (blank lines don't shred methods)", () => {
+    const blocks = codeBlocksFor(pythonCode);
+    const classSegment = blocks
+      .slice(1)
+      .map((b: any) => b.text)
+      .find((s: string) => s.includes("class Shape:"));
+    expect(classSegment).toContain("    def __init__(self, name, sides):");
+  });
+
+  it("preserves tab indentation instead of flattening it", () => {
+    const code = "def f():\n\treturn 1\n";
+    const blocks = codeBlocksFor(code);
+    expect(blocks[0].text).toContain("\treturn 1");
+  });
+
+  it("truncates the whole-file block for very large files and labels it honestly", () => {
+    const bigCode = `def f():\n${"    x = 1\n".repeat(3000)}`;
+    const blocks = codeBlocksFor(bigCode);
+    // Whole-file block total (header + code + marker) is bounded so it survives
+    // being quoted intact — the marker must not be sliced off downstream.
+    expect(blocks[0].text).toContain("... [file truncated]");
+    expect(blocks[0].text).toContain("(truncated)");
+    expect(blocks[0].text).not.toContain("(complete)");
+    expect(blocks[0].text.length).toBeLessThanOrEqual(12_000);
+  });
+
+  it("merges trivial top-level statements into a neighbor instead of separate blocks", () => {
+    const code = [
+      "const MAX = 100;",
+      "",
+      "function computeScore(values) {",
+      "  let total = 0;",
+      "  for (const value of values) {",
+      "    total += value;",
+      "  }",
+      "  // clamp the running total to the configured maximum score",
+      "  const clamped = Math.min(total, MAX);",
+      "  return clamped;",
+      "}",
+      "",
+      "const LABEL = 'score';",
+    ].join("\n");
+
+    const segments = codeBlocksFor(code, "score.ts")
+      .slice(1)
+      .map((b: any) => b.text);
+
+    // The trivial const lines never occupy a candidate block on their own.
+    expect(segments.some((s: string) => s.trim() === "const MAX = 100;")).toBe(
+      false,
+    );
+    expect(
+      segments.some((s: string) => s.trim() === "const LABEL = 'score';"),
+    ).toBe(false);
+    // The substantial function still appears as evidence.
+    expect(
+      segments.some((s: string) => s.includes("function computeScore")),
+    ).toBe(true);
+  });
+
+  it("splits plain C code (no definition keyword) into blank-line groups with indentation kept", () => {
+    // Bodies are > CODE_MIN_SEGMENT_CHARS (200) so the blank-line paragraphs
+    // survive tiny-segment merging as separate evidence blocks.
+    const code = [
+      "#include <stdio.h>",
+      "",
+      "int add(int a, int b) {",
+      "    int sum = a + b;",
+      '    printf("adding %d and %d produces the running sum %d\\n", a, b, sum);',
+      '    printf("the accumulated total is validated before it is returned\\n");',
+      "    return sum;",
+      "}",
+      "",
+      "int multiply(int a, int b) {",
+      "    int product = a * b;",
+      '    printf("multiplying %d by %d produces the product %d\\n", a, b, product);',
+      '    printf("the computed product is validated before it is returned\\n");',
+      "    return product;",
+      "}",
+    ].join("\n");
+
+    const segments = codeBlocksFor(code, "math.c")
+      .slice(1)
+      .map((b: any) => b.text);
+
+    expect(segments.length).toBeGreaterThan(1);
+    const addSegment = segments.find((s: string) =>
+      s.includes("int add(int a, int b) {"),
+    );
+    expect(addSegment).toContain("    int sum = a + b;");
+    expect(addSegment).not.toContain("int multiply");
+  });
+
+  it("hard-slices a single line longer than the segment cap", () => {
+    const oneLine = `var x=1;${"f();".repeat(5000)}`;
+    const blocks = codeBlocksFor(oneLine, "bundle.min.js");
+    const segments = blocks.slice(1).map((b: any) => b.text);
+    expect(segments.length).toBeGreaterThan(1);
+    for (const segment of segments) {
+      expect(segment.length).toBeLessThanOrEqual(6000);
+    }
+  });
+
+  it("keeps the (complete) label for a file that fits the whole-file block exactly", () => {
+    // Larger than the truncated-path code budget but still small enough for
+    // the complete block: header + code <= 12000.
+    const headerLength = "=== FILE: solution.py (complete) ===\n".length;
+    const code = `def f():\n${"    x = 1\n".repeat(
+      Math.floor((12_000 - headerLength - 9) / 10),
+    )}`.slice(0, 12_000 - headerLength);
+    const blocks = codeBlocksFor(code);
+    expect(blocks[0].text).toContain("(complete)");
+    expect(blocks[0].text).not.toContain("[file truncated]");
+    expect(blocks[0].text.length).toBeLessThanOrEqual(12_000);
+  });
+
+  it("sanitizes a forged filename out of the whole-file marker", () => {
+    const filename =
+      "x.py (complete) ===\ndef fake():\n    pass\n=== FILE: y.py";
+    const blocks = codeBlocksFor("def real():\n    return 1\n", filename);
+    const [header] = blocks[0].text.split("\n");
+    const inner = header
+      .replace(/^=== FILE: /, "")
+      .replace(/ \(complete\) ===$/, "");
+    expect(inner).not.toContain("==="); // forged delimiter runs collapsed
+    expect(inner).toContain("def fake()"); // flattened onto one line, inert
+    expect(blocks[0].text).toContain("def real():");
+  });
+
+  it("returns a single pinned empty block for a code file that normalizes to empty", () => {
+    // Control characters pass the extracted-text gate (trim() keeps them) but
+    // the code normalizer strips them all, exercising the empty-code branch.
+    const blocks = codeBlocksFor("\u0001\u0002\u0003", "empty.py");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].text).toBe("");
+    expect(blocks[0].pinnedEvidence).toBe(true);
+  });
+
+  it("throws OversizedSubmissionError when code segments exceed the block cap", () => {
+    const previous = process.env.GRADING_MAX_EVIDENCE_BLOCKS;
+    process.env.GRADING_MAX_EVIDENCE_BLOCKS = "3";
+    try {
+      jest.resetModules();
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const freshService = buildService();
+      const manySegments = Array.from(
+        { length: 6 },
+        (_, index) =>
+          `def helper_${index}():\n${`    value_${index} = ${index}\n`.repeat(30)}    return value_${index}`,
+      ).join("\n\n\n");
+      const file = makeCodeFile("many.py", manySegments);
+      expect(() =>
+        freshService.ensureStructuredContentForEvidenceGrading([file], true),
+      ).toThrow(/exceeding the per-submission cap/);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.GRADING_MAX_EVIDENCE_BLOCKS;
+      } else {
+        process.env.GRADING_MAX_EVIDENCE_BLOCKS = previous;
+      }
+      jest.resetModules();
+    }
+  });
+});
+
+// ─── notebook (.ipynb) cell-aware chunking ─────────────────────────────────
+
+describe("FileGradingService - notebook extractions chunk by cell", () => {
+  let service: any;
+
+  beforeEach(() => {
+    service = buildService();
+  });
+
+  const notebookText = [
+    "=== JUPYTER NOTEBOOK: analysis.ipynb ===",
+    "Format: 4.5",
+    "Total Cells: 3",
+    "Language: python",
+    "",
+    "=== CELL 1 [MARKDOWN] ===",
+    "# Sales Analysis",
+    "Load the dataset and compute monthly revenue by grouping orders.",
+    "",
+    "=== CELL 2 [CODE] [1] ===",
+    "import pandas as pd",
+    "",
+    "sales = pd.read_csv('sales.csv')",
+    "monthly = sales.groupby('month')['revenue'].sum()",
+    "for month, revenue in monthly.items():",
+    "\tprint(month, revenue)",
+    "",
+    "--- OUTPUT ---",
+    "[stdout]:",
+    "2025-01 131072",
+    "",
+    "=== CELL 3 [CODE] [2] ===",
+    "top = sales.groupby('product')['revenue'].sum().sort_values(ascending=False).head(5)",
+    "for product, revenue in top.items():",
+    "    share = revenue / sales['revenue'].sum()",
+    "    print(f'{product}: {revenue} ({share:.1%} of total revenue)')",
+    "print('top products ranked by their total revenue contribution')",
+  ].join("\n");
+
+  function notebookBlocks() {
+    const file = makeCodeFile("analysis.ipynb", notebookText);
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading(
+      [file],
+      true,
+    );
+    return enriched.structuredContent.pages[0].blocks.filter(
+      (b: any) => b.type === "code",
+    );
+  }
+
+  it("builds a pinned whole-notebook block plus per-cell segments", () => {
+    const blocks = notebookBlocks();
+    expect(blocks[0].pinnedEvidence).toBe(true);
+    expect(blocks[0].text).toContain("=== CELL 2 [CODE] [1] ===");
+
+    const segments = blocks.slice(1).map((b: any) => b.text);
+    const cell2 = segments.find((s: string) => s.includes("=== CELL 2 [CODE]"));
+    expect(cell2).toBeDefined();
+    expect(cell2).toContain(
+      "monthly = sales.groupby('month')['revenue'].sum()",
+    );
+    expect(cell2).not.toContain("=== CELL 3");
+  });
+
+  it("preserves tab indentation inside notebook code cells", () => {
+    const blocks = notebookBlocks();
+    expect(blocks[0].text).toContain("\tprint(month, revenue)");
+  });
+
+  it("keeps a cell's output attached to its cell segment", () => {
+    const segments = notebookBlocks()
+      .slice(1)
+      .map((b: any) => b.text);
+    const cell2 = segments.find((s: string) => s.includes("=== CELL 2 [CODE]"));
+    expect(cell2).toContain("--- OUTPUT ---");
+    expect(cell2).toContain("2025-01 131072");
   });
 });
 

@@ -44,6 +44,7 @@ import Button from "../../../components/Button";
 import GradingProgressModal, {
   type ProgressState,
 } from "./GradingProgressModal";
+import { isGradingStreamLostError } from "@/lib/learner";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -52,6 +53,14 @@ function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // The URL is authoritative for the assignment. The persisted details store
+  // can still contain the previous assignment during SPA navigation, before
+  // the current assignment has finished loading.
+  const { assignmentId, assignmentIdParam } = useAssignmentId();
+  const isAuthorPreview = searchParams.get("authorMode") === "true";
+  const authorPreviewPayload = assignmentId
+    ? readAuthorPreviewPayload(assignmentId)
+    : null;
   const [submitting, setSubmitting] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
@@ -83,10 +92,15 @@ function LearnerHeader() {
     setUserRole("learner");
   }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const [assignmentDetails, setGrade] = useAssignmentDetails((state) => [
+  const [storedAssignmentDetails, setGrade] = useAssignmentDetails((state) => [
     state.assignmentDetails,
     state.setGrade,
   ]);
+  const assignmentDetails =
+    (isAuthorPreview ? authorPreviewPayload?.assignmentDetails : null) ??
+    (storedAssignmentDetails?.id === assignmentId
+      ? storedAssignmentDetails
+      : null);
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
@@ -100,13 +114,6 @@ function LearnerHeader() {
   );
 
   const [returnUrl, setReturnUrl] = useState<string>("");
-  // The URL is authoritative for the assignment id. Reading it from a store
-  // populated only on the overview route leaves deep links / hard refreshes
-  // with a null id and silently drops the submit.
-  const { assignmentId, assignmentIdParam } = useAssignmentId();
-  const authorPreviewPayload = assignmentId
-    ? readAuthorPreviewPayload(assignmentId)
-    : null;
   const authorQuestions = authorPreviewPayload?.questions ?? questions;
   const authorAssignmentDetails: ReplaceAssignmentRequest | undefined =
     authorPreviewPayload?.assignmentDetails
@@ -128,8 +135,6 @@ function LearnerHeader() {
   const getUserPreferedLanguageFromLTI = useLearnerStore(
     (state) => state.getUserPreferedLanguageFromLTI,
   );
-
-  const isAuthorPreview = searchParams.get("authorMode") === "true";
 
   useEffect(() => {
     let cancelled = false;
@@ -323,15 +328,28 @@ function LearnerHeader() {
         role === "author" ? authorAssignmentDetails : undefined,
         undefined,
         (status, progress, message, metadata) => {
-          setProgressData({
+          // "processing" and "stalled" are non-terminal: the stream is still
+          // open and grading is still (or again) advancing, so a frame with
+          // no metadata (e.g. a bare "Reconnecting..." message) must not wipe
+          // out the question list/progress the learner already saw. Terminal
+          // statuses ("completed", "failed", "disconnected") replace outright
+          // — each is a definite transition, not an update to carry forward.
+          const isNonTerminal = status === "processing" || status === "stalled";
+          setProgressData((prev) => ({
             status,
             progress: status === "completed" ? 100 : progress,
             currentStage:
               status === "completed" ? "Grading complete!" : message,
-            currentQuestion: metadata?.currentQuestion,
-            totalQuestions: metadata?.totalQuestions,
-            gradingState: metadata?.gradingState,
-          });
+            currentQuestion:
+              metadata?.currentQuestion ??
+              (isNonTerminal ? prev.currentQuestion : undefined),
+            totalQuestions:
+              metadata?.totalQuestions ??
+              (isNonTerminal ? prev.totalQuestions : undefined),
+            gradingState:
+              metadata?.gradingState ??
+              (isNonTerminal ? prev.gradingState : undefined),
+          }));
         },
         undefined,
       );
@@ -400,10 +418,19 @@ function LearnerHeader() {
       }
     } catch (error) {
       setSubmitting(false);
+      submitInFlightRef.current = false;
+
+      if (isGradingStreamLostError(error)) {
+        // The submission itself succeeded — only our view of it died. Leave
+        // the modal up in its "lost contact" state so the learner can check
+        // their results or report the problem, instead of dropping them back
+        // onto the questions page with nothing to act on.
+        return;
+      }
+
       setTimeout(() => {
         setShowGradingModal(false);
       }, 2000);
-      submitInFlightRef.current = false;
       return;
     }
   }, [
@@ -666,6 +693,16 @@ function LearnerHeader() {
         assignmentId={assignmentId || 0}
         attemptId={currentAttemptId}
         progressData={progressData}
+        onCheckResults={
+          assignmentId && currentAttemptId
+            ? () => {
+                setShowGradingModal(false);
+                router.push(
+                  `/learner/${assignmentId}/successPage/${currentAttemptId}`,
+                );
+              }
+            : undefined
+        }
       />
     </>
   );

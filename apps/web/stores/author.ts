@@ -2509,10 +2509,10 @@ export const useAuthorStore = createWithEqualityFn<
                         assignment.numAttempts ||
                         assignmentConfigStore.numAttempts,
                       attemptsBeforeCoolDown:
-                        assignment.attemptsBeforeCoolDown ||
+                        assignment.attemptsBeforeCoolDown ??
                         assignmentConfigStore.attemptsBeforeCoolDown,
                       retakeAttemptCoolDownMinutes:
-                        assignment.retakeAttemptCoolDownMinutes ||
+                        assignment.retakeAttemptCoolDownMinutes ??
                         assignmentConfigStore.retakeAttemptCoolDownMinutes,
                       passingGrade:
                         assignment.passingGrade ||

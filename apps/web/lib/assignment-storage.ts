@@ -1,7 +1,11 @@
 import { extractAssignmentId } from "@/lib/strings";
 import { createSafeStorage, type SafeStorage } from "@/lib/safe-storage";
 
-type AssignmentStoreScope = "author" | "config" | "feedbackConfig";
+type AssignmentStoreScope =
+  | "author"
+  | "config"
+  | "feedbackConfig"
+  | "learnerDetails";
 
 function getAssignmentStoreName(pathname: string, scope: AssignmentStoreScope) {
   const assignmentId = extractAssignmentId(pathname);
@@ -15,7 +19,11 @@ function getAssignmentStoreName(pathname: string, scope: AssignmentStoreScope) {
     return `assignment-${assignmentId}-config`;
   }
 
-  return `assignmentFeedbackConfig-${assignmentId}`;
+  if (scope === "feedbackConfig") {
+    return `assignmentFeedbackConfig-${assignmentId}`;
+  }
+
+  return `assignment-${assignmentId}-learner-details`;
 }
 
 export function createAssignmentScopedStorage(

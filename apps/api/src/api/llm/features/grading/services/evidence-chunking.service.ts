@@ -49,10 +49,11 @@ export class EvidenceChunkingService {
           sourceId: submission.submissionId,
           anchor,
           metadata: {
-            filename: submission.submissionId,
+            filename: block.sourceFilename ?? submission.submissionId,
             pageCount: submission.metadata.pageCount,
             structured: true,
             checksum: submission.metadata.checksum,
+            ...(block.pinnedEvidence ? { pinned: true } : {}),
           },
         });
 

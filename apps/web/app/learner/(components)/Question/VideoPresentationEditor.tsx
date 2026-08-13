@@ -5,8 +5,9 @@ import {
   TranscriptSegment,
 } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
+import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { getFfmpeg } from "@/lib/ffmpeg-client";
 import JSZip from "jszip";
 import React, { useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
@@ -94,7 +95,6 @@ const extractAudio = async (ffmpeg: FFmpeg, videoBlob: Blob): Promise<Blob> => {
   }
 };
 
-const ffmpeg = new FFmpeg();
 
 interface VideoPresentationEditorProps {
   question: QuestionStore;
@@ -144,6 +144,7 @@ const VideoPresentationEditor = ({
 
   useEffect(() => {
     const load = async () => {
+      const ffmpeg = getFfmpeg();
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
           coreURL: await toBlobURL(
@@ -316,6 +317,7 @@ const VideoPresentationEditor = ({
     if (!videoFile) return;
     setProcessingTrim(true);
     setLimitError("");
+    const ffmpeg = getFfmpeg();
     try {
       await ensureFfmpegLoaded(ffmpeg);
 
@@ -350,6 +352,7 @@ const VideoPresentationEditor = ({
   };
 
   const generateTranscript = async (file: File) => {
+    const ffmpeg = getFfmpeg();
     try {
       setProcessingTranscript(true);
       await ensureFfmpegLoaded(ffmpeg);
