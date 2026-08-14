@@ -39,6 +39,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { applyQuestionOrder } from "../utils/question-order.util";
+import { resolveTrueFalseAnswer } from "../utils/true-false-answer.util";
 import { PrismaService } from "../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../helpers/sanitize-unicode";
 import { sanitizeForLog } from "../../../logger/sanitize";
@@ -2799,7 +2800,13 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         this.getLocalizedString("invalidTrueFalse", language),
       );
     }
-    const correctAnswer = question.choices[0].isCorrect;
+    const resolved = resolveTrueFalseAnswer(question.choices);
+    if (!resolved) {
+      throw new BadRequestException(
+        this.getLocalizedString("invalidTrueFalse", language),
+      );
+    }
+    const { correctAnswer, correctPoints } = resolved;
     const isCorrect = learnerChoice === correctAnswer;
     const feedback = isCorrect
       ? this.getLocalizedString("correctTF", language)
@@ -2808,10 +2815,6 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             ? this.getLocalizedString("true", language)
             : this.getLocalizedString("false", language),
         });
-    const correctPoints =
-      question.choices && question.choices[0]
-        ? question.choices[0].points || 0
-        : 0;
     const pointsAwarded = isCorrect ? correctPoints : 0;
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();

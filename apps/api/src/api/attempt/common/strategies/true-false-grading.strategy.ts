@@ -12,6 +12,7 @@ import {
   Choice,
   QuestionDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { resolveTrueFalseAnswer } from "src/api/assignment/utils/true-false-answer.util";
 import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
@@ -105,12 +106,8 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     const choices: Choice[] = Array.isArray(question.choices)
       ? question.choices
       : (JSON.parse(question.choices as unknown as string) as Choice[]);
-    const choiceValue = choices[0]?.choice;
-    const correctAnswer =
-      typeof choiceValue === "string"
-        ? choiceValue.trim().toLowerCase() === "true"
-        : false;
-    if (correctAnswer === undefined) {
+    const resolved = resolveTrueFalseAnswer(choices);
+    if (!resolved) {
       throw new BadRequestException(
         this.localizationService.getLocalizedString(
           "missingCorrectAnswer",
@@ -118,6 +115,7 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
         ),
       );
     }
+    const { correctAnswer } = resolved;
     const isCorrect = learnerResponse === correctAnswer;
 
     const feedback = isCorrect
@@ -141,7 +139,7 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
           },
         );
 
-    const correctPoints = question.totalPoints || question.choices[0].points;
+    const correctPoints = question.totalPoints || resolved.correctPoints;
     const pointsAwarded = isCorrect ? correctPoints : 0;
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
