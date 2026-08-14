@@ -855,18 +855,14 @@ export class AttemptSubmissionService {
 
     this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
 
-    // When clamping reduced the total, recompute the grade the learner sees.
-    // Read assignmentAttempt.grade after applyVisibilitySettings: that call
-    // sets it to null when showAssignmentScore=false, which must be respected
-    // even when clamping occurred. The persisted grade and the LTI passback
-    // are intentionally left untouched — correcting those is a separate
-    // re-grade, not a display fix.
+    // Same clamped value as preVisibilityGrade, except that
+    // applyVisibilitySettings has since nulled assignmentAttempt.grade when
+    // showAssignmentScore=false — which must be respected even when clamping
+    // occurred. The persisted grade and the LTI passback are intentionally
+    // left untouched — correcting those is a separate re-grade, not a display
+    // fix.
     const displayGrade =
-      totalPointsEarned < rawPointsEarned &&
-      totalPossiblePoints > 0 &&
-      assignmentAttempt.grade !== null
-        ? totalPointsEarned / totalPossiblePoints
-        : assignmentAttempt.grade;
+      assignmentAttempt.grade === null ? null : preVisibilityGrade;
 
     return {
       ...assignmentAttempt,
@@ -966,7 +962,6 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestions: true,
         showQuestionScore: true,
-        showPassFailIndicator: true,
         updatedAt: true,
         currentVersionId: true,
         currentVersion: {
@@ -983,7 +978,6 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: boolean;
       showQuestions: boolean;
       showQuestionScore: boolean;
-      showPassFailIndicator: boolean;
       updatedAt: Date;
       currentVersionId: number | null;
       currentVersion: {
@@ -1073,20 +1067,22 @@ export class AttemptSubmissionService {
       assignment.currentVersionId !== null &&
       assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
 
+    // No pass/fail verdict here on purpose. This route serves the in-progress
+    // attempt, so it has none of the clamping the completed route applies to
+    // historically over-scored responses; deriving `passed` from the raw
+    // persisted grade would contradict the verdict the learner is shown on the
+    // success page. Pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      // The spread carries the persisted grade, which must not reach a learner
+      // whose assignment hides the score.
+      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
-      showPassFailIndicator: assignment.showPassFailIndicator,
-      passed: resolvePassedIndicator(
-        assignment.showPassFailIndicator,
-        assignmentAttempt.grade,
-        assignment.passingGrade,
-      ),
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       currentVersionId: assignment.currentVersionId,

@@ -1524,8 +1524,14 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       }
     }
 
+    // No pass/fail verdict here on purpose — see the v2 twin in
+    // attempt-submission.service.ts. This route serves the in-progress
+    // attempt; pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      // The spread carries the persisted grade, which must not reach a learner
+      // whose assignment hides the score.
+      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions.map((question) => ({
         ...question,
         choices:
@@ -1538,12 +1544,6 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
-      showPassFailIndicator: assignment.showPassFailIndicator,
-      passed: resolvePassedIndicator(
-        assignment.showPassFailIndicator,
-        assignmentAttempt.grade,
-        assignment.passingGrade,
-      ),
       correctAnswerVisibility,
       questionControls,
       assignmentDetails: {

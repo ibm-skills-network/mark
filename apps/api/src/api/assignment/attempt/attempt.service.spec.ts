@@ -671,6 +671,56 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
         NotFoundException,
       );
     });
+
+    it("returns the grade when the assignment shows the score", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue(baseAssignment);
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.grade).toBe(0.9);
+    });
+
+    // The attempt row is spread into the response, so the persisted grade
+    // reaches the learner unless it is explicitly overridden.
+    it("withholds the grade when the assignment hides the score", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        showAssignmentScore: false,
+      });
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.grade).toBeNull();
+      expect(result.showAssignmentScore).toBe(false);
+    });
+
+    // Pass/fail lives on the completed and submit responses, which apply the
+    // over-scoring clamp this route does not.
+    it("carries no pass/fail verdict", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        showPassFailIndicator: true,
+      });
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.passed).toBeUndefined();
+    });
   });
 
   describe("getAssignmentContext - v1 URL context enrichment", () => {

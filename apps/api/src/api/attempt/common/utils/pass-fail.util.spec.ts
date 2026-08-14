@@ -26,6 +26,20 @@ describe("resolvePassedIndicator", () => {
     expect(resolvePassedIndicator(true, 0.5, 50)).toBe(true);
   });
 
+  // 0.29 * 100 is 28.999999999999996, so scaling the grade up instead of the
+  // threshold down fails a learner who scored exactly the passing grade.
+  it("passes at boundaries that are not exact in binary floating point", () => {
+    expect(resolvePassedIndicator(true, 29 / 100, 29)).toBe(true);
+    expect(resolvePassedIndicator(true, 58 / 200, 29)).toBe(true);
+    expect(resolvePassedIndicator(true, 57 / 100, 57)).toBe(true);
+    expect(resolvePassedIndicator(true, 29 / 50, 58)).toBe(true);
+  });
+
+  it("still fails a grade one point below an inexact boundary", () => {
+    expect(resolvePassedIndicator(true, 28 / 100, 29)).toBe(false);
+    expect(resolvePassedIndicator(true, 56 / 100, 57)).toBe(false);
+  });
+
   it("defaults the passing grade to 50 when unset", () => {
     expect(resolvePassedIndicator(true, 0.5, null)).toBe(true);
     expect(resolvePassedIndicator(true, 0.49, undefined)).toBe(false);

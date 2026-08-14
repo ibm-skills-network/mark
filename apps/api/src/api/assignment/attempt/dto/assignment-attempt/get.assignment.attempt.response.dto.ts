@@ -100,13 +100,13 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   showQuestionScore: boolean;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      "Tell the learner whether they passed, even when the score is hidden",
+      "Tell the learner whether they passed, even when the score is hidden. Absent on the in-progress attempt route, which carries no pass/fail verdict.",
     type: Boolean,
-    required: false,
   })
-  showPassFailIndicator: boolean;
+  @Optional()
+  showPassFailIndicator?: boolean;
 
   @ApiPropertyOptional({
     description:

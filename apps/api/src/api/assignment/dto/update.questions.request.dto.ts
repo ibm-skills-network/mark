@@ -590,7 +590,7 @@ export class UpdateAssignmentQuestionsDto {
   })
   @IsOptional()
   @IsBoolean()
-  showPassFailIndicator: boolean;
+  showPassFailIndicator?: boolean;
 
   @ApiProperty({
     description:

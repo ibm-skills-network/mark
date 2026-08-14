@@ -238,7 +238,7 @@ export class UpdateAssignmentRequestDto {
   })
   @IsOptional()
   @IsBoolean()
-  showPassFailIndicator: boolean;
+  showPassFailIndicator?: boolean;
 
   @ApiProperty({
     description: "When should correct answers be shown to learners",

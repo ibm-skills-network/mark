@@ -333,6 +333,10 @@ function SuccessPage() {
     attemptId,
     zustandQuestions,
     zustandGrade,
+    // setGrade and setPassed are separate store writes, so an effect run
+    // triggered by zustandGrade would otherwise close over the previous
+    // attempt's verdict.
+    zustandPassed,
     zustandTotalPointsEarned,
     zustandTotalPoints,
     zustandAssignmentDetails,

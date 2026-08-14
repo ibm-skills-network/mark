@@ -260,11 +260,6 @@ class FeedbackConfigDto {
   @IsBoolean()
   showQuestionScore: boolean;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsBoolean()
-  showPassFailIndicator?: boolean;
-
   @ApiProperty()
   @IsBoolean()
   showAssignmentScore: boolean;
