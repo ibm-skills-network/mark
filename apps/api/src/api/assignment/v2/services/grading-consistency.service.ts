@@ -20,6 +20,8 @@ interface GradingRecord {
   feedback: string;
   rubricScores?: RubricScore[];
   timestamp: Date;
+  /** Grading model identity that produced this grade, when known. */
+  modelIdentity?: string;
 }
 
 interface ConsistencyCheck {
@@ -46,6 +48,11 @@ interface ParsedResponsePayload {
   totalPoints?: number;
   maxPoints?: number;
   feedback?: unknown;
+  [key: string]: unknown;
+}
+
+interface ParsedAuditMetadata {
+  modelSnapshot?: string;
   [key: string]: unknown;
 }
 
@@ -115,9 +122,10 @@ export class GradingConsistencyService implements OnModuleDestroy {
     responseHash: string,
     currentResponse: string,
     questionType: QuestionType,
+    modelIdentity?: string,
   ): Promise<ConsistencyCheck> {
     try {
-      const cacheKey = `q_${questionId}`;
+      const cacheKey = this.buildCacheKey(questionId, modelIdentity);
       const cachedRecords = this.gradingCache.get(cacheKey) || [];
 
       for (const record of cachedRecords) {
@@ -145,6 +153,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
           id: true,
           requestPayload: true,
           responsePayload: true,
+          metadata: true,
           timestamp: true,
         },
       });
@@ -159,6 +168,21 @@ export class GradingConsistencyService implements OnModuleDestroy {
           );
 
           if (!requestData || !responseData) continue;
+
+          // A grade is only reusable if the same grader produced it. Reusing
+          // across models silently serves the previous model's judgement under
+          // the new model's name, which no cache-identity elsewhere can undo
+          // and which makes a model A/B measure the model it replaced.
+          // Records predating model tracking carry no snapshot and are treated
+          // as not reusable rather than assumed to match.
+          if (modelIdentity) {
+            const auditMetadata = this.safeJsonParse<ParsedAuditMetadata>(
+              grading.metadata ?? "",
+            );
+            if (auditMetadata?.modelSnapshot !== modelIdentity) {
+              continue;
+            }
+          }
 
           const previousResponse =
             requestData.learnerTextResponse ||
@@ -204,6 +228,17 @@ export class GradingConsistencyService implements OnModuleDestroy {
   }
 
   /**
+   * In-memory reuse is partitioned by grading model for the same reason the
+   * persistent lookup filters on it: entries written by one model must not be
+   * served once the feature is routed to another.
+   */
+  private buildCacheKey(questionId: number, modelIdentity?: string): string {
+    return modelIdentity
+      ? `q_${questionId}::${modelIdentity}`
+      : `q_${questionId}`;
+  }
+
+  /**
    * Record a grading for future consistency checks
    */
   async recordGrading(
@@ -213,6 +248,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
     maxPoints: number,
     feedback: string,
     rubricScores?: RubricScore[],
+    modelIdentity?: string,
   ): Promise<void> {
     try {
       const record: GradingRecord = {
@@ -223,9 +259,13 @@ export class GradingConsistencyService implements OnModuleDestroy {
         feedback,
         rubricScores,
         timestamp: new Date(),
+        modelIdentity,
       };
 
-      await this.atomicCacheUpdate(`q_${questionId}`, record);
+      await this.atomicCacheUpdate(
+        this.buildCacheKey(questionId, modelIdentity),
+        record,
+      );
     } catch (error) {
       this.logger.error("Error recording grading:", error);
     }
