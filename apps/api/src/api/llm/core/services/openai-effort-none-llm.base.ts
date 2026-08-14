@@ -11,6 +11,7 @@ import {
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 import { invokeStructuredChatModel } from "./structured-output.util";
 import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
+import { explicitPromptCacheKwargs } from "../utils/prompt-cache.util";
 
 /**
  * Shared base for OpenAI providers pinned to `reasoning_effort: "none"`.
@@ -25,6 +26,12 @@ export abstract class EffortNoneOpenAiLlmService
   private static readonly FALLBACK_IMAGE_TOKENS = 200;
   protected readonly logger: Logger;
   abstract readonly key: string;
+
+  /**
+   * Off by default. GPT-5.4 shares this base and rejects the explicit-cache
+   * parameters with a 400, so only the GPT-5.6 subclasses opt in.
+   */
+  readonly supportsExplicitPromptCache: boolean = false;
 
   protected constructor(
     private readonly modelName: string,
@@ -45,6 +52,9 @@ export abstract class EffortNoneOpenAiLlmService
       modelKwargs: {
         reasoning_effort: "none",
         ...safetyIdentifierKwargs(options),
+        ...(this.supportsExplicitPromptCache
+          ? explicitPromptCacheKwargs(options)
+          : {}),
       },
       maxCompletionTokens: options?.maxTokens ?? 4096,
       timeout: options?.timeoutMs,

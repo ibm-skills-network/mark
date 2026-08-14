@@ -20,6 +20,9 @@ import { EffortNoneOpenAiLlmService } from "./openai-effort-none-llm.base";
 export class Gpt56LunaLlmService extends EffortNoneOpenAiLlmService {
   static readonly MODEL = "gpt-5.6-luna";
   readonly key = Gpt56LunaLlmService.MODEL;
+  // GPT-5.6 caches only at explicit breakpoints; earlier models 400 on the
+  // parameters that enable them.
+  readonly supportsExplicitPromptCache = true;
 
   constructor(
     @Inject(TOKEN_COUNTER) tokenCounter: ITokenCounter,
@@ -33,6 +36,9 @@ export class Gpt56LunaLlmService extends EffortNoneOpenAiLlmService {
 export class Gpt56TerraLlmService extends EffortNoneOpenAiLlmService {
   static readonly MODEL = "gpt-5.6-terra";
   readonly key = Gpt56TerraLlmService.MODEL;
+  // GPT-5.6 caches only at explicit breakpoints; earlier models 400 on the
+  // parameters that enable them.
+  readonly supportsExplicitPromptCache = true;
 
   constructor(
     @Inject(TOKEN_COUNTER) tokenCounter: ITokenCounter,
@@ -46,6 +52,9 @@ export class Gpt56TerraLlmService extends EffortNoneOpenAiLlmService {
 export class Gpt56SolLlmService extends EffortNoneOpenAiLlmService {
   static readonly MODEL = "gpt-5.6-sol";
   readonly key = Gpt56SolLlmService.MODEL;
+  // GPT-5.6 caches only at explicit breakpoints; earlier models 400 on the
+  // parameters that enable them.
+  readonly supportsExplicitPromptCache = true;
 
   constructor(
     @Inject(TOKEN_COUNTER) tokenCounter: ITokenCounter,
