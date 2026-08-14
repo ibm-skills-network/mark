@@ -88,7 +88,11 @@ export abstract class EffortNoneOpenAiLlmService
     const result = await this.createChatModel(options).invoke(messages);
     const content = result.content.toString();
     const usage = result.usage_metadata as
-      | { input_tokens?: unknown; output_tokens?: unknown }
+      | {
+          input_tokens?: unknown;
+          output_tokens?: unknown;
+          input_token_details?: { cache_read?: unknown };
+        }
       | undefined;
     const inputTokens =
       typeof usage?.input_tokens === "number"
@@ -98,12 +102,14 @@ export abstract class EffortNoneOpenAiLlmService
       typeof usage?.output_tokens === "number"
         ? usage.output_tokens
         : this.tokenCounter.countTokens(content);
+    const cacheRead = usage?.input_token_details?.cache_read;
 
     return {
       content,
       tokenUsage: {
         input: inputTokens,
         output: outputTokens,
+        ...(typeof cacheRead === "number" ? { cachedInput: cacheRead } : {}),
       },
     };
   }

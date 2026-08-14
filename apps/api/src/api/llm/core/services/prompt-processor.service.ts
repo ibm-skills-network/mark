@@ -151,7 +151,13 @@ export class PromptProcessorService implements IPromptProcessor {
         purpose: featureKey,
         prompt: input,
         response: JSON.stringify(parsed),
-        context: { assignment_id: assignmentId, usage_type: usageType },
+        context: {
+          assignment_id: assignmentId,
+          usage_type: usageType,
+          input_tokens: tokenUsage.input,
+          output_tokens: tokenUsage.output,
+          cached_input_tokens: tokenUsage.cachedInput,
+        },
       });
       await this.trackUsageSafely(
         assignmentId,
@@ -204,7 +210,13 @@ export class PromptProcessorService implements IPromptProcessor {
         purpose: "structured_prompt",
         prompt: input,
         response: JSON.stringify(parsed),
-        context: { assignment_id: assignmentId, usage_type: usageType },
+        context: {
+          assignment_id: assignmentId,
+          usage_type: usageType,
+          input_tokens: tokenUsage.input,
+          output_tokens: tokenUsage.output,
+          cached_input_tokens: tokenUsage.cachedInput,
+        },
       });
       await this.trackUsageSafely(
         assignmentId,
@@ -357,7 +369,13 @@ export class PromptProcessorService implements IPromptProcessor {
       purpose: purposeLabel ?? usageType,
       prompt: input,
       response,
-      context: { assignment_id: assignmentId, usage_type: usageType },
+      context: {
+        assignment_id: assignmentId,
+        usage_type: usageType,
+        input_tokens: result.tokenUsage?.input,
+        output_tokens: result.tokenUsage?.output,
+        cached_input_tokens: result.tokenUsage?.cachedInput,
+      },
     });
 
     await this.trackUsageSafely(
@@ -429,7 +447,13 @@ export class PromptProcessorService implements IPromptProcessor {
         purpose: usageType,
         prompt: `${textContent} [image omitted]`,
         response,
-        context: { assignment_id: assignmentId, usage_type: usageType },
+        context: {
+          assignment_id: assignmentId,
+          usage_type: usageType,
+          input_tokens: result.tokenUsage?.input,
+          output_tokens: result.tokenUsage?.output,
+          cached_input_tokens: result.tokenUsage?.cachedInput,
+        },
       });
 
       await this.trackUsageSafely(

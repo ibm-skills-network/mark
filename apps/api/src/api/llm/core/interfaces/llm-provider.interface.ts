@@ -56,20 +56,25 @@ export interface PromptCacheSpec {
   key: string;
 }
 
+export interface TokenUsage {
+  input: number;
+  output: number;
+  /**
+   * Portion of `input` served from the provider's prompt cache. Set only when
+   * the provider reports it, so 0 means a genuine miss on a model that does
+   * report — absent means the provider gave no cache detail at all.
+   */
+  cachedInput?: number;
+}
+
 export interface LlmResponse {
   content: string;
-  tokenUsage: {
-    input: number;
-    output: number;
-  };
+  tokenUsage: TokenUsage;
 }
 
 export interface LlmStructuredResponse<T> {
   parsed: T;
-  tokenUsage: {
-    input: number;
-    output: number;
-  };
+  tokenUsage: TokenUsage;
 }
 
 export interface ILlmProvider {

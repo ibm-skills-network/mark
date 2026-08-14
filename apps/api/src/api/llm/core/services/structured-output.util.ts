@@ -219,7 +219,11 @@ export async function invokeStructuredChatModel<T>(
   try {
     const result = (await structuredModel.invoke(messages)) as {
       raw: {
-        usage_metadata?: { input_tokens?: number; output_tokens?: number };
+        usage_metadata?: {
+          input_tokens?: number;
+          output_tokens?: number;
+          input_token_details?: { cache_read?: number };
+        };
       };
       parsed: T | null | undefined;
     };
@@ -239,17 +243,22 @@ export async function invokeStructuredChatModel<T>(
     const inputUsed = usage?.input_tokens ?? inputTokens;
     const outputUsed =
       usage?.output_tokens ?? tokenCounter.countTokens(JSON.stringify(parsed));
+    // `usage_metadata.input_token_details.cache_read` is the only field this
+    // value appears on for structured invocations; `response_metadata.
+    // tokenUsage.prompt_tokens_details` is undefined on this path.
+    const cachedInput = usage?.input_token_details?.cache_read;
 
     logger.info("openai.invokeStructured.complete", {
       model_name: modelName,
       input_tokens: inputUsed,
       output_tokens: outputUsed,
+      cached_input_tokens: cachedInput,
       duration_ms: Date.now() - start,
     });
 
     return {
       parsed,
-      tokenUsage: { input: inputUsed, output: outputUsed },
+      tokenUsage: { input: inputUsed, output: outputUsed, cachedInput },
     };
   } catch (error) {
     logger.error("openai.invokeStructured.failed", {
