@@ -43,8 +43,20 @@ export class CriterionJudgeService {
     const parser = StructuredOutputParser.fromZodSchema(JudgeCritiqueSchema);
     const formatInstructions = parser.getFormatInstructions();
 
+    // Question and rubric are fixed for a submission while the grader outputs
+    // change between judge passes, so they lead and the varying blocks trail.
+    // See the ordering note in criterion-grading.service.ts.
     const prompt = new PromptTemplate({
       template: `You are a grading judge. Review rubric criteria, grader outputs, and evidence citations.
+
+CHECKS:
+- Evidence quality (anchored, relevant, not hallucinated).
+- Rationale consistency with evidence and rubric.
+- Score alignment with rubric points.
+
+Return issues per criterionId if any.
+
+{format_instructions}
 
 QUESTION:
 {question}
@@ -56,16 +68,7 @@ CRITERION OUTPUTS:
 {outputs}
 
 EVIDENCE SUMMARY:
-{evidence}
-
-CHECKS:
-- Evidence quality (anchored, relevant, not hallucinated).
-- Rationale consistency with evidence and rubric.
-- Score alignment with rubric points.
-
-Return issues per criterionId if any.
-
-{format_instructions}`,
+{evidence}`,
       inputVariables: [],
       partialVariables: {
         question: () => request.question,
