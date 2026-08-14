@@ -228,6 +228,11 @@ class AssignmentConfigDto {
   @IsBoolean()
   showQuestionScore: boolean;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  showPassFailIndicator?: boolean;
+
   @ApiProperty({ enum: CorrectAnswerVisibility })
   @IsEnum(CorrectAnswerVisibility)
   correctAnswerVisibility: CorrectAnswerVisibility;
@@ -254,6 +259,11 @@ class FeedbackConfigDto {
   @ApiProperty()
   @IsBoolean()
   showQuestionScore: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  showPassFailIndicator?: boolean;
 
   @ApiProperty()
   @IsBoolean()

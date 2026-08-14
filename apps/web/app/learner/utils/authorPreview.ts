@@ -70,6 +70,7 @@ export function buildAuthorPreviewPayload(
       showQuestions: assignment.showQuestions,
       showAssignmentScore: assignment.showAssignmentScore,
       showQuestionScore: assignment.showQuestionScore,
+      showPassFailIndicator: assignment.showPassFailIndicator,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       correctAnswerVisibility: assignment.correctAnswerVisibility,
       questionControls: assignment.questionControls,

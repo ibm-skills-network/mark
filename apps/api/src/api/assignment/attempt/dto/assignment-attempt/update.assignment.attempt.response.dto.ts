@@ -44,6 +44,23 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
   showQuestions: boolean;
 
   @ApiProperty({
+    description:
+      "Tell the learner whether they passed, even when the score is hidden",
+    type: Boolean,
+    required: false,
+  })
+  showPassFailIndicator?: boolean;
+
+  @ApiProperty({
+    description:
+      "Whether the attempt met the passing grade. Only present when showPassFailIndicator is enabled and the attempt has a grade; computed server-side so the score itself stays hidden.",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  passed?: boolean;
+
+  @ApiProperty({
     description: "Show correct answer",
     type: Boolean,
     required: false,

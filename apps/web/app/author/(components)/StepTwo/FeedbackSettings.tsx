@@ -163,11 +163,13 @@ const SettingsContainer: React.FC = () => {
     toggleShowSubmissionFeedback,
     toggleShowQuestionScore,
     toggleShowQuestions,
+    toggleShowPassFailIndicator,
     setCorrectAnswerVisibility,
     showAssignmentScore,
     showSubmissionFeedback,
     showQuestionScore,
     showQuestions,
+    showPassFailIndicator,
     correctAnswerVisibility,
   } = useAssignmentFeedbackConfig();
 
@@ -197,6 +199,13 @@ const SettingsContainer: React.FC = () => {
         "The questions will be visible to the learner after submission",
       value: showQuestions,
       toggleValue: toggleShowQuestions,
+    },
+    {
+      title: "Pass/fail result",
+      description:
+        "The learner will be told whether they passed, even when scores are hidden.",
+      value: showPassFailIndicator,
+      toggleValue: toggleShowPassFailIndicator,
     },
   ] as const;
   return (

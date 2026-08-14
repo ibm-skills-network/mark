@@ -2012,6 +2012,10 @@ export const useAuthorStore = createWithEqualityFn<
                 versionData.showQuestionScore !== undefined
                   ? versionData.showQuestionScore
                   : feedbackConfigState.showQuestionScore,
+              showPassFailIndicator:
+                versionData.showPassFailIndicator !== undefined
+                  ? versionData.showPassFailIndicator
+                  : feedbackConfigState.showPassFailIndicator,
               showSubmissionFeedback:
                 versionData.showSubmissionFeedback !== undefined
                   ? versionData.showSubmissionFeedback
@@ -2216,6 +2220,7 @@ export const useAuthorStore = createWithEqualityFn<
                   showSubmissionFeedback: feedbackData.showSubmissionFeedback,
                   showQuestions: feedbackData.showQuestions,
                   showQuestionScore: feedbackData.showQuestionScore,
+                  showPassFailIndicator: feedbackData.showPassFailIndicator,
                   showAssignmentScore: feedbackData.showAssignmentScore,
                   requireAllQuestions: configData.requireAllQuestions,
                   optionalQuestionIds: configData.optionalQuestionIds,
@@ -2347,6 +2352,7 @@ export const useAuthorStore = createWithEqualityFn<
 
                 showAssignmentScore: feedbackConfig.showAssignmentScore,
                 showQuestionScore: feedbackConfig.showQuestionScore,
+                showPassFailIndicator: feedbackConfig.showPassFailIndicator,
                 showSubmissionFeedback: feedbackConfig.showSubmissionFeedback,
                 showQuestions: feedbackConfig.showQuestions,
                 requireAllQuestions: assignmentConfig.requireAllQuestions,
@@ -2564,6 +2570,10 @@ export const useAuthorStore = createWithEqualityFn<
                         assignment.showQuestionScore !== undefined
                           ? assignment.showQuestionScore
                           : feedbackConfigStore.showQuestionScore,
+                      showPassFailIndicator:
+                        assignment.showPassFailIndicator !== undefined
+                          ? assignment.showPassFailIndicator
+                          : feedbackConfigStore.showPassFailIndicator,
                       showAssignmentScore:
                         assignment.showAssignmentScore !== undefined
                           ? assignment.showAssignmentScore

@@ -43,6 +43,7 @@ const FIELDS = [
   "showQuestionScore",
   "showSubmissionFeedback",
   "showQuestions",
+  "showPassFailIndicator",
   "correctAnswerVisibility",
   "questionControls",
   "requireAllQuestions",
@@ -64,6 +65,7 @@ const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
+  showPassFailIndicator: false,
   requireAllQuestions: false,
   optionalQuestionIds: [],
 };

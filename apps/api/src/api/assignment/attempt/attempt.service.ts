@@ -27,6 +27,7 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
+import { resolvePassedIndicator } from "src/api/attempt/common/utils/pass-fail.util";
 import { LtiGradeSyncService } from "src/api/attempt/services/lti-grade-sync.service";
 import { GradingKillSwitchService } from "src/api/ai-feature-flags/grading-kill-switch.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
@@ -729,6 +730,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
+        passingGrade: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -805,6 +808,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         totalPointsEarned,
         totalPossiblePoints,
         grade: assignment.showAssignmentScore ? grade : undefined,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
         correctAnswerVisibility:
@@ -832,6 +841,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         totalPossiblePoints,
         showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          result.grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -922,6 +937,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         questionControls: true,
         currentVersion: {
           select: {
@@ -1007,6 +1023,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((qId) => questionsWithResponses.find((q) => q.id === qId))
       .filter(Boolean);
 
+    // Captured before the visibility filtering deletes the grade: the
+    // pass/fail indicator must stay computable when the score is hidden.
+    const preVisibilityGrade = assignmentAttempt.grade;
     if (assignment.showAssignmentScore === false) {
       delete assignmentAttempt.grade;
     }
@@ -1138,6 +1157,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
+      showPassFailIndicator: assignment.showPassFailIndicator,
+      passed: resolvePassedIndicator(
+        assignment.showPassFailIndicator,
+        preVisibilityGrade,
+        assignment.passingGrade,
+      ),
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
@@ -1222,6 +1247,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         questionControls: true,
         updatedAt: true,
         currentVersion: {
@@ -1512,6 +1538,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
       showQuestions: assignment.showQuestions,
+      showPassFailIndicator: assignment.showPassFailIndicator,
+      passed: resolvePassedIndicator(
+        assignment.showPassFailIndicator,
+        assignmentAttempt.grade,
+        assignment.passingGrade,
+      ),
       correctAnswerVisibility,
       questionControls,
       assignmentDetails: {
@@ -1539,6 +1571,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showQuestionScore: assignment.showQuestionScore,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator: assignment.showPassFailIndicator,
         correctAnswerVisibility,
         questionControls,
         updatedAt: assignment.updatedAt,

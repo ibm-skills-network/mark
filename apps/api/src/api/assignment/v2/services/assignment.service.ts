@@ -461,6 +461,7 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         published: updateDto.published,
         showAssignmentScore: updateDto.showAssignmentScore,
         showQuestionScore: updateDto.showQuestionScore,
+        showPassFailIndicator: updateDto.showPassFailIndicator,
         showSubmissionFeedback: updateDto.showSubmissionFeedback,
         correctAnswerVisibility: updateDto.correctAnswerVisibility,
         timeEstimateMinutes: updateDto.timeEstimateMinutes,
