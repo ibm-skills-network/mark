@@ -23,8 +23,26 @@ export function isJupyterNotebookFilename(filename?: string | null): boolean {
   return filename.toLowerCase().endsWith(".ipynb");
 }
 
+/**
+ * Xcode project manifests (project.pbxproj) are the proof that a submission
+ * is a real Xcode project, which rubrics ask about directly. Like notebooks
+ * they stay out of SOURCE_CODE_EXTENSION_REGEX (they must not affect route
+ * decisions), but they need code-like handling everywhere text is chunked or
+ * quoted: the facts a grader needs (target and product names) sit mid-file,
+ * past prose-quote caps. Oversized manifests are still dropped by the
+ * archive per-entry byte limit before this ever applies.
+ */
+export function isProjectManifestFilename(filename?: string | null): boolean {
+  if (!filename) return false;
+  return filename.toLowerCase().endsWith(".pbxproj");
+}
+
 export function isCodeLikeFilename(filename?: string | null): boolean {
-  return isSourceCodeFilename(filename) || isJupyterNotebookFilename(filename);
+  return (
+    isSourceCodeFilename(filename) ||
+    isJupyterNotebookFilename(filename) ||
+    isProjectManifestFilename(filename)
+  );
 }
 
 /**

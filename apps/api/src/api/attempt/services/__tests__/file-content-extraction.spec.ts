@@ -1561,4 +1561,21 @@ describe("FileContentExtractionService.extractArchiveContent source files", () =
     expect(result.text).toContain("=== ARCHIVE:");
     expect(result.text).toContain("--- FILE LISTING ---");
   });
+
+  it("extracts project.pbxproj content at the code-sized cap, not the text cap", async () => {
+    const result = await extract();
+    const text: string = result.extractedText;
+    expect(text).toContain(
+      "--- CONTENT: SmartTravelJournal/SmartTravelJournal.xcodeproj/project.pbxproj ---",
+    );
+    // Sits ~8.5KB into the manifest: only the code cap reaches it, and it is
+    // the fact a "valid Xcode project" rubric needs to see.
+    expect(text).toContain("com.apple.product-type.application");
+
+    const manifest = result.archiveEntries.find((e: { path: string }) =>
+      e.path.endsWith("project.pbxproj"),
+    );
+    expect(manifest).toBeDefined();
+    expect(manifest.truncated).toBe(false);
+  });
 });
