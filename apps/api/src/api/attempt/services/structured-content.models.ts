@@ -72,6 +72,12 @@ export interface ContentBlock {
 
   imageData?: string;
   imageDescription?: string;
+  /**
+   * Content digest of the image bytes. Two blocks carrying the same picture
+   * share a hash, so the vision step can describe it once and reuse the result
+   * (notebooks re-run cells constantly and emit the identical plot each time).
+   */
+  imageHash?: string;
   imageMetadata?: {
     width: number;
     height: number;

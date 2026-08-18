@@ -62,6 +62,7 @@ import {
   CODE_SEGMENT_MAX_CHARS,
   CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
   isCodeLikeFilename,
+  isJupyterNotebookFilename,
   isSourceCodeFilename,
   sanitizeFilenameForMarker,
 } from "./source-code.utils";
@@ -1372,6 +1373,17 @@ export class FileGradingService implements IFileGradingService {
     // includeCodeUploads branch in ensureStructuredContentForEvidenceGrading.
     if (this.isSourceCodeFile(file)) {
       return false;
+    }
+
+    // Notebook extraction now emits its own structuredContent (cell blocks plus
+    // image blocks carrying plot data). Honouring it here would skip the code
+    // policy this service applies — cell segmentation, tiny-segment merging,
+    // the pinned whole-file block — so notebooks keep rebuilding from text
+    // until that policy can be applied to extraction-supplied blocks. Until
+    // then the image blocks are carried but unused.
+    // See docs/handoff-notebook-grading.md, increment 1.
+    if (isJupyterNotebookFilename(file.filename)) {
+      return this.hasExtractedSubmissionText(file);
     }
 
     return !file.structuredContent && this.hasExtractedSubmissionText(file);
