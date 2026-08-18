@@ -59,7 +59,10 @@ import {
   AttemptQuestionsMapper,
   EnhancedAttemptQuestionDto,
 } from "../common/utils/attempt-questions-mapper.util";
-import { resolvePassedIndicator } from "../common/utils/pass-fail.util";
+import {
+  meetsPassingGrade,
+  resolvePassedIndicator,
+} from "../common/utils/pass-fail.util";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import {
@@ -1510,6 +1513,17 @@ export class AttemptSubmissionService {
         await progressCallback("Preview completed!", 100);
       }
 
+      // The author's unsaved pass/fail settings ride in on the preview
+      // request; prefer them over the persisted row so previewing before
+      // publish reflects the toggle. This path is author-only and the values
+      // shape nothing but the author's own unpersisted preview response.
+      const showPassFailIndicator =
+        updateDto.authorAssignmentDetails?.showPassFailIndicator ??
+        assignment.showPassFailIndicator;
+      const passingGrade =
+        updateDto.authorAssignmentDetails?.passingGrade ??
+        assignment.passingGrade;
+
       return {
         id: -1,
         submitted: true,
@@ -1521,11 +1535,11 @@ export class AttemptSubmissionService {
         // author's only way to see what learners actually experience.
         grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
-        showPassFailIndicator: assignment.showPassFailIndicator,
+        showPassFailIndicator,
         passed: resolvePassedIndicator(
-          assignment.showPassFailIndicator,
+          showPassFailIndicator,
           grade,
-          assignment.passingGrade,
+          passingGrade,
         ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
@@ -2216,7 +2230,7 @@ export class AttemptSubmissionService {
         return true;
       }
       case "ON_PASS": {
-        return grade >= passingGrade;
+        return meetsPassingGrade(grade, passingGrade);
       }
       default: {
         return false;

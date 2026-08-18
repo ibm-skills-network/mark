@@ -1,4 +1,26 @@
-import { resolvePassedIndicator } from "./pass-fail.util";
+import { meetsPassingGrade, resolvePassedIndicator } from "./pass-fail.util";
+
+describe("meetsPassingGrade", () => {
+  it("compares the 0-1 grade against the percentage passing grade", () => {
+    expect(meetsPassingGrade(0.6, 75)).toBe(false);
+    expect(meetsPassingGrade(0.75, 75)).toBe(true);
+  });
+
+  it("never passes an ungraded attempt", () => {
+    expect(meetsPassingGrade(null, 75)).toBe(false);
+    expect(meetsPassingGrade(undefined, 75)).toBe(false);
+  });
+
+  it("passes at boundaries that are not exact in binary floating point", () => {
+    expect(meetsPassingGrade(29 / 100, 29)).toBe(true);
+    expect(meetsPassingGrade(57 / 100, 57)).toBe(true);
+  });
+
+  it("defaults the passing grade to 50 when unset", () => {
+    expect(meetsPassingGrade(0.5, null)).toBe(true);
+    expect(meetsPassingGrade(0.49, undefined)).toBe(false);
+  });
+});
 
 describe("resolvePassedIndicator", () => {
   it("returns undefined when the indicator is disabled", () => {

@@ -27,7 +27,10 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
-import { resolvePassedIndicator } from "src/api/attempt/common/utils/pass-fail.util";
+import {
+  meetsPassingGrade,
+  resolvePassedIndicator,
+} from "src/api/attempt/common/utils/pass-fail.util";
 import { LtiGradeSyncService } from "src/api/attempt/services/lti-grade-sync.service";
 import { GradingKillSwitchService } from "src/api/ai-feature-flags/grading-kill-switch.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
@@ -1129,10 +1132,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       }
     }
 
+    // NEVER always hides the correct answers; ON_PASS hides them until the
+    // attempt meets the passing grade. The grade must be read from
+    // preVisibilityGrade — the visibility filtering above deletes
+    // assignmentAttempt.grade when the score is hidden, and an undefined
+    // grade used to disable this gating entirely.
+    const completedAnswerVisibility =
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER";
     if (
-      (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
-        "NEVER" &&
-      assignmentAttempt.grade < assignment.passingGrade
+      completedAnswerVisibility === "NEVER" ||
+      (completedAnswerVisibility === "ON_PASS" &&
+        !meetsPassingGrade(preVisibilityGrade, assignment.passingGrade))
     ) {
       for (const question of finalQuestions) {
         if (question.choices) {
@@ -1471,7 +1481,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           delete choice.points;
           if (
             correctAnswerVisibility === "ON_PASS" &&
-            assignmentAttempt.grade < assignment.passingGrade
+            !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
           ) {
             delete choice.isCorrect;
             delete choice.feedback;
@@ -1487,7 +1497,10 @@ export class AttemptServiceV1 implements OnModuleDestroy {
               delete choice.points;
               if (
                 correctAnswerVisibility === "ON_PASS" &&
-                assignmentAttempt.grade < assignment.passingGrade
+                !meetsPassingGrade(
+                  assignmentAttempt.grade,
+                  assignment.passingGrade,
+                )
               ) {
                 delete choice.isCorrect;
                 delete choice.feedback;
@@ -1508,7 +1521,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           delete choice.points;
           if (
             correctAnswerVisibility === "ON_PASS" &&
-            assignmentAttempt.grade < assignment.passingGrade
+            !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
           ) {
             delete choice.isCorrect;
             delete choice.feedback;
@@ -1519,7 +1532,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
       if (
         correctAnswerVisibility === "ON_PASS" &&
-        assignmentAttempt.grade < assignment.passingGrade
+        !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
       ) {
         delete question.answer;
       }
