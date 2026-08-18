@@ -11,6 +11,8 @@ import {
 } from "../assignment/dto/update.questions.request.dto";
 import { IModerationService } from "./core/interfaces/moderation.interface";
 import { IPromptProcessor } from "./core/interfaces/prompt-processor.interface";
+import { LlmRouter } from "./core/services/llm-router.service";
+import { getGradingModelCacheIdentity } from "./core/utils/grading-cache-identity.util";
 import { IFileGradingService } from "./features/grading/interfaces/file-grading.interface";
 import { IImageGradingService } from "./features/grading/interfaces/image-grading.interface";
 import { IPresentationGradingService } from "./features/grading/interfaces/presentation-grading.interface";
@@ -79,7 +81,26 @@ export class LlmFacadeService {
     @Inject(RUBRIC_SERVICE) private readonly rubricService: IRubricService,
     @Inject(TRANSLATION_SERVICE)
     private readonly translationService: ITranslationService,
+    private readonly llmRouter: LlmRouter,
   ) {}
+
+  /**
+   * Cache identity of the model currently serving text grading.
+   *
+   * Callers that reuse a previously computed grade need this to confirm the
+   * stored grade came from the same grader: a reused grade carries the
+   * judgement of whichever model produced it, so serving one across a model
+   * change misattributes it. Resolution is the same router lookup the grading
+   * service performs (memoised for 5 minutes), so this is cheap to call on the
+   * grading path.
+   */
+  async getTextGradingModelIdentity(): Promise<string> {
+    const provider = await this.llmRouter.getForFeatureWithFallback(
+      "text_grading",
+      "gpt-4o-mini",
+    );
+    return getGradingModelCacheIdentity(provider.key);
+  }
 
   /**
    * Validate content using moderation service

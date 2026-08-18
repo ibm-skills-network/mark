@@ -4,7 +4,10 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 
 import { AdminGuard } from "../../../auth/guards/admin.guard";
 import type { UserSessionRequest } from "../../../auth/interfaces/user.session.interface";
-import { RolesGlobalGuard } from "../../../auth/role/roles.global.guard";
+import {
+  ROLES_KEY,
+  RolesGlobalGuard,
+} from "../../../auth/role/roles.global.guard";
 import { ScheduledTasksService } from "../../scheduled-tasks/services/scheduled-tasks.service";
 import { AdminService } from "../admin.service";
 import { AdminDashboardController } from "./admin-dashboard.controller";
@@ -331,5 +334,40 @@ describe("AdminDashboardController", () => {
       ).rejects.toThrow(new BadRequestException("Page must be at least 1"));
       expect(mockAdminService.getAssignmentAnalytics).not.toHaveBeenCalled();
     });
+  });
+  describe("guard metadata", () => {
+    // Regression: RolesGlobalGuard is registered globally, so Nest runs it
+    // before this controller's AdminGuard. Any @Roles metadata here is decided
+    // against the forwarded cookie session, which for an admin browsing with a
+    // learner launch cookie is role "learner" -> 403 before AdminGuard can
+    // establish the admin role. AdminGuard alone is both correct and narrower.
+    const handlerNames = [
+      "getDashboardStats",
+      "executeQuickAction",
+      "getAssignmentAnalytics",
+      "getDetailedAssignmentInsights",
+      "manualDraftCleanup",
+    ] as const;
+
+    it("declares AdminGuard at the controller level", () => {
+      const guards: unknown[] =
+        Reflect.getMetadata("__guards__", AdminDashboardController) ?? [];
+      expect(guards).toContain(AdminGuard);
+    });
+
+    it.each(handlerNames)(
+      "does not put @Roles metadata on %s",
+      (handlerName) => {
+        const handler = (
+          AdminDashboardController.prototype as unknown as Record<
+            string,
+            (...args: unknown[]) => unknown
+          >
+        )[handlerName];
+
+        expect(handler).toBeDefined();
+        expect(Reflect.getMetadata(ROLES_KEY, handler)).toBeUndefined();
+      },
+    );
   });
 });

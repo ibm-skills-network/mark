@@ -1,6 +1,11 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
 import { Gpt54MiniLlmService } from "./gpt54-llm.service";
+import {
+  Gpt56LunaLlmService,
+  Gpt56SolLlmService,
+  Gpt56TerraLlmService,
+} from "./gpt56-llm.service";
 import { Gpt5LlmService } from "./gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./gpt5-nano-llm.service";
@@ -24,6 +29,9 @@ const PROVIDERS = [
   ["Gpt4VisionPreviewLlmService", Gpt4VisionPreviewLlmService],
   ["OpenAiLlmMiniService", OpenAiLlmMiniService],
   ["Gpt54MiniLlmService", Gpt54MiniLlmService],
+  ["Gpt56LunaLlmService", Gpt56LunaLlmService],
+  ["Gpt56TerraLlmService", Gpt56TerraLlmService],
+  ["Gpt56SolLlmService", Gpt56SolLlmService],
 ] as const;
 
 describe.each(PROVIDERS)("%s request options", (_name, Provider) => {
@@ -85,6 +93,113 @@ describe.each(PROVIDERS)("%s request options", (_name, Provider) => {
         modelKwargs: expect.objectContaining({ safety_identifier: "abc123" }),
       }),
     );
+  });
+});
+
+// GPT-5.6 reasons at `medium` unless told otherwise, and a slug copy-paste
+// slip between the three would grade at the wrong price tier.
+const GPT56_PROVIDERS = [
+  ["Gpt56LunaLlmService", Gpt56LunaLlmService, "gpt-5.6-luna"],
+  ["Gpt56TerraLlmService", Gpt56TerraLlmService, "gpt-5.6-terra"],
+  ["Gpt56SolLlmService", Gpt56SolLlmService, "gpt-5.6-sol"],
+] as const;
+
+describe.each(GPT56_PROVIDERS)("%s", (_name, Provider, expectedSlug) => {
+  beforeEach(() => {
+    (ChatOpenAI as unknown as jest.Mock).mockClear();
+  });
+
+  it(`invokes the exact ${expectedSlug} slug with reasoning disabled`, async () => {
+    const tokenCounter = { countTokens: jest.fn().mockReturnValue(1) };
+    const logger = {
+      child: jest.fn(),
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+    logger.child.mockReturnValue(logger);
+    const service = new Provider(tokenCounter as never, logger as never);
+
+    expect(service.key).toBe(expectedSlug);
+
+    await service.invoke([new HumanMessage("hi")]);
+
+    expect(ChatOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelName: expectedSlug,
+        modelKwargs: expect.objectContaining({ reasoning_effort: "none" }),
+      }),
+    );
+  });
+});
+
+it("gives the three GPT-5.6 variants distinct provider keys", () => {
+  const keys = GPT56_PROVIDERS.map(([, , slug]) => slug);
+  expect(new Set(keys).size).toBe(3);
+});
+
+describe("GPT-5.6 token usage", () => {
+  const makeLunaService = (countTokens: jest.Mock) => {
+    const logger = {
+      child: jest.fn(),
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+    logger.child.mockReturnValue(logger);
+    return new Gpt56LunaLlmService({ countTokens } as never, logger as never);
+  };
+
+  beforeEach(() => {
+    (ChatOpenAI as unknown as jest.Mock).mockClear();
+  });
+
+  it("uses provider-reported image tokens instead of counting Base64 as text", async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      content: "ok",
+      usage_metadata: { input_tokens: 4321, output_tokens: 17 },
+    });
+    (ChatOpenAI as unknown as jest.Mock).mockImplementationOnce(() => ({
+      invoke,
+    }));
+    const countTokens = jest.fn().mockReturnValue(3);
+    const service = makeLunaService(countTokens);
+
+    const result = await service.invokeWithImage(
+      "Describe the image",
+      "A".repeat(20_000),
+    );
+
+    expect(result.tokenUsage).toEqual({ input: 4321, output: 17 });
+    expect(countTokens).toHaveBeenCalledTimes(1);
+    expect(countTokens).toHaveBeenCalledWith("Describe the image");
+  });
+
+  it("uses a bounded image estimate when the provider omits usage metadata", async () => {
+    const invoke = jest.fn().mockResolvedValue({ content: "ok" });
+    (ChatOpenAI as unknown as jest.Mock).mockImplementationOnce(() => ({
+      invoke,
+    }));
+    const countTokens = jest
+      .fn()
+      .mockImplementation((value: string) =>
+        value === "Describe the image" ? 7 : 2,
+      );
+    const service = makeLunaService(countTokens);
+
+    const result = await service.invokeWithImage(
+      "Describe the image",
+      "B".repeat(20_000),
+    );
+
+    expect(result.tokenUsage).toEqual({ input: 207, output: 2 });
+    expect(
+      countTokens.mock.calls.every(
+        ([value]) => typeof value === "string" && !value.includes("BBBB"),
+      ),
+    ).toBe(true);
   });
 });
 

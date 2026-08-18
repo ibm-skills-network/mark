@@ -29,6 +29,7 @@ import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.inte
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
 import { Gpt54MiniLlmService } from "../../../core/services/gpt54-llm.service";
+import { getGradingModelCacheIdentity } from "../../../core/utils/grading-cache-identity.util";
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   LLM_RESOLVER_SERVICE,
@@ -893,6 +894,9 @@ export class FileGradingService implements IFileGradingService {
     modelSnapshot: string;
     grade: () => Promise<FileBasedQuestionResponseModel>;
   }): Promise<FileBasedQuestionResponseModel> {
+    const modelCacheIdentity = getGradingModelCacheIdentity(
+      parameters.modelSnapshot,
+    );
     const answerHash = this.hashCanonical(
       [...parameters.learnerResponse]
         .sort((left, right) =>
@@ -907,7 +911,7 @@ export class FileGradingService implements IFileGradingService {
     );
     const rubricHash = this.hashCanonical({
       graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
-      modelSnapshot: parameters.modelSnapshot,
+      modelSnapshot: modelCacheIdentity,
       reasoningEffort: "none",
       question: parameters.question,
       scoringCriteria: parameters.scoringCriteria,
@@ -927,7 +931,7 @@ export class FileGradingService implements IFileGradingService {
       this.logger.info("Using deterministic structured-file grading cache", {
         questionId: parameters.questionId,
         cacheKey,
-        modelSnapshot: parameters.modelSnapshot,
+        modelSnapshot: modelCacheIdentity,
       });
       return cachedResponse;
     }
@@ -959,7 +963,7 @@ export class FileGradingService implements IFileGradingService {
         hitCount: 0,
         metadata: {
           graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
-          modelSnapshot: parameters.modelSnapshot,
+          modelSnapshot: modelCacheIdentity,
           fileResponse: this.fileResponseForCache(result),
         },
       };

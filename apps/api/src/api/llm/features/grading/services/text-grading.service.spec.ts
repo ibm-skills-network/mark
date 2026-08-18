@@ -56,6 +56,11 @@ function buildService() {
       .fn()
       .mockResolvedValue(validGrading),
   };
+  service.llmRouter = {
+    getForFeatureWithFallback: jest.fn().mockResolvedValue({
+      key: "gpt-4o-mini",
+    }),
+  };
 
   // Char/4 heuristic approximates the tokenizer for budget math.
   service.contentSummarization = {
@@ -258,6 +263,84 @@ describe("TextGradingService.generateGrading token budget gate", () => {
       "text.grading.context.dropped",
       expect.objectContaining({ assignmentId: 1 }),
     );
+  });
+});
+
+describe("TextGradingService grading cache identity", () => {
+  it("keys the cache and routed request by the resolved model revision", async () => {
+    const originalRevision = process.env.GRADING_CACHE_REVISION;
+    process.env.GRADING_CACHE_REVISION = "rollout-42";
+
+    try {
+      const { service } = buildService();
+      service.maxRetries = 1;
+      service.retryDelay = 0;
+      service.moderationService = {
+        assessContent: jest.fn().mockResolvedValue({
+          action: "allow",
+          flaggedCategories: [],
+          severeCategories: [],
+        }),
+      };
+      service.llmRouter.getForFeatureWithFallback.mockResolvedValue({
+        key: "gpt-5.6-luna",
+      });
+      service.normalizationService = {
+        normalizeAnswer: jest.fn().mockReturnValue({
+          original: "A short answer.",
+          normalized: "a short answer.",
+          claims: ["a short answer."],
+          hash: "answer-hash",
+          wordCount: 3,
+        }),
+        hashRubric: jest.fn().mockReturnValue("rubric-hash"),
+        generateCacheKey: jest.fn().mockReturnValue("cache-key"),
+      };
+      service.cacheService = {
+        getCachedGrading: jest.fn().mockResolvedValue(null),
+      };
+      service.promptProcessor.processStructuredPromptForFeature.mockRejectedValue(
+        new Error("stop after cache lookup"),
+      );
+
+      await expect(
+        service.gradeTextBasedQuestion(
+          {
+            ...baseModel(),
+            totalPoints: 4,
+            scoringCriteriaType: "OTHER",
+            questionId: 42,
+          },
+          7,
+        ),
+      ).rejects.toThrow();
+
+      expect(
+        service.normalizationService.generateCacheKey,
+      ).toHaveBeenCalledWith(
+        "rubric-hash",
+        "answer-hash",
+        42,
+        "gpt-5.6-luna@rollout-42",
+      );
+      expect(
+        service.promptProcessor.processStructuredPromptForFeature,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        7,
+        expect.anything(),
+        "text_grading",
+        expect.anything(),
+        "gpt-5.6-luna",
+        expect.anything(),
+      );
+    } finally {
+      if (originalRevision === undefined) {
+        delete process.env.GRADING_CACHE_REVISION;
+      } else {
+        process.env.GRADING_CACHE_REVISION = originalRevision;
+      }
+    }
   });
 });
 

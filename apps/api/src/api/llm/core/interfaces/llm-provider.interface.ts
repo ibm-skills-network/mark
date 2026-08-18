@@ -27,22 +27,54 @@ export interface LlmRequestOptions {
    * attributes to one end user instead of the whole org account.
    */
   safetyIdentifier?: string;
+  /**
+   * Opt this request into explicit prefix caching. Ignored by providers that
+   * do not advertise `supportsExplicitPromptCache`.
+   */
+  promptCache?: PromptCacheSpec;
+}
+
+/**
+ * Describes the reusable head of a prompt so it can be cached across calls.
+ *
+ * GPT-5.6 caches only at explicit breakpoints, and only when the prefix is at
+ * least 1024 tokens — below that the request succeeds and stores nothing, so a
+ * short prefix looks identical to a working one. Older OpenAI models reject
+ * the parameters outright, which is why providers gate on capability rather
+ * than sending these unconditionally.
+ */
+export interface PromptCacheSpec {
+  /**
+   * Rendered invariant head. Must be a literal prefix of the formatted prompt;
+   * if it is not, the caller falls back to an uncached single-block message.
+   */
+  prefix: string;
+  /**
+   * Cache routing key. Rotate it whenever `prefix` changes, so a stale entry
+   * can never be served against new instructions.
+   */
+  key: string;
+}
+
+export interface TokenUsage {
+  input: number;
+  output: number;
+  /**
+   * Portion of `input` served from the provider's prompt cache. Set only when
+   * the provider reports it, so 0 means a genuine miss on a model that does
+   * report — absent means the provider gave no cache detail at all.
+   */
+  cachedInput?: number;
 }
 
 export interface LlmResponse {
   content: string;
-  tokenUsage: {
-    input: number;
-    output: number;
-  };
+  tokenUsage: TokenUsage;
 }
 
 export interface LlmStructuredResponse<T> {
   parsed: T;
-  tokenUsage: {
-    input: number;
-    output: number;
-  };
+  tokenUsage: TokenUsage;
 }
 
 export interface ILlmProvider {
@@ -71,6 +103,13 @@ export interface ILlmProvider {
   ): Promise<LlmStructuredResponse<T>>;
 
   readonly key: string;
+
+  /**
+   * True only for models that accept explicit cache breakpoints. Callers must
+   * check this before building a breakpoint-bearing message: every other
+   * OpenAI model rejects `prompt_cache_options` with a 400.
+   */
+  readonly supportsExplicitPromptCache?: boolean;
 }
 
 export interface IMultimodalLlmProvider extends ILlmProvider {
