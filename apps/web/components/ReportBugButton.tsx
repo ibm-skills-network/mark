@@ -4,10 +4,7 @@ import { FlagIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import type { User } from "@/config/types";
-import {
-  submitBugReport,
-  type BugReportSubmission,
-} from "@/lib/report-client";
+import { submitBugReport, type BugReportSubmission } from "@/lib/report-client";
 import { getUser } from "@/lib/talkToBackend";
 
 /**

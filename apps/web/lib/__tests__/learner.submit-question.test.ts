@@ -100,7 +100,11 @@ describe("submitQuestion", () => {
 
     const result = await submitQuestion(10, 20, 2, samplePayload);
 
-    expect(result).toEqual({ ok: false, status: undefined, message: undefined });
+    expect(result).toEqual({
+      ok: false,
+      status: undefined,
+      message: undefined,
+    });
   });
 
   it("never throws, even when apiClient.post rejects with a bare Error", async () => {
