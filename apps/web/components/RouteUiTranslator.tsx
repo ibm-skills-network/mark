@@ -1,16 +1,13 @@
 "use client";
 
+import { DEFAULT_UI_LANGUAGE } from "@/lib/ui-language";
+import { useActiveUiLanguage } from "@/hooks/use-active-ui-language";
 import {
-  DEFAULT_UI_LANGUAGE,
-  getStoredUiLanguage,
-  isSupportedUiLanguage,
-  setStoredUiLanguage,
-  UI_LANGUAGE_CHANGED_EVENT,
-} from "@/lib/ui-language";
-import { getStaticUiTranslations } from "@/lib/static-ui-translations";
+  getStaticUiTranslations,
+  normalizeSourceText,
+} from "@/lib/static-ui-translations";
 import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLang";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 const TRANSLATABLE_ATTRIBUTES = ["placeholder", "title", "aria-label"] as const;
 const SKIP_TAGS = new Set([
@@ -32,10 +29,8 @@ const originalTextByNode = new WeakMap<Text, string>();
 const originalAttrsByElement = new WeakMap<Element, Map<string, string>>();
 
 // What this translator last wrote into each node/attribute. Anything that does
-// not match is content the app rewrote (a countdown ticking, a live status),
-// which must be adopted as the new source text. Without this the first text a
-// node ever had is treated as its source forever, and every translation pass
-// restores it — silently reverting live UI to its first-rendered value.
+// not match is content the app rewrote, which must become the new source text —
+// otherwise a node stays pinned to its first text and every pass restores it.
 const lastWrittenTextByNode = new WeakMap<Text, string>();
 const lastWrittenAttrsByElement = new WeakMap<Element, Map<string, string>>();
 
@@ -140,10 +135,6 @@ function collectAttrTargets(root: HTMLElement): Array<{
 
 function getCacheKey(languageCode: string, sourceText: string): string {
   return `${languageCode}::${normalizeSourceText(sourceText)}`;
-}
-
-function normalizeSourceText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 function withOriginalPadding(original: string, translatedCore: string): string {
@@ -503,9 +494,7 @@ function ensureTranslationCache(
 function readTextOriginal(node: Text): string {
   const currentText = node.textContent || "";
   const lastWritten = lastWrittenTextByNode.get(node);
-  // Re-baseline when the app changed this node since our last write. Skipping
-  // this pins the node to its first-ever text and makes every later pass
-  // overwrite live updates with it.
+  // Re-baseline when the app changed this node since our last write.
   const wasRewrittenByApp =
     lastWritten !== undefined && currentText !== lastWritten;
 
@@ -625,45 +614,9 @@ export function translateScope(root: HTMLElement, languageCode: string) {
 export default function RouteUiTranslator({
   scopeSelector,
 }: RouteUiTranslatorProps) {
-  const searchParams = useSearchParams();
-  const queryLanguage = searchParams.get("uiLang");
-  const [activeLanguage, setActiveLanguage] =
-    useState<string>(DEFAULT_UI_LANGUAGE);
+  const activeLanguage = useActiveUiLanguage();
   const isApplyingRef = useRef(false);
   const debounceTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (isSupportedUiLanguage(queryLanguage)) {
-      setActiveLanguage(queryLanguage);
-      setStoredUiLanguage(queryLanguage);
-      return;
-    }
-
-    const storedLanguage = getStoredUiLanguage();
-    setActiveLanguage(storedLanguage || DEFAULT_UI_LANGUAGE);
-  }, [queryLanguage]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const handleLanguageChange = (event: Event) => {
-      const selectedLanguage = (event as CustomEvent<string>).detail;
-      if (!isSupportedUiLanguage(selectedLanguage)) return;
-      setActiveLanguage(selectedLanguage);
-    };
-
-    window.addEventListener(
-      UI_LANGUAGE_CHANGED_EVENT,
-      handleLanguageChange as EventListener,
-    );
-
-    return () => {
-      window.removeEventListener(
-        UI_LANGUAGE_CHANGED_EVENT,
-        handleLanguageChange as EventListener,
-      );
-    };
-  }, []);
 
   useEffect(() => {
     const rootElement = getRootElement(scopeSelector);
@@ -698,10 +651,8 @@ export default function RouteUiTranslator({
     const observer = new MutationObserver((records) => {
       if (isApplyingRef.current) return;
 
-      // Opted-out subtrees hold content we will never rewrite (a ticking
-      // countdown, a live counter). Scheduling a pass for them means walking
-      // and re-translating the entire route on every tick to produce no change
-      // at all, so ignore records that come only from inside them.
+      // Opted-out subtrees are never rewritten, so scanning the route for them
+      // is pure cost. Ignore records that come only from inside one.
       if (records.every((record) => isInsideOptedOutSubtree(record.target))) {
         return;
       }

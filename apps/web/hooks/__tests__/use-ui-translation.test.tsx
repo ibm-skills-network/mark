@@ -13,6 +13,7 @@ jest.mock("@/lib/static-ui-translations", () => ({
             "Attendez {time} avant de réessayer",
         }
       : {},
+  normalizeSourceText: (value: string) => value.replace(/\s+/g, " ").trim(),
 }));
 
 import { interpolate, useUiTranslation } from "../use-ui-translation";
@@ -72,5 +73,24 @@ describe("useUiTranslation", () => {
     expect(result.current.t("Some unconverted string")).toBe(
       "Some unconverted string",
     );
+  });
+});
+
+// Catalog keys are stored normalized, and RouteUiTranslator falls back to the
+// normalized form when the raw string misses. The hook has to do the same or a
+// string resolves on one path and not the other.
+describe("useUiTranslation key normalization", () => {
+  beforeEach(() => {
+    searchParams.get.mockReturnValue("fr");
+    window.localStorage.clear();
+  });
+
+  it("matches a catalog key when the source has irregular whitespace", () => {
+    const { result } = renderHook(() => useUiTranslation());
+    expect(
+      result.current.t("Please wait   {time}\n  before retrying", {
+        time: "4m 54s",
+      }),
+    ).toBe("Attendez 4m 54s avant de réessayer");
   });
 });

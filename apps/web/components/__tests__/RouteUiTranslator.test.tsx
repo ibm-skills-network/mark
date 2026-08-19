@@ -141,3 +141,46 @@ describe("RouteUiTranslator isInsideOptedOutSubtree", () => {
     expect(host.textContent).toContain("before retrying");
   });
 });
+
+// The re-baseline in readTextOriginal only works because every collected node
+// reaches writeTextTranslation. That holds because the tree walker rejects text
+// without letters, so empty/whitespace nodes are never collected or pinned —
+// React reuses those nodes ({cond ? "" : "Label"}). These lock that invariant:
+// if isTranslatableText is ever loosened, the pinning bug reappears here first.
+describe("RouteUiTranslator nodes that start empty", () => {
+  const hosts: HTMLElement[] = [];
+
+  afterEach(() => {
+    for (const host of hosts) host.remove();
+    hosts.length = 0;
+  });
+
+  const mountText = (text: string): Text => {
+    const host = document.createElement("div");
+    const node = document.createTextNode(text);
+    host.append(node);
+    document.body.append(host);
+    hosts.push(host);
+    return node;
+  };
+
+  it("keeps real text that replaces an empty node", () => {
+    const node = mountText("");
+
+    translateScope(document.body, "en");
+    node.nodeValue = "Label";
+    translateScope(document.body, "en");
+
+    expect(node.nodeValue).toBe("Label");
+  });
+
+  it("keeps real text that replaces a whitespace-only node", () => {
+    const node = mountText("   ");
+
+    translateScope(document.body, "en");
+    node.nodeValue = "Label";
+    translateScope(document.body, "en");
+
+    expect(node.nodeValue).toBe("Label");
+  });
+});

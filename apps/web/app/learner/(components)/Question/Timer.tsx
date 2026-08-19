@@ -288,10 +288,7 @@ function Timer(props: Props) {
       <div className="text-gray-600 dark:text-gray-300 text-base font-medium leading-tight">
         Time Remaining:
       </div>
-      {/* The clock changes every second. RouteUiTranslator would never rewrite
-          it (digits contain no letters), but its MutationObserver still fires on
-          each tick and re-scans the whole route, so opt the subtree out. The
-          "Time Remaining:" label above stays translatable. */}
+      {/* Opted out so the per-second tick does not re-scan the whole route. */}
       {hasCountdown ? (
         <div
           data-no-ui-translate="true"

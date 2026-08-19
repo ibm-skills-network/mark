@@ -24,6 +24,13 @@ import zhTW from "./zh-TW/translations.json";
 
 export type UiTranslationMap = Record<string, string>;
 
+// Catalog keys are matched on this form, so every lookup path must apply it.
+// Shared by the DOM translator and the render-time `useUiTranslation` hook —
+// two normalizers would make the same string resolve differently per path.
+export function normalizeSourceText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 const staticUiTranslations: Record<string, UiTranslationMap> = {
   ar,
   de,

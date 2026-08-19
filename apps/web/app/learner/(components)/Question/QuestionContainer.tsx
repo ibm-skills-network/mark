@@ -362,10 +362,7 @@ function Component(props: Props) {
           {effectiveTranslationOn && loadingTranslation && (
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
-                {/* Cycles every 1.2s. Left unguarded it re-scans the whole
-                    route on each change — and being letters, RouteUiTranslator
-                    also rewrote it, which pinned the animation to the first
-                    word. */}
+                {/* Opted out so the 1.2s cycle does not re-scan the whole route. */}
                 <span
                   data-no-ui-translate="true"
                   className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400"

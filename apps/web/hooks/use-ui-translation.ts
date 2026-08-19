@@ -1,14 +1,12 @@
 "use client";
 
-import { getStaticUiTranslationsSync } from "@/lib/static-ui-translations";
+import { useActiveUiLanguage } from "@/hooks/use-active-ui-language";
 import {
-  DEFAULT_UI_LANGUAGE,
-  UI_LANGUAGE_CHANGED_EVENT,
-  getStoredUiLanguage,
-  isSupportedUiLanguage,
-} from "@/lib/ui-language";
-import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+  getStaticUiTranslationsSync,
+  normalizeSourceText,
+} from "@/lib/static-ui-translations";
+import { DEFAULT_UI_LANGUAGE } from "@/lib/ui-language";
+import { useCallback } from "react";
 
 export type UiTranslationParams = Record<string, string | number>;
 
@@ -46,46 +44,21 @@ export function interpolate(
  * so RouteUiTranslator neither rewrites nor re-scans what is already translated.
  */
 export function useUiTranslation() {
-  const searchParams = useSearchParams();
-  const queryLanguage = searchParams.get("uiLang");
-  const [activeLanguage, setActiveLanguage] =
-    useState<string>(DEFAULT_UI_LANGUAGE);
-
-  useEffect(() => {
-    if (isSupportedUiLanguage(queryLanguage)) {
-      setActiveLanguage(queryLanguage);
-      return;
-    }
-    setActiveLanguage(getStoredUiLanguage() || DEFAULT_UI_LANGUAGE);
-  }, [queryLanguage]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const handleLanguageChange = (event: Event) => {
-      const selectedLanguage = (event as CustomEvent<string>).detail;
-      if (!isSupportedUiLanguage(selectedLanguage)) return;
-      setActiveLanguage(selectedLanguage);
-    };
-
-    window.addEventListener(
-      UI_LANGUAGE_CHANGED_EVENT,
-      handleLanguageChange as EventListener,
-    );
-    return () =>
-      window.removeEventListener(
-        UI_LANGUAGE_CHANGED_EVENT,
-        handleLanguageChange as EventListener,
-      );
-  }, []);
+  const activeLanguage = useActiveUiLanguage();
 
   const t = useCallback(
     (source: string, params?: UiTranslationParams): string => {
       if (activeLanguage === DEFAULT_UI_LANGUAGE) {
         return interpolate(source, params);
       }
+
+      // Match the DOM translator's key handling exactly: it tries the raw
+      // string then the normalized one. Resolving keys differently here would
+      // let the same string translate on one path and not the other.
+      const catalog = getStaticUiTranslationsSync(activeLanguage);
       const translated =
-        getStaticUiTranslationsSync(activeLanguage)[source] ?? source;
+        catalog[source] ?? catalog[normalizeSourceText(source)] ?? source;
+
       return interpolate(translated, params);
     },
     [activeLanguage],
