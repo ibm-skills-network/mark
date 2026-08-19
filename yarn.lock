@@ -1630,11 +1630,6 @@
   resolved "https://registry.yarnpkg.com/@eslint/js/-/js-8.57.1.tgz#de633db3ec2ef6a3c89e2f19038063e8a122e2c2"
   integrity sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==
 
-"@faker-js/faker@^8.0.2":
-  version "8.4.1"
-  resolved "https://registry.yarnpkg.com/@faker-js/faker/-/faker-8.4.1.tgz#5d5e8aee8fce48f5e189bf730ebd1f758f491451"
-  integrity sha512-XQ3cU+Q8Uqmrbf2e0cIC/QN43sTBSC8KF12u29Mb47tWrt2hAgBXSgpZMj4Ao8Uk0iJcU99QsOCaIL8934obCg==
-
 "@ffmpeg/ffmpeg@^0.12.15":
   version "0.12.15"
   resolved "https://registry.yarnpkg.com/@ffmpeg/ffmpeg/-/ffmpeg-0.12.15.tgz#e5b05c2b5c946f3464b3aa85461e4654a4649d80"
@@ -6253,7 +6248,7 @@
   resolved "https://registry.yarnpkg.com/@webgpu/types/-/types-0.1.38.tgz#6fda4b410edc753d3213c648320ebcf319669020"
   integrity sha512-7LrhVKz2PRh+DD7+S+PVaFd5HxaWQvoMqBbsV9fNJO1pjUs1P8bM2vQVNfk+3URTqbuTI7gkXi0rfsN0IadoBA==
 
-"@xmldom/xmldom@^0.8.13", "@xmldom/xmldom@^0.8.2", "@xmldom/xmldom@^0.8.6":
+"@xmldom/xmldom@^0.8.13", "@xmldom/xmldom@^0.8.6":
   version "0.8.13"
   resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.13.tgz#00d1dd940b218dff2e49309d410d8bb212159225"
   integrity sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==
@@ -6891,9 +6886,9 @@ base64id@2.0.0, base64id@~2.0.0:
   integrity sha512-lGe34o6EHj9y3Kts9R4ZYs/Gr+6N7MCaMlIFA3F1R2O5/m7K06AxfSeO5530PEERE6/WyEg3lsuyw4GHlPZHog==
 
 baseline-browser-mapping@^2.10.12, baseline-browser-mapping@^2.9.19:
-  version "2.10.29"
-  resolved "https://registry.yarnpkg.com/baseline-browser-mapping/-/baseline-browser-mapping-2.10.29.tgz#47bdc13027af28d341f367a4f35a07ce872e27b4"
-  integrity sha512-Asa2krT+XTPZINCS+2QcyS8WTkObE77RwkydwF7h6DmnKqbvlalz93m/dnphUyCa6SWSP51VgtEUf2FN+gelFQ==
+  version "2.11.15"
+  resolved "https://registry.yarnpkg.com/baseline-browser-mapping/-/baseline-browser-mapping-2.11.15.tgz#9c0cac93d7d304f3d61bb41088a102cd62e68676"
+  integrity sha512-FwMjJJ7HnyZpWe+oWxegG0fezZyBZUagI5LZEoO3GCbtbKNwRfMH9Ue5d5v01PNePBy1QSfPSDTTeVL0Hb9EzA==
 
 basic-auth@^2.0.1:
   version "2.0.1"
@@ -7558,9 +7553,9 @@ component-emitter@^1.3.0:
   integrity sha512-T0+barUSQRTUQASh8bx02dl+DhF54GtIDY13Y3m9oWTklKbb3Wv974meRpeZ3lp1JpLVECWWNHC4vaG2XHXouQ==
 
 compromise@^14.14.4:
-  version "14.14.4"
-  resolved "https://registry.yarnpkg.com/compromise/-/compromise-14.14.4.tgz#30c4fc934723a60bf65c9dcb4b7312b64a6cb027"
-  integrity sha512-QdbJwronwxeqb7a5KFK/+Y5YieZ4PE1f7ai0vU58Pp4jih+soDCBMuKVbhDEPQ+6+vI3vSiG4UAAjTAXLJw1Qw==
+  version "14.16.0"
+  resolved "https://registry.yarnpkg.com/compromise/-/compromise-14.16.0.tgz#ed712f9afb1455c92cf2bf0dde99e588da5c7705"
+  integrity sha512-4DFYl/Hl7sW4XWUDfx9S5vxqyYKpZDwwqrpXsQv5acdbVP+joKceIcIaLb0lhVWUpDBV0OnExk/o/dnYUwXnhQ==
   dependencies:
     efrt "2.7.0"
     grad-school "0.0.5"
@@ -9133,11 +9128,6 @@ fecha@^4.2.0:
   resolved "https://registry.yarnpkg.com/fecha/-/fecha-4.2.3.tgz#4d9ccdbc61e8629b259fdca67e65891448d569fd"
   integrity sha512-OP2IUU6HeYKJi3i0z4A19kHMQoLVs4Hc+DPqqxI2h/DPZHTm/vjsfC6P0b4jCMy14XizLBqvndQ+UilD7707Jw==
 
-fflate@^0.7.3:
-  version "0.7.4"
-  resolved "https://registry.yarnpkg.com/fflate/-/fflate-0.7.4.tgz#61587e5d958fdabb5a9368a302c25363f4f69f50"
-  integrity sha512-5u2V/CDW15QM1XbbgS+0DfPxVB+jUKhWEKuuFuHncbk3tEEqzmoXL+2KyOFuKGqOnmdIy0/davWF1CkuwtibCw==
-
 file-entry-cache@^6.0.1:
   version "6.0.1"
   resolved "https://registry.yarnpkg.com/file-entry-cache/-/file-entry-cache-6.0.1.tgz#211b2dd9659cb0394b073e7323ac3c933d522027"
@@ -9355,19 +9345,19 @@ fresh@^2.0.0:
   resolved "https://registry.yarnpkg.com/fresh/-/fresh-2.0.0.tgz#8dd7df6a1b3a1b3a5cf186c05a5dd267622635a4"
   integrity sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==
 
-fs-extra@^10.0.0:
-  version "10.1.0"
-  resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-10.1.0.tgz#02873cfbc4084dde127eaa5f9905eef2325d1abf"
-  integrity sha512-oRXApq54ETRj4eMiFzGnHWGy+zo5raudjuxN0b8H7s/RU2oW0Wvsx9O0ACRN/kRq9E8Vu/ReskGB5o3ji+FzHQ==
+fs-extra@11.3.1:
+  version "11.3.1"
+  resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-11.3.1.tgz#ba7a1f97a85f94c6db2e52ff69570db3671d5a74"
+  integrity sha512-eXvGGwZ5CL17ZSwHWd3bbgk7UUpF6IFHtP57NYYakPvHOs8GDgDe5KJI36jIJzDkJ6eJjuzRA8eBQb6SkKue0g==
   dependencies:
     graceful-fs "^4.2.0"
     jsonfile "^6.0.1"
     universalify "^2.0.0"
 
-fs-extra@^11.2.0:
-  version "11.3.0"
-  resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-11.3.0.tgz#0daced136bbaf65a555a326719af931adc7a314d"
-  integrity sha512-Z4XaCL6dUDHfP/jT25jJKMmtxvuwbkrD1vNSMFlo9lNLY2c5FHYSQgHPRZUjAB26TpDEoW9HCOgplrdbaPV/ew==
+fs-extra@^10.0.0:
+  version "10.1.0"
+  resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-10.1.0.tgz#02873cfbc4084dde127eaa5f9905eef2325d1abf"
+  integrity sha512-oRXApq54ETRj4eMiFzGnHWGy+zo5raudjuxN0b8H7s/RU2oW0Wvsx9O0ACRN/kRq9E8Vu/ReskGB5o3ji+FzHQ==
   dependencies:
     graceful-fs "^4.2.0"
     jsonfile "^6.0.1"
@@ -14113,15 +14103,6 @@ read-cache@^1.0.0:
   dependencies:
     pify "^2.3.0"
 
-read-excel-file@^5.8.8:
-  version "5.8.8"
-  resolved "https://registry.yarnpkg.com/read-excel-file/-/read-excel-file-5.8.8.tgz#44a9bae73c442090ee02a55c29a8a28363ddd71e"
-  integrity sha512-Jb3g7wYe3NU7k52q5xs16swqsl47xIxc/CvHuJy49Elzp6+G6bg56Lds4s57FayosuCYm+TTU0ROpMMuM7WE0A==
-  dependencies:
-    "@xmldom/xmldom" "^0.8.2"
-    fflate "^0.7.3"
-    unzipper "^0.12.2"
-
 read-pkg-up@^7.0.1:
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/read-pkg-up/-/read-pkg-up-7.0.1.tgz#f3a6135758459733ae2b95638056e1854e7ef507"
@@ -16314,14 +16295,14 @@ unrs-resolver@^1.7.11:
     "@unrs/resolver-binding-win32-ia32-msvc" "1.11.1"
     "@unrs/resolver-binding-win32-x64-msvc" "1.11.1"
 
-unzipper@^0.12.2, unzipper@^0.12.3:
-  version "0.12.3"
-  resolved "https://registry.yarnpkg.com/unzipper/-/unzipper-0.12.3.tgz#31958f5eed7368ed8f57deae547e5a673e984f87"
-  integrity sha512-PZ8hTS+AqcGxsaQntl3IRBw65QrBI6lxzqDEL7IAo/XCEqRTKGfOX56Vea5TH9SZczRVxuzk1re04z/YjuYCJA==
+unzipper@^0.12.3:
+  version "0.12.5"
+  resolved "https://registry.yarnpkg.com/unzipper/-/unzipper-0.12.5.tgz#7fc6b4862f3832202d1f5cc3adbee2679deaaf6c"
+  integrity sha512-tXYOi9R57Uj/2Z25SOs5RRSzq886MBQj2gY8dPL+xl/kv6s6SvByoKfAtvfVeEuhntWDgjd2o9p2lb4TVPAz0A==
   dependencies:
     bluebird "~3.7.2"
     duplexer2 "~0.1.4"
-    fs-extra "^11.2.0"
+    fs-extra "11.3.1"
     graceful-fs "^4.2.2"
     node-int64 "^0.4.0"
 
