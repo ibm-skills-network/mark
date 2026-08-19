@@ -156,6 +156,13 @@ export class CriterionEvidenceRetrievalService {
 
     if (candidates.length > 0) {
       const maxSearchScore = Math.max(...candidates.map((c) => c.score), 1);
+      // The full filtered pool (up to maxCandidates from the search above)
+      // goes forward: the LLM validator is the judge of which candidates are
+      // evidence, and its prompt is written to pick the best maxEvidence from
+      // a wider pool. Slicing to maxEvidence here would hand that judgement
+      // to lexical scoring, which ranks rubric-parroting prose above the code
+      // that actually answers it. Non-validated paths cap at maxEvidence in
+      // mapRerankedCandidatesToEvidence.
       reranked = candidates
         .map((candidate) => {
           const relevance = this.computeRelevanceScore(
@@ -171,8 +178,7 @@ export class CriterionEvidenceRetrievalService {
           };
         })
         .filter((candidate) => candidate.relevance >= this.config.minRelevance)
-        .sort((a, b) => b.combined - a.combined)
-        .slice(0, maxEvidence);
+        .sort((a, b) => b.combined - a.combined);
     }
 
     if (reranked.length === 0) {
@@ -193,7 +199,7 @@ export class CriterionEvidenceRetrievalService {
       const aboveThreshold = scored
         .filter((item) => item.relevance >= this.config.minRelevance)
         .sort((a, b) => b.combined - a.combined)
-        .slice(0, maxEvidence);
+        .slice(0, this.config.maxCandidates);
 
       // Lexical relevance scoring misses genuinely relevant content with no
       // keyword overlap (e.g. numeric spreadsheet cells vs. prose rubric

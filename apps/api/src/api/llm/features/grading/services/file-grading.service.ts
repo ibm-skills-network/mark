@@ -1770,18 +1770,59 @@ export class FileGradingService implements IFileGradingService {
   }
 
   // Jupyter notebook extractions carry "=== CELL N [TYPE] ===" section
-  // headers (see FileContentExtractionService.extractJupyterNotebook). Each
-  // cell — with its header and any outputs — becomes one segment. Returns
-  // null when the text is not a notebook extraction.
+  // headers (see FileContentExtractionService.extractJupyterNotebook).
+  // Returns null when the text is not a notebook extraction.
+  //
+  // Cells are grouped into task sections rather than kept one-per-segment: a
+  // rubric criterion's wording matches the markdown task cell, but the work
+  // that satisfies it lives in the code cells that follow. Evidence retrieval
+  // selects whole chunks, so a task's description and its answer code must
+  // share a chunk — a lone markdown cell that parrots the rubric otherwise
+  // outranks the learner's code everywhere and the grader never sees the code.
   private splitNotebookIntoCellSegments(code: string): string[] | null {
     const cellHeader = /^=== CELL \d+ \[/m;
     if (!cellHeader.test(code)) return null;
 
-    const segments = code
+    const cells = code
       .split(/\n(?==== CELL \d+ \[)/)
       .map((segment) => segment.trimEnd())
       .filter((segment) => segment.trim());
-    return segments.length > 0 ? segments : null;
+    if (cells.length === 0) return null;
+
+    // A section starts at each markdown run (a markdown cell whose
+    // predecessor is not markdown) and carries every following cell until the
+    // next run. Sections are bounded by CODE_SEGMENT_MAX_CHARS so they
+    // survive capCodeSegments un-split; a cell that would overflow starts its
+    // own section (the pre-grouping behaviour) rather than shearing the
+    // section mid-cell.
+    const markdownCellHeader = /^=== CELL \d+ \[MARKDOWN]/;
+
+    const sections: string[] = [];
+    let current: string[] = [];
+    let currentSize = 0;
+    let previousWasMarkdown = false;
+
+    for (const cell of cells) {
+      const markdown = markdownCellHeader.test(cell);
+      const startsNewSection =
+        markdown && !previousWasMarkdown && current.length > 0;
+      const overflows =
+        current.length > 0 &&
+        currentSize + cell.length + 1 > CODE_SEGMENT_MAX_CHARS;
+
+      if (startsNewSection || overflows) {
+        sections.push(current.join("\n"));
+        current = [];
+        currentSize = 0;
+      }
+
+      current.push(cell);
+      currentSize += cell.length + 1;
+      previousWasMarkdown = markdown;
+    }
+    if (current.length > 0) sections.push(current.join("\n"));
+
+    return sections;
   }
 
   // Fold trivially short segments (a lone import, a one-line `const`) into an

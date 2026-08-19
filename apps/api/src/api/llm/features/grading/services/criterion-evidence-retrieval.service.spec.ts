@@ -535,4 +535,69 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(cellEvidence?.quote).toBe(cellText);
     expect(proseEvidence?.quote?.length).toBe(220);
   });
+
+  /**
+   * The validator prompt is designed to pick the best six chunks FROM a wider
+   * candidate pool ("Keep only the most relevant 6 chunks. Where more than
+   * six qualify..."). Slicing the pool to six before the validator ever sees
+   * it silently delegates the final relevance judgement to lexical scoring —
+   * which ranks rubric-parroting template text above the learner's actual
+   * code (observed in production as "submission shows only the solution
+   * template" false zeros on notebook uploads). The full reranked pool must
+   * reach the validator; only the validator's verdict is capped at six.
+   */
+  it("surfaces the full reranked candidate pool to the validator, not only the lexical top six", async () => {
+    const core = "notebook python code bar chart";
+    const chunks = Array.from({ length: 9 }, (_, i) =>
+      makeChunk(
+        `ch${i + 1}`,
+        `${core} variant-${i + 1} ${"filler ".repeat(i * 3)}`,
+      ),
+    );
+
+    const criterion: RubricCriterion = {
+      id: "bar-chart",
+      rubricQuestion:
+        "Does the notebook include Python code to create a bar chart?",
+      description: "The notebook must include Python code for a bar chart.",
+      criteria: [
+        { description: "Correct bar chart code", points: 2 },
+        { description: "Partial bar chart code", points: 1 },
+        { description: "No bar chart code", points: 0 },
+      ],
+      maxPoints: 2,
+    };
+
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "ch9", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this notebook submission",
+        chunks,
+        assignmentId: 7,
+      },
+      index,
+    );
+
+    const promptArg = promptProcessor.processStructuredPrompt.mock.calls[0][0];
+    const validationPrompt = await promptArg.format({});
+    for (const chunk of chunks) {
+      expect(validationPrompt).toContain(chunk.chunkId);
+    }
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "ch9" }),
+    ]);
+  });
 });
