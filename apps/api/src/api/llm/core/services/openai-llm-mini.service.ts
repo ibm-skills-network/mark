@@ -12,6 +12,10 @@ import {
   LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import {
+  toImageDataList,
+  totalImageDataLength,
+} from "../utils/multimodal-image.util";
 import { invokeStructuredChatModel } from "./structured-output.util";
 import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
@@ -114,14 +118,16 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
   /** Invocation that includes an inline image */
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     const model = this.createChatModel(options);
-    const processedImageData = this.normalizeImageData(imageData);
+    const processedImages = toImageDataList(imageData).map((entry) =>
+      this.normalizeImageData(entry),
+    );
 
     const textTokens = this.tokenCounter.countTokens(textContent);
-    const estimatedImageTokens = 150;
+    const estimatedImageTokens = 150 * processedImages.length;
     const modelName = options?.modelName ?? OpenAiLlmMiniService.DEFAULT_MODEL;
 
     this.logger.info("openai.invokeWithImage.start", {
@@ -130,7 +136,8 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       estimated_image_tokens: estimatedImageTokens,
       text_full_length: textContent.length,
       text_snippet: textContent.slice(0, 400),
-      image_data_length: imageData?.length ?? 0,
+      image_count: processedImages.length,
+      image_data_length: totalImageDataLength(imageData),
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
     });
@@ -140,7 +147,10 @@ export class OpenAiLlmMiniService implements IMultimodalLlmProvider {
       new HumanMessage({
         content: [
           { type: "text", text: textContent },
-          { type: "image_url", image_url: { url: processedImageData } },
+          ...processedImages.map((url) => ({
+            type: "image_url" as const,
+            image_url: { url },
+          })),
         ],
       }),
     ]);

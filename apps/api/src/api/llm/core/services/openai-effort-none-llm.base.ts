@@ -9,6 +9,7 @@ import {
   LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 import { invokeStructuredChatModel } from "./structured-output.util";
 import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 import { explicitPromptCacheKwargs } from "../utils/prompt-cache.util";
@@ -131,34 +132,35 @@ export abstract class EffortNoneOpenAiLlmService
 
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
-    if (!imageData) throw new Error("Image data is empty or null");
-    const imageUrl = imageData.startsWith("data:")
-      ? imageData
-      : `data:image/jpeg;base64,${imageData}`;
+    const imageUrls = toImageDataList(imageData).map((entry) =>
+      entry.startsWith("data:") ? entry : `data:image/jpeg;base64,${entry}`,
+    );
+    if (imageUrls.length === 0) throw new Error("Image data is empty or null");
 
     const message = new HumanMessage({
       content: [
         { type: "text", text: textContent },
-        {
-          type: "image_url",
+        ...imageUrls.map((url) => ({
+          type: "image_url" as const,
           image_url: {
-            url: imageUrl,
+            url,
             detail: options?.imageDetail ?? "auto",
           },
-        },
+        })),
       ],
     });
 
     // API usage includes the model's image-token calculation. If an SDK or
     // mocked response omits it, use a bounded estimate without ever tokenizing
-    // the Base64 payload as if it were prompt text.
+    // the Base64 payload as if it were prompt text. The estimate scales with
+    // the image count so a multi-image call is not billed as a single image.
     return this.invokeWithUsageFallback(
       [message],
       this.tokenCounter.countTokens(textContent) +
-        EffortNoneOpenAiLlmService.FALLBACK_IMAGE_TOKENS,
+        EffortNoneOpenAiLlmService.FALLBACK_IMAGE_TOKENS * imageUrls.length,
       options,
     );
   }

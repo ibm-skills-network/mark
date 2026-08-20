@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 import { withWatsonxRateLimit } from "../utils/watsonx-rate-limiter";
 import { extractStructuredJSON } from "../utils/structured-json.util";
 
@@ -88,11 +89,12 @@ export class Llama3370bInstructLlmService implements IMultimodalLlmProvider {
 
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     this.logger.warn(
       "Llama 3.3 70B Instruct does not support multimodal inputs. Processing text only.",
+      { images_ignored: toImageDataList(imageData).length },
     );
 
     const inputTokens = this.tokenCounter.countTokens(textContent);

@@ -114,11 +114,17 @@ export interface ILlmProvider {
 
 export interface IMultimodalLlmProvider extends ILlmProvider {
   /**
-   * Send a request with image content to the LLM
+   * Send a request with image content to the LLM.
+   *
+   * `imageData` accepts one payload or several. A submission can carry more
+   * than one image, and grading only the first one is indistinguishable from
+   * grading a submission that was never shown — so every image the caller
+   * resolved must reach the model as its own image part. Callers own the
+   * bounding (count and bytes); providers only render what they are given.
    */
   invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse>;
 }
