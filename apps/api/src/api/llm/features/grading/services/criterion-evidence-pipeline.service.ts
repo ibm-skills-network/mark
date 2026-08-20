@@ -333,34 +333,39 @@ export class CriterionEvidencePipelineService {
 
     const gradingAttempts = [...attemptsMap.values()].flat();
 
-    // The audit is persisted (grading-cache metadata JSONB + Redis), and its
-    // evidence arrays repeat every quote per criterion per attempt. Section
-    // and whole-document quotes run to 4-12KB, which multiplies a stored
-    // entry into the hundreds of KB on an already-evicting Redis. Chunk
-    // hashes identify the content; an excerpt is enough for tracing.
-    const truncateQuotes = <T extends { evidence: CriterionEvidence[] }>(
-      item: T,
-    ): T => ({
-      ...item,
-      evidence: item.evidence.map((e) => ({
-        ...e,
-        quote: e.quote.length > 300 ? `${e.quote.slice(0, 300)}…` : e.quote,
-      })),
-    });
-
     return {
       rubricHash,
       chunkHashes,
-      evidenceRetrieval: evidence.map((item) => truncateQuotes(item)),
+      evidenceRetrieval: evidence.map((item) => this.truncateQuotes(item)),
       gradingAttempts: gradingAttempts.map((attempt) =>
         attempt.grade
-          ? { ...attempt, grade: truncateQuotes(attempt.grade) }
+          ? { ...attempt, grade: this.truncateQuotes(attempt.grade) }
           : attempt,
       ),
       judgeCritiques,
       finalSelection,
       llmCalls,
       createdAt: new Date().toISOString(),
+    };
+  }
+
+  // The audit is persisted (grading-cache metadata JSONB + Redis), and its
+  // evidence arrays repeat every quote per criterion per attempt. Section
+  // and whole-document quotes run to 4-12KB, which multiplies a stored
+  // entry into the hundreds of KB on an already-evicting Redis. Chunk
+  // hashes identify the content; an excerpt is enough for tracing.
+  private truncateQuotes<T extends { evidence: CriterionEvidence[] }>(
+    item: T,
+  ): T {
+    return {
+      ...item,
+      evidence: item.evidence.map((entry) => ({
+        ...entry,
+        quote:
+          entry.quote.length > 300
+            ? `${entry.quote.slice(0, 300)}…`
+            : entry.quote,
+      })),
     };
   }
 }
