@@ -1110,6 +1110,15 @@ export const MarkChat = () => {
           onWaitingForCapacity: () => {
             updateFileStatus(fileId, { uploadStatus: "waiting" });
           },
+          onFallback: () => {
+            // Storage domain unreachable from this network; the file is being
+            // re-sent through the API. Hold the indeterminate state rather
+            // than snapping the bar back to 0%.
+            updateFileStatus(fileId, {
+              uploadStatus: "waiting",
+              uploadProgress: 0,
+            });
+          },
         });
 
         // Update file as uploaded
