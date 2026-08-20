@@ -113,6 +113,30 @@ describe("single-PUT fallback", () => {
     expect((fallbackRequest.body as FormData).get("source")).toBe("fallback");
   });
 
+  it("explains instead of rerouting a single-PUT file above the fallback cap", async () => {
+    const size = DIRECT_UPLOAD_FALLBACK_MAX_BYTES + 1;
+    sendWithStallDetection.mockRejectedValue(
+      new UploadTransportError("dead", "stalled"),
+    );
+    const onFallback = jest.fn();
+
+    await expect(
+      uploadFileToStorage(
+        makeFile(size),
+        { ...uploadRequest, fileSize: size },
+        { onFallback },
+      ),
+    ).rejects.toMatchObject({
+      userMessage: expect.stringContaining("too large to send the slower way"),
+    });
+
+    expect(onFallback).not.toHaveBeenCalled();
+    const postedToApi = sendWithStallDetection.mock.calls.some(
+      (call) => call[0].method === "POST",
+    );
+    expect(postedToApi).toBe(false);
+  });
+
   it("re-sends through the API when the storage leg errors outright", async () => {
     sendWithStallDetection
       .mockRejectedValueOnce(new UploadTransportError("no response", "network"))
@@ -235,27 +259,11 @@ describe("multipart uploads", () => {
     );
   });
 
-  it("reroutes a part failure through the API when the file fits", async () => {
+  // The fallback cap sits below the multipart threshold (bodies past ~5MB die
+  // at the UI proxy's timeout), so a multipart file can never reroute: it must
+  // get the clear explanation instead of a second doomed attempt.
+  it("explains instead of rerouting a multipart file", async () => {
     const size = 12 * 1024 * 1024;
-    sendWithStallDetection
-      .mockRejectedValueOnce(new UploadTransportError("dead", "stalled"))
-      .mockReturnValueOnce(
-        httpResponse(201, JSON.stringify(DIRECT_UPLOAD_RESPONSE)),
-      );
-    const onFallback = jest.fn();
-
-    const result = await uploadFileToStorage(
-      makeFile(size),
-      { ...uploadRequest, fileSize: size },
-      { onFallback },
-    );
-
-    expect(onFallback).toHaveBeenCalledWith({ reason: "stalled" });
-    expect(result.key).toBe(DIRECT_UPLOAD_RESPONSE.key);
-  });
-
-  it("explains instead of rerouting a file the API route cannot carry", async () => {
-    const oversized = DIRECT_UPLOAD_FALLBACK_MAX_BYTES + 1;
     sendWithStallDetection.mockRejectedValue(
       new UploadTransportError("dead", "stalled"),
     );
@@ -263,8 +271,8 @@ describe("multipart uploads", () => {
 
     await expect(
       uploadFileToStorage(
-        makeFile(oversized),
-        { ...uploadRequest, fileSize: oversized },
+        makeFile(size),
+        { ...uploadRequest, fileSize: size },
         { onFallback },
       ),
     ).rejects.toMatchObject({

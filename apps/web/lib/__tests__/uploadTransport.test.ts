@@ -115,13 +115,12 @@ describe("stall budgets", () => {
   it("keeps the response budget above the transfer time of a fallback-sized file", () => {
     // The largest file the fallback will carry must not be aborted purely for
     // being slow on the pessimistic floor link.
-    const worstCase =
-      DIRECT_UPLOAD_FALLBACK_MAX_BYTES / UPLOAD_MIN_BYTES_PER_SECOND;
+    const worstCaseMs =
+      (DIRECT_UPLOAD_FALLBACK_MAX_BYTES / UPLOAD_MIN_BYTES_PER_SECOND) * 1000;
+    const budget = computeResponseTimeoutMs(DIRECT_UPLOAD_FALLBACK_MAX_BYTES);
 
-    expect(computeResponseTimeoutMs(DIRECT_UPLOAD_FALLBACK_MAX_BYTES)).toBe(
-      UPLOAD_RESPONSE_TIMEOUT_CAP_MS,
-    );
-    expect(worstCase * 1000).toBeGreaterThan(UPLOAD_RESPONSE_TIMEOUT_CAP_MS);
+    expect(budget).toBeGreaterThanOrEqual(worstCaseMs);
+    expect(budget).toBeLessThanOrEqual(UPLOAD_RESPONSE_TIMEOUT_CAP_MS);
   });
 
   it("scales the response budget with payload size", () => {

@@ -53,13 +53,13 @@ export const UPLOAD_RESPONSE_TIMEOUT_CAP_MS = 5 * 60 * 1000;
  * Largest file we will re-send through the API when the storage domain is
  * unreachable.
  *
- * The API buffers the whole body in memory and the request crosses the
- * same-origin proxy, so the rescue route is capped well below the server's
- * 100MB hard limit. This still covers the entire single-PUT range (10MB) plus
- * the first multipart tier; every stalled upload reported so far was under
- * 2MB.
+ * The rescue request crosses the same-origin UI proxy, and bodies of 10MB and
+ * above die there against its ~30s timeout while 5MB clears in ~1s (measured
+ * on staging) — so anything above this cap would fail the learner a second
+ * time rather than rescue them. Every stalled upload reported so far was
+ * under 2MB.
  */
-export const DIRECT_UPLOAD_FALLBACK_MAX_BYTES = 25 * 1024 * 1024;
+export const DIRECT_UPLOAD_FALLBACK_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * network — the request never produced an HTTP response (DNS, refused
