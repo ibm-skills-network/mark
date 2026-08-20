@@ -254,4 +254,70 @@ describe("EvidenceChunkingService prose section merging", () => {
     expect(chunks).toHaveLength(1);
     expect(chunks[0].metadata?.pinned).toBeUndefined();
   });
+
+  it("splits a single oversized block into capped section chunks anchored at that block", () => {
+    const words = Array.from({ length: 2000 }, (_, i) => `word${i}`).join(" ");
+    const submission = makeDocumentSubmission([[{ text: words }]]);
+
+    const chunks = service.extractFromSubmission(submission);
+    const sections = chunks.filter((chunk) => chunk.metadata?.section);
+
+    expect(sections.length).toBeGreaterThan(1);
+    for (const section of sections) {
+      expect(section.text.length).toBeLessThanOrEqual(PROSE_SECTION_MAX_CHARS);
+      expect(section.anchor).toEqual(
+        expect.objectContaining({ type: "file", blockId: "p1b1" }),
+      );
+      // Every piece must be findable inside the anchored block's text.
+      expect(words.includes(section.text)).toBe(true);
+    }
+  });
+
+  it("records the anchored block's text length on section chunks", () => {
+    const submission = makeDocumentSubmission([
+      [{ text: "short heading" }, { text: "a much longer body line follows" }],
+    ]);
+
+    const chunks = service.extractFromSubmission(submission);
+
+    expect(chunks[0].metadata?.anchorTextChars).toBe("short heading".length);
+  });
+
+  it("anchors the whole-document chunk at the first prose block", () => {
+    const submission = makeDocumentSubmission([
+      [{ text: "chart ocr", type: "image" }, { text: "first prose" }],
+      [{ text: "second page prose" }],
+    ]);
+
+    const chunks = service.extractFromSubmission(submission);
+    const pinned = chunks.find((chunk) => chunk.metadata?.pinned);
+
+    expect(pinned?.anchor).toEqual(
+      expect.objectContaining({ type: "file", page: 1, blockId: "p1b2" }),
+    );
+    expect(pinned?.metadata?.wholeDocument).toBe(true);
+    expect(pinned?.metadata?.anchorTextChars).toBe("first prose".length);
+  });
+
+  it("labels the whole-document chunk honestly when non-prose blocks are omitted", () => {
+    const withImages = makeDocumentSubmission([
+      [{ text: "chart ocr", type: "image" }, { text: "first prose" }],
+      [{ text: "second page prose" }],
+    ]);
+    const allProse = makeDocumentSubmission([
+      [{ text: "first prose" }],
+      [{ text: "second page prose" }],
+    ]);
+
+    const pinnedWithImages = service
+      .extractFromSubmission(withImages)
+      .find((chunk) => chunk.metadata?.pinned);
+    const pinnedAllProse = service
+      .extractFromSubmission(allProse)
+      .find((chunk) => chunk.metadata?.pinned);
+
+    expect(pinnedWithImages?.text).toContain("(text content)");
+    expect(pinnedWithImages?.text).not.toContain("(complete)");
+    expect(pinnedAllProse?.text).toContain("(complete)");
+  });
 });

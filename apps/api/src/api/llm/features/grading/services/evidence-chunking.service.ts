@@ -36,6 +36,8 @@ export class EvidenceChunkingService {
     const prosePages = new Map<number, string[]>();
     let hasPinnedBlock = false;
     let sectionCount = 0;
+    let firstProseBlock: ContentBlock | undefined;
+    let omittedNonProse = false;
 
     for (const page of submission.pages) {
       // Document extraction (PDF especially) emits line-level text runs, one
@@ -68,13 +70,35 @@ export class EvidenceChunkingService {
         if (standalone) {
           flushSection();
           if (block.pinnedEvidence) hasPinnedBlock = true;
+          omittedNonProse = true;
           chunks.push(this.createBlockChunk(submission, block, text));
           continue;
         }
 
+        firstProseBlock ??= block;
         const pageTexts = prosePages.get(block.page) ?? [];
         pageTexts.push(text);
         prosePages.set(block.page, pageTexts);
+
+        // A single block above the section cap never merges; split it into
+        // capped pieces instead, each its own section chunk. Every piece is a
+        // substring of the block's text, so highlight lookup inside the
+        // anchored block still succeeds.
+        if (text.length > PROSE_SECTION_MAX_CHARS) {
+          flushSection();
+          for (const piece of this.splitOversizedText(text)) {
+            chunks.push(
+              this.createProseSectionChunk(submission, {
+                firstBlock: block,
+                sourceFilename: block.sourceFilename,
+                texts: [piece],
+                chars: piece.length,
+              }),
+            );
+            sectionCount += 1;
+          }
+          continue;
+        }
 
         const fitsSection =
           section !== null &&
@@ -103,15 +127,33 @@ export class EvidenceChunkingService {
     // view — the prose analog of the code whole-file block. Skipped when the
     // submission already carries a pinned block (code/notebook uploads) or
     // when a single section already holds the entire document.
-    if (!hasPinnedBlock && sectionCount > 1) {
+    if (!hasPinnedBlock && sectionCount > 1 && firstProseBlock) {
       const wholeDocument = this.buildWholeDocumentChunk(
         submission,
         prosePages,
+        firstProseBlock,
+        omittedNonProse,
       );
       if (wholeDocument) chunks.push(wholeDocument);
     }
 
     return chunks;
+  }
+
+  // Split an oversized single block's text into section-sized pieces at
+  // whitespace boundaries (hard cut when a run has none).
+  private splitOversizedText(text: string): string[] {
+    const pieces: string[] = [];
+    let rest = text;
+    while (rest.length > PROSE_SECTION_MAX_CHARS) {
+      const window = rest.slice(0, PROSE_SECTION_MAX_CHARS);
+      const cut = Math.max(window.lastIndexOf("\n"), window.lastIndexOf(" "));
+      const at = cut > PROSE_SECTION_MAX_CHARS / 2 ? cut : window.length;
+      pieces.push(rest.slice(0, at).trimEnd());
+      rest = rest.slice(at).trimStart();
+    }
+    if (rest.trim()) pieces.push(rest);
+    return pieces;
   }
 
   private createBlockChunk(
@@ -173,6 +215,7 @@ export class EvidenceChunkingService {
         structured: true,
         checksum: submission.metadata.checksum,
         section: true,
+        anchorTextChars: section.texts[0].length,
       },
     });
   }
@@ -180,6 +223,8 @@ export class EvidenceChunkingService {
   private buildWholeDocumentChunk(
     submission: CanonicalSubmission,
     prosePages: Map<number, string[]>,
+    firstProseBlock: ContentBlock,
+    omittedNonProse: boolean,
   ): ExtractedChunk | null {
     const pageNumbers = [...prosePages.keys()].sort((a, b) => a - b);
     if (pageNumbers.length === 0) return null;
@@ -198,8 +243,12 @@ export class EvidenceChunkingService {
 
     // Mirrors the code whole-file block: the ENTIRE text (header + body +
     // marker) is bounded, and a document only counts as truncated when the
-    // complete block would not fit.
-    const completeText = `=== DOCUMENT: ${name} (complete) ===\n${body}`;
+    // complete block would not fit. "(complete)" would be a lie when image or
+    // code blocks were left out of this prose aggregate — the grader is told
+    // to trust shown-vs-truncated distinctions — so those documents get the
+    // honest "(text content)" label instead.
+    const wholeLabel = omittedNonProse ? "text content" : "complete";
+    const completeText = `=== DOCUMENT: ${name} (${wholeLabel}) ===\n${body}`;
     const bodyBudget =
       DOC_WHOLE_SUBMISSION_BLOCK_MAX_CHARS -
       truncatedHeader.length -
@@ -209,14 +258,18 @@ export class EvidenceChunkingService {
         ? completeText
         : `${truncatedHeader}${body.slice(0, bodyBudget)}${marker}`;
 
+    // Anchor at the first prose block (not a synthetic id): citations then
+    // resolve to a real block for highlighting, and nothing learner-facing
+    // falls back to a bare chunk hash.
+    const firstProseText = prosePages.get(pageNumbers[0])?.[0] ?? "";
     return this.createChunk({
       text,
       sourceType: "file",
       sourceId: submission.submissionId,
       anchor: {
         type: "file",
-        page: pageNumbers[0],
-        blockId: undefined,
+        page: firstProseBlock.page,
+        blockId: firstProseBlock.blockId,
         lineStart: 1,
         lineEnd: Math.max(1, text.split(/\n+/).length),
       },
@@ -226,6 +279,8 @@ export class EvidenceChunkingService {
         structured: true,
         checksum: submission.metadata.checksum,
         pinned: true,
+        wholeDocument: true,
+        anchorTextChars: firstProseText.length,
       },
     });
   }

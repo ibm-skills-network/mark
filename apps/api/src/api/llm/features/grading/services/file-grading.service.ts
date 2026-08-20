@@ -145,8 +145,12 @@ export class FileGradingService implements IFileGradingService {
     string,
     Promise<FileBasedQuestionResponseModel>
   >();
+  // v5: document uploads are section-chunked with a pinned whole-document
+  // view. The chunking change is invisible to the cache's answer hash (it
+  // hashes structuredContent, which is unchanged), so the version bump is
+  // what invalidates grades produced from the old starved evidence.
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
-    "structured-file-evidence-v4-stable-answer-hash";
+    "structured-file-evidence-v5-doc-sections";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)

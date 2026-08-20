@@ -138,8 +138,14 @@ EVIDENCE SUMMARY:
         evidence: () =>
           request.evidence
             .map((item) => {
+              // The judge reviews grades, not the submission: an excerpt is
+              // enough context. Full-length quotes (sections and the pinned
+              // whole-document view run to 12KB) repeated per criterion would
+              // put a multi-hundred-KB prompt on every judged submission.
               const citations = item.evidence
-                .map((event) => `${event.chunkId}: ${event.quote}`)
+                .map(
+                  (event) => `${event.chunkId}: ${event.quote.slice(0, 300)}`,
+                )
                 .slice(0, 3)
                 .join(" | ");
               return `${item.criterionId}: ${citations}`;
