@@ -153,6 +153,7 @@ export class CriterionEvidenceRetrievalService {
       relevance: number;
       combined: number;
     }> = [];
+    let scored: typeof reranked = [];
 
     if (candidates.length > 0) {
       const maxSearchScore = Math.max(...candidates.map((c) => c.score), 1);
@@ -163,7 +164,7 @@ export class CriterionEvidenceRetrievalService {
       // to lexical scoring, which ranks rubric-parroting prose above the code
       // that actually answers it. Non-validated paths cap at maxEvidence in
       // mapRerankedCandidatesToEvidence.
-      reranked = candidates
+      scored = candidates
         .map((candidate) => {
           const relevance = this.computeRelevanceScore(
             request.criterion,
@@ -177,8 +178,11 @@ export class CriterionEvidenceRetrievalService {
             combined,
           };
         })
-        .filter((candidate) => candidate.relevance >= this.config.minRelevance)
         .sort((a, b) => b.combined - a.combined);
+
+      reranked = scored.filter(
+        (candidate) => candidate.relevance >= this.config.minRelevance,
+      );
     }
 
     if (reranked.length === 0) {
@@ -218,6 +222,40 @@ export class CriterionEvidenceRetrievalService {
           `search=${candidates.length} candidates, reranked=0 after filter; ` +
           `surfaced ${reranked.length} chunks (aboveThreshold=${aboveThreshold.length})`,
       );
+    } else if (reranked.length < maxEvidence) {
+      // A thin above-threshold pool starves the validator into judging a
+      // criterion on one or two fragments — often a bare heading, which the
+      // rubric then scores as "heading only". Verbose criteria dilute token
+      // overlap, so a thin pool signals a weak relevance signal, not a thin
+      // submission. Top the pool back up to maxCandidates — below-threshold
+      // search candidates first (they carry search signal), then the best of
+      // the remaining corpus — and let the validator judge, the same trust
+      // the empty-pool fallback above already extends.
+      const present = new Set(reranked.map((item) => item.chunk.chunkId));
+      const belowThreshold = scored.filter(
+        (item) => !present.has(item.chunk.chunkId),
+      );
+      for (const item of belowThreshold) present.add(item.chunk.chunkId);
+      const corpusTopUp = index
+        .getAllChunks()
+        .filter((chunk) => !present.has(chunk.chunkId))
+        .map((chunk) => {
+          const relevance = this.computeRelevanceScore(
+            request.criterion,
+            chunk.text,
+          );
+          return { chunk, score: 0, relevance, combined: relevance };
+        })
+        .sort((a, b) => b.combined - a.combined);
+
+      const topUpCount = Math.max(
+        0,
+        this.config.maxCandidates - reranked.length,
+      );
+      reranked = [
+        ...reranked,
+        ...[...belowThreshold, ...corpusTopUp].slice(0, topUpCount),
+      ];
     }
 
     // Pinned chunks (e.g. the whole-file block for code uploads) must always
@@ -320,14 +358,19 @@ export class CriterionEvidenceRetrievalService {
     }));
   }
 
-  // Prose chunks keep the historical short cap; code-like chunks (source
-  // files and notebook cells) carry their full text (a short fragment can't
-  // show whether code works).
+  // Fragment-sized prose chunks keep the historical short cap. Chunks whose
+  // whole point is carrying a full unit of work — code-like chunks (source
+  // files, notebook cells), merged prose sections (a page/slide of a
+  // document), and pinned whole-submission views — carry their full text:
+  // truncating them back to a fragment would undo the merge that made them
+  // usable evidence. Their builders bound them at or below this cap.
   // proseCap is 220 for stored evidence quotes and 240 for validation excerpts.
   private buildExcerpt(chunk: ExtractedChunk, proseCap: number): string {
-    const cap = isCodeLikeFilename(chunk.metadata?.filename)
-      ? CODE_EVIDENCE_QUOTE_MAX_CHARS
-      : proseCap;
+    const fullLength =
+      isCodeLikeFilename(chunk.metadata?.filename) ||
+      chunk.metadata?.section ||
+      chunk.metadata?.pinned;
+    const cap = fullLength ? CODE_EVIDENCE_QUOTE_MAX_CHARS : proseCap;
     return chunk.text.slice(0, cap);
   }
 

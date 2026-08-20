@@ -60,6 +60,12 @@ export interface ExtractedChunk {
     checksum?: string;
     /** Mirrors ContentBlock.pinnedEvidence: always reaches the LLM validator. */
     pinned?: boolean;
+    /**
+     * Chunk is a merged prose section (a page/slide worth of consecutive
+     * blocks). Section quotes carry their full text — the short prose
+     * excerpt cap would undo the merge.
+     */
+    section?: boolean;
   };
 }
 
