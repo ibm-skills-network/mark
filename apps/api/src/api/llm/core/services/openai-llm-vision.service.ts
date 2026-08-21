@@ -12,6 +12,10 @@ import {
   LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import {
+  toImageDataList,
+  totalImageDataLength,
+} from "../utils/multimodal-image.util";
 import { invokeStructuredChatModel } from "./structured-output.util";
 import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
@@ -116,17 +120,22 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
    */
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     const model = this.createChatModel(options);
 
-    const processedImageData = this.normalizeImageData(imageData);
+    const processedImages = toImageDataList(imageData).map((entry) =>
+      this.normalizeImageData(entry),
+    );
     const inputTokens = this.tokenCounter.countTokens(textContent);
     const modelName =
       options?.modelName ?? Gpt4VisionPreviewLlmService.DEFAULT_MODEL;
 
-    const estimatedImageTokens = this.estimateImageTokens(processedImageData);
+    const estimatedImageTokens = processedImages.reduce(
+      (sum, url) => sum + this.estimateImageTokens(url),
+      0,
+    );
 
     this.logger.info("openai.invokeWithImage.start", {
       model_name: modelName,
@@ -134,7 +143,8 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       estimated_image_tokens: estimatedImageTokens,
       text_full_length: textContent.length,
       text_snippet: textContent.slice(0, 400),
-      image_data_length: imageData?.length ?? 0,
+      image_count: processedImages.length,
+      image_data_length: totalImageDataLength(imageData),
       image_detail: options?.imageDetail ?? "auto",
       max_tokens: options?.maxTokens,
       temperature: options?.temperature ?? 0,
@@ -146,13 +156,13 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
         new HumanMessage({
           content: [
             { type: "text", text: textContent },
-            {
-              type: "image_url",
+            ...processedImages.map((url) => ({
+              type: "image_url" as const,
               image_url: {
-                url: processedImageData,
+                url,
                 detail: options?.imageDetail ?? "auto",
               },
-            },
+            })),
           ],
         }),
       ]);

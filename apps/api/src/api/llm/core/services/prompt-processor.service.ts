@@ -13,10 +13,21 @@ import type { ZodTypeAny } from "zod";
 import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { AiFeatureFlagsService } from "../../../ai-feature-flags/ai-feature-flags.service";
 import { USAGE_TRACKER } from "../../llm.constants";
-import { LlmRequestOptions } from "../interfaces/llm-provider.interface";
+import {
+  ILlmProvider,
+  LlmRequestOptions,
+} from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { logAiInvocation } from "../utils/ai-invocation-log.util";
+import {
+  toImageDataList,
+  totalImageDataLength,
+} from "../utils/multimodal-image.util";
+import {
+  buildPromptMessage,
+  promptCacheApplies,
+} from "../utils/prompt-cache.util";
 import { LlmRouter } from "./llm-router.service";
 
 @Injectable()
@@ -71,6 +82,43 @@ export class PromptProcessorService implements IPromptProcessor {
   }
 
   /**
+   * Wraps the formatted prompt in a message, splitting off a cacheable head
+   * when the caller asked for it and the model supports it.
+   *
+   * Every fallback returns the plain single-block message this method has
+   * always produced, so a caching miss can only ever cost money — never change
+   * what the model is asked.
+   */
+  private buildMessageFor(
+    llm: ILlmProvider,
+    input: string,
+    options?: LlmRequestOptions,
+  ): HumanMessage {
+    const requested = options?.promptCache;
+    if (!requested || !llm.supportsExplicitPromptCache) {
+      return new HumanMessage(input);
+    }
+
+    if (!promptCacheApplies(input, requested)) {
+      // The head drifted from the template it was derived from. Caching the
+      // wrong bytes is worse than not caching, so drop to the plain form and
+      // make the drift visible rather than silently paying full price.
+      this.logger.warn(
+        "Prompt cache prefix does not match the formatted prompt",
+        {
+          model_key: llm.key,
+          cache_key: requested.key,
+          prefix_length: requested.prefix.length,
+          prompt_length: input.length,
+        },
+      );
+      return new HumanMessage(input);
+    }
+
+    return buildPromptMessage(input, requested);
+  }
+
+  /**
    * Process a prompt for a feature and return a value validated against
    * `schema`, preferring the provider's native structured output.
    */
@@ -98,7 +146,7 @@ export class PromptProcessorService implements IPromptProcessor {
     if (typeof llm.invokeStructured === "function") {
       const input = await this.formatPromptInput(prompt);
       const { parsed, tokenUsage } = await llm.invokeStructured<T>(
-        [new HumanMessage(input)],
+        [this.buildMessageFor(llm, input, options)],
         schema,
         options,
       );
@@ -107,7 +155,13 @@ export class PromptProcessorService implements IPromptProcessor {
         purpose: featureKey,
         prompt: input,
         response: JSON.stringify(parsed),
-        context: { assignment_id: assignmentId, usage_type: usageType },
+        context: {
+          assignment_id: assignmentId,
+          usage_type: usageType,
+          input_tokens: tokenUsage.input,
+          output_tokens: tokenUsage.output,
+          cached_input_tokens: tokenUsage.cachedInput,
+        },
       });
       await this.trackUsageSafely(
         assignmentId,
@@ -151,7 +205,7 @@ export class PromptProcessorService implements IPromptProcessor {
     if (typeof llm.invokeStructured === "function") {
       const input = await this.formatPromptInput(prompt);
       const { parsed, tokenUsage } = await llm.invokeStructured<T>(
-        [new HumanMessage(input)],
+        [this.buildMessageFor(llm, input, options)],
         schema,
         options,
       );
@@ -160,7 +214,13 @@ export class PromptProcessorService implements IPromptProcessor {
         purpose: "structured_prompt",
         prompt: input,
         response: JSON.stringify(parsed),
-        context: { assignment_id: assignmentId, usage_type: usageType },
+        context: {
+          assignment_id: assignmentId,
+          usage_type: usageType,
+          input_tokens: tokenUsage.input,
+          output_tokens: tokenUsage.output,
+          cached_input_tokens: tokenUsage.cachedInput,
+        },
       });
       await this.trackUsageSafely(
         assignmentId,
@@ -289,7 +349,10 @@ export class PromptProcessorService implements IPromptProcessor {
     let result: any;
 
     try {
-      result = await llm.invoke([new HumanMessage(input)], options);
+      result = await llm.invoke(
+        [this.buildMessageFor(llm, input, options)],
+        options,
+      );
     } catch (error) {
       this.logger.error(
         `Provider invocation failed: ${
@@ -310,7 +373,13 @@ export class PromptProcessorService implements IPromptProcessor {
       purpose: purposeLabel ?? usageType,
       prompt: input,
       response,
-      context: { assignment_id: assignmentId, usage_type: usageType },
+      context: {
+        assignment_id: assignmentId,
+        usage_type: usageType,
+        input_tokens: result.tokenUsage?.input,
+        output_tokens: result.tokenUsage?.output,
+        cached_input_tokens: result.tokenUsage?.cachedInput,
+      },
     });
 
     await this.trackUsageSafely(
@@ -332,7 +401,7 @@ export class PromptProcessorService implements IPromptProcessor {
    */
   async processPromptWithImage(
     prompt: PromptTemplate,
-    imageData: string,
+    imageData: string | string[],
     assignmentId: number,
     usageType: AIUsageType,
     llmKey = "gpt-4.1-mini",
@@ -367,7 +436,24 @@ export class PromptProcessorService implements IPromptProcessor {
 
       textContent = decodeIfBase64(textContent) || textContent;
 
-      const decodedImageData = decodeIfBase64(imageData) || imageData;
+      // Each payload is decoded independently: a batch can mix an inline data
+      // URL with a storage-resolved one, and decoding the joined list would
+      // corrupt both.
+      const imagePayloads = toImageDataList(imageData);
+      if (imagePayloads.length === 0) {
+        throw new Error("No image data provided for image prompt");
+      }
+      const decodedImageData = imagePayloads.map(
+        (payload) => decodeIfBase64(payload) || payload,
+      );
+
+      this.logger.debug("llm.prompt.with_image.start", {
+        assignment_id: assignmentId,
+        usage_type: usageType,
+        llm_key: llmKey,
+        image_count: decodedImageData.length,
+        image_bytes: totalImageDataLength(decodedImageData),
+      });
 
       const result = await llm.invokeWithImage(
         textContent,
@@ -380,9 +466,15 @@ export class PromptProcessorService implements IPromptProcessor {
       logAiInvocation(this.logger, {
         modelKey: llm.key,
         purpose: usageType,
-        prompt: `${textContent} [image omitted]`,
+        prompt: `${textContent} [${decodedImageData.length} image(s) omitted]`,
         response,
-        context: { assignment_id: assignmentId, usage_type: usageType },
+        context: {
+          assignment_id: assignmentId,
+          usage_type: usageType,
+          input_tokens: result.tokenUsage?.input,
+          output_tokens: result.tokenUsage?.output,
+          cached_input_tokens: result.tokenUsage?.cachedInput,
+        },
       });
 
       await this.trackUsageSafely(

@@ -671,6 +671,238 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
         NotFoundException,
       );
     });
+
+    it("returns the grade when the assignment shows the score", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue(baseAssignment);
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.grade).toBe(0.9);
+    });
+
+    // The attempt row is spread into the response, so the persisted grade
+    // reaches the learner unless it is explicitly overridden.
+    it("withholds the grade when the assignment hides the score", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        showAssignmentScore: false,
+      });
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.grade).toBeNull();
+      expect(result.showAssignmentScore).toBe(false);
+    });
+
+    // Pass/fail lives on the completed and submit responses, which apply the
+    // over-scoring clamp this route does not.
+    it("carries no pass/fail verdict", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        showPassFailIndicator: true,
+      });
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      expect(result.passed).toBeUndefined();
+    });
+
+    // The 0-1 grade used to be compared raw against the 0-100 passing grade,
+    // so ON_PASS behaved like NEVER: 0.9 < 70 hid the answers from a learner
+    // who scored 90% against a 70% threshold.
+    it("shows correct answers under ON_PASS when the grade meets the passing grade", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
+        baseAttempt,
+      );
+      mockPrismaService.assignment.findUnique.mockResolvedValue(baseAssignment);
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([
+        {
+          id: 7,
+          answer: "the answer",
+          choices: [
+            { choice: "A", isCorrect: true, points: 1, feedback: "right" },
+          ],
+        },
+      ]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      const [question] = result.questions;
+      expect(question.choices[0].isCorrect).toBe(true);
+      expect(question.choices[0].feedback).toBe("right");
+      // points are stripped regardless of pass/fail
+      expect(question.choices[0].points).toBeUndefined();
+      expect(question.answer).toBe("the answer");
+    });
+
+    it("hides correct answers under ON_PASS when the grade is below the passing grade", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue({
+        ...baseAttempt,
+        grade: 0.5,
+      });
+      mockPrismaService.assignment.findUnique.mockResolvedValue(baseAssignment);
+      mockPrismaService.translation.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([
+        {
+          id: 7,
+          answer: "the answer",
+          choices: [
+            { choice: "A", isCorrect: true, points: 1, feedback: "right" },
+          ],
+        },
+      ]);
+
+      const result = await service.getAssignmentAttempt(555, "en");
+
+      const [question] = result.questions;
+      expect(question.choices[0].isCorrect).toBeUndefined();
+      expect(question.choices[0].feedback).toBeUndefined();
+      expect(question.answer).toBeUndefined();
+    });
+  });
+
+  describe("getLearnerAssignmentAttempt - correct answer visibility", () => {
+    const completedAttempt = () => ({
+      id: 555,
+      assignmentId: 42,
+      grade: 0.9,
+      questionOrder: [7],
+      questionResponses: [],
+      questionVariants: [],
+      comments: null,
+    });
+
+    const completedQuestion = () => ({
+      id: 7,
+      assignmentId: 42,
+      question: "Pick one",
+      type: "SINGLE_CORRECT",
+      totalPoints: 1,
+      answer: "the answer",
+      choices: [{ choice: "A", isCorrect: true, points: 1, feedback: "right" }],
+      scoring: null,
+      isDeleted: false,
+    });
+
+    const completedAssignment = () => ({
+      id: 42,
+      languageCode: null,
+      questions: [],
+      questionOrder: [],
+      displayOrder: "DEFINED",
+      passingGrade: 70,
+      showAssignmentScore: true,
+      showSubmissionFeedback: true,
+      showQuestionScore: true,
+      showQuestions: true,
+      showPassFailIndicator: true,
+      questionControls: null,
+      currentVersion: {
+        correctAnswerVisibility: "NEVER",
+        questionControls: null,
+      },
+    });
+
+    const mockCompleted = (
+      attempt: ReturnType<typeof completedAttempt>,
+      assignment: ReturnType<typeof completedAssignment>,
+    ) => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(attempt);
+      mockPrismaService.question.findMany.mockResolvedValue([
+        completedQuestion(),
+      ]);
+      mockPrismaService.assignment.findUnique.mockResolvedValue(assignment);
+    };
+
+    // The gate used to read assignmentAttempt.grade after the score-hiding
+    // step deleted it, so `undefined < passingGrade` was false and NEVER
+    // assignments with a hidden score leaked isCorrect and feedback on the
+    // completed route. (question.answer never survives this route's mapper.)
+    it("hides correct answers under NEVER even when the score is hidden", async () => {
+      mockCompleted(completedAttempt(), {
+        ...completedAssignment(),
+        showAssignmentScore: false,
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(555);
+
+      const [question] = result.questions;
+      expect(question.choices[0].isCorrect).toBeUndefined();
+      expect(question.choices[0].feedback).toBeUndefined();
+    });
+
+    it("hides correct answers under NEVER regardless of the grade", async () => {
+      mockCompleted(completedAttempt(), completedAssignment());
+
+      const result = await service.getLearnerAssignmentAttempt(555);
+
+      expect(result.questions[0].choices[0].isCorrect).toBeUndefined();
+    });
+
+    // ON_PASS previously never matched the gate at all, so failing learners
+    // saw the correct answers on the completed route.
+    it("hides correct answers under ON_PASS when the grade is below the passing grade", async () => {
+      mockCompleted(
+        { ...completedAttempt(), grade: 0.5 },
+        {
+          ...completedAssignment(),
+          currentVersion: {
+            correctAnswerVisibility: "ON_PASS",
+            questionControls: null,
+          },
+        },
+      );
+
+      const result = await service.getLearnerAssignmentAttempt(555);
+
+      expect(result.questions[0].choices[0].isCorrect).toBeUndefined();
+    });
+
+    it("shows correct answers under ON_PASS when the grade meets the passing grade", async () => {
+      mockCompleted(completedAttempt(), {
+        ...completedAssignment(),
+        currentVersion: {
+          correctAnswerVisibility: "ON_PASS",
+          questionControls: null,
+        },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(555);
+
+      const [question] = result.questions;
+      expect(question.choices[0].isCorrect).toBe(true);
+      expect(question.choices[0].feedback).toBe("right");
+    });
+
+    it("shows correct answers under ALWAYS", async () => {
+      mockCompleted(completedAttempt(), {
+        ...completedAssignment(),
+        currentVersion: {
+          correctAnswerVisibility: "ALWAYS",
+          questionControls: null,
+        },
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(555);
+
+      expect(result.questions[0].choices[0].isCorrect).toBe(true);
+    });
   });
 
   describe("getAssignmentContext - v1 URL context enrichment", () => {

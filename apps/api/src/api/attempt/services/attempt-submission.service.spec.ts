@@ -1433,6 +1433,96 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(result.grade).toBe(1);
     });
 
+    // The author's unsaved pass/fail settings arrive in authorAssignmentDetails;
+    // the preview must reflect them, not the not-yet-published Prisma row.
+    it("prefers the request's pass/fail settings over the persisted row", async () => {
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        questions: [],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+        showPassFailIndicator: false,
+        passingGrade: 70,
+      });
+
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [{ id: 1, question: "Preview response" }],
+        authorQuestions: [{ id: 1, totalPoints: 20 }],
+        authorAssignmentDetails: {
+          showPassFailIndicator: true,
+          passingGrade: 60,
+        },
+      };
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({ questionId: 1, totalPoints: 20, metadata: undefined }),
+      ]);
+      mockGradingService.calculateGradeForAuthor.mockReturnValue({
+        grade: 0.65,
+        totalPointsEarned: 13,
+        totalPossiblePoints: 20,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        -1,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "",
+        false,
+        authorRequest as UpdateAttemptRequest,
+      );
+
+      // 0.65 passes the unsaved 60% threshold; against the persisted row the
+      // indicator would be off entirely (and 70% would fail it).
+      expect(result.showPassFailIndicator).toBe(true);
+      expect(result.passed).toBe(true);
+    });
+
+    it("falls back to the persisted pass/fail settings when the request omits them", async () => {
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: assignmentId,
+        questions: [],
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+        showAssignmentScore: true,
+        showQuestions: true,
+        showSubmissionFeedback: true,
+        showPassFailIndicator: true,
+        passingGrade: 70,
+      });
+
+      const updateDto = {
+        submitted: true,
+        language: "en",
+        responsesForQuestions: [{ id: 1, question: "Preview response" }],
+        authorQuestions: [{ id: 1, totalPoints: 20 }],
+      };
+
+      mockQuestionResponseService.submitQuestions.mockResolvedValue([
+        makeResponse({ questionId: 1, totalPoints: 20, metadata: undefined }),
+      ]);
+      mockGradingService.calculateGradeForAuthor.mockReturnValue({
+        grade: 0.65,
+        totalPointsEarned: 13,
+        totalPossiblePoints: 20,
+      });
+
+      const result = await service.updateAssignmentAttempt(
+        -1,
+        assignmentId,
+        updateDto as UpdateAttemptDto,
+        "",
+        false,
+        authorRequest as UpdateAttemptRequest,
+      );
+
+      expect(result.showPassFailIndicator).toBe(true);
+      expect(result.passed).toBe(false);
+    });
+
     it("throws when preview responses reference questions missing from provided draft questions", async () => {
       const updateDto = {
         submitted: true,

@@ -58,11 +58,15 @@ export interface IPromptProcessor {
   ): Promise<string>;
 
   /**
-   * Process a prompt with image data and return the LLM response
+   * Process a prompt with image data and return the LLM response.
+   *
+   * `imageData` accepts one payload or a list. Multi-image submissions must
+   * send every resolved image, not just a "primary" one; the caller is
+   * responsible for bounding how many images and how many bytes it passes.
    */
   processPromptWithImage(
     prompt: PromptTemplate,
-    imageData: string,
+    imageData: string | string[],
     assignmentId: number,
     usageType: AIUsageType,
     llmKey?: string,

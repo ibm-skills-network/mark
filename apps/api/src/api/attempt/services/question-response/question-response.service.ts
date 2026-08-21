@@ -900,6 +900,7 @@ export class QuestionResponseService {
         const gradingStrategy = this.gradingFactoryService.getStrategy(
           question.type,
           question.responseType,
+          requestDto.learnerFileResponse,
         );
 
         if (!gradingStrategy) {
@@ -1056,6 +1057,7 @@ export class QuestionResponseService {
       const fileGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.UPLOAD,
         responseType,
+        requestDto.learnerFileResponse,
       );
       const isValid = await fileGradingStrategy.validateResponse(
         question,

@@ -89,7 +89,7 @@ describe("GradingProgressModal error report context identity", () => {
 });
 
 describe("GradingProgressModal stalled state", () => {
-  it("keeps the spinner and tells the learner grading is still running", () => {
+  it("keeps the working presentation and tells the learner grading is still running", () => {
     renderModal({
       status: "stalled",
       currentStage:

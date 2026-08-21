@@ -80,14 +80,18 @@ api:
     # is open. Runtime check is strict equality with "true".
     ENABLE_TRANSLATION: "false"
     ENABLE_PARALLEL_GRADING: "false"
-    SN_SUPPORT_API_URL: "https://support.skills.network"
+    # Bump when a rolling model or grading semantics change so persistent
+    # grading cache entries are not reused across deployments.
+    GRADING_CACHE_REVISION: "2026-08-05-gpt56"
     # Bottleneck maxConcurrent ceiling on parallel LLM calls inside ONE
     # grading job (the wave scheduler's fan-out cap). Distinct from
     # GRADING_WORKER_CONCURRENCY on mark-jobs, which controls how many
     # grading jobs the BullMQ worker pulls in parallel per pod.
     GRADING_CONCURRENCY: "10"
   secretEnv:
-    SN_SUPPORT_API_KEY: ""
+    # SN Support ticket forwarding; unset leaves the integration disabled.
+    SN_SUPPORT_URL: ""
+    SN_SUPPORT_TOKEN: ""
 
 jobs:
   enabled: false

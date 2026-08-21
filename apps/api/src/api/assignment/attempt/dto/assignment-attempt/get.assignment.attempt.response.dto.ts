@@ -100,6 +100,23 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   showQuestionScore: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      "Tell the learner whether they passed, even when the score is hidden. Absent on the in-progress attempt route, which carries no pass/fail verdict.",
+    type: Boolean,
+  })
+  @Optional()
+  showPassFailIndicator?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Whether the attempt met the passing grade. Only present when showPassFailIndicator is enabled and the attempt has a grade; computed server-side so the score itself stays hidden.",
+    type: Boolean,
+    required: false,
+  })
+  @Optional()
+  passed?: boolean;
+
   @ApiProperty({
     description: "Show correct answer",
     type: Boolean,
@@ -207,6 +224,7 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
     showQuestionScore?: boolean;
     showSubmissionFeedback?: boolean;
     showQuestions?: boolean;
+    showPassFailIndicator?: boolean;
     correctAnswerVisibility?: CorrectAnswerVisibility;
     questionControls?: {
       disableCopy?: boolean;

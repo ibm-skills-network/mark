@@ -172,6 +172,7 @@ export class AssignmentServiceV1 {
           published: version.published,
           showAssignmentScore: version.showAssignmentScore,
           showQuestionScore: version.showQuestionScore,
+          showPassFailIndicator: version.showPassFailIndicator,
           showSubmissionFeedback: version.showSubmissionFeedback,
           showQuestions: version.showQuestions,
           languageCode: version.languageCode,

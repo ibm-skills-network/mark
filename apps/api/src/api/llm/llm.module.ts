@@ -7,6 +7,11 @@ import {
   Gpt54MiniLlmService,
   Gpt54NanoLlmService,
 } from "./core/services/gpt54-llm.service";
+import {
+  Gpt56LunaLlmService,
+  Gpt56SolLlmService,
+  Gpt56TerraLlmService,
+} from "./core/services/gpt56-llm.service";
 import { GptOss120bLlmService } from "./core/services/gpt-oss-120b-llm-service";
 import { Granite4HSmallLlmService } from "./core/services/granite-4-h-small-llm-service";
 import { GraniteVision322bLlmService } from "./core/services/granite-vision-3-2-2b-llm-service";
@@ -92,6 +97,9 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     Gpt5NanoLlmService,
     Gpt54MiniLlmService,
     Gpt54NanoLlmService,
+    Gpt56LunaLlmService,
+    Gpt56TerraLlmService,
+    Gpt56SolLlmService,
     GptOss120bLlmService,
     Granite4HSmallLlmService,
     GraniteVision322bLlmService,
@@ -116,8 +124,30 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
         p12: MistralMedium2505LlmService,
         p13: Gpt54MiniLlmService,
         p14: Gpt54NanoLlmService,
+        // Append only: LlmRouter.getDefault() returns this array's first entry.
+        p15: Gpt56LunaLlmService,
+        p16: Gpt56TerraLlmService,
+        p17: Gpt56SolLlmService,
       ) => {
-        return [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14];
+        return [
+          p1,
+          p2,
+          p3,
+          p4,
+          p5,
+          p6,
+          p7,
+          p8,
+          p9,
+          p10,
+          p11,
+          p12,
+          p13,
+          p14,
+          p15,
+          p16,
+          p17,
+        ];
       },
       inject: [
         OpenAiLlmService,
@@ -134,6 +164,9 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
         MistralMedium2505LlmService,
         Gpt54MiniLlmService,
         Gpt54NanoLlmService,
+        Gpt56LunaLlmService,
+        Gpt56TerraLlmService,
+        Gpt56SolLlmService,
       ],
     },
     S3Service,

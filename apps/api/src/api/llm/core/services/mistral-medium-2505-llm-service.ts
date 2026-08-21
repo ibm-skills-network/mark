@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 
 @Injectable()
 export class MistralMedium2505LlmService implements IMultimodalLlmProvider {
@@ -86,11 +87,12 @@ export class MistralMedium2505LlmService implements IMultimodalLlmProvider {
 
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     this.logger.warn(
       "Mistral Medium 2505 supports image inputs but requires special handling. Processing text only for now.",
+      { images_ignored: toImageDataList(imageData).length },
     );
 
     const inputTokens = this.tokenCounter.countTokens(textContent);

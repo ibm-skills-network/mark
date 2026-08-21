@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -57,9 +58,19 @@ export class DirectUploadDto {
   @IsEnum(UploadType)
   uploadType: UploadType;
 
+  /** JSON-encoded UploadContextDto. Parsed and validated in the handler. */
   @IsOptional()
   @IsString()
   context?: string;
+
+  /**
+   * Why this route was taken, for observability only. Never used to make an
+   * authorization or routing decision, and constrained to a fixed set so a
+   * hostile client cannot write arbitrary text into logs.
+   */
+  @IsOptional()
+  @IsIn(["direct", "fallback"])
+  source?: "direct" | "fallback";
 }
 
 export class UploadResponseDto {

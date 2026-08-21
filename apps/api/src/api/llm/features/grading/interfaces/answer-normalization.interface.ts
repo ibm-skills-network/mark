@@ -51,6 +51,7 @@ export interface IAnswerNormalizationService {
     rubricHash: string,
     answerHash: string,
     questionId?: number,
+    modelIdentity?: string,
   ): string;
 
   /**
