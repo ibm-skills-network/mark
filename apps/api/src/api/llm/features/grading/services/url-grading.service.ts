@@ -1,7 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
@@ -117,13 +116,6 @@ export class UrlGradingService implements IUrlGradingService {
       return this.buildUrlResponseFromPipeline(pipelineResult, totalPoints);
     }
 
-    // Parser kept only to inject {format_instructions}: native structured
-    // output (below) fills the schema on OpenAI providers, but a watsonx
-    // provider falls back to text parsing and still needs the instructions.
-    const parser = StructuredOutputParser.fromZodSchema(UrlGradeSchema);
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const responseSpecificInstruction: string =
       RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS[responseType] ?? "";
 
@@ -143,7 +135,6 @@ export class UrlGradingService implements IUrlGradingService {
         total_points: () => totalPoints.toString(),
         scoring_type: () => scoringCriteriaType,
         scoring_criteria: () => JSON.stringify(scoringCriteria),
-        format_instructions: () => formatInstructions,
         grading_type: () => responseType,
         language: () => language ?? "en",
       },
@@ -239,9 +230,6 @@ export class UrlGradingService implements IUrlGradingService {
     - NO subjective adjectives, NO encouragement, NO praise - be specific and objective
     
     LANGUAGE: {language}
-    
-    Respond with a JSON object containing the points awarded and feedback according to the following format:
-    {format_instructions}
     `;
   }
 

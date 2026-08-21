@@ -1,7 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
 import { VideoPresentationQuestionResponseModel } from "src/api/llm/model/video-presentation.question.response.model";
@@ -81,12 +80,6 @@ export class VideoPresentationGradingService
       });
     }
 
-    // Parser kept only to inject {format_instructions} for the watsonx
-    // text-parse fallback; OpenAI providers use native structured output.
-    const parser = StructuredOutputParser.fromZodSchema(VideoGradeSchema);
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = new PromptTemplate({
       template: this.loadVideoPresentationGradingTemplate(),
       inputVariables: [],
@@ -104,7 +97,6 @@ export class VideoPresentationGradingService
         total_points: () => totalPoints.toString(),
         scoring_type: () => scoringCriteriaType,
         scoring_criteria: () => JSON.stringify(scoringCriteria),
-        format_instructions: () => formatInstructions,
         grading_type: () => responseType,
         video_config: () => JSON.stringify(videoPresentationConfig ?? {}),
       },
@@ -123,6 +115,12 @@ export class VideoPresentationGradingService
         );
       return result as unknown as VideoPresentationQuestionResponseModel;
     } catch (error) {
+      // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that
+      // the structured call can throw — only genuine parse/format failures
+      // should surface as a generic 500.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         `Error parsing video presentation grading response: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -170,9 +168,6 @@ export class VideoPresentationGradingService
     4. Provide detailed, constructive feedback that explains your evaluation.
     5. Include specific examples from the transcript or slides when relevant.
     6. Suggest improvements for future presentations.
-    
-    Respond with a JSON object containing the points awarded and feedback according to the following format:
-    {format_instructions}
     `;
   }
 }

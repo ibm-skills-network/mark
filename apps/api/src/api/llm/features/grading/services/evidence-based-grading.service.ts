@@ -13,7 +13,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   CanonicalSubmission,
@@ -318,11 +317,6 @@ export class EvidenceBasedGradingService {
       return validatorOverride;
     }
 
-    // Parser kept only to inject {format_instructions} for the watsonx
-    // text-parse fallback; OpenAI providers use native structured output.
-    const parser = StructuredOutputParser.fromZodSchema(EvidenceOutputSchema);
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = new PromptTemplate({
       template: `You are grading a single criterion from a rubric. You MUST provide evidence before making any decision.
 
@@ -402,9 +396,7 @@ IMPORTANT:
 - Think step-by-step internally but ONLY output the JSON response.
 - If judge feedback indicates a mistake, correct it.
 
-LANGUAGE: {language}
-
-{format_instructions}`,
+LANGUAGE: {language}`,
       inputVariables: [],
       partialVariables: {
         question: () => questionText,
@@ -415,7 +407,6 @@ LANGUAGE: {language}
         submission_context: () => submissionContext,
         judge_feedback: () => judgeFeedback || "No judge feedback provided.",
         language: () => language,
-        format_instructions: () => formatInstructions,
       },
     });
 

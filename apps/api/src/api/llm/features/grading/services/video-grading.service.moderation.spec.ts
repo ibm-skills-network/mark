@@ -1,3 +1,4 @@
+import { HttpException } from "@nestjs/common";
 import { VideoPresentationGradingService } from "./video-grading.service";
 import { VideoPresentationQuestionResponseModel } from "../../../model/video-presentation.question.response.model";
 
@@ -88,5 +89,22 @@ describe("VideoPresentationGradingService moderation verdicts", () => {
       "grading.moderation.flagged",
       expect.objectContaining({ categories: ["violence"] }),
     );
+  });
+
+  it("rethrows a typed HttpException (kill-switch/rate-limit) instead of masking it as a 500", async () => {
+    const assessContent = jest.fn().mockResolvedValue({
+      action: "allow",
+      flaggedCategories: [],
+      severeCategories: [],
+    });
+    const { service } = buildService(assessContent);
+    const killSwitch = new HttpException("AI temporarily disabled", 409);
+    service.promptProcessor.processStructuredPromptForFeature = jest
+      .fn()
+      .mockRejectedValue(killSwitch);
+
+    await expect(
+      (service as any).gradeVideoPresentationQuestion(gradeModel(), 1736),
+    ).rejects.toBe(killSwitch);
   });
 });

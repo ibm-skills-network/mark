@@ -5,7 +5,6 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import sharp from "sharp";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { S3Service } from "src/api/files/services/s3.service";
@@ -256,12 +255,6 @@ export class ImageGradingService implements IImageGradingService {
       }
     }
 
-    // Parser kept only to inject {format_instructions} for the watsonx
-    // vision text-parse fallback; the OpenAI vision provider uses native
-    // multimodal structured output.
-    const parser = StructuredOutputParser.fromZodSchema(ImageGradeSchema);
-
-    const formatInstructions = parser.getFormatInstructions();
     const templateVariables = {
       question: () => String(question || ""),
       assignment_instructions: () => String(assignmentInstrctions || ""),
@@ -274,7 +267,6 @@ export class ImageGradingService implements IImageGradingService {
       total_points: () => String(maxTotalPoints || 0),
       scoring_type: () => scoringCriteriaType,
       scoring_criteria: () => JSON.stringify(scoringCriteria),
-      format_instructions: () => formatInstructions,
     };
 
     const gradingPrompt = new PromptTemplate({
@@ -360,8 +352,6 @@ Respond with a JSON object containing:
 - Points awarded (sum of all rubric scores)
 - Separate fields for each AEEG component (analysis, evaluation, explanation, guidance)
 - If scoring type is CRITERIA_BASED, include rubricScores array with score for each rubric
-
-{format_instructions}
       `.trim(),
       inputVariables: [],
       partialVariables: templateVariables,

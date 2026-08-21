@@ -2,7 +2,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { PresentationQuestionResponseModel } from "src/api/llm/model/presentation.question.response.model";
@@ -138,14 +137,6 @@ export class PresentationGradingService implements IPresentationGradingService {
     const safeBodyLangExplanation =
       learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
 
-    // Parser kept only to inject {format_instructions} for the watsonx
-    // text-parse fallback; OpenAI providers use native structured output.
-    const parser = StructuredOutputParser.fromZodSchema(
-      PresentationGradeSchema,
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = new PromptTemplate({
       template: this.loadPresentationGradingTemplate(),
       inputVariables: [],
@@ -165,7 +156,6 @@ export class PresentationGradingService implements IPresentationGradingService {
           totalPoints == null ? "0" : totalPoints.toString(),
         scoring_type: () => scoringCriteriaType ?? "N/A",
         scoring_criteria: () => JSON.stringify(scoringCriteria ?? {}),
-        format_instructions: () => formatInstructions,
         grading_type: () => responseType ?? "N/A",
       },
     });
@@ -201,6 +191,12 @@ ${parsedResponse.guidance}
         feedback: aeegFeedback,
       } as PresentationQuestionResponseModel;
     } catch (error) {
+      // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that
+      // the structured call can throw — only genuine parse/format failures
+      // should surface as a generic 500.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         `Error parsing presentation grading response: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -220,14 +216,6 @@ ${parsedResponse.guidance}
     liveRecordingData: LearnerLiveRecordingFeedback,
     assignmentId: number,
   ): Promise<string> {
-    // Parser kept only to inject {format_instructions} for the watsonx
-    // text-parse fallback; OpenAI providers use native structured output.
-    const parser = StructuredOutputParser.fromZodSchema(
-      LiveRecordingFeedbackSchema,
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const safeSpeechReport =
       liveRecordingData.speechReport ?? "No speech analysis available.";
     const safeContentReport =
@@ -261,8 +249,6 @@ ${parsedResponse.guidance}
         live_recording_bodyLanguageScore: () => String(safeBodyLangScore),
 
         live_recording_bodyLanguageExplanation: () => safeBodyLangExplanation,
-
-        format_instructions: () => formatInstructions,
       },
     });
 
@@ -292,6 +278,12 @@ ${parsedResponse.guidance}
 
       return parsedResponse.feedback || aeegFeedback;
     } catch (error) {
+      // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that
+      // the structured call can throw — only genuine parse/format failures
+      // should surface as a generic 500.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         `Error generating live recording feedback: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -389,9 +381,6 @@ ${parsedResponse.guidance}
     - Comprehensive feedback incorporating all four AEEG components
     - Separate fields for each AEEG component
     - If scoring type is CRITERIA_BASED, include rubricScores array with score for each rubric
-    
-    Format your response according to:
-    {format_instructions}
     `;
   }
 
@@ -455,9 +444,6 @@ ${parsedResponse.guidance}
     Respond with a JSON object containing:
     - Comprehensive feedback incorporating all AEEG components
     - Separate fields for each AEEG component (analysis, evaluation, explanation, guidance)
-    
-    Format your response according to:
-    {format_instructions}
     `;
   }
 }

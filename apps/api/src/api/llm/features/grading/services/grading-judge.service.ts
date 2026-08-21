@@ -1,7 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { RubricDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
@@ -96,13 +95,6 @@ export class GradingJudgeService implements IGradingJudgeService {
 
       this.validateInput(input);
 
-      // Parser kept only to inject {format_instructions} for the watsonx
-      // text-parse fallback; OpenAI providers use native structured output.
-      const parser = StructuredOutputParser.fromZodSchema(
-        ParsedJudgeResponseSchema,
-      );
-      const formatInstructions = parser.getFormatInstructions();
-
       this.logger.info(
         `Judge will focus on qualitative assessment only, ignoring mathematical calculations`,
       );
@@ -131,7 +123,6 @@ export class GradingJudgeService implements IGradingJudgeService {
             input.proposedGrading.guidance || "Not provided",
           proposed_rubric_scores: () =>
             JSON.stringify(input.proposedGrading.rubricScores || []),
-          format_instructions: () => formatInstructions,
         },
       });
 
@@ -402,9 +393,7 @@ Be LENIENT - only reject if there are genuinely serious problems with the gradin
 CORRECTIONS RULES (only when rejecting):
 - If points are not valid rubric values or total doesn't match sum, provide correctedRubricScores.
 - If feedback is generic/subjective, provide suggestedFeedbackChanges.
-- If you cannot correct safely, leave corrections empty and explain in feedback.
-
-{format_instructions}`;
+- If you cannot correct safely, leave corrections empty and explain in feedback.`;
   }
 
   private sanitizeCorrectedRubricScores(

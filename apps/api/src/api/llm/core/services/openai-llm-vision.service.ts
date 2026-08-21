@@ -137,6 +137,12 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       ],
     });
 
+    // Estimate tokens cheaply from the text plus the image heuristic; never
+    // tokenize the base64 data URL (see invokeStructuredChatModel).
+    const inputTokensEstimate =
+      this.tokenCounter.countTokens(textContent) +
+      this.estimateImageTokens(processedImageData);
+
     return invokeStructuredChatModel<T>(
       this.createChatModel(options),
       [message],
@@ -144,6 +150,7 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
       this.tokenCounter,
       this.logger,
       options?.modelName ?? this.key,
+      inputTokensEstimate,
     );
   }
 

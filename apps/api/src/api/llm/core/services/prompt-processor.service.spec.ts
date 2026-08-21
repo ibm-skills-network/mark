@@ -213,6 +213,37 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       "granite-4-h-small",
     );
   });
+
+  it("appends format instructions and salvages control chars on the text fallback", async () => {
+    // The template no longer carries {format_instructions}; the fallback must
+    // add them for the text-parsing provider. And a raw control char inside a
+    // string (the exact code-submission failure mode) must still parse.
+    const codeSchema = z.object({ grade: z.number(), code: z.string() });
+    const llm = {
+      key: "granite-4-h-small",
+      invoke: jest.fn().mockResolvedValue({
+        content: '{"grade": 2, "code": "a\nb"}',
+        tokenUsage: { input: 3, output: 4 },
+      }),
+    };
+    router.getForFeatureWithFallback.mockResolvedValue(llm);
+    const service = makeService();
+
+    const result = await service.processStructuredPromptForFeature(
+      PromptTemplate.fromTemplate("grade this"),
+      88,
+      AIUsageType.ASSIGNMENT_GRADING,
+      "text_grading",
+      codeSchema,
+      "gpt-4o-mini",
+    );
+
+    expect(result).toEqual({ grade: 2, code: "a\nb" });
+    // The prompt sent to the provider carried appended schema instructions.
+    const sentPrompt = llm.invoke.mock.calls[0][0][0].content as string;
+    expect(sentPrompt).toContain("grade this");
+    expect(sentPrompt.toLowerCase()).toContain("json");
+  });
 });
 
 describe("PromptProcessorService.processStructuredPromptWithImage", () => {

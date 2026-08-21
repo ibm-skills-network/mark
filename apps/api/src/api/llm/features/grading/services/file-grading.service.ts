@@ -4,7 +4,6 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AIUsageType, ResponseType } from "@prisma/client";
 import axios from "axios";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
@@ -375,12 +374,6 @@ export class FileGradingService implements IFileGradingService {
 
     const selectedTemplate = this.getTemplateForFileType(responseType);
 
-    // Parser kept only to inject {format_instructions} for the watsonx
-    // text-parse fallback; OpenAI providers use native structured output.
-    const parser = StructuredOutputParser.fromZodSchema(FileGradingSchema);
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = this.buildFileGradingPrompt({
       template: selectedTemplate,
       question,
@@ -393,7 +386,6 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteria,
       responseType,
       language,
-      formatInstructions,
       judgeFeedback,
     });
     const extractedContent = learnerResponse
@@ -458,7 +450,6 @@ export class FileGradingService implements IFileGradingService {
           scoringCriteria,
           responseType,
           language,
-          formatInstructions,
           judgeFeedback,
         });
 
@@ -1139,8 +1130,6 @@ export class FileGradingService implements IFileGradingService {
     AVOID REDUNDANCY: Each field should contain unique information and not repeat content from other fields.
 
     Make sure your feedback is short and concise.
-
-    {format_instructions}
     `;
   }
 
@@ -1153,7 +1142,6 @@ export class FileGradingService implements IFileGradingService {
     scoringCriteria,
     responseType,
     language,
-    formatInstructions,
     judgeFeedback,
   }: {
     template: string;
@@ -1164,7 +1152,6 @@ export class FileGradingService implements IFileGradingService {
     scoringCriteria: ScoringDto;
     responseType: ResponseType;
     language?: string;
-    formatInstructions: string;
     judgeFeedback?: string;
   }): PromptTemplate {
     return new PromptTemplate({
@@ -1179,7 +1166,6 @@ export class FileGradingService implements IFileGradingService {
         grading_type: () => responseType,
         language: () => language ?? "en",
         judge_feedback: () => judgeFeedback || "No judge feedback provided.",
-        format_instructions: () => formatInstructions,
       },
     });
   }
@@ -3055,7 +3041,6 @@ export class FileGradingService implements IFileGradingService {
       scoringCriteria,
       responseType: ResponseType.OTHER,
       language,
-      formatInstructions: "{}",
     });
 
     const combinedPromptText = await combinedPrompt.format({});
@@ -3095,7 +3080,6 @@ export class FileGradingService implements IFileGradingService {
         scoringCriteria,
         responseType: ResponseType.OTHER,
         language,
-        formatInstructions: "{}",
       });
       const mergedPromptText = await mergedPrompt.format({});
       const mergedTokens = this.tokenCounter.countTokens(
