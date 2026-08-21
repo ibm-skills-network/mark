@@ -70,6 +70,70 @@ describe("LLMPricingService.calculateCostBatch", () => {
     });
   });
 
+  it("uses the GPT-5.6 long-context prices for the whole request above 272K input tokens", async () => {
+    jest.spyOn(service, "getPricingAtDate").mockResolvedValue(
+      pricing({
+        modelKey: "gpt-5.6-sol",
+        inputTokenPrice: 0.000_005,
+        outputTokenPrice: 0.000_03,
+        metadata: {
+          longContextInputTokenPrice: 0.000_01,
+          longContextOutputTokenPrice: 0.000_045,
+          longContextInputThresholdTokens: 272_000,
+        },
+      }),
+    );
+
+    const [result] = await service.calculateCostBatch([
+      {
+        modelKey: "gpt-5.6-sol",
+        inputTokens: 272_001,
+        outputTokens: 1000,
+        usageDate: new Date("2026-08-06T00:00:00.000Z"),
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      inputTokenPrice: 0.000_01,
+      outputTokenPrice: 0.000_045,
+    });
+    expect(result?.inputCost).toBeCloseTo(2.720_01);
+    expect(result?.outputCost).toBeCloseTo(0.045);
+    expect(result?.totalCost).toBeCloseTo(2.765_01);
+  });
+
+  it("keeps short-context prices at the exact 272K threshold", async () => {
+    jest.spyOn(service, "getPricingAtDate").mockResolvedValue(
+      pricing({
+        modelKey: "gpt-5.6-sol",
+        inputTokenPrice: 0.000_005,
+        outputTokenPrice: 0.000_03,
+        metadata: {
+          longContextInputTokenPrice: 0.000_01,
+          longContextOutputTokenPrice: 0.000_045,
+          longContextInputThresholdTokens: 272_000,
+        },
+      }),
+    );
+
+    const [result] = await service.calculateCostBatch([
+      {
+        modelKey: "gpt-5.6-sol",
+        inputTokens: 272_000,
+        outputTokens: 1000,
+        usageDate: new Date("2026-08-06T00:00:00.000Z"),
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      inputTokenPrice: 0.000_005,
+      outputTokenPrice: 0.000_03,
+    });
+    expect(result?.inputCost).toBeCloseTo(1.36);
+    expect(result?.outputCost).toBeCloseTo(0.03);
+    expect(result?.totalCost).toBeCloseTo(1.39);
+  });
+
   it("looks pricing up once per (modelKey, calendar-day)", async () => {
     const pricingSpy = jest
       .spyOn(service, "getPricingAtDate")

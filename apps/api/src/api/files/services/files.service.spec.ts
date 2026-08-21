@@ -1,4 +1,7 @@
-import { BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { UploadType } from "../dto/upload.dto";
@@ -375,6 +378,90 @@ describe("FilesService", () => {
       bucket: "author-bucket",
       uploadId: "upload-123",
       etag: '"etag-final"',
+    });
+  });
+
+  describe("hostile upload context", () => {
+    it.each([
+      ["null", null],
+      ["an array", []],
+      ["a string", "authors/"],
+      ["a number", 7],
+    ])(
+      "treats %s as an absent context instead of crashing",
+      (_label, value) => {
+        const s3 = mockS3Service as unknown as { getBucketName: jest.Mock };
+        s3.getBucketName.mockReturnValue("author-bucket");
+
+        const result = service.resolveUploadTarget(
+          {
+            fileName: "notes.txt",
+            fileType: "text/plain",
+            fileSize: 10,
+            uploadType: UploadType.AUTHOR,
+            context: value as never,
+          },
+          "user-123",
+          UserRole.AUTHOR,
+        );
+
+        expect(result.key).toMatch(/^authors\/user-123\/.+-notes\.txt$/);
+      },
+    );
+  });
+
+  describe("direct upload", () => {
+    const file = {
+      buffer: Buffer.from("hello"),
+      size: 5,
+      mimetype: "text/plain",
+      originalname: "hello.txt",
+    } as Express.Multer.File;
+
+    it("claims and releases processing budget around the storage write", async () => {
+      const s3 = mockS3Service as unknown as { putObject: jest.Mock };
+      s3.putObject.mockResolvedValue({ ETag: '"etag-direct"' });
+
+      const result = await service.directUpload(
+        file,
+        "author-bucket",
+        "authors/user-123/hello.txt",
+      );
+
+      expect(mockBudget.tryAcquire).toHaveBeenCalledWith(5);
+      expect(mockBudget.release).toHaveBeenCalledWith(5);
+      expect(result).toEqual({
+        success: true,
+        key: "authors/user-123/hello.txt",
+        bucket: "author-bucket",
+        etag: '"etag-direct"',
+      });
+    });
+
+    it("releases the claim when the storage write fails", async () => {
+      const s3 = mockS3Service as unknown as { putObject: jest.Mock };
+      s3.putObject.mockRejectedValue(new Error("storage down"));
+
+      await expect(
+        service.directUpload(file, "author-bucket", "authors/user-123/x.txt"),
+      ).rejects.toThrow("storage down");
+
+      expect(mockBudget.release).toHaveBeenCalledWith(5);
+    });
+
+    it("refuses the upload when the pod budget is full", async () => {
+      const s3 = mockS3Service as unknown as { putObject: jest.Mock };
+      (mockBudget.tryAcquire as jest.Mock).mockReturnValue(false);
+      (mockBudget.buildBusyException as jest.Mock).mockReturnValue(
+        new ServiceUnavailableException({ status: "busy" }),
+      );
+
+      await expect(
+        service.directUpload(file, "author-bucket", "authors/user-123/x.txt"),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(s3.putObject).not.toHaveBeenCalled();
+      expect(mockBudget.release).not.toHaveBeenCalled();
     });
   });
 });

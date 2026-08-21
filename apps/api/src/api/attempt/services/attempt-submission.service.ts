@@ -59,6 +59,10 @@ import {
   AttemptQuestionsMapper,
   EnhancedAttemptQuestionDto,
 } from "../common/utils/attempt-questions-mapper.util";
+import {
+  meetsPassingGrade,
+  resolvePassedIndicator,
+} from "../common/utils/pass-fail.util";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import {
@@ -648,6 +652,7 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         updatedAt: true,
         currentVersion: {
           select: {
@@ -841,20 +846,26 @@ export class AttemptSubmissionService {
         assignmentAttempt.preferredLanguage || undefined,
       );
 
-    this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
-
-    // When clamping reduced the total, recompute the grade the learner sees.
-    // Read assignmentAttempt.grade after applyVisibilitySettings: that call
-    // sets it to null when showAssignmentScore=false, which must be respected
-    // even when clamping occurred. The persisted grade and the LTI passback
-    // are intentionally left untouched — correcting those is a separate
-    // re-grade, not a display fix.
-    const displayGrade =
+    // Captured before applyVisibilitySettings nulls the grade: the pass/fail
+    // indicator must stay computable when the score itself is hidden. Mirrors
+    // the displayGrade clamping below so both derive from the same value.
+    const preVisibilityGrade =
       totalPointsEarned < rawPointsEarned &&
       totalPossiblePoints > 0 &&
       assignmentAttempt.grade !== null
         ? totalPointsEarned / totalPossiblePoints
         : assignmentAttempt.grade;
+
+    this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
+
+    // Same clamped value as preVisibilityGrade, except that
+    // applyVisibilitySettings has since nulled assignmentAttempt.grade when
+    // showAssignmentScore=false — which must be respected even when clamping
+    // occurred. The persisted grade and the LTI passback are intentionally
+    // left untouched — correcting those is a separate re-grade, not a display
+    // fix.
+    const displayGrade =
+      assignmentAttempt.grade === null ? null : preVisibilityGrade;
 
     return {
       ...assignmentAttempt,
@@ -870,6 +881,12 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestions: assignment.showQuestions,
       showQuestionScore: assignment.showQuestionScore,
+      showPassFailIndicator: assignment.showPassFailIndicator,
+      passed: resolvePassedIndicator(
+        assignment.showPassFailIndicator,
+        preVisibilityGrade,
+        assignment.passingGrade,
+      ),
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
@@ -1053,8 +1070,16 @@ export class AttemptSubmissionService {
       assignment.currentVersionId !== null &&
       assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
 
+    // No pass/fail verdict here on purpose. This route serves the in-progress
+    // attempt, so it has none of the clamping the completed route applies to
+    // historically over-scored responses; deriving `passed` from the raw
+    // persisted grade would contradict the verdict the learner is shown on the
+    // success page. Pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      // The spread carries the persisted grade, which must not reach a learner
+      // whose assignment hides the score.
+      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
@@ -1369,6 +1394,12 @@ export class AttemptSubmissionService {
         totalPossiblePoints,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          result.grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -1482,6 +1513,17 @@ export class AttemptSubmissionService {
         await progressCallback("Preview completed!", 100);
       }
 
+      // The author's unsaved pass/fail settings ride in on the preview
+      // request; prefer them over the persisted row so previewing before
+      // publish reflects the toggle. This path is author-only and the values
+      // shape nothing but the author's own unpersisted preview response.
+      const showPassFailIndicator =
+        updateDto.authorAssignmentDetails?.showPassFailIndicator ??
+        assignment.showPassFailIndicator;
+      const passingGrade =
+        updateDto.authorAssignmentDetails?.passingGrade ??
+        assignment.passingGrade;
+
       return {
         id: -1,
         submitted: true,
@@ -1493,6 +1535,12 @@ export class AttemptSubmissionService {
         // author's only way to see what learners actually experience.
         grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          showPassFailIndicator,
+          grade,
+          passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -2182,7 +2230,7 @@ export class AttemptSubmissionService {
         return true;
       }
       case "ON_PASS": {
-        return grade >= passingGrade;
+        return meetsPassingGrade(grade, passingGrade);
       }
       default: {
         return false;

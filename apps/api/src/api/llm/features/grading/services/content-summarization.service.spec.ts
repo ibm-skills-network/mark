@@ -44,6 +44,19 @@ describe("ContentSummarizationService.getSafeContextLimit", () => {
     // 32_000 * 0.8 = 25_600
     expect(service.getSafeContextLimit("some-unknown-model")).toBe(25_600);
   });
+
+  // Every "gpt-5.6-*" key also contains "gpt-5"; the specific entry must win.
+  it.each(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"])(
+    "gives %s its 1.05M window, not the gpt-5 128k window",
+    (modelKey) => {
+      const { service } = buildMocks();
+      expect(service.getContextWindow(modelKey)).toBe(1_050_000);
+
+      const safeLimit = service.getSafeContextLimit(modelKey);
+      expect(safeLimit).toBe(840_000);
+      expect(safeLimit).toBeLessThan(922_000);
+    },
+  );
 });
 
 describe("ContentSummarizationService.splitTextIntoChunks", () => {

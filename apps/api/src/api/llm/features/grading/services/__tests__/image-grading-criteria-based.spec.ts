@@ -2,15 +2,26 @@
 /**
  * Service-flow regression test for criteria-based image grading.
  *
- * Criteria-based grading consumes OCR evidence extracted from the learner's
- * images, never the image bytes themselves. It must therefore neither fetch
- * the primary image from storage nor preflight it — a COS-stored HEIC that the
- * vision model could not grade still grades fine here off its OCR text. This
- * asserts the storage fetch (s3.getObject) is never invoked for a CRITERIA_BASED
- * request whose only image lives in COS ("InCos").
+ * CONTRACT CHANGE: criteria-based grading used to consume OCR evidence
+ * extracted from the learner's images and never looked at the image bytes, so
+ * it deliberately skipped the storage fetch and the format preflight. That is
+ * what let a screenshot with no extractable text score zero against evidence
+ * that was literally the string "[Image content]". Criteria-based grading is a
+ * vision call now: it fetches and preflights exactly like the holistic path,
+ * and a format the vision model cannot read fails terminally with the
+ * learner-facing error instead of silently grading nothing.
  */
 
 import { UnsupportedImageFormatError } from "../../errors/unsupported-image-format.error";
+
+function heicBuffer() {
+  return Buffer.concat([
+    Buffer.from([0x00, 0x00, 0x00, 0x18]),
+    Buffer.from("ftyp", "ascii"),
+    Buffer.from("heic", "ascii"),
+    Buffer.from([0x00, 0x00, 0x00, 0x00]),
+  ]);
+}
 
 function buildService() {
   const mockLogger = {
@@ -37,115 +48,132 @@ function buildService() {
       severeCategories: [],
     }),
   };
-  service.chunkingService = {
-    extractFromImages: jest
-      .fn()
-      .mockReturnValue([
-        { id: "c1", text: "extracted ocr text", source: "img" },
-      ]),
+  service.llmResolver = {
+    getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4.1-mini"),
   };
-  service.evidencePipeline = {
-    gradeWithEvidence: jest.fn().mockResolvedValue({
-      grades: [
-        {
-          rubricQuestion: "Clarity",
-          pointsAwarded: 4,
-          maxPoints: 5,
-          rationale: "clear",
-        },
-      ],
-      summary: { totalPoints: 4, maxPoints: 5 },
-      audit: null,
-    }),
+  service.promptProcessor = {
+    processPromptWithImage: jest.fn().mockResolvedValue(
+      JSON.stringify({
+        criteria: [
+          {
+            criterionId: "rubric-1",
+            score: 5,
+            rationale:
+              "The screenshot shows the running login screen with both fields and the submit button.",
+          },
+        ],
+      }),
+    ),
   };
 
   return { service, getObject, mockLogger };
 }
 
-describe("ImageGradingService.gradeImageBasedQuestion - CRITERIA_BASED skips storage/preflight", () => {
-  it("does NOT fetch or preflight a COS HEIC image for criteria-based grading", async () => {
+function criteriaModel(overrides: Record<string, unknown> = {}) {
+  return {
+    question: "Describe the diagram",
+    imageData: "",
+    imageBucket: "",
+    imageKey: "",
+    learnerResponse: "my answer",
+    totalPoints: 5,
+    scoringCriteriaType: "CRITERIA_BASED",
+    scoringCriteria: {
+      type: "CRITERIA_BASED",
+      rubrics: [
+        {
+          rubricQuestion: "Clarity",
+          criteria: [
+            { description: "clear", points: 5 },
+            { description: "unclear", points: 0 },
+          ],
+        },
+      ],
+    },
+    previousQuestionsAnswersContext: [],
+    assignmentInstrctions: "",
+    learnerImageResponse: [
+      {
+        filename: "IMG_1234.heic",
+        imageData: "InCos",
+        imageKey: "assignments/9f8a-uuid-IMG_1234.heic",
+        imageBucket: "submissions",
+        imageUrl: "",
+        mimeType: "image/heic",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("ImageGradingService.gradeImageBasedQuestion - CRITERIA_BASED is a vision call", () => {
+  it("fetches the COS-stored image so the model can see it", async () => {
     const { service, getObject } = buildService();
 
-    const model = {
-      question: "Describe the diagram",
-      imageData: "",
-      imageBucket: "",
-      imageKey: "",
-      learnerResponse: "my answer",
-      totalPoints: 5,
-      scoringCriteriaType: "CRITERIA_BASED",
-      scoringCriteria: {
-        type: "CRITERIA_BASED",
-        rubrics: [
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({
+      create: {
+        width: 4,
+        height: 4,
+        channels: 3,
+        background: { r: 9, g: 9, b: 9 },
+      },
+    })
+      .png()
+      .toBuffer();
+    getObject.mockResolvedValue({ Body: png });
+
+    const result = await service.gradeImageBasedQuestion(
+      criteriaModel({
+        learnerImageResponse: [
           {
-            rubricQuestion: "Clarity",
-            criteria: [{ description: "clear", points: 5 }],
+            filename: "login.png",
+            imageData: "InCos",
+            imageKey: "assignments/uuid-login.png",
+            imageBucket: "submissions",
+            imageUrl: "",
+            mimeType: "image/png",
           },
         ],
-      },
-      previousQuestionsAnswersContext: [],
-      assignmentInstrctions: "",
-      // The only image lives in COS — its bytes are never needed here.
-      learnerImageResponse: [
-        {
-          filename: "IMG_1234.heic",
-          imageData: "InCos",
-          imageKey: "assignments/9f8a-uuid-IMG_1234.heic",
-          imageBucket: "submissions",
-          imageUrl: "",
-          mimeType: "image/heic",
-        },
-      ],
-    };
+      }),
+      1,
+    );
 
-    const result = await service.gradeImageBasedQuestion(model, 1);
-
-    // Storage must never be touched: criteria-based grading reads OCR evidence.
-    expect(getObject).not.toHaveBeenCalled();
-    expect(service.evidencePipeline.gradeWithEvidence).toHaveBeenCalledTimes(1);
-    expect(result.points).toBe(4);
+    // The bytes are fetched and sent — the old contract asserted the opposite.
+    expect(getObject).toHaveBeenCalledTimes(1);
+    const [, images] =
+      service.promptProcessor.processPromptWithImage.mock.calls[0];
+    expect(Array.isArray(images)).toBe(true);
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain("data:image/png;base64,");
+    expect(result.points).toBe(5);
   });
 
-  it("propagates a preflight rejection only on the non-criteria (vision) path", async () => {
+  it("fails terminally on a COS HEIC instead of grading it blind", async () => {
     const { service, getObject } = buildService();
-
-    // A non-criteria request with a COS HEIC: this path DOES need the bytes, so
-    // it fetches + preflights, and the HEIC is rejected. Proves the skip above
-    // is specific to the criteria branch, not a blanket no-op.
-    getObject.mockResolvedValue({
-      Body: Buffer.concat([
-        Buffer.from([0x00, 0x00, 0x00, 0x18]),
-        Buffer.from("ftyp", "ascii"),
-        Buffer.from("heic", "ascii"),
-        Buffer.from([0x00, 0x00, 0x00, 0x00]),
-      ]),
-    });
-
-    const model = {
-      question: "Describe the photo",
-      imageData: "",
-      imageBucket: "",
-      imageKey: "",
-      learnerResponse: "my answer",
-      totalPoints: 5,
-      scoringCriteriaType: "AI_GRADED",
-      scoringCriteria: { type: "AI_GRADED", rubrics: [] },
-      previousQuestionsAnswersContext: [],
-      assignmentInstrctions: "",
-      learnerImageResponse: [
-        {
-          filename: "IMG_1234.heic",
-          imageData: "InCos",
-          imageKey: "assignments/9f8a-uuid-IMG_1234.heic",
-          imageBucket: "submissions",
-          imageUrl: "",
-          mimeType: "image/heic",
-        },
-      ],
-    };
+    getObject.mockResolvedValue({ Body: heicBuffer() });
 
     await expect(
-      service.gradeImageBasedQuestion(model, 1),
+      service.gradeImageBasedQuestion(criteriaModel(), 1),
+    ).rejects.toBeInstanceOf(UnsupportedImageFormatError);
+    expect(getObject).toHaveBeenCalledTimes(1);
+    expect(
+      service.promptProcessor.processPromptWithImage,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("propagates a preflight rejection on the non-criteria (vision) path too", async () => {
+    const { service, getObject } = buildService();
+    getObject.mockResolvedValue({ Body: heicBuffer() });
+
+    await expect(
+      service.gradeImageBasedQuestion(
+        criteriaModel({
+          scoringCriteriaType: "AI_GRADED",
+          scoringCriteria: { type: "AI_GRADED", rubrics: [] },
+        }),
+        1,
+      ),
     ).rejects.toBeInstanceOf(UnsupportedImageFormatError);
     expect(getObject).toHaveBeenCalledTimes(1);
   });
@@ -155,14 +183,7 @@ describe("ImageGradingService.getPrimaryImageForGrading - learner filename, not 
   it("surfaces the submission filename in the rejection, never the storage key", async () => {
     const { service, getObject } = buildService();
 
-    getObject.mockResolvedValue({
-      Body: Buffer.concat([
-        Buffer.from([0x00, 0x00, 0x00, 0x18]),
-        Buffer.from("ftyp", "ascii"),
-        Buffer.from("heic", "ascii"),
-        Buffer.from([0x00, 0x00, 0x00, 0x00]),
-      ]),
-    });
+    getObject.mockResolvedValue({ Body: heicBuffer() });
 
     const learnerImages = [
       {

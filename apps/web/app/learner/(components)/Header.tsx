@@ -92,10 +92,9 @@ function LearnerHeader() {
     setUserRole("learner");
   }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const [storedAssignmentDetails, setGrade] = useAssignmentDetails((state) => [
-    state.assignmentDetails,
-    state.setGrade,
-  ]);
+  const [storedAssignmentDetails, setGrade, setPassed] = useAssignmentDetails(
+    (state) => [state.assignmentDetails, state.setGrade, state.setPassed],
+  );
   const assignmentDetails =
     (isAuthorPreview ? authorPreviewPayload?.assignmentDetails : null) ??
     (storedAssignmentDetails?.id === assignmentId
@@ -365,6 +364,7 @@ function LearnerHeader() {
           // from a previous attempt so the success page doesn't show it.
           setGrade(null);
         }
+        setPassed(res.passed ?? null);
         if (role === "learner") {
           setShowSubmissionFeedback(res.showSubmissionFeedback);
         }
@@ -446,6 +446,7 @@ function LearnerHeader() {
     setTotalPointsEarned,
     setTotalPointsPossible,
     setGrade,
+    setPassed,
     setShowSubmissionFeedback,
     setQuestion,
     clearGithubStore,

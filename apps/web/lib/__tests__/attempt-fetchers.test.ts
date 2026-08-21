@@ -19,7 +19,7 @@ jest.mock("../api-retry", () => {
   const actual = jest.requireActual("../api-retry");
   return {
     ...actual,
-    withTransientRetry: async <T,>(fn: () => Promise<T>): Promise<T> => {
+    withTransientRetry: async <T>(fn: () => Promise<T>): Promise<T> => {
       try {
         return await fn();
       } catch (error) {

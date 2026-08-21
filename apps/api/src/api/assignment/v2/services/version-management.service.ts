@@ -330,6 +330,7 @@ export class VersionManagementService {
           published: !createVersionDto.isDraft,
           showAssignmentScore: assignment.showAssignmentScore,
           showQuestionScore: assignment.showQuestionScore,
+          showPassFailIndicator: assignment.showPassFailIndicator,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
@@ -598,6 +599,7 @@ export class VersionManagementService {
       published: version.published,
       showAssignmentScore: version.showAssignmentScore,
       showQuestionScore: version.showQuestionScore,
+      showPassFailIndicator: version.showPassFailIndicator,
       showSubmissionFeedback: version.showSubmissionFeedback,
       showQuestions: version.showQuestions,
       correctAnswerVisibility: version.correctAnswerVisibility,
@@ -687,6 +689,7 @@ export class VersionManagementService {
             published: false,
             showAssignmentScore: versionToRestore.showAssignmentScore,
             showQuestionScore: versionToRestore.showQuestionScore,
+            showPassFailIndicator: versionToRestore.showPassFailIndicator,
             showSubmissionFeedback: versionToRestore.showSubmissionFeedback,
             showQuestions: versionToRestore.showQuestions,
             correctAnswerVisibility: versionToRestore.correctAnswerVisibility,
@@ -1236,6 +1239,7 @@ export class VersionManagementService {
           questionOrder: assignment.questionOrder,
           showAssignmentScore: assignment.showAssignmentScore,
           showQuestionScore: assignment.showQuestionScore,
+          showPassFailIndicator: assignment.showPassFailIndicator,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
@@ -1514,6 +1518,7 @@ export class VersionManagementService {
           published: false,
           showAssignmentScore: assignment.showAssignmentScore,
           showQuestionScore: assignment.showQuestionScore,
+          showPassFailIndicator: assignment.showPassFailIndicator,
           showSubmissionFeedback: assignment.showSubmissionFeedback,
           showQuestions: assignment.showQuestions,
           correctAnswerVisibility: assignment.correctAnswerVisibility,
@@ -1611,6 +1616,7 @@ export class VersionManagementService {
     published: boolean;
     showAssignmentScore: boolean;
     showQuestionScore: boolean;
+    showPassFailIndicator: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
     correctAnswerVisibility: string;
@@ -1655,6 +1661,7 @@ export class VersionManagementService {
       published: latestDraft.published,
       showAssignmentScore: latestDraft.showAssignmentScore,
       showQuestionScore: latestDraft.showQuestionScore,
+      showPassFailIndicator: latestDraft.showPassFailIndicator,
       showSubmissionFeedback: latestDraft.showSubmissionFeedback,
       showQuestions: latestDraft.showQuestions,
       correctAnswerVisibility: latestDraft.correctAnswerVisibility,
@@ -1757,6 +1764,7 @@ export class VersionManagementService {
             published: false,
             showAssignmentScore: sourceVersion.showAssignmentScore,
             showQuestionScore: sourceVersion.showQuestionScore,
+            showPassFailIndicator: sourceVersion.showPassFailIndicator,
             showSubmissionFeedback: sourceVersion.showSubmissionFeedback,
             showQuestions: sourceVersion.showQuestions,
             correctAnswerVisibility: sourceVersion.correctAnswerVisibility,
@@ -2225,6 +2233,10 @@ export class VersionManagementService {
                 draftData.assignmentData.showQuestionScore ??
                 assignment.showQuestionScore ??
                 true,
+              showPassFailIndicator:
+                draftData.assignmentData.showPassFailIndicator ??
+                assignment.showPassFailIndicator ??
+                false,
               showSubmissionFeedback:
                 draftData.assignmentData.showSubmissionFeedback ??
                 assignment.showSubmissionFeedback ??

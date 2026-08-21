@@ -142,7 +142,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
   it("uses the provider's native structured output and returns the parsed object", async () => {
     const invokeStructured = jest.fn().mockResolvedValue({
       parsed: { grade: 4 },
-      tokenUsage: { input: 10, output: 5 },
+      tokenUsage: { input: 10, output: 5, cachedInput: 7 },
     });
     const llm = { key: "gpt-4o-mini", invoke: jest.fn(), invokeStructured };
     router.getForFeatureWithFallback.mockResolvedValue(llm);
@@ -166,6 +166,12 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
         model: "gpt-4o-mini",
         purpose: "TEXT_GRADING",
         assignment_id: 77,
+        // Cache behaviour is otherwise invisible: a too-short or drifted
+        // prefix still returns 200 and only the bill changes, so the log
+        // line is the only place a deploy can be checked.
+        input_tokens: 10,
+        output_tokens: 5,
+        cached_input_tokens: 7,
       }),
     );
     // The string path that does the brittle JSON.parse must NOT be used.

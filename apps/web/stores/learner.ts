@@ -445,11 +445,13 @@ export type LearnerActions = {
 export type AssignmentDetailsState = {
   assignmentDetails: Assignment | null;
   grade: number | null;
+  passed: boolean | null;
 };
 
 export type AssignmentDetailsActions = {
   setAssignmentDetails: (assignmentDetails: Assignment) => void;
   setGrade: (grade: number | null) => void;
+  setPassed: (passed: boolean | null) => void;
 };
 
 const isQuestionEdited = (question: QuestionStore) => {
@@ -1028,6 +1030,8 @@ export const useAssignmentDetails = createWithEqualityFn<
           set({ assignmentDetails: assignmentDetails }),
         grade: null,
         setGrade: (grade) => set({ grade }),
+        passed: null,
+        setPassed: (passed) => set({ passed }),
       }),
       {
         name: "learner-assignment-details",

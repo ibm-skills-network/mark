@@ -27,6 +27,10 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
+import {
+  meetsPassingGrade,
+  resolvePassedIndicator,
+} from "src/api/attempt/common/utils/pass-fail.util";
 import { LtiGradeSyncService } from "src/api/attempt/services/lti-grade-sync.service";
 import { GradingKillSwitchService } from "src/api/ai-feature-flags/grading-kill-switch.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
@@ -39,6 +43,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { applyQuestionOrder } from "../utils/question-order.util";
+import { resolveTrueFalseAnswer } from "../utils/true-false-answer.util";
 import { PrismaService } from "../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../helpers/sanitize-unicode";
 import { sanitizeForLog } from "../../../logger/sanitize";
@@ -729,6 +734,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
+        passingGrade: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -805,6 +812,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         totalPointsEarned,
         totalPossiblePoints,
         grade: assignment.showAssignmentScore ? grade : undefined,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
         correctAnswerVisibility:
@@ -832,6 +845,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         totalPossiblePoints,
         showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          result.grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -922,6 +941,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         questionControls: true,
         currentVersion: {
           select: {
@@ -1007,6 +1027,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((qId) => questionsWithResponses.find((q) => q.id === qId))
       .filter(Boolean);
 
+    // Captured before the visibility filtering deletes the grade: the
+    // pass/fail indicator must stay computable when the score is hidden.
+    const preVisibilityGrade = assignmentAttempt.grade;
     if (assignment.showAssignmentScore === false) {
       delete assignmentAttempt.grade;
     }
@@ -1109,10 +1132,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       }
     }
 
+    // NEVER always hides the correct answers; ON_PASS hides them until the
+    // attempt meets the passing grade. The grade must be read from
+    // preVisibilityGrade — the visibility filtering above deletes
+    // assignmentAttempt.grade when the score is hidden, and an undefined
+    // grade used to disable this gating entirely.
+    const completedAnswerVisibility =
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER";
     if (
-      (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
-        "NEVER" &&
-      assignmentAttempt.grade < assignment.passingGrade
+      completedAnswerVisibility === "NEVER" ||
+      (completedAnswerVisibility === "ON_PASS" &&
+        !meetsPassingGrade(preVisibilityGrade, assignment.passingGrade))
     ) {
       for (const question of finalQuestions) {
         if (question.choices) {
@@ -1138,6 +1168,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
+      showPassFailIndicator: assignment.showPassFailIndicator,
+      passed: resolvePassedIndicator(
+        assignment.showPassFailIndicator,
+        preVisibilityGrade,
+        assignment.passingGrade,
+      ),
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
@@ -1222,6 +1258,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         questionControls: true,
         updatedAt: true,
         currentVersion: {
@@ -1444,7 +1481,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           delete choice.points;
           if (
             correctAnswerVisibility === "ON_PASS" &&
-            assignmentAttempt.grade < assignment.passingGrade
+            !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
           ) {
             delete choice.isCorrect;
             delete choice.feedback;
@@ -1460,7 +1497,10 @@ export class AttemptServiceV1 implements OnModuleDestroy {
               delete choice.points;
               if (
                 correctAnswerVisibility === "ON_PASS" &&
-                assignmentAttempt.grade < assignment.passingGrade
+                !meetsPassingGrade(
+                  assignmentAttempt.grade,
+                  assignment.passingGrade,
+                )
               ) {
                 delete choice.isCorrect;
                 delete choice.feedback;
@@ -1481,7 +1521,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           delete choice.points;
           if (
             correctAnswerVisibility === "ON_PASS" &&
-            assignmentAttempt.grade < assignment.passingGrade
+            !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
           ) {
             delete choice.isCorrect;
             delete choice.feedback;
@@ -1492,14 +1532,20 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
       if (
         correctAnswerVisibility === "ON_PASS" &&
-        assignmentAttempt.grade < assignment.passingGrade
+        !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
       ) {
         delete question.answer;
       }
     }
 
+    // No pass/fail verdict here on purpose — see the v2 twin in
+    // attempt-submission.service.ts. This route serves the in-progress
+    // attempt; pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      // The spread carries the persisted grade, which must not reach a learner
+      // whose assignment hides the score.
+      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions.map((question) => ({
         ...question,
         choices:
@@ -1539,6 +1585,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showQuestionScore: assignment.showQuestionScore,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator: assignment.showPassFailIndicator,
         correctAnswerVisibility,
         questionControls,
         updatedAt: assignment.updatedAt,
@@ -2799,7 +2846,13 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         this.getLocalizedString("invalidTrueFalse", language),
       );
     }
-    const correctAnswer = question.choices[0].isCorrect;
+    const resolved = resolveTrueFalseAnswer(question.choices);
+    if (!resolved) {
+      throw new BadRequestException(
+        this.getLocalizedString("invalidTrueFalse", language),
+      );
+    }
+    const { correctAnswer, correctPoints } = resolved;
     const isCorrect = learnerChoice === correctAnswer;
     const feedback = isCorrect
       ? this.getLocalizedString("correctTF", language)
@@ -2808,10 +2861,6 @@ export class AttemptServiceV1 implements OnModuleDestroy {
             ? this.getLocalizedString("true", language)
             : this.getLocalizedString("false", language),
         });
-    const correctPoints =
-      question.choices && question.choices[0]
-        ? question.choices[0].points || 0
-        : 0;
     const pointsAwarded = isCorrect ? correctPoints : 0;
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();

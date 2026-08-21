@@ -284,6 +284,7 @@ model Assignment {
   showQuestionScore            Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback       Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
   showQuestions                Boolean                         @default(true) /// Should the questions be shown to the learner
+  showPassFailIndicator        Boolean                         @default(false) /// Should learners be told whether they passed, even when the score is hidden
   correctAnswerVisibility      CorrectAnswerVisibility         @default(ALWAYS) /// When should correct answers be shown to learners
   questionControls             Json? /// Question-level controls (e.g., allowCopy, allowPaste, allowRightClick)
   updatedAt                    DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
@@ -360,6 +361,7 @@ model AssignmentVersion {
   showQuestionScore               Boolean                         @default(true) /// Show question score
   showSubmissionFeedback          Boolean                         @default(true) /// Show submission feedback
   showQuestions                   Boolean                         @default(true) /// Show questions
+  showPassFailIndicator           Boolean                         @default(false) /// Show pass/fail result even when the score is hidden
   correctAnswerVisibility         CorrectAnswerVisibility         @default(ALWAYS) /// When to show correct answers to learners
   questionControls                Json? /// Question-level controls (e.g., allowCopy, allowPaste, allowRightClick)
   languageCode                    String? /// Language code
@@ -823,6 +825,7 @@ model AssignmentDraft {
   showQuestionScore            Boolean                         @default(true) /// Show question score
   showSubmissionFeedback       Boolean                         @default(true) /// Show submission feedback
   showQuestions                Boolean                         @default(true) /// Show questions
+  showPassFailIndicator        Boolean                         @default(false) /// Show pass/fail result even when the score is hidden
   languageCode                 String? /// Language code
   questionsData                Json? /// Serialized questions data
   createdAt                    DateTime                        @default(now()) /// When draft was created

@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Assignment, Question, QuestionVariant } from "@prisma/client";
 import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
+import { DEFAULT_PASSING_GRADE } from "src/api/attempt/common/utils/pass-fail.util";
 import {
   UserRole,
   UserSession,
@@ -43,6 +44,7 @@ const FIELDS = [
   "showQuestionScore",
   "showSubmissionFeedback",
   "showQuestions",
+  "showPassFailIndicator",
   "correctAnswerVisibility",
   "questionControls",
   "requireAllQuestions",
@@ -56,7 +58,7 @@ type FieldKey = (typeof FIELDS)[number];
 const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
   attemptsBeforeCoolDown: 1,
   retakeAttemptCoolDownMinutes: 5,
-  passingGrade: 50,
+  passingGrade: DEFAULT_PASSING_GRADE,
   questionDisplay: "ONE_PER_PAGE",
   graded: false,
   numAttempts: -1,
@@ -64,6 +66,7 @@ const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
+  showPassFailIndicator: false,
   requireAllQuestions: false,
   optionalQuestionIds: [],
 };

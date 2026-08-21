@@ -7,6 +7,10 @@ import type {
   UploadRequest,
 } from "@config/types";
 import { APIError, apiClient } from "./api-client";
+import {
+  sendWithStallDetection,
+  UploadTransportError,
+} from "./uploadTransport";
 
 interface UploadProgress {
   loaded: number;
@@ -41,10 +45,12 @@ export class UploadError extends Error {
   }
 }
 
-// Per-part defaults: 3 retries, 1s initial backoff, 5-minute timeout
+// Per-part defaults: 3 retries, 1s initial backoff. Each attempt is bounded
+// by the transport's stall watchdog rather than a flat timeout, so a part
+// that is merely slow keeps going while one that is black-holed gives up in
+// seconds instead of minutes.
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY = 1000;
-const DEFAULT_TIMEOUT = 5 * 60 * 1000;
 
 // /initiate retry tuning for 503-busy: wait up to ~5 attempts ~= 1 minute
 // before giving up; matches the server's queue timeout window.
@@ -195,62 +201,62 @@ async function uploadPartWithRetry(
   options: {
     maxRetries?: number;
     retryDelay?: number;
-    timeout?: number;
-    onUploadedBytes?: (loadedBytes: number) => void;
+    onPartProgress?: (loadedBytes: number) => void;
   } = {},
 ): Promise<string> {
   const {
     maxRetries = DEFAULT_MAX_RETRIES,
     retryDelay = DEFAULT_RETRY_DELAY,
-    timeout = DEFAULT_TIMEOUT,
-    onUploadedBytes,
+    onPartProgress,
   } = options;
 
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      const response = await fetch(partUrl, {
+      const response = await sendWithStallDetection({
         method: "PUT",
+        url: partUrl,
         body: chunk,
-        signal: controller.signal,
+        totalBytes: chunk.size,
+        onUploadProgress: (progress) => onPartProgress?.(progress.loaded),
       });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(
-          `Upload failed with status ${response.status}: ${response.statusText}`,
+      if (response.status < 200 || response.status >= 300) {
+        throw new UploadError(
+          `Part upload failed with status ${response.status}`,
+          "We hit a problem while uploading. Please try again.",
+          response.status,
+          response.status >= 500,
         );
       }
 
       // S3 returns an ETag per part; collected and sent in the complete call.
       // If the browser can't read it the bucket CORS is missing
-      // Access-Control-Expose-Headers: ETag — that's a bucket config fix, not
-      // a client retry. Raise a user-friendly error and stop retrying.
-      const etag = response.headers.get("etag");
+      // Access-Control-Expose-Headers: ETag. No retry fixes that, but routing
+      // the file through the API does — so classify it as reroutable.
+      const etag = response.getResponseHeader("etag");
       if (!etag) {
-        throw new UploadError(
+        throw new UploadTransportError(
           "Multipart upload response missing ETag header (CORS expose-headers misconfigured)",
-          "Upload couldn't complete due to a server configuration issue. Please contact support.",
-          undefined,
-          false,
+          "cors",
         );
       }
 
-      onUploadedBytes?.(chunk.size);
+      onPartProgress?.(chunk.size);
       return etag;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Timeout aborts are not retryable
-      if (lastError.name === "AbortError") {
+      // A stall or a cross-origin rejection is a property of the route, not
+      // of this attempt — retrying just burns the learner's time.
+      if (
+        lastError instanceof UploadTransportError &&
+        lastError.kind !== "network"
+      ) {
         break;
       }
-      // Server-config errors (CORS) won't get better on retry
+      // Server-config errors won't get better on retry
       if (lastError instanceof UploadError && !lastError.retryable) {
         break;
       }
@@ -286,7 +292,7 @@ export async function reliableUpload(
   }
 
   const completedParts: MultipartUploadCompletedPart[] = [];
-  let loadedBytes = 0;
+  let completedBytes = 0;
 
   try {
     for (const part of multipartUpload.urls) {
@@ -297,8 +303,10 @@ export async function reliableUpload(
 
       // PUT the chunk directly to S3 via its presigned URL; returns the ETag
       const etag = await uploadPartWithRetry(chunk, part.url, {
-        onUploadedBytes: (chunkBytes) => {
-          loadedBytes += chunkBytes;
+        onPartProgress: (partLoaded) => {
+          // Report within-part progress so the bar moves during a part
+          // instead of jumping once per completed chunk.
+          const loadedBytes = completedBytes + Math.min(partLoaded, chunk.size);
           onProgress?.({
             loaded: loadedBytes,
             total: file.size,
@@ -306,6 +314,7 @@ export async function reliableUpload(
           });
         },
       });
+      completedBytes += chunk.size;
 
       // S3 needs each part's ETag to assemble the final object
       completedParts.push({

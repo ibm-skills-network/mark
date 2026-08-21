@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 import { extractStructuredJSON } from "../utils/structured-json.util";
 import { withWatsonxRateLimit } from "../utils/watsonx-rate-limiter";
 
@@ -88,17 +89,22 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
 
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     const model = this.createChatModel(options);
 
-    const processedImageData = this.normalizeImageData(imageData);
+    const processedImages = toImageDataList(imageData).map((entry) =>
+      this.normalizeImageData(entry),
+    );
     const inputTokens = this.tokenCounter.countTokens(textContent);
-    const estimatedImageTokens = this.estimateImageTokens(processedImageData);
+    const estimatedImageTokens = processedImages.reduce(
+      (sum, url) => sum + this.estimateImageTokens(url),
+      0,
+    );
 
     this.logger.debug(
-      `Invoking Granite Vision 3.2 2B with multimodal input (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
+      `Invoking Granite Vision 3.2 2B with multimodal input (${processedImages.length} image(s), ${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
     );
 
     try {
@@ -107,12 +113,10 @@ export class GraniteVision322bLlmService implements IMultimodalLlmProvider {
           new HumanMessage({
             content: [
               { type: "text", text: textContent },
-              {
-                type: "image_url",
-                image_url: {
-                  url: processedImageData,
-                },
-              },
+              ...processedImages.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              })),
             ],
           }),
         ]),

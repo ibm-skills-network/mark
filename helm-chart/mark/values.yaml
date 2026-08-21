@@ -80,6 +80,9 @@ api:
     # is open. Runtime check is strict equality with "true".
     ENABLE_TRANSLATION: "false"
     ENABLE_PARALLEL_GRADING: "false"
+    # Bump when a rolling model or grading semantics change so persistent
+    # grading cache entries are not reused across deployments.
+    GRADING_CACHE_REVISION: "2026-08-05-gpt56"
     # Bottleneck maxConcurrent ceiling on parallel LLM calls inside ONE
     # grading job (the wave scheduler's fan-out cap). Distinct from
     # GRADING_WORKER_CONCURRENCY on mark-jobs, which controls how many

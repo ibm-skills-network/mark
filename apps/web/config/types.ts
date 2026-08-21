@@ -257,6 +257,7 @@ export type AuthorAssignmentState = {
   published: boolean;
   showAssignmentScore: boolean;
   showQuestionScore: boolean;
+  showPassFailIndicator: boolean;
   showSubmissionFeedback: boolean;
   showQuestions: boolean;
   correctAnswerVisibility: CorrectAnswerVisibility;
@@ -639,6 +640,7 @@ export type FeedbackData = {
   showSubmissionFeedback: boolean;
 
   showQuestionScore: boolean;
+  showPassFailIndicator: boolean;
   showQuestions: boolean;
 
   showAssignmentScore: boolean;
@@ -668,6 +670,7 @@ export type ReplaceAssignmentRequest = {
   showQuestions?: boolean;
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
+  showPassFailIndicator?: boolean;
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
   questionControls?: QuestionControls;
@@ -721,6 +724,8 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   showAssignmentScore?: boolean;
   showQuestions?: boolean;
   showQuestionScore?: boolean;
+  showPassFailIndicator?: boolean;
+  passed?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
   questionControls?: QuestionControls;
   comments?: string;
@@ -758,6 +763,7 @@ export interface AssignmentDetails {
   showQuestions?: boolean;
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
+  showPassFailIndicator?: boolean;
   showSubmissionFeedback?: boolean;
   correctAnswerVisibility?: CorrectAnswerVisibility;
   numberOfQuestionsPerAttempt?: number | null;
@@ -774,6 +780,7 @@ export interface AssignmentDetailsLocal extends AssignmentDetails {
   updatedAt: number;
   showAssignmentScore: boolean;
   showQuestionScore: boolean;
+  showPassFailIndicator: boolean;
   showSubmissionFeedback: boolean;
   correctAnswerVisibility: CorrectAnswerVisibility;
 }
@@ -790,6 +797,8 @@ export type UpdateAssignmentQuestionsResponse = BaseBackendResponse & {
 
 export interface SubmitAssignmentResponse extends BaseBackendResponse {
   grade?: number;
+  passed?: boolean;
+  showPassFailIndicator?: boolean;
   showSubmissionFeedback: boolean;
   feedbacksForQuestions?: QuestionAttemptResponse[];
   totalPointsEarned: number;

@@ -288,4 +288,108 @@ describe("TrueFalseGradingStrategy - Type Safety Tests", () => {
       expect(result.totalPoints).toBe(1);
     });
   });
+
+  describe("gradeResponse - correct answer comes from isCorrect, not position", () => {
+    const mockContext: GradingContext = {
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+      assignmentId: 1,
+      language: "en",
+      userRole: "learner" as any,
+      metadata: {},
+    };
+
+    // The shape every authored TF question actually has: [True, False],
+    // with isCorrect flagging the answer and points sitting on that row.
+    const tfQuestion = (correct: "True" | "False"): QuestionDto =>
+      ({
+        id: 9876,
+        question: "You can change the value of an element in a tuple.",
+        type: "TRUE_FALSE" as any,
+        totalPoints: 1,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          {
+            id: 0,
+            choice: "True",
+            isCorrect: correct === "True",
+            points: correct === "True" ? 1 : 0,
+          },
+          {
+            id: 1,
+            choice: "False",
+            isCorrect: correct === "False",
+            points: correct === "False" ? 1 : 0,
+          },
+        ],
+      }) as any;
+
+    it("accepts False on a False-answer question", async () => {
+      // The regression this guards: choices[0] is the True row, so
+      // position-keyed grading marked every correct False answer wrong.
+      const result = await strategy.gradeResponse(
+        tfQuestion("False"),
+        false,
+        mockContext,
+      );
+
+      expect(result.totalPoints).toBe(1);
+      expect((result.metadata as any).isCorrect).toBe(true);
+      expect((result.metadata as any).correctAnswer).toBe(false);
+    });
+
+    it("rejects True on a False-answer question", async () => {
+      const result = await strategy.gradeResponse(
+        tfQuestion("False"),
+        true,
+        mockContext,
+      );
+
+      expect(result.totalPoints).toBe(0);
+      expect((result.feedback as any)[0].feedback).toContain("False");
+    });
+
+    it("accepts True on a True-answer question", async () => {
+      const result = await strategy.gradeResponse(
+        tfQuestion("True"),
+        true,
+        mockContext,
+      );
+
+      expect(result.totalPoints).toBe(1);
+    });
+
+    it("rejects False on a True-answer question", async () => {
+      const result = await strategy.gradeResponse(
+        tfQuestion("True"),
+        false,
+        mockContext,
+      );
+
+      expect(result.totalPoints).toBe(0);
+      expect((result.feedback as any)[0].feedback).toContain("True");
+    });
+
+    it("awards the correct choice's points when the question has no totalPoints", async () => {
+      const question = tfQuestion("False");
+      (question as any).totalPoints = undefined;
+      (question as any).choices[1].points = 2;
+
+      const result = await strategy.gradeResponse(question, false, mockContext);
+
+      // The True row carries 0 points on a False-answer question; reading
+      // choices[0].points here silently awarded 0 for a correct answer.
+      expect(result.totalPoints).toBe(2);
+    });
+
+    it("refuses to grade when the question has no choices", async () => {
+      const question = tfQuestion("True");
+      (question as any).choices = [];
+
+      await expect(
+        strategy.gradeResponse(question, true, mockContext),
+      ).rejects.toThrow("Missing correct answer");
+    });
+  });
 });

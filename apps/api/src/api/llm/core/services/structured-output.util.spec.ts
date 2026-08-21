@@ -57,6 +57,47 @@ describe("invokeStructuredChatModel", () => {
     });
   });
 
+  it("surfaces the provider's cache_read count as cachedInput", async () => {
+    const structuredInvoke = jest.fn().mockResolvedValue({
+      raw: {
+        usage_metadata: {
+          input_tokens: 1083,
+          output_tokens: 40,
+          input_token_details: { cache_read: 1063 },
+        },
+      },
+      parsed: { grade: 7 },
+    });
+    const model = {
+      withStructuredOutput: jest
+        .fn()
+        .mockReturnValue({ invoke: structuredInvoke }),
+    } as never;
+    const logger = makeLogger();
+
+    const result = await invokeStructuredChatModel(
+      model,
+      [new HumanMessage("grade this")],
+      schema,
+      { countTokens: jest.fn().mockReturnValue(3) } as never,
+      logger as never,
+      "gpt-5.6-luna",
+    );
+
+    // A silently-dead cache is indistinguishable from a working one at the
+    // API level; this number reaching the logs is the only way a deploy can
+    // verify caching actually engaged.
+    expect(result.tokenUsage).toEqual({
+      input: 1083,
+      output: 40,
+      cachedInput: 1063,
+    });
+    expect(logger.info).toHaveBeenCalledWith(
+      "openai.invokeStructured.complete",
+      expect.objectContaining({ cached_input_tokens: 1063 }),
+    );
+  });
+
   it("falls back to counting tokens when usage metadata is absent", async () => {
     const structuredInvoke = jest
       .fn()

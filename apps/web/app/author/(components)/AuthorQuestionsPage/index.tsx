@@ -1167,6 +1167,14 @@ const AuthorQuestionsPage: FC<Props> = ({
             );
             settingsUpdated = true;
           }
+          if (
+            assignmentData.feedbackConfig.showPassFailIndicator !== undefined
+          ) {
+            feedbackConfigStore.setShowPassFailIndicator(
+              assignmentData.feedbackConfig.showPassFailIndicator,
+            );
+            settingsUpdated = true;
+          }
           if (assignmentData.feedbackConfig.showQuestions !== undefined) {
             feedbackConfigStore.setShowQuestion(
               assignmentData.feedbackConfig.showQuestions,

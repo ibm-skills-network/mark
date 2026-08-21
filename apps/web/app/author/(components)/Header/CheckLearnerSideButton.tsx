@@ -24,12 +24,14 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showPassFailIndicator,
     correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showPassFailIndicator,
     state.correctAnswerVisibility,
   ]);
   const assignmentConfig = {
@@ -50,6 +52,7 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     showQuestions: showQuestions,
     showAssignmentScore: showAssignmentScore,
     showQuestionScore: showQuestionScore,
+    showPassFailIndicator: showPassFailIndicator,
     correctAnswerVisibility: correctAnswerVisibility,
     instructions: authorState.instructions ?? "",
     gradingCriteriaOverview: authorState.gradingCriteriaOverview ?? "",

@@ -403,6 +403,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
   ): Promise<void> {
     const startTime = Date.now();
     let consistencyResult: GradingValidationResult | undefined;
+    const modelIdentity = await this.resolveGradingModelIdentity();
 
     this.logger?.info("Starting grading record process", {
       questionId: question.id,
@@ -533,6 +534,9 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
             timestamp: new Date().toISOString(),
             version: "2.0",
             processingTime: Date.now() - startTime,
+            // Read back by GradingConsistencyService.checkConsistency to keep
+            // grade reuse within a single grading model.
+            modelSnapshot: modelIdentity,
           },
         },
         context.tx,
@@ -543,6 +547,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         requestDto,
         responseDto,
         context,
+        modelIdentity,
       );
 
       const results = await Promise.allSettled([
@@ -590,11 +595,22 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
   /**
    * Record consistency data separately for better error handling
    */
+  /**
+   * Identity of the model that graded this response, when the strategy knows
+   * it. Recorded alongside the grade so later reuse can require a matching
+   * grader. Strategies that do not resolve a model return undefined and keep
+   * the previous, model-agnostic behaviour.
+   */
+  protected async resolveGradingModelIdentity(): Promise<string | undefined> {
+    return undefined;
+  }
+
   private async recordConsistencyData(
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
     responseDto: CreateQuestionResponseAttemptResponseDto,
     _context: GradingContext,
+    modelIdentity?: string,
   ): Promise<void> {
     void _context;
     if (!this.consistencyService) {
@@ -637,6 +653,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         JSON.stringify(responseDto.feedback),
         // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         responseDto.metadata?.rubricScores,
+        modelIdentity,
       );
     } catch (error) {
       this.logger?.error("Error in consistency recording", {

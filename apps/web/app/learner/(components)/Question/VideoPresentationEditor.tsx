@@ -95,7 +95,6 @@ const extractAudio = async (ffmpeg: FFmpeg, videoBlob: Blob): Promise<Blob> => {
   }
 };
 
-
 interface VideoPresentationEditorProps {
   question: QuestionStore;
   assignmentId: number;

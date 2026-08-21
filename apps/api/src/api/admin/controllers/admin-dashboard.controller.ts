@@ -24,7 +24,6 @@ import {
   UserRole,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
-import { Roles } from "src/auth/role/roles.global.guard";
 import { ScheduledTasksService } from "../../scheduled-tasks/services/scheduled-tasks.service";
 import { AdminService } from "../admin.service";
 import { DashboardStatsQueryDto } from "./dto/dashboard-stats-query.dto";
@@ -107,6 +106,13 @@ const ANALYTICS_SORT_FIELDS = ["name", "updatedAt", "published"] as const;
 type AnalyticsSortField = (typeof ANALYTICS_SORT_FIELDS)[number];
 
 @ApiTags("Admin Dashboard")
+// AdminGuard covers the whole controller and is the single source of truth for
+// access here. Deliberately no @Roles on any handler: RolesGlobalGuard is a
+// global guard, so it runs BEFORE AdminGuard and would decide on the forwarded
+// cookie session — an admin browsing with a learner/author launch cookie would
+// be rejected before AdminGuard could establish the admin role. AdminGuard is
+// strictly narrower than @Roles(AUTHOR, ADMIN) anyway, so dropping the metadata
+// never widens access.
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
 @Injectable()
@@ -152,7 +158,6 @@ export class AdminDashboardController {
   }
 
   @Get("stats")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @ApiOperation({
     summary: "Get admin dashboard statistics",
   })
@@ -177,7 +182,6 @@ export class AdminDashboardController {
     });
   }
   @Get("quick-actions/:action")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @ApiOperation({
     summary: "Execute predefined quick actions for dashboard insights",
   })
@@ -207,7 +211,6 @@ export class AdminDashboardController {
    * Get assignment analytics with detailed insights
    */
   @Get("analytics")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary:
@@ -289,7 +292,6 @@ export class AdminDashboardController {
    * Get detailed insights for a specific assignment
    */
   @Get("assignments/:id/insights")
-  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: "Get detailed insights for a specific assignment",
@@ -321,7 +323,6 @@ export class AdminDashboardController {
    * Manual cleanup of old drafts
    */
   @Post("cleanup/drafts")
-  @Roles(UserRole.ADMIN)
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: "Manually trigger cleanup of old drafts (Admin only)",

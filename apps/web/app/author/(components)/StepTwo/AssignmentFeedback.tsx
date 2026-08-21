@@ -66,6 +66,7 @@ const Component: FC<Props> = ({ compact }) => {
     setShowQuestionScore,
     setShowQuestion,
     setCorrectAnswerVisibility,
+    setShowPassFailIndicator,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.setVerbosityLevel,
@@ -74,6 +75,7 @@ const Component: FC<Props> = ({ compact }) => {
     state.setShowQuestionScore,
     state.setShowQuestion,
     state.setCorrectAnswerVisibility,
+    state.setShowPassFailIndicator,
   ]);
   const [
     showAssignmentScore,
@@ -81,12 +83,14 @@ const Component: FC<Props> = ({ compact }) => {
     showQuestionScore,
     showQuestions,
     correctAnswerVisibility,
+    showPassFailIndicator,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showAssignmentScore,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showQuestions,
     state.correctAnswerVisibility,
+    state.showPassFailIndicator,
   ]);
   const handleButtonClick = (verbosity: VerbosityLevels) => {
     setVerbosityLevel(verbosity);
@@ -111,6 +115,7 @@ const Component: FC<Props> = ({ compact }) => {
         setShowQuestionScore(false);
         setShowQuestion(false);
         setCorrectAnswerVisibility("NEVER");
+        setShowPassFailIndicator(false);
         break;
       default:
         break;
@@ -130,7 +135,11 @@ const Component: FC<Props> = ({ compact }) => {
       !showSubmissionFeedback &&
       !showQuestionScore &&
       !showQuestions &&
-      correctAnswerVisibility === "NEVER"
+      correctAnswerVisibility === "NEVER" &&
+      // A pass/fail verdict is feedback, so it disqualifies "No Feedback".
+      // "Full" stays agnostic to it: assignments predating the flag default
+      // to false and must keep reading as Full.
+      !showPassFailIndicator
     ) {
       setVerbosityLevel("None");
     } else {
@@ -142,6 +151,7 @@ const Component: FC<Props> = ({ compact }) => {
     showQuestionScore,
     showQuestions,
     correctAnswerVisibility,
+    showPassFailIndicator,
   ]);
 
   return (

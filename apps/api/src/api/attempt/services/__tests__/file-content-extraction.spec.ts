@@ -1561,4 +1561,134 @@ describe("FileContentExtractionService.extractArchiveContent source files", () =
     expect(result.text).toContain("=== ARCHIVE:");
     expect(result.text).toContain("--- FILE LISTING ---");
   });
+
+  it("extracts project.pbxproj content at the code-sized cap, not the text cap", async () => {
+    const result = await extract();
+    const text: string = result.extractedText;
+    expect(text).toContain(
+      "--- CONTENT: SmartTravelJournal/SmartTravelJournal.xcodeproj/project.pbxproj ---",
+    );
+    // Sits ~8.5KB into the manifest: only the code cap reaches it, and it is
+    // the fact a "valid Xcode project" rubric needs to see.
+    expect(text).toContain("com.apple.product-type.application");
+
+    const manifest = result.archiveEntries.find((e: { path: string }) =>
+      e.path.endsWith("project.pbxproj"),
+    );
+    expect(manifest).toBeDefined();
+    expect(manifest.truncated).toBe(false);
+  });
+});
+
+// ─── Jupyter notebook output hygiene ────────────────────────────────────────
+//
+// Notebook outputs are grading evidence, but oversized or duplicated output
+// payloads crowd the learner's actual code out of every downstream budget
+// (the 12K pinned whole-file block, the 30K validation render budget). A
+// 135KB pandas HTML table repr must never reach the prompt when its
+// text/plain sibling already carries the same information.
+
+describe("FileContentExtractionService.extractJupyterNotebook output handling", () => {
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  function notebookBuffer(cells: unknown[]): Buffer {
+    return Buffer.from(
+      JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells }),
+    );
+  }
+
+  function codeCell(source: string, outputs: unknown[] = []): unknown {
+    return { cell_type: "code", source: [source], metadata: {}, outputs };
+  }
+
+  async function extractNotebook(cells: unknown[]): Promise<string> {
+    const result = await (service as any).extractJupyterNotebook(
+      notebookBuffer(cells),
+      "test.ipynb",
+    );
+    return result.extractedText as string;
+  }
+
+  it("inlines only the highest-preference text payload per output", async () => {
+    const text = await extractNotebook([
+      codeCell("df.head()", [
+        {
+          output_type: "execute_result",
+          execution_count: 1,
+          data: {
+            "text/plain": ["   col_a  col_b\n0      1      2"],
+            "text/html": [
+              '<div><table class="dataframe"><tr><td>1</td></tr></table></div>',
+            ],
+          },
+        },
+      ]),
+    ]);
+
+    expect(text).toContain("col_a  col_b");
+    expect(text).not.toContain("<table");
+  });
+
+  it("keeps image placeholders alongside the text payload", async () => {
+    const text = await extractNotebook([
+      codeCell("plt.plot(x, y)", [
+        {
+          output_type: "display_data",
+          data: {
+            "text/plain": ["<Figure size 640x480 with 1 Axes>"],
+            "image/png": ["iVBORw0KGgoAAAANSUhEUg" + "A".repeat(500)],
+          },
+        },
+      ]),
+    ]);
+
+    expect(text).toContain("<Figure size 640x480 with 1 Axes>");
+    expect(text).toContain("[image/png]: <image data present>");
+    expect(text).not.toContain("iVBORw0KGgo");
+  });
+
+  it("caps an oversized rich-output text payload", async () => {
+    const huge = "x".repeat(50_000);
+    const text = await extractNotebook([
+      codeCell("print(huge)", [
+        { output_type: "execute_result", data: { "text/plain": [huge] } },
+      ]),
+    ]);
+
+    expect(text).toContain("[output truncated");
+    expect(text.length).toBeLessThan(10_000);
+  });
+
+  it("caps an oversized stream output", async () => {
+    const verbose = "Fitting 5 folds for each of 288 candidates\n".repeat(3000);
+    const text = await extractNotebook([
+      codeCell("grid.fit(X, y)", [
+        { output_type: "stream", name: "stdout", text: [verbose] },
+      ]),
+    ]);
+
+    expect(text).toContain("Fitting 5 folds");
+    expect(text).toContain("[output truncated");
+    expect(text.length).toBeLessThan(10_000);
+  });
+
+  it("never inlines non-preferred mime payloads", async () => {
+    const text = await extractNotebook([
+      codeCell("show_gif()", [
+        {
+          output_type: "display_data",
+          data: {
+            "image/webp": "UklGRh4AAABXRUJQVlA4TBEAAAAv" + "B".repeat(400),
+          },
+        },
+      ]),
+    ]);
+
+    expect(text).toContain("[image/webp]: <image data present>");
+    expect(text).not.toContain("UklGRh4");
+  });
 });

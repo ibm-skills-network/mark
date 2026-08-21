@@ -21,6 +21,9 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiQuery, ApiResponse } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
+import { plainToInstance } from "class-transformer";
+import { validateSync } from "class-validator";
 import { memoryStorage } from "multer";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
@@ -41,6 +44,7 @@ import {
   UploadType,
 } from "./dto/upload.dto";
 import { AuthGuard } from "./guards/auth.guard";
+import { UserThrottlerGuard } from "./guards/user-throttler.guard";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
 import { sanitizeForLog } from "../../logger/sanitize";
@@ -207,13 +211,28 @@ export class FilesController {
     );
   }
 
+  /**
+   * Upload a file through the API instead of straight to object storage.
+   *
+   * This is the rescue route for learners whose network accepts connections
+   * to the storage domain and then never answers — the browser cannot tell
+   * that apart from a slow upload, so it hangs forever. Because the request
+   * is same-origin, any network that can load the app can complete it.
+   *
+   * Authorization, per-role upload-type rules and per-type size limits all
+   * come from the same resolveUploadTarget() the presigned path uses, so the
+   * two routes cannot drift apart. Rate limiting is keyed on the session user
+   * because every request shares the gateway's IP.
+   */
   @Post("direct-upload")
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, UserThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: memoryStorage(),
       limits: {
         fileSize: 100 * 1024 * 1024,
+        files: 1,
       },
     }),
   )
@@ -225,27 +244,33 @@ export class FilesController {
     @Body() body: DirectUploadDto,
     @Req() request: UserSessionRequest,
   ) {
+    const userId = request.userSession.userId;
+    const source = body.source ?? "direct";
+
     if (!file) {
+      this.logger.warn("direct_upload_rejected: no file in request", {
+        denial_reason: "missing_file",
+        user_id: sanitizeForLog(userId),
+        upload_type: sanitizeForLog(body.uploadType),
+        source,
+      });
       throw new BadRequestException("No file provided");
     }
 
-    let context: UploadContextDto = {};
-    if (body.context) {
-      try {
-        context = JSON.parse(body.context);
-      } catch (error) {
-        this.logger.error("[DIRECT UPLOAD] Failed to parse context", {
-          context_raw: sanitizeForLog(body.context),
-          error: sanitizeForLog(
-            error instanceof Error ? error.message : String(error),
-          ),
-        });
-        throw new BadRequestException("Invalid context JSON");
-      }
-    }
+    this.logger.info("direct_upload_start", {
+      user_id: sanitizeForLog(userId),
+      role: sanitizeForLog(request.userSession.role),
+      upload_type: sanitizeForLog(body.uploadType),
+      size_bytes: file.size,
+      mime_type: sanitizeForLog(file.mimetype),
+      source,
+    });
 
-    const userId = request.userSession.userId;
+    const context = this.parseUploadContext(body.context, userId, source);
 
+    // Same resolver as the presigned path: role guard, per-type size limit,
+    // key derivation. file.size is the real buffered length, not a
+    // client-declared number, so the size check cannot be lied past here.
     const { bucket, key } = this.filesService.resolveUploadTarget(
       {
         fileName: file.originalname,
@@ -258,7 +283,33 @@ export class FilesController {
       request.userSession.role,
     );
 
-    const result = await this.filesService.directUpload(file, bucket, key);
+    let result: { etag?: string };
+    try {
+      result = await this.filesService.directUpload(file, bucket, key);
+    } catch (error) {
+      this.logger.error("direct_upload_failed", {
+        user_id: sanitizeForLog(userId),
+        upload_type: sanitizeForLog(body.uploadType),
+        size_bytes: file.size,
+        bucket: sanitizeForLog(bucket),
+        key: sanitizeForLog(key),
+        source,
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+        stack: sanitizeForLog(error instanceof Error ? error.stack : undefined),
+      });
+      throw error;
+    }
+
+    this.logger.info("direct_upload_complete", {
+      user_id: sanitizeForLog(userId),
+      upload_type: sanitizeForLog(body.uploadType),
+      size_bytes: file.size,
+      bucket: sanitizeForLog(bucket),
+      key: sanitizeForLog(key),
+      source,
+    });
 
     return {
       success: true,
@@ -270,6 +321,71 @@ export class FilesController {
       size: file.size,
       etag: result.etag,
     };
+  }
+
+  /**
+   * Parse and validate the JSON-encoded upload context.
+   *
+   * It arrives as a multipart text field, so the global ValidationPipe never
+   * sees its contents — this is the only place its shape is checked. Every
+   * rejection uses the same generic message so nothing leaks about which
+   * field failed.
+   */
+  private parseUploadContext(
+    raw: string | undefined,
+    userId: string,
+    source: string,
+  ): UploadContextDto {
+    if (!raw) {
+      return {};
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      this.logger.warn("direct_upload_rejected: context is not valid JSON", {
+        denial_reason: "context_not_json",
+        user_id: sanitizeForLog(userId),
+        source,
+        error: sanitizeForLog(
+          error instanceof Error ? error.message : String(error),
+        ),
+      });
+      throw new BadRequestException("Invalid upload context");
+    }
+
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      this.logger.warn("direct_upload_rejected: context is not an object", {
+        denial_reason: "context_not_object",
+        user_id: sanitizeForLog(userId),
+        source,
+      });
+      throw new BadRequestException("Invalid upload context");
+    }
+
+    const context = plainToInstance(UploadContextDto, parsed);
+    const errors = validateSync(context, {
+      whitelist: true,
+      forbidUnknownValues: true,
+    });
+    if (errors.length > 0) {
+      this.logger.warn("direct_upload_rejected: context failed validation", {
+        denial_reason: "context_invalid",
+        user_id: sanitizeForLog(userId),
+        source,
+        invalid_properties: errors.map((error) =>
+          sanitizeForLog(error.property),
+        ),
+      });
+      throw new BadRequestException("Invalid upload context");
+    }
+
+    return context;
   }
 
   @Get("access")

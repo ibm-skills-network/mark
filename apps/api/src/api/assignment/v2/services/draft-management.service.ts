@@ -40,6 +40,7 @@ export interface SaveDraftDto {
     questionOrder: number[];
     showAssignmentScore: boolean;
     showQuestionScore: boolean;
+    showPassFailIndicator: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
     requireAllQuestions: boolean;
@@ -194,6 +195,9 @@ export class DraftManagementService {
           showQuestionScore:
             saveDraftDto.assignmentData?.showQuestionScore ??
             assignment.showQuestionScore,
+          showPassFailIndicator:
+            saveDraftDto.assignmentData?.showPassFailIndicator ??
+            assignment.showPassFailIndicator,
           showSubmissionFeedback:
             saveDraftDto.assignmentData?.showSubmissionFeedback ??
             assignment.showSubmissionFeedback,
@@ -328,6 +332,11 @@ export class DraftManagementService {
         ...(saveDraftDto.assignmentData?.showQuestionScore !== undefined && {
           showQuestionScore: saveDraftDto.assignmentData.showQuestionScore,
         }),
+        ...(saveDraftDto.assignmentData?.showPassFailIndicator !==
+          undefined && {
+          showPassFailIndicator:
+            saveDraftDto.assignmentData.showPassFailIndicator,
+        }),
         ...(saveDraftDto.assignmentData?.showSubmissionFeedback !==
           undefined && {
           showSubmissionFeedback:
@@ -412,6 +421,7 @@ export class DraftManagementService {
     published: boolean;
     showAssignmentScore: boolean;
     showQuestionScore: boolean;
+    showPassFailIndicator: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
     requireAllQuestions: boolean;
@@ -464,6 +474,7 @@ export class DraftManagementService {
       published: draft.published,
       showAssignmentScore: draft.showAssignmentScore,
       showQuestionScore: draft.showQuestionScore,
+      showPassFailIndicator: draft.showPassFailIndicator,
       showSubmissionFeedback: draft.showSubmissionFeedback,
       showQuestions: draft.showQuestions,
       requireAllQuestions,
@@ -527,6 +538,7 @@ export class DraftManagementService {
     published: boolean;
     showAssignmentScore: boolean;
     showQuestionScore: boolean;
+    showPassFailIndicator: boolean;
     showSubmissionFeedback: boolean;
     showQuestions: boolean;
     requireAllQuestions: boolean;
