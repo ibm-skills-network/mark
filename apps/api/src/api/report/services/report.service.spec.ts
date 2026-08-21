@@ -107,42 +107,59 @@ describe("ReportsService.sendBugRenewalEmail", () => {
 });
 
 describe("ReportsService.reportIssue", () => {
-  it("forwards the report to SN Support with Mark context", async () => {
+  const reportDto = {
+    issueType: "technical",
+    description: "The assignment submission fails",
+    attemptId: 84,
+    additionalDetails: {
+      category: "Submission",
+      portalName: "Coursera",
+    },
+  };
+  const session = {
+    assignmentId: 42,
+    attemptId: 84,
+    userId: "employee@ibm.com",
+  };
+
+  const makeForReportIssue = (snSupportService: unknown) => {
     const forwardPrisma = {
       report: {
         findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: 7 }),
       },
     };
-    const snSupportService = {
-      createTicket: jest.fn().mockRejectedValue(new Error("forwarded")),
-    };
+    const floService = { sendError: jest.fn().mockResolvedValue(undefined) };
     const service = new ReportsService(
-      undefined as never,
+      floService as never,
       forwardPrisma as never,
       undefined as never,
       undefined as never,
       snSupportService as never,
     );
-
-    await expect(
-      service.reportIssue(
-        {
-          issueType: "technical",
-          description: "The assignment submission fails",
-          attemptId: 84,
-          additionalDetails: {
-            category: "Submission",
-            portalName: "Coursera",
-          },
+    jest
+      .spyOn(
+        service as unknown as {
+          createGithubIssue: () => Promise<{ number: number }>;
         },
-        {
-          assignmentId: 42,
-          attemptId: 84,
-          userId: "employee@ibm.com",
-        },
-      ),
-    ).rejects.toThrow("forwarded");
+        "createGithubIssue",
+      )
+      .mockResolvedValue({ number: 123 });
+    return service;
+  };
 
+  it("forwards the report to SN Support with Mark context", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-1" }),
+    };
+
+    const result = await makeForReportIssue(snSupportService).reportIssue(
+      reportDto,
+      session,
+    );
+
+    expect(result.issueNumber).toBe(123);
     expect(snSupportService.createTicket).toHaveBeenCalledWith({
       title: expect.stringContaining("Assignment 42 - Attempt 84"),
       description: expect.stringContaining("The assignment submission fails"),
@@ -154,6 +171,52 @@ describe("ReportsService.reportIssue", () => {
       toolName: "Mark",
       browser: undefined,
       chatHistoryUrl: undefined,
+      screenshotUrl: undefined,
     });
+  });
+
+  it("still files the GitHub issue when SN Support is down", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockRejectedValue(new Error("sn down")),
+    };
+
+    const result = await makeForReportIssue(snSupportService).reportIssue(
+      reportDto,
+      session,
+    );
+
+    expect(snSupportService.createTicket).toHaveBeenCalled();
+    expect(result.issueNumber).toBe(123);
+  });
+
+  it("skips the SN forward when the reporter email is unknown", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn(),
+    };
+
+    const result = await makeForReportIssue(snSupportService).reportIssue(
+      reportDto,
+      { assignmentId: 42, attemptId: 84 },
+    );
+
+    expect(snSupportService.createTicket).not.toHaveBeenCalled();
+    expect(result.issueNumber).toBe(123);
+  });
+
+  it("skips the SN forward when the integration is not configured", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(false),
+      createTicket: jest.fn(),
+    };
+
+    const result = await makeForReportIssue(snSupportService).reportIssue(
+      reportDto,
+      session,
+    );
+
+    expect(snSupportService.createTicket).not.toHaveBeenCalled();
+    expect(result.issueNumber).toBe(123);
   });
 });

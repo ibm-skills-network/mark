@@ -19,6 +19,7 @@ export interface SnSupportTicket {
   toolName?: string;
   browser?: string;
   chatHistoryUrl?: string;
+  screenshotUrl?: string;
 }
 
 interface SnSupportTicketResponse {
@@ -58,14 +59,21 @@ export class SnSupportService {
     private readonly configService: ConfigService,
   ) {}
 
+  isConfigured(): boolean {
+    return Boolean(
+      this.configService.get<string>("SN_SUPPORT_URL")?.trim() &&
+        this.configService.get<string>("SN_SUPPORT_TOKEN")?.trim(),
+    );
+  }
+
   async createTicket(
     ticket: SnSupportTicket,
   ): Promise<SnSupportTicketResponse> {
     const baseUrl = this.configService
-      .get<string>("SN_SUPPORT_API_URL")
+      .get<string>("SN_SUPPORT_URL")
       ?.trim()
       .replace(/\/+$/, "");
-    const apiKey = this.configService.get<string>("SN_SUPPORT_API_KEY")?.trim();
+    const apiKey = this.configService.get<string>("SN_SUPPORT_TOKEN")?.trim();
 
     if (!baseUrl || !apiKey) {
       throw new InternalServerErrorException(
@@ -114,6 +122,16 @@ export class SnSupportService {
     addMetadata("toolName", ticket.toolName);
     addMetadata("courseTitle", ticket.courseTitle);
     addMetadata("mark.issueType", ticket.issueType);
+    // SN Support surfaces an opening screenshot from metadata.imageUrl; a
+    // malformed URL is dropped rather than failing the whole ticket.
+    try {
+      addMetadata(
+        "imageUrl",
+        normalizeHttpUrl("screenshot URL", ticket.screenshotUrl),
+      );
+    } catch {
+      this.logger.warn("Dropping non-HTTP screenshot URL from SN ticket");
+    }
 
     const supportTicket = {
       title: ticket.title,

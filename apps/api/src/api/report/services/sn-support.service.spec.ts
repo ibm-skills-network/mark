@@ -22,12 +22,18 @@ describe("SnSupportService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     configService.get.mockImplementation((key: string) => {
-      if (key === "SN_SUPPORT_API_URL") {
+      if (key === "SN_SUPPORT_URL") {
         return "https://support.skills.network/";
       }
-      if (key === "SN_SUPPORT_API_KEY") return "mark-api-key";
+      if (key === "SN_SUPPORT_TOKEN") return "mark-api-key";
       return undefined;
     });
+  });
+
+  it("reports configured only when both URL and token are set", () => {
+    expect(service.isConfigured()).toBe(true);
+    configService.get.mockReturnValue(undefined);
+    expect(service.isConfigured()).toBe(false);
   });
 
   it("creates a ticket through the product-scoped v2 API", async () => {
@@ -104,6 +110,58 @@ describe("SnSupportService", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("passes the screenshot as metadata.imageUrl and drops non-HTTP values", async () => {
+    httpService.post.mockReturnValue(
+      of({
+        data: {
+          ticketKey: "SUPPORT-102",
+          reportKey: "SUPPORT-102-1",
+          status: "open",
+          createdAt: "2026-08-12T18:00:00.000Z",
+        },
+      }),
+    );
+
+    await service.createTicket({
+      title: "Mark report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      screenshotUrl: "https://cos.example.com/bucket/shot.png",
+    });
+    expect(httpService.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          imageUrl: "https://cos.example.com/bucket/shot.png",
+        }),
+      }),
+      expect.any(Object),
+    );
+
+    httpService.post.mockClear();
+    httpService.post.mockReturnValue(
+      of({
+        data: {
+          ticketKey: "SUPPORT-103",
+          reportKey: "SUPPORT-103-1",
+          status: "open",
+          createdAt: "2026-08-12T18:00:00.000Z",
+        },
+      }),
+    );
+    await service.createTicket({
+      title: "Mark report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      screenshotUrl: "not-a-url",
+    });
+    const [, sentBody] = httpService.post.mock.calls[0] as [
+      string,
+      { metadata: Record<string, string> },
+    ];
+    expect(sentBody.metadata.imageUrl).toBeUndefined();
   });
 
   it("rejects a ticket without the reporter email required by v2", async () => {

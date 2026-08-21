@@ -1102,49 +1102,9 @@ export class ReportsService {
     const issueTitle = buildChatIssueTitle(issueTemplateInput);
     let issueBody = buildChatIssueBody(issueTemplateInput);
 
-    const supportDescription = [
-      description.trim(),
-      "",
-      `Issue type: ${issueType}`,
-      `Reporter role: ${role}`,
-      `Severity: ${issueSeverity}`,
-      `Assignment ID: ${assignmentId ?? "N/A"}`,
-      `Attempt ID: ${attemptId ?? "N/A"}`,
-    ].join("\n");
-
-    await this.snSupportService.createTicket({
-      title: issueTitle,
-      description: supportDescription,
-      reporterEmail: safeUserEmail === "Unknown" ? undefined : safeUserEmail,
-      issueType:
-        typeof additionalDetails?.category === "string"
-          ? additionalDetails.category
-          : issueType,
-      pageUrl:
-        typeof additionalDetails?.pageUrl === "string"
-          ? additionalDetails.pageUrl
-          : undefined,
-      portalName:
-        typeof additionalDetails?.portalName === "string"
-          ? additionalDetails.portalName
-          : undefined,
-      courseTitle:
-        typeof additionalDetails?.courseTitle === "string"
-          ? additionalDetails.courseTitle
-          : undefined,
-      toolName: "Mark",
-      browser:
-        typeof additionalDetails?.browser === "string"
-          ? additionalDetails.browser
-          : undefined,
-      chatHistoryUrl:
-        typeof additionalDetails?.chatHistoryUrl === "string"
-          ? additionalDetails.chatHistoryUrl
-          : undefined,
-    });
-
     const finalScreenshotUrl =
       screenshotUrl || additionalDetails?.screenshotUrl;
+    let fullScreenshotUrl: string | undefined;
     if (finalScreenshotUrl && typeof finalScreenshotUrl === "string") {
       const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
       const cosEndpoint = process.env.IBM_COS_ENDPOINT;
@@ -1154,7 +1114,7 @@ export class ReportsService {
         debugBucket &&
         (screenshotUrl || finalScreenshotUrl.includes(debugBucket))
       ) {
-        const fullScreenshotUrl = screenshotUrl
+        fullScreenshotUrl = screenshotUrl
           ? `${cosEndpoint}/${debugBucket}/${screenshotUrl}`
           : `${cosEndpoint}/${debugBucket}/${finalScreenshotUrl}`;
 
@@ -1170,6 +1130,71 @@ export class ReportsService {
 Screenshot Key: \`${finalScreenshotUrl}\`
 `;
       }
+    }
+
+    // Forward to SN Support in addition to the GitHub issue. Best-effort
+    // during the transition: an SN outage or validation error must never
+    // block the report itself. The v2 API requires a reporter email.
+    if (this.snSupportService.isConfigured() && safeUserEmail !== "Unknown") {
+      const supportDescription = [
+        description.trim(),
+        "",
+        `Issue type: ${issueType}`,
+        `Reporter role: ${role}`,
+        `Severity: ${issueSeverity}`,
+        `Assignment ID: ${assignmentId ?? "N/A"}`,
+        `Attempt ID: ${attemptId ?? "N/A"}`,
+      ].join("\n");
+
+      try {
+        const snTicket = await this.snSupportService.createTicket({
+          title: issueTitle,
+          description: supportDescription,
+          reporterEmail: safeUserEmail,
+          issueType:
+            typeof additionalDetails?.category === "string"
+              ? additionalDetails.category
+              : issueType,
+          pageUrl:
+            typeof additionalDetails?.pageUrl === "string"
+              ? additionalDetails.pageUrl
+              : undefined,
+          portalName:
+            typeof additionalDetails?.portalName === "string"
+              ? additionalDetails.portalName
+              : undefined,
+          courseTitle:
+            typeof additionalDetails?.courseTitle === "string"
+              ? additionalDetails.courseTitle
+              : undefined,
+          toolName: "Mark",
+          browser:
+            typeof additionalDetails?.browser === "string"
+              ? additionalDetails.browser
+              : undefined,
+          chatHistoryUrl:
+            typeof additionalDetails?.chatHistoryUrl === "string"
+              ? additionalDetails.chatHistoryUrl
+              : undefined,
+          screenshotUrl: fullScreenshotUrl,
+        });
+        this.logger.log("Forwarded report to SN Support", {
+          ticket_key: snTicket.ticketKey,
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+        });
+      } catch (error) {
+        this.logger.warn("SN Support ticket creation failed; continuing", {
+          error: error instanceof Error ? error.message : String(error),
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+        });
+      }
+    } else {
+      this.logger.debug("Skipping SN Support forward", {
+        configured: this.snSupportService.isConfigured(),
+        has_reporter_email: safeUserEmail !== "Unknown",
+      });
     }
 
     if (similarReports.length > 0) {
