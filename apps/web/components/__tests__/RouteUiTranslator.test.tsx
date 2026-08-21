@@ -2,11 +2,27 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
 }));
 
+// Must stub everything RouteUiTranslator imports from this module, not just the
+// loader: the "en" path never touches normalizeSourceText, so a partial mock
+// looks fine until a test exercises a real language, then throws.
 jest.mock("@/lib/static-ui-translations", () => ({
-  getStaticUiTranslations: jest.fn().mockResolvedValue({}),
+  getStaticUiTranslations: jest.fn(async (language: string) =>
+    language === "fr"
+      ? {
+          "About this assignment": "À propos de ce devoir",
+          "First message": "Premier message",
+          "Second message": "Deuxième message",
+        }
+      : {},
+  ),
+  normalizeSourceText: (value: string) => value.replace(/\s+/g, " ").trim(),
 }));
 
-import { isInsideOptedOutSubtree, translateScope } from "../RouteUiTranslator";
+import {
+  ensureLanguageTranslationsLoaded,
+  isInsideOptedOutSubtree,
+  translateScope,
+} from "../RouteUiTranslator";
 
 // The translator rewrites text nodes in place, using a per-node "original" it
 // records the first time it sees each node. Live UI — a ticking countdown, a
@@ -182,5 +198,64 @@ describe("RouteUiTranslator nodes that start empty", () => {
     translateScope(document.body, "en");
 
     expect(node.nodeValue).toBe("Label");
+  });
+});
+
+// Everything above passes "en", which returns before any catalog lookup, so it
+// exercises none of the real translation path. These load a stubbed catalog and
+// run the path that actually reads it.
+describe("RouteUiTranslator translateScope with a real language", () => {
+  const hosts: HTMLElement[] = [];
+
+  beforeAll(async () => {
+    await ensureLanguageTranslationsLoaded("fr");
+  });
+
+  afterEach(() => {
+    for (const host of hosts) host.remove();
+    hosts.length = 0;
+  });
+
+  const mountText = (text: string): Text => {
+    const host = document.createElement("div");
+    const node = document.createTextNode(text);
+    host.append(node);
+    document.body.append(host);
+    hosts.push(host);
+    return node;
+  };
+
+  it("translates a node using the loaded catalog", () => {
+    const node = mountText("About this assignment");
+
+    translateScope(document.body, "fr");
+
+    expect(node.nodeValue).toBe("À propos de ce devoir");
+  });
+
+  it("re-translates the new source when the app rewrites a translated node", () => {
+    // The bug this fix exists for, on the path that actually translates: the
+    // node is pinned to "First message" and every later pass would restore
+    // "Premier message" over whatever the app rendered since.
+    const node = mountText("First message");
+
+    translateScope(document.body, "fr");
+    expect(node.nodeValue).toBe("Premier message");
+
+    node.nodeValue = "Second message";
+    translateScope(document.body, "fr");
+
+    expect(node.nodeValue).toBe("Deuxième message");
+  });
+
+  it("leaves an opted-out subtree untranslated", () => {
+    const host = document.createElement("div");
+    host.innerHTML = `<span data-no-ui-translate="true">About this assignment</span>`;
+    document.body.append(host);
+    hosts.push(host);
+
+    translateScope(document.body, "fr");
+
+    expect(host.textContent).toBe("About this assignment");
   });
 });

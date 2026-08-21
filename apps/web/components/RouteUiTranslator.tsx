@@ -435,7 +435,10 @@ function fetchTranslationsForBatch(
   return results;
 }
 
-async function ensureLanguageTranslationsLoaded(
+// Exported so tests can exercise the real translation path: translateScope
+// reads the loaded catalog, and without loading one it returns every string
+// unchanged and proves nothing.
+export async function ensureLanguageTranslationsLoaded(
   languageCode: string,
 ): Promise<void> {
   if (languageCode === DEFAULT_UI_LANGUAGE) return;
