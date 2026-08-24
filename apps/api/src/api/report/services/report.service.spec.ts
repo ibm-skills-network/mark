@@ -173,6 +173,9 @@ describe("ReportsService.reportIssue", () => {
       chatHistoryUrl: undefined,
       screenshotUrl: undefined,
     });
+    const sentTitle = snSupportService.createTicket.mock.calls[0][0].title;
+    expect(sentTitle).not.toContain("[MARK CHAT]");
+    expect(sentTitle).not.toContain("[PROD]");
   });
 
   it("still files the GitHub issue when SN Support is down", async () => {

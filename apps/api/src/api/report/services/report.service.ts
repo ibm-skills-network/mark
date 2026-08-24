@@ -25,6 +25,7 @@ import { PrismaService } from "src/database/prisma.service";
 import {
   buildChatIssueBody,
   buildChatIssueTitle,
+  buildSnSupportTicketTitle,
   CHAT_ISSUE_FOOTER,
   defaultSeverityForIssueType,
 } from "../helpers/issue-template";
@@ -1148,7 +1149,7 @@ Screenshot Key: \`${finalScreenshotUrl}\`
 
       try {
         const snTicket = await this.snSupportService.createTicket({
-          title: issueTitle,
+          title: buildSnSupportTicketTitle(issueTemplateInput),
           description: supportDescription,
           reporterEmail: safeUserEmail,
           issueType:
