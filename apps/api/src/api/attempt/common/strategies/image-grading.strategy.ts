@@ -28,6 +28,21 @@ import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
+/**
+ * Raster formats the vision grading pipeline can grade directly or convert.
+ * Shared with the grading factory so strategy routing and this strategy's own
+ * validation can never disagree about what counts as a gradable image.
+ */
+export const GRADABLE_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "bmp",
+  "webp",
+  "tiff",
+]);
+
 interface RawImageUpload {
   filename: string;
   imageData?: string;
@@ -576,17 +591,8 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
   }
 
   private isValidImageFormat(filename: string): boolean {
-    const supportedFormats = [
-      "jpg",
-      "jpeg",
-      "png",
-      "gif",
-      "bmp",
-      "webp",
-      "tiff",
-    ];
     const extension = filename.split(".").pop()?.toLowerCase() || "";
-    return supportedFormats.includes(extension);
+    return GRADABLE_IMAGE_EXTENSIONS.has(extension);
   }
 
   private getMimeTypeFromFilename(filename: string): string {

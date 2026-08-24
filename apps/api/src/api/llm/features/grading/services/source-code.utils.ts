@@ -23,8 +23,26 @@ export function isJupyterNotebookFilename(filename?: string | null): boolean {
   return filename.toLowerCase().endsWith(".ipynb");
 }
 
+/**
+ * Xcode project manifests (project.pbxproj) are the proof that a submission
+ * is a real Xcode project, which rubrics ask about directly. Like notebooks
+ * they stay out of SOURCE_CODE_EXTENSION_REGEX (they must not affect route
+ * decisions), but they need code-like handling everywhere text is chunked or
+ * quoted: the facts a grader needs (target and product names) sit mid-file,
+ * past prose-quote caps. Oversized manifests are still dropped by the
+ * archive per-entry byte limit before this ever applies.
+ */
+export function isProjectManifestFilename(filename?: string | null): boolean {
+  if (!filename) return false;
+  return filename.toLowerCase().endsWith(".pbxproj");
+}
+
 export function isCodeLikeFilename(filename?: string | null): boolean {
-  return isSourceCodeFilename(filename) || isJupyterNotebookFilename(filename);
+  return (
+    isSourceCodeFilename(filename) ||
+    isJupyterNotebookFilename(filename) ||
+    isProjectManifestFilename(filename)
+  );
 }
 
 /**
@@ -86,3 +104,30 @@ export const CODE_MIN_SEGMENT_CHARS = 200;
  * maxCandidates chunks at full code length — ~100KB of prompt per criterion.
  */
 export const CODE_VALIDATION_RENDER_BUDGET_CHARS = 30_000;
+
+/**
+ * Upper bound for a merged prose section chunk (document uploads). PDF and
+ * office-document extraction emits line-level text runs; evidence chunking
+ * merges consecutive runs on a page into one section so a chunk carries a
+ * slide/page worth of content instead of a fragment. Sections never span
+ * pages, so for typical slides the page boundary — not this cap — is what
+ * bounds them.
+ *
+ * INVARIANT: must be <= CODE_EVIDENCE_QUOTE_MAX_CHARS, so a section quote is
+ * never re-truncated (see buildExcerpt in criterion-evidence-retrieval).
+ */
+export const PROSE_SECTION_MAX_CHARS = 4000;
+
+/**
+ * Upper bound for the ENTIRE text of the synthetic pinned whole-document
+ * block (header + page-labelled text + truncation marker, all counted) that
+ * evidence chunking adds for document uploads. Same role and same sizing
+ * rationale as CODE_WHOLE_FILE_BLOCK_MAX_CHARS: holistic criteria
+ * (organization, completeness, creativity) concern the document as a unit.
+ *
+ * INVARIANT: must be <= CODE_EVIDENCE_QUOTE_MAX_CHARS, so the block's
+ * truncation marker survives quoting (a sliced-off marker would make a
+ * truncated document read as complete to the grader).
+ */
+export const DOC_WHOLE_SUBMISSION_BLOCK_MAX_CHARS =
+  CODE_WHOLE_FILE_BLOCK_MAX_CHARS;

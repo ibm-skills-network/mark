@@ -668,7 +668,7 @@ describe("FileGradingService.buildCodeEvidenceBlocks", () => {
 
 // ─── notebook (.ipynb) cell-aware chunking ─────────────────────────────────
 
-describe("FileGradingService - notebook extractions chunk by cell", () => {
+describe("FileGradingService - notebook extractions chunk by task section", () => {
   let service: any;
 
   beforeEach(() => {
@@ -716,18 +716,23 @@ describe("FileGradingService - notebook extractions chunk by cell", () => {
     );
   }
 
-  it("builds a pinned whole-notebook block plus per-cell segments", () => {
+  it("builds a pinned whole-notebook block plus task-section segments", () => {
     const blocks = notebookBlocks();
     expect(blocks[0].pinnedEvidence).toBe(true);
     expect(blocks[0].text).toContain("=== CELL 2 [CODE] [1] ===");
 
+    // The markdown task cell and the code cells answering it share one
+    // segment: retrieval matches rubric wording against the markdown, so the
+    // code must travel in the same chunk to ever reach the grader.
     const segments = blocks.slice(1).map((b: any) => b.text);
-    const cell2 = segments.find((s: string) => s.includes("=== CELL 2 [CODE]"));
-    expect(cell2).toBeDefined();
-    expect(cell2).toContain(
+    const section = segments.find((s: string) =>
+      s.includes("=== CELL 1 [MARKDOWN]"),
+    );
+    expect(section).toBeDefined();
+    expect(section).toContain(
       "monthly = sales.groupby('month')['revenue'].sum()",
     );
-    expect(cell2).not.toContain("=== CELL 3");
+    expect(section).toContain("=== CELL 3");
   });
 
   it("preserves tab indentation inside notebook code cells", () => {
@@ -735,13 +740,15 @@ describe("FileGradingService - notebook extractions chunk by cell", () => {
     expect(blocks[0].text).toContain("\tprint(month, revenue)");
   });
 
-  it("keeps a cell's output attached to its cell segment", () => {
+  it("keeps a cell's output attached to its section segment", () => {
     const segments = notebookBlocks()
       .slice(1)
       .map((b: any) => b.text);
-    const cell2 = segments.find((s: string) => s.includes("=== CELL 2 [CODE]"));
-    expect(cell2).toContain("--- OUTPUT ---");
-    expect(cell2).toContain("2025-01 131072");
+    const section = segments.find((s: string) =>
+      s.includes("=== CELL 2 [CODE]"),
+    );
+    expect(section).toContain("--- OUTPUT ---");
+    expect(section).toContain("2025-01 131072");
   });
 });
 

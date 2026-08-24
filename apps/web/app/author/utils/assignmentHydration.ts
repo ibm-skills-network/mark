@@ -33,6 +33,7 @@ export function getAssignmentFeedbackHydration(
   return {
     showSubmissionFeedback: assignment.showSubmissionFeedback,
     showQuestionScore: assignment.showQuestionScore,
+    showPassFailIndicator: assignment.showPassFailIndicator,
     showAssignmentScore: assignment.showAssignmentScore,
     showQuestions: assignment.showQuestions,
     correctAnswerVisibility: assignment.correctAnswerVisibility,

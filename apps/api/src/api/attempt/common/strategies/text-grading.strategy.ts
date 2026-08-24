@@ -53,6 +53,19 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
     );
   }
 
+  protected async resolveGradingModelIdentity(): Promise<string | undefined> {
+    try {
+      return await this.llmFacadeService.getTextGradingModelIdentity();
+    } catch (error) {
+      // Recording the grade matters more than tagging it. An untagged record
+      // is simply not reused later, which is the safe direction.
+      this.logger?.warn("Could not resolve text grading model identity", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
   /**
    * Validate that the request contains a valid text response
    */
@@ -182,11 +195,17 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         question.type,
       );
 
+      // Scope reuse to the model that will actually grade this response, so a
+      // change of grading model does not serve the previous model's grades.
+      const modelIdentity =
+        await this.llmFacadeService.getTextGradingModelIdentity();
+
       const check = await this.consistencyService.checkConsistency(
         question.id,
         responseHash,
         learnerResponse,
         question.type,
+        modelIdentity,
       );
 
       if (check.similar && check.previousGrade !== undefined) {

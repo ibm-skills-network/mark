@@ -832,12 +832,14 @@ function Component() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showPassFailIndicator,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showPassFailIndicator,
     state.correctAnswerVisibility,
   ]);
 
@@ -877,6 +879,9 @@ function Component() {
       ),
       showAssignmentScore: filteredChanges.some((c) =>
         c.includes("Changed assignment score visibility"),
+      ),
+      showPassFailIndicator: filteredChanges.some((c) =>
+        c.includes("Changed pass/fail result visibility"),
       ),
       correctAnswerVisibility: filteredChanges.some((c) =>
         c.includes("Changed correct answer visibility"),
@@ -1209,6 +1214,7 @@ function Component() {
           showQuestionScore,
           showAssignmentScore,
           showQuestions,
+          showPassFailIndicator,
         };
       }
 
@@ -1733,6 +1739,7 @@ function Component() {
             changes.showSubmissionFeedback ||
             changes.showQuestionScore ||
             changes.showAssignmentScore ||
+            changes.showPassFailIndicator ||
             changes.numberOfQuestionsPerAttempt ||
             changes.questionOrder ||
             changes.requireAllQuestions ||
@@ -1922,6 +1929,15 @@ function Component() {
                       label="Show Assignment Score"
                       before={originalAssignment.showAssignmentScore}
                       after={showAssignmentScore}
+                      type="boolean"
+                    />
+                  )}
+
+                  {changes.showPassFailIndicator && (
+                    <ChangeComparison
+                      label="Show Pass/Fail Result"
+                      before={originalAssignment.showPassFailIndicator}
+                      after={showPassFailIndicator}
                       type="boolean"
                     />
                   )}

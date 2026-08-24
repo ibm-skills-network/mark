@@ -120,8 +120,9 @@ export class AnswerNormalizationService implements IAnswerNormalizationService {
     rubricHash: string,
     answerHash: string,
     questionId?: number,
+    modelIdentity?: string,
   ): string {
-    const combined = `${questionId || ""}:${rubricHash}:${answerHash}`;
+    const combined = `${questionId || ""}:${rubricHash}:${answerHash}:${modelIdentity || ""}`;
     return createHash("sha256").update(combined).digest("hex");
   }
 

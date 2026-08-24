@@ -128,8 +128,8 @@ export default function GradingProgressModal({
 
   const { progress, currentStage: message } = progressData;
 
-  // Decouple render status from real status so the wheel can animate to 100%
-  // before the success/failure icon appears. "failed" surfaces immediately;
+  // Decouple render status from real status so the progress bar can animate
+  // to 100% before the success/failure icon appears. "failed" surfaces immediately;
   // "completed" waits for the spring to settle first.
   const [displayStatus, setDisplayStatus] =
     useState<ProgressState["status"]>("processing");
@@ -161,10 +161,6 @@ export default function GradingProgressModal({
     progressData.gradingState,
     progressData.status,
     isOpen,
-  );
-  const strokeDasharrayMotion = useTransform(
-    displayProgress,
-    (v) => `${v * 2.64} 264`,
   );
   const barWidth = useTransform(displayProgress, (v) => `${Math.round(v)}%`);
   // `stalled` keeps the working presentation on purpose: grading really is
@@ -276,29 +272,6 @@ export default function GradingProgressModal({
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Animated gradient background orbs */}
-            <motion.div
-              className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/30 rounded-full blur-3xl"
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.3, 0.5, 0.3],
-              }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <motion.div
-              className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/30 rounded-full blur-3xl"
-              animate={{
-                scale: [1.2, 1, 1.2],
-                opacity: [0.3, 0.5, 0.3],
-              }}
-              transition={{
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: 1,
-              }}
-            />
-
             {/* Main Modal Card */}
             <motion.div
               initial={{ scale: 0.8, opacity: 0, y: 50 }}
@@ -312,226 +285,89 @@ export default function GradingProgressModal({
               }}
             >
               <div className="text-center relative">
-                {/* Floating particles */}
-                {isWorking && (
-                  <>
-                    {[...Array(6)].map((_, i) => (
+                {!isWorking && (
+                  <div className="mb-8 relative">
+                    {/* Success/Failure Icon with celebration */}
+                    <motion.div
+                      initial={{ scale: 0, rotate: -180 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{
+                        type: "spring",
+                        damping: 12,
+                        stiffness: 200,
+                        delay: 0.1,
+                      }}
+                      className="relative"
+                    >
+                      {/* Glow effect */}
                       <motion.div
-                        key={i}
-                        className="absolute w-2 h-2 bg-purple-400 rounded-full"
-                        style={{
-                          top: `${20 + i * 15}%`,
-                          left: i % 2 === 0 ? "10%" : "90%",
-                        }}
+                        className={`absolute inset-0 rounded-full blur-2xl ${
+                          status === "completed"
+                            ? "bg-green-500/40"
+                            : status === "disconnected"
+                              ? "bg-amber-500/40"
+                              : "bg-red-500/40"
+                        }`}
                         animate={{
-                          y: [-20, 20, -20],
-                          x: [0, i % 2 === 0 ? 10 : -10, 0],
-                          opacity: [0.2, 0.6, 0.2],
-                          scale: [0.8, 1.2, 0.8],
-                        }}
-                        transition={{
-                          duration: 3 + i * 0.5,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                          delay: i * 0.3,
-                        }}
-                      />
-                    ))}
-                  </>
-                )}
-
-                <div className="mb-8 relative">
-                  {isWorking ? (
-                    <div className="relative w-40 h-40 mx-auto">
-                      {/* Outer glow ring */}
-                      <motion.div
-                        className="absolute inset-0 rounded-full bg-gradient-to-tr from-purple-500/20 to-blue-500/20 blur-xl"
-                        animate={{
-                          scale: [1, 1.1, 1],
+                          scale: [1, 1.2, 1],
                           opacity: [0.5, 0.8, 0.5],
                         }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
                       />
 
-                      {/* Rotating gradient ring */}
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 3,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                        className="absolute inset-4"
+                      <div
+                        className={`relative w-32 h-32 mx-auto rounded-full ${getStatusColor()} flex items-center justify-center shadow-2xl`}
                       >
-                        <svg className="w-full h-full" viewBox="0 0 100 100">
-                          <defs>
-                            <linearGradient
-                              id="progressGradient"
-                              x1="0%"
-                              y1="0%"
-                              x2="100%"
-                              y2="100%"
-                            >
-                              <stop offset="0%" stopColor="#8b5cf6" />
-                              <stop offset="50%" stopColor="#6366f1" />
-                              <stop offset="100%" stopColor="#3b82f6" />
-                            </linearGradient>
-                          </defs>
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="42"
-                            fill="none"
-                            stroke="#e5e7eb"
-                            strokeWidth="6"
-                          />
-                          <motion.circle
-                            cx="50"
-                            cy="50"
-                            r="42"
-                            fill="none"
-                            stroke="url(#progressGradient)"
-                            strokeWidth="6"
-                            strokeLinecap="round"
-                            transform="rotate(-90 50 50)"
-                            style={{ strokeDasharray: strokeDasharrayMotion }}
-                          />
-                        </svg>
-                      </motion.div>
-
-                      {/* Center content with glassmorphism. No percent here:
-                          learners read a % in the wheel as their score
-                          climbing, so the center shows question progress (or
-                          a neutral pulse) instead. */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-white/80 backdrop-blur-md rounded-full w-24 h-24 shadow-xl flex flex-col items-center justify-center border border-white/50">
-                          {progressData.currentQuestion &&
-                          progressData.totalQuestions ? (
-                            <>
-                              <motion.span
-                                initial={{ opacity: 0, y: 5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                translate="no"
-                                className="text-2xl font-bold bg-gradient-to-br from-purple-600 to-blue-600 bg-clip-text text-transparent"
-                              >
-                                {progressData.currentQuestion}/
-                                {progressData.totalQuestions}
-                              </motion.span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                questions
-                              </span>
-                            </>
-                          ) : (
-                            <div className="flex items-center gap-1.5">
-                              {[0, 1, 2].map((i) => (
-                                <motion.span
-                                  key={i}
-                                  className="w-2 h-2 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"
-                                  animate={{
-                                    opacity: [0.3, 1, 0.3],
-                                    scale: [0.8, 1.1, 0.8],
-                                  }}
-                                  transition={{
-                                    duration: 1.2,
-                                    repeat: Infinity,
-                                    ease: "easeInOut",
-                                    delay: i * 0.2,
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Success/Failure Icon with celebration */}
-                      <motion.div
-                        initial={{ scale: 0, rotate: -180 }}
-                        animate={{ scale: 1, rotate: 0 }}
-                        transition={{
-                          type: "spring",
-                          damping: 12,
-                          stiffness: 200,
-                          delay: 0.1,
-                        }}
-                        className="relative"
-                      >
-                        {/* Glow effect */}
                         <motion.div
-                          className={`absolute inset-0 rounded-full blur-2xl ${
-                            status === "completed"
-                              ? "bg-green-500/40"
-                              : status === "disconnected"
-                                ? "bg-amber-500/40"
-                                : "bg-red-500/40"
-                          }`}
-                          animate={{
-                            scale: [1, 1.2, 1],
-                            opacity: [0.5, 0.8, 0.5],
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{
+                            delay: 0.3,
+                            type: "spring",
+                            damping: 10,
                           }}
-                          transition={{ duration: 2, repeat: Infinity }}
-                        />
-
-                        <div
-                          className={`relative w-32 h-32 mx-auto rounded-full ${getStatusColor()} flex items-center justify-center shadow-2xl`}
                         >
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{
-                              delay: 0.3,
-                              type: "spring",
-                              damping: 10,
-                            }}
-                          >
-                            {getStatusIcon()}
-                          </motion.div>
-                        </div>
-                      </motion.div>
+                          {getStatusIcon()}
+                        </motion.div>
+                      </div>
+                    </motion.div>
 
-                      {/* Confetti effect for success */}
-                      {status === "completed" && (
-                        <>
-                          {confettiParticles.map((p, i) => (
-                            <motion.div
-                              key={i}
-                              className="absolute w-2 h-2 rounded-full"
-                              style={{
-                                top: "50%",
-                                left: "50%",
-                                background: [
-                                  "#8b5cf6",
-                                  "#6366f1",
-                                  "#3b82f6",
-                                  "#10b981",
-                                  "#f59e0b",
-                                ][i % 5],
-                              }}
-                              initial={{ scale: 0, x: 0, y: 0 }}
-                              animate={{
-                                scale: [0, 1, 0.5],
-                                x: p.x,
-                                y: p.y,
-                                opacity: [1, 1, 0],
-                              }}
-                              transition={{
-                                duration: 1.5,
-                                delay: i * 0.03,
-                                ease: "easeOut",
-                              }}
-                            />
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
+                    {/* Confetti effect for success */}
+                    {status === "completed" && (
+                      <>
+                        {confettiParticles.map((p, i) => (
+                          <motion.div
+                            key={i}
+                            className="absolute w-2 h-2 rounded-full"
+                            style={{
+                              top: "50%",
+                              left: "50%",
+                              background: [
+                                "#8b5cf6",
+                                "#6366f1",
+                                "#3b82f6",
+                                "#10b981",
+                                "#f59e0b",
+                              ][i % 5],
+                            }}
+                            initial={{ scale: 0, x: 0, y: 0 }}
+                            animate={{
+                              scale: [0, 1, 0.5],
+                              x: p.x,
+                              y: p.y,
+                              opacity: [1, 1, 0],
+                            }}
+                            transition={{
+                              duration: 1.5,
+                              delay: i * 0.03,
+                              ease: "easeOut",
+                            }}
+                          />
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <motion.h3
                   key={status}

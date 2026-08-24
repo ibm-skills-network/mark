@@ -26,6 +26,8 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { LlmRouter } from "../../../core/services/llm-router.service";
+import { getGradingModelCacheIdentity } from "../../../core/utils/grading-cache-identity.util";
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   ANSWER_NORMALIZATION_SERVICE,
@@ -122,6 +124,7 @@ export class TextGradingService implements ITextGradingService {
   constructor(
     @Inject(PROMPT_PROCESSOR)
     private readonly promptProcessor: IPromptProcessor,
+    private readonly llmRouter: LlmRouter,
     @Inject(MODERATION_SERVICE)
     private readonly moderationService: IModerationService,
     private readonly chunkingService: EvidenceChunkingService,
@@ -223,6 +226,12 @@ export class TextGradingService implements ITextGradingService {
       let normalizedAnswer: INormalizedAnswer | null = null;
       let rubricHash: string | null = null;
       let cacheKey: string | null = null;
+      const gradingProvider = await this.llmRouter.getForFeatureWithFallback(
+        "text_grading",
+        "gpt-4o-mini",
+      );
+      const gradingModel = gradingProvider.key;
+      const modelCacheIdentity = getGradingModelCacheIdentity(gradingModel);
 
       if (this.normalizationService) {
         normalizedAnswer = this.normalizationService.normalizeAnswer(
@@ -235,6 +244,7 @@ export class TextGradingService implements ITextGradingService {
           rubricHash,
           normalizedAnswer.hash,
           questionId,
+          modelCacheIdentity,
         );
 
         this.logger.info(
@@ -323,6 +333,7 @@ export class TextGradingService implements ITextGradingService {
             assignmentId,
             language,
             safetyIdentifier,
+            gradingModel,
           );
         } catch (error) {
           // A context_length_exceeded 400 is deterministic for a given prompt:
@@ -448,6 +459,7 @@ export class TextGradingService implements ITextGradingService {
               gradingTimeMs: endTime - startTime,
               attempts: attemptCount,
               judgeApproved,
+              modelSnapshot: modelCacheIdentity,
             },
           });
 
@@ -566,6 +578,7 @@ export class TextGradingService implements ITextGradingService {
     assignmentId: number,
     language?: string,
     safetyIdentifier?: string,
+    gradingModel = "gpt-4o-mini",
     previousJudgeFeedback?: string | null,
   ): Promise<GradingAttempt> {
     const {
@@ -715,7 +728,7 @@ export class TextGradingService implements ITextGradingService {
         AIUsageType.ASSIGNMENT_GRADING,
         "text_grading",
         GradingAttemptSchema,
-        "gpt-4o-mini",
+        gradingModel,
         // maxTokens must cover reasoning + the full JSON grade: gpt-5-mini
         // spends its completion budget on reasoning first, and the provider
         // default of 4096 truncates the JSON on large rubrics, failing the

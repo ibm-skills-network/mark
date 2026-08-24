@@ -195,12 +195,14 @@ function AuthorHeader() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showPassFailIndicator,
     correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showPassFailIndicator,
     state.correctAnswerVisibility,
   ]);
   const role = useAuthorStore((state) => state.role);
@@ -603,6 +605,7 @@ function AuthorHeader() {
       showQuestions,
       showQuestionScore,
       showAssignmentScore,
+      showPassFailIndicator,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
       requireAllQuestions,

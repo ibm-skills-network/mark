@@ -185,6 +185,7 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       passingGrade: assignmentDetails.passingGrade || 0,
       showSubmissionFeedback: assignmentDetails.showSubmissionFeedback || false,
       showQuestionScore: assignmentDetails.showQuestionScore || false,
+      showPassFailIndicator: assignmentDetails.showPassFailIndicator || false,
       showAssignmentScore: assignmentDetails.showAssignmentScore || false,
       questionControls: assignmentDetails.questionControls,
     });

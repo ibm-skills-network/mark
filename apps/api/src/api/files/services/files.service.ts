@@ -20,6 +20,7 @@ import {
   CompleteMultipartUploadRequestDto,
   CompleteMultipartUploadResponseDto,
   MultipartUploadInitiateResponseDto,
+  UploadContextDto,
   UploadRequestDto,
   UploadResponseDto,
   UploadType,
@@ -74,6 +75,11 @@ const CHATBOT_ALLOWED_FILE_TYPES: Record<string, string[]> = {
 const CHATBOT_ALLOWED_EXTENSIONS = new Set(
   Object.values(CHATBOT_ALLOWED_FILE_TYPES).flat(),
 );
+
+/** Narrow untrusted JSON to a non-null, non-array object. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 @Injectable()
 export class FilesService {
@@ -179,13 +185,14 @@ export class FilesService {
     uploadType: UploadType;
     maxAllowedBytes: number;
   } {
-    const {
-      fileName,
-      fileType,
-      fileSize,
-      uploadType,
-      context = {},
-    } = uploadRequest;
+    const { fileName, fileType, fileSize, uploadType } = uploadRequest;
+
+    // `context` reaches us as untyped JSON on both upload paths, so null,
+    // arrays and primitives all get here. A destructuring default only covers
+    // undefined — anything else used to reach property access and 500.
+    const context: UploadContextDto = isPlainObject(uploadRequest.context)
+      ? uploadRequest.context
+      : {};
 
     this.assertRoleAllowedForUploadType(role, uploadType, userId);
 
@@ -817,24 +824,47 @@ export class FilesService {
     return { presignedUrl };
   }
 
+  /**
+   * Stream a buffered upload into object storage.
+   *
+   * Claims the file's size against the pod byte-budget for the duration of
+   * the PUT, the same accounting the multipart path uses, so a burst of
+   * fallback traffic queues on the client instead of racing toward OOM.
+   *
+   * The claim is taken here rather than at admission because multer has
+   * already materialised the whole body in memory by the time any handler
+   * runs — this bounds the concurrent storage work, not the buffering itself.
+   */
   async directUpload(
     file: Express.Multer.File,
     bucket: string,
     key: string,
-  ): Promise<any> {
-    const result = await this.s3Service.putObject({
-      Bucket: bucket,
-      Key: key,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-    });
+  ): Promise<{ success: true; key: string; bucket: string; etag?: string }> {
+    if (!this.processingBudget.tryAcquire(file.size)) {
+      this.logger.warn(
+        `Direct upload deferred — budget full: size=${file.size} ` +
+          `bucket=${bucket}`,
+      );
+      throw this.processingBudget.buildBusyException(file.size);
+    }
 
-    return {
-      success: true,
-      key,
-      bucket,
-      etag: result.ETag,
-    };
+    try {
+      const result = await this.s3Service.putObject({
+        Bucket: bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      });
+
+      return {
+        success: true,
+        key,
+        bucket,
+        etag: result.ETag,
+      };
+    } finally {
+      this.processingBudget.release(file.size);
+    }
   }
 
   async createFolder(createFolderDto: CreateFolderDto): Promise<any> {

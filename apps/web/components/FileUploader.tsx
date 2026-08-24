@@ -219,6 +219,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             },
           }));
         },
+        onFallback: () => {
+          // The direct-to-storage route is blocked on this network and the
+          // file is being re-sent through the API. Say so — progress is
+          // genuinely starting over, and a silent snap back to 0% reads as
+          // a hang.
+          setUploadStatus((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              status: "waiting",
+              progress: 0,
+              message: "Retrying over a different route…",
+            },
+          }));
+        },
       });
       setUploadStatus((prev) => ({
         ...prev,

@@ -4,6 +4,7 @@
 
 import React from "react";
 import { render, screen, act, fireEvent } from "@testing-library/react";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import FeedbackSettings from "../FeedbackSettings";
 
@@ -86,6 +87,30 @@ describe("FeedbackSettings", () => {
     expect(useAssignmentFeedbackConfig.getState().correctAnswerVisibility).toBe(
       "ALWAYS",
     );
+  });
+
+  it("shows the live passing threshold on the pass/fail toggle", () => {
+    act(() => {
+      useAssignmentConfig.setState({ passingGrade: 70 });
+    });
+    render(<FeedbackSettings />);
+    expect(
+      screen.getByText(
+        "The learner will be told whether they passed (score of 70% or higher), even when scores are hidden.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the 50% default when the threshold is unset", () => {
+    act(() => {
+      useAssignmentConfig.setState({ passingGrade: 0 });
+    });
+    render(<FeedbackSettings />);
+    expect(
+      screen.getByText(
+        "The learner will be told whether they passed (score of 50% or higher), even when scores are hidden.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("clears cached question state when correct-answer visibility changes", () => {

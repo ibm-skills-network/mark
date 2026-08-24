@@ -535,4 +535,189 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(cellEvidence?.quote).toBe(cellText);
     expect(proseEvidence?.quote?.length).toBe(220);
   });
+
+  /**
+   * The validator prompt is designed to pick the best six chunks FROM a wider
+   * candidate pool ("Keep only the most relevant 6 chunks. Where more than
+   * six qualify..."). Slicing the pool to six before the validator ever sees
+   * it silently delegates the final relevance judgement to lexical scoring —
+   * which ranks rubric-parroting template text above the learner's actual
+   * code (observed in production as "submission shows only the solution
+   * template" false zeros on notebook uploads). The full reranked pool must
+   * reach the validator; only the validator's verdict is capped at six.
+   */
+  it("surfaces the full reranked candidate pool to the validator, not only the lexical top six", async () => {
+    const core = "notebook python code bar chart";
+    const chunks = Array.from({ length: 9 }, (_, i) =>
+      makeChunk(
+        `ch${i + 1}`,
+        `${core} variant-${i + 1} ${"filler ".repeat(i * 3)}`,
+      ),
+    );
+
+    const criterion: RubricCriterion = {
+      id: "bar-chart",
+      rubricQuestion:
+        "Does the notebook include Python code to create a bar chart?",
+      description: "The notebook must include Python code for a bar chart.",
+      criteria: [
+        { description: "Correct bar chart code", points: 2 },
+        { description: "Partial bar chart code", points: 1 },
+        { description: "No bar chart code", points: 0 },
+      ],
+      maxPoints: 2,
+    };
+
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "ch9", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const index = new ChunkIndex(chunks);
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this notebook submission",
+        chunks,
+        assignmentId: 7,
+      },
+      index,
+    );
+
+    const promptArg = promptProcessor.processStructuredPrompt.mock.calls[0][0];
+    const validationPrompt = await promptArg.format({});
+    for (const chunk of chunks) {
+      expect(validationPrompt).toContain(chunk.chunkId);
+    }
+    expect(response.evidence).toEqual([
+      expect.objectContaining({ chunkId: "ch9" }),
+    ]);
+  });
+
+  /**
+   * Merged prose sections (a page/slide of a document) carry their full text
+   * as the evidence quote — re-truncating them to the 220-char prose cap
+   * would undo the merge and hand the grader a fragment again.
+   */
+  it("does not truncate evidence quotes for prose section chunks", async () => {
+    const sectionText = `Stakeholder Analysis and Engagement Plan\n${"detail line about roles and influence levels\n".repeat(20)}`;
+    const chunks = [
+      {
+        ...makeChunk("sec", sectionText),
+        metadata: { filename: "report.pdf", section: true },
+      },
+      makeChunk("prose", "word ".repeat(200)),
+    ];
+
+    const criterion: RubricCriterion = {
+      id: "c-section-quote",
+      rubricQuestion: "Section quote length check",
+      description: "Section quote length check.",
+      criteria: [{ description: "Level", points: 1 }],
+      maxPoints: 1,
+    };
+
+    const service = makeService(
+      JSON.stringify({
+        evidence: [
+          { chunkId: "sec", relevance: "supports" },
+          { chunkId: "prose", relevance: "supports" },
+        ],
+      }),
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Grade", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    const sectionEvidence = response.evidence.find((e) => e.chunkId === "sec");
+    const proseEvidence = response.evidence.find((e) => e.chunkId === "prose");
+    expect(sectionEvidence?.quote).toBe(sectionText);
+    expect(proseEvidence?.quote?.length).toBe(220);
+  });
+
+  /**
+   * When fewer candidates pass the lexical relevance threshold than the
+   * evidence cap, the thin pool signals a weak relevance signal (verbose
+   * criteria dilute token overlap), not a thin submission. Collapsing the
+   * pool to the one surviving chunk made the validator judge a criterion on
+   * a bare heading (observed in production as "slide contains only a
+   * heading" zeros on document uploads). The full ranked candidate pool must
+   * reach the validator instead.
+   */
+  it("surfaces the full candidate pool to the validator when few chunks pass the relevance threshold", async () => {
+    const criterion: RubricCriterion = {
+      id: "c-thin-pool",
+      rubricQuestion:
+        "Did the learner complete the stakeholder analysis and engagement plan slide, naming stakeholders with their influence, interest, and communication approach?",
+      description:
+        "The slide must identify stakeholders and describe influence, interest, and the planned engagement approach for each.",
+      criteria: [
+        { description: "Complete stakeholder analysis", points: 4 },
+        { description: "No stakeholder analysis", points: 0 },
+      ],
+      maxPoints: 4,
+    };
+
+    // The heading parrots the criterion wording (high overlap, passes the
+    // threshold); the body chunks share only one token ("stakeholder") so
+    // they are searchable but fall below the relevance threshold.
+    const chunks = [
+      makeChunk(
+        "heading",
+        "Stakeholder analysis and engagement plan slide: stakeholders, influence, interest, communication approach",
+      ),
+      makeChunk(
+        "body1",
+        "stakeholder Hospital Director requires weekly briefings and holds final budget sign-off",
+      ),
+      makeChunk(
+        "body2",
+        "stakeholder Nursing Lead prefers daily stand-ups and owns triage workflow changes",
+      ),
+    ];
+
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [
+          { chunkId: "heading", relevance: "partial" },
+          { chunkId: "body1", relevance: "supports" },
+          { chunkId: "body2", relevance: "supports" },
+        ],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Grade this presentation",
+        chunks,
+        assignmentId: 1,
+      },
+      new ChunkIndex(chunks),
+    );
+
+    const promptArg = promptProcessor.processStructuredPrompt.mock.calls[0][0];
+    const validationPrompt = await promptArg.format({});
+    for (const chunk of chunks) {
+      expect(validationPrompt).toContain(chunk.chunkId);
+    }
+    expect(response.evidence.some((item) => item.chunkId === "body1")).toBe(
+      true,
+    );
+  });
 });

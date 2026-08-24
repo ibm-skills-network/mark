@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 import { extractStructuredJSON } from "../utils/structured-json.util";
 import { withWatsonxRateLimit } from "../utils/watsonx-rate-limiter";
 
@@ -84,11 +85,12 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
 
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     this.logger.warn(
       "WatsonX Chat does not support multimodal (text + image) inputs. Processing text only.",
+      { images_ignored: toImageDataList(imageData).length },
     );
 
     const inputTokens = this.tokenCounter.countTokens(textContent);
