@@ -88,7 +88,10 @@ api:
     # GRADING_WORKER_CONCURRENCY on mark-jobs, which controls how many
     # grading jobs the BullMQ worker pulls in parallel per pod.
     GRADING_CONCURRENCY: "10"
-  secretEnv: {}
+  secretEnv:
+    # SN Support ticket forwarding; unset leaves the integration disabled.
+    SN_SUPPORT_URL: ""
+    SN_SUPPORT_TOKEN: ""
 
 jobs:
   enabled: false

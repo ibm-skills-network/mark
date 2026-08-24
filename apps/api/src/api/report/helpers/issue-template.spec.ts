@@ -1,6 +1,7 @@
 import {
   buildChatIssueBody,
   buildChatIssueTitle,
+  buildSnSupportTicketTitle,
   CHAT_ISSUE_FOOTER,
   defaultSeverityForIssueType,
 } from "./issue-template";
@@ -51,6 +52,27 @@ describe("buildChatIssueTitle", () => {
     const title = buildChatIssueTitle({ ...baseInput, isProduction: false });
 
     expect(title).toContain("[DEV]");
+  });
+});
+
+describe("buildSnSupportTicketTitle", () => {
+  it("renders type and ids without the bracket prefixes", () => {
+    const title = buildSnSupportTicketTitle(baseInput);
+
+    expect(title).toContain("Assignment 771 - Attempt 12345");
+    expect(title).not.toContain("[");
+    expect(title).not.toContain("MARK CHAT");
+    expect(title).not.toContain("PROD");
+  });
+
+  it("omits the attempt segment when attemptId is missing", () => {
+    const title = buildSnSupportTicketTitle({
+      ...baseInput,
+      attemptId: undefined,
+    });
+
+    expect(title).toContain("Assignment 771:");
+    expect(title).not.toContain("Attempt");
   });
 });
 
