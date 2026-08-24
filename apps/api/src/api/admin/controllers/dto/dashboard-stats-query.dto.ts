@@ -1,4 +1,5 @@
 import {
+  IsDateString,
   IsEmail,
   IsOptional,
   IsString,
@@ -9,10 +10,12 @@ import {
 export class DashboardStatsQueryDto {
   @IsOptional()
   @IsString()
+  @IsDateString()
   startDate?: string;
 
   @IsOptional()
   @IsString()
+  @IsDateString()
   endDate?: string;
 
   @IsOptional()

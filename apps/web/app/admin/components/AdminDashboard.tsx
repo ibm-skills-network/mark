@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { FeedbackTable } from "./FeedbackTable";
 import { ReportsTable } from "./ReportsTable";
 import { AssignmentAnalyticsTable } from "./AssignmentAnalyticsTable";
+import { LearnerAttemptsTable } from "./LearnerAttemptsTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,15 +40,22 @@ import { queryClient } from "@/lib/query-client";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Default dashboard window. "All time" makes getDashboardStats load every
-// AIUsage row and run full-table group-bys (cost grows unbounded with history),
-// so the dashboard opens on a bounded last-24h window instead.
+// Default to 24 hours because historical cost calculation grows with event volume.
 function getLast24hRange(): { startDate: string; endDate: string } {
   const now = new Date();
   return {
     startDate: new Date(now.getTime() - DAY_MS).toISOString(),
     endDate: now.toISOString(),
   };
+}
+
+function formatAiCost(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 8,
+  }).format(amount);
 }
 
 interface AdminDashboardProps {
@@ -60,14 +68,12 @@ function AdminDashboardContent({
   onLogout,
 }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    "feedback" | "reports" | "assignments"
+    "feedback" | "reports" | "assignments" | "learners"
   >("assignments");
+  // Keep filters date-only; learner and assignment searches have dedicated controls.
   const [filters, setFilters] = useState<{
     startDate?: string;
     endDate?: string;
-    assignmentId?: number;
-    assignmentName?: string;
-    userId?: string;
   }>(() => getLast24hRange());
   const [datePreset, setDatePreset] = useState<string>("last24hours");
   const [customDateRange, setCustomDateRange] = useState<{
@@ -87,10 +93,6 @@ function AdminDashboardContent({
   } = useDashboardStats(sessionToken, filters);
 
   const refreshDashboard = useRefreshDashboard(sessionToken);
-
-  const handleFiltersChange = (newFilters: typeof filters) => {
-    setFilters(newFilters);
-  };
 
   const handleDatePresetChange = (preset: string) => {
     setDatePreset(preset);
@@ -519,7 +521,7 @@ function AdminDashboardContent({
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent leading-none">
-                  ${stats.totalCost.toFixed(2)}
+                  {formatAiCost(stats.totalCost)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   {filters.startDate ? formatDateRange() : "Total spent"}
@@ -577,6 +579,15 @@ function AdminDashboardContent({
                   ? `Cost distribution for ${formatDateRange()}`
                   : "Cost distribution across different AI services"}
               </p>
+              {stats.estimatedCost > 0 || stats.unpricedRecordCount > 0 ? (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Verified: {formatAiCost(stats.exactCost ?? 0)} · Estimated:{" "}
+                  {formatAiCost(stats.estimatedCost ?? 0)}
+                  {stats.unpricedRecordCount > 0
+                    ? ` · ${stats.unpricedRecordCount} unpriced call${stats.unpricedRecordCount === 1 ? "" : "s"}`
+                    : ""}
+                </p>
+              ) : null}
             </CardHeader>
             <CardContent className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -585,7 +596,7 @@ function AdminDashboardContent({
                     Grading
                   </div>
                   <div className="text-lg font-semibold">
-                    ${stats.costBreakdown.grading.toFixed(2)}
+                    {formatAiCost(stats.costBreakdown.grading)}
                   </div>
                 </div>
                 <div className="text-center">
@@ -593,7 +604,7 @@ function AdminDashboardContent({
                     Question Gen
                   </div>
                   <div className="text-lg font-semibold">
-                    ${stats.costBreakdown.questionGeneration.toFixed(2)}
+                    {formatAiCost(stats.costBreakdown.questionGeneration)}
                   </div>
                 </div>
                 <div className="text-center">
@@ -601,7 +612,7 @@ function AdminDashboardContent({
                     Translation
                   </div>
                   <div className="text-lg font-semibold">
-                    ${stats.costBreakdown.translation.toFixed(2)}
+                    {formatAiCost(stats.costBreakdown.translation)}
                   </div>
                 </div>
                 <div className="text-center">
@@ -609,7 +620,7 @@ function AdminDashboardContent({
                     Other
                   </div>
                   <div className="text-lg font-semibold">
-                    ${stats.costBreakdown.other.toFixed(2)}
+                    {formatAiCost(stats.costBreakdown.other)}
                   </div>
                 </div>
               </div>
@@ -649,6 +660,19 @@ function AdminDashboardContent({
             {isAdmin && (
               <Button
                 variant="ghost"
+                onClick={() => setActiveTab("learners")}
+                className={cn(
+                  "px-0 py-2 border-b-2 border-transparent hover:border-border rounded-none",
+                  activeTab === "learners" && "border-primary text-primary",
+                )}
+              >
+                Learners
+              </Button>
+            )}
+
+            {isAdmin && (
+              <Button
+                variant="ghost"
                 onClick={() => setActiveTab("reports")}
                 className={cn(
                   "px-0 py-2 border-b-2 border-transparent hover:border-border rounded-none",
@@ -672,12 +696,14 @@ function AdminDashboardContent({
               quickActionTitle={quickActionTitle}
               onClearQuickActionResults={clearQuickActionResults}
               onQuickActionComplete={handleQuickActionComplete}
-              filters={filters}
-              onFiltersChange={handleFiltersChange}
             />
           )}
           {activeTab === "feedback" && (
             <FeedbackTable sessionToken={sessionToken} />
+          )}
+
+          {activeTab === "learners" && isAdmin && (
+            <LearnerAttemptsTable sessionToken={sessionToken} />
           )}
 
           {activeTab === "reports" && isAdmin && (

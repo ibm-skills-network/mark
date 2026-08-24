@@ -7,6 +7,16 @@ const prisma = {
     findUnique: jest.fn(),
     findMany: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
+  },
+  assignment: {
+    findMany: jest.fn(),
+  },
+  questionResponse: {
+    deleteMany: jest.fn(),
+  },
+  gradingJob: {
+    deleteMany: jest.fn(),
   },
   gradingProgress: {
     upsert: jest.fn(),
@@ -157,5 +167,132 @@ describe("AttemptAdminService.forcePass", () => {
       status: LtiSyncStatus.FAILED,
     });
     expect(result.lti.message).toContain("gateway down");
+  });
+});
+
+describe("AttemptAdminService.deleteAttempt", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.assignmentAttempt.findUnique.mockResolvedValue(attempt);
+    prisma.questionResponse.deleteMany.mockResolvedValue({ count: 2 });
+    prisma.gradingJob.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.assignmentAttempt.delete.mockResolvedValue({});
+  });
+
+  it("throws NotFound and deletes nothing when the attempt does not exist", async () => {
+    prisma.assignmentAttempt.findUnique.mockResolvedValue(null);
+
+    await expect(make().deleteAttempt(7, "admin@x")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.assignmentAttempt.delete).not.toHaveBeenCalled();
+    expect(prisma.questionResponse.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // Delete non-cascading dependents first in one transaction.
+  it("clears the non-cascading children before the attempt, in one transaction", async () => {
+    const result = await make().deleteAttempt(7, "admin@x");
+
+    expect(prisma.questionResponse.deleteMany).toHaveBeenCalledWith({
+      where: { assignmentAttemptId: 7 },
+    });
+    expect(prisma.gradingJob.deleteMany).toHaveBeenCalledWith({
+      where: { attemptId: 7 },
+    });
+    expect(prisma.assignmentAttempt.delete).toHaveBeenCalledWith({
+      where: { id: 7 },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const ops = prisma.$transaction.mock.calls[0][0] as unknown[];
+    expect(ops).toHaveLength(3);
+    expect(result).toEqual({
+      success: true,
+      attemptId: 7,
+      userId: "user-1",
+      assignmentId: 42,
+    });
+  });
+
+  // Deleting an attempt must leave the LMS grade unchanged.
+  it("does not re-sync to the LMS", async () => {
+    await make().deleteAttempt(7, "admin@x");
+
+    expect(ltiGradeSyncService.createAndSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("AttemptAdminService.listAttemptsForUser", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("matches the learner id case-insensitively and caps the result set", async () => {
+    prisma.assignmentAttempt.findMany.mockResolvedValue([]);
+
+    await make().listAttemptsForUser("User-1");
+
+    expect(prisma.assignmentAttempt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: { equals: "User-1", mode: "insensitive" } },
+        take: 200,
+      }),
+    );
+    // Skip assignment lookup when no attempts are returned.
+    expect(prisma.assignment.findMany).not.toHaveBeenCalled();
+  });
+
+  // Resolve assignment names and thresholds with a separate keyed query.
+  it("joins in the assignment name and passing grade", async () => {
+    prisma.assignmentAttempt.findMany.mockResolvedValue([
+      {
+        id: 7,
+        assignmentId: 42,
+        userId: "user-1",
+        submitted: true,
+        grade: 0.29,
+        createdAt: new Date("2026-01-01"),
+        expiresAt: null,
+        gradingProgress: { status: GradingStatus.COMPLETED },
+      },
+    ]);
+    prisma.assignment.findMany.mockResolvedValue([
+      { id: 42, name: "Intro to Mark", passingGrade: 29 },
+    ]);
+
+    const [row] = await make().listAttemptsForUser("user-1");
+
+    expect(prisma.assignment.findMany).toHaveBeenCalledWith({
+      where: { id: { in: [42] } },
+      select: { id: true, name: true, passingGrade: true },
+    });
+    expect(row).toMatchObject({
+      id: 7,
+      assignmentName: "Intro to Mark",
+      passingGrade: 29,
+      grade: 0.29,
+      gradingStatus: GradingStatus.COMPLETED,
+    });
+  });
+
+  it("falls back to a placeholder name when the assignment is gone", async () => {
+    prisma.assignmentAttempt.findMany.mockResolvedValue([
+      {
+        id: 8,
+        assignmentId: 99,
+        userId: "user-1",
+        submitted: false,
+        grade: null,
+        createdAt: new Date("2026-01-01"),
+        expiresAt: null,
+        gradingProgress: null,
+      },
+    ]);
+    prisma.assignment.findMany.mockResolvedValue([]);
+
+    const [row] = await make().listAttemptsForUser("user-1");
+
+    expect(row.assignmentName).toBe("Assignment 99");
+    expect(row.passingGrade).toBeNull();
+    expect(row.gradingStatus).toBeNull();
   });
 });

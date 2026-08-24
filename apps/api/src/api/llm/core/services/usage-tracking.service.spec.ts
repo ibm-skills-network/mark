@@ -14,9 +14,13 @@ describe("UsageTrackerService", () => {
     assignment: {
       findUnique: jest.fn(),
     },
+    aIUsageEvent: {
+      create: jest.fn(),
+    },
     aIUsage: {
       upsert: jest.fn(),
     },
+    $transaction: jest.fn(),
   };
 
   beforeEach(() => {
@@ -26,7 +30,9 @@ describe("UsageTrackerService", () => {
 
   it("stores token counters as bigint values", async () => {
     prisma.assignment.findUnique.mockResolvedValue({ id: 123 });
+    prisma.aIUsageEvent.create.mockResolvedValue({});
     prisma.aIUsage.upsert.mockResolvedValue({});
+    prisma.$transaction.mockResolvedValue([]);
     const service = new UsageTrackerService(prisma as any, parentLogger as any);
 
     await service.trackUsage(
@@ -46,6 +52,7 @@ describe("UsageTrackerService", () => {
       },
       update: {
         tokensIn: { increment: BigInt(11) },
+        cachedTokensIn: { increment: BigInt(0) },
         tokensOut: { increment: BigInt(29) },
         usageCount: { increment: BigInt(1) },
         updatedAt: expect.any(Date),
@@ -55,6 +62,7 @@ describe("UsageTrackerService", () => {
         assignmentId: 123,
         usageType: AIUsageType.ASSIGNMENT_GRADING,
         tokensIn: BigInt(11),
+        cachedTokensIn: BigInt(0),
         tokensOut: BigInt(29),
         usageCount: BigInt(1),
         createdAt: expect.any(Date),
@@ -62,6 +70,21 @@ describe("UsageTrackerService", () => {
         modelKey: "gpt-4o-mini",
       },
     });
+    expect(prisma.aIUsageEvent.create).toHaveBeenCalledWith({
+      data: {
+        assignmentId: 123,
+        usageType: AIUsageType.ASSIGNMENT_GRADING,
+        tokensIn: BigInt(11),
+        cachedTokensIn: BigInt(0),
+        tokensOut: BigInt(29),
+        modelKey: "gpt-4o-mini",
+        createdAt: expect.any(Date),
+      },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      expect.anything(),
+      expect.anything(),
+    ]);
   });
 
   it("preserves assignment validation failures", async () => {

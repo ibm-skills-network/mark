@@ -53,6 +53,9 @@ const makeMockPrisma = () => ({
     deleteMany: noopDeleteMany,
     findMany: jest.fn().mockResolvedValue([]),
   },
+  aIUsageEvent: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   question: { deleteMany: noopDeleteMany },
   assignment: {
     findUnique: jest.fn().mockResolvedValue({
@@ -160,6 +163,71 @@ describe("AdminService", () => {
     expect(service).toBeDefined();
   });
 
+  describe("historical AI cost classification", () => {
+    it("prices cached tokens separately and marks forward-dated rates as estimated", async () => {
+      const usageDate = new Date("2026-01-01T00:00:00.000Z");
+      mockLlmPricingService.calculateCostBatch.mockResolvedValue([
+        {
+          inputTokens: 100,
+          cachedInputTokens: 40,
+          outputTokens: 10,
+          inputCost: 0.00006,
+          cachedInputCost: 0.000004,
+          outputCost: 0.00002,
+          totalCost: 0.000084,
+          modelKey: "gpt-4o-mini",
+          pricingEffectiveDate: new Date("2026-02-01T00:00:00.000Z"),
+          inputTokenPrice: 0.000001,
+          cachedInputTokenPrice: 0.0000001,
+          outputTokenPrice: 0.000002,
+        },
+      ]);
+
+      const result = await (service as any).calculateHistoricalCosts([
+        {
+          tokensIn: BigInt(100),
+          cachedTokensIn: BigInt(40),
+          tokensOut: BigInt(10),
+          createdAt: usageDate,
+          usageType: "TRANSLATION",
+          modelKey: "gpt-4o-mini",
+        },
+      ]);
+
+      expect(mockLlmPricingService.calculateCostBatch).toHaveBeenCalledWith([
+        expect.objectContaining({ cachedInputTokens: 40 }),
+      ]);
+      expect(result.totalCost).toBe(0.000084);
+      expect(result.exactCost).toBe(0);
+      expect(result.estimatedCost).toBe(0.000084);
+      expect(result.detailedBreakdown[0]).toMatchObject({
+        cachedTokensIn: 40,
+        cachedInputCost: 0.000004,
+        pricingStatus: "estimated",
+        isEstimated: true,
+      });
+    });
+
+    it("does not invent a price for an unknown model", async () => {
+      mockLlmPricingService.calculateCostBatch.mockResolvedValue([null]);
+
+      const result = await (service as any).calculateHistoricalCosts([
+        {
+          tokensIn: BigInt(100),
+          cachedTokensIn: BigInt(0),
+          tokensOut: BigInt(10),
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          usageType: "TRANSLATION",
+          modelKey: "model-without-a-price",
+        },
+      ]);
+
+      expect(result.totalCost).toBe(0);
+      expect(result.unpricedRecordCount).toBe(1);
+      expect(result.detailedBreakdown[0].pricingStatus).toBe("unpriced");
+    });
+  });
+
   describe("getAssignmentAnalytics (connection-pool guard)", () => {
     const adminSession = {
       role: UserRole.ADMIN,
@@ -199,7 +267,7 @@ describe("AdminService", () => {
         .mockResolvedValue([
           { assignmentId: 1, _avg: { assignmentRating: 4 } },
         ]);
-      mockPrisma.aIUsage.findMany = jest.fn().mockResolvedValue([]);
+      mockPrisma.aIUsageEvent.findMany = jest.fn().mockResolvedValue([]);
     });
 
     // NOTE: #527's service-level page-size clamp was dropped in favour of the
@@ -207,13 +275,18 @@ describe("AdminService", () => {
     // That behaviour is covered by the controller spec; there is no service
     // clamp to test here anymore.
 
-    it("derives unique learners with ONE grouped query, not one per assignment", async () => {
+    it("derives unique learners with grouped queries, not one per assignment", async () => {
       await service.getAssignmentAnalytics(adminSession, 1, 1000);
 
+      // Verify both page and aggregate learner counts use grouped queries.
       const pairCalls = (
         mockPrisma.assignmentAttempt.groupBy as jest.Mock
       ).mock.calls.filter(([args]) => args.by?.includes("userId"));
-      expect(pairCalls).toHaveLength(1);
+      expect(pairCalls).toHaveLength(2);
+      const distinctFindMany = (
+        mockPrisma.assignmentAttempt.findMany as jest.Mock
+      ).mock.calls.filter(([args]) => args?.distinct !== undefined);
+      expect(distinctFindMany).toHaveLength(0);
     });
 
     it("batches AI usage into batched queries (page + full-set), never per-assignment", async () => {
@@ -221,8 +294,8 @@ describe("AdminService", () => {
 
       // Two batched scans, each with an `in` filter — one for the page, one for
       // the filter-wide aggregates — instead of one findMany per assignment.
-      expect(mockPrisma.aIUsage.findMany).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.aIUsage.findMany).toHaveBeenCalledWith(
+      expect(mockPrisma.aIUsageEvent.findMany).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.aIUsageEvent.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { assignmentId: { in: [1, 2] } },
         }),
@@ -261,7 +334,7 @@ describe("AdminService", () => {
         ),
       );
       // Every assignment has AI usage, so each cost chain calls pricing.
-      mockPrisma.aIUsage.findMany = jest.fn().mockResolvedValue(
+      mockPrisma.aIUsageEvent.findMany = jest.fn().mockResolvedValue(
         ids.map((assignmentId) => ({
           assignmentId,
           tokensIn: 10,
@@ -285,13 +358,16 @@ describe("AdminService", () => {
           active -= 1;
           return records.map(() => ({
             inputTokens: 10,
+            cachedInputTokens: 0,
             outputTokens: 5,
             inputCost: 0.005,
+            cachedInputCost: 0,
             outputCost: 0.005,
             totalCost: 0.01,
             modelKey: "gpt-4o",
             pricingEffectiveDate: new Date(),
             inputTokenPrice: 0.000_001,
+            cachedInputTokenPrice: 0.000_001,
             outputTokenPrice: 0.000_002,
           }));
         },
@@ -516,17 +592,17 @@ describe("AdminService", () => {
       );
     };
 
-    // Route assignmentAttempt.findMany: the aggregate path asks for distinct
-    // (assignmentId, userId) pairs; the per-row path asks for distinct userId.
+    // Route grouped learner queries to the shared pair fixture.
     const setAttemptFindMany = (
       pairRows: Array<{ assignmentId: number; userId: string }>,
       perRowUsers: Array<{ userId: string }> = [],
     ) => {
-      mockPrisma.assignmentAttempt.findMany.mockImplementation((args: any) =>
-        Array.isArray(args?.distinct) && args.distinct.includes("assignmentId")
+      mockPrisma.assignmentAttempt.groupBy.mockImplementation((args: any) =>
+        Array.isArray(args?.by) && args.by.includes("userId")
           ? Promise.resolve(pairRows)
-          : Promise.resolve(perRowUsers),
+          : Promise.resolve([]),
       );
+      mockPrisma.assignmentAttempt.findMany.mockResolvedValue(perRowUsers);
     };
 
     const pageRow = (id: number, published = true) => ({
@@ -653,6 +729,9 @@ describe("AdminService", () => {
       expect(result.aggregates).toEqual({
         totalAssignments: 50, // from count, not page length
         totalCost: 0,
+        exactCost: 0,
+        estimatedCost: 0,
+        unpricedRecordCount: 0,
         totalLearnerAssignmentPairs: 30, // from the full distinct-pair set
         averageRating: 4.5,
       });
@@ -685,6 +764,9 @@ describe("AdminService", () => {
       expect(result.aggregates).toEqual({
         totalAssignments: 5,
         totalCost: 0,
+        exactCost: 0,
+        estimatedCost: 0,
+        unpricedRecordCount: 0,
         totalLearnerAssignmentPairs: 2,
         averageRating: 3,
       });
@@ -705,6 +787,9 @@ describe("AdminService", () => {
       expect(result.aggregates).toEqual({
         totalAssignments: 0,
         totalCost: 0,
+        exactCost: 0,
+        estimatedCost: 0,
+        unpricedRecordCount: 0,
         totalLearnerAssignmentPairs: 0,
         averageRating: 0,
       });

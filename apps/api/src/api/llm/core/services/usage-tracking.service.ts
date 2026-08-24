@@ -27,11 +27,22 @@ export class UsageTrackerService implements IUsageTracker {
     tokensIn: number,
     tokensOut: number,
     modelKey?: string,
+    cachedTokensIn = 0,
   ): Promise<void> {
     try {
       const assignmentIdToDatabase = Number(assignmentId);
       const tokensInToStore = toAiUsageCounterBigInt(tokensIn, "tokensIn");
       const tokensOutToStore = toAiUsageCounterBigInt(tokensOut, "tokensOut");
+      const cachedTokensInToStore = toAiUsageCounterBigInt(
+        cachedTokensIn,
+        "cachedTokensIn",
+      );
+      if (cachedTokensIn > tokensIn) {
+        throw new HttpException(
+          "Cached input tokens cannot exceed total input tokens",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const assignmentExists = await this.prisma.assignment.findUnique({
         where: { id: assignmentIdToDatabase },
       });
@@ -43,31 +54,47 @@ export class UsageTrackerService implements IUsageTracker {
         );
       }
 
-      await this.prisma.aIUsage.upsert({
-        where: {
-          assignmentId_usageType: {
+      // Write the immutable event and legacy aggregate atomically.
+      await this.prisma.$transaction([
+        this.prisma.aIUsageEvent.create({
+          data: {
             assignmentId: assignmentIdToDatabase,
             usageType,
+            tokensIn: tokensInToStore,
+            cachedTokensIn: cachedTokensInToStore,
+            tokensOut: tokensOutToStore,
+            modelKey: modelKey || "unknown",
+            createdAt: new Date(),
           },
-        },
-        update: {
-          tokensIn: { increment: tokensInToStore },
-          tokensOut: { increment: tokensOutToStore },
-          usageCount: { increment: BigInt(1) },
-          updatedAt: new Date(),
-          ...(modelKey && { modelKey }),
-        },
-        create: {
-          assignmentId: assignmentIdToDatabase,
-          usageType,
-          tokensIn: tokensInToStore,
-          tokensOut: tokensOutToStore,
-          usageCount: BigInt(1),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          modelKey,
-        },
-      });
+        }),
+        this.prisma.aIUsage.upsert({
+          where: {
+            assignmentId_usageType: {
+              assignmentId: assignmentIdToDatabase,
+              usageType,
+            },
+          },
+          update: {
+            tokensIn: { increment: tokensInToStore },
+            cachedTokensIn: { increment: cachedTokensInToStore },
+            tokensOut: { increment: tokensOutToStore },
+            usageCount: { increment: BigInt(1) },
+            updatedAt: new Date(),
+            ...(modelKey && { modelKey }),
+          },
+          create: {
+            assignmentId: assignmentIdToDatabase,
+            usageType,
+            tokensIn: tokensInToStore,
+            cachedTokensIn: cachedTokensInToStore,
+            tokensOut: tokensOutToStore,
+            usageCount: BigInt(1),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            modelKey,
+          },
+        }),
+      ]);
 
       this.logger.debug(
         `Tracked usage for assignment ${assignmentIdToDatabase}: ${tokensIn} in, ${tokensOut} out (${usageType})`,

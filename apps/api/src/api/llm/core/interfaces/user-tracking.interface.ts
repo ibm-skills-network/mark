@@ -10,5 +10,6 @@ export interface IUsageTracker {
     tokensIn: number,
     tokensOut: number,
     modelKey?: string,
+    cachedTokensIn?: number,
   ): Promise<void>;
 }

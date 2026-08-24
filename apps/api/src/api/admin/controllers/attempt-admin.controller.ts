@@ -1,10 +1,14 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
+  Get,
   Logger,
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Req,
   UseGuards,
   UsePipes,
@@ -15,6 +19,7 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
@@ -25,11 +30,7 @@ import { ForcePassAttemptDto } from "../dto/force-pass-attempt.dto";
 import { AttemptAdminService } from "../services/attempt-admin.service";
 
 @ApiTags("Admin Attempts")
-// AdminGuard covers the whole controller and is the single source of truth for
-// access (it rejects any non-admin session). Lives under "admin-dashboard/..."
-// — not "admin/..." — so it routes through the same api-gateway path as the
-// other admin-dashboard endpoints (cookie session + x-admin-token) and reaches
-// mark-api's AdminGuard, rather than the gateway's JWT-bearer "/admin/*" guard.
+// AdminGuard protects this controller and preserves cookie-session routing.
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
 @UsePipes(
@@ -45,9 +46,44 @@ export class AttemptAdminController {
 
   constructor(private readonly attemptAdminService: AttemptAdminService) {}
 
+  @Get()
+  @ApiOperation({
+    summary: "List every attempt belonging to one learner (ADMIN)",
+  })
+  @ApiQuery({ name: "userId", required: true, type: String })
+  @ApiResponse({ status: 200, description: "Attempts for the learner" })
+  @ApiResponse({ status: 403, description: "Not an admin" })
+  async listForUser(@Query("userId") userId?: string) {
+    const trimmed = userId?.trim();
+    // Reject empty userId values to prevent unbounded learner queries.
+    if (!trimmed) {
+      throw new BadRequestException("userId is required");
+    }
+    return this.attemptAdminService.listAttemptsForUser(trimmed);
+  }
+
+  @Delete(":attemptId")
+  // Rate-limit destructive actions consistently with force-pass.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary:
+      "Delete an attempt, freeing one of the learner's attempts so they can restart (ADMIN)",
+  })
+  @ApiParam({ name: "attemptId", required: true, type: Number })
+  @ApiResponse({ status: 200, description: "Attempt deleted" })
+  @ApiResponse({ status: 403, description: "Not an admin" })
+  @ApiResponse({ status: 404, description: "Attempt not found" })
+  async deleteAttempt(
+    @Param("attemptId", ParseIntPipe) attemptId: number,
+    @Req() request: UserSessionRequest,
+  ) {
+    const adminEmail = request.userSession?.userId ?? "unknown";
+    return this.attemptAdminService.deleteAttempt(attemptId, adminEmail);
+  }
+
   @Post(":attemptId/force-pass")
-  // Mutating override action: rate-limit per admin in line with the other
-  // admin write actions (queue retry/remove).
+  // Rate-limit mutating override actions consistently with admin writes.
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({

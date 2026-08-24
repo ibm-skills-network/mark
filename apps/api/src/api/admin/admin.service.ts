@@ -53,6 +53,18 @@ interface DashboardFilters {
   userId?: string;
 }
 
+type HistoricalAIUsageRecord = {
+  assignmentId?: number;
+  tokensIn: bigint | number;
+  cachedTokensIn?: bigint | number;
+  tokensOut: bigint | number;
+  createdAt: Date;
+  usageType?: string;
+  modelKey?: string | null;
+  /** Backfilled aggregate rows are useful for all-time totals but not exact. */
+  isEstimated?: boolean;
+};
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -398,15 +410,12 @@ export class AdminService {
    * Helper method to calculate costs using historical pricing data with detailed breakdown
    */
   private async calculateHistoricalCosts(
-    aiUsageRecords: Array<{
-      tokensIn: bigint | number;
-      tokensOut: bigint | number;
-      createdAt: Date;
-      usageType?: string;
-      modelKey?: string | null;
-    }>,
+    aiUsageRecords: HistoricalAIUsageRecord[],
   ): Promise<{
     totalCost: number;
+    exactCost: number;
+    estimatedCost: number;
+    unpricedRecordCount: number;
     costBreakdown: {
       grading: number;
       questionGeneration: number;
@@ -415,24 +424,33 @@ export class AdminService {
     };
     detailedBreakdown: Array<{
       tokensIn: number;
+      cachedTokensIn: number;
       tokensOut: number;
       inputCost: number;
+      cachedInputCost: number;
       outputCost: number;
       totalCost: number;
       usageDate: Date;
       modelKey: string;
       inputTokenPrice: number;
+      cachedInputTokenPrice: number;
       outputTokenPrice: number;
       pricingEffectiveDate: Date;
       usageType?: string;
+      isEstimated: boolean;
+      pricingStatus: "exact" | "estimated" | "unpriced";
       calculationSteps: {
         inputCalculation: string;
+        cachedInputCalculation: string;
         outputCalculation: string;
         totalCalculation: string;
       };
     }>;
   }> {
     let totalCost = 0;
+    let exactCost = 0;
+    let estimatedCost = 0;
+    let unpricedRecordCount = 0;
     const detailedBreakdown = [];
     const costByType = {
       grading: 0,
@@ -442,8 +460,7 @@ export class AdminService {
     };
 
     // Normalize each usage row to a batch input. Token counts are coerced
-    // here (BigInt → number) and missing model keys fall back deterministically
-    // by usage type so the pricing cache can dedupe by (modelKey, day).
+    // Coerce counters safely; missing model keys remain unpriced.
     const normalized = aiUsageRecords.map((usage) => {
       const tokensIn = toAiUsageCounterNumber(
         usage.tokensIn,
@@ -453,47 +470,47 @@ export class AdminService {
         usage.tokensOut,
         "AIUsage.tokensOut",
       );
-      let modelKey = usage.modelKey;
+      const cachedTokensIn = toAiUsageCounterNumber(
+        usage.cachedTokensIn ?? 0,
+        "AIUsage.cachedTokensIn",
+      );
+      const modelKey = usage.modelKey;
       if (!modelKey) {
         this.logger.warn(
-          `Missing model key for usage record from ${usage.createdAt.toISOString()}, falling back based on usage type`,
+          `Usage record from ${usage.createdAt.toISOString()} has no model key; cost will be reported as unpriced`,
         );
-        const usageTypeLower = usage.usageType?.toLowerCase() || "";
-        if (usageTypeLower.includes("translation")) {
-          modelKey = "gpt-4o-mini";
-        } else if (
-          usageTypeLower.includes("image") ||
-          usageTypeLower.includes("vision")
-        ) {
-          modelKey = "gpt-4.1-mini";
-        } else if (
-          usageTypeLower.includes("grading") ||
-          usageTypeLower.includes("generation")
-        ) {
-          modelKey = "gpt-4o";
-        } else {
-          modelKey = "gpt-4o-mini";
-        }
       }
-      return { usage, tokensIn, tokensOut, modelKey };
+      return { usage, tokensIn, cachedTokensIn, tokensOut, modelKey };
     });
 
     const breakdowns = await this.llmPricingService.calculateCostBatch(
-      normalized.map((n) => ({
-        modelKey: n.modelKey,
-        inputTokens: n.tokensIn,
-        outputTokens: n.tokensOut,
-        usageDate: n.usage.createdAt,
-        usageType: n.usage.usageType,
-      })),
+      normalized
+        .filter((n): n is typeof n & { modelKey: string } => !!n.modelKey)
+        .map((n) => ({
+          modelKey: n.modelKey,
+          inputTokens: n.tokensIn,
+          cachedInputTokens: n.cachedTokensIn,
+          outputTokens: n.tokensOut,
+          usageDate: n.usage.createdAt,
+          usageType: n.usage.usageType,
+        })),
     );
 
-    for (const [index, item] of normalized.entries()) {
-      const { usage, tokensIn, tokensOut, modelKey } = item;
-      const costBreakdown = breakdowns[index];
+    let pricedIndex = 0;
+    for (const item of normalized) {
+      const { usage, tokensIn, cachedTokensIn, tokensOut, modelKey } = item;
+      const costBreakdown = modelKey ? breakdowns[pricedIndex++] : null;
 
       if (costBreakdown) {
         totalCost += costBreakdown.totalCost;
+        const pricingIsForwardDated =
+          costBreakdown.pricingEffectiveDate > usage.createdAt;
+        const isEstimated = !!usage.isEstimated || pricingIsForwardDated;
+        if (isEstimated) {
+          estimatedCost += costBreakdown.totalCost;
+        } else {
+          exactCost += costBreakdown.totalCost;
+        }
 
         const usageType = usage.usageType?.toLowerCase() || "other";
         if (usageType.includes("grading")) {
@@ -510,85 +527,80 @@ export class AdminService {
         }
 
         const inputPricePerMillion = costBreakdown.inputTokenPrice * 1_000_000;
+        const cachedInputPricePerMillion =
+          costBreakdown.cachedInputTokenPrice * 1_000_000;
         const outputPricePerMillion =
           costBreakdown.outputTokenPrice * 1_000_000;
         const calculationSteps = {
-          inputCalculation: `${tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
+          inputCalculation: `${(
+            tokensIn - cachedTokensIn
+          ).toLocaleString()} uncached tokens × $${inputPricePerMillion.toFixed(
             2,
           )}/1M tokens = $${costBreakdown.inputCost.toFixed(8)}`,
+          cachedInputCalculation: `${cachedTokensIn.toLocaleString()} cached tokens × $${cachedInputPricePerMillion.toFixed(
+            2,
+          )}/1M tokens = $${costBreakdown.cachedInputCost.toFixed(8)}`,
           outputCalculation: `${tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
             2,
           )}/1M tokens = $${costBreakdown.outputCost.toFixed(8)}`,
           totalCalculation: `$${costBreakdown.inputCost.toFixed(
             8,
-          )} + $${costBreakdown.outputCost.toFixed(
+          )} + $${costBreakdown.cachedInputCost.toFixed(
+            8,
+          )} cached + $${costBreakdown.outputCost.toFixed(
             8,
           )} = $${costBreakdown.totalCost.toFixed(8)}`,
         };
 
         detailedBreakdown.push({
           tokensIn,
+          cachedTokensIn,
           tokensOut,
           inputCost: costBreakdown.inputCost,
+          cachedInputCost: costBreakdown.cachedInputCost,
           outputCost: costBreakdown.outputCost,
           totalCost: costBreakdown.totalCost,
           usageDate: usage.createdAt,
           modelKey: costBreakdown.modelKey,
           inputTokenPrice: costBreakdown.inputTokenPrice,
+          cachedInputTokenPrice: costBreakdown.cachedInputTokenPrice,
           outputTokenPrice: costBreakdown.outputTokenPrice,
           pricingEffectiveDate: costBreakdown.pricingEffectiveDate,
           usageType: usage.usageType,
+          isEstimated,
+          pricingStatus: isEstimated ? "estimated" : "exact",
           calculationSteps,
         });
       } else {
         this.logger.error(
-          `No pricing found for ${modelKey} at ${usage.createdAt.toISOString()}, using emergency fallback`,
+          `No pricing found for ${modelKey || "unknown"} at ${usage.createdAt.toISOString()}; excluding from cost total`,
         );
-
-        const fallbackPrices: Record<
-          string,
-          { input: number; output: number }
-        > = {
-          "gpt-4o": { input: 0.000_002_5, output: 0.000_01 },
-          "gpt-4o-mini": { input: 0.000_000_15, output: 0.000_000_6 },
-          "gpt-4.1-mini": { input: 0.000_002_5, output: 0.000_01 },
-        };
-
-        const prices =
-          fallbackPrices[modelKey] || fallbackPrices["gpt-4o-mini"];
-        const inputCost = tokensIn * prices.input;
-        const outputCost = tokensOut * prices.output;
-        const fallbackCost = inputCost + outputCost;
-
-        totalCost += fallbackCost;
-        costByType.other += fallbackCost;
-
-        const inputPricePerMillion = prices.input * 1_000_000;
-        const outputPricePerMillion = prices.output * 1_000_000;
+        unpricedRecordCount += 1;
         const calculationSteps = {
-          inputCalculation: `${tokensIn.toLocaleString()} tokens × $${inputPricePerMillion.toFixed(
-            2,
-          )}/1M tokens = $${inputCost.toFixed(8)} (fallback)`,
-          outputCalculation: `${tokensOut.toLocaleString()} tokens × $${outputPricePerMillion.toFixed(
-            2,
-          )}/1M tokens = $${outputCost.toFixed(8)} (fallback)`,
-          totalCalculation: `$${inputCost.toFixed(8)} + $${outputCost.toFixed(
-            8,
-          )} = $${fallbackCost.toFixed(8)} (fallback)`,
+          inputCalculation: `${tokensIn.toLocaleString()} input tokens × unknown rate = unpriced`,
+          cachedInputCalculation: `${cachedTokensIn.toLocaleString()} cached input tokens × unknown rate = unpriced`,
+          outputCalculation: `${tokensOut.toLocaleString()} output tokens × unknown rate = unpriced`,
+          totalCalculation:
+            "No total included because the model has no verified price",
         };
 
         detailedBreakdown.push({
           tokensIn,
           tokensOut,
-          inputCost,
-          outputCost,
-          totalCost: fallbackCost,
+          cachedTokensIn,
+          inputCost: 0,
+          cachedInputCost: 0,
+          outputCost: 0,
+          totalCost: 0,
           usageDate: usage.createdAt,
-          modelKey: `${modelKey} (fallback)`,
-          inputTokenPrice: prices.input,
-          outputTokenPrice: prices.output,
-          pricingEffectiveDate: new Date(),
+          modelKey: modelKey || "unknown",
+          inputTokenPrice: 0,
+          cachedInputTokenPrice: 0,
+          outputTokenPrice: 0,
+          pricingEffectiveDate: usage.createdAt,
           usageType: usage.usageType,
+          isEstimated: !!usage.isEstimated,
+          pricingStatus: "unpriced",
           calculationSteps,
         });
       }
@@ -596,6 +608,9 @@ export class AdminService {
 
     return {
       totalCost,
+      exactCost,
+      estimatedCost,
+      unpricedRecordCount,
       costBreakdown: costByType,
       detailedBreakdown,
     };
@@ -1217,6 +1232,9 @@ export class AdminService {
     const emptyAggregates = {
       totalAssignments: 0,
       totalCost: 0,
+      exactCost: 0,
+      estimatedCost: 0,
+      unpricedRecordCount: 0,
       totalLearnerAssignmentPairs: 0,
       averageRating: 0,
     };
@@ -1358,15 +1376,17 @@ export class AdminService {
     const feedbackMap = new Map(feedbackStats.map((s) => [s.assignmentId, s]));
 
     // Batch-fetch AI usage for all assignments on the page, then group by id.
-    const allAiUsage = await this.prisma.aIUsage.findMany({
+    const allAiUsage = await this.prisma.aIUsageEvent.findMany({
       where: { assignmentId: { in: assignmentIds } },
       select: {
         assignmentId: true,
         tokensIn: true,
+        cachedTokensIn: true,
         tokensOut: true,
         createdAt: true,
         usageType: true,
         modelKey: true,
+        isEstimated: true,
       },
     });
     const aiUsageByAssignment = new Map<number, typeof allAiUsage>();
@@ -1426,12 +1446,10 @@ export class AdminService {
         }
 
         const costBreakdown = {
-          grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-          questionGeneration:
-            Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
-          translation:
-            Math.round(costData.costBreakdown.translation * 100) / 100,
-          other: Math.round(costData.costBreakdown.other * 100) / 100,
+          grading: costData.costBreakdown.grading,
+          questionGeneration: costData.costBreakdown.questionGeneration,
+          translation: costData.costBreakdown.translation,
+          other: costData.costBreakdown.other,
         };
 
         return {
@@ -1448,6 +1466,9 @@ export class AdminService {
             questionInsights: [],
             performanceInsights,
             costBreakdown,
+            exactCost: costData.exactCost,
+            estimatedCost: costData.estimatedCost,
+            unpricedRecordCount: costData.unpricedRecordCount,
             ...(details && {
               detailedCostBreakdown: costData.detailedBreakdown.map(
                 (detail) => ({
@@ -1477,14 +1498,7 @@ export class AdminService {
     };
   }
 
-  /**
-   * Compute filter-wide aggregates for the analytics table cards.
-   *
-   * The card "Total Learner-Assignment Pairs" sums per-assignment unique
-   * learner counts (a user attempting 3 distinct filtered assignments
-   * contributes 3 to the total). Implemented via Prisma's `distinct` on
-   * (assignmentId, userId), which uses the existing composite index.
-   */
+  /** Compute filter-wide analytics aggregates using SQL grouping. */
   private async computeAnalyticsAggregates(
     allMatchingIds: number[],
     totalCount: number,
@@ -1492,10 +1506,10 @@ export class AdminService {
     const assignmentIdFilter = { assignmentId: { in: allMatchingIds } };
 
     const [pairRows, feedbackAgg, allAiUsage] = await Promise.all([
-      this.prisma.assignmentAttempt.findMany({
+      // Count grouped pairs in Node; use raw SQL if scale requires it.
+      this.prisma.assignmentAttempt.groupBy({
+        by: ["assignmentId", "userId"],
         where: assignmentIdFilter,
-        distinct: ["assignmentId", "userId"],
-        select: { assignmentId: true, userId: true },
       }),
       this.prisma.assignmentFeedback.aggregate({
         where: {
@@ -1504,14 +1518,17 @@ export class AdminService {
         },
         _avg: { assignmentRating: true },
       }),
-      this.prisma.aIUsage.findMany({
+      this.prisma.aIUsageEvent.findMany({
         where: assignmentIdFilter,
         select: {
+          assignmentId: true,
           tokensIn: true,
+          cachedTokensIn: true,
           tokensOut: true,
           createdAt: true,
           usageType: true,
           modelKey: true,
+          isEstimated: true,
         },
       }),
     ]);
@@ -1521,6 +1538,9 @@ export class AdminService {
     return {
       totalAssignments: totalCount,
       totalCost: costData.totalCost,
+      exactCost: costData.exactCost,
+      estimatedCost: costData.estimatedCost,
+      unpricedRecordCount: costData.unpricedRecordCount,
       totalLearnerAssignmentPairs: pairRows.length,
       averageRating: feedbackAgg._avg.assignmentRating ?? 0,
     };
@@ -1763,7 +1783,7 @@ export class AdminService {
         : 0,
 
       isAdmin || assignmentIds.length > 0
-        ? this.prisma.aIUsage.findMany({
+        ? this.prisma.aIUsageEvent.findMany({
             where: {
               ...(isAdmin
                 ? {}
@@ -1780,13 +1800,19 @@ export class AdminService {
               ...(Object.keys(dateFilter).length > 0
                 ? { createdAt: dateFilter }
                 : {}),
+              // Exclude backfilled aggregates from date-ranged spend reports.
+              ...(Object.keys(dateFilter).length > 0
+                ? { isEstimated: false }
+                : {}),
             },
             select: {
               tokensIn: true,
+              cachedTokensIn: true,
               tokensOut: true,
               createdAt: true,
               usageType: true,
               modelKey: true,
+              isEstimated: true,
             },
           })
         : [],
@@ -1843,13 +1869,15 @@ export class AdminService {
       totalUsers: attemptStats.totalUsers,
       averageAssignmentRating:
         averageAssignmentRating._avg.assignmentRating || 0,
-      totalCost: Math.round(totalCost * 100) / 100,
+      totalCost,
+      exactCost: costData.exactCost,
+      estimatedCost: costData.estimatedCost,
+      unpricedRecordCount: costData.unpricedRecordCount,
       costBreakdown: {
-        grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-        questionGeneration:
-          Math.round(costData.costBreakdown.questionGeneration * 100) / 100,
-        translation: Math.round(costData.costBreakdown.translation * 100) / 100,
-        other: Math.round(costData.costBreakdown.other * 100) / 100,
+        grading: costData.costBreakdown.grading,
+        questionGeneration: costData.costBreakdown.questionGeneration,
+        translation: costData.costBreakdown.translation,
+        other: costData.costBreakdown.other,
       },
       userRole: isAdmin ? ("admin" as const) : ("author" as const),
       recentActivity: recentAttempts.map((attempt: any) => ({
@@ -1902,7 +1930,9 @@ export class AdminService {
               },
             },
           },
-          AIUsage: true,
+          AIUsageEvent: {
+            orderBy: { createdAt: "asc" },
+          },
           AssignmentFeedback: true,
           Report: true,
           AssignmentAuthor: true,
@@ -2051,12 +2081,15 @@ export class AdminService {
       const completedAttempts = submittedAttempts;
       const averageGrade = calculatedAverageGrade;
 
-      const aiUsageRecords = assignment.AIUsage.map((usage) => ({
+      const aiUsageRecords = assignment.AIUsageEvent.map((usage) => ({
+        assignmentId: assignment.id,
         tokensIn: usage.tokensIn,
+        cachedTokensIn: usage.cachedTokensIn,
         tokensOut: usage.tokensOut,
         createdAt: usage.createdAt,
         usageType: usage.usageType,
         modelKey: usage.modelKey,
+        isEstimated: usage.isEstimated,
       }));
 
       const costData = await this.calculateHistoricalCosts(aiUsageRecords);
@@ -2066,17 +2099,22 @@ export class AdminService {
         assignment.AssignmentAuthor,
       );
 
-      const aiUsageWithCost = assignment.AIUsage.map((usage, index) => {
+      const aiUsageWithCost = assignment.AIUsageEvent.map((usage, index) => {
         const detailedCost = costData.detailedBreakdown[index] || {
           totalCost: 0,
           inputCost: 0,
+          cachedInputCost: 0,
           outputCost: 0,
           modelKey: "unknown",
           inputTokenPrice: 0,
+          cachedInputTokenPrice: 0,
           outputTokenPrice: 0,
           pricingEffectiveDate: new Date(),
+          isEstimated: false,
+          pricingStatus: "unpriced" as const,
           calculationSteps: {
             inputCalculation: "0 tokens × $0 = $0 (missing)",
+            cachedInputCalculation: "0 cached tokens × $0 = $0 (missing)",
             outputCalculation: "0 tokens × $0 = $0 (missing)",
             totalCalculation: "$0 + $0 = $0 (missing)",
           },
@@ -2085,23 +2123,31 @@ export class AdminService {
         return {
           usageType: usage.usageType,
           tokensIn: toAiUsageCounterNumber(usage.tokensIn, "AIUsage.tokensIn"),
+          cachedTokensIn: toAiUsageCounterNumber(
+            usage.cachedTokensIn,
+            "AIUsageEvent.cachedTokensIn",
+          ),
           tokensOut: toAiUsageCounterNumber(
             usage.tokensOut,
             "AIUsage.tokensOut",
           ),
           usageCount: toAiUsageCounterNumber(
-            usage.usageCount,
-            "AIUsage.usageCount",
+            BigInt(1),
+            "AIUsageEvent.usageCount",
           ),
           inputCost: detailedCost.inputCost,
+          cachedInputCost: detailedCost.cachedInputCost,
           outputCost: detailedCost.outputCost,
           totalCost: detailedCost.totalCost,
           modelUsed: detailedCost.modelKey,
           inputTokenPrice: detailedCost.inputTokenPrice,
+          cachedInputTokenPrice: detailedCost.cachedInputTokenPrice,
           outputTokenPrice: detailedCost.outputTokenPrice,
           pricingEffectiveDate: detailedCost.pricingEffectiveDate.toISOString(),
           calculationSteps: detailedCost.calculationSteps,
           createdAt: usage.createdAt.toISOString(),
+          isEstimated: detailedCost.isEstimated,
+          pricingStatus: detailedCost.pricingStatus,
         };
       });
 
@@ -2198,22 +2244,27 @@ export class AdminService {
         ...(details && {
           aiUsage: aiUsageWithCost,
           costCalculationDetails: {
-            totalCost: Math.round(totalCost * 100) / 100,
+            totalCost,
+            exactCost: costData.exactCost,
+            estimatedCost: costData.estimatedCost,
+            unpricedRecordCount: costData.unpricedRecordCount,
             breakdown: costData.detailedBreakdown.map((detail) => ({
               usageType: detail.usageType || "Unknown",
               tokensIn: detail.tokensIn,
+              cachedTokensIn: detail.cachedTokensIn,
               tokensOut: detail.tokensOut,
               modelUsed: detail.modelKey,
               inputTokenPrice: detail.inputTokenPrice,
+              cachedInputTokenPrice: detail.cachedInputTokenPrice,
               outputTokenPrice: detail.outputTokenPrice,
-              inputCost:
-                Math.round(detail.inputCost * 100_000_000) / 100_000_000,
-              outputCost:
-                Math.round(detail.outputCost * 100_000_000) / 100_000_000,
-              totalCost:
-                Math.round(detail.totalCost * 100_000_000) / 100_000_000,
+              inputCost: detail.inputCost,
+              cachedInputCost: detail.cachedInputCost,
+              outputCost: detail.outputCost,
+              totalCost: detail.totalCost,
               pricingEffectiveDate: detail.pricingEffectiveDate.toISOString(),
               usageDate: detail.usageDate.toISOString(),
+              isEstimated: detail.isEstimated,
+              pricingStatus: detail.pricingStatus,
               calculationSteps: detail.calculationSteps,
             })),
             summary: {
@@ -2225,33 +2276,63 @@ export class AdminService {
                 (sum, d) => sum + d.tokensOut,
                 0,
               ),
-              totalInputCost:
-                Math.round(
-                  costData.detailedBreakdown.reduce(
-                    (sum, d) => sum + d.inputCost,
-                    0,
-                  ) * 100_000_000,
-                ) / 100_000_000,
-              totalOutputCost:
-                Math.round(
-                  costData.detailedBreakdown.reduce(
-                    (sum, d) => sum + d.outputCost,
-                    0,
-                  ) * 100_000_000,
-                ) / 100_000_000,
+              totalCachedInputTokens: costData.detailedBreakdown.reduce(
+                (sum, d) => sum + d.cachedTokensIn,
+                0,
+              ),
+              totalInputCost: costData.detailedBreakdown.reduce(
+                (sum, d) => sum + d.inputCost,
+                0,
+              ),
+              totalCachedInputCost: costData.detailedBreakdown.reduce(
+                (sum, d) => sum + d.cachedInputCost,
+                0,
+              ),
+              totalOutputCost: costData.detailedBreakdown.reduce(
+                (sum, d) => sum + d.outputCost,
+                0,
+              ),
               averageInputPrice:
-                costData.detailedBreakdown.length > 0
+                costData.detailedBreakdown.reduce(
+                  (sum, d) => sum + (d.tokensIn - d.cachedTokensIn),
+                  0,
+                ) > 0
                   ? costData.detailedBreakdown.reduce(
-                      (sum, d) => sum + d.inputTokenPrice,
+                      (sum, d) => sum + d.inputCost,
                       0,
-                    ) / costData.detailedBreakdown.length
+                    ) /
+                    costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + (d.tokensIn - d.cachedTokensIn),
+                      0,
+                    )
+                  : 0,
+              averageCachedInputPrice:
+                costData.detailedBreakdown.reduce(
+                  (sum, d) => sum + d.cachedTokensIn,
+                  0,
+                ) > 0
+                  ? costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.cachedInputCost,
+                      0,
+                    ) /
+                    costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.cachedTokensIn,
+                      0,
+                    )
                   : 0,
               averageOutputPrice:
-                costData.detailedBreakdown.length > 0
+                costData.detailedBreakdown.reduce(
+                  (sum, d) => sum + d.tokensOut,
+                  0,
+                ) > 0
                   ? costData.detailedBreakdown.reduce(
-                      (sum, d) => sum + d.outputTokenPrice,
+                      (sum, d) => sum + d.outputCost,
                       0,
-                    ) / costData.detailedBreakdown.length
+                    ) /
+                    costData.detailedBreakdown.reduce(
+                      (sum, d) => sum + d.tokensOut,
+                      0,
+                    )
                   : 0,
               // eslint-disable-next-line unicorn/no-array-reduce
               modelDistribution: costData.detailedBreakdown.reduce(
@@ -2263,13 +2344,10 @@ export class AdminService {
                 {} as Record<string, number>,
               ),
               usageTypeDistribution: {
-                grading: Math.round(costData.costBreakdown.grading * 100) / 100,
-                questionGeneration:
-                  Math.round(costData.costBreakdown.questionGeneration * 100) /
-                  100,
-                translation:
-                  Math.round(costData.costBreakdown.translation * 100) / 100,
-                other: Math.round(costData.costBreakdown.other * 100) / 100,
+                grading: costData.costBreakdown.grading,
+                questionGeneration: costData.costBreakdown.questionGeneration,
+                translation: costData.costBreakdown.translation,
+                other: costData.costBreakdown.other,
               },
             },
           },
@@ -2721,13 +2799,15 @@ export class AdminService {
         name: true,
         published: true,
         updatedAt: true,
-        AIUsage: {
+        AIUsageEvent: {
           select: {
             tokensIn: true,
+            cachedTokensIn: true,
             tokensOut: true,
             createdAt: true,
             usageType: true,
             modelKey: true,
+            isEstimated: true,
           },
         },
         AssignmentFeedback: {
@@ -2740,7 +2820,7 @@ export class AdminService {
     const assignmentsWithCost = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsage,
+          assignment.AIUsageEvent,
         );
 
         const attemptCount = await this.prisma.assignmentAttempt.count({
@@ -3115,13 +3195,15 @@ export class AdminService {
         name: true,
         published: true,
         updatedAt: true,
-        AIUsage: {
+        AIUsageEvent: {
           select: {
             tokensIn: true,
+            cachedTokensIn: true,
             tokensOut: true,
             createdAt: true,
             usageType: true,
             modelKey: true,
+            isEstimated: true,
           },
         },
       },
@@ -3131,7 +3213,7 @@ export class AdminService {
     const assignmentsWithCostPerLearner = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsage,
+          assignment.AIUsageEvent,
         );
 
         const attempts = await this.prisma.assignmentAttempt.findMany({
