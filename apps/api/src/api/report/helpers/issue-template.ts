@@ -18,7 +18,7 @@ const TITLE_SUMMARY_MAX_CHARS = 50;
 // description already templated into "**Label:**\ncontent" sections.
 const SECTION_LABEL_PATTERN = /\*\*([^\n*]+):\*\*/g;
 const ACTUAL_RESULT_PATTERN =
-  /\*\*Actual result:\*\*\s*([\s\S]*?)(?=\n\s*\*\*[^\n*]+:\*\*|$)/i;
+  /\*\*actual result:\*\*\s*([\S\s]*?)(?=\n\s*\*\*[^\n*]+:\*\*|$)/i;
 
 /**
  * One-line summary of a report description for use in a title. For templated

@@ -1037,7 +1037,9 @@ export class FileGradingService implements IFileGradingService {
   ): Record<string, unknown> {
     const { metadata, ...rest } = content;
     if (!metadata) return { ...rest };
-    const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
+    const stableMetadata = Object.fromEntries(
+      Object.entries(metadata).filter(([key]) => key !== "extractedAt"),
+    );
     return { ...rest, metadata: stableMetadata };
   }
 
