@@ -166,20 +166,20 @@ model publishJob {
 
 /// This model tracks the AI usage for each assignment and usage type
 model AIUsage {
-  id           Int             @id @default(autoincrement()) /// Unique identifier for the AI usage log
-  assignmentId Int /// The ID of the assignment for which the AI was used
-  assignment   Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
-  usageType    AIUsageType /// Enum to define the type of AI usage (e.g., question generation, assignment generation, grading)
-  tokensIn     BigInt          @default(0) /// The number of tokens sent to the AI (input)
-  cachedTokensIn BigInt        @default(0) /// Input tokens served from the provider prompt cache
-  tokensOut    BigInt          @default(0) /// The number of tokens received from the AI (output)
-  usageCount   BigInt          @default(0) /// Tracks how many times this AI feature was used for this assignment
-  usageDetails Json? /// Optional field to store additional details about the AI usage
-  createdAt    DateTime        @default(now()) /// Timestamp for when the AI was used
-  updatedAt    DateTime        @updatedAt /// Timestamp for when the usage record was last updated
-  userId       String? /// The ID of the user who used the AI feature
-  user         UserCredential? @relation(fields: [userId], references: [userId]) /// Relation to the UserCredential model
-  modelKey     String? /// The key of the LLM model actually used for this AI operation
+  id             Int             @id @default(autoincrement()) /// Unique identifier for the AI usage log
+  assignmentId   Int /// The ID of the assignment for which the AI was used
+  assignment     Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade) /// Relation to the Assignment model
+  usageType      AIUsageType /// Enum to define the type of AI usage (e.g., question generation, assignment generation, grading)
+  tokensIn       BigInt          @default(0) /// The number of tokens sent to the AI (input)
+  cachedTokensIn BigInt          @default(0) /// Input tokens served from the provider prompt cache
+  tokensOut      BigInt          @default(0) /// The number of tokens received from the AI (output)
+  usageCount     BigInt          @default(0) /// Tracks how many times this AI feature was used for this assignment
+  usageDetails   Json? /// Optional field to store additional details about the AI usage
+  createdAt      DateTime        @default(now()) /// Timestamp for when the AI was used
+  updatedAt      DateTime        @updatedAt /// Timestamp for when the usage record was last updated
+  userId         String? /// The ID of the user who used the AI feature
+  user           UserCredential? @relation(fields: [userId], references: [userId]) /// Relation to the UserCredential model
+  modelKey       String? /// The key of the LLM model actually used for this AI operation
 
   @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
   @@index([assignmentId, createdAt, usageType, modelKey]) /// Composite index for analytics queries
@@ -187,19 +187,20 @@ model AIUsage {
 
 /// One row per provider invocation for auditable cost reporting.
 model AIUsageEvent {
-  id           Int        @id @default(autoincrement())
-  assignmentId Int
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  usageType    AIUsageType
-  tokensIn     BigInt
-  cachedTokensIn BigInt @default(0)
-  tokensOut    BigInt
-  modelKey     String
-  userId       String?
-  user         UserCredential? @relation(fields: [userId], references: [userId])
-  createdAt    DateTime   @default(now())
+  id             Int             @id @default(autoincrement())
+  assignmentId   Int
+  assignment     Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  usageType      AIUsageType
+  tokensIn       BigInt
+  cachedTokensIn BigInt          @default(0)
+  tokensOut      BigInt
+  modelKey       String
+  /// Reserved for per-learner attribution; the tracker does not populate it yet.
+  userId         String?
+  user           UserCredential? @relation(fields: [userId], references: [userId])
+  createdAt      DateTime        @default(now())
   /// Backfilled aggregate rows are estimated because invocation timestamps are unavailable.
-  isEstimated  Boolean    @default(false)
+  isEstimated    Boolean         @default(false)
 
   @@index([assignmentId, createdAt, usageType, modelKey])
   @@index([createdAt, isEstimated])
@@ -223,7 +224,7 @@ model UserCredential {
   updatedAt   DateTime @updatedAt /// The DateTime at which the user was last updated
   chats       Chat[] /// The list of chats associated with the user
 
-  AIUsage AIUsage[]
+  AIUsage      AIUsage[]
   AIUsageEvent AIUsageEvent[]
 }
 

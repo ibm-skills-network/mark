@@ -183,7 +183,7 @@ export function AssignmentAnalyticsTable({
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 8,
+      maximumFractionDigits: 4,
     }).format(amount);
   }, []);
 

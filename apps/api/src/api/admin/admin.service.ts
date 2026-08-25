@@ -63,7 +63,25 @@ type HistoricalAIUsageRecord = {
   modelKey?: string | null;
   /** Backfilled aggregate rows are useful for all-time totals but not exact. */
   isEstimated?: boolean;
+  /** How many provider calls this row covers; rolled-up rows cover many. */
+  recordCount?: number;
 };
+
+/** One rolled-up usage bucket: same model, usage type, pricing status, and day. */
+type UsageRollupRow = {
+  assignmentId?: number;
+  modelKey: string;
+  usageType: string;
+  isEstimated: boolean;
+  day: Date;
+  tokensIn: bigint;
+  cachedTokensIn: bigint;
+  tokensOut: bigint;
+  recordCount: number;
+};
+
+/** Newest provider calls kept for the per-call audit table on the insights page. */
+const INSIGHTS_USAGE_EVENT_LIMIT = 200;
 
 @Injectable()
 export class AdminService {
@@ -406,6 +424,96 @@ export class AdminService {
     }
   }
 
+  /** Sums usage per model, usage type, pricing status, and day. Pricing already resolves per (model, day), so this matches summing each call. Raw SQL because Prisma cannot group on a truncated date. */
+  private async rollUpUsageForCost(
+    filters: {
+      assignmentIds?: number[];
+      from?: Date;
+      to?: Date;
+      excludeEstimated?: boolean;
+    },
+    byAssignment = false,
+  ): Promise<HistoricalAIUsageRecord[]> {
+    const conditions: Prisma.Sql[] = [];
+    if (filters.assignmentIds) {
+      if (filters.assignmentIds.length === 0) return [];
+      conditions.push(
+        Prisma.sql`"assignmentId" IN (${Prisma.join(filters.assignmentIds)})`,
+      );
+    }
+    if (filters.from) {
+      conditions.push(Prisma.sql`"createdAt" >= ${filters.from}`);
+    }
+    if (filters.to) {
+      conditions.push(Prisma.sql`"createdAt" <= ${filters.to}`);
+    }
+    if (filters.excludeEstimated) {
+      conditions.push(Prisma.sql`"isEstimated" = false`);
+    }
+
+    const assignmentColumn = byAssignment
+      ? Prisma.sql`"assignmentId",`
+      : Prisma.empty;
+    const whereClause =
+      conditions.length > 0
+        ? Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`
+        : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<UsageRollupRow[]>(Prisma.sql`
+      SELECT
+        ${assignmentColumn}
+        "modelKey",
+        "usageType"::text AS "usageType",
+        "isEstimated",
+        date_trunc('day', "createdAt") AS "day",
+        SUM("tokensIn")::bigint AS "tokensIn",
+        SUM("cachedTokensIn")::bigint AS "cachedTokensIn",
+        SUM("tokensOut")::bigint AS "tokensOut",
+        COUNT(*)::int AS "recordCount"
+      FROM "AIUsageEvent"
+      ${whereClause}
+      GROUP BY
+        ${assignmentColumn}
+        "modelKey",
+        "usageType",
+        "isEstimated",
+        date_trunc('day', "createdAt")
+    `);
+
+    return rows.map((row) => ({
+      assignmentId: row.assignmentId,
+      tokensIn: row.tokensIn,
+      cachedTokensIn: row.cachedTokensIn,
+      tokensOut: row.tokensOut,
+      createdAt: row.day,
+      usageType: row.usageType,
+      modelKey: row.modelKey,
+      isEstimated: row.isEstimated,
+      recordCount: row.recordCount,
+    }));
+  }
+
+  /** Rolled-up usage keyed by assignment, for per-assignment cost totals. */
+  private async rollUpUsageByAssignment(
+    assignmentIds: number[],
+  ): Promise<Map<number, HistoricalAIUsageRecord[]>> {
+    const rows = await this.rollUpUsageForCost(
+      { assignmentIds },
+      /* byAssignment */ true,
+    );
+    const byAssignment = new Map<number, HistoricalAIUsageRecord[]>();
+    for (const row of rows) {
+      // byAssignment guarantees assignmentId is selected.
+      const list = byAssignment.get(row.assignmentId);
+      if (list) {
+        list.push(row);
+      } else {
+        byAssignment.set(row.assignmentId, [row]);
+      }
+    }
+    return byAssignment;
+  }
+
   /**
    * Helper method to calculate costs using historical pricing data with detailed breakdown
    */
@@ -422,6 +530,8 @@ export class AdminService {
       translation: number;
       other: number;
     };
+    /** Cost per raw AIUsageType, for callers that need their own buckets. */
+    costByUsageType: Record<string, number>;
     detailedBreakdown: Array<{
       tokensIn: number;
       cachedTokensIn: number;
@@ -439,6 +549,8 @@ export class AdminService {
       usageType?: string;
       isEstimated: boolean;
       pricingStatus: "exact" | "estimated" | "unpriced";
+      /** Provider calls covered by this row; above 1 the row is a rollup. */
+      recordCount: number;
       calculationSteps: {
         inputCalculation: string;
         cachedInputCalculation: string;
@@ -452,6 +564,7 @@ export class AdminService {
     let estimatedCost = 0;
     let unpricedRecordCount = 0;
     const detailedBreakdown = [];
+    const costByUsageType: Record<string, number> = {};
     const costByType = {
       grading: 0,
       questionGeneration: 0,
@@ -459,8 +572,7 @@ export class AdminService {
       other: 0,
     };
 
-    // Normalize each usage row to a batch input. Token counts are coerced
-    // Coerce counters safely; missing model keys remain unpriced.
+    // Coerce counters safely; rows with no model key stay unpriced.
     const normalized = aiUsageRecords.map((usage) => {
       const tokensIn = toAiUsageCounterNumber(
         usage.tokensIn,
@@ -526,6 +638,11 @@ export class AdminService {
           costByType.other += costBreakdown.totalCost;
         }
 
+        // Exact usage-type totals too, so callers can bucket them their own way.
+        const rawUsageType = usage.usageType ?? "UNKNOWN";
+        costByUsageType[rawUsageType] =
+          (costByUsageType[rawUsageType] ?? 0) + costBreakdown.totalCost;
+
         const inputPricePerMillion = costBreakdown.inputTokenPrice * 1_000_000;
         const cachedInputPricePerMillion =
           costBreakdown.cachedInputTokenPrice * 1_000_000;
@@ -569,13 +686,14 @@ export class AdminService {
           usageType: usage.usageType,
           isEstimated,
           pricingStatus: isEstimated ? "estimated" : "exact",
+          recordCount: usage.recordCount ?? 1,
           calculationSteps,
         });
       } else {
         this.logger.error(
           `No pricing found for ${modelKey || "unknown"} at ${usage.createdAt.toISOString()}; excluding from cost total`,
         );
-        unpricedRecordCount += 1;
+        unpricedRecordCount += usage.recordCount ?? 1;
         const calculationSteps = {
           inputCalculation: `${tokensIn.toLocaleString()} input tokens × unknown rate = unpriced`,
           cachedInputCalculation: `${cachedTokensIn.toLocaleString()} cached input tokens × unknown rate = unpriced`,
@@ -601,6 +719,7 @@ export class AdminService {
           usageType: usage.usageType,
           isEstimated: !!usage.isEstimated,
           pricingStatus: "unpriced",
+          recordCount: usage.recordCount ?? 1,
           calculationSteps,
         });
       }
@@ -612,6 +731,7 @@ export class AdminService {
       estimatedCost,
       unpricedRecordCount,
       costBreakdown: costByType,
+      costByUsageType,
       detailedBreakdown,
     };
   }
@@ -649,7 +769,8 @@ export class AdminService {
         _count: {
           select: {
             questions: true,
-            AIUsage: true,
+            // Count provider calls, not aggregate rows, so the buckets mean something.
+            AIUsageEvent: true,
             AssignmentFeedback: true,
           },
         },
@@ -705,7 +826,7 @@ export class AdminService {
         0,
       );
       const totalAIUsage = authoredAssignments.reduce(
-        (sum, assignment) => sum + assignment._count.AIUsage,
+        (sum, assignment) => sum + assignment._count.AIUsageEvent,
         0,
       );
       const totalFeedback = authoredAssignments.reduce(
@@ -1375,29 +1496,9 @@ export class AdminService {
     );
     const feedbackMap = new Map(feedbackStats.map((s) => [s.assignmentId, s]));
 
-    // Batch-fetch AI usage for all assignments on the page, then group by id.
-    const allAiUsage = await this.prisma.aIUsageEvent.findMany({
-      where: { assignmentId: { in: assignmentIds } },
-      select: {
-        assignmentId: true,
-        tokensIn: true,
-        cachedTokensIn: true,
-        tokensOut: true,
-        createdAt: true,
-        usageType: true,
-        modelKey: true,
-        isEstimated: true,
-      },
-    });
-    const aiUsageByAssignment = new Map<number, typeof allAiUsage>();
-    for (const usage of allAiUsage) {
-      const list = aiUsageByAssignment.get(usage.assignmentId);
-      if (list) {
-        list.push(usage);
-      } else {
-        aiUsageByAssignment.set(usage.assignmentId, [usage]);
-      }
-    }
+    // Roll up in SQL; reading raw events scans one row per provider call.
+    const aiUsageByAssignment =
+      await this.rollUpUsageByAssignment(assignmentIds);
 
     // Cost calculation does per-row pricing lookups, so running every
     // assignment's cost chain at once would hold one pool connection per
@@ -1518,19 +1619,8 @@ export class AdminService {
         },
         _avg: { assignmentRating: true },
       }),
-      this.prisma.aIUsageEvent.findMany({
-        where: assignmentIdFilter,
-        select: {
-          assignmentId: true,
-          tokensIn: true,
-          cachedTokensIn: true,
-          tokensOut: true,
-          createdAt: true,
-          usageType: true,
-          modelKey: true,
-          isEstimated: true,
-        },
-      }),
+      // Rolled up in SQL: the card only needs totals, not every call.
+      this.rollUpUsageForCost({ assignmentIds: allMatchingIds }),
     ]);
 
     const costData = await this.calculateHistoricalCosts(allAiUsage);
@@ -1783,37 +1873,13 @@ export class AdminService {
         : 0,
 
       isAdmin || assignmentIds.length > 0
-        ? this.prisma.aIUsageEvent.findMany({
-            where: {
-              ...(isAdmin
-                ? {}
-                : {
-                    assignment: {
-                      AssignmentAuthor: {
-                        some: { userId: adminSession.userId },
-                      },
-                    },
-                  }),
-              ...(assignmentIds.length > 0 && isAdmin
-                ? { assignmentId: { in: assignmentIds } }
-                : {}),
-              ...(Object.keys(dateFilter).length > 0
-                ? { createdAt: dateFilter }
-                : {}),
-              // Exclude backfilled aggregates from date-ranged spend reports.
-              ...(Object.keys(dateFilter).length > 0
-                ? { isEstimated: false }
-                : {}),
-            },
-            select: {
-              tokensIn: true,
-              cachedTokensIn: true,
-              tokensOut: true,
-              createdAt: true,
-              usageType: true,
-              modelKey: true,
-              isEstimated: true,
-            },
+        ? // assignmentIds already covers the author's own assignments.
+          this.rollUpUsageForCost({
+            ...(assignmentIds.length > 0 ? { assignmentIds } : {}),
+            ...(dateFilter.gte ? { from: dateFilter.gte } : {}),
+            ...(dateFilter.lte ? { to: dateFilter.lte } : {}),
+            // Backfilled rows have no real per-call date, so exclude them here.
+            excludeEstimated: Object.keys(dateFilter).length > 0,
           })
         : [],
 
@@ -1929,9 +1995,6 @@ export class AdminService {
                 where: { isDeleted: false },
               },
             },
-          },
-          AIUsageEvent: {
-            orderBy: { createdAt: "asc" },
           },
           AssignmentFeedback: true,
           Report: true,
@@ -2081,26 +2144,31 @@ export class AdminService {
       const completedAttempts = submittedAttempts;
       const averageGrade = calculatedAverageGrade;
 
-      const aiUsageRecords = assignment.AIUsageEvent.map((usage) => ({
-        assignmentId: assignment.id,
-        tokensIn: usage.tokensIn,
-        cachedTokensIn: usage.cachedTokensIn,
-        tokensOut: usage.tokensOut,
-        createdAt: usage.createdAt,
-        usageType: usage.usageType,
-        modelKey: usage.modelKey,
-        isEstimated: usage.isEstimated,
-      }));
+      // Totals cover all history; the audit table shows only the newest calls.
+      const [rolledUpUsage, recentUsageEvents] = await Promise.all([
+        this.rollUpUsageForCost({ assignmentIds: [assignmentId] }),
+        this.prisma.aIUsageEvent.findMany({
+          where: { assignmentId },
+          orderBy: { createdAt: "desc" },
+          take: INSIGHTS_USAGE_EVENT_LIMIT,
+        }),
+      ]);
 
-      const costData = await this.calculateHistoricalCosts(aiUsageRecords);
+      const costData = await this.calculateHistoricalCosts(rolledUpUsage);
       const totalCost = costData.totalCost;
+      const recentUsageCost =
+        await this.calculateHistoricalCosts(recentUsageEvents);
+      const totalCalls = rolledUpUsage.reduce(
+        (sum, row) => sum + (row.recordCount ?? 1),
+        0,
+      );
 
       const authorActivity = await this.getAuthorActivity(
         assignment.AssignmentAuthor,
       );
 
-      const aiUsageWithCost = assignment.AIUsageEvent.map((usage, index) => {
-        const detailedCost = costData.detailedBreakdown[index] || {
+      const aiUsageWithCost = recentUsageEvents.map((usage, index) => {
+        const detailedCost = recentUsageCost.detailedBreakdown[index] || {
           totalCost: 0,
           inputCost: 0,
           cachedInputCost: 0,
@@ -2248,7 +2316,11 @@ export class AdminService {
             exactCost: costData.exactCost,
             estimatedCost: costData.estimatedCost,
             unpricedRecordCount: costData.unpricedRecordCount,
-            breakdown: costData.detailedBreakdown.map((detail) => ({
+            costByUsageType: costData.costByUsageType,
+            totalCalls,
+            // Totals above cover every call; these rows are the newest slice.
+            breakdownTruncated: totalCalls > recentUsageEvents.length,
+            breakdown: recentUsageCost.detailedBreakdown.map((detail) => ({
               usageType: detail.usageType || "Unknown",
               tokensIn: detail.tokensIn,
               cachedTokensIn: detail.cachedTokensIn,
@@ -2799,17 +2871,6 @@ export class AdminService {
         name: true,
         published: true,
         updatedAt: true,
-        AIUsageEvent: {
-          select: {
-            tokensIn: true,
-            cachedTokensIn: true,
-            tokensOut: true,
-            createdAt: true,
-            usageType: true,
-            modelKey: true,
-            isEstimated: true,
-          },
-        },
         AssignmentFeedback: {
           select: { id: true },
         },
@@ -2817,10 +2878,14 @@ export class AdminService {
       take: Math.min(limit * 10, 1000),
     });
 
+    const usageByAssignment = await this.rollUpUsageByAssignment(
+      assignments.map((a) => a.id),
+    );
+
     const assignmentsWithCost = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsageEvent,
+          usageByAssignment.get(assignment.id) ?? [],
         );
 
         const attemptCount = await this.prisma.assignmentAttempt.count({
@@ -3195,25 +3260,18 @@ export class AdminService {
         name: true,
         published: true,
         updatedAt: true,
-        AIUsageEvent: {
-          select: {
-            tokensIn: true,
-            cachedTokensIn: true,
-            tokensOut: true,
-            createdAt: true,
-            usageType: true,
-            modelKey: true,
-            isEstimated: true,
-          },
-        },
       },
       take: Math.min(limit * 10, 1000),
     });
 
+    const usageByAssignment = await this.rollUpUsageByAssignment(
+      assignments.map((a) => a.id),
+    );
+
     const assignmentsWithCostPerLearner = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
-          assignment.AIUsageEvent,
+          usageByAssignment.get(assignment.id) ?? [],
         );
 
         const attempts = await this.prisma.assignmentAttempt.findMany({

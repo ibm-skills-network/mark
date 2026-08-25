@@ -175,7 +175,6 @@ describe("AttemptAdminService.deleteAttempt", () => {
     jest.clearAllMocks();
     prisma.assignmentAttempt.findUnique.mockResolvedValue(attempt);
     prisma.questionResponse.deleteMany.mockResolvedValue({ count: 2 });
-    prisma.gradingJob.deleteMany.mockResolvedValue({ count: 1 });
     prisma.assignmentAttempt.delete.mockResolvedValue({});
   });
 
@@ -189,28 +188,32 @@ describe("AttemptAdminService.deleteAttempt", () => {
     expect(prisma.questionResponse.deleteMany).not.toHaveBeenCalled();
   });
 
-  // Delete non-cascading dependents first in one transaction.
-  it("clears the non-cascading children before the attempt, in one transaction", async () => {
+  // Clear the restricting child first, in one transaction.
+  it("clears question responses before the attempt, in one transaction", async () => {
     const result = await make().deleteAttempt(7, "admin@x");
 
     expect(prisma.questionResponse.deleteMany).toHaveBeenCalledWith({
       where: { assignmentAttemptId: 7 },
-    });
-    expect(prisma.gradingJob.deleteMany).toHaveBeenCalledWith({
-      where: { attemptId: 7 },
     });
     expect(prisma.assignmentAttempt.delete).toHaveBeenCalledWith({
       where: { id: 7 },
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const ops = prisma.$transaction.mock.calls[0][0] as unknown[];
-    expect(ops).toHaveLength(3);
+    expect(ops).toHaveLength(2);
     expect(result).toEqual({
       success: true,
       attemptId: 7,
       userId: "user-1",
       assignmentId: 42,
     });
+  });
+
+  // 20260304120000_remove_job_tables dropped GradingJob, so touching it would fail the transaction with P2021.
+  it("does not touch the dropped GradingJob table", async () => {
+    await make().deleteAttempt(7, "admin@x");
+
+    expect(prisma.gradingJob.deleteMany).not.toHaveBeenCalled();
   });
 
   // Deleting an attempt must leave the LMS grade unchanged.
@@ -226,14 +229,14 @@ describe("AttemptAdminService.listAttemptsForUser", () => {
     jest.clearAllMocks();
   });
 
-  it("matches the learner id case-insensitively and caps the result set", async () => {
+  it("matches the learner id loosely and caps the result set", async () => {
     prisma.assignmentAttempt.findMany.mockResolvedValue([]);
 
     await make().listAttemptsForUser("User-1");
 
     expect(prisma.assignmentAttempt.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: { equals: "User-1", mode: "insensitive" } },
+        where: { userId: { contains: "User-1", mode: "insensitive" } },
         take: 200,
       }),
     );

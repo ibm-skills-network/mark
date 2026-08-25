@@ -157,6 +157,11 @@ interface DetailedInsightData {
     exactCost?: number;
     estimatedCost?: number;
     unpricedRecordCount?: number;
+    /** Full-history cost per usage type, unaffected by the breakdown cap. */
+    costByUsageType?: Record<string, number>;
+    /** Calls behind the totals; the breakdown below may show only the newest. */
+    totalCalls?: number;
+    breakdownTruncated?: boolean;
     breakdown: Array<{
       usageType: string;
       tokensIn: number;
@@ -229,6 +234,18 @@ export interface AssignmentInsightsContentProps {
    */
   mode: "admin" | "author";
 }
+
+const AUTHORING_USAGE_TYPES = [
+  "TRANSLATION",
+  "QUESTION_GENERATION",
+  "ASSIGNMENT_GENERATION",
+] as const;
+
+const GRADING_USAGE_TYPES = [
+  "LIVE_RECORDING_FEEDBACK",
+  "GRADING_VALIDATION",
+  "ASSIGNMENT_GRADING",
+] as const;
 
 export function AssignmentInsightsContent({
   assignmentId,
@@ -383,6 +400,19 @@ export function AssignmentInsightsContent({
       minimumFractionDigits: 2,
       maximumFractionDigits: 8,
     }).format(amount ?? 0);
+  };
+
+  // Read the server's full-history totals; the per-call rows are capped and would undercount.
+  const costForUsageTypes = (usageTypes: readonly string[]) => {
+    const byType = data?.costCalculationDetails?.costByUsageType ?? {};
+    return usageTypes.reduce((sum, type) => sum + (byType[type] ?? 0), 0);
+  };
+
+  const usageTypeRows = (usageTypes: readonly string[]) => {
+    const byType = data?.costCalculationDetails?.costByUsageType ?? {};
+    return usageTypes
+      .filter((type) => byType[type] !== undefined)
+      .map((type) => ({ usageType: type, totalCost: byType[type] }));
   };
 
   const formatDate = (dateString: string) => {
@@ -759,18 +789,7 @@ export function AssignmentInsightsContent({
                         </div>
                         <div className="text-2xl font-bold text-green-700 dark:text-green-300">
                           {formatCurrency(
-                            (data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "TRANSLATION",
-                                  "QUESTION_GENERATION",
-                                  "ASSIGNMENT_GENERATION",
-                                ].includes(usage.usageType),
-                              )
-                              .reduce(
-                                (sum, usage) => sum + (usage.totalCost || 0),
-                                0,
-                              ),
+                            costForUsageTypes(AUTHORING_USAGE_TYPES),
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
@@ -787,18 +806,7 @@ export function AssignmentInsightsContent({
                         </div>
                         <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
                           {formatCurrency(
-                            (data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "LIVE_RECORDING_FEEDBACK",
-                                  "GRADING_VALIDATION",
-                                  "ASSIGNMENT_GRADING",
-                                ].includes(usage.usageType),
-                              )
-                              .reduce(
-                                (sum, usage) => sum + (usage.totalCost || 0),
-                                0,
-                              ),
+                            costForUsageTypes(GRADING_USAGE_TYPES),
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
@@ -814,15 +822,8 @@ export function AssignmentInsightsContent({
                             Authoring Details
                           </h4>
                           <div className="space-y-2">
-                            {(data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "TRANSLATION",
-                                  "QUESTION_GENERATION",
-                                  "ASSIGNMENT_GENERATION",
-                                ].includes(usage.usageType),
-                              )
-                              .map((usage, index) => (
+                            {usageTypeRows(AUTHORING_USAGE_TYPES).map(
+                              (usage, index) => (
                                 <div
                                   key={index}
                                   className="flex justify-between items-center py-1"
@@ -837,7 +838,8 @@ export function AssignmentInsightsContent({
                                     {formatCurrency(usage.totalCost || 0)}
                                   </span>
                                 </div>
-                              ))}
+                              ),
+                            )}
                           </div>
                         </div>
 
@@ -846,15 +848,8 @@ export function AssignmentInsightsContent({
                             Grading Details
                           </h4>
                           <div className="space-y-2">
-                            {(data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "LIVE_RECORDING_FEEDBACK",
-                                  "GRADING_VALIDATION",
-                                  "ASSIGNMENT_GRADING",
-                                ].includes(usage.usageType),
-                              )
-                              .map((usage, index) => (
+                            {usageTypeRows(GRADING_USAGE_TYPES).map(
+                              (usage, index) => (
                                 <div
                                   key={index}
                                   className="flex justify-between items-center py-1"
@@ -869,7 +864,8 @@ export function AssignmentInsightsContent({
                                     {formatCurrency(usage.totalCost || 0)}
                                   </span>
                                 </div>
-                              ))}
+                              ),
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1620,31 +1616,11 @@ export function AssignmentInsightsContent({
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-green-700 dark:text-green-300 mb-4">
-                      {formatCurrency(
-                        (data.aiUsage ?? [])
-                          .filter((usage) =>
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
-                      )}
+                      {formatCurrency(costForUsageTypes(AUTHORING_USAGE_TYPES))}
                     </div>
                     <div className="space-y-2">
-                      {(data.aiUsage ?? [])
-                        .filter((usage) =>
-                          [
-                            "TRANSLATION",
-                            "QUESTION_GENERATION",
-                            "ASSIGNMENT_GENERATION",
-                          ].includes(usage.usageType),
-                        )
-                        .map((usage, index) => (
+                      {usageTypeRows(AUTHORING_USAGE_TYPES).map(
+                        (usage, index) => (
                           <div
                             key={index}
                             className="flex justify-between items-center"
@@ -1659,7 +1635,8 @@ export function AssignmentInsightsContent({
                               {formatCurrency(usage.totalCost || 0)}
                             </span>
                           </div>
-                        ))}
+                        ),
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1673,31 +1650,11 @@ export function AssignmentInsightsContent({
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-purple-700 dark:text-purple-300 mb-4">
-                      {formatCurrency(
-                        (data.aiUsage ?? [])
-                          .filter((usage) =>
-                            [
-                              "LIVE_RECORDING_FEEDBACK",
-                              "GRADING_VALIDATION",
-                              "ASSIGNMENT_GRADING",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
-                      )}
+                      {formatCurrency(costForUsageTypes(GRADING_USAGE_TYPES))}
                     </div>
                     <div className="space-y-2">
-                      {(data.aiUsage ?? [])
-                        .filter((usage) =>
-                          [
-                            "LIVE_RECORDING_FEEDBACK",
-                            "GRADING_VALIDATION",
-                            "ASSIGNMENT_GRADING",
-                          ].includes(usage.usageType),
-                        )
-                        .map((usage, index) => (
+                      {usageTypeRows(GRADING_USAGE_TYPES).map(
+                        (usage, index) => (
                           <div
                             key={index}
                             className="flex justify-between items-center"
@@ -1712,7 +1669,8 @@ export function AssignmentInsightsContent({
                               {formatCurrency(usage.totalCost || 0)}
                             </span>
                           </div>
-                        ))}
+                        ),
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1788,6 +1746,13 @@ export function AssignmentInsightsContent({
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {data.costCalculationDetails?.breakdownTruncated && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Showing the {(data.aiUsage ?? []).length} most recent of{" "}
+                      {data.costCalculationDetails.totalCalls?.toLocaleString()}{" "}
+                      calls. The cost totals above cover all of them.
+                    </p>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>

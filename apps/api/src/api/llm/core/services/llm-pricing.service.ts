@@ -1,6 +1,6 @@
 /* eslint-disable */
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { PricingSource } from "@prisma/client";
+import { PricingSource, Prisma } from "@prisma/client";
 import * as cheerio from "cheerio";
 import { PrismaService } from "../../../../database/prisma.service";
 import { LLM_RESOLVER_SERVICE } from "../../llm.constants";
@@ -60,6 +60,13 @@ function positiveMetadataNumber(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+/** Narrows a Prisma Json metadata value to a plain object, or empty if it isn't one. */
+function asMetadataObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function resolveTokenPrices(
   pricing: ModelPricing,
   inputTokens: number,
@@ -68,15 +75,7 @@ function resolveTokenPrices(
     input: pricing.inputTokenPrice,
     output: pricing.outputTokenPrice,
   };
-  if (
-    !pricing.metadata ||
-    typeof pricing.metadata !== "object" ||
-    Array.isArray(pricing.metadata)
-  ) {
-    return base;
-  }
-
-  const metadata = pricing.metadata as Record<string, unknown>;
+  const metadata = asMetadataObject(pricing.metadata);
   const threshold = positiveMetadataNumber(
     metadata,
     "longContextInputThresholdTokens",
@@ -96,17 +95,8 @@ function resolveCachedInputTokenPrice(
   pricing: ModelPricing,
   inputTokens: number,
 ): number {
-  let metadata: Record<string, unknown> | null = null;
-  if (
-    pricing.metadata &&
-    typeof pricing.metadata === "object" &&
-    !Array.isArray(pricing.metadata)
-  ) {
-    metadata = pricing.metadata as Record<string, unknown>;
-  }
-
+  const metadata = asMetadataObject(pricing.metadata);
   const defaultPrice = pricing.inputTokenPrice;
-  if (!metadata) return defaultPrice;
 
   const threshold = positiveMetadataNumber(
     metadata,
@@ -1197,6 +1187,16 @@ export class LLMPricingService {
           continue;
         }
 
+        // Cached and cache-write rates are seeded by migration, never scraped, so carry them forward or cached tokens silently revert to the full input price.
+        const activePricing = await this.prisma.lLMPricing.findFirst({
+          where: { modelId: model.id, isActive: true },
+          orderBy: { effectiveDate: "desc" },
+        });
+        const metadata = {
+          ...asMetadataObject(activePricing?.metadata),
+          ...asMetadataObject(pricing.metadata),
+        } as Prisma.InputJsonObject;
+
         await this.prisma.lLMPricing.updateMany({
           where: {
             modelId: model.id,
@@ -1215,7 +1215,7 @@ export class LLMPricingService {
             effectiveDate: pricing.effectiveDate,
             source: pricing.source,
             isActive: true,
-            metadata: pricing.metadata,
+            metadata,
           },
         });
 

@@ -49,13 +49,12 @@ const makeMockPrisma = () => ({
   regradingRequest: { deleteMany: noopDeleteMany },
   report: { deleteMany: noopDeleteMany },
   assignmentTranslation: { deleteMany: noopDeleteMany },
-  aIUsage: {
-    deleteMany: noopDeleteMany,
-    findMany: jest.fn().mockResolvedValue([]),
-  },
+  aIUsage: { deleteMany: noopDeleteMany },
   aIUsageEvent: {
     findMany: jest.fn().mockResolvedValue([]),
   },
+  // Cost rollups group by a truncated date, so they go through raw SQL.
+  $queryRaw: jest.fn().mockResolvedValue([]),
   question: { deleteMany: noopDeleteMany },
   assignment: {
     findUnique: jest.fn().mockResolvedValue({
@@ -161,6 +160,48 @@ describe("AdminService", () => {
 
   it("should be defined", () => {
     expect(service).toBeDefined();
+  });
+
+  describe("usage rollup", () => {
+    it("groups by day and keeps the call count, so unpriced totals stay per-call", async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([
+        {
+          modelKey: "gpt-4o-mini",
+          usageType: "ASSIGNMENT_GRADING",
+          isEstimated: false,
+          day: new Date("2026-01-01T00:00:00.000Z"),
+          tokensIn: BigInt(900),
+          cachedTokensIn: BigInt(300),
+          tokensOut: BigInt(120),
+          recordCount: 17,
+        },
+      ]);
+      mockLlmPricingService.calculateCostBatch.mockResolvedValue([null]);
+
+      const rows = await (service as any).rollUpUsageForCost({
+        assignmentIds: [1, 2],
+      });
+
+      const sql = mockPrisma.$queryRaw.mock.calls[0][0].sql;
+      expect(sql).toContain(`date_trunc('day', "createdAt")`);
+      expect(sql).toContain("GROUP BY");
+      // Without byAssignment the rollup must not carry a per-assignment key.
+      expect(sql).not.toContain(`"assignmentId",`);
+      expect(rows[0]).toMatchObject({ recordCount: 17, tokensIn: BigInt(900) });
+
+      // One rollup row stands for 17 calls, so the unpriced count says 17.
+      const cost = await (service as any).calculateHistoricalCosts(rows);
+      expect(cost.unpricedRecordCount).toBe(17);
+    });
+
+    it("skips the query entirely when the id filter is empty", async () => {
+      mockPrisma.$queryRaw.mockClear();
+
+      expect(
+        await (service as any).rollUpUsageForCost({ assignmentIds: [] }),
+      ).toEqual([]);
+      expect(mockPrisma.$queryRaw).not.toHaveBeenCalled();
+    });
   });
 
   describe("historical AI cost classification", () => {
@@ -289,17 +330,13 @@ describe("AdminService", () => {
       expect(distinctFindMany).toHaveLength(0);
     });
 
-    it("batches AI usage into batched queries (page + full-set), never per-assignment", async () => {
+    it("rolls AI usage up in SQL instead of reading one row per provider call", async () => {
       await service.getAssignmentAnalytics(adminSession, 1, 1000);
 
-      // Two batched scans, each with an `in` filter — one for the page, one for
-      // the filter-wide aggregates — instead of one findMany per assignment.
-      expect(mockPrisma.aIUsageEvent.findMany).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.aIUsageEvent.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { assignmentId: { in: [1, 2] } },
-        }),
-      );
+      // Two rollups: one for the page, one for the filter-wide aggregates.
+      expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(2);
+      // Reading raw events here is what made /admin slow; it must not come back.
+      expect(mockPrisma.aIUsageEvent.findMany).not.toHaveBeenCalled();
     });
 
     it("returns the correct per-assignment unique-learner counts", async () => {

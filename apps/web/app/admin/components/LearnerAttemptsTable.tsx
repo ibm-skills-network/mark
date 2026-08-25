@@ -77,11 +77,16 @@ export function LearnerAttemptsTable({
     try {
       if (action.kind === "pass") {
         await forcePassAttempt(sessionToken, action.attemptId);
-        // Update locally because the backend has already persisted the pass.
+        // Update locally; force-pass has already persisted the grade and status.
         setAttempts((prev) =>
           prev.map((attempt) =>
             attempt.id === action.attemptId
-              ? { ...attempt, grade: 1, submitted: true }
+              ? {
+                  ...attempt,
+                  grade: 1,
+                  submitted: true,
+                  gradingStatus: "COMPLETED",
+                }
               : attempt,
           ),
         );

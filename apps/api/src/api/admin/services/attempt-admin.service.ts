@@ -48,10 +48,10 @@ export class AttemptAdminService {
     private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {}
 
-  /** Lists a learner's attempts newest first using a case-insensitive user ID. */
+  /** Lists a learner's attempts newest first, matching the user ID loosely so a partial id or email fragment still finds them. */
   async listAttemptsForUser(userId: string): Promise<LearnerAttemptSummary[]> {
     const attempts = await this.prisma.assignmentAttempt.findMany({
-      where: { userId: { equals: userId, mode: "insensitive" } },
+      where: { userId: { contains: userId, mode: "insensitive" } },
       orderBy: { createdAt: "desc" },
       take: LEARNER_ATTEMPT_LIMIT,
       select: {
@@ -109,12 +109,11 @@ export class AttemptAdminService {
       throw new NotFoundException(`Attempt ${attemptId} not found`);
     }
 
+    // QuestionResponse is the only child that restricts the delete; the rest cascade.
     await this.prisma.$transaction([
       this.prisma.questionResponse.deleteMany({
         where: { assignmentAttemptId: attemptId },
       }),
-      // Remove queued grading jobs because their attempt is being deleted.
-      this.prisma.gradingJob.deleteMany({ where: { attemptId } }),
       this.prisma.assignmentAttempt.delete({ where: { id: attemptId } }),
     ]);
 

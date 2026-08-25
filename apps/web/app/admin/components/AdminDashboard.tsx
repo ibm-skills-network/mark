@@ -49,12 +49,13 @@ function getLast24hRange(): { startDate: string; endDate: string } {
   };
 }
 
+// Four decimals keeps small spend readable without per-token precision.
 function formatAiCost(amount: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 8,
+    maximumFractionDigits: 4,
   }).format(amount);
 }
 
