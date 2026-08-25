@@ -57,16 +57,10 @@ const staticUiTranslations: Record<string, UiTranslationMap> = {
   "zh-TW": zhTW,
 };
 
-export async function getStaticUiTranslations(
-  languageCode: string,
-): Promise<UiTranslationMap> {
-  return staticUiTranslations[languageCode] || {};
-}
-
-// Every catalog is statically imported above, so a lookup needs no await. This
-// is what lets translation resolve during render (see `useUiTranslation`)
+// Every catalog is statically imported above, so this is a plain object lookup.
+// That is what lets translation resolve during render (see `useUiTranslation`)
 // instead of being applied to the DOM afterwards.
-export function getStaticUiTranslationsSync(
+export function getStaticUiTranslations(
   languageCode: string,
 ): UiTranslationMap {
   return staticUiTranslations[languageCode] || {};

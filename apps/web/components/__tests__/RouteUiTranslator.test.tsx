@@ -6,7 +6,7 @@ jest.mock("next/navigation", () => ({
 // loader: the "en" path never touches normalizeSourceText, so a partial mock
 // looks fine until a test exercises a real language, then throws.
 jest.mock("@/lib/static-ui-translations", () => ({
-  getStaticUiTranslations: jest.fn(async (language: string) =>
+  getStaticUiTranslations: jest.fn((language: string) =>
     language === "fr"
       ? {
           "About this assignment": "À propos de ce devoir",
@@ -207,8 +207,8 @@ describe("RouteUiTranslator nodes that start empty", () => {
 describe("RouteUiTranslator translateScope with a real language", () => {
   const hosts: HTMLElement[] = [];
 
-  beforeAll(async () => {
-    await ensureLanguageTranslationsLoaded("fr");
+  beforeAll(() => {
+    ensureLanguageTranslationsLoaded("fr");
   });
 
   afterEach(() => {

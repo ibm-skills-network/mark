@@ -195,7 +195,6 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
 
   const attemptsCount = attempts.length;
   const [cooldownTime, setCooldownTime] = useState<string | null>(null);
-  const [isCooldown, setIsCooldown] = useState(false);
 
   useEffect(() => {
     if (
@@ -209,7 +208,6 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       !isAttemptSubmitted(latestAttempt)
     ) {
       setCooldownTime(null);
-      setIsCooldown(false);
       return;
     }
 
@@ -234,7 +232,6 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
 
     if (finishedAt === undefined || Number.isNaN(finishedAt)) {
       setCooldownTime(null);
-      setIsCooldown(false);
       return;
     }
 
@@ -246,11 +243,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
 
       if (remainingMs <= 0) {
         setCooldownTime(null);
-        setIsCooldown(false);
         return;
       }
-
-      setIsCooldown(true);
 
       const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
       let remainder = remainingMs % (24 * 60 * 60 * 1000);
@@ -314,17 +308,14 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       : `/learner/${assignmentId}/questions?authorMode=true`;
 
   // One translatable key with the duration as a parameter, resolved here rather
-  // than by RouteUiTranslator rewriting the DOM afterwards.
-  const cooldownMessage = cooldownTime
-    ? t("Please wait {time} before retrying", { time: cooldownTime })
-    : null;
-
-  // Already translated above, so RouteUiTranslator must neither rewrite it nor
-  // re-scan the route each time the duration ticks.
-  const cooldownButtonMessage =
-    isCooldown && cooldownMessage ? (
-      <span data-no-ui-translate="true">{cooldownMessage}</span>
-    ) : null;
+  // than by RouteUiTranslator rewriting the DOM afterwards. Opted out because it
+  // is already translated: RouteUiTranslator must neither rewrite it nor re-scan
+  // the route each time the duration ticks.
+  const cooldownMessage = cooldownTime ? (
+    <span data-no-ui-translate="true">
+      {t("Please wait {time} before retrying", { time: cooldownTime })}
+    </span>
+  ) : null;
 
   const buttonLabel = assignmentState === "in-progress" ? "Resume" : "Begin";
   let buttonMessage: React.ReactNode = "";
@@ -340,7 +331,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     buttonDisabled = true;
     buttonMessage =
       "Maximum attempts reached, contact the author to request more.";
-  } else if (isCooldown && cooldownMessage) {
+  } else if (cooldownMessage) {
     buttonDisabled = true;
     buttonMessage = cooldownMessage;
   } else {
@@ -378,8 +369,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 <div className="sm:hidden">
                   <BeginTheAssignmentButton
                     className="w-full"
-                    disabled={isCooldown || buttonDisabled}
-                    message={cooldownButtonMessage ?? buttonMessage}
+                    disabled={buttonDisabled}
+                    message={buttonMessage}
                     label={buttonLabel}
                     href={url}
                   />
@@ -387,18 +378,15 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 <div className="hidden sm:block">
                   <BeginTheAssignmentButton
                     className="w-auto"
-                    disabled={isCooldown || buttonDisabled}
-                    message={cooldownButtonMessage ?? buttonMessage}
+                    disabled={buttonDisabled}
+                    message={buttonMessage}
                     label={buttonLabel}
                     href={url}
                   />
                 </div>
               </div>
-              {isCooldown && cooldownMessage && (
-                <span
-                  className="text-red-600 font-semibold"
-                  data-no-ui-translate="true"
-                >
+              {cooldownMessage && (
+                <span className="text-red-600 font-semibold">
                   ({cooldownMessage})
                 </span>
               )}
@@ -575,8 +563,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
           <div className="flex justify-center mt-6">
             <BeginTheAssignmentButton
               className="w-full sm:w-auto"
-              disabled={isCooldown || buttonDisabled}
-              message={cooldownButtonMessage ?? buttonMessage}
+              disabled={buttonDisabled}
+              message={buttonMessage}
               label={buttonLabel}
               href={url}
             />

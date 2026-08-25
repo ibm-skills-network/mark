@@ -6,7 +6,7 @@ jest.mock("next/navigation", () => ({
 }));
 
 jest.mock("@/lib/static-ui-translations", () => ({
-  getStaticUiTranslationsSync: (language: string) =>
+  getStaticUiTranslations: (language: string) =>
     language === "fr"
       ? {
           "Please wait {time} before retrying":

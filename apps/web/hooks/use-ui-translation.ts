@@ -2,7 +2,7 @@
 
 import { useActiveUiLanguage } from "@/hooks/use-active-ui-language";
 import {
-  getStaticUiTranslationsSync,
+  getStaticUiTranslations,
   normalizeSourceText,
 } from "@/lib/static-ui-translations";
 import { DEFAULT_UI_LANGUAGE } from "@/lib/ui-language";
@@ -17,8 +17,11 @@ export function interpolate(
   params?: UiTranslationParams,
 ): string {
   if (!params) return template;
+  // `hasOwn`, not `in`: `in` reaches Object.prototype, so a `{constructor}` or
+  // `{toString}` placeholder would render a function body instead of surviving
+  // untouched.
   return template.replace(PLACEHOLDER_PATTERN, (match, key: string) =>
-    key in params ? String(params[key]) : match,
+    Object.hasOwn(params, key) ? String(params[key]) : match,
   );
 }
 
@@ -55,7 +58,7 @@ export function useUiTranslation() {
       // Match the DOM translator's key handling exactly: it tries the raw
       // string then the normalized one. Resolving keys differently here would
       // let the same string translate on one path and not the other.
-      const catalog = getStaticUiTranslationsSync(activeLanguage);
+      const catalog = getStaticUiTranslations(activeLanguage);
       const translated =
         catalog[source] ?? catalog[normalizeSourceText(source)] ?? source;
 

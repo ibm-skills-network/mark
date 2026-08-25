@@ -591,7 +591,14 @@ export default function PresentationGrader({
 
         {countdown !== null && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-6xl font-bold">
-            {countdown > 0 ? countdown : "Go!"}
+            {countdown > 0 ? (
+              // Only the digit is opted out, so its per-second tick does not
+              // re-scan the route. "Go!" stays translatable — it is in every
+              // catalog, and it renders once.
+              <span data-no-ui-translate="true">{countdown}</span>
+            ) : (
+              "Go!"
+            )}
           </div>
         )}
 

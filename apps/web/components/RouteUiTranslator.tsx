@@ -53,7 +53,7 @@ export function isInsideOptedOutSubtree(node: Node | null): boolean {
 
 function shouldSkipElement(element: Element | null): boolean {
   if (!element) return true;
-  if (element.closest("[data-no-ui-translate='true']")) return true;
+  if (isInsideOptedOutSubtree(element)) return true;
   if (SKIP_TAGS.has(element.tagName)) return true;
 
   if (element instanceof HTMLElement) {
@@ -438,13 +438,11 @@ function fetchTranslationsForBatch(
 // Exported so tests can exercise the real translation path: translateScope
 // reads the loaded catalog, and without loading one it returns every string
 // unchanged and proves nothing.
-export async function ensureLanguageTranslationsLoaded(
-  languageCode: string,
-): Promise<void> {
+export function ensureLanguageTranslationsLoaded(languageCode: string): void {
   if (languageCode === DEFAULT_UI_LANGUAGE) return;
   if (STATIC_TRANSLATIONS.has(languageCode)) return;
 
-  const translations = await getStaticUiTranslations(languageCode);
+  const translations = getStaticUiTranslations(languageCode);
   const augmentedTranslations = buildAugmentedTranslations(
     languageCode,
     translations,
@@ -669,27 +667,21 @@ export default function RouteUiTranslator({
       }, 120);
     });
 
-    let cancelled = false;
+    // Loading the catalog is a synchronous lookup, so the observer attaches in
+    // the same tick as the effect — no gap in which mutations go unobserved.
+    ensureLanguageTranslationsLoaded(activeLanguage);
 
-    const initializeTranslation = async () => {
-      await ensureLanguageTranslationsLoaded(activeLanguage);
-      if (cancelled) return;
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: [...TRANSLATABLE_ATTRIBUTES],
+    });
 
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: [...TRANSLATABLE_ATTRIBUTES],
-      });
-
-      runTranslation();
-    };
-
-    void initializeTranslation();
+    runTranslation();
 
     return () => {
-      cancelled = true;
       observer.disconnect();
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
