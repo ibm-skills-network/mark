@@ -12,6 +12,7 @@ export interface SnSupportTicket {
   title: string;
   description: string;
   reporterEmail?: string;
+  severity?: string;
   issueType?: string;
   pageUrl?: string;
   portalName?: string;
@@ -28,6 +29,15 @@ interface SnSupportTicketResponse {
   status: "open" | "in_progress" | "resolved" | "closed";
   createdAt: string;
 }
+
+// requestedPriority mirrors the severity the reporter picked; the value is
+// frontend-supplied, so anything outside the known set falls back to MEDIUM.
+const REQUESTED_PRIORITY_BY_SEVERITY: Record<string, string> = {
+  info: "LOW",
+  warning: "MEDIUM",
+  error: "HIGH",
+  critical: "CRITICAL",
+};
 
 function normalizeHttpUrl(field: string, value?: string): string | undefined {
   const normalizedValue = value?.trim();
@@ -102,9 +112,11 @@ export class SnSupportService {
       throw new BadRequestException("SN Support reporter origin is too long");
     }
 
-    const isIbmReporter = /^[^\s@]+@ibm\.com$/i.test(reporterEmail);
     const metadata: Record<string, string> = {
-      "mark.requestedPriority": isIbmReporter ? "CRITICAL" : "MEDIUM",
+      "mark.requestedPriority":
+        REQUESTED_PRIORITY_BY_SEVERITY[
+          ticket.severity?.trim().toLowerCase() ?? ""
+        ] ?? "MEDIUM",
     };
 
     const addMetadata = (key: string, value?: string) => {

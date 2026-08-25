@@ -164,6 +164,7 @@ describe("ReportsService.reportIssue", () => {
       title: expect.stringContaining("Assignment 42 - Attempt 84"),
       description: expect.stringContaining("The assignment submission fails"),
       reporterEmail: "employee@ibm.com",
+      severity: "error",
       issueType: "Submission",
       pageUrl: undefined,
       portalName: "Coursera",
@@ -176,6 +177,34 @@ describe("ReportsService.reportIssue", () => {
     const sentTitle = snSupportService.createTicket.mock.calls[0][0].title;
     expect(sentTitle).not.toContain("[MARK CHAT]");
     expect(sentTitle).not.toContain("[PROD]");
+  });
+
+  it("forwards flag-button reports with a symptom title and plain-text body", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-2" }),
+    };
+
+    // The flag-button modal pre-composes the description into markdown
+    // sections and lets the reporter pick a severity.
+    await makeForReportIssue(snSupportService).reportIssue(
+      {
+        ...reportDto,
+        issueType: "other",
+        severity: "info",
+        description:
+          "**Steps to reproduce:**\nOpen the quiz\n\n**Actual result:**\nSpinner never stops",
+      },
+      session,
+    );
+
+    const sent = snSupportService.createTicket.mock.calls[0][0];
+    expect(sent.severity).toBe("info");
+    expect(sent.title).toContain("Spinner never stops");
+    expect(sent.title).not.toContain("Steps to reproduce");
+    expect(sent.title).not.toContain("**");
+    expect(sent.description).toContain("Steps to reproduce:");
+    expect(sent.description).not.toContain("**");
   });
 
   it("still files the GitHub issue when SN Support is down", async () => {

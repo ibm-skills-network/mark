@@ -82,35 +82,47 @@ describe("SnSupportService", () => {
     );
   });
 
-  it("requests critical handling for reports from an IBM email", async () => {
-    httpService.post.mockReturnValue(
-      of({
-        data: {
-          ticketKey: "SUPPORT-101",
-          reportKey: "SUPPORT-101-1",
-          status: "open",
-          createdAt: "2026-08-12T18:00:00.000Z",
-        },
-      }),
-    );
-
-    await service.createTicket({
-      title: "Mark report",
-      description: "Details",
-      reporterEmail: "Employee@IBM.COM",
-    });
-
-    expect(httpService.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        reporterEmail: "Employee@IBM.COM",
-        metadata: expect.objectContaining({
-          "mark.requestedPriority": "CRITICAL",
+  it.each([
+    ["info", "LOW"],
+    ["warning", "MEDIUM"],
+    ["error", "HIGH"],
+    ["critical", "CRITICAL"],
+    [undefined, "MEDIUM"],
+    ["not-a-severity", "MEDIUM"],
+  ])(
+    "maps reporter severity %s to requested priority %s",
+    async (severity, expectedPriority) => {
+      httpService.post.mockReturnValue(
+        of({
+          data: {
+            ticketKey: "SUPPORT-101",
+            reportKey: "SUPPORT-101-1",
+            status: "open",
+            createdAt: "2026-08-12T18:00:00.000Z",
+          },
         }),
-      }),
-      expect.any(Object),
-    );
-  });
+      );
+
+      // An IBM reporter address must not influence the priority — only the
+      // severity the reporter picked does.
+      await service.createTicket({
+        title: "Mark report",
+        description: "Details",
+        reporterEmail: "Employee@IBM.COM",
+        severity,
+      });
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            "mark.requestedPriority": expectedPriority,
+          }),
+        }),
+        expect.any(Object),
+      );
+    },
+  );
 
   it("passes the screenshot as metadata.imageUrl and drops non-HTTP values", async () => {
     httpService.post.mockReturnValue(

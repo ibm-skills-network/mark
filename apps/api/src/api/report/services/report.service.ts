@@ -28,6 +28,7 @@ import {
   buildSnSupportTicketTitle,
   CHAT_ISSUE_FOOTER,
   defaultSeverityForIssueType,
+  stripSectionLabelMarkdown,
 } from "../helpers/issue-template";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
@@ -1138,7 +1139,7 @@ Screenshot Key: \`${finalScreenshotUrl}\`
     // block the report itself. The v2 API requires a reporter email.
     if (this.snSupportService.isConfigured() && safeUserEmail !== "Unknown") {
       const supportDescription = [
-        description.trim(),
+        stripSectionLabelMarkdown(description),
         "",
         `Issue type: ${issueType}`,
         `Reporter role: ${role}`,
@@ -1152,6 +1153,7 @@ Screenshot Key: \`${finalScreenshotUrl}\`
           title: buildSnSupportTicketTitle(issueTemplateInput),
           description: supportDescription,
           reporterEmail: safeUserEmail,
+          severity: issueSeverity,
           issueType:
             typeof additionalDetails?.category === "string"
               ? additionalDetails.category
