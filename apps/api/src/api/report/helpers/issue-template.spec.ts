@@ -1,8 +1,10 @@
 import {
   buildChatIssueBody,
   buildChatIssueTitle,
+  buildSnSupportTicketTitle,
   CHAT_ISSUE_FOOTER,
   defaultSeverityForIssueType,
+  stripSectionLabelMarkdown,
 } from "./issue-template";
 
 const baseInput = {
@@ -51,6 +53,75 @@ describe("buildChatIssueTitle", () => {
     const title = buildChatIssueTitle({ ...baseInput, isProduction: false });
 
     expect(title).toContain("[DEV]");
+  });
+
+  it("summarizes a form-templated description without markdown markers", () => {
+    const title = buildChatIssueTitle({
+      ...baseInput,
+      description:
+        "**Steps to reproduce:**\nOpen quiz\n\n**Actual result:**\nSpinner never stops",
+    });
+
+    expect(title).toContain("Spinner never stops");
+    expect(title).not.toContain("**");
+  });
+});
+
+describe("buildSnSupportTicketTitle", () => {
+  it("renders type and ids without the bracket prefixes", () => {
+    const title = buildSnSupportTicketTitle(baseInput);
+
+    expect(title).toContain("Assignment 771 - Attempt 12345");
+    expect(title).not.toContain("[");
+    expect(title).not.toContain("MARK CHAT");
+    expect(title).not.toContain("PROD");
+  });
+
+  it("omits the attempt segment when attemptId is missing", () => {
+    const title = buildSnSupportTicketTitle({
+      ...baseInput,
+      attemptId: undefined,
+    });
+
+    expect(title).toContain("Assignment 771:");
+    expect(title).not.toContain("Attempt");
+  });
+
+  it("summarizes a form-templated description from the Actual result section", () => {
+    const title = buildSnSupportTicketTitle({
+      ...baseInput,
+      description: [
+        "**Steps to reproduce:**\n1. Open the quiz\n2. Submit",
+        "**Expected result:**\nGrade appears",
+        "**Actual result:**\nSpinner never stops",
+        "**Environment (browser/device):**\nFirefox",
+      ].join("\n\n"),
+    });
+
+    expect(title).toContain("Spinner never stops");
+    expect(title).not.toContain("*");
+    expect(title).not.toContain("Steps to reproduce");
+  });
+
+  it("inlines section labels when the template has no Actual result section", () => {
+    const title = buildSnSupportTicketTitle({
+      ...baseInput,
+      description: "**What you're trying to do:**\nExport grades",
+    });
+
+    expect(title).toContain("What you're trying to do: Export grades");
+    expect(title).not.toContain("*");
+  });
+});
+
+describe("stripSectionLabelMarkdown", () => {
+  it("drops bold markers around section labels but keeps plain text intact", () => {
+    expect(
+      stripSectionLabelMarkdown("**Steps to reproduce:**\n1. Open the quiz"),
+    ).toBe("Steps to reproduce:\n1. Open the quiz");
+    expect(stripSectionLabelMarkdown("plain description")).toBe(
+      "plain description",
+    );
   });
 });
 
