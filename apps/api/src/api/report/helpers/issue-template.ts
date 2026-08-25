@@ -61,6 +61,24 @@ export function buildChatIssueTitle(input: ChatIssueTemplateInput): string {
   )} Assignment ${input.assignmentId || "N/A"}${attemptSegment}: ${summary}${ellipsis}`;
 }
 
+// SN Support tickets carry environment, role, and severity as structured
+// fields, so the title stays human-readable without the bracket prefixes.
+export function buildSnSupportTicketTitle(
+  input: ChatIssueTemplateInput,
+): string {
+  const normalizedDescription = input.description
+    .replaceAll(/\s+/g, " ")
+    .trim();
+  const summary = normalizedDescription.slice(0, TITLE_SUMMARY_MAX_CHARS);
+  const ellipsis =
+    normalizedDescription.length > TITLE_SUMMARY_MAX_CHARS ? "..." : "";
+  const attemptSegment = input.attemptId ? ` - Attempt ${input.attemptId}` : "";
+
+  return `${capitalizeIssueType(input.issueType)}: Assignment ${
+    input.assignmentId || "N/A"
+  }${attemptSegment}: ${summary}${ellipsis}`;
+}
+
 export function buildChatIssueBody(input: ChatIssueTemplateInput): string {
   return `
 ## Issue Report from Mark Chat
