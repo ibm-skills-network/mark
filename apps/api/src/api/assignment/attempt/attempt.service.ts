@@ -1190,7 +1190,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    * @param language - The language code requested (if none provided, defaults to "en")
    * @returns Structured attempt data with:
    * - Questions in their attempt-specific order
-   * - Merged question/variant data including translations for all available languages
+   * - Merged question/variant data including translations for the requested
+   *   language family only (the client refetches on language switch)
    * - Responses with score/feedback visibility rules applied
    * - Assignment configuration metadata
    *
@@ -1292,8 +1293,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((qv) => qv.questionVariant?.id)
       .filter((id) => id != undefined);
 
+    // Only the requested language family is fetched (startsWith covers
+    // regional rows like zh-CN/zh-TW for a zh request). Returning every
+    // language made the response size scale with the translation count — an
+    // assignment with images embedded in its question HTML shipped each image
+    // once per language (assignment 2532 reached ~4MB, overflowing
+    // localStorage on the client and trapping learners in a clear-and-reload
+    // loop). The client refetches the attempt when the learner switches
+    // language mid-attempt.
     const translations = await this.prisma.translation.findMany({
       where: {
+        languageCode: { startsWith: normalizedLanguage },
         OR: [
           { questionId: { in: questionIds } },
           ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),

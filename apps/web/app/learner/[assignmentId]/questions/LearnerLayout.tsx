@@ -148,6 +148,22 @@ async function LearnerLayout(props: Props) {
     return <ClientLearnerLayout assignmentId={assignmentId} role={role} />;
   }
 
+  // Authors must not fall through to the learner flow: the server accepts
+  // their attempt creation, but AttemptLoader renders learner-only content,
+  // which left authors on a silently blank page (and created stray attempts).
+  if (role === "author") {
+    log("Author attempt disallowed");
+    return (
+      <ErrorModal
+        error={
+          "You can't take the assignment as an author, please switch to learner mode or check learner side in the review page to try the assignment"
+        }
+        statusCode={403}
+        stateTimeline={stateTimeline}
+      />
+    );
+  }
+
   let listOfAttempts;
   try {
     listOfAttempts = await getAttempts(assignmentId, cookieHeader, {
