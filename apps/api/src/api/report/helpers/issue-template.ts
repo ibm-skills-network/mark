@@ -14,6 +14,35 @@ export const CHAT_ISSUE_FOOTER = `\n---\n*This issue was automatically reported 
 
 const TITLE_SUMMARY_MAX_CHARS = 50;
 
+// Form-composed reports (flag button, error dialog) arrive with the
+// description already templated into "**Label:**\ncontent" sections.
+const SECTION_LABEL_PATTERN = /\*\*([^\n*]+):\*\*/g;
+const ACTUAL_RESULT_PATTERN =
+  /\*\*Actual result:\*\*\s*([\s\S]*?)(?=\n\s*\*\*[^\n*]+:\*\*|$)/i;
+
+/**
+ * One-line summary of a report description for use in a title. For templated
+ * descriptions, the "Actual result" section (the symptom) makes the best
+ * summary; failing that, the section labels are inlined so the title carries
+ * the reporter's own words instead of markdown markers. Plain descriptions
+ * pass through unchanged apart from whitespace normalization.
+ */
+function summarizeDescription(description: string): string {
+  const actualResult = ACTUAL_RESULT_PATTERN.exec(description);
+  const source = actualResult
+    ? actualResult[1]
+    : description.replaceAll(SECTION_LABEL_PATTERN, "$1:");
+  return source.replaceAll(/\s+/g, " ").trim();
+}
+
+/**
+ * SN Support renders descriptions as plain text, so the markdown bold
+ * markers around form-section labels would show as literal asterisks there.
+ */
+export function stripSectionLabelMarkdown(description: string): string {
+  return description.replaceAll(SECTION_LABEL_PATTERN, "$1:").trim();
+}
+
 function capitalizeIssueType(issueType: string): string {
   if (!issueType) return "Unknown";
   return issueType.charAt(0).toUpperCase() + issueType.slice(1).toLowerCase();
@@ -48,9 +77,7 @@ export function defaultSeverityForIssueType(
 
 export function buildChatIssueTitle(input: ChatIssueTemplateInput): string {
   const environment = input.isProduction ? "PROD" : "DEV";
-  const normalizedDescription = input.description
-    .replaceAll(/\s+/g, " ")
-    .trim();
+  const normalizedDescription = summarizeDescription(input.description);
   const summary = normalizedDescription.slice(0, TITLE_SUMMARY_MAX_CHARS);
   const ellipsis =
     normalizedDescription.length > TITLE_SUMMARY_MAX_CHARS ? "..." : "";
@@ -59,6 +86,22 @@ export function buildChatIssueTitle(input: ChatIssueTemplateInput): string {
   return `[MARK CHAT] [${environment}] [${input.role}] ${input.severity.toUpperCase()} ${capitalizeIssueType(
     input.issueType,
   )} Assignment ${input.assignmentId || "N/A"}${attemptSegment}: ${summary}${ellipsis}`;
+}
+
+// SN Support tickets carry environment, role, and severity as structured
+// fields, so the title stays human-readable without the bracket prefixes.
+export function buildSnSupportTicketTitle(
+  input: ChatIssueTemplateInput,
+): string {
+  const normalizedDescription = summarizeDescription(input.description);
+  const summary = normalizedDescription.slice(0, TITLE_SUMMARY_MAX_CHARS);
+  const ellipsis =
+    normalizedDescription.length > TITLE_SUMMARY_MAX_CHARS ? "..." : "";
+  const attemptSegment = input.attemptId ? ` - Attempt ${input.attemptId}` : "";
+
+  return `${capitalizeIssueType(input.issueType)}: Assignment ${
+    input.assignmentId || "N/A"
+  }${attemptSegment}: ${summary}${ellipsis}`;
 }
 
 export function buildChatIssueBody(input: ChatIssueTemplateInput): string {

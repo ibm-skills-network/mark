@@ -16,9 +16,16 @@ import { AdminReportsController } from "./controllers/admin-report.controller";
 import { GithubWebhookController } from "./controllers/github-webhook.controller";
 import { FloService } from "./services/flo.service";
 import { ReportsService } from "./services/report.service";
+import { SnSupportService } from "./services/sn-support.service";
 
 @Module({
-  providers: [ReportsService, FloService, FilesService, S3Service],
+  providers: [
+    ReportsService,
+    FloService,
+    SnSupportService,
+    FilesService,
+    S3Service,
+  ],
   controllers: [
     ReportsController,
     AdminReportsController,
