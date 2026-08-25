@@ -123,43 +123,39 @@ describe("ReportsService.reportIssue", () => {
   };
 
   const makeForReportIssue = (snSupportService: unknown) => {
-    const forwardPrisma = {
+    const prisma = {
       report: {
         findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 7 }),
       },
     };
     const floService = { sendError: jest.fn().mockResolvedValue(undefined) };
     const service = new ReportsService(
       floService as never,
-      forwardPrisma as never,
+      prisma as never,
       undefined as never,
       undefined as never,
       snSupportService as never,
     );
-    jest
-      .spyOn(
-        service as unknown as {
-          createGithubIssue: () => Promise<{ number: number }>;
-        },
-        "createGithubIssue",
-      )
-      .mockResolvedValue({ number: 123 });
-    return service;
+    return { service, prisma, floService };
   };
 
-  it("forwards the report to SN Support with Mark context", async () => {
+  it("creates the SN Support ticket with Mark context and no GitHub issue", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(true),
       createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-1" }),
     };
 
-    const result = await makeForReportIssue(snSupportService).reportIssue(
-      reportDto,
-      session,
-    );
+    const { service, prisma } = makeForReportIssue(snSupportService);
+    const result = await service.reportIssue(reportDto, session);
 
-    expect(result.issueNumber).toBe(123);
+    expect(result.reportId).toBe(7);
+    expect(result.message).toContain("SUPPORT-1");
+    // The DB row is the record now — no GitHub issue number anywhere.
+    expect(
+      prisma.report.create.mock.calls[0][0].data.issueNumber,
+    ).toBeUndefined();
     expect(snSupportService.createTicket).toHaveBeenCalledWith({
       title: expect.stringContaining("Assignment 42 - Attempt 84"),
       description: expect.stringContaining("The assignment submission fails"),
@@ -187,7 +183,7 @@ describe("ReportsService.reportIssue", () => {
 
     // The flag-button modal pre-composes the description into markdown
     // sections and lets the reporter pick a severity.
-    await makeForReportIssue(snSupportService).reportIssue(
+    await makeForReportIssue(snSupportService).service.reportIssue(
       {
         ...reportDto,
         issueType: "other",
@@ -207,48 +203,49 @@ describe("ReportsService.reportIssue", () => {
     expect(sent.description).not.toContain("**");
   });
 
-  it("still files the GitHub issue when SN Support is down", async () => {
+  it("still records the report when SN Support is down", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(true),
       createTicket: jest.fn().mockRejectedValue(new Error("sn down")),
     };
 
-    const result = await makeForReportIssue(snSupportService).reportIssue(
-      reportDto,
-      session,
-    );
+    const { service, prisma } = makeForReportIssue(snSupportService);
+    const result = await service.reportIssue(reportDto, session);
 
     expect(snSupportService.createTicket).toHaveBeenCalled();
-    expect(result.issueNumber).toBe(123);
+    expect(prisma.report.create).toHaveBeenCalled();
+    expect(result.reportId).toBe(7);
+    expect(result.message).not.toContain("SUPPORT");
   });
 
-  it("skips the SN forward when the reporter email is unknown", async () => {
+  it("records anonymous reports as DB rows without an SN ticket", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(true),
       createTicket: jest.fn(),
     };
 
-    const result = await makeForReportIssue(snSupportService).reportIssue(
-      reportDto,
-      { assignmentId: 42, attemptId: 84 },
-    );
+    const { service, prisma } = makeForReportIssue(snSupportService);
+    const result = await service.reportIssue(reportDto, {
+      assignmentId: 42,
+      attemptId: 84,
+    });
 
     expect(snSupportService.createTicket).not.toHaveBeenCalled();
-    expect(result.issueNumber).toBe(123);
+    expect(prisma.report.create).toHaveBeenCalled();
+    expect(result.reportId).toBe(7);
   });
 
-  it("skips the SN forward when the integration is not configured", async () => {
+  it("records the report when the SN integration is not configured", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(false),
       createTicket: jest.fn(),
     };
 
-    const result = await makeForReportIssue(snSupportService).reportIssue(
-      reportDto,
-      session,
-    );
+    const { service, prisma } = makeForReportIssue(snSupportService);
+    const result = await service.reportIssue(reportDto, session);
 
     expect(snSupportService.createTicket).not.toHaveBeenCalled();
-    expect(result.issueNumber).toBe(123);
+    expect(prisma.report.create).toHaveBeenCalled();
+    expect(result.reportId).toBe(7);
   });
 });
