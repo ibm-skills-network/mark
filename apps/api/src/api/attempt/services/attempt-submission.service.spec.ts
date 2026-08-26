@@ -2078,6 +2078,55 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           callOrder.indexOf("lti"),
         );
       });
+
+      it("sends the grade to the LMS only after the commit has persisted it", async () => {
+        mockLtiGradeSyncService.createAndSync.mockImplementation(async () => {
+          callOrder.push("lti");
+          return undefined;
+        });
+
+        await (service as unknown as LearnerAttemptRunner).updateLearnerAttempt(
+          555,
+          2580,
+          updateDto,
+          "cookie",
+          true,
+          request,
+        );
+
+        expect(callOrder.indexOf("lti")).toBeGreaterThan(
+          callOrder.indexOf("commit"),
+        );
+      });
+
+      it("never delivers a grade to the LMS when the commit fails", async () => {
+        mockQuestionResponseService.commitAttemptWithResponses.mockImplementation(
+          async () => {
+            callOrder.push("commit");
+            throw new Error("commit read-back was not a submitted attempt");
+          },
+        );
+        mockLtiGradeSyncService.createAndSync.mockImplementation(async () => {
+          callOrder.push("lti");
+          return undefined;
+        });
+
+        await expect(
+          (service as unknown as LearnerAttemptRunner).updateLearnerAttempt(
+            555,
+            2580,
+            updateDto,
+            "cookie",
+            true,
+            request,
+          ),
+        ).rejects.toThrow("not a submitted attempt");
+
+        expect(mockLtiGradeSyncService.createAndSync).not.toHaveBeenCalled();
+        expect(
+          mockQuestionResponseService.markGradingComplete,
+        ).not.toHaveBeenCalled();
+      });
     });
   });
 });
