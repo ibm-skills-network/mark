@@ -15,7 +15,10 @@ import {
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import IORedis from "ioredis";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import {
+  createCacheRedisConnection,
+  isRedisReady,
+} from "src/job-queue/redis.connection";
 import {
   Assignment,
   Question,
@@ -138,7 +141,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
   private createRedisClient(): IORedis | undefined {
     try {
-      const client = createRedisConnection();
+      const client = createCacheRedisConnection();
       client.on("error", (error) => {
         this.logger.warn(
           `attempt.redis.error { message: ${JSON.stringify(error.message)} }`,
@@ -1102,7 +1105,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       // If the Redis connection is unavailable on this pod, treat as
       // not-in-flight (marker = "unavailable") rather than crashing the
       // learner request.
-      const languageInflight = this.redis
+      const languageInflight = isRedisReady(this.redis)
         ? await isLanguageInFlight(
             this.redis,
             assignment.id,
