@@ -3,11 +3,13 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { GradingCacheService } from "./grading-cache.service";
 import { PrismaService } from "src/database/prisma.service";
 import { ICachedGradingResult } from "../interfaces/grading-cache.interface";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import { createCacheRedisConnection } from "src/job-queue/redis.connection";
 import { Prisma } from "@prisma/client";
 
 jest.mock("src/job-queue/redis.connection", () => ({
-  createRedisConnection: jest.fn(),
+  createCacheRedisConnection: jest.fn(),
+  isRedisReady: jest.requireActual("src/job-queue/redis.connection")
+    .isRedisReady,
 }));
 
 const makeResult = (
@@ -27,6 +29,7 @@ const makeResult = (
 });
 
 class FakeRedis {
+  public status = "ready";
   public readonly data = new Map<string, string>();
   public readonly ttls = new Map<string, number>();
 
@@ -101,7 +104,7 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     fakeRedis = new FakeRedis();
-    (createRedisConnection as jest.Mock).mockReturnValue(fakeRedis);
+    (createCacheRedisConnection as jest.Mock).mockReturnValue(fakeRedis);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -314,8 +317,8 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
   // ─── Graceful Redis fallback ───────────────────────────────────────────────
 
   describe("Redis unavailable fallback", () => {
-    it("operates in PostgreSQL-only mode when createRedisConnection throws", async () => {
-      (createRedisConnection as jest.Mock).mockImplementation(() => {
+    it("operates in PostgreSQL-only mode when createCacheRedisConnection throws", async () => {
+      (createCacheRedisConnection as jest.Mock).mockImplementation(() => {
         throw new Error("Cannot connect to Redis");
       });
 

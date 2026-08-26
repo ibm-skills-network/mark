@@ -15,7 +15,7 @@ import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
 import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { PrismaService } from "src/database/prisma.service";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import { createCacheRedisConnection } from "src/job-queue/redis.connection";
 import {
   decrementInflightLanguage,
   seedInflightLanguages,
@@ -242,12 +242,12 @@ export class TranslationService implements OnModuleDestroy {
     this.translationStateRedis = this.tryCreateTranslationStateRedis();
   }
 
-  // Wrap createRedisConnection() in try/catch so missing REDIS_URL (or any
+  // Wrap createCacheRedisConnection() in try/catch so missing REDIS_URL (or any
   // boot-time Redis failure) degrades gracefully instead of bringing down
   // DI. Status-tracking sites become no-ops; translation work still runs.
   private tryCreateTranslationStateRedis(): IORedis | undefined {
     try {
-      const client = createRedisConnection();
+      const client = createCacheRedisConnection();
       client.on("error", (error) => {
         this.logger.warn(
           `Translation status Redis error (status tracking disabled): ${error.message}`,
