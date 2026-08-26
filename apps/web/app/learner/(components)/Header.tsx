@@ -14,6 +14,7 @@ import type {
   SubmitAssignmentResponse,
 } from "@/config/types";
 import {
+  getAttempt,
   getSupportedLanguages,
   getUser,
   submitAssignment,
@@ -73,6 +74,7 @@ function LearnerHeader() {
   const [
     questions,
     setQuestion,
+    setQuestions,
     setShowSubmissionFeedback,
     activeAttemptId,
     setTotalPointsEarned,
@@ -81,6 +83,7 @@ function LearnerHeader() {
   ] = useLearnerStore((state) => [
     state.questions,
     state.setQuestion,
+    state.setQuestions,
     state.setShowSubmissionFeedback,
     state.activeAttemptId,
     state.setTotalPointsEarned,
@@ -181,6 +184,23 @@ function LearnerHeader() {
     if (!selectedLanguage) return;
     if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
+
+      // The attempt payload only carries the language it was fetched with, so
+      // an in-page switch pulls the new language's translations and merges
+      // them over the store (setQuestions keeps draft answers). Until the
+      // fetch lands the UI falls back to the server-translated question text.
+      if (isInQuestionPage && assignmentId && activeAttemptId) {
+        void getAttempt(
+          assignmentId,
+          activeAttemptId,
+          undefined,
+          selectedLanguage,
+        ).then((attempt) => {
+          if (attempt?.questions?.length) {
+            setQuestions(attempt.questions);
+          }
+        });
+      }
     }
 
     if (!isInQuestionPage && !isAttemptPage && !isSuccessPage) {
