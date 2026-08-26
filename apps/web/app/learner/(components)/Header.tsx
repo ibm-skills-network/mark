@@ -373,7 +373,7 @@ function LearnerHeader() {
         undefined,
       );
 
-      if (res) {
+      if (res && typeof res.id === "number") {
         const { grade, feedbacksForQuestions } = res;
         setTotalPointsEarned(res.totalPointsEarned);
         setTotalPointsPossible(res.totalPossiblePoints);
@@ -428,9 +428,12 @@ function LearnerHeader() {
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
         }, 1000);
       } else {
-        // submitAssignment resolved without a result (e.g. an SSE finalize
-        // event carrying no payload). Without this branch submitting/modal stay
-        // true forever and the grading modal spins with no error and no exit.
+        // submitAssignment resolved without a usable result: no payload at
+        // all (e.g. an SSE finalize event carrying none), or one missing the
+        // attempt id — navigating with an undefined id lands the learner on
+        // /successPage/undefined and a 404 dialog. Without this branch
+        // submitting/modal stay true forever and the grading modal spins with
+        // no error and no exit.
         toast.error("We couldn't complete your submission. Please try again.");
         setSubmitting(false);
         setShowGradingModal(false);
