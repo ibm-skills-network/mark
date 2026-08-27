@@ -5,7 +5,11 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 
+// The real normalizer, not a copy: these tests certify that the hook and the
+// DOM translator resolve keys identically, which only holds if they normalize
+// with the production implementation.
 jest.mock("@/lib/static-ui-translations", () => ({
+  ...jest.requireActual("@/lib/static-ui-translations"),
   getStaticUiTranslations: (language: string) =>
     language === "fr"
       ? {
@@ -13,7 +17,6 @@ jest.mock("@/lib/static-ui-translations", () => ({
             "Attendez {time} avant de réessayer",
         }
       : {},
-  normalizeSourceText: (value: string) => value.replace(/\s+/g, " ").trim(),
 }));
 
 import { interpolate, useUiTranslation } from "../use-ui-translation";
@@ -92,5 +95,19 @@ describe("useUiTranslation key normalization", () => {
         time: "4m 54s",
       }),
     ).toBe("Attendez 4m 54s avant de réessayer");
+  });
+
+  // The DOM translator resolves through augmented aliases the raw catalog does
+  // not contain (True/False built from trueFalseTranslations, and more). The
+  // hook must reach them too, or a migrated string silently loses them.
+  it("resolves aliases the DOM translator builds on top of the catalog", () => {
+    const { result } = renderHook(() => useUiTranslation());
+    expect(result.current.t("TRUE_FALSE")).toBe("Vrai/Faux");
+  });
+
+  it("misses rather than resolving Object.prototype members", () => {
+    const { result } = renderHook(() => useUiTranslation());
+    expect(result.current.t("constructor")).toBe("constructor");
+    expect(result.current.t("toString")).toBe("toString");
   });
 });

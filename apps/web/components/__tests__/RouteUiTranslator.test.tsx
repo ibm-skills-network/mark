@@ -6,6 +6,9 @@ jest.mock("next/navigation", () => ({
 // loader: the "en" path never touches normalizeSourceText, so a partial mock
 // looks fine until a test exercises a real language, then throws.
 jest.mock("@/lib/static-ui-translations", () => ({
+  // The real normalizer, not a copy — key-normalization parity proven against
+  // a reimplementation would not survive the real one changing.
+  ...jest.requireActual("@/lib/static-ui-translations"),
   getStaticUiTranslations: jest.fn((language: string) =>
     language === "fr"
       ? {
@@ -15,10 +18,11 @@ jest.mock("@/lib/static-ui-translations", () => ({
         }
       : {},
   ),
-  normalizeSourceText: (value: string) => value.replace(/\s+/g, " ").trim(),
 }));
 
-import {
+import { act, render } from "@testing-library/react";
+
+import RouteUiTranslator, {
   ensureLanguageTranslationsLoaded,
   isInsideOptedOutSubtree,
   translateScope,
@@ -257,5 +261,98 @@ describe("RouteUiTranslator translateScope with a real language", () => {
     translateScope(document.body, "fr");
 
     expect(host.textContent).toBe("About this assignment");
+  });
+});
+
+// Everything above drives translateScope by hand. These mount the component,
+// so the MutationObserver path — scoping, opt-out skips, debounce — is what
+// is under test, not just the bare predicates it is built from.
+describe("RouteUiTranslator mounted with a scope", () => {
+  let routeRoot: HTMLDivElement;
+  let outside: HTMLDivElement;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    window.localStorage.setItem("ui-language", "fr");
+    routeRoot = document.createElement("div");
+    routeRoot.id = "route-root";
+    outside = document.createElement("div");
+    document.body.append(routeRoot, outside);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    window.localStorage.clear();
+    routeRoot.remove();
+    outside.remove();
+  });
+
+  // Mutation records are delivered on a microtask, then the pass runs after a
+  // 120ms debounce.
+  const flushTranslation = async () => {
+    // Deliver the mutation records (a microtask), then fire the debounce.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      jest.advanceTimersByTime(150);
+    });
+  };
+
+  it("translates placeholders on real form fields", () => {
+    routeRoot.innerHTML = `
+      <input type="text" placeholder="First message" />
+      <textarea placeholder="Second message"></textarea>
+    `;
+
+    render(<RouteUiTranslator scopeSelector="#route-root" />);
+
+    expect(routeRoot.querySelector("input")?.placeholder).toBe(
+      "Premier message",
+    );
+    expect(routeRoot.querySelector("textarea")?.placeholder).toBe(
+      "Deuxième message",
+    );
+  });
+
+  it("re-baselines an attribute the app rewrote instead of restoring it", async () => {
+    routeRoot.innerHTML = `<input type="text" placeholder="First message" />`;
+    const input = routeRoot.querySelector("input");
+
+    render(<RouteUiTranslator scopeSelector="#route-root" />);
+    expect(input.placeholder).toBe("Premier message");
+
+    input.setAttribute("placeholder", "Second message");
+    await flushTranslation();
+
+    expect(input.placeholder).toBe("Deuxième message");
+  });
+
+  it("translates a text mutation inside the scope via the observer", async () => {
+    const node = document.createTextNode("First message");
+    routeRoot.append(node);
+
+    render(<RouteUiTranslator scopeSelector="#route-root" />);
+    expect(node.nodeValue).toBe("Premier message");
+
+    node.nodeValue = "Second message";
+    await flushTranslation();
+
+    expect(node.nodeValue).toBe("Deuxième message");
+  });
+
+  it("leaves content outside the scope and inside opt-outs alone", async () => {
+    routeRoot.innerHTML = `<span data-no-ui-translate="true">First message</span>`;
+    outside.textContent = "About this assignment";
+
+    render(<RouteUiTranslator scopeSelector="#route-root" />);
+
+    outside.textContent = "First message";
+    const optedOut = routeRoot.querySelector("span");
+    optedOut.textContent = "Second message";
+    await flushTranslation();
+
+    expect(outside.textContent).toBe("First message");
+    expect(optedOut.textContent).toBe("Second message");
   });
 });

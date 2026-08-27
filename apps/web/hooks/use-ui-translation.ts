@@ -1,10 +1,7 @@
 "use client";
 
+import { resolveUiTranslation } from "@/components/RouteUiTranslator";
 import { useActiveUiLanguage } from "@/hooks/use-active-ui-language";
-import {
-  getStaticUiTranslations,
-  normalizeSourceText,
-} from "@/lib/static-ui-translations";
 import { DEFAULT_UI_LANGUAGE } from "@/lib/ui-language";
 import { useCallback } from "react";
 
@@ -55,14 +52,7 @@ export function useUiTranslation() {
         return interpolate(source, params);
       }
 
-      // Match the DOM translator's key handling exactly: it tries the raw
-      // string then the normalized one. Resolving keys differently here would
-      // let the same string translate on one path and not the other.
-      const catalog = getStaticUiTranslations(activeLanguage);
-      const translated =
-        catalog[source] ?? catalog[normalizeSourceText(source)] ?? source;
-
-      return interpolate(translated, params);
+      return interpolate(resolveUiTranslation(activeLanguage, source), params);
     },
     [activeLanguage],
   );

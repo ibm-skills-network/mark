@@ -51,10 +51,15 @@ export function isInsideOptedOutSubtree(node: Node | null): boolean {
   return Boolean(element?.closest("[data-no-ui-translate='true']"));
 }
 
+const SKIP_TAGS_SELECTOR = "script,style,noscript,code,pre,textarea";
+
+// Ancestry-aware: translateScope can now be handed any mutated subtree, so a
+// scope root buried inside a code block or opted-out region must be refused
+// here, not just direct children of a skipped element.
 function shouldSkipElement(element: Element | null): boolean {
   if (!element) return true;
   if (isInsideOptedOutSubtree(element)) return true;
-  if (SKIP_TAGS.has(element.tagName)) return true;
+  if (element.closest(SKIP_TAGS_SELECTOR)) return true;
 
   if (element instanceof HTMLElement) {
     if (element.isContentEditable) return true;
@@ -69,6 +74,25 @@ function shouldSkipElement(element: Element | null): boolean {
   return false;
 }
 
+// Subtree-root variant for the tree walker: checks only the element's own
+// state, because the walker prunes at the topmost skipped element and never
+// descends past it.
+function isSkippedSubtreeRoot(element: Element): boolean {
+  if (element.matches("[data-no-ui-translate='true']")) return true;
+  if (SKIP_TAGS.has(element.tagName)) return true;
+  return element instanceof HTMLElement && element.isContentEditable;
+}
+
+// Attribute carriers get a looser filter than text nodes: SKIP_TAGS and the
+// input-type check exist to keep the translator out of user-entered *content*
+// (code blocks, field values). placeholder/title/aria-label are chrome, not
+// content, so an input's placeholder must translate even though its value
+// must not.
+function shouldSkipAttrCarrier(element: Element): boolean {
+  if (isInsideOptedOutSubtree(element)) return true;
+  return Boolean(element.closest("script,style,noscript"));
+}
+
 function getRootElement(scopeSelector?: string): HTMLElement | null {
   if (typeof document === "undefined") return null;
 
@@ -78,25 +102,32 @@ function getRootElement(scopeSelector?: string): HTMLElement | null {
 }
 
 function collectTextNodes(root: HTMLElement): Text[] {
-  const textNodes: Text[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node.parentElement;
-      if (!parent || shouldSkipElement(parent)) {
-        return NodeFilter.FILTER_REJECT;
-      }
-      if (!isTranslatableText(node.textContent || "")) {
-        return NodeFilter.FILTER_REJECT;
-      }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
+  if (shouldSkipElement(root)) return [];
 
+  // Elements are filtered with FILTER_REJECT so a skipped subtree is pruned
+  // in one step instead of every text node inside it re-walking its ancestry.
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          return isSkippedSubtreeRoot(node as Element)
+            ? NodeFilter.FILTER_REJECT
+            : NodeFilter.FILTER_SKIP;
+        }
+        return isTranslatableText(node.textContent || "")
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    },
+  );
+
+  // Elements are FILTER_SKIPped above, so the walker only ever returns text.
+  const textNodes: Text[] = [];
   let node = walker.nextNode();
   while (node) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      textNodes.push(node as Text);
-    }
+    textNodes.push(node as Text);
     node = walker.nextNode();
   }
 
@@ -121,7 +152,7 @@ function collectAttrTargets(root: HTMLElement): Array<{
     elements.push(...Array.from(root.querySelectorAll(`[${attribute}]`)));
 
     for (const element of elements) {
-      if (shouldSkipElement(element)) continue;
+      if (shouldSkipAttrCarrier(element)) continue;
 
       const value = element.getAttribute(attribute);
       if (!value || !isTranslatableText(value)) continue;
@@ -193,7 +224,10 @@ function buildAugmentedTranslations(
   languageCode: string,
   translations: Record<string, string>,
 ): Record<string, string> {
-  const augmentedTranslations: Record<string, string> = {};
+  // Null prototype: lookups here are keyed on arbitrary UI strings, and a
+  // source like "constructor" must miss rather than resolve to a function
+  // inherited from Object.prototype.
+  const augmentedTranslations: Record<string, string> = Object.create(null);
 
   for (const [sourceText, translatedText] of Object.entries(translations)) {
     const normalizedSource = normalizeSourceText(sourceText);
@@ -455,16 +489,28 @@ export function ensureLanguageTranslationsLoaded(languageCode: string): void {
   }
 
   STATIC_TRANSLATIONS.set(languageCode, augmentedTranslations);
-  NORMALIZED_STATIC_TRANSLATIONS.set(
-    languageCode,
-    Object.fromEntries(
-      Object.entries(augmentedTranslations).map(
-        ([sourceText, translatedText]) => [
-          normalizeSourceText(sourceText),
-          translatedText,
-        ],
-      ),
-    ),
+  const normalizedTranslations: Record<string, string> = Object.create(null);
+  for (const [sourceText, translatedText] of Object.entries(
+    augmentedTranslations,
+  )) {
+    normalizedTranslations[normalizeSourceText(sourceText)] = translatedText;
+  }
+  NORMALIZED_STATIC_TRANSLATIONS.set(languageCode, normalizedTranslations);
+}
+
+// Render-time resolution for `useUiTranslation`, through the same layers the
+// DOM path uses — augmented aliases, normalized keys, word-token fallback. A
+// separate raw-catalog lookup in the hook would let the same string translate
+// on one path and not the other.
+export function resolveUiTranslation(
+  languageCode: string,
+  sourceText: string,
+): string {
+  if (languageCode === DEFAULT_UI_LANGUAGE) return sourceText;
+  ensureLanguageTranslationsLoaded(languageCode);
+  ensureTranslationCache(languageCode, [sourceText]);
+  return (
+    TRANSLATION_CACHE.get(getCacheKey(languageCode, sourceText)) ?? sourceText
   );
 }
 
@@ -612,11 +658,29 @@ export function translateScope(root: HTMLElement, languageCode: string) {
   }
 }
 
+// Above this many distinct mutated subtrees per debounce window, give up on
+// scoping and run one full pass — the bookkeeping would cost more than the
+// walk it saves.
+const MAX_SCOPED_TARGETS = 24;
+
+// The element whose subtree a mutation record dirties: the target itself for
+// childList/attribute records, its parent for characterData on a text node.
+function recordScopeElement(record: MutationRecord): HTMLElement | null {
+  const target = record.target;
+  return target instanceof HTMLElement ? target : target.parentElement;
+}
+
+// Drop any scope contained by another so a subtree is not walked twice.
+function pruneNestedScopes(scopes: HTMLElement[]): HTMLElement[] {
+  return scopes.filter((scope) =>
+    scopes.every((other) => other === scope || !other.contains(scope)),
+  );
+}
+
 export default function RouteUiTranslator({
   scopeSelector,
 }: RouteUiTranslatorProps) {
   const activeLanguage = useActiveUiLanguage();
-  const isApplyingRef = useRef(false);
   const debounceTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -634,37 +698,66 @@ export default function RouteUiTranslator({
       return roots;
     };
 
-    const runTranslation = () => {
-      if (isApplyingRef.current) return;
-      isApplyingRef.current = true;
+    // Mutated subtrees awaiting the next pass; null means the next pass walks
+    // every translation root.
+    let pendingScopes: Set<HTMLElement> | null = null;
+
+    const runTranslation = (scopes: HTMLElement[] | null) => {
       try {
-        const translationRoots = getTranslationRoots();
-        for (const root of translationRoots) {
+        for (const root of scopes ?? getTranslationRoots()) {
           translateScope(root, activeLanguage);
         }
       } catch (error) {
         console.error("UI translation failed:", error);
       } finally {
-        isApplyingRef.current = false;
+        // Discard the records our own writes just queued — records are
+        // delivered after this synchronous pass ends, so without this every
+        // effective pass schedules one more that no-ops.
+        observer.takeRecords();
       }
     };
 
-    const observer = new MutationObserver((records) => {
-      if (isApplyingRef.current) return;
-
-      // Opted-out subtrees are never rewritten, so scanning the route for them
-      // is pure cost. Ignore records that come only from inside one.
-      if (records.every((record) => isInsideOptedOutSubtree(record.target))) {
-        return;
-      }
-
+    const scheduleTranslation = () => {
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
       }
 
       debounceTimerRef.current = window.setTimeout(() => {
-        runTranslation();
+        const scopes = pendingScopes;
+        pendingScopes = new Set();
+        runTranslation(
+          scopes === null ? null : pruneNestedScopes(Array.from(scopes)),
+        );
       }, 120);
+    };
+
+    const observer = new MutationObserver((records) => {
+      const translationRoots = getTranslationRoots();
+      let sawRelevantRecord = false;
+
+      for (const record of records) {
+        const scopeElement = recordScopeElement(record);
+        if (!scopeElement) continue;
+        // Opted-out subtrees are never rewritten, and mutations outside every
+        // translation root (chat panel, toasts, body-level portals) cannot
+        // change route content — scanning for either is pure cost.
+        if (isInsideOptedOutSubtree(scopeElement)) continue;
+        if (!translationRoots.some((root) => root.contains(scopeElement))) {
+          continue;
+        }
+
+        sawRelevantRecord = true;
+        if (pendingScopes !== null) {
+          pendingScopes.add(scopeElement);
+          if (pendingScopes.size > MAX_SCOPED_TARGETS) {
+            pendingScopes = null;
+          }
+        }
+      }
+
+      if (sawRelevantRecord) {
+        scheduleTranslation();
+      }
     });
 
     // Loading the catalog is a synchronous lookup, so the observer attaches in
@@ -679,7 +772,8 @@ export default function RouteUiTranslator({
       attributeFilter: [...TRANSLATABLE_ATTRIBUTES],
     });
 
-    runTranslation();
+    pendingScopes = new Set();
+    runTranslation(null);
 
     return () => {
       observer.disconnect();
