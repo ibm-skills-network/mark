@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 import PromoBanner from "@/components/promo/PromoBanner";
 import { useUiTranslation } from "@/hooks/use-ui-translation";
+import { formatShortDuration } from "@/lib/format-duration";
 import {
   getExpiresAtMs,
   getLatestAttempt,
@@ -137,7 +138,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     ]);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useUiTranslation();
+  const { t, activeLanguage } = useUiTranslation();
   const isAuthorPreview = searchParams.get("authorMode") === "true";
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
@@ -194,7 +195,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const latestAttempt = getLatestAttempt(attempts || []);
 
   const attemptsCount = attempts.length;
-  const [cooldownTime, setCooldownTime] = useState<string | null>(null);
+  const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     if (
@@ -207,7 +210,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       assignmentState === "in-progress" ||
       !isAttemptSubmitted(latestAttempt)
     ) {
-      setCooldownTime(null);
+      setCooldownSecondsLeft(null);
       return;
     }
 
@@ -231,7 +234,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     }
 
     if (finishedAt === undefined || Number.isNaN(finishedAt)) {
-      setCooldownTime(null);
+      setCooldownSecondsLeft(null);
       return;
     }
 
@@ -242,29 +245,18 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       const remainingMs = nextEligibleAt - Date.now();
 
       if (remainingMs <= 0) {
-        setCooldownTime(null);
+        setCooldownSecondsLeft(null);
+        clearInterval(interval);
         return;
       }
 
-      const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
-      let remainder = remainingMs % (24 * 60 * 60 * 1000);
-      const hours = Math.floor(remainder / (60 * 60 * 1000));
-      remainder %= 60 * 60 * 1000;
-      const minutes = Math.floor(remainder / 60000);
-      const seconds = Math.floor((remainder % 60000) / 1000);
-
-      const parts = [];
-      if (days) parts.push(`${days}d`);
-      if (hours) parts.push(`${hours}h`);
-      if (minutes) parts.push(`${minutes}m`);
-      if (seconds) parts.push(`${seconds}s`);
-
-      const timeString = parts.length > 0 ? parts.join(" ") : "a moment";
-      setCooldownTime(timeString);
+      // Ceil, not floor: the state holds whole seconds, and a floor would
+      // display "0s"-adjacent values while the cooldown is still active.
+      setCooldownSecondsLeft(Math.ceil(remainingMs / 1000));
     }
 
-    updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
+    updateCountdown();
     return () => clearInterval(interval);
   }, [
     latestAttempt,
@@ -310,12 +302,16 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   // One translatable key with the duration as a parameter, resolved here rather
   // than by RouteUiTranslator rewriting the DOM afterwards. Opted out because it
   // is already translated: RouteUiTranslator must neither rewrite it nor re-scan
-  // the route each time the duration ticks.
-  const cooldownMessage = cooldownTime ? (
-    <span data-no-ui-translate="true">
-      {t("Please wait {time} before retrying", { time: cooldownTime })}
-    </span>
-  ) : null;
+  // the route each time the duration ticks. translate="no" additionally keeps
+  // browser-level page translation from latching onto the ticking text.
+  const cooldownMessage =
+    cooldownSecondsLeft !== null ? (
+      <span data-no-ui-translate="true" translate="no">
+        {t("Please wait {time} before retrying", {
+          time: formatShortDuration(cooldownSecondsLeft, activeLanguage),
+        })}
+      </span>
+    ) : null;
 
   const buttonLabel = assignmentState === "in-progress" ? "Resume" : "Begin";
   let buttonMessage: React.ReactNode = "";

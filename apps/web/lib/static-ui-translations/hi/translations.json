@@ -865,6 +865,7 @@
   "Please select a language to continue.": "जारी रखने के लिए कृपया एक भाषा चुनें.",
   "Please select a Question Type first.": "कृपया पहले प्रश्न प्रकार चुनें.",
   "Please select the number of variations to generate": "कृपया उत्पन्न करने के लिए विविधताओं की संख्या का चयन करें",
+  "Please wait {time} before retrying": "पुनः प्रयास करने से पहले कृपया {time} प्रतीक्षा करें",
   "Points": "अंक",
   "Points hidden": "अंक छिपाए गए",
   "Points:": "अंक:",

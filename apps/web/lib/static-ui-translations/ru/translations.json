@@ -865,6 +865,7 @@
   "Please select a language to continue.": "Пожалуйста, выберите язык, чтобы продолжить.",
   "Please select a Question Type first.": "Пожалуйста, сначала выберите тип вопроса.",
   "Please select the number of variations to generate": "Пожалуйста, выберите количество вариантов для создания",
+  "Please wait {time} before retrying": "Подождите {time}, прежде чем повторить попытку",
   "Points": "Очки",
   "Points hidden": "Очки скрыты",
   "Points:": "Очки:",
