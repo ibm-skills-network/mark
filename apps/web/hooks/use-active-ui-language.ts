@@ -10,6 +10,13 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+// The URL search string whose ?uiLang has already been consumed. Module-level
+// on purpose: every hook instance shares it, so an instance that mounts late
+// (after a data fetch resolves) sees the URL was already handled and defers
+// to storage instead of re-persisting a ?uiLang the user has since
+// overridden — which would revert the switch and broadcast the stale value.
+let lastResolvedSearch: string | null = null;
+
 /**
  * The UI language currently in effect: `?uiLang` if it names a supported
  * language (which is then remembered), otherwise the stored choice, otherwise
@@ -22,19 +29,30 @@ import { useEffect, useState } from "react";
  */
 export function useActiveUiLanguage(): string {
   const searchParams = useSearchParams();
+  const search = searchParams.toString();
   const queryLanguage = searchParams.get("uiLang");
   const [activeLanguage, setActiveLanguage] =
     useState<string>(DEFAULT_UI_LANGUAGE);
 
   useEffect(() => {
-    if (isSupportedUiLanguage(queryLanguage)) {
+    const isNewUrl = search !== lastResolvedSearch;
+    lastResolvedSearch = search;
+
+    if (isSupportedUiLanguage(queryLanguage) && isNewUrl) {
       setActiveLanguage(queryLanguage);
       setStoredUiLanguage(queryLanguage);
       return;
     }
 
-    setActiveLanguage(getStoredUiLanguage() || DEFAULT_UI_LANGUAGE);
-  }, [queryLanguage]);
+    // Already-consumed URL or no query language: storage is authoritative.
+    // The query is only a last resort for a cleared storage.
+    setActiveLanguage(
+      getStoredUiLanguage() ||
+        (isSupportedUiLanguage(queryLanguage)
+          ? queryLanguage
+          : DEFAULT_UI_LANGUAGE),
+    );
+  }, [search, queryLanguage]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
