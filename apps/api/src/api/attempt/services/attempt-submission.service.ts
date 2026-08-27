@@ -1099,9 +1099,9 @@ export class AttemptSubmissionService {
    * Uses a 3-phase grading flow:
    *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
    *   Grade computation + validation (in-memory)
-   *   LTI callback (external, before DB commit)
    *   Phase 3 — commitAttemptWithResponses: write QuestionResponse records and
    *              AssignmentAttempt.grade atomically in a single short transaction
+   *   LTI callback (external, strictly after the DB commit)
    */
   private async updateLearnerAttempt(
     attemptId: number,
@@ -1344,21 +1344,8 @@ export class AttemptSubmissionService {
         );
       }
 
-      if (gradingCallbackRequired) {
-        if (progressCallback) {
-          await progressCallback("Sending grade to LTI...", 95);
-        }
-        await this.handleLtiGradeCallback(
-          attemptId,
-          grade,
-          authCookie,
-          assignmentId,
-          request.userSession.userId,
-        );
-      }
-
       if (progressCallback) {
-        await progressCallback("Finalizing results...", 98);
+        await progressCallback("Finalizing results...", 95);
       }
 
       // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
@@ -1370,11 +1357,30 @@ export class AttemptSubmissionService {
           updateDto,
         );
 
+      // LTI delivery strictly AFTER the commit: a grade must never reach the
+      // LMS for a submission that did not durably persist — a failed commit
+      // throws above and the callback never sees the grade. The reverse risk
+      // does not exist: sendGradeToLtiGateway never throws (sync failures go
+      // to its own retry queue), so a delivery hiccup cannot fail an
+      // already-committed attempt.
+      if (gradingCallbackRequired) {
+        if (progressCallback) {
+          await progressCallback("Sending grade to LTI...", 98);
+        }
+        await this.handleLtiGradeCallback(
+          attemptId,
+          grade,
+          authCookie,
+          assignmentId,
+          request.userSession.userId,
+        );
+      }
+
       // Only now is the grade readable, so only now may the progress row say
-      // COMPLETED. Everything above — grade computation, the external LTI
-      // callback, the commit transaction itself — used to run after the row
-      // had already been flipped, which let a client see "done" and then read
-      // an unsubmitted, ungraded attempt.
+      // COMPLETED. Everything above — grade computation, the commit
+      // transaction itself — used to run after the row had already been
+      // flipped, which let a client see "done" and then read an unsubmitted,
+      // ungraded attempt.
       await this.questionResponseService.markGradingComplete(attemptId);
 
       await this.pruneAutoSavedResponses(
