@@ -865,6 +865,7 @@
   "Please select a language to continue.": "続行するには言語を選択してください。",
   "Please select a Question Type first.": "最初に質問の種類を選択してください。",
   "Please select the number of variations to generate": "生成するバリエーションの数を選択してください",
+  "Please wait {time} before retrying": "再試行するまで{time}お待ちください",
   "Points": "ポイント",
   "Points hidden": "隠されたポイント",
   "Points:": "ポイント:",

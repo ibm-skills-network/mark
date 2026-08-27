@@ -384,8 +384,13 @@ export default function GradingProgressModal({
                   {status === "disconnected" && "We Lost Contact With Grading"}
                 </motion.h3>
 
+                {/* Server-generated stage text: not in any catalog, so
+                    word-token translation could only mangle it, and it
+                    remounts on every SSE event. Opt it out entirely. */}
                 <motion.p
                   key={message}
+                  data-no-ui-translate="true"
+                  translate="no"
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="text-gray-600 dark:text-gray-300 mb-6 min-h-[48px] flex items-center justify-center text-base px-4"
