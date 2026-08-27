@@ -53,4 +53,36 @@ describe("sanitizeUnicodeForJson", () => {
     const { value } = sanitizeUnicodeForJson({ when: date });
     expect((value as { when: Date }).when).toBe(date);
   });
+
+  it("deletes NUL characters and counts them", () => {
+    const broken = "cell A1\u0000cell B1\u0000";
+    const { value, replaced } = sanitizeUnicodeForJson(broken);
+    expect(value).toBe("cell A1cell B1");
+    expect(replaced).toBe(2);
+  });
+
+  it("scrubs NULs inside nested feedback the way the persist path sees them", () => {
+    const input = {
+      feedback: [{ feedback: "extracted: \u0000\u0000binary-ish" }],
+      meta: { note: "clean" },
+    };
+    const { value, replaced } = sanitizeUnicodeForJson(input);
+    expect(replaced).toBe(2);
+    expect(value).toEqual({
+      feedback: [{ feedback: "extracted: binary-ish" }],
+      meta: { note: "clean" },
+    });
+  });
+
+  it("handles NULs and lone surrogates in the same string", () => {
+    const broken = "a\u0000b \uD83D c";
+    const { value, replaced } = sanitizeUnicodeForJson(broken);
+    expect(value).toBe("ab � c");
+    expect(replaced).toBe(2);
+  });
+
+  it("stringified output contains no \\u0000 escape jsonb would reject", () => {
+    const { value } = sanitizeUnicodeForJson({ s: "x\u0000y" });
+    expect(JSON.stringify(value)).not.toContain("\\u0000");
+  });
 });

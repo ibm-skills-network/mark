@@ -98,13 +98,13 @@ describe("GradingProgressService.markComplete", () => {
     );
   });
 
-  it("warns when it is reached before the attempt has been committed", async () => {
-    const warn = jest
+  it("logs an error when it is reached before the attempt has been committed", async () => {
+    const error = jest
       .spyOn(
         Reflect.get(service, "logger") as {
-          warn: (message: string) => void;
+          error: (message: string) => void;
         },
-        "warn",
+        "error",
       )
       .mockImplementation(() => undefined);
 
@@ -117,7 +117,7 @@ describe("GradingProgressService.markComplete", () => {
 
     await service.markComplete(77);
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       expect.stringContaining("grading.progress.completed.before.commit"),
     );
   });
