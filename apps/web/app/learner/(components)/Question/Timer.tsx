@@ -80,7 +80,9 @@ function Timer(props: Props) {
 
   const seconds = Math.floor((safeCountdown / 1000) % 60);
   const minutes = Math.floor((safeCountdown / (1000 * 60)) % 60);
-  const hours = Math.floor((safeCountdown / (1000 * 60 * 60)) % 24);
+  // Total hours, not % 24: the display has no days field, so a timer over
+  // 24h would otherwise render the day-truncated remainder.
+  const hours = Math.floor(safeCountdown / (1000 * 60 * 60));
   const twoDigit = (num: number) => {
     return num < 10 ? `0${num}` : num;
   };
@@ -288,10 +290,13 @@ function Timer(props: Props) {
       <div className="text-gray-600 dark:text-gray-300 text-base font-medium leading-tight">
         Time Remaining:
       </div>
-      {/* Opted out so the per-second tick does not re-scan the whole route. */}
+      {/* Opted out so the per-second tick does not re-scan the whole route.
+          translate="no" additionally keeps browser-level page translation
+          from latching onto the ticking text and freezing it. */}
       {hasCountdown ? (
         <div
           data-no-ui-translate="true"
+          translate="no"
           className={cn(
             "text-base font-bold leading-tight",
             hours === 0 && minutes < 5 ? "text-red-500" : "text-purple-600",
@@ -302,6 +307,7 @@ function Timer(props: Props) {
       ) : (
         <div
           data-no-ui-translate="true"
+          translate="no"
           className="text-base font-bold leading-tight text-gray-400"
         >
           --:--:--
