@@ -72,4 +72,20 @@ export interface IPromptProcessor {
     llmKey?: string,
     options?: LlmRequestOptions,
   ): Promise<string>;
+
+  /**
+   * Process a prompt with image data and return a value validated against
+   * `schema`. Uses the provider's native multimodal structured output when
+   * available (guaranteeing schema-valid JSON), and falls back to parsing the
+   * model's text for multimodal providers that do not support it.
+   */
+  processStructuredPromptWithImage<T>(
+    prompt: PromptTemplate,
+    imageData: string,
+    assignmentId: number,
+    usageType: AIUsageType,
+    schema: ZodTypeAny,
+    llmKey?: string,
+    options?: LlmRequestOptions,
+  ): Promise<T>;
 }

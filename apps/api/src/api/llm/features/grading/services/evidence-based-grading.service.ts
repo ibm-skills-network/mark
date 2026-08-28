@@ -13,7 +13,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   CanonicalSubmission,
@@ -318,9 +317,6 @@ export class EvidenceBasedGradingService {
       return validatorOverride;
     }
 
-    const parser = StructuredOutputParser.fromZodSchema(EvidenceOutputSchema);
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = new PromptTemplate({
       template: `You are grading a single criterion from a rubric. You MUST provide evidence before making any decision.
 
@@ -400,9 +396,7 @@ IMPORTANT:
 - Think step-by-step internally but ONLY output the JSON response.
 - If judge feedback indicates a mistake, correct it.
 
-LANGUAGE: {language}
-
-{format_instructions}`,
+LANGUAGE: {language}`,
       inputVariables: [],
       partialVariables: {
         question: () => questionText,
@@ -413,23 +407,25 @@ LANGUAGE: {language}
         submission_context: () => submissionContext,
         judge_feedback: () => judgeFeedback || "No judge feedback provided.",
         language: () => language,
-        format_instructions: () => formatInstructions,
       },
     });
 
     this.logger.debug(`Calling LLM for criterion: ${criterion.rubricQuestion}`);
 
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "file_grading",
-      "gpt-4o-mini",
-    );
-
     let parsedOutput: EvidenceOutput;
     try {
-      parsedOutput = await this.parseEvidenceOutput(response, parser);
+      const structured =
+        await this.promptProcessor.processStructuredPromptForFeature<EvidenceOutput>(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          "file_grading",
+          EvidenceOutputSchema,
+          "gpt-4o-mini",
+        );
+      // Re-validate through the schema so downstream code keeps its guarantees
+      // regardless of which provider (native or text-fallback) produced it.
+      parsedOutput = EvidenceOutputSchema.parse(structured);
     } catch (parseError) {
       this.logger.error(
         `Failed to parse LLM response: ${
@@ -834,98 +830,6 @@ LANGUAGE: {language}
         .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
         .trim()
     );
-  }
-
-  private async parseEvidenceOutput(
-    response: string,
-    parser: StructuredOutputParser<typeof EvidenceOutputSchema>,
-  ): Promise<EvidenceOutput> {
-    const sanitized = this.sanitizeJsonResponse(response);
-
-    try {
-      const parsed = (await parser.parse(sanitized)) as unknown;
-      return EvidenceOutputSchema.parse(parsed);
-    } catch (parseError) {
-      const extracted = this.extractJsonPayload(sanitized);
-      if (extracted && extracted !== sanitized) {
-        const parsed = (await parser.parse(extracted)) as unknown;
-        return EvidenceOutputSchema.parse(parsed);
-      }
-      throw parseError;
-    }
-  }
-
-  private sanitizeJsonResponse(response: string): string {
-    const trimmed = response.trim().replace(/^\uFEFF/, "");
-    return this.escapeControlCharsInJsonStrings(trimmed);
-  }
-
-  private extractJsonPayload(response: string): string {
-    const first = response.indexOf("{");
-    const last = response.lastIndexOf("}");
-    if (first === -1 || last === -1 || last <= first) {
-      return response;
-    }
-    return response.slice(first, last + 1);
-  }
-
-  private escapeControlCharsInJsonStrings(input: string): string {
-    let output = "";
-    let inString = false;
-    let isEscaped = false;
-
-    for (const char of input) {
-      if (isEscaped) {
-        output += char;
-        isEscaped = false;
-        continue;
-      }
-
-      if (char === "\\") {
-        output += char;
-        isEscaped = true;
-        continue;
-      }
-
-      if (char === '"') {
-        inString = !inString;
-        output += char;
-        continue;
-      }
-
-      if (inString) {
-        const code = char.codePointAt(0);
-
-        if (char === "\t") {
-          output += "\\t";
-          continue;
-        }
-        if (char === "\n") {
-          output += "\\n";
-          continue;
-        }
-        if (char === "\r") {
-          output += "\\r";
-          continue;
-        }
-        if (char === "\u2028") {
-          output += "\\u2028";
-          continue;
-        }
-        if (char === "\u2029") {
-          output += "\\u2029";
-          continue;
-        }
-        if (code < 0x20) {
-          output += `\\u${code.toString(16).padStart(4, "0")}`;
-          continue;
-        }
-      }
-
-      output += char;
-    }
-
-    return output;
   }
 
   /**

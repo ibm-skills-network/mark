@@ -18,7 +18,13 @@ function buildService(assessContent: jest.Mock) {
   service.logger = mockLogger();
   service.moderationService = { assessContent };
   service.promptProcessor = {
-    processPromptWithImage: jest.fn().mockResolvedValue("{}"),
+    processStructuredPromptWithImage: jest.fn().mockResolvedValue({
+      points: 3,
+      analysis: "a",
+      evaluation: "e",
+      explanation: "x",
+      guidance: "g",
+    }),
   };
   service.llmResolver = {
     getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4.1-mini"),
@@ -73,7 +79,7 @@ describe("ImageGradingService moderation verdicts", () => {
     expect(result.points).toBe(0);
     expect(result.feedback).toContain("flagged by automated content review");
     expect(
-      service.promptProcessor.processPromptWithImage,
+      service.promptProcessor.processStructuredPromptWithImage,
     ).not.toHaveBeenCalled();
     expect(mockLogger.warn).toHaveBeenCalledWith(
       "grading.moderation.blocked_severe",
@@ -138,7 +144,7 @@ describe("ImageGradingService moderation verdicts", () => {
     expect(result.points).toBe(0);
     expect(result.feedback).toContain("flagged by automated content review");
     expect(
-      service.promptProcessor.processPromptWithImage,
+      service.promptProcessor.processStructuredPromptWithImage,
     ).not.toHaveBeenCalled();
     expect(mockLogger.warn).toHaveBeenCalledWith(
       "grading.moderation.blocked_severe",
@@ -196,7 +202,7 @@ describe("ImageGradingService moderation verdicts", () => {
     expect(result.points).toBe(0);
     expect(result.feedback).toContain("flagged by automated content review");
     expect(
-      service.promptProcessor.processPromptWithImage,
+      service.promptProcessor.processStructuredPromptWithImage,
     ).not.toHaveBeenCalled();
     expect(mockLogger.warn).toHaveBeenCalledWith(
       "grading.moderation.blocked_severe",

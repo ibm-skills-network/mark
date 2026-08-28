@@ -116,6 +116,49 @@ export class Gpt4VisionPreviewLlmService implements IMultimodalLlmProvider {
   }
 
   /**
+   * Native structured output over an image + text prompt. Builds the same
+   * multimodal HumanMessage as invokeWithImage, then runs it through the shared
+   * structured-output invocation so schema fields are filled via constrained
+   * decoding and the SDK serializes the JSON (no free-form parse failures).
+   */
+  async invokeStructuredWithImage<T>(
+    textContent: string,
+    imageData: string,
+    schema: ZodTypeAny,
+    options?: LlmRequestOptions,
+  ): Promise<LlmStructuredResponse<T>> {
+    const processedImageData = this.normalizeImageData(imageData);
+    const message = new HumanMessage({
+      content: [
+        { type: "text", text: textContent },
+        {
+          type: "image_url",
+          image_url: {
+            url: processedImageData,
+            detail: options?.imageDetail ?? "auto",
+          },
+        },
+      ],
+    });
+
+    // Estimate tokens cheaply from the text plus the image heuristic; never
+    // tokenize the base64 data URL (see invokeStructuredChatModel).
+    const inputTokensEstimate =
+      this.tokenCounter.countTokens(textContent) +
+      this.estimateImageTokens(processedImageData);
+
+    return invokeStructuredChatModel<T>(
+      this.createChatModel(options),
+      [message],
+      schema,
+      this.tokenCounter,
+      this.logger,
+      options?.modelName ?? this.key,
+      inputTokensEstimate,
+    );
+  }
+
+  /**
    * Send a request with image content to the LLM
    */
   async invokeWithImage(

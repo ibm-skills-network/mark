@@ -194,18 +194,35 @@ export async function invokeStructuredChatModel<T>(
   tokenCounter: ITokenCounter,
   logger: Logger,
   modelName: string,
+  // Callers with non-string message content (e.g. an image data URL) should
+  // pass a precomputed token estimate. Otherwise the base64 payload gets
+  // JSON.stringified and BPE-tokenized on every call — slow, and it becomes
+  // the billed input count whenever usage_metadata is absent.
+  inputTokensOverride?: number,
 ): Promise<LlmStructuredResponse<T>> {
   const structuredModel = model.withStructuredOutput(getWidenedSchema(schema), {
     name: "structured_response",
     includeRaw: true,
   });
 
-  const inputText = messages
-    .map((m) =>
-      typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-    )
-    .join("\n");
-  const inputTokens = tokenCounter.countTokens(inputText);
+  const hasNonStringContent = messages.some(
+    (m) => typeof m.content !== "string",
+  );
+  // Skip stringifying multimodal content (base64 images) when an override is
+  // supplied; only build the text form for the start-log snippet when it is
+  // cheap (all-string content).
+  const inputText =
+    inputTokensOverride !== undefined && hasNonStringContent
+      ? "[multimodal content omitted]"
+      : messages
+          .map((m) =>
+            typeof m.content === "string"
+              ? m.content
+              : JSON.stringify(m.content),
+          )
+          .join("\n");
+  const inputTokens =
+    inputTokensOverride ?? tokenCounter.countTokens(inputText);
 
   logger.info("openai.invokeStructured.start", {
     model_name: modelName,

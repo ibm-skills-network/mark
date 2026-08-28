@@ -1,7 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { RubricDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
@@ -71,8 +70,6 @@ const ParsedJudgeResponseSchema = z.object({
 
 type ParsedJudgeResponse = z.infer<typeof ParsedJudgeResponseSchema>;
 
-const judgeParserCache = new WeakMap<any, StructuredOutputParser<any>>();
-
 @Injectable()
 export class GradingJudgeService implements IGradingJudgeService {
   private readonly logger: Logger;
@@ -97,9 +94,6 @@ export class GradingJudgeService implements IGradingJudgeService {
       );
 
       this.validateInput(input);
-
-      const parser = this.getOrCreateParser();
-      const formatInstructions = parser.getFormatInstructions();
 
       this.logger.info(
         `Judge will focus on qualitative assessment only, ignoring mathematical calculations`,
@@ -129,7 +123,6 @@ export class GradingJudgeService implements IGradingJudgeService {
             input.proposedGrading.guidance || "Not provided",
           proposed_rubric_scores: () =>
             JSON.stringify(input.proposedGrading.rubricScores || []),
-          format_instructions: () => formatInstructions,
         },
       });
 
@@ -142,18 +135,18 @@ export class GradingJudgeService implements IGradingJudgeService {
         ).length,
       );
 
-      const response = await this.processWithTimeout(
-        this.promptProcessor.processPromptForFeature(
+      const parsedResponse = await this.processWithTimeout(
+        this.promptProcessor.processStructuredPromptForFeature<ParsedJudgeResponse>(
           prompt,
           input.assignmentId,
           AIUsageType.GRADING_VALIDATION,
           "text_grading",
+          ParsedJudgeResponseSchema,
           selectedModel,
         ),
         this.maxJudgeTimeout,
       );
 
-      const parsedResponse = await parser.parse(response);
       const result = this.buildJudgeResult(parsedResponse, input);
 
       const endTime = Date.now();
@@ -319,20 +312,6 @@ export class GradingJudgeService implements IGradingJudgeService {
     return result;
   }
 
-  private getOrCreateParser(): StructuredOutputParser<
-    typeof ParsedJudgeResponseSchema
-  > {
-    const cacheKey = {};
-    let parser = judgeParserCache.get(cacheKey);
-
-    if (!parser) {
-      parser = StructuredOutputParser.fromZodSchema(ParsedJudgeResponseSchema);
-      judgeParserCache.set(cacheKey, parser);
-    }
-
-    return parser as StructuredOutputParser<typeof ParsedJudgeResponseSchema>;
-  }
-
   private async processWithTimeout<T>(
     promise: Promise<T>,
     timeoutMs: number,
@@ -414,9 +393,7 @@ Be LENIENT - only reject if there are genuinely serious problems with the gradin
 CORRECTIONS RULES (only when rejecting):
 - If points are not valid rubric values or total doesn't match sum, provide correctedRubricScores.
 - If feedback is generic/subjective, provide suggestedFeedbackChanges.
-- If you cannot correct safely, leave corrections empty and explain in feedback.
-
-{format_instructions}`;
+- If you cannot correct safely, leave corrections empty and explain in feedback.`;
   }
 
   private sanitizeCorrectedRubricScores(

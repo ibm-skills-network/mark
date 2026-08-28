@@ -1,5 +1,5 @@
 /**
- * The file-grading retry ladder (processPromptWithRetry) must not resend an
+ * The file-grading retry ladder (processStructuredWithRetry) must not resend an
  * identical prompt after a context_length_exceeded 400. That error is
  * deterministic for a given prompt, so retrying it on the same model — and then
  * resending it once more on the fallback model — wastes budget and can never
@@ -13,7 +13,7 @@
  */
 import { PromptTemplate } from "@langchain/core/prompts";
 
-function buildService(processPromptForFeature: jest.Mock) {
+function buildService(processStructuredPromptForFeature: jest.Mock) {
   const mockLogger = {
     info: jest.fn(),
     warn: jest.fn(),
@@ -27,7 +27,7 @@ function buildService(processPromptForFeature: jest.Mock) {
     require("../file-grading.service").FileGradingService.prototype,
   );
   service.logger = mockLogger;
-  service.promptProcessor = { processPromptForFeature };
+  service.promptProcessor = { processStructuredPromptForFeature };
   service.llmResolver = {
     getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
   };
@@ -41,20 +41,24 @@ function buildPrompt(): PromptTemplate {
   return new PromptTemplate({ template: "grade this", inputVariables: [] });
 }
 
-describe("FileGradingService.processPromptWithRetry context-length fail-fast", () => {
+describe("FileGradingService.processStructuredWithRetry context-length fail-fast", () => {
   it("stops after one invoke on a context-length error and never tries the fallback", async () => {
     const contextError = Object.assign(new Error("Request failed"), {
       code: "context_length_exceeded",
     });
-    const processPromptForFeature = jest.fn().mockRejectedValue(contextError);
-    const { service, mockLogger } = buildService(processPromptForFeature);
+    const processStructuredPromptForFeature = jest
+      .fn()
+      .mockRejectedValue(contextError);
+    const { service, mockLogger } = buildService(
+      processStructuredPromptForFeature,
+    );
 
     await expect(
-      service.processPromptWithRetry(buildPrompt(), 42, "gpt-4o", 10),
+      service.processStructuredWithRetry(buildPrompt(), 42, "gpt-4o"),
     ).rejects.toThrow();
 
     // Exactly one underlying call: no same-model retries, no fallback resend.
-    expect(processPromptForFeature).toHaveBeenCalledTimes(1);
+    expect(processStructuredPromptForFeature).toHaveBeenCalledTimes(1);
     expect(service.llmResolver.getModelKeyWithFallback).not.toHaveBeenCalled();
 
     // The fail-fast structured error log fired with the event name.
@@ -65,17 +69,19 @@ describe("FileGradingService.processPromptWithRetry context-length fail-fast", (
   });
 
   it("uses the full retry ladder (3 same-model + 1 fallback) on a generic error", async () => {
-    const processPromptForFeature = jest
+    const processStructuredPromptForFeature = jest
       .fn()
       .mockRejectedValue(new Error("Rate limit reached for gpt-4o"));
-    const { service, mockLogger } = buildService(processPromptForFeature);
+    const { service, mockLogger } = buildService(
+      processStructuredPromptForFeature,
+    );
 
     await expect(
-      service.processPromptWithRetry(buildPrompt(), 42, "gpt-4o", 10),
+      service.processStructuredWithRetry(buildPrompt(), 42, "gpt-4o"),
     ).rejects.toThrow();
 
     // 3 primary-model attempts then 1 fallback-model attempt.
-    expect(processPromptForFeature).toHaveBeenCalledTimes(4);
+    expect(processStructuredPromptForFeature).toHaveBeenCalledTimes(4);
     expect(service.llmResolver.getModelKeyWithFallback).toHaveBeenCalledTimes(
       1,
     );

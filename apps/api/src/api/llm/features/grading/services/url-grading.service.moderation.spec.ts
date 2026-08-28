@@ -16,7 +16,11 @@ function buildService(assessContent: jest.Mock) {
   const service: any = Object.create(UrlGradingService.prototype);
   service.logger = mockLogger();
   service.moderationService = { assessContent };
-  service.promptProcessor = { processPromptForFeature: jest.fn() };
+  service.promptProcessor = {
+    processStructuredPromptForFeature: jest
+      .fn()
+      .mockResolvedValue({ points: 3, feedback: "ok" }),
+  };
   return { service, mockLogger: service.logger };
 }
 
@@ -52,7 +56,7 @@ describe("UrlGradingService moderation verdicts", () => {
     expect(result.points).toBe(0);
     expect(result.feedback).toContain("flagged by automated content review");
     expect(
-      service.promptProcessor.processPromptForFeature,
+      service.promptProcessor.processStructuredPromptForFeature,
     ).not.toHaveBeenCalled();
     expect(mockLogger.warn).toHaveBeenCalledWith(
       "grading.moderation.blocked_severe",
