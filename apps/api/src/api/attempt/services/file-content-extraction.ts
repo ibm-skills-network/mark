@@ -39,6 +39,13 @@ const MAX_NOTEBOOK_IMAGE_BYTES = 1_500_000;
 /** Notebook output MIME types worth sending to a vision model. */
 const DESCRIBABLE_IMAGE_MIMES = new Set(["image/png", "image/jpeg"]);
 
+/**
+ * matplotlib's figure repr, e.g. "<Figure size 800x600 with 1 Axes>". An empty
+ * figure prints exactly the same line as a full one, so it carries no evidence
+ * about what was drawn.
+ */
+const MATPLOTLIB_FIGURE_REPR = /^<Figure size [\d.x]+ with \d+ Axes?>$/;
+
 interface NotebookImage {
   mime: string;
   /** Data URL — matches what the PDF extractor emits. */
@@ -1734,9 +1741,11 @@ export class FileContentExtractionService {
       }
 
       const text = cell.text.trim();
+      let cellBlockId: string | undefined;
       if (text) {
+        cellBlockId = `p1b${blockIndex}_cell${cell.index}`;
         blocks.push({
-          blockId: `p1b${blockIndex}_cell${cell.index}`,
+          blockId: cellBlockId,
           type: cell.type === "code" ? "code" : "paragraph",
           text,
           page: 1,
@@ -1762,6 +1771,9 @@ export class FileContentExtractionService {
             ? `[Image output of cell ${cell.index}]`
             : `[Image output of cell ${cell.index} — not described, image cap reached]`,
           page: 1,
+          // The cell that drew this plot, stated rather than inferred from
+          // adjacency — grading attaches the description back onto it.
+          ...(cellBlockId ? { producedByBlockId: cellBlockId } : {}),
           ...(withinCap
             ? {
                 imageData: image.imageData,
@@ -1838,6 +1850,17 @@ export class FileContentExtractionService {
       "image/svg+xml",
     ];
 
+    // A plot's text/plain twin is matplotlib's object repr, e.g.
+    // "<Figure size 800x600 with 1 Axes>". It proves a figure OBJECT existed,
+    // never that a chart was drawn — an empty figure prints the identical
+    // line. Graders read it as proof of a rendered chart and awarded full
+    // marks for blank plots, so drop it when the same output carries an image
+    // we will describe properly. Kept when there is no image, where it is the
+    // only trace of the figure at all.
+    const describableImage = [...DESCRIBABLE_IMAGE_MIMES].some(
+      (mime) => data[mime],
+    );
+
     for (const mime of mimePreference) {
       if (data[mime]) {
         const content = data[mime];
@@ -1850,6 +1873,13 @@ export class FileContentExtractionService {
           const text = Array.isArray(content)
             ? content.join("")
             : String(content);
+          if (
+            mime === "text/plain" &&
+            describableImage &&
+            MATPLOTLIB_FIGURE_REPR.test(text.trim())
+          ) {
+            continue;
+          }
           result += `[${mime}]:\n${text}\n`;
         } else if (mime.startsWith("image/")) {
           result += `[${mime}]: <image data present>\n`;

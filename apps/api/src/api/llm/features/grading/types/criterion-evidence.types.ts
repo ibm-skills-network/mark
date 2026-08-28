@@ -60,6 +60,12 @@ export interface ExtractedChunk {
     checksum?: string;
     /** Mirrors ContentBlock.pinnedEvidence: always reaches the LLM validator. */
     pinned?: boolean;
+    /**
+     * Mirrors ContentBlock.imageHash — identity of the picture this chunk
+     * describes. Retrieval collapses chunks sharing one so several copies of
+     * the same plot cannot spend the whole evidence budget.
+     */
+    imageHash?: string;
   };
 }
 

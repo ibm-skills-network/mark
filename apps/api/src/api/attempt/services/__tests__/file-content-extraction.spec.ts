@@ -473,6 +473,81 @@ describe("FileContentExtractionService - notebook structured content", () => {
     expect(result.structuredContent.metadata.checksum).toBe(expected);
   });
 
+  it("drops the matplotlib figure repr when a real image accompanies it", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["df.plot()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              data: {
+                "text/plain": ["<Figure size 800x500 with 1 Axes>"],
+                "image/png": [PNG],
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    // "<Figure size ... with 1 Axes>" is printed identically by an EMPTY figure,
+    // so it is not evidence a chart was drawn — graders read it as exactly that
+    // and credited blank plots. The described image replaces it.
+    expect(result.extractedText).not.toContain("<Figure size");
+    expect(result.extractedText).toContain("[image/png]: <image data present>");
+  });
+
+  it("keeps the figure repr when there is no image to describe", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["fig = plt.figure()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "execute_result",
+              execution_count: 1,
+              data: { "text/plain": ["<Figure size 640x480 with 0 Axes>"] },
+            },
+          ],
+        },
+      ]),
+    );
+
+    // With no image attached it is the only trace of the figure at all.
+    expect(result.extractedText).toContain("<Figure size 640x480 with 0 Axes>");
+  });
+
+  it("keeps ordinary text output that sits alongside an image", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["report()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              data: {
+                "text/plain": ["Revenue by month: 12 rows"],
+                "image/png": [PNG],
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(result.extractedText).toContain("Revenue by month: 12 rows");
+  });
+
   it("returns no structured content when the notebook cannot be parsed", async () => {
     const result = await extract(Buffer.from("{not json", "utf8"));
 

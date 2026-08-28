@@ -745,6 +745,334 @@ describe("FileGradingService - notebook extractions chunk by cell", () => {
   });
 });
 
+// ─── Notebooks with extractor-built blocks (cells + plot images) ──────────
+
+describe("FileGradingService - notebook blocks from extraction", () => {
+  let service: any;
+
+  beforeEach(() => {
+    service = buildService();
+  });
+
+  const IMAGE_DATA = "data:image/png;base64,iVBORw0KGgo=";
+
+  const bigCell = (n: number, body: string) =>
+    `=== CELL ${n} [CODE] [${n}] ===\n${body}\n${"# padding comment line\n".repeat(
+      12,
+    )}`;
+
+  /** Mirrors the shape FileContentExtractionService emits for a notebook. */
+  function extractionSubmission(
+    blocks: Partial<CanonicalSubmission["pages"][0]["blocks"][0]>[],
+  ): CanonicalSubmission {
+    return {
+      submissionId: "analysis.ipynb",
+      metadata: {
+        wordCount: 100,
+        pageCount: 1,
+        blockCount: blocks.length,
+        sourceType: "ipynb",
+        checksum: "notebook-bytes-checksum",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [{ pageNumber: 1, blocks: blocks as any }],
+    };
+  }
+
+  function notebookFile(structuredContent: CanonicalSubmission) {
+    const text = structuredContent.pages[0].blocks
+      .map((block) => block.text)
+      .join("\n");
+    return makeFile("analysis.ipynb", {
+      content: text,
+      extractedText: text,
+      structuredContent,
+    });
+  }
+
+  function enrich(file: LearnerFileUpload) {
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading(
+      [file],
+      true,
+    );
+    return enriched.structuredContent.pages[0].blocks;
+  }
+
+  const plotNotebook = () =>
+    extractionSubmission([
+      {
+        blockId: "p1b1_cell1",
+        type: "code",
+        page: 1,
+        text: bigCell(1, "df.plot(kind='bar')"),
+      },
+      {
+        blockId: "p1b2_cell1_img1",
+        type: "image",
+        page: 1,
+        text: "[Image output of cell 1]",
+        imageData: IMAGE_DATA,
+        imageHash: "abc123",
+      },
+      {
+        blockId: "p1b3_cell2",
+        type: "code",
+        page: 1,
+        text: bigCell(2, "print(df.describe())"),
+      },
+    ]);
+
+  it("applies the code policy that the text path applies", () => {
+    const blocks = enrich(notebookFile(plotNotebook()));
+
+    // The pinned whole-file view is what holistic criteria are judged against.
+    const pinned = blocks.filter((b: any) => b.pinnedEvidence);
+    expect(pinned).toHaveLength(1);
+    expect(pinned[0].text).toContain("=== FILE: analysis.ipynb");
+    expect(pinned[0].text).toContain("df.plot(kind='bar')");
+  });
+
+  it("keeps the plot next to the cell that produced it", () => {
+    const blocks = enrich(notebookFile(plotNotebook()));
+
+    const imageIndex = blocks.findIndex((b: any) => b.type === "image");
+    expect(imageIndex).toBeGreaterThan(-1);
+    expect(blocks[imageIndex - 1].text).toContain("df.plot(kind='bar')");
+    expect(blocks[imageIndex].imageData).toBe(IMAGE_DATA);
+    expect(blocks[imageIndex].imageHash).toBe("abc123");
+  });
+
+  it("keeps every block on page 1", () => {
+    const blocks = enrich(notebookFile(plotNotebook()));
+    expect(blocks.every((b: any) => b.page === 1)).toBe(true);
+  });
+
+  it("keeps cell identity in the blockId", () => {
+    const blocks = enrich(notebookFile(plotNotebook()));
+
+    expect(blocks.some((b: any) => b.blockId.includes("_cell1"))).toBe(true);
+    expect(blocks.some((b: any) => b.blockId.includes("_cell1_img1"))).toBe(
+      true,
+    );
+    // Ids stay unique after renumbering.
+    const ids = blocks.map((b: any) => b.blockId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("does not stack duplicate policy blocks when run twice", () => {
+    const file = notebookFile(plotNotebook());
+    const [once] = service.ensureStructuredContentForEvidenceGrading(
+      [file],
+      true,
+    );
+    const [twice] = service.ensureStructuredContentForEvidenceGrading(
+      [once],
+      true,
+    );
+
+    const pinnedCount = twice.structuredContent.pages[0].blocks.filter(
+      (b: any) => b.pinnedEvidence,
+    ).length;
+    expect(pinnedCount).toBe(1);
+    expect(twice.structuredContent.pages[0].blocks).toHaveLength(
+      once.structuredContent.pages[0].blocks.length,
+    );
+  });
+
+  it("folds a trivially short cell into its neighbour", () => {
+    const blocks = enrich(
+      notebookFile(
+        extractionSubmission([
+          {
+            blockId: "p1b1_cell1",
+            type: "code",
+            page: 1,
+            text: bigCell(1, "import pandas as pd"),
+          },
+          {
+            blockId: "p1b2_cell2",
+            type: "code",
+            page: 1,
+            text: "=== CELL 2 [CODE] [2] ===\nx = 1",
+          },
+        ]),
+      ),
+    );
+
+    const cellBlocks = blocks.filter(
+      (b: any) => !b.pinnedEvidence && b.type === "code",
+    );
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].text).toContain("import pandas as pd");
+    expect(cellBlocks[0].text).toContain("x = 1");
+  });
+
+  it("never folds away a cell that owns a plot", () => {
+    const blocks = enrich(
+      notebookFile(
+        extractionSubmission([
+          {
+            blockId: "p1b1_cell1",
+            type: "code",
+            page: 1,
+            text: bigCell(1, "setup()"),
+          },
+          {
+            blockId: "p1b2_cell2",
+            type: "code",
+            page: 1,
+            text: "=== CELL 2 [CODE] [2] ===\ndf.plot()",
+          },
+          {
+            blockId: "p1b3_cell2_img1",
+            type: "image",
+            page: 1,
+            text: "[Image output of cell 2]",
+            imageData: IMAGE_DATA,
+          },
+        ]),
+      ),
+    );
+
+    // The short cell survives as its own block so the plot stays attached to
+    // the code that drew it.
+    const imageIndex = blocks.findIndex((b: any) => b.type === "image");
+    expect(blocks[imageIndex - 1].text).toContain("df.plot()");
+  });
+
+  it("keeps the extractor checksum so cache identity tracks the artifact", () => {
+    const [enriched] = service.ensureStructuredContentForEvidenceGrading(
+      [notebookFile(plotNotebook())],
+      true,
+    );
+
+    expect(enriched.structuredContent.metadata.checksum).toBe(
+      "notebook-bytes-checksum",
+    );
+    expect(enriched.structuredContent.metadata.sourceType).toBe("ipynb");
+  });
+
+  it("still rebuilds from text when the notebook had no structured content", () => {
+    const file = makeCodeFile(
+      "analysis.ipynb",
+      "=== CELL 1 [CODE] [1] ===\nprint('hi')\n",
+    );
+    const blocks = enrich(file);
+
+    expect(blocks.some((b: any) => b.pinnedEvidence)).toBe(true);
+    expect(blocks.some((b: any) => b.type === "image")).toBe(false);
+  });
+});
+
+// ─── Cache identity does not canonicalize image payloads ──────────────────
+
+describe("FileGradingService.stableStructuredContent", () => {
+  let service: any;
+
+  beforeEach(() => {
+    service = buildService();
+  });
+
+  function withImage(imageData: string, imageHash?: string) {
+    return {
+      submissionId: "analysis.ipynb",
+      metadata: {
+        wordCount: 5,
+        pageCount: 1,
+        blockCount: 1,
+        sourceType: "ipynb",
+        checksum: "chk",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            {
+              blockId: "p1b1_cell1_img1",
+              type: "image",
+              text: "[Image output of cell 1]",
+              page: 1,
+              imageData,
+              ...(imageHash ? { imageHash } : {}),
+            },
+          ],
+        },
+      ],
+    } as CanonicalSubmission;
+  }
+
+  it("substitutes the payload with its hash instead of canonicalizing base64", () => {
+    const huge = `data:image/png;base64,${"A".repeat(200_000)}`;
+    const stable = service.stableStructuredContent(withImage(huge, "hash-a"));
+
+    const serialized = JSON.stringify(stable);
+    expect(serialized).not.toContain("A".repeat(100));
+    expect(serialized).toContain("hash-a");
+    expect(serialized.length).toBeLessThan(1000);
+  });
+
+  it("still changes identity when the picture changes", () => {
+    const first = service.hashCanonical(
+      service.stableStructuredContent(withImage("data:one", "hash-a")),
+    );
+    const second = service.hashCanonical(
+      service.stableStructuredContent(withImage("data:two", "hash-b")),
+    );
+
+    expect(first).not.toBe(second);
+  });
+
+  it("hashes the payload itself when the extractor supplied no hash", () => {
+    const stable = service.stableStructuredContent(withImage("data:one"));
+    const block = (stable as any).pages[0].blocks[0];
+
+    expect(block.imageData).not.toBe("data:one");
+    expect(block.imageData).toHaveLength(64);
+
+    const other = service.stableStructuredContent(withImage("data:two"));
+    expect((other as any).pages[0].blocks[0].imageData).not.toBe(
+      block.imageData,
+    );
+  });
+
+  it("still strips extractedAt so the cache can hit across attempts", () => {
+    const stable = service.stableStructuredContent(withImage("d", "h"));
+    expect((stable as any).metadata.extractedAt).toBeUndefined();
+    expect((stable as any).metadata.checksum).toBe("chk");
+  });
+
+  it("leaves submissions without images untouched", () => {
+    const submission: CanonicalSubmission = {
+      submissionId: "essay.pdf",
+      metadata: {
+        wordCount: 5,
+        pageCount: 1,
+        blockCount: 1,
+        sourceType: "pdf",
+        checksum: "chk",
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          blocks: [
+            { blockId: "p1b1", type: "paragraph", text: "hello", page: 1 },
+          ],
+        },
+      ],
+    };
+
+    const stable: any = service.stableStructuredContent(submission);
+    expect(stable.pages[0].blocks[0]).toEqual({
+      blockId: "p1b1",
+      type: "paragraph",
+      text: "hello",
+      page: 1,
+    });
+  });
+});
+
 // ─── tryDeterministicSpreadsheetGrading is called before evidence-based ───
 
 describe("FileGradingService - deterministic grading runs before evidence-based", () => {

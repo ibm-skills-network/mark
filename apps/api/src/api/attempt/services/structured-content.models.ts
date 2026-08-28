@@ -70,8 +70,23 @@ export interface ContentBlock {
    */
   sourceFilename?: string;
 
+  /**
+   * Grading-time note about what this block's output actually looks like, set
+   * once an image it produced has been described. NOT learner content: it is
+   * appended when building chunk text so retrieval and validation can see it,
+   * while `text` stays exactly what the learner submitted.
+   */
+  renderedOutputNote?: string;
+
   imageData?: string;
   imageDescription?: string;
+  /**
+   * blockId of the block whose execution produced this image, where the
+   * extractor knows the relationship (a notebook cell and its plots). Absent
+   * when it does not: PDF pages list every text block before every image, so
+   * position implies nothing about which text produced which figure.
+   */
+  producedByBlockId?: string;
   /**
    * Content digest of the image bytes. Two blocks carrying the same picture
    * share a hash, so the vision step can describe it once and reuse the result

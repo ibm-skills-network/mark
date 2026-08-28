@@ -54,6 +54,11 @@ export class EvidenceChunkingService {
             structured: true,
             checksum: submission.metadata.checksum,
             ...(block.pinnedEvidence ? { pinned: true } : {}),
+            // Identity of the picture itself. Retrieval collapses chunks
+            // sharing one so several copies of the same plot cannot spend the
+            // whole evidence budget; the chunk *text* can't be used for that,
+            // since each carries its own "[Image output of cell N]" label.
+            ...(block.imageHash ? { imageHash: block.imageHash } : {}),
           },
         });
 
@@ -195,7 +200,14 @@ export class EvidenceChunkingService {
       return [ocr, description].filter(Boolean).join("\n").trim();
     }
 
-    return block.text?.trim() || "";
+    // A block that produced an image carries a grading-time note describing
+    // what that image actually shows. It belongs in the retrieved text — a
+    // grader citing the code alone would otherwise infer output the picture
+    // contradicts — but never in block.text, which is the learner's own
+    // content.
+    return [block.text?.trim() || "", block.renderedOutputNote || ""]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   private splitIntoParagraphs(text: string): string[] {

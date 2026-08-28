@@ -127,6 +127,42 @@ export class CriterionEvidenceRetrievalService {
     };
   }
 
+  /**
+   * Collapse chunks carrying the SAME picture, keeping the best-ranked one.
+   *
+   * One picture can appear in a submission many times over — a notebook cell
+   * re-run emits a byte-identical plot each time — and the vision pass
+   * deliberately gives every copy the same description. Evidence slots are
+   * scarce (maxEvidence), so without this a notebook re-running one plot five
+   * times spends five of six slots on the same sentence and crowds out its own
+   * code.
+   *
+   * Keys on the extractor's `imageHash`, not the chunk text: every image chunk
+   * carries its own "[Image output of cell N]" label, so identical pictures
+   * never have identical text. Chunks with no hash are left alone — repeated
+   * *text* can be genuinely distinct evidence (the same boilerplate in two
+   * files is two findings), and each copy still anchors to its own location.
+   *
+   * Callers must sort before calling: the first occurrence wins.
+   */
+  private dropDuplicateImages<T extends { chunk: ExtractedChunk }>(
+    items: T[],
+  ): T[] {
+    const seen = new Set<string>();
+    const kept: T[] = [];
+    for (const item of items) {
+      const hash = item.chunk.metadata?.imageHash;
+      if (typeof hash !== "string" || !hash) {
+        kept.push(item);
+        continue;
+      }
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      kept.push(item);
+    }
+    return kept;
+  }
+
   async retrieveEvidence(
     request: CriterionEvidenceRequest,
     index: ChunkIndex,
@@ -171,8 +207,8 @@ export class CriterionEvidenceRetrievalService {
           };
         })
         .filter((candidate) => candidate.relevance >= this.config.minRelevance)
-        .sort((a, b) => b.combined - a.combined)
-        .slice(0, maxEvidence);
+        .sort((a, b) => b.combined - a.combined);
+      reranked = this.dropDuplicateImages(reranked).slice(0, maxEvidence);
     }
 
     if (reranked.length === 0) {
@@ -190,10 +226,11 @@ export class CriterionEvidenceRetrievalService {
         };
       });
 
-      const aboveThreshold = scored
-        .filter((item) => item.relevance >= this.config.minRelevance)
-        .sort((a, b) => b.combined - a.combined)
-        .slice(0, maxEvidence);
+      const aboveThreshold = this.dropDuplicateImages(
+        scored
+          .filter((item) => item.relevance >= this.config.minRelevance)
+          .sort((a, b) => b.combined - a.combined),
+      ).slice(0, maxEvidence);
 
       // Lexical relevance scoring misses genuinely relevant content with no
       // keyword overlap (e.g. numeric spreadsheet cells vs. prose rubric
@@ -203,9 +240,9 @@ export class CriterionEvidenceRetrievalService {
       reranked =
         aboveThreshold.length > 0
           ? aboveThreshold
-          : scored
-              .sort((a, b) => b.combined - a.combined)
-              .slice(0, this.config.maxCandidates);
+          : this.dropDuplicateImages(
+              scored.sort((a, b) => b.combined - a.combined),
+            ).slice(0, this.config.maxCandidates);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
