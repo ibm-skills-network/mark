@@ -127,6 +127,42 @@ export class CriterionEvidenceRetrievalService {
     };
   }
 
+  /**
+   * Collapse chunks carrying the SAME picture, keeping the best-ranked one.
+   *
+   * One picture can appear in a submission many times over — a notebook cell
+   * re-run emits a byte-identical plot each time — and the vision pass
+   * deliberately gives every copy the same description. Evidence slots are
+   * scarce (maxEvidence), so without this a notebook re-running one plot five
+   * times spends five of six slots on the same sentence and crowds out its own
+   * code.
+   *
+   * Keys on the extractor's `imageHash`, not the chunk text: every image chunk
+   * carries its own "[Image output of cell N]" label, so identical pictures
+   * never have identical text. Chunks with no hash are left alone — repeated
+   * *text* can be genuinely distinct evidence (the same boilerplate in two
+   * files is two findings), and each copy still anchors to its own location.
+   *
+   * Callers must sort before calling: the first occurrence wins.
+   */
+  private dropDuplicateImages<T extends { chunk: ExtractedChunk }>(
+    items: T[],
+  ): T[] {
+    const seen = new Set<string>();
+    const kept: T[] = [];
+    for (const item of items) {
+      const hash = item.chunk.metadata?.imageHash;
+      if (typeof hash !== "string" || !hash) {
+        kept.push(item);
+        continue;
+      }
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      kept.push(item);
+    }
+    return kept;
+  }
+
   async retrieveEvidence(
     request: CriterionEvidenceRequest,
     index: ChunkIndex,
@@ -180,8 +216,13 @@ export class CriterionEvidenceRetrievalService {
         })
         .sort((a, b) => b.combined - a.combined);
 
-      reranked = scored.filter(
-        (candidate) => candidate.relevance >= this.config.minRelevance,
+      // Collapse repeats of one picture before the pool goes forward: with the
+      // whole pool reaching the validator, duplicate plot descriptions would
+      // otherwise spend both its attention and the prompt render budget.
+      reranked = this.dropDuplicateImages(
+        scored.filter(
+          (candidate) => candidate.relevance >= this.config.minRelevance,
+        ),
       );
     }
 
@@ -200,10 +241,11 @@ export class CriterionEvidenceRetrievalService {
         };
       });
 
-      const aboveThreshold = scored
-        .filter((item) => item.relevance >= this.config.minRelevance)
-        .sort((a, b) => b.combined - a.combined)
-        .slice(0, this.config.maxCandidates);
+      const aboveThreshold = this.dropDuplicateImages(
+        scored
+          .filter((item) => item.relevance >= this.config.minRelevance)
+          .sort((a, b) => b.combined - a.combined),
+      ).slice(0, this.config.maxCandidates);
 
       // Lexical relevance scoring misses genuinely relevant content with no
       // keyword overlap (e.g. numeric spreadsheet cells vs. prose rubric
@@ -213,9 +255,9 @@ export class CriterionEvidenceRetrievalService {
       reranked =
         aboveThreshold.length > 0
           ? aboveThreshold
-          : scored
-              .sort((a, b) => b.combined - a.combined)
-              .slice(0, this.config.maxCandidates);
+          : this.dropDuplicateImages(
+              scored.sort((a, b) => b.combined - a.combined),
+            ).slice(0, this.config.maxCandidates);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
@@ -252,10 +294,15 @@ export class CriterionEvidenceRetrievalService {
         0,
         this.config.maxCandidates - reranked.length,
       );
-      reranked = [
+      // Dedupe the composed pool, not just the top-up: `scored` and the corpus
+      // still hold the duplicate image chunks collapsed above, so topping up
+      // from them would put them straight back. Order is preserved and the
+      // already-deduped `reranked` leads, so this only drops repeats.
+      reranked = this.dropDuplicateImages([
         ...reranked,
-        ...[...belowThreshold, ...corpusTopUp].slice(0, topUpCount),
-      ];
+        ...belowThreshold,
+        ...corpusTopUp,
+      ]).slice(0, Math.max(reranked.length + topUpCount, reranked.length));
     }
 
     // Pinned chunks (e.g. the whole-file block for code uploads) must always
