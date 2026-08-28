@@ -40,6 +40,10 @@ export class authorAssignmentDetailsDTO {
   introduction: string;
   @IsString()
   instructions: string;
+  // The unsaved author toggle, so a preview can reflect it before publish.
+  @IsBoolean()
+  @IsOptional()
+  showPassFailIndicator?: boolean;
 }
 
 export class LearnerUpdateAssignmentAttemptRequestDto {

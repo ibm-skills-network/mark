@@ -199,13 +199,17 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           const progress = Math.round(
             (ProgressEvent.loaded / ProgressEvent.total) * 100,
           );
+          // The message stays a stable, translatable string; the ticking
+          // percentage renders only in the opted-out badge. Interpolating it
+          // here would rewrite a translatable text node several times per
+          // second, forcing a route re-scan on every progress event.
           setUploadStatus((prev) => ({
             ...prev,
             [id]: {
               ...prev[id],
               status: "uploading",
               progress,
-              message: `Uploading... ${progress}%`,
+              message: "Uploading file...",
             },
           }));
         },
@@ -216,6 +220,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               ...prev[id],
               status: "waiting",
               message: "Waiting to upload…",
+            },
+          }));
+        },
+        onFallback: () => {
+          // The direct-to-storage route is blocked on this network and the
+          // file is being re-sent through the API. Say so — progress is
+          // genuinely starting over, and a silent snap back to 0% reads as
+          // a hang.
+          setUploadStatus((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              status: "waiting",
+              progress: 0,
+              message: "Retrying over a different route…",
             },
           }));
         },
@@ -396,7 +415,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                       </p>
                     </div>
                   </div>
+                  {/* Opted out: the percentage ticks with every progress
+                      event and must not re-scan the route. */}
                   <span
+                    data-no-ui-translate="true"
+                    translate="no"
                     className={`
                     text-sm font-semibold px-3 py-1 rounded-full
                     ${

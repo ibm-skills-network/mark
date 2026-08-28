@@ -865,6 +865,7 @@
   "Please select a language to continue.": "Välj ett språk för att fortsätta.",
   "Please select a Question Type first.": "Välj en frågetyp först.",
   "Please select the number of variations to generate": "Välj antalet varianter som ska genereras",
+  "Please wait {time} before retrying": "Vänta {time} innan du försöker igen",
   "Points": "Poäng",
   "Points hidden": "Poäng gömda",
   "Points:": "Poäng:",

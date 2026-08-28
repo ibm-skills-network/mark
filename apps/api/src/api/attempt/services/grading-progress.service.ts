@@ -266,8 +266,10 @@ export class GradingProgressService {
           // ready" signal and must never precede the commit; if a future
           // caller reintroduces that ordering this is how we find out.
           // Throwing here would strand the row at PROCESSING, which is worse
-          // for the learner than a momentarily early COMPLETED.
-          this.logger.warn(
+          // for the learner than a momentarily early COMPLETED. Logged at
+          // error because every firing means a learner was told "done" for
+          // an attempt that never persisted.
+          this.logger.error(
             `grading.progress.completed.before.commit attemptId=${attemptId}`,
           );
         }

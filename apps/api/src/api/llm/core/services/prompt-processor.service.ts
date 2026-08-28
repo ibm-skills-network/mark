@@ -21,6 +21,10 @@ import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { logAiInvocation } from "../utils/ai-invocation-log.util";
 import {
+  toImageDataList,
+  totalImageDataLength,
+} from "../utils/multimodal-image.util";
+import {
   buildPromptMessage,
   promptCacheApplies,
 } from "../utils/prompt-cache.util";
@@ -397,7 +401,7 @@ export class PromptProcessorService implements IPromptProcessor {
    */
   async processPromptWithImage(
     prompt: PromptTemplate,
-    imageData: string,
+    imageData: string | string[],
     assignmentId: number,
     usageType: AIUsageType,
     llmKey = "gpt-4.1-mini",
@@ -432,7 +436,24 @@ export class PromptProcessorService implements IPromptProcessor {
 
       textContent = decodeIfBase64(textContent) || textContent;
 
-      const decodedImageData = decodeIfBase64(imageData) || imageData;
+      // Each payload is decoded independently: a batch can mix an inline data
+      // URL with a storage-resolved one, and decoding the joined list would
+      // corrupt both.
+      const imagePayloads = toImageDataList(imageData);
+      if (imagePayloads.length === 0) {
+        throw new Error("No image data provided for image prompt");
+      }
+      const decodedImageData = imagePayloads.map(
+        (payload) => decodeIfBase64(payload) || payload,
+      );
+
+      this.logger.debug("llm.prompt.with_image.start", {
+        assignment_id: assignmentId,
+        usage_type: usageType,
+        llm_key: llmKey,
+        image_count: decodedImageData.length,
+        image_bytes: totalImageDataLength(decodedImageData),
+      });
 
       const result = await llm.invokeWithImage(
         textContent,
@@ -445,7 +466,7 @@ export class PromptProcessorService implements IPromptProcessor {
       logAiInvocation(this.logger, {
         modelKey: llm.key,
         purpose: usageType,
-        prompt: `${textContent} [image omitted]`,
+        prompt: `${textContent} [${decodedImageData.length} image(s) omitted]`,
         response,
         context: {
           assignment_id: assignmentId,

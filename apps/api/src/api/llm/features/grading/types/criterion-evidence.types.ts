@@ -66,6 +66,24 @@ export interface ExtractedChunk {
      * the same plot cannot spend the whole evidence budget.
      */
     imageHash?: string;
+    /**
+     * Chunk is a merged prose section (a page/slide worth of consecutive
+     * blocks). Section quotes carry their full text — the short prose
+     * excerpt cap would undo the merge.
+     */
+    section?: boolean;
+    /**
+     * Synthetic pinned whole-document view (page-labelled prose aggregate).
+     * Learner-facing citations strip its marker header lines.
+     */
+    wholeDocument?: boolean;
+    /**
+     * How many leading chars of the chunk's text belong to the ANCHORED
+     * block. Learner-facing citation quotes and highlight searches must stay
+     * within this bound — a quote that crosses into the next merged block
+     * can never be located inside the anchored block's text.
+     */
+    anchorTextChars?: number;
   };
 }
 

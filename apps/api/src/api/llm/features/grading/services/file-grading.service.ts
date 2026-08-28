@@ -146,8 +146,12 @@ export class FileGradingService implements IFileGradingService {
     string,
     Promise<FileBasedQuestionResponseModel>
   >();
+  // v5: document uploads are section-chunked with a pinned whole-document
+  // view. The chunking change is invisible to the cache's answer hash (it
+  // hashes structuredContent, which is unchanged), so the version bump is
+  // what invalidates grades produced from the old starved evidence.
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
-    "structured-file-evidence-v4-stable-answer-hash";
+    "structured-file-evidence-v5-doc-sections";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -1564,36 +1568,38 @@ export class FileGradingService implements IFileGradingService {
 
     push(this.buildWholeFileCodeBlock(normalized, filename, `p1b${index}`));
 
-    for (const unit of this.mergeTinyBlockUnits(
-      this.groupBlocksIntoUnits(extracted),
-    )) {
-      // One oversized cell becomes several blocks; its images follow the last
-      // of them so they still sit next to the code they came from.
+    for (const section of this.groupBlocksIntoTaskSections(extracted)) {
+      // One oversized section becomes several blocks; its images follow the
+      // last of them so they still sit beside the code they came from.
       const pieces = this.capCodeSegments([
-        this.normalizeCodeSubmissionText(unit.text),
+        this.normalizeCodeSubmissionText(section.text),
       ]).filter((piece) => piece.trim());
 
       // Blocks are renumbered for this submission, so the extractor's
       // producedByBlockId would dangle. Re-point each image at the piece it
-      // now follows; a cell folded away entirely leaves its images unlinked
-      // rather than pointing at a block that no longer exists.
+      // now follows; a section that yields no piece at all leaves its images
+      // unlinked rather than pointing at a block that does not exist.
       let producedByBlockId: string | undefined;
 
       for (const [pieceIndex, piece] of pieces.entries()) {
         producedByBlockId = this.notebookBlockId(
           index,
-          unit.block.blockId,
+          section.blockId,
           pieceIndex,
         );
         push({
-          ...unit.block,
           blockId: producedByBlockId,
+          // Emitted as code, matching what the text path produces via
+          // buildCodeEvidenceBlocks, so evidence chunking keeps a section as
+          // its own chunk instead of merging it into a prose section.
+          type: "code",
           text: piece,
           page: 1,
+          ...(section.language ? { language: section.language } : {}),
         });
       }
 
-      for (const image of unit.images) {
+      for (const image of section.images) {
         push({
           ...image,
           blockId: this.notebookBlockId(index, image.blockId),
@@ -1640,74 +1646,86 @@ export class FileGradingService implements IFileGradingService {
   }
 
   /**
-   * Walk extractor blocks into (cell, its images) units. Images always follow
-   * their cell, so an image block attaches to the unit currently open; any
-   * leading image with no cell before it becomes its own unit rather than
-   * being dropped.
+   * Group notebook cell blocks into task sections.
+   *
+   * A rubric criterion's wording matches the markdown task cell, but the work
+   * satisfying it lives in the code cells that follow. Evidence retrieval
+   * selects whole chunks, so the two must share one — a lone markdown cell
+   * parroting the rubric otherwise outranks the learner's code everywhere and
+   * the grader never sees the code (observed in production as "submission
+   * shows only the solution template" false zeros).
+   *
+   * Mirrors the rule splitNotebookIntoCellSegments applies on the text path,
+   * but reads cell kind from block.type instead of re-parsing "=== CELL N
+   * [MARKDOWN] ===" headers out of flattened text. A section starts at each
+   * prose run (a non-code block whose predecessor is not prose) and carries
+   * every following block until the next run; a block that would push the
+   * section past CODE_SEGMENT_MAX_CHARS starts its own section rather than
+   * shearing one mid-cell.
+   *
+   * Images belong to the section holding the cell that produced them, and are
+   * carried on the section rather than becoming section boundaries.
    */
-  private groupBlocksIntoUnits(extracted: CanonicalSubmission): {
-    block: ContentBlock;
+  private groupBlocksIntoTaskSections(extracted: CanonicalSubmission): {
+    blockId: string;
     text: string;
+    language?: string;
     images: ContentBlock[];
   }[] {
-    const units: {
-      block: ContentBlock;
+    const sections: {
+      blockId: string;
       text: string;
+      language?: string;
       images: ContentBlock[];
     }[] = [];
+    let current: (typeof sections)[0] | undefined;
+    let previousWasProse = false;
 
     for (const page of extracted.pages ?? []) {
       for (const block of page.blocks ?? []) {
         if (block.type === "image") {
-          const current = units.at(-1);
-          if (current) {
-            current.images.push(block);
-          } else {
-            units.push({ block, text: "", images: [block] });
+          // An image with no section open (a notebook that opens on a plot)
+          // is kept as its own section so it is never dropped.
+          if (!current) {
+            current = { blockId: block.blockId, text: "", images: [] };
+            sections.push(current);
           }
+          current.images.push(block);
           continue;
         }
-        units.push({ block, text: block.text ?? "", images: [] });
+
+        const text = block.text?.trim() ?? "";
+        if (!text) continue;
+
+        // Both markdown and raw cells arrive as "paragraph"; raw cells are
+        // rare and prose-like, so treating them as section starters is fine.
+        const prose = block.type !== "code";
+        const startsSection = prose && !previousWasProse;
+        const overflows =
+          current !== undefined &&
+          current.text.length + text.length + 1 > CODE_SEGMENT_MAX_CHARS;
+
+        if (!current || startsSection || overflows) {
+          current = {
+            blockId: block.blockId,
+            text,
+            ...(block.language ? { language: block.language } : {}),
+            images: [],
+          };
+          sections.push(current);
+        } else {
+          current.text = current.text ? `${current.text}\n${text}` : text;
+          current.language ??= block.language;
+        }
+
+        previousWasProse = prose;
       }
     }
 
-    return units;
+    return sections.filter(
+      (section) => section.text.trim() || section.images.length > 0,
+    );
   }
-
-  /**
-   * Cell-level counterpart of mergeTinyCodeSegments: a one-line cell should not
-   * occupy an evidence candidate slot on its own. A cell that produced a plot
-   * is exempt — folding it away would leave the plot with no code beside it.
-   */
-  private mergeTinyBlockUnits(
-    units: { block: ContentBlock; text: string; images: ContentBlock[] }[],
-  ): { block: ContentBlock; text: string; images: ContentBlock[] }[] {
-    const merged: typeof units = [];
-
-    for (const unit of units) {
-      const previous = merged.at(-1);
-      const isTiny = unit.text.trim().length < CODE_MIN_SEGMENT_CHARS;
-      // A unit holding an image is never folded away: its text is the caption
-      // for a plot the grader has to be able to cite.
-      if (isTiny && previous && unit.images.length === 0) {
-        previous.text = `${previous.text}\n${unit.text}`;
-        continue;
-      }
-      merged.push({ ...unit, images: [...unit.images] });
-    }
-
-    if (
-      merged.length > 1 &&
-      merged[0].text.trim().length < CODE_MIN_SEGMENT_CHARS &&
-      merged[0].images.length === 0
-    ) {
-      merged[1].text = `${merged[0].text}\n${merged[1].text}`;
-      merged.shift();
-    }
-
-    return merged;
-  }
-
   private splitTextIntoEvidenceBlocks(
     text: string,
     startIndex = 1,
@@ -2019,18 +2037,59 @@ export class FileGradingService implements IFileGradingService {
   }
 
   // Jupyter notebook extractions carry "=== CELL N [TYPE] ===" section
-  // headers (see FileContentExtractionService.extractJupyterNotebook). Each
-  // cell — with its header and any outputs — becomes one segment. Returns
-  // null when the text is not a notebook extraction.
+  // headers (see FileContentExtractionService.extractJupyterNotebook).
+  // Returns null when the text is not a notebook extraction.
+  //
+  // Cells are grouped into task sections rather than kept one-per-segment: a
+  // rubric criterion's wording matches the markdown task cell, but the work
+  // that satisfies it lives in the code cells that follow. Evidence retrieval
+  // selects whole chunks, so a task's description and its answer code must
+  // share a chunk — a lone markdown cell that parrots the rubric otherwise
+  // outranks the learner's code everywhere and the grader never sees the code.
   private splitNotebookIntoCellSegments(code: string): string[] | null {
     const cellHeader = /^=== CELL \d+ \[/m;
     if (!cellHeader.test(code)) return null;
 
-    const segments = code
+    const cells = code
       .split(/\n(?==== CELL \d+ \[)/)
       .map((segment) => segment.trimEnd())
       .filter((segment) => segment.trim());
-    return segments.length > 0 ? segments : null;
+    if (cells.length === 0) return null;
+
+    // A section starts at each markdown run (a markdown cell whose
+    // predecessor is not markdown) and carries every following cell until the
+    // next run. Sections are bounded by CODE_SEGMENT_MAX_CHARS so they
+    // survive capCodeSegments un-split; a cell that would overflow starts its
+    // own section (the pre-grouping behaviour) rather than shearing the
+    // section mid-cell.
+    const markdownCellHeader = /^=== CELL \d+ \[MARKDOWN]/;
+
+    const sections: string[] = [];
+    let current: string[] = [];
+    let currentSize = 0;
+    let previousWasMarkdown = false;
+
+    for (const cell of cells) {
+      const markdown = markdownCellHeader.test(cell);
+      const startsNewSection =
+        markdown && !previousWasMarkdown && current.length > 0;
+      const overflows =
+        current.length > 0 &&
+        currentSize + cell.length + 1 > CODE_SEGMENT_MAX_CHARS;
+
+      if (startsNewSection || overflows) {
+        sections.push(current.join("\n"));
+        current = [];
+        currentSize = 0;
+      }
+
+      current.push(cell);
+      currentSize += cell.length + 1;
+      previousWasMarkdown = markdown;
+    }
+    if (current.length > 0) sections.push(current.join("\n"));
+
+    return sections;
   }
 
   // Fold trivially short segments (a lone import, a one-line `const`) into an

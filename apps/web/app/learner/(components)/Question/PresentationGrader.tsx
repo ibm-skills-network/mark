@@ -15,7 +15,6 @@ import {
 import { getLiveRecordingFeedback } from "@/lib/talkToBackend";
 import { useLearnerStore, useVideoRecorderStore } from "@/stores/learner";
 
-
 /** ------------------------------------------------------------------
  * HOOK #1: Manage camera stream, recording, and a manual timer
  * ------------------------------------------------------------------ */
@@ -592,7 +591,17 @@ export default function PresentationGrader({
 
         {countdown !== null && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-6xl font-bold">
-            {countdown > 0 ? countdown : "Go!"}
+            {countdown > 0 ? (
+              // Only the digit is opted out, so its per-second tick does not
+              // re-scan the route. "Go!" stays translatable — it is in every
+              // catalog, and it renders once. translate="no" keeps browser
+              // page translation from latching onto the ticking digit.
+              <span data-no-ui-translate="true" translate="no">
+                {countdown}
+              </span>
+            ) : (
+              "Go!"
+            )}
           </div>
         )}
 
@@ -604,7 +613,14 @@ export default function PresentationGrader({
         )}
 
         {recording && (
-          <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+          // Opted out so the 5x/second update does not re-scan the whole
+          // route; translate="no" keeps browser page translation from
+          // latching onto the ticking readout.
+          <div
+            data-no-ui-translate="true"
+            translate="no"
+            className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded"
+          >
             {currentRecordingTime.toFixed(1)}s / {maxDuration}s
           </div>
         )}

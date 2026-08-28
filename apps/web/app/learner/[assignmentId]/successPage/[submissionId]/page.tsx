@@ -58,6 +58,9 @@ function SuccessPage() {
 
   const [questions, setQuestions] = useState([]);
   const [grade, setGrade] = useState(0);
+  // Server-computed pass/fail verdict; null unless showPassFailIndicator is
+  // enabled for the assignment and the attempt has a grade.
+  const [passed, setPassed] = useState<boolean | null>(null);
   const [totalPointsEarned, setTotalPointsEarned] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [assignmentDetails, setAssignmentDetails] =
@@ -78,9 +81,12 @@ function SuccessPage() {
       state.totalPointsEarned,
       state.totalPointsPossible,
     ]);
-  const [zustandAssignmentDetails, zustandGrade] = useAssignmentDetails(
-    (state) => [state.assignmentDetails, state.grade],
-  );
+  const [zustandAssignmentDetails, zustandGrade, zustandPassed] =
+    useAssignmentDetails((state) => [
+      state.assignmentDetails,
+      state.grade,
+      state.passed,
+    ]);
 
   const [showQuestions, setShowQuestions] = useState<boolean>(false);
   // Why the NaN-grade view is showing: score hidden by the author (default,
@@ -214,6 +220,11 @@ function SuccessPage() {
             setTotalPoints(possible);
             setTotalPointsEarned(earned);
           }
+          setPassed(
+            typeof submissionDetails.passed === "boolean"
+              ? submissionDetails.passed
+              : null,
+          );
           setAssignmentDetails({
             passingGrade: submissionDetails.passingGrade,
             id: assignmentId,
@@ -275,6 +286,11 @@ function SuccessPage() {
             setTotalPoints(possible);
             setTotalPointsEarned(earned);
           }
+          setPassed(
+            typeof submissionDetails.passed === "boolean"
+              ? submissionDetails.passed
+              : null,
+          );
           setAssignmentDetails({
             passingGrade: submissionDetails.passingGrade,
             id: assignmentId,
@@ -287,6 +303,7 @@ function SuccessPage() {
           setShowQuestions(zustandShowQuestions);
           // A never-set store grade must render the hidden-score view, not 0%.
           setGrade(resolveStoreGrade(zustandGrade));
+          setPassed(zustandPassed);
           setMissingGradeReason(
             resolveMissingGradeReason(
               zustandAssignmentDetails?.showAssignmentScore,
@@ -316,6 +333,10 @@ function SuccessPage() {
     attemptId,
     zustandQuestions,
     zustandGrade,
+    // setGrade and setPassed are separate store writes, so an effect run
+    // triggered by zustandGrade would otherwise close over the previous
+    // attempt's verdict.
+    zustandPassed,
     zustandTotalPointsEarned,
     zustandTotalPoints,
     zustandAssignmentDetails,
@@ -705,14 +726,42 @@ function SuccessPage() {
               </div>
             </>
           ) : missingGradeReason === "score-hidden" ? (
-            <motion.h1
-              className="text-5xl font-extrabold text-gray-800"
-              initial={{ opacity: 0, y: -30 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              Grades are currently unavailable as the author has disabled
-              viewing them.
-            </motion.h1>
+            typeof passed === "boolean" ? (
+              <>
+                <motion.h1
+                  className="text-5xl font-extrabold text-gray-800"
+                  initial={{ opacity: 0, y: -30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  {passed
+                    ? "You passed this assignment!"
+                    : "You did not pass this assignment."}
+                </motion.h1>
+                <motion.p
+                  className="text-xl"
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  Status:
+                  <span
+                    className={`ml-1 font-semibold ${
+                      passed ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {passed ? "Passed" : "Failed"}
+                  </span>
+                </motion.p>
+              </>
+            ) : (
+              <motion.h1
+                className="text-5xl font-extrabold text-gray-800"
+                initial={{ opacity: 0, y: -30 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                Grades are currently unavailable as the author has disabled
+                viewing them.
+              </motion.h1>
+            )
           ) : (
             <>
               <motion.h1

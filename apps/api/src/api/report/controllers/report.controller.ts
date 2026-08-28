@@ -153,7 +153,7 @@ export class ReportsController {
     },
     @UploadedFile() screenshot: Express.Multer.File,
     @Req() request: UserSessionRequest,
-  ): Promise<{ message: string; issueNumber?: number; reportId?: number }> {
+  ): Promise<{ message: string; reportId?: number }> {
     const resolvedUserEmail = dto.userEmail || request.userSession?.userId;
     const reportDto = {
       issueType: dto.issueType,

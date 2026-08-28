@@ -10,6 +10,7 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 import { extractStructuredJSON } from "../utils/structured-json.util";
 import { withWatsonxRateLimit } from "../utils/watsonx-rate-limiter";
 
@@ -89,11 +90,12 @@ export class Llama4MaverickLlmService implements IMultimodalLlmProvider {
 
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     this.logger.info(
       "Llama 4 Maverick supports multimodal inputs. Processing text and image.",
+      { images_ignored: toImageDataList(imageData).length },
     );
 
     const inputTokens = this.tokenCounter.countTokens(textContent);

@@ -668,7 +668,7 @@ describe("FileGradingService.buildCodeEvidenceBlocks", () => {
 
 // ─── notebook (.ipynb) cell-aware chunking ─────────────────────────────────
 
-describe("FileGradingService - notebook extractions chunk by cell", () => {
+describe("FileGradingService - notebook extractions chunk by task section", () => {
   let service: any;
 
   beforeEach(() => {
@@ -716,18 +716,23 @@ describe("FileGradingService - notebook extractions chunk by cell", () => {
     );
   }
 
-  it("builds a pinned whole-notebook block plus per-cell segments", () => {
+  it("builds a pinned whole-notebook block plus task-section segments", () => {
     const blocks = notebookBlocks();
     expect(blocks[0].pinnedEvidence).toBe(true);
     expect(blocks[0].text).toContain("=== CELL 2 [CODE] [1] ===");
 
+    // The markdown task cell and the code cells answering it share one
+    // segment: retrieval matches rubric wording against the markdown, so the
+    // code must travel in the same chunk to ever reach the grader.
     const segments = blocks.slice(1).map((b: any) => b.text);
-    const cell2 = segments.find((s: string) => s.includes("=== CELL 2 [CODE]"));
-    expect(cell2).toBeDefined();
-    expect(cell2).toContain(
+    const section = segments.find((s: string) =>
+      s.includes("=== CELL 1 [MARKDOWN]"),
+    );
+    expect(section).toBeDefined();
+    expect(section).toContain(
       "monthly = sales.groupby('month')['revenue'].sum()",
     );
-    expect(cell2).not.toContain("=== CELL 3");
+    expect(section).toContain("=== CELL 3");
   });
 
   it("preserves tab indentation inside notebook code cells", () => {
@@ -735,13 +740,15 @@ describe("FileGradingService - notebook extractions chunk by cell", () => {
     expect(blocks[0].text).toContain("\tprint(month, revenue)");
   });
 
-  it("keeps a cell's output attached to its cell segment", () => {
+  it("keeps a cell's output attached to its section segment", () => {
     const segments = notebookBlocks()
       .slice(1)
       .map((b: any) => b.text);
-    const cell2 = segments.find((s: string) => s.includes("=== CELL 2 [CODE]"));
-    expect(cell2).toContain("--- OUTPUT ---");
-    expect(cell2).toContain("2025-01 131072");
+    const section = segments.find((s: string) =>
+      s.includes("=== CELL 2 [CODE]"),
+    );
+    expect(section).toContain("--- OUTPUT ---");
+    expect(section).toContain("2025-01 131072");
   });
 });
 
@@ -879,7 +886,7 @@ describe("FileGradingService - notebook blocks from extraction", () => {
     );
   });
 
-  it("folds a trivially short cell into its neighbour", () => {
+  it("runs consecutive code cells together into one section", () => {
     const blocks = enrich(
       notebookFile(
         extractionSubmission([
@@ -907,7 +914,7 @@ describe("FileGradingService - notebook blocks from extraction", () => {
     expect(cellBlocks[0].text).toContain("x = 1");
   });
 
-  it("never folds away a cell that owns a plot", () => {
+  it("keeps a plot beside the section holding the cell that drew it", () => {
     const blocks = enrich(
       notebookFile(
         extractionSubmission([
@@ -934,10 +941,125 @@ describe("FileGradingService - notebook blocks from extraction", () => {
       ),
     );
 
-    // The short cell survives as its own block so the plot stays attached to
-    // the code that drew it.
     const imageIndex = blocks.findIndex((b: any) => b.type === "image");
     expect(blocks[imageIndex - 1].text).toContain("df.plot()");
+    expect(blocks[imageIndex].producedByBlockId).toBe(
+      blocks[imageIndex - 1].blockId,
+    );
+  });
+
+  /**
+   * The guarantee #640 established for the text path, asserted on the path real
+   * notebooks actually take. Master's notebook-sections spec drives
+   * splitCodeIntoSegments directly, so it stays green even if this path stops
+   * grouping — which is how the regression hid.
+   */
+  describe("task sections", () => {
+    const taskMarkdown =
+      "=== CELL 1 [MARKDOWN] ===\nTASK 1.3: Create a bar chart comparing " +
+      "Vehicle-Wise Sales During Recession and Non-Recession Periods.\n" +
+      "Use the template below and keep the axis labels readable.\n".repeat(4);
+
+    const answerCode = bigCell(
+      2,
+      "df_grouped = df.groupby('Vehicle_Type')['Sales'].sum()\n" +
+        "df_grouped.plot(kind='bar')",
+    );
+
+    it("keeps a task's markdown in the same block as the code answering it", () => {
+      const blocks = enrich(
+        notebookFile(
+          extractionSubmission([
+            {
+              blockId: "p1b1_cell1",
+              type: "paragraph",
+              page: 1,
+              text: taskMarkdown,
+            },
+            { blockId: "p1b2_cell2", type: "code", page: 1, text: answerCode },
+          ]),
+        ),
+      );
+
+      const section = blocks.find(
+        (b: any) => !b.pinnedEvidence && b.text.includes("TASK 1.3"),
+      );
+      expect(section).toBeDefined();
+      expect(section.text).toContain("groupby('Vehicle_Type')");
+      // Emitted as code so evidence chunking keeps it as its own chunk rather
+      // than merging it into a prose section with unrelated markdown.
+      expect(section.type).toBe("code");
+    });
+
+    it("starts a new section at the next task", () => {
+      const blocks = enrich(
+        notebookFile(
+          extractionSubmission([
+            {
+              blockId: "p1b1_cell1",
+              type: "paragraph",
+              page: 1,
+              text: taskMarkdown,
+            },
+            { blockId: "p1b2_cell2", type: "code", page: 1, text: answerCode },
+            {
+              blockId: "p1b3_cell3",
+              type: "paragraph",
+              page: 1,
+              text:
+                "=== CELL 3 [MARKDOWN] ===\nTASK 2.1: Plot revenue by region.\n" +
+                "Explain the trend you observe in a short paragraph.\n".repeat(
+                  4,
+                ),
+            },
+            {
+              blockId: "p1b4_cell4",
+              type: "code",
+              page: 1,
+              text: bigCell(4, "df.groupby('region').sum().plot(kind='pie')"),
+            },
+          ]),
+        ),
+      );
+
+      const sections = blocks.filter(
+        (b: any) => !b.pinnedEvidence && b.type === "code",
+      );
+      expect(sections).toHaveLength(2);
+      expect(sections[0].text).toContain("TASK 1.3");
+      expect(sections[0].text).not.toContain("TASK 2.1");
+      expect(sections[1].text).toContain("TASK 2.1");
+      expect(sections[1].text).toContain("kind='pie'");
+    });
+
+    it("splits an oversized section at a cell boundary, never mid-cell", () => {
+      const fatCell = (n: number) =>
+        `=== CELL ${n} [CODE] [${n}] ===\n${"# body line\n".repeat(400)}`;
+
+      const blocks = enrich(
+        notebookFile(
+          extractionSubmission([
+            {
+              blockId: "p1b1_cell1",
+              type: "paragraph",
+              page: 1,
+              text: taskMarkdown,
+            },
+            { blockId: "p1b2_cell2", type: "code", page: 1, text: fatCell(2) },
+            { blockId: "p1b3_cell3", type: "code", page: 1, text: fatCell(3) },
+          ]),
+        ),
+      );
+
+      const sections = blocks.filter(
+        (b: any) => !b.pinnedEvidence && b.type === "code",
+      );
+      expect(sections.length).toBeGreaterThan(1);
+      // Every emitted section begins at a cell header, so no cell was sheared.
+      for (const section of sections) {
+        expect(section.text.trimStart()).toMatch(/^=== CELL \d+ \[/);
+      }
+    });
   });
 
   it("keeps the extractor checksum so cache identity tracks the artifact", () => {

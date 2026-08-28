@@ -59,6 +59,10 @@ import {
   AttemptQuestionsMapper,
   EnhancedAttemptQuestionDto,
 } from "../common/utils/attempt-questions-mapper.util";
+import {
+  meetsPassingGrade,
+  resolvePassedIndicator,
+} from "../common/utils/pass-fail.util";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import {
@@ -648,6 +652,7 @@ export class AttemptSubmissionService {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         updatedAt: true,
         currentVersion: {
           select: {
@@ -841,20 +846,26 @@ export class AttemptSubmissionService {
         assignmentAttempt.preferredLanguage || undefined,
       );
 
-    this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
-
-    // When clamping reduced the total, recompute the grade the learner sees.
-    // Read assignmentAttempt.grade after applyVisibilitySettings: that call
-    // sets it to null when showAssignmentScore=false, which must be respected
-    // even when clamping occurred. The persisted grade and the LTI passback
-    // are intentionally left untouched — correcting those is a separate
-    // re-grade, not a display fix.
-    const displayGrade =
+    // Captured before applyVisibilitySettings nulls the grade: the pass/fail
+    // indicator must stay computable when the score itself is hidden. Mirrors
+    // the displayGrade clamping below so both derive from the same value.
+    const preVisibilityGrade =
       totalPointsEarned < rawPointsEarned &&
       totalPossiblePoints > 0 &&
       assignmentAttempt.grade !== null
         ? totalPointsEarned / totalPossiblePoints
         : assignmentAttempt.grade;
+
+    this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
+
+    // Same clamped value as preVisibilityGrade, except that
+    // applyVisibilitySettings has since nulled assignmentAttempt.grade when
+    // showAssignmentScore=false — which must be respected even when clamping
+    // occurred. The persisted grade and the LTI passback are intentionally
+    // left untouched — correcting those is a separate re-grade, not a display
+    // fix.
+    const displayGrade =
+      assignmentAttempt.grade === null ? null : preVisibilityGrade;
 
     return {
       ...assignmentAttempt,
@@ -870,6 +881,12 @@ export class AttemptSubmissionService {
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestions: assignment.showQuestions,
       showQuestionScore: assignment.showQuestionScore,
+      showPassFailIndicator: assignment.showPassFailIndicator,
+      passed: resolvePassedIndicator(
+        assignment.showPassFailIndicator,
+        preVisibilityGrade,
+        assignment.passingGrade,
+      ),
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
@@ -1053,8 +1070,16 @@ export class AttemptSubmissionService {
       assignment.currentVersionId !== null &&
       assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
 
+    // No pass/fail verdict here on purpose. This route serves the in-progress
+    // attempt, so it has none of the clamping the completed route applies to
+    // historically over-scored responses; deriving `passed` from the raw
+    // persisted grade would contradict the verdict the learner is shown on the
+    // success page. Pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      // The spread carries the persisted grade, which must not reach a learner
+      // whose assignment hides the score.
+      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
@@ -1074,9 +1099,9 @@ export class AttemptSubmissionService {
    * Uses a 3-phase grading flow:
    *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
    *   Grade computation + validation (in-memory)
-   *   LTI callback (external, before DB commit)
    *   Phase 3 — commitAttemptWithResponses: write QuestionResponse records and
    *              AssignmentAttempt.grade atomically in a single short transaction
+   *   LTI callback (external, strictly after the DB commit)
    */
   private async updateLearnerAttempt(
     attemptId: number,
@@ -1319,21 +1344,8 @@ export class AttemptSubmissionService {
         );
       }
 
-      if (gradingCallbackRequired) {
-        if (progressCallback) {
-          await progressCallback("Sending grade to LTI...", 95);
-        }
-        await this.handleLtiGradeCallback(
-          attemptId,
-          grade,
-          authCookie,
-          assignmentId,
-          request.userSession.userId,
-        );
-      }
-
       if (progressCallback) {
-        await progressCallback("Finalizing results...", 98);
+        await progressCallback("Finalizing results...", 95);
       }
 
       // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
@@ -1345,11 +1357,30 @@ export class AttemptSubmissionService {
           updateDto,
         );
 
+      // LTI delivery strictly AFTER the commit: a grade must never reach the
+      // LMS for a submission that did not durably persist — a failed commit
+      // throws above and the callback never sees the grade. The reverse risk
+      // does not exist: sendGradeToLtiGateway never throws (sync failures go
+      // to its own retry queue), so a delivery hiccup cannot fail an
+      // already-committed attempt.
+      if (gradingCallbackRequired) {
+        if (progressCallback) {
+          await progressCallback("Sending grade to LTI...", 98);
+        }
+        await this.handleLtiGradeCallback(
+          attemptId,
+          grade,
+          authCookie,
+          assignmentId,
+          request.userSession.userId,
+        );
+      }
+
       // Only now is the grade readable, so only now may the progress row say
-      // COMPLETED. Everything above — grade computation, the external LTI
-      // callback, the commit transaction itself — used to run after the row
-      // had already been flipped, which let a client see "done" and then read
-      // an unsubmitted, ungraded attempt.
+      // COMPLETED. Everything above — grade computation, the commit
+      // transaction itself — used to run after the row had already been
+      // flipped, which let a client see "done" and then read an unsubmitted,
+      // ungraded attempt.
       await this.questionResponseService.markGradingComplete(attemptId);
 
       await this.pruneAutoSavedResponses(
@@ -1369,6 +1400,12 @@ export class AttemptSubmissionService {
         totalPossiblePoints,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          result.grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -1482,6 +1519,17 @@ export class AttemptSubmissionService {
         await progressCallback("Preview completed!", 100);
       }
 
+      // The author's unsaved pass/fail settings ride in on the preview
+      // request; prefer them over the persisted row so previewing before
+      // publish reflects the toggle. This path is author-only and the values
+      // shape nothing but the author's own unpersisted preview response.
+      const showPassFailIndicator =
+        updateDto.authorAssignmentDetails?.showPassFailIndicator ??
+        assignment.showPassFailIndicator;
+      const passingGrade =
+        updateDto.authorAssignmentDetails?.passingGrade ??
+        assignment.passingGrade;
+
       return {
         id: -1,
         submitted: true,
@@ -1493,6 +1541,12 @@ export class AttemptSubmissionService {
         // author's only way to see what learners actually experience.
         grade: assignment.showAssignmentScore ? grade : undefined,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          showPassFailIndicator,
+          grade,
+          passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -2182,7 +2236,7 @@ export class AttemptSubmissionService {
         return true;
       }
       case "ON_PASS": {
-        return grade >= passingGrade;
+        return meetsPassingGrade(grade, passingGrade);
       }
       default: {
         return false;

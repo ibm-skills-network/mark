@@ -14,6 +14,7 @@ import type {
   SubmitAssignmentResponse,
 } from "@/config/types";
 import {
+  getAttempt,
   getSupportedLanguages,
   getUser,
   submitAssignment,
@@ -73,6 +74,7 @@ function LearnerHeader() {
   const [
     questions,
     setQuestion,
+    setQuestions,
     setShowSubmissionFeedback,
     activeAttemptId,
     setTotalPointsEarned,
@@ -81,6 +83,7 @@ function LearnerHeader() {
   ] = useLearnerStore((state) => [
     state.questions,
     state.setQuestion,
+    state.setQuestions,
     state.setShowSubmissionFeedback,
     state.activeAttemptId,
     state.setTotalPointsEarned,
@@ -92,10 +95,9 @@ function LearnerHeader() {
     setUserRole("learner");
   }, [setUserRole]);
   const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
-  const [storedAssignmentDetails, setGrade] = useAssignmentDetails((state) => [
-    state.assignmentDetails,
-    state.setGrade,
-  ]);
+  const [storedAssignmentDetails, setGrade, setPassed] = useAssignmentDetails(
+    (state) => [state.assignmentDetails, state.setGrade, state.setPassed],
+  );
   const assignmentDetails =
     (isAuthorPreview ? authorPreviewPayload?.assignmentDetails : null) ??
     (storedAssignmentDetails?.id === assignmentId
@@ -182,6 +184,23 @@ function LearnerHeader() {
     if (!selectedLanguage) return;
     if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
+
+      // The attempt payload only carries the language it was fetched with, so
+      // an in-page switch pulls the new language's translations and merges
+      // them over the store (setQuestions keeps draft answers). Until the
+      // fetch lands the UI falls back to the server-translated question text.
+      if (isInQuestionPage && assignmentId && activeAttemptId) {
+        void getAttempt(
+          assignmentId,
+          activeAttemptId,
+          undefined,
+          selectedLanguage,
+        ).then((attempt) => {
+          if (attempt?.questions?.length) {
+            setQuestions(attempt.questions);
+          }
+        });
+      }
     }
 
     if (!isInQuestionPage && !isAttemptPage && !isSuccessPage) {
@@ -354,7 +373,7 @@ function LearnerHeader() {
         undefined,
       );
 
-      if (res) {
+      if (res && typeof res.id === "number") {
         const { grade, feedbacksForQuestions } = res;
         setTotalPointsEarned(res.totalPointsEarned);
         setTotalPointsPossible(res.totalPossiblePoints);
@@ -365,6 +384,7 @@ function LearnerHeader() {
           // from a previous attempt so the success page doesn't show it.
           setGrade(null);
         }
+        setPassed(res.passed ?? null);
         if (role === "learner") {
           setShowSubmissionFeedback(res.showSubmissionFeedback);
         }
@@ -408,9 +428,12 @@ function LearnerHeader() {
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
         }, 1000);
       } else {
-        // submitAssignment resolved without a result (e.g. an SSE finalize
-        // event carrying no payload). Without this branch submitting/modal stay
-        // true forever and the grading modal spins with no error and no exit.
+        // submitAssignment resolved without a usable result: no payload at
+        // all (e.g. an SSE finalize event carrying none), or one missing the
+        // attempt id — navigating with an undefined id lands the learner on
+        // /successPage/undefined and a 404 dialog. Without this branch
+        // submitting/modal stay true forever and the grading modal spins with
+        // no error and no exit.
         toast.error("We couldn't complete your submission. Please try again.");
         setSubmitting(false);
         setShowGradingModal(false);
@@ -446,6 +469,7 @@ function LearnerHeader() {
     setTotalPointsEarned,
     setTotalPointsPossible,
     setGrade,
+    setPassed,
     setShowSubmissionFeedback,
     setQuestion,
     clearGithubStore,

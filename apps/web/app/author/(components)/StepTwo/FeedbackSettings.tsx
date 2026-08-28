@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/strings";
+import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 import type { CorrectAnswerVisibility } from "@/config/types";
 
@@ -163,13 +164,18 @@ const SettingsContainer: React.FC = () => {
     toggleShowSubmissionFeedback,
     toggleShowQuestionScore,
     toggleShowQuestions,
+    toggleShowPassFailIndicator,
     setCorrectAnswerVisibility,
     showAssignmentScore,
     showSubmissionFeedback,
     showQuestionScore,
     showQuestions,
+    showPassFailIndicator,
     correctAnswerVisibility,
   } = useAssignmentFeedbackConfig();
+  // The pass/fail verdict depends on the passing threshold set in the
+  // completion section; surface it here so the dependency is visible.
+  const passingGrade = useAssignmentConfig((state) => state.passingGrade);
 
   const settingsData = [
     {
@@ -197,6 +203,12 @@ const SettingsContainer: React.FC = () => {
         "The questions will be visible to the learner after submission",
       value: showQuestions,
       toggleValue: toggleShowQuestions,
+    },
+    {
+      title: "Pass/fail result",
+      description: `The learner will be told whether they passed (score of ${passingGrade || 50}% or higher), even when scores are hidden.`,
+      value: showPassFailIndicator,
+      toggleValue: toggleShowPassFailIndicator,
     },
   ] as const;
   return (

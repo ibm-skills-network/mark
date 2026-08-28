@@ -174,9 +174,9 @@ describe("restoreVersion", () => {
       activeAssignmentId: 123,
       name: "Current assignment",
     });
-    useAuthorStore.getState().setVersions([
-      { id: 7, versionNumber: "1.0.0", isActive: true } as any,
-    ]);
+    useAuthorStore
+      .getState()
+      .setVersions([{ id: 7, versionNumber: "1.0.0", isActive: true } as any]);
     useAssignmentConfig.getState().setAssignmentConfigStore({
       attemptsBeforeCoolDown: 3,
       retakeAttemptCoolDownMinutes: 10,

@@ -445,11 +445,13 @@ export type LearnerActions = {
 export type AssignmentDetailsState = {
   assignmentDetails: Assignment | null;
   grade: number | null;
+  passed: boolean | null;
 };
 
 export type AssignmentDetailsActions = {
   setAssignmentDetails: (assignmentDetails: Assignment) => void;
   setGrade: (grade: number | null) => void;
+  setPassed: (passed: boolean | null) => void;
 };
 
 const isQuestionEdited = (question: QuestionStore) => {
@@ -524,6 +526,28 @@ export const useLearnerOverviewStore = createWithEqualityFn<
   ),
   shallow,
 );
+
+/**
+ * Only learner-authored state may be persisted. Server content (question
+ * HTML, translations, choices) can carry embedded images and once multiplied
+ * across languages has overflowed the localStorage quota, which trapped
+ * learners in a clear-and-reload loop. Content is re-fetched on every load
+ * and merged over these drafts by setQuestions.
+ */
+const persistQuestionDraft = (question: QuestionStore) => ({
+  id: question.id,
+  status: question.status,
+  learnerResponse: question.learnerResponse,
+  learnerTextResponse: question.learnerTextResponse,
+  learnerUrlResponse: question.learnerUrlResponse,
+  learnerChoices: question.learnerChoices,
+  learnerAnswerChoice: question.learnerAnswerChoice,
+  learnerFileResponse: question.learnerFileResponse,
+  learnerPresentationResponse: question.learnerPresentationResponse,
+  presentationResponse: question.presentationResponse,
+  translationOn: question.translationOn,
+  selectedLanguage: question.selectedLanguage,
+});
 
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions
@@ -1003,7 +1027,7 @@ export const useLearnerStore = createWithEqualityFn<
       name: `learner-${ASSIGNMENT_ID}`,
       storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
-        questions: state.questions,
+        questions: state.questions.map(persistQuestionDraft),
         activeAttemptId: state.activeAttemptId,
         userPreferedLanguage: state.userPreferedLanguage,
       }),
@@ -1028,6 +1052,8 @@ export const useAssignmentDetails = createWithEqualityFn<
           set({ assignmentDetails: assignmentDetails }),
         grade: null,
         setGrade: (grade) => set({ grade }),
+        passed: null,
+        setPassed: (passed) => set({ passed }),
       }),
       {
         name: "learner-assignment-details",

@@ -20,6 +20,7 @@ export interface DraftData {
   questionDisplay?: any;
   showAssignmentScore?: boolean;
   showQuestionScore?: boolean;
+  showPassFailIndicator?: boolean;
   showSubmissionFeedback?: boolean;
   showQuestions?: boolean;
   requireAllQuestions?: boolean;
@@ -305,6 +306,10 @@ export function useVersionControl() {
                 typedDraftData.showQuestionScore !== undefined
                   ? typedDraftData.showQuestionScore
                   : feedbackConfigStore.showQuestionScore,
+              showPassFailIndicator:
+                typedDraftData.showPassFailIndicator !== undefined
+                  ? typedDraftData.showPassFailIndicator
+                  : feedbackConfigStore.showPassFailIndicator,
               showSubmissionFeedback:
                 typedDraftData.showSubmissionFeedback !== undefined
                   ? typedDraftData.showSubmissionFeedback

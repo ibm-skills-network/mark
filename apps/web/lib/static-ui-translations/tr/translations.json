@@ -865,6 +865,7 @@
   "Please select a language to continue.": "Devam etmek için lütfen bir dil seçin.",
   "Please select a Question Type first.": "Lütfen önce bir Soru Türü seçin.",
   "Please select the number of variations to generate": "Lütfen oluşturulacak varyasyon sayısını seçin",
+  "Please wait {time} before retrying": "Yeniden denemeden önce lütfen {time} bekleyin",
   "Points": "Puanlar",
   "Points hidden": "Gizli puanlar",
   "Points:": "Puanlar:",

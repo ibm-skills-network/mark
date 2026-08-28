@@ -541,7 +541,21 @@ LANGUAGE: {language}
       };
     }
 
-    const quote = chunk.text.slice(0, 200);
+    // Merged section chunks anchor to their FIRST source block, so the
+    // learner-facing quote must not run past that block's text: highlight
+    // lookup searches for the quote inside the anchored block, and document
+    // blocks are line-sized — an unbounded slice would cross into the next
+    // merged block and never match. The whole-document view additionally
+    // carries synthetic "=== DOCUMENT/PAGE ===" marker lines that must never
+    // reach a learner.
+    const base = chunk.metadata?.wholeDocument
+      ? chunk.text.replace(/^(?:=== [^\n]*===\n)+/, "")
+      : chunk.text;
+    const anchorCap = chunk.metadata?.anchorTextChars;
+    const quote = base.slice(
+      0,
+      anchorCap && anchorCap > 0 ? Math.min(200, anchorCap) : 200,
+    );
 
     if (chunk.anchor.type === "file") {
       return {

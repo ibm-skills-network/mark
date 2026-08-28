@@ -865,6 +865,7 @@
   "Please select a language to continue.": "请选择一种语言以继续。",
   "Please select a Question Type first.": "请先选择问题类型。",
   "Please select the number of variations to generate": "请选择要生成的变体数量",
+  "Please wait {time} before retrying": "请等待{time}后重试",
   "Points": "积分",
   "Points hidden": "隐藏点",
   "Points:": "要点：",

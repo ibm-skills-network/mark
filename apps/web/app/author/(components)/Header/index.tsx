@@ -25,10 +25,10 @@ import {
 import { extractAssignmentId } from "@/lib/strings";
 import {
   DEFAULT_UI_LANGUAGE,
-  getStoredUiLanguage,
   isSupportedUiLanguage,
   setStoredUiLanguage,
 } from "@/lib/ui-language";
+import { useActiveUiLanguage } from "@/hooks/use-active-ui-language";
 import {
   getActivePublishJob,
   getAssignment,
@@ -97,7 +97,10 @@ function AuthorHeader() {
   const searchParams = useSearchParams();
   const { isOpen: isChatbotOpen } = useChatbot();
   const assignmentId = extractAssignmentId(pathname);
-  const [uiLanguage, setUiLanguage] = useState<string>(DEFAULT_UI_LANGUAGE);
+  // Shared resolution hook, not an inline copy of its rules — a divergence
+  // here shows up as the header dropdown disagreeing with what the route
+  // translator actually applies.
+  const uiLanguage = useActiveUiLanguage();
   const languageOptions = useMemo(
     () =>
       [...languages]
@@ -195,12 +198,14 @@ function AuthorHeader() {
     showQuestionScore,
     showAssignmentScore,
     showQuestions,
+    showPassFailIndicator,
     correctAnswerVisibility,
   ] = useAssignmentFeedbackConfig((state) => [
     state.showSubmissionFeedback,
     state.showQuestionScore,
     state.showAssignmentScore,
     state.showQuestions,
+    state.showPassFailIndicator,
     state.correctAnswerVisibility,
   ]);
   const role = useAuthorStore((state) => state.role);
@@ -603,6 +608,7 @@ function AuthorHeader() {
       showQuestions,
       showQuestionScore,
       showAssignmentScore,
+      showPassFailIndicator,
       correctAnswerVisibility,
       numberOfQuestionsPerAttempt,
       requireAllQuestions,
@@ -809,23 +815,12 @@ function AuthorHeader() {
     setDraftName("");
   };
 
-  useEffect(() => {
-    const languageFromQuery = searchParams.get("uiLang");
-    if (isSupportedUiLanguage(languageFromQuery)) {
-      setUiLanguage(languageFromQuery);
-      setStoredUiLanguage(languageFromQuery);
-      return;
-    }
-
-    const storedLanguage = getStoredUiLanguage();
-    setUiLanguage(storedLanguage || DEFAULT_UI_LANGUAGE);
-  }, [searchParams]);
-
   const handleChangeUiLanguage = (selectedLanguage: string) => {
     if (!isSupportedUiLanguage(selectedLanguage)) return;
     if (selectedLanguage === uiLanguage) return;
 
-    setUiLanguage(selectedLanguage);
+    // Persisting dispatches UI_LANGUAGE_CHANGED_EVENT, which updates every
+    // useActiveUiLanguage instance — including this header's.
     setStoredUiLanguage(selectedLanguage);
 
     const params = new URLSearchParams(searchParams.toString());

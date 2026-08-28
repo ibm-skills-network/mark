@@ -27,6 +27,8 @@ import React, { FC, useEffect, useState } from "react";
 import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 import PromoBanner from "@/components/promo/PromoBanner";
+import { useUiTranslation } from "@/hooks/use-ui-translation";
+import { formatShortDuration } from "@/lib/format-duration";
 import {
   getExpiresAtMs,
   getLatestAttempt,
@@ -136,6 +138,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     ]);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t, activeLanguage } = useUiTranslation();
   const isAuthorPreview = searchParams.get("authorMode") === "true";
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(
@@ -192,8 +195,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   const latestAttempt = getLatestAttempt(attempts || []);
 
   const attemptsCount = attempts.length;
-  const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
-  const [isCooldown, setIsCooldown] = useState(false);
+  const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     if (
@@ -206,8 +210,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       assignmentState === "in-progress" ||
       !isAttemptSubmitted(latestAttempt)
     ) {
-      setCooldownMessage(null);
-      setIsCooldown(false);
+      setCooldownSecondsLeft(null);
       return;
     }
 
@@ -231,8 +234,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     }
 
     if (finishedAt === undefined || Number.isNaN(finishedAt)) {
-      setCooldownMessage(null);
-      setIsCooldown(false);
+      setCooldownSecondsLeft(null);
       return;
     }
 
@@ -243,32 +245,18 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       const remainingMs = nextEligibleAt - Date.now();
 
       if (remainingMs <= 0) {
-        setCooldownMessage(null);
-        setIsCooldown(false);
+        setCooldownSecondsLeft(null);
+        clearInterval(interval);
         return;
       }
 
-      setIsCooldown(true);
-
-      const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
-      let remainder = remainingMs % (24 * 60 * 60 * 1000);
-      const hours = Math.floor(remainder / (60 * 60 * 1000));
-      remainder %= 60 * 60 * 1000;
-      const minutes = Math.floor(remainder / 60000);
-      const seconds = Math.floor((remainder % 60000) / 1000);
-
-      const parts = [];
-      if (days) parts.push(`${days}d`);
-      if (hours) parts.push(`${hours}h`);
-      if (minutes) parts.push(`${minutes}m`);
-      if (seconds) parts.push(`${seconds}s`);
-
-      const timeString = parts.length > 0 ? parts.join(" ") : "a moment";
-      setCooldownMessage(`Please wait ${timeString} before retrying`);
+      // Ceil, not floor: the state holds whole seconds, and a floor would
+      // display "0s"-adjacent values while the cooldown is still active.
+      setCooldownSecondsLeft(Math.ceil(remainingMs / 1000));
     }
 
-    updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
+    updateCountdown();
     return () => clearInterval(interval);
   }, [
     latestAttempt,
@@ -311,8 +299,22 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       ? `/learner/${assignmentId}/questions`
       : `/learner/${assignmentId}/questions?authorMode=true`;
 
+  // One translatable key with the duration as a parameter, resolved here rather
+  // than by RouteUiTranslator rewriting the DOM afterwards. Opted out because it
+  // is already translated: RouteUiTranslator must neither rewrite it nor re-scan
+  // the route each time the duration ticks. translate="no" additionally keeps
+  // browser-level page translation from latching onto the ticking text.
+  const cooldownMessage =
+    cooldownSecondsLeft !== null ? (
+      <span data-no-ui-translate="true" translate="no">
+        {t("Please wait {time} before retrying", {
+          time: formatShortDuration(cooldownSecondsLeft, activeLanguage),
+        })}
+      </span>
+    ) : null;
+
   const buttonLabel = assignmentState === "in-progress" ? "Resume" : "Begin";
-  let buttonMessage = "";
+  let buttonMessage: React.ReactNode = "";
   let buttonDisabled = false;
 
   if (!role) {
@@ -325,7 +327,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     buttonDisabled = true;
     buttonMessage =
       "Maximum attempts reached, contact the author to request more.";
-  } else if (isCooldown && cooldownMessage) {
+  } else if (cooldownMessage) {
     buttonDisabled = true;
     buttonMessage = cooldownMessage;
   } else {
@@ -363,8 +365,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 <div className="sm:hidden">
                   <BeginTheAssignmentButton
                     className="w-full"
-                    disabled={isCooldown || buttonDisabled}
-                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    disabled={buttonDisabled}
+                    message={buttonMessage}
                     label={buttonLabel}
                     href={url}
                   />
@@ -372,14 +374,14 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 <div className="hidden sm:block">
                   <BeginTheAssignmentButton
                     className="w-auto"
-                    disabled={isCooldown || buttonDisabled}
-                    message={isCooldown ? cooldownMessage : buttonMessage}
+                    disabled={buttonDisabled}
+                    message={buttonMessage}
                     label={buttonLabel}
                     href={url}
                   />
                 </div>
               </div>
-              {isCooldown && cooldownMessage && (
+              {cooldownMessage && (
                 <span className="text-red-600 font-semibold">
                   ({cooldownMessage})
                 </span>
@@ -557,8 +559,8 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
           <div className="flex justify-center mt-6">
             <BeginTheAssignmentButton
               className="w-full sm:w-auto"
-              disabled={isCooldown || buttonDisabled}
-              message={isCooldown ? cooldownMessage : buttonMessage}
+              disabled={buttonDisabled}
+              message={buttonMessage}
               label={buttonLabel}
               href={url}
             />

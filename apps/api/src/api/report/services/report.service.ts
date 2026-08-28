@@ -23,13 +23,13 @@ import {
 import { AdminEmailService } from "src/auth/services/admin-email.service";
 import { PrismaService } from "src/database/prisma.service";
 import {
-  buildChatIssueBody,
-  buildChatIssueTitle,
-  CHAT_ISSUE_FOOTER,
+  buildSnSupportTicketTitle,
   defaultSeverityForIssueType,
+  stripSectionLabelMarkdown,
 } from "../helpers/issue-template";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
+import { SnSupportService } from "./sn-support.service";
 
 interface FeedbackFilterParameters {
   page: number;
@@ -63,6 +63,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly filesService: FilesService,
     private readonly adminEmailService: AdminEmailService,
+    private readonly snSupportService: SnSupportService,
   ) {}
 
   private async getGithubConfig(
@@ -590,178 +591,6 @@ export class ReportsService {
       },
     };
   }
-  private async createGithubIssue(
-    title: string,
-    body: string,
-    labels: string[] = [],
-  ): Promise<{ number: number; [key: string]: any }> {
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-
-    const token = await this.getInstallationToken();
-    if (!githubOwner || !githubRepo || !token) {
-      const missingConfig = [];
-      if (!githubOwner) missingConfig.push("GITHUB_OWNER");
-      if (!githubRepo) missingConfig.push("GITHUB_REPO");
-      if (!token) missingConfig.push("installation token");
-      this.logger.error("createGitHubIssue: required config missing", {
-        missing: missingConfig,
-        title_length: title?.length,
-        body_length: body?.length,
-        labels,
-      });
-      throw new InternalServerErrorException(
-        `GitHub repository configuration or token missing: ${missingConfig.join(
-          ", ",
-        )}`,
-      );
-    }
-
-    try {
-      const url = `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues`;
-      const payload = { title, body, labels };
-      const response = await axios.post(url, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-      });
-
-      return response.data as { number: number; [key: string]: any };
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const errorMessage: string =
-          error.response?.data?.message || error.message;
-        const status = error.response?.status;
-
-        this.logger.error(
-          `createGitHubIssue: GitHub API call failed (${status})`,
-          {
-            status,
-            errorMessage,
-            response_data: error.response?.data,
-            url: error.config?.url,
-          },
-        );
-        throw new InternalServerErrorException(
-          `Failed to create GitHub issue (${status}): ${errorMessage}`,
-        );
-      } else {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        this.logger.error("createGitHubIssue: non-axios error", {
-          errorMessage,
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        throw new InternalServerErrorException(
-          `Failed to create GitHub issue: ${errorMessage}`,
-        );
-      }
-    }
-  }
-
-  private async checkGitHubIssueStatus(issueNumber: number): Promise<{
-    state: string;
-    status: ReportStatus;
-    statusMessage: string;
-    closureReason?: string;
-  }> {
-    const { githubOwner, githubRepo, token } = await this.getGithubConfig(
-      "checkGitHubIssueStatus",
-      { issueNumber },
-    );
-
-    try {
-      const response = await axios.get(
-        `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${issueNumber}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-          },
-        },
-      );
-
-      const issue = response.data as {
-        state: string;
-        labels: Array<{ name: string }>;
-        closed_at: string | null;
-      };
-
-      let status: ReportStatus = ReportStatus.OPEN;
-      let statusMessage =
-        "Your issue is currently open, developers didn't pick it up yet";
-      let closureReason: string | undefined;
-
-      if (issue.state === "closed") {
-        const isDuplicate = issue.labels.some((label) =>
-          label.name.toLowerCase().includes("duplicate"),
-        );
-
-        const isWontFix = issue.labels.some(
-          (label) =>
-            label.name.toLowerCase().includes("wontfix") ||
-            label.name.toLowerCase().includes("won't fix") ||
-            label.name.toLowerCase().includes("not planned"),
-        );
-
-        const isInvalid = issue.labels.some(
-          (label) =>
-            label.name.toLowerCase().includes("invalid") ||
-            label.name.toLowerCase().includes("not reproducible"),
-        );
-
-        if (isDuplicate) {
-          status = ReportStatus.CLOSED;
-          closureReason = "duplicate";
-          statusMessage =
-            "This issue was closed as a duplicate of another issue.";
-        } else if (isWontFix) {
-          status = ReportStatus.CLOSED;
-          closureReason = "wontfix";
-          statusMessage =
-            "This issue was closed as it won't be implemented or fixed.";
-        } else if (isInvalid) {
-          status = ReportStatus.CLOSED;
-          closureReason = "invalid";
-          statusMessage =
-            "This issue was closed as it was deemed invalid or not reproducible.";
-        } else {
-          status = ReportStatus.RESOLVED;
-          closureReason = "fixed";
-          statusMessage = "This issue has been resolved.";
-        }
-      } else {
-        const inProgressLabel = issue.labels.find(
-          (label: { name: string }) =>
-            label.name === "in progress" ||
-            label.name === "in-progress" ||
-            label.name === "working",
-        );
-
-        if (inProgressLabel) {
-          status = ReportStatus.IN_PROGRESS;
-          statusMessage = "Our team is actively working on this issue.";
-        }
-      }
-
-      return {
-        state: issue.state,
-        status,
-        statusMessage,
-        closureReason,
-      };
-    } catch {
-      return {
-        state: "unknown",
-        status: ReportStatus.OPEN,
-        statusMessage: "Unable to retrieve current status.",
-      };
-    }
-  }
-
   private mapIssueTypeToReportType(issueType: string): ReportType {
     switch (issueType.toLowerCase()) {
       case "bug":
@@ -1001,7 +830,6 @@ export class ReportsService {
     screenshot?: Express.Multer.File,
   ): Promise<{
     message: string;
-    issueNumber?: number;
     reportId?: number;
     similarReports?: Array<{
       id: number;
@@ -1026,7 +854,6 @@ export class ReportsService {
       throw new InternalServerErrorException("issueType is required");
     }
 
-    const isProduction = process.env.NODE_ENV === "production";
     const role = userSession?.role || "Author";
     const issueSeverity: "info" | "warning" | "error" | "critical" =
       severity || defaultSeverityForIssueType(issueType);
@@ -1086,22 +913,16 @@ export class ReportsService {
     const potentialDuplicate = similarReports.find((r) => r.similarity > 0.85);
     const highSimilarityReport = similarReports.find((r) => r.similarity > 0.7);
 
-    const issueTemplateInput = {
+    const ticketTitle = buildSnSupportTicketTitle({
       issueType,
-      role,
-      severity: issueSeverity,
-      userEmail: safeUserEmail,
       assignmentId,
       attemptId,
-      reportedAt: new Date(),
-      isProduction,
       description,
-    };
-    const issueTitle = buildChatIssueTitle(issueTemplateInput);
-    let issueBody = buildChatIssueBody(issueTemplateInput);
+    });
 
     const finalScreenshotUrl =
       screenshotUrl || additionalDetails?.screenshotUrl;
+    let fullScreenshotUrl: string | undefined;
     if (finalScreenshotUrl && typeof finalScreenshotUrl === "string") {
       const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
       const cosEndpoint = process.env.IBM_COS_ENDPOINT;
@@ -1111,265 +932,166 @@ export class ReportsService {
         debugBucket &&
         (screenshotUrl || finalScreenshotUrl.includes(debugBucket))
       ) {
-        const fullScreenshotUrl = screenshotUrl
+        fullScreenshotUrl = screenshotUrl
           ? `${cosEndpoint}/${debugBucket}/${screenshotUrl}`
           : `${cosEndpoint}/${debugBucket}/${finalScreenshotUrl}`;
-
-        issueBody += `
-### Screenshot
-![Screenshot](${fullScreenshotUrl})
-
-*Screenshot uploaded to IBM Cloud Object Storage: \`${finalScreenshotUrl}\`*
-`;
-      } else {
-        issueBody += `
-### Screenshot
-Screenshot Key: \`${finalScreenshotUrl}\`
-`;
       }
     }
 
-    if (similarReports.length > 0) {
-      issueBody += `\n\n### Similar Issues\n`;
-      for (const report of similarReports.slice(0, 3)) {
-        const similarityPercentage = Math.round(report.similarity * 100);
-        issueBody += `- Issue #${
-          report.issueNumber || report.id
-        } (${similarityPercentage}% similar)\n`;
+    // SN Support is the support queue for new reports. The v2 API requires a
+    // reporter email, so anonymous reports exist only as DB rows below.
+    let snTicketKey: string | undefined;
+    if (this.snSupportService.isConfigured() && safeUserEmail !== "Unknown") {
+      const supportDescription = [
+        stripSectionLabelMarkdown(description),
+        "",
+        `Issue type: ${issueType}`,
+        `Reporter role: ${role}`,
+        `Severity: ${issueSeverity}`,
+        `Assignment ID: ${assignmentId ?? "N/A"}`,
+        `Attempt ID: ${attemptId ?? "N/A"}`,
+      ].join("\n");
+
+      try {
+        const snTicket = await this.snSupportService.createTicket({
+          title: ticketTitle,
+          description: supportDescription,
+          reporterEmail: safeUserEmail,
+          severity: issueSeverity,
+          issueType:
+            typeof additionalDetails?.category === "string"
+              ? additionalDetails.category
+              : issueType,
+          pageUrl:
+            typeof additionalDetails?.pageUrl === "string"
+              ? additionalDetails.pageUrl
+              : undefined,
+          portalName:
+            typeof additionalDetails?.portalName === "string"
+              ? additionalDetails.portalName
+              : undefined,
+          courseTitle:
+            typeof additionalDetails?.courseTitle === "string"
+              ? additionalDetails.courseTitle
+              : undefined,
+          toolName: "Mark",
+          browser:
+            typeof additionalDetails?.browser === "string"
+              ? additionalDetails.browser
+              : undefined,
+          chatHistoryUrl:
+            typeof additionalDetails?.chatHistoryUrl === "string"
+              ? additionalDetails.chatHistoryUrl
+              : undefined,
+          screenshotUrl: fullScreenshotUrl,
+        });
+        snTicketKey = snTicket.ticketKey;
+        this.logger.log("Created SN Support ticket for report", {
+          ticket_key: snTicket.ticketKey,
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+        });
+      } catch (error) {
+        // The report survives as a DB row (and in the admin dashboard), so
+        // the submission itself is not failed — but nobody is watching that
+        // queue, so this needs attention.
+        this.logger.error("SN Support ticket creation failed", {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+        });
       }
+    } else {
+      // Without a ticket the report reaches no support queue — DB row only.
+      this.logger.warn("Report not forwarded to SN Support", {
+        configured: this.snSupportService.isConfigured(),
+        has_reporter_email: safeUserEmail !== "Unknown",
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+      });
     }
 
-    issueBody += CHAT_ISSUE_FOOTER;
+    // Duplicates inherit the parent's resolution so reporters aren't told a
+    // fixed issue is still open.
+    let reportStatus: ReportStatus = ReportStatus.OPEN;
+    let statusMessage = "Your issue has been reported and is being reviewed.";
+    let closureReason: string | null = null;
+    const isDuplicate = Boolean(potentialDuplicate);
 
     if (potentialDuplicate) {
-      issueBody += `\n\n⚠️ **Potential Duplicate** ⚠️\nThis issue appears to be a duplicate of Issue #${
-        potentialDuplicate.issueNumber || potentialDuplicate.id
-      } (${Math.round(potentialDuplicate.similarity * 100)}% similar)`;
+      const parentReport = await this.prisma.report.findUnique({
+        where: { id: potentialDuplicate.id },
+        select: { status: true, closureReason: true },
+      });
+
+      if (
+        parentReport &&
+        (parentReport.status === ReportStatus.RESOLVED ||
+          parentReport.status === ReportStatus.CLOSED)
+      ) {
+        reportStatus = parentReport.status;
+        closureReason = parentReport.closureReason ?? null;
+        statusMessage =
+          parentReport.closureReason === "wontfix"
+            ? "This issue was closed as it won't be implemented or fixed."
+            : parentReport.closureReason === "invalid"
+              ? "This issue was closed as it was deemed invalid or not reproducible."
+              : parentReport.closureReason === "duplicate"
+                ? "This issue was closed as a duplicate of another issue."
+                : "This issue was resolved.";
+      }
+    }
+
+    const reportData: {
+      duplicateOfReportId: number | null;
+      reporterId: string;
+      assignmentId: number | null;
+      attemptId: number | null;
+      issueType: ReportType;
+      description: string;
+      author: boolean;
+      status: ReportStatus;
+      statusMessage: string;
+      relatedToReportId?: number | null;
+      similarityScore?: number | null;
+      closureReason?: string | null;
+    } = {
+      reporterId: userSession?.userId || "anonymous",
+      assignmentId: typeof assignmentId === "number" ? assignmentId : null,
+      attemptId: typeof attemptId === "number" ? attemptId : null,
+      issueType: mappedIssueType,
+      description: description,
+      author: role?.toLowerCase() === "author",
+      status: reportStatus,
+      statusMessage: statusMessage,
+      duplicateOfReportId: null,
+      relatedToReportId: null,
+      similarityScore: null,
+      closureReason,
+    };
+
+    if (potentialDuplicate) {
+      reportData.duplicateOfReportId = potentialDuplicate.id;
+      reportData.similarityScore = potentialDuplicate.similarity;
+    } else if (highSimilarityReport) {
+      reportData.relatedToReportId = highSimilarityReport.id;
+      reportData.similarityScore = highSimilarityReport.similarity;
     }
 
     try {
-      let issue: { number: number; [key: string]: any } | undefined;
-      let parentIssueNumber: number | undefined;
-      let isDuplicate = false;
-
-      if (potentialDuplicate?.issueNumber) {
-        isDuplicate = true;
-        parentIssueNumber = potentialDuplicate.issueNumber;
-
-        const { githubOwner, githubRepo, token } = await this.getGithubConfig(
-          "submitReport (duplicate path)",
-          { parent_issue_number: parentIssueNumber },
-        );
-
-        let commentBody = `
-## Duplicate Report Detected
-
-Another user has reported a nearly identical issue:
-
-**Similarity Score:** ${Math.round(potentialDuplicate.similarity * 100)}%
-**Reported By:** ${role || "Unknown"}
-**User Email:** ${safeUserEmail}
-**Assignment ID:** ${assignmentId || "N/A"}
-**Attempt ID:** ${attemptId || "N/A"}
-**Time Reported:** ${new Date().toISOString()}
-
-### Description from new report
-${description}
-`;
-
-        const screenshotUrl = additionalDetails?.screenshotUrl;
-        if (screenshotUrl && typeof screenshotUrl === "string") {
-          const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
-          if (debugBucket && screenshotUrl.includes(debugBucket)) {
-            const cosEndpoint = process.env.IBM_COS_ENDPOINT;
-            const fullScreenshotUrl = `${cosEndpoint}/${debugBucket}/${screenshotUrl}`;
-
-            commentBody += `
-### Screenshot from duplicate report
-![Screenshot](${fullScreenshotUrl})
-`;
-          } else {
-            commentBody += `
-### Screenshot from duplicate report
-Screenshot Key: \`${screenshotUrl}\`
-`;
-          }
-        }
-
-        await axios.post(
-          `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${parentIssueNumber}/comments`,
-          { body: commentBody },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-            },
-          },
-        );
-
-        const issueResponse = await axios.get(
-          `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${parentIssueNumber}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-            },
-          },
-        );
-
-        issue = issueResponse.data as {
-          number: number;
-          state: string;
-          labels: Array<{ name: string }>;
-          closed_at?: string | null;
-        };
-
-        if (issue.state === "closed") {
-          await this.checkGitHubIssueStatus(parentIssueNumber);
-        }
-      } else if (highSimilarityReport?.issueNumber) {
-        const labels = ["chat-report", "related-issue"];
-        if (issueType === "technical" || issueType === "bug")
-          labels.push("bug");
-        if (issueType === "content") labels.push("content");
-        if (issueType === "grading") labels.push("grading");
-        if (role) labels.push(role);
-
-        issueBody += `\n\n### Related Issue\nThis appears to be related to Issue #${
-          highSimilarityReport.issueNumber
-        } (${Math.round(highSimilarityReport.similarity * 100)}% similar)`;
-
-        issue = await this.createGithubIssue(issueTitle, issueBody, labels);
-
-        const githubOwner = process.env.GITHUB_OWNER;
-        const githubRepo = process.env.GITHUB_REPO;
-        const token = await this.getInstallationToken();
-
-        if (githubOwner && githubRepo && token) {
-          const relationComment = `
-## Related Issue Created
-
-A new related issue has been created: #${issue.number}
-
-**Similarity Score:** ${Math.round(highSimilarityReport.similarity * 100)}%
-**Issue Type:** ${issueType}
-`;
-
-          await axios.post(
-            `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${highSimilarityReport.issueNumber}/comments`,
-            { body: relationComment },
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-              },
-            },
-          );
-        }
-      } else {
-        const labels = ["chat-report"];
-        if (issueType === "technical" || issueType === "bug")
-          labels.push("bug");
-        if (issueType === "content") labels.push("content");
-        if (issueType === "grading") labels.push("grading");
-        if (role) labels.push(role);
-
-        issue = await this.createGithubIssue(issueTitle, issueBody, labels);
-      }
-
-      let reportStatus: ReportStatus = ReportStatus.OPEN;
-      let statusMessage = "Your issue has been reported and is being reviewed.";
-
-      if (isDuplicate && potentialDuplicate) {
-        const parentReport = await this.prisma.report.findUnique({
-          where: { id: potentialDuplicate.id },
-          select: { status: true, statusMessage: true, closureReason: true },
-        });
-
-        if (
-          parentReport &&
-          (parentReport.status === ReportStatus.RESOLVED ||
-            parentReport.status === ReportStatus.CLOSED)
-        ) {
-          reportStatus = parentReport.status;
-          statusMessage =
-            parentReport.closureReason === "wontfix"
-              ? "This issue was closed as it won't be implemented or fixed."
-              : parentReport.closureReason === "invalid"
-                ? "This issue was closed as it was deemed invalid or not reproducible."
-                : parentReport.closureReason === "duplicate"
-                  ? "This issue was closed as a duplicate of another issue."
-                  : "This issue was resolved.";
-        }
-      }
-
-      const reportData: {
-        duplicateOfReportId: number | null;
-        reporterId: string;
-        assignmentId: number | null;
-        attemptId: number | null;
-        issueType: ReportType;
-        description: string;
-        author: boolean;
-        status: ReportStatus;
-        issueNumber?: number;
-        statusMessage: string;
-        relatedToReportId?: number | null;
-        similarityScore?: number | null;
-        closureReason?: string | null;
-      } = {
-        reporterId: userSession?.userId || "anonymous",
-        assignmentId: typeof assignmentId === "number" ? assignmentId : null,
-        attemptId: typeof attemptId === "number" ? attemptId : null,
-        issueType: mappedIssueType,
-        description: description,
-        author: role?.toLowerCase() === "author",
-        status: reportStatus,
-        issueNumber: issue.number,
-        statusMessage: statusMessage,
-        duplicateOfReportId: null,
-        relatedToReportId: null,
-        similarityScore: null,
-        closureReason: null,
-      };
-
-      if (potentialDuplicate) {
-        reportData.duplicateOfReportId = potentialDuplicate.id;
-        reportData.similarityScore = potentialDuplicate.similarity;
-
-        if (
-          reportStatus === ReportStatus.CLOSED ||
-          reportStatus === ReportStatus.RESOLVED
-        ) {
-          const parentReport = await this.prisma.report.findUnique({
-            where: { id: potentialDuplicate.id },
-            select: { closureReason: true },
-          });
-
-          if (parentReport?.closureReason) {
-            reportData.closureReason = parentReport.closureReason;
-          }
-        }
-      } else if (highSimilarityReport) {
-        reportData.relatedToReportId = highSimilarityReport.id;
-        reportData.similarityScore = highSimilarityReport.similarity;
-      }
-
       const report = await this.prisma.report.create({ data: reportData });
 
       // Fire-and-forget: Flo is best-effort telemetry. Never block the
       // request on its NATS publish — the underlying ts-nats client opens a
       // fresh connection per call and has no built-in deadline.
       void this.floService
-        .sendError(issueTitle, description, {
+        .sendError(ticketTitle, description, {
           severity: issueSeverity,
           tags: ["mark", "chat", "report", role || "user", issueType],
           assignmentId,
           attemptId,
-          github_issue: issue.number,
+          sn_ticket: snTicketKey,
           report_id: report.id,
           is_duplicate: isDuplicate,
         })
@@ -1381,10 +1103,13 @@ A new related issue has been created: #${issue.number}
           );
         });
 
-      let message = `Thank you for your report. Issue #${issue.number} has been created and our team will review it soon. You can check the status of this issue anytime by asking me about your reported issues.`;
+      const ticketSegment = snTicketKey
+        ? `Support ticket ${snTicketKey} has been created and our team will review it soon.`
+        : `Our team will review it soon.`;
+      let message = `Thank you for your report. ${ticketSegment} You can check the status anytime by asking about your reported issues.`;
 
       if (isDuplicate) {
-        message = `Thank you for your report. We found that this is likely a duplicate of an existing issue (#${parentIssueNumber}). Your report has been linked to the existing issue and will be handled together. You can check the status anytime by asking about your reported issues.`;
+        message = `Thank you for your report. This looks like a duplicate of a previously reported issue, so your report has been linked to it and they will be handled together. You can check the status anytime by asking about your reported issues.`;
 
         if (
           reportStatus === ReportStatus.RESOLVED ||
@@ -1395,11 +1120,9 @@ A new related issue has been created: #${issue.number}
           }.`;
         }
       } else if (highSimilarityReport) {
-        message = `Thank you for your report. Issue #${issue.number} has been created and linked to a similar existing issue (#${highSimilarityReport.issueNumber}). Our team will review both issues together. You can check the status anytime by asking about your reported issues.`;
+        message = `Thank you for your report. ${ticketSegment} It has been linked to a similar existing report and our team will review them together. You can check the status anytime by asking about your reported issues.`;
       } else if (similarReports.length > 0) {
-        message = `Thank you for your report. Issue #${
-          issue.number
-        } has been created and our team will review it soon. We found ${
+        message = `Thank you for your report. ${ticketSegment} We found ${
           similarReports.length
         } similar ${
           similarReports.length === 1 ? "issue" : "issues"
@@ -1408,7 +1131,6 @@ A new related issue has been created: #${issue.number}
 
       return {
         message,
-        issueNumber: issue?.number,
         reportId: report.id,
         similarReports:
           similarReports.length > 0
@@ -1422,66 +1144,14 @@ A new related issue has been created: #${issue.number}
             : undefined,
         isDuplicate,
       };
-    } catch {
-      try {
-        const reportData: {
-          duplicateOfReportId: number | null;
-          reporterId: string;
-          assignmentId: number | null;
-          attemptId: number | null;
-          issueType: ReportType;
-          description: string;
-          author: boolean;
-          status: ReportStatus;
-          issueNumber?: number;
-          statusMessage: string;
-          relatedToReportId?: number | null;
-          similarityScore?: number | null;
-        } = {
-          reporterId: userSession?.userId || "anonymous",
-          assignmentId: assignmentId,
-          attemptId: attemptId,
-          issueType: mappedIssueType,
-          description: `${description}\n\nNote: GitHub issue creation failed.`,
-          author: role?.toLowerCase() === "author",
-          status: ReportStatus.OPEN,
-          statusMessage:
-            "Your issue has been reported but there was a problem creating a GitHub issue.",
-          issueNumber: null,
-          duplicateOfReportId: null,
-          relatedToReportId: null,
-          similarityScore: null,
-        };
-
-        if (potentialDuplicate) {
-          reportData.duplicateOfReportId = potentialDuplicate.id;
-          reportData.similarityScore = potentialDuplicate.similarity;
-        } else if (highSimilarityReport) {
-          reportData.relatedToReportId = highSimilarityReport.id;
-          reportData.similarityScore = highSimilarityReport.similarity;
-        }
-
-        const report = await this.prisma.report.create({ data: reportData });
-
-        return {
-          message:
-            "Your report has been saved. However, we encountered an issue with our tracking system. Your feedback is still important to us - we'll follow up as soon as possible.",
-          reportId: report.id,
-          similarReports:
-            similarReports.length > 0
-              ? similarReports.slice(0, 3).map((r) => ({
-                  id: r.id,
-                  issueNumber: r.issueNumber,
-                  similarity: r.similarity,
-                  description: r.description,
-                  status: r.status.toString(),
-                }))
-              : undefined,
-          isDuplicate: potentialDuplicate !== undefined,
-        };
-      } catch {
-        // If we fail to create a report, fall through to generic error response
-      }
+    } catch (error) {
+      this.logger.error("submitReport: failed to persist report", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+        sn_ticket: snTicketKey,
+      });
 
       return {
         message:
@@ -1723,72 +1393,43 @@ A new related issue has been created: #${issue.number}
       throw new NotFoundException(`Report with ID ${reportId} not found`);
     }
 
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
-    const token = await this.getInstallationToken();
+    // Reports created after the SN Support cutover have no GitHub issue;
+    // their comment is delivered by email below. GitHub-era reports keep
+    // getting the issue comment so the mark-support thread stays complete.
+    if (report.issueNumber) {
+      const githubOwner = process.env.GITHUB_OWNER;
+      const githubRepo = process.env.GITHUB_REPO;
+      const token = await this.getInstallationToken();
 
-    if (!githubOwner || !githubRepo || !token) {
-      this.logger.error("addReportComment: GitHub config or token missing", {
-        report_id: report.id,
-        issue_number: report.issueNumber,
-        owner_set: !!githubOwner,
-        repo_set: !!githubRepo,
-        token_set: !!token,
-      });
-      throw new InternalServerErrorException(
-        "GitHub repository configuration or token missing",
-      );
-    }
+      if (!githubOwner || !githubRepo || !token) {
+        this.logger.error("addReportComment: GitHub config or token missing", {
+          report_id: report.id,
+          issue_number: report.issueNumber,
+          owner_set: !!githubOwner,
+          repo_set: !!githubRepo,
+          token_set: !!token,
+        });
+        throw new InternalServerErrorException(
+          "GitHub repository configuration or token missing",
+        );
+      }
 
-    // Orphan reports (issueNumber === null) exist when GitHub issue creation
-    // failed during report submission. Backfill the issue here so commenting
-    // recovers them instead of 500ing forever.
-    if (!report.issueNumber) {
-      const labels = ["chat-report", report.issueType.toLowerCase()];
-      const backfillDescription = report.description ?? "(no description)";
-      const backfillTemplateInput = {
-        issueType: report.issueType,
-        role: report.author ? "author" : "learner",
-        severity: defaultSeverityForIssueType(report.issueType),
-        userEmail: report.reporterId,
-        assignmentId: report.assignmentId,
-        attemptId: report.attemptId,
-        reportedAt: report.createdAt ?? new Date(),
-        isProduction: process.env.NODE_ENV === "production",
-        description: backfillDescription,
-      };
-
-      const issue = await this.createGithubIssue(
-        buildChatIssueTitle(backfillTemplateInput),
-        buildChatIssueBody(backfillTemplateInput) + CHAT_ISSUE_FOOTER,
-        labels,
-      );
-      report.issueNumber = issue.number;
-      await this.prisma.report.update({
-        where: { id: report.id },
-        data: { issueNumber: issue.number },
-      });
-      this.logger.log(
-        "addReportComment: backfilled GitHub issue for orphan report",
-        { report_id: report.id, issue_number: issue.number },
-      );
-    }
-
-    await axios.post(
-      `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${report.issueNumber}/comments`,
-      {
-        body: `**${userSession.role ?? "user"} (${
-          userSession.userId
-        })**\n\n${comment}`,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
+      await axios.post(
+        `https://api.github.com/repos/${githubOwner}/${githubRepo}/issues/${report.issueNumber}/comments`,
+        {
+          body: `**${userSession.role ?? "user"} (${
+            userSession.userId
+          })**\n\n${comment}`,
         },
-      },
-    );
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        },
+      );
+    }
 
     const reporterEmail = report.reporterId;
     const developerEmail = this.getDeveloperNotificationEmail();
@@ -2721,51 +2362,22 @@ A new related issue has been created: #${issue.number}
     userId?: string,
     assignmentId?: number,
   ): Promise<{ message: string; reportId?: number }> {
-    try {
-      // Fire-and-forget: see floService.sendError comment in reportIssue.
-      void this.floService
-        .sendFeedback(title, description, {
-          rating,
-          userEmail,
-          portalName: portalName || "Mark AI Assistant",
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `Flo sendFeedback dispatch failed: ${(error as Error).message}`,
-          );
-        });
+    // Fire-and-forget: see floService.sendError comment in reportIssue.
+    void this.floService
+      .sendFeedback(title, description, {
+        rating,
+        userEmail,
+        portalName: portalName || "Mark AI Assistant",
+      })
+      .catch((error) => {
+        this.logger.warn(
+          `Flo sendFeedback dispatch failed: ${(error as Error).message}`,
+        );
+      });
 
-      const issueTitle = `[MARK CHAT] User Feedback: ${title}`;
-      const issueBody = `
-## User Feedback Report
-**Feedback Type:** ${title}
-**Rating:** ${rating}
-**Reported By:** ${userEmail || "Anonymous"}
-**Time Reported:** ${new Date().toISOString()}
-### Description
-${description}
----
-*This feedback was automatically reported through the Mark Chat feature.*
-`;
-
-      const labels = ["feedback"];
-      if (title === "bug") labels.push("bug");
-      if (title === "content") labels.push("content");
-      if (title === "grading") labels.push("grading");
-      if (title === "technical") labels.push("technical");
-      if (title === "critical") labels.push("critical");
-      if (title === "feature") labels.push("feature");
-      if (title === "other") labels.push("other");
-
-      const issue = await this.createGithubIssue(issueTitle, issueBody, labels);
-
-      let report: {
-        id: number;
-        status: ReportStatus;
-        statusMessage: string;
-      } | null;
-
-      if (assignmentId) {
+    let report: { id: number } | null = null;
+    if (assignmentId) {
+      try {
         report = await this.prisma.report.create({
           data: {
             reporterId: userId || "anonymous",
@@ -2774,54 +2386,32 @@ ${description}
             description: `Rating: ${rating}\n\n${description}`,
             author: false,
             status: ReportStatus.OPEN,
-            issueNumber: issue.number,
             statusMessage:
               "Your feedback has been received and is being reviewed.",
           },
         });
+      } catch (error) {
+        this.logger.error("sendUserFeedback: failed to persist feedback", {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          assignment_id: assignmentId,
+        });
+
+        return {
+          message:
+            "We encountered an issue while submitting your feedback. Please try again later.",
+        };
       }
-
-      return {
-        message: `Thank you for your feedback! Issue #${
-          issue.number
-        } has been created and our team will review it soon.${
-          report
-            ? " You can check the status of this feedback anytime by asking me about your reported issues."
-            : ""
-        }`,
-        reportId: report?.id,
-      };
-    } catch {
-      if (assignmentId && userId) {
-        try {
-          const report = await this.prisma.report.create({
-            data: {
-              reporterId: userId,
-              assignmentId,
-              issueType: ReportType.FEEDBACK,
-              description: `Rating: ${rating}\n\n${description}\n\nNote: GitHub issue creation failed.`,
-              author: false,
-              status: ReportStatus.OPEN,
-              statusMessage:
-                "Your feedback has been received, but there was a problem creating a GitHub issue.",
-            },
-          });
-
-          return {
-            message:
-              "Your feedback has been saved. Thank you for helping us improve!",
-            reportId: report.id,
-          };
-        } catch {
-          // fall through to generic error
-        }
-      }
-
-      return {
-        message:
-          "We encountered an issue while submitting your feedback. Please try again later.",
-      };
     }
+
+    return {
+      message: `Thank you for your feedback! Our team will review it soon.${
+        report
+          ? " You can check the status of this feedback anytime by asking me about your reported issues."
+          : ""
+      }`,
+      reportId: report?.id,
+    };
   }
 
   async sendBugRenewalEmail(dto: BugRenewalEmailDto): Promise<{

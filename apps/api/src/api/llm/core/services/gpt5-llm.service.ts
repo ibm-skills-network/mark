@@ -12,6 +12,7 @@ import {
   LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { toImageDataList } from "../utils/multimodal-image.util";
 import { invokeStructuredChatModel } from "./structured-output.util";
 import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 
@@ -108,18 +109,20 @@ export class Gpt5LlmService implements IMultimodalLlmProvider {
    */
   async invokeWithImage(
     textContent: string,
-    imageData: string,
+    imageData: string | string[],
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
     const model = this.createChatModel(options);
 
-    const processedImageData = this.normalizeImageData(imageData);
+    const processedImages = toImageDataList(imageData).map((entry) =>
+      this.normalizeImageData(entry),
+    );
     const inputTokens = this.tokenCounter.countTokens(textContent);
 
-    const estimatedImageTokens = 200;
+    const estimatedImageTokens = 200 * processedImages.length;
 
     this.logger.debug(
-      `Invoking GPT-5 with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
+      `Invoking GPT-5 with ${processedImages.length} image(s) (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
     );
 
     try {
@@ -127,13 +130,13 @@ export class Gpt5LlmService implements IMultimodalLlmProvider {
         new HumanMessage({
           content: [
             { type: "text", text: textContent },
-            {
-              type: "image_url",
+            ...processedImages.map((url) => ({
+              type: "image_url" as const,
               image_url: {
-                url: processedImageData,
+                url,
                 detail: options?.imageDetail || "auto",
               },
-            },
+            })),
           ],
         }),
       ]);

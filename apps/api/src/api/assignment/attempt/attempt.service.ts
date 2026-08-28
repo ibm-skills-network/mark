@@ -27,6 +27,10 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
+import {
+  meetsPassingGrade,
+  resolvePassedIndicator,
+} from "src/api/attempt/common/utils/pass-fail.util";
 import { LtiGradeSyncService } from "src/api/attempt/services/lti-grade-sync.service";
 import { GradingKillSwitchService } from "src/api/ai-feature-flags/grading-kill-switch.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
@@ -730,6 +734,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
+        passingGrade: true,
         currentVersion: {
           select: {
             correctAnswerVisibility: true,
@@ -806,6 +812,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         totalPointsEarned,
         totalPossiblePoints,
         grade: assignment.showAssignmentScore ? grade : undefined,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
         correctAnswerVisibility:
@@ -833,6 +845,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         totalPossiblePoints,
         showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
+        showPassFailIndicator: assignment.showPassFailIndicator,
+        passed: resolvePassedIndicator(
+          assignment.showPassFailIndicator,
+          result.grade,
+          assignment.passingGrade,
+        ),
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         correctAnswerVisibility:
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
@@ -923,6 +941,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         questionControls: true,
         currentVersion: {
           select: {
@@ -1008,6 +1027,9 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((qId) => questionsWithResponses.find((q) => q.id === qId))
       .filter(Boolean);
 
+    // Captured before the visibility filtering deletes the grade: the
+    // pass/fail indicator must stay computable when the score is hidden.
+    const preVisibilityGrade = assignmentAttempt.grade;
     if (assignment.showAssignmentScore === false) {
       delete assignmentAttempt.grade;
     }
@@ -1110,10 +1132,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       }
     }
 
+    // NEVER always hides the correct answers; ON_PASS hides them until the
+    // attempt meets the passing grade. The grade must be read from
+    // preVisibilityGrade — the visibility filtering above deletes
+    // assignmentAttempt.grade when the score is hidden, and an undefined
+    // grade used to disable this gating entirely.
+    const completedAnswerVisibility =
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER";
     if (
-      (assignment.currentVersion?.correctAnswerVisibility || "NEVER") ===
-        "NEVER" &&
-      assignmentAttempt.grade < assignment.passingGrade
+      completedAnswerVisibility === "NEVER" ||
+      (completedAnswerVisibility === "ON_PASS" &&
+        !meetsPassingGrade(preVisibilityGrade, assignment.passingGrade))
     ) {
       for (const question of finalQuestions) {
         if (question.choices) {
@@ -1139,6 +1168,12 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
+      showPassFailIndicator: assignment.showPassFailIndicator,
+      passed: resolvePassedIndicator(
+        assignment.showPassFailIndicator,
+        preVisibilityGrade,
+        assignment.passingGrade,
+      ),
       correctAnswerVisibility:
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       comments: assignmentAttempt.comments,
@@ -1155,7 +1190,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    * @param language - The language code requested (if none provided, defaults to "en")
    * @returns Structured attempt data with:
    * - Questions in their attempt-specific order
-   * - Merged question/variant data including translations for all available languages
+   * - Merged question/variant data including translations for the requested
+   *   language family only (the client refetches on language switch)
    * - Responses with score/feedback visibility rules applied
    * - Assignment configuration metadata
    *
@@ -1223,6 +1259,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showQuestions: true,
+        showPassFailIndicator: true,
         questionControls: true,
         updatedAt: true,
         currentVersion: {
@@ -1256,8 +1293,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((qv) => qv.questionVariant?.id)
       .filter((id) => id != undefined);
 
+    // Only the requested language family is fetched (startsWith covers
+    // regional rows like zh-CN/zh-TW for a zh request). Returning every
+    // language made the response size scale with the translation count — an
+    // assignment with images embedded in its question HTML shipped each image
+    // once per language (assignment 2532 reached ~4MB, overflowing
+    // localStorage on the client and trapping learners in a clear-and-reload
+    // loop). The client refetches the attempt when the learner switches
+    // language mid-attempt.
     const translations = await this.prisma.translation.findMany({
       where: {
+        languageCode: { startsWith: normalizedLanguage },
         OR: [
           { questionId: { in: questionIds } },
           ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
@@ -1445,7 +1491,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           delete choice.points;
           if (
             correctAnswerVisibility === "ON_PASS" &&
-            assignmentAttempt.grade < assignment.passingGrade
+            !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
           ) {
             delete choice.isCorrect;
             delete choice.feedback;
@@ -1461,7 +1507,10 @@ export class AttemptServiceV1 implements OnModuleDestroy {
               delete choice.points;
               if (
                 correctAnswerVisibility === "ON_PASS" &&
-                assignmentAttempt.grade < assignment.passingGrade
+                !meetsPassingGrade(
+                  assignmentAttempt.grade,
+                  assignment.passingGrade,
+                )
               ) {
                 delete choice.isCorrect;
                 delete choice.feedback;
@@ -1482,7 +1531,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           delete choice.points;
           if (
             correctAnswerVisibility === "ON_PASS" &&
-            assignmentAttempt.grade < assignment.passingGrade
+            !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
           ) {
             delete choice.isCorrect;
             delete choice.feedback;
@@ -1493,14 +1542,20 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
       if (
         correctAnswerVisibility === "ON_PASS" &&
-        assignmentAttempt.grade < assignment.passingGrade
+        !meetsPassingGrade(assignmentAttempt.grade, assignment.passingGrade)
       ) {
         delete question.answer;
       }
     }
 
+    // No pass/fail verdict here on purpose — see the v2 twin in
+    // attempt-submission.service.ts. This route serves the in-progress
+    // attempt; pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      // The spread carries the persisted grade, which must not reach a learner
+      // whose assignment hides the score.
+      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions.map((question) => ({
         ...question,
         choices:
@@ -1540,6 +1595,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         showQuestionScore: assignment.showQuestionScore,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         showQuestions: assignment.showQuestions,
+        showPassFailIndicator: assignment.showPassFailIndicator,
         correctAnswerVisibility,
         questionControls,
         updatedAt: assignment.updatedAt,

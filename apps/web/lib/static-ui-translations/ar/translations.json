@@ -865,6 +865,7 @@
   "Please select a language to continue.": "الرجاء تحديد لغة للمتابعة.",
   "Please select a Question Type first.": "الرجاء تحديد نوع السؤال أولاً.",
   "Please select the number of variations to generate": "الرجاء تحديد عدد الاختلافات المراد إنشاؤها",
+  "Please wait {time} before retrying": "يرجى الانتظار {time} قبل إعادة المحاولة",
   "Points": "النقاط",
   "Points hidden": "النقاط مخفية",
   "Points:": "النقاط:",

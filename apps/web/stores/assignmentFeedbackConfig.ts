@@ -16,9 +16,11 @@ type FeedbackDataActions = {
   toggleShowQuestionScore: () => void;
   toggleShowAssignmentScore: () => void;
   toggleShowQuestions: () => void;
+  toggleShowPassFailIndicator: () => void;
 
   setShowSubmissionFeedback: (showSubmissionFeedback: boolean) => void;
   setShowQuestionScore: (showQuestionScore: boolean) => void;
+  setShowPassFailIndicator: (showPassFailIndicator: boolean) => void;
   setShowQuestion: (showQuestions: boolean) => void;
   setShowAssignmentScore: (showAssignmentScore: boolean) => void;
   setCorrectAnswerVisibility: (
@@ -41,6 +43,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         showQuestionScore: true,
         showAssignmentScore: true,
         showQuestions: true,
+        showPassFailIndicator: false,
         correctAnswerVisibility: "ALWAYS",
         setShowQuestion: (showQuestions: boolean) => set({ showQuestions }),
         toggleShowQuestions: () =>
@@ -71,6 +74,12 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
           set((state) => ({ showAssignmentScore: !state.showAssignmentScore })),
         setShowAssignmentScore: (showAssignmentScore: boolean) =>
           set({ showAssignmentScore }),
+        toggleShowPassFailIndicator: () =>
+          set((state) => ({
+            showPassFailIndicator: !state.showPassFailIndicator,
+          })),
+        setShowPassFailIndicator: (showPassFailIndicator: boolean) =>
+          set({ showPassFailIndicator }),
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         setAssignmentFeedbackConfigStore: (state) =>
           set((prevState) => ({ ...prevState, ...state })),
@@ -81,6 +90,7 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
             showQuestionScore: true,
             showAssignmentScore: true,
             showQuestions: true,
+            showPassFailIndicator: false,
             correctAnswerVisibility: "ALWAYS",
             updatedAt: undefined,
           })),

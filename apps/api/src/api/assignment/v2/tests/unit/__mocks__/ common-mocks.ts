@@ -968,6 +968,7 @@ export const createMockAssignment = (
   showQuestionScore: true,
   showSubmissionFeedback: true,
   showQuestions: true,
+  showPassFailIndicator: false,
   updatedAt: new Date(),
   languageCode: "en",
   currentVersionId: 1,

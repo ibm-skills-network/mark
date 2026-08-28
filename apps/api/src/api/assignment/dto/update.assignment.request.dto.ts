@@ -231,6 +231,16 @@ export class UpdateAssignmentRequestDto {
   showSubmissionFeedback: boolean;
 
   @ApiProperty({
+    description:
+      "Should learners be told whether they passed, even when the score is hidden",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showPassFailIndicator?: boolean;
+
+  @ApiProperty({
     description: "When should correct answers be shown to learners",
     required: false,
   })

@@ -144,6 +144,11 @@ export class FileContentExtractionService {
   private readonly ARCHIVE_ENTRY_MAX_BYTES = 100_000;
   private readonly ARCHIVE_TEXT_ENTRY_MAX_CHARS = 1000;
   private readonly ARCHIVE_TOTAL_CONTENT_BUDGET = 2_000_000;
+  // A single notebook output (GridSearch verbose logs, a full-frame DataFrame
+  // repr) can run to hundreds of KB and crowd the learner's code out of every
+  // downstream evidence budget. The head of an output is what shows whether
+  // the cell ran and what it produced.
+  private readonly NOTEBOOK_OUTPUT_TEXT_MAX_CHARS = 2000;
 
   private readonly mimeTypeMap: Record<string, string[]> = {
     "text/plain": ["txt", "log", "md", "markdown", "rst", "asc", "text"],
@@ -1577,7 +1582,9 @@ export class FileContentExtractionService {
                 const text = Array.isArray(output.text)
                   ? output.text.join("")
                   : output.text || "";
-                cellText += `[${output.name || "stdout"}]:\n${text}`;
+                cellText += `[${
+                  output.name || "stdout"
+                }]:\n${this.capNotebookOutputText(text)}`;
                 break;
               }
 
@@ -1838,16 +1845,17 @@ export class FileContentExtractionService {
     let result = "";
     const images: NotebookImage[] = [];
 
-    const mimePreference = [
+    // Alternate representations of the same result (text/plain + text/html +
+    // text/latex) carry the same information; inlining more than the first is
+    // pure prompt bloat — a pandas HTML repr of a text/plain table can run to
+    // 100KB+ on its own.
+    const textMimePreference = [
       "text/plain",
       "text/markdown",
       "text/html",
       "text/latex",
       "application/json",
       "application/javascript",
-      "image/png",
-      "image/jpeg",
-      "image/svg+xml",
     ];
 
     // A plot's text/plain twin is matplotlib's object repr, e.g.
@@ -1861,45 +1869,46 @@ export class FileContentExtractionService {
       (mime) => data[mime],
     );
 
-    for (const mime of mimePreference) {
-      if (data[mime]) {
-        const content = data[mime];
-
+    let textEmitted = false;
+    for (const mime of textMimePreference) {
+      const content = data[mime];
+      if (!content) continue;
+      if (
+        !textEmitted &&
+        (typeof content === "string" || Array.isArray(content))
+      ) {
+        const text = Array.isArray(content)
+          ? content.join("")
+          : String(content);
+        // Skipping leaves textEmitted false so a genuinely informative mime
+        // later in the preference order can still be emitted.
         if (
-          mime.startsWith("text/") ||
-          mime === "application/json" ||
-          mime === "application/javascript"
+          mime === "text/plain" &&
+          describableImage &&
+          MATPLOTLIB_FIGURE_REPR.test(text.trim())
         ) {
-          const text = Array.isArray(content)
-            ? content.join("")
-            : String(content);
-          if (
-            mime === "text/plain" &&
-            describableImage &&
-            MATPLOTLIB_FIGURE_REPR.test(text.trim())
-          ) {
-            continue;
-          }
-          result += `[${mime}]:\n${text}\n`;
-        } else if (mime.startsWith("image/")) {
-          result += `[${mime}]: <image data present>\n`;
-          const image = this.captureNotebookImage(mime, content);
-          if (image) images.push(image);
-        } else {
-          result += `[${mime}]: <binary data present>\n`;
+          continue;
         }
+        result += `[${mime}]:\n${this.capNotebookOutputText(text)}\n`;
+        textEmitted = true;
       }
     }
 
+    // Image payloads are base64; only their presence is evidence. Anything
+    // outside the known text mimes is never inlined — vendor mimes
+    // (image/webp, application/vnd.plotly.v1+json, ...) also arrive as
+    // base64 or oversized JSON strings.
     for (const [mime, content] of Object.entries(data)) {
-      if (!mimePreference.includes(mime)) {
-        if (typeof content === "string" || Array.isArray(content)) {
-          const text = Array.isArray(content) ? content.join("") : content;
-          result += `[${mime}]:\n${text}\n`;
-        } else {
-          result += `[${mime}]: <data present>\n`;
-        }
+      if (!content || textMimePreference.includes(mime)) continue;
+      if (mime.startsWith("image/")) {
+        result += `[${mime}]: <image data present>\n`;
+        // The placeholder is all the TEXT ever carries; the bytes ride out on
+        // `images` so the grading-time vision pass can describe the plot.
+        const image = this.captureNotebookImage(mime, content);
+        if (image) images.push(image);
+        continue;
       }
+      result += `[${mime}]: <data present>\n`;
     }
 
     return { text: result, images };
@@ -1936,6 +1945,12 @@ export class FileContentExtractionService {
       hash: crypto.createHash("sha256").update(base64).digest("hex"),
       byteLength,
     };
+  }
+
+  private capNotebookOutputText(text: string): string {
+    if (text.length <= this.NOTEBOOK_OUTPUT_TEXT_MAX_CHARS) return text;
+    const omitted = text.length - this.NOTEBOOK_OUTPUT_TEXT_MAX_CHARS;
+    return `${text.slice(0, this.NOTEBOOK_OUTPUT_TEXT_MAX_CHARS)}\n... [output truncated: ${omitted} more characters]`;
   }
 
   private extractPresentationMetadata(parsed: any): string {

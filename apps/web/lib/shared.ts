@@ -2,6 +2,13 @@
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import { apiClient, APIError } from "./api-client";
+import {
+  DIRECT_UPLOAD_FALLBACK_MAX_BYTES,
+  failureKindOf,
+  isReroutableFailure,
+  sendWithStallDetection,
+  type UploadFailureKind,
+} from "./uploadTransport";
 import type {
   Assignment,
   BaseBackendResponse,
@@ -138,6 +145,12 @@ interface UploadCallbacks {
     attempt: number;
     maxAttempts: number;
   }) => void;
+  /**
+   * Fired when the direct-to-storage leg failed without ever reaching a
+   * server and the file is about to be re-sent through the API instead.
+   * The UI should say so rather than silently snapping back to 0%.
+   */
+  onFallback?: (info: { reason: UploadFailureKind }) => void;
 }
 
 /**
@@ -179,6 +192,17 @@ export async function uploadFileToStorage(
       options?.onWaitingForCapacity,
     );
   } catch (error: unknown) {
+    // Every part goes straight to the storage domain, so a blocked route
+    // fails all of them identically. Re-send through the API instead of
+    // telling the learner to try a different network.
+    if (isReroutableFailure(error)) {
+      return uploadThroughApiFallback(
+        file,
+        resolvedUploadRequest,
+        failureKindOf(error),
+        options,
+      );
+    }
     if (error instanceof UploadError) {
       throw error;
     }
@@ -209,60 +233,52 @@ async function singlePutFileToStorage(
 
   options?.onUploadProgress?.({ loaded: 0, total: file.size });
 
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", uploadResponse.presignedUrl);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        options?.onUploadProgress?.({
-          loaded: event.loaded,
-          total: event.total,
-        });
-      }
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        options?.onUploadProgress?.({ loaded: file.size, total: file.size });
-        resolve();
-      } else {
-        reject(
-          new UploadError(
-            `Single-PUT upload failed with status ${xhr.status}`,
-            xhr.status === 403
-              ? "Upload session expired. Please refresh and try again."
-              : "We hit a problem while uploading. Please try again.",
-            xhr.status,
-            false,
-          ),
-        );
-      }
-    };
-    xhr.onerror = () => {
-      reject(
-        new UploadError(
-          "Single-PUT upload failed (network error)",
-          "Network error while uploading. Please check your connection and try again.",
-          undefined,
-          false,
-        ),
+  let response;
+  try {
+    response = await sendWithStallDetection({
+      method: "PUT",
+      url: uploadResponse.presignedUrl,
+      body: file,
+      totalBytes: file.size,
+      headers: {
+        "Content-Type": uploadRequest.fileType || "application/octet-stream",
+      },
+      onUploadProgress: (progress) => options?.onUploadProgress?.(progress),
+    });
+  } catch (error) {
+    // The PUT never reached a server — a blocked storage domain, a proxy that
+    // accepted the connection and went quiet, or a cross-origin rejection.
+    // The same bytes can still go through the API on this origin.
+    if (isReroutableFailure(error)) {
+      return uploadThroughApiFallback(
+        file,
+        uploadRequest,
+        failureKindOf(error),
+        options,
       );
-    };
-    xhr.onabort = () => {
-      reject(
-        new UploadError(
-          "Single-PUT upload aborted",
-          "Upload was cancelled.",
-          undefined,
-          false,
-        ),
-      );
-    };
-    xhr.setRequestHeader(
-      "Content-Type",
-      uploadRequest.fileType || "application/octet-stream",
+    }
+    throw new UploadError(
+      error instanceof Error ? error.message : String(error),
+      "Upload was cancelled.",
+      undefined,
+      false,
     );
-    xhr.send(file);
-  });
+  }
+
+  // A status means the storage service answered: the network is fine and the
+  // fallback would only repeat whatever it objected to.
+  if (response.status < 200 || response.status >= 300) {
+    throw new UploadError(
+      `Single-PUT upload failed with status ${response.status}`,
+      response.status === 403
+        ? "Upload session expired. Please refresh and try again."
+        : "We hit a problem while uploading. Please try again.",
+      response.status,
+      false,
+    );
+  }
+
+  options?.onUploadProgress?.({ loaded: file.size, total: file.size });
 
   return {
     uploadId: "",
@@ -280,54 +296,175 @@ async function singlePutFileToStorage(
   };
 }
 
+/**
+ * Re-send a file through the API after the direct-to-storage leg proved
+ * unreachable. Same origin as the site, so any network that can load Mark at
+ * all can complete this. Returns the same shape as the storage paths so
+ * callers cannot tell which route carried the bytes.
+ */
+async function uploadThroughApiFallback(
+  file: File,
+  uploadRequest: UploadRequest,
+  reason: UploadFailureKind,
+  options?: UploadCallbacks,
+): Promise<MultipartUploadedStorageFile> {
+  const { UploadError } = await import("./reliableUpload");
+
+  if (file.size > DIRECT_UPLOAD_FALLBACK_MAX_BYTES) {
+    throw new UploadError(
+      `Storage upload failed (${reason}) and the file exceeds the fallback limit of ${DIRECT_UPLOAD_FALLBACK_MAX_BYTES} bytes`,
+      "Your network is blocking our file storage service, and this file is too large to send the slower way. Please try a different network or a smaller file.",
+      undefined,
+      false,
+    );
+  }
+
+  // No zero-progress event here on purpose: emitting one would repaint the
+  // bar as "Uploading… 0%", which is exactly the silent reset the fallback
+  // state is meant to replace. The next real progress event takes over.
+  options?.onFallback?.({ reason });
+
+  let result;
+  try {
+    result = await directUpload(file, uploadRequest, {
+      source: "fallback",
+      onUploadProgress: (progress) => options?.onUploadProgress?.(progress),
+    });
+  } catch (error) {
+    // The API answered with a status: that message is the useful one.
+    if (error instanceof UploadError) {
+      throw error;
+    }
+    // Both routes died without reaching a server — the connection itself is
+    // the problem, not the storage domain.
+    throw new UploadError(
+      `Fallback upload failed after storage upload failed (${reason}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      "We couldn't upload this file — your connection dropped partway through. Please check your network and try again.",
+      undefined,
+      false,
+    );
+  }
+
+  options?.onUploadProgress?.({ loaded: file.size, total: file.size });
+
+  return {
+    uploadId: "",
+    key: result.key,
+    bucket: result.bucket,
+    fileType: result.fileType,
+    fileName: result.fileName,
+    uploadType: result.uploadType,
+    expiresInSeconds: 0,
+    expiresAt: new Date().toISOString(),
+    maxAllowedBytes: result.size,
+    partSizeBytes: 0,
+    urls: [],
+    s3Link: `s3://${result.bucket}/${result.key}`,
+  };
+}
+
+/**
+ * Map an HTTP status returned by our own API onto a user-facing upload error.
+ * Kept separate from the transport so both the presign call and the fallback
+ * POST speak with one voice.
+ */
+async function uploadErrorForApiStatus(
+  status: number,
+  technicalMessage: string,
+  serverMessage: string | undefined,
+): Promise<Error> {
+  const { UploadError } = await import("./reliableUpload");
+  const isSizeError =
+    !!serverMessage &&
+    /too large|max(?:imum)? (?:allowed|size)/i.test(serverMessage);
+
+  if (status === 400) {
+    return new UploadError(
+      technicalMessage,
+      isSizeError && serverMessage
+        ? serverMessage
+        : "We couldn't start this upload. Please refresh and try again, or pick a different file.",
+      400,
+      false,
+    );
+  }
+  if (status === 401) {
+    return new UploadError(
+      technicalMessage,
+      "Your session expired. Please refresh and try again.",
+      401,
+      false,
+    );
+  }
+  if (status === 403) {
+    return new UploadError(
+      technicalMessage,
+      "You don't have permission to upload this file.",
+      403,
+      false,
+    );
+  }
+  if (status === 413) {
+    return new UploadError(
+      technicalMessage,
+      serverMessage ?? "That file is too large to upload.",
+      413,
+      false,
+    );
+  }
+  if (status === 429) {
+    return new UploadError(
+      technicalMessage,
+      "Too many uploads in a short time. Please wait a moment and try again.",
+      429,
+      true,
+    );
+  }
+  if (status === 503) {
+    return new UploadError(
+      technicalMessage,
+      "Uploads are temporarily busy. Please try again in a moment.",
+      503,
+      true,
+    );
+  }
+  if (status >= 500) {
+    return new UploadError(
+      technicalMessage,
+      "We hit a server issue starting this upload. Please try again.",
+      status,
+      false,
+    );
+  }
+  return new UploadError(
+    technicalMessage,
+    "We couldn't upload this file. Please refresh and try again.",
+    status,
+    false,
+  );
+}
+
+function readServerMessage(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const message = (body as { message?: unknown }).message;
+  if (typeof message === "string" && message.trim().length > 0) return message;
+  if (Array.isArray(message) && typeof message[0] === "string") {
+    return message[0];
+  }
+  return undefined;
+}
+
 async function translateInitiateError(error: unknown): Promise<Error> {
   const { UploadError } = await import("./reliableUpload");
   if (error instanceof UploadError) return error;
   if (error instanceof APIError) {
-    const body = error.body as { message?: unknown } | undefined;
-    const serverMessage =
-      typeof body?.message === "string"
-        ? body.message
-        : Array.isArray(body?.message) && typeof body.message[0] === "string"
-          ? body.message[0]
-          : undefined;
-    const isSizeError =
-      !!serverMessage &&
-      /too large|max(?:imum)? (?:allowed|size)/i.test(serverMessage);
-    if (error.status === 400) {
-      return new UploadError(
-        error.message,
-        isSizeError && serverMessage
-          ? serverMessage
-          : "We couldn't start this upload. Please refresh and try again, or pick a different file.",
-        400,
-        false,
-      );
-    }
-    if (error.status === 403) {
-      return new UploadError(
-        error.message,
-        "You don't have permission to upload this file.",
-        403,
-        false,
-      );
-    }
-    if (error.status === 401) {
-      return new UploadError(
-        error.message,
-        "Your session expired. Please refresh and try again.",
-        401,
-        false,
-      );
-    }
-    if (error.status >= 500) {
-      return new UploadError(
-        error.message,
-        "We hit a server issue starting this upload. Please try again.",
-        error.status,
-        false,
-      );
-    }
+    return uploadErrorForApiStatus(
+      error.status,
+      error.message,
+      readServerMessage(error.body),
+    );
   }
   return new UploadError(
     error instanceof Error ? error.message : String(error),
@@ -337,14 +474,7 @@ async function translateInitiateError(error: unknown): Promise<Error> {
   );
 }
 
-/**
- * Direct upload a file through the backend (bypasses CORS issues)
- */
-export async function directUpload(
-  file: File,
-  uploadRequest: UploadRequest,
-  cookies?: string,
-): Promise<{
+export interface DirectUploadResult {
   success: boolean;
   key: string;
   bucket: string;
@@ -353,7 +483,30 @@ export async function directUpload(
   uploadType: string;
   size: number;
   etag: string;
-}> {
+}
+
+export interface DirectUploadOptions {
+  onUploadProgress?: (progress: { loaded: number; total: number }) => void;
+  signal?: AbortSignal;
+  /**
+   * Why this route was taken. Sent to the server purely as a log label so
+   * fallback volume is observable; it grants no privileges.
+   */
+  source?: "direct" | "fallback";
+}
+
+/**
+ * Upload a file through the API rather than straight to object storage.
+ *
+ * The request goes to the site's own origin, so it works on any network that
+ * can reach Mark at all — including the corporate proxies that black-hole the
+ * storage domain. Browser-only: it needs XHR for upload progress.
+ */
+export async function directUpload(
+  file: File,
+  uploadRequest: UploadRequest,
+  options?: DirectUploadOptions,
+): Promise<DirectUploadResult> {
   const url = `${getBaseApiPath("v1")}/files/direct-upload`;
 
   if (file.size === 0) {
@@ -365,33 +518,50 @@ export async function directUpload(
   formData.append("fileName", uploadRequest.fileName);
   formData.append("fileType", uploadRequest.fileType);
   formData.append("uploadType", uploadRequest.uploadType);
+  formData.append("source", options?.source ?? "direct");
 
   if (uploadRequest.context) {
-    const contextJson = JSON.stringify(uploadRequest.context);
-    formData.append("context", contextJson);
+    formData.append("context", JSON.stringify(uploadRequest.context));
   }
 
+  // Content-Type is intentionally unset so the browser adds the multipart
+  // boundary itself.
+  const response = await sendWithStallDetection({
+    method: "POST",
+    url,
+    body: formData,
+    totalBytes: file.size,
+    signal: options?.signal,
+    onUploadProgress: options?.onUploadProgress,
+  });
+
+  let parsedBody: unknown;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message || "Failed to upload file directly");
-    }
-
-    return await res.json();
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error("Failed to upload file directly");
+    parsedBody = JSON.parse(response.responseText);
+  } catch {
+    parsedBody = undefined;
   }
+
+  if (response.status < 200 || response.status >= 300) {
+    throw await uploadErrorForApiStatus(
+      response.status,
+      `Direct upload failed with status ${response.status}`,
+      readServerMessage(parsedBody),
+    );
+  }
+
+  const result = parsedBody as DirectUploadResult | undefined;
+  if (!result?.key || !result?.bucket) {
+    const { UploadError } = await import("./reliableUpload");
+    throw new UploadError(
+      "Direct upload returned an unusable response",
+      "We couldn't confirm this upload. Please try again.",
+      response.status,
+      false,
+    );
+  }
+
+  return result;
 }
 
 /**

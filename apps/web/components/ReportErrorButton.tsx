@@ -50,9 +50,7 @@ export default function ReportErrorButton({
       severity: "error",
       fieldPrefills: buildErrorReportPrefills(error, {
         pagePath:
-          typeof window !== "undefined"
-            ? window.location.pathname
-            : undefined,
+          typeof window !== "undefined" ? window.location.pathname : undefined,
         userAgent:
           typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       }),

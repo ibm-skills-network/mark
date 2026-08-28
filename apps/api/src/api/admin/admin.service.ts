@@ -2467,6 +2467,7 @@ export class AdminService {
           attemptsPerTimeRange: config.attemptsPerTimeRange,
           attemptsTimeRangeHours: config.attemptsTimeRangeHours,
           showQuestionScore: config.showQuestionScore,
+          showPassFailIndicator: config.showPassFailIndicator ?? false,
           correctAnswerVisibility: config.correctAnswerVisibility,
         },
       });
@@ -2576,6 +2577,7 @@ export class AdminService {
       questionOrder,
       showAssignmentScore: assignment.showAssignmentScore ?? false,
       showQuestionScore: assignment.showQuestionScore ?? false,
+      showPassFailIndicator: assignment.showPassFailIndicator ?? false,
       showSubmissionFeedback: assignment.showSubmissionFeedback ?? false,
       showQuestions: assignment.showQuestions ?? false,
       correctAnswerVisibility: assignment.correctAnswerVisibility ?? undefined,
