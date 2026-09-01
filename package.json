@@ -137,7 +137,7 @@
     "**/js-yaml": "^4.3.1",
     "**/lodash": "4.18.1",
     "**/lodash-es": "4.18.1",
-    "**/langsmith": "0.7.1",
+    "**/langsmith": "0.10.1",
     "tmp": "^0.2.6",
     "tar-fs": "^3.1.1",
     "jsondiffpatch": "^0.7.6",
