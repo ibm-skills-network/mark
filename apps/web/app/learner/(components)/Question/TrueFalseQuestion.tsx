@@ -19,11 +19,6 @@ function TrueFalseQuestion(props: Props) {
   const langTranslations =
     trueFalseTranslations[userPreferredLanguage] || trueFalseTranslations["en"];
 
-  // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {
-  //   enabled: true,
-  //   debounceMs: 500,
-  // });
-
   const handleChoiceClick = (choice: boolean) => {
     setAnswerChoice(choice, question.id);
   };

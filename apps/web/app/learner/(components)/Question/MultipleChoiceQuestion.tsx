@@ -18,11 +18,6 @@ function MultipleChoiceQuestion({
   ]);
   const { choices, learnerChoices } = question;
 
-  // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {
-  //   enabled: true,
-  //   debounceMs: 500,
-  // });
-
   const handleChoiceClick = (choiceIndex: number) => {
     if (isSingleCorrect) {
       choices.forEach((_, index) => {

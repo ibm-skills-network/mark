@@ -10,11 +10,45 @@ import type {
   slideMetaData,
 } from "@/config/types";
 import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
+import { clearDraft, clearOtherDrafts, saveDraft } from "@/lib/learner-draft";
 import { getUser } from "@/lib/talkToBackend";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { createSafeStorage } from "@/lib/safe-storage";
+
+/**
+ * Answer edits fire on every keystroke; writing localStorage that often is
+ * wasteful and can jank typing on large answers. Coalesce into one write per
+ * idle window — losing the last few hundred milliseconds on a crash is an
+ * acceptable trade for not touching storage on every character.
+ */
+const DRAFT_SAVE_DEBOUNCE_MS = 800;
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDraftSave(
+  attemptId: number | null,
+  questions: QuestionStore[],
+): void {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null;
+    saveDraft(attemptId, questions);
+  }, DRAFT_SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * A scheduled write captured its attempt id and answers when the edit
+ * happened. Once the active attempt changes or the answers are deliberately
+ * dropped, letting it land would recreate a draft that cleanup just removed —
+ * so every transition away from an attempt cancels it.
+ */
+function cancelPendingDraftSave(): void {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+}
 
 type GitHubQuestionState = {
   repos: RepoType[];
@@ -837,8 +871,11 @@ export const useLearnerStore = createWithEqualityFn<
         activeAttemptId: null,
         totalPointsEarned: 0,
         totalPointsPossible: 0,
+        // Attempt-change side effects live in setLearnerStore, which is the
+        // path the page hydration actually takes; this named setter routes
+        // through it so both entries behave identically.
         setActiveAttemptId: (id) => {
-          set({ activeAttemptId: id });
+          get().setLearnerStore({ activeAttemptId: id });
         },
         activeQuestionNumber: 1,
         setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
@@ -926,6 +963,7 @@ export const useLearnerStore = createWithEqualityFn<
             ),
           }));
           get().setQuestionStatus(questionId);
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
 
         setURLResponse: (learnerUrlResponse, questionId) => {
@@ -935,6 +973,7 @@ export const useLearnerStore = createWithEqualityFn<
             ),
           }));
           get().setQuestionStatus(questionId);
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
 
         setChoices: (learnerChoices, questionId) => {
@@ -944,6 +983,7 @@ export const useLearnerStore = createWithEqualityFn<
             ),
           }));
           get().setQuestionStatus(questionId);
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
 
         addChoice: (learnerChoiceIndex, questionId) => {
@@ -962,6 +1002,7 @@ export const useLearnerStore = createWithEqualityFn<
             return { questions: updatedQuestions };
           }),
             get().setQuestionStatus(questionId));
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
         removeChoice: (learnerChoiceIndex, questionId) => {
           (set((state) => {
@@ -978,6 +1019,7 @@ export const useLearnerStore = createWithEqualityFn<
             return { questions: updatedQuestions };
           }),
             get().setQuestionStatus(questionId));
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
 
         setAnswerChoice: (learnerAnswerChoice, questionId) => {
@@ -993,13 +1035,32 @@ export const useLearnerStore = createWithEqualityFn<
             return { questions: updatedQuestions };
           });
           get().setQuestionStatus(questionId);
+          scheduleDraftSave(get().activeAttemptId, get().questions);
         },
         setRole: (role) => set({ role }),
-        setLearnerStore: (learnerState) => set(learnerState),
+        setLearnerStore: (learnerState) => {
+          const previousAttemptId = get().activeAttemptId;
+          set(learnerState);
+          const nextAttemptId = get().activeAttemptId;
+          if (nextAttemptId !== previousAttemptId) {
+            // Moving onto an attempt (or off one, after the timer submits) is
+            // the moment we know which draft is still wanted. A write already
+            // scheduled for the previous attempt must not land afterwards, and
+            // dropping every other entry caps storage at a single draft and
+            // stops a new attempt inheriting an old one's answers.
+            cancelPendingDraftSave();
+            clearOtherDrafts(nextAttemptId);
+          }
+        },
         setTotalPointsEarned: (totalPointsEarned) => set({ totalPointsEarned }),
         setTotalPointsPossible: (totalPointsPossible) =>
           set({ totalPointsPossible }),
-        clearLearnerAnswers: () =>
+        clearLearnerAnswers: () => {
+          // Runs once the submission is safely in. Cancel any pending write
+          // first — a debounced save landing after this would resurrect the
+          // answers we are deliberately dropping.
+          cancelPendingDraftSave();
+          clearDraft(get().activeAttemptId);
           set((state) => ({
             questions: state.questions.map((q) => ({
               ...q,
@@ -1011,7 +1072,8 @@ export const useLearnerStore = createWithEqualityFn<
               presentationResponse: null,
               status: "unedited" as QuestionStatus,
             })),
-          })),
+          }));
+        },
       }),
       {
         name: `learner-${ASSIGNMENT_ID}`,

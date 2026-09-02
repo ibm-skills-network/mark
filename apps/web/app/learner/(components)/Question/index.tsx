@@ -9,6 +9,11 @@ import type {
   QuestionStore,
 } from "@/config/types";
 import { QuestionDisplayType } from "@/config/types";
+import {
+  clearOtherDrafts,
+  loadDraft,
+  mergeDraftIntoQuestions,
+} from "@/lib/learner-draft";
 import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
 import { parseLearnerResponse, useDebugLog } from "@/lib/utils";
@@ -366,7 +371,15 @@ function QuestionPage(props: Props) {
 
       debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
 
-      setQuestions(questionsWithStatus);
+      // Restore anything typed but never submitted. The server copy wins on
+      // every field it already has; the draft only fills gaps, so a stale
+      // local value can never overwrite a graded answer.
+      setQuestions(mergeDraftIntoQuestions(questionsWithStatus, loadDraft(id)));
+
+      // Every other attempt's draft is now unwanted. The store's attempt-change
+      // hook also prunes, but a reload resumes the same id and skips the store
+      // update below — this keeps storage at one draft on that path too.
+      clearOtherDrafts(id);
 
       const currentStoreUpdate = {
         activeAttemptId: id,
