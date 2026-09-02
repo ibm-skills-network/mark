@@ -19,7 +19,7 @@ import {
   TranslateQuestionJobPayload,
   TranslateVariantJobPayload,
 } from "src/job-queue/job-queue.types";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import { createCacheRedisConnection } from "src/job-queue/redis.connection";
 import { Logger } from "winston";
 import { getAllLanguageCodes } from "../../attempt/helper/languages";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
@@ -92,12 +92,12 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     this.translationStateRedis = this.tryCreateTranslationStateRedis();
   }
 
-  // Wrap createRedisConnection() so missing REDIS_URL (or boot-time Redis
+  // Wrap createCacheRedisConnection() so missing REDIS_URL (or boot-time Redis
   // failure) degrades gracefully instead of bringing down DI. Status sites
   // become no-ops; the publish poll loop falls back to the hard timeout.
   private tryCreateTranslationStateRedis(): IORedis | undefined {
     try {
-      const client = createRedisConnection();
+      const client = createCacheRedisConnection();
       client.on("error", (error) => {
         this.logger.warn(
           `Translation status Redis error (status tracking disabled): ${error.message}`,

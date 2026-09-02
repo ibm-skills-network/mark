@@ -8,7 +8,10 @@ import {
 } from "../interfaces/grading-cache.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { Prisma } from "@prisma/client";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import {
+  createCacheRedisConnection,
+  isRedisReady,
+} from "src/job-queue/redis.connection";
 
 const REDIS_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
@@ -52,7 +55,7 @@ export class GradingCacheService
 
   private createRedisClient(): IORedis | undefined {
     try {
-      const client = createRedisConnection();
+      const client = createCacheRedisConnection();
       client.on("error", (error) => {
         this.logger.warn(
           `GradingCache Redis error (falling back to PostgreSQL): ${error.message}`,
@@ -74,7 +77,7 @@ export class GradingCacheService
   private async redisGet(
     cacheKey: string,
   ): Promise<ICachedGradingResult | null> {
-    if (!this.redis) return null;
+    if (!isRedisReady(this.redis)) return null;
     try {
       const raw = await this.redis.get(this.redisKey(cacheKey));
       if (!raw) return null;
@@ -85,7 +88,7 @@ export class GradingCacheService
   }
 
   private async redisSet(result: ICachedGradingResult): Promise<void> {
-    if (!this.redis) return;
+    if (!isRedisReady(this.redis)) return;
     try {
       await this.redis.set(
         this.redisKey(result.cacheKey),
@@ -99,7 +102,7 @@ export class GradingCacheService
   }
 
   private async redisDel(cacheKey: string): Promise<void> {
-    if (!this.redis) return;
+    if (!isRedisReady(this.redis)) return;
     try {
       await this.redis.del(this.redisKey(cacheKey));
     } catch {
@@ -114,7 +117,7 @@ export class GradingCacheService
    * fall back to a full-prefix scan limited to 1000 keys per call.
    */
   private async redisInvalidateQuestion(questionId: number): Promise<void> {
-    if (!this.redis) return;
+    if (!isRedisReady(this.redis)) return;
     try {
       const pattern = `mark:grading-cache:*`;
       let cursor = "0";
