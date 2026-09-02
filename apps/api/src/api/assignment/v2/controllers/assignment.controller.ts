@@ -475,8 +475,9 @@ export class AssignmentControllerV2 {
   @Roles(UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({
-    summary:
-      "Complete a multipart upload for an assignment file and extract content",
+    summary: "Complete a multipart upload for an assignment file",
+    description:
+      "File finalized; content extraction runs asynchronously (extractionStatus PENDING until READY/FAILED)",
   })
   @ApiParam({ name: "id", required: true, description: "Assignment ID" })
   @ApiParam({ name: "fileId", required: true, description: "File ID" })
@@ -484,7 +485,7 @@ export class AssignmentControllerV2 {
   @ApiResponse({
     status: 201,
     description:
-      "File record updated to READY (or FAILED extraction) and extracted content persisted",
+      "File record updated to READY with extractionStatus PENDING; extraction runs asynchronously on mark-jobs",
   })
   async completeAssignmentFileUpload(
     @Param("id", ParseIntPipe) id: number,

@@ -7,6 +7,7 @@ import {
 } from "../api/admin/controllers/translation-maintenance.job-runner";
 import { AssignmentServiceV1 } from "../api/assignment/v1/services/assignment.service";
 import { AssignmentServiceV2 } from "../api/assignment/v2/services/assignment.service";
+import { AssignmentFileService } from "../api/assignment/v2/services/assignment-file.service";
 import { QuestionService as AssignmentQuestionServiceV2 } from "../api/assignment/v2/services/question.service";
 import { TranslationService } from "../api/assignment/v2/services/translation.service";
 import { AttemptServiceV2 } from "../api/attempt/services/attempt.service";
@@ -26,6 +27,7 @@ import {
   AssignmentV2RetryFailedTranslationsJobPayload,
   AttemptAuthorPreviewJobPayload,
   AttemptGradeJobPayload,
+  FileExtractJobPayload,
   TranslateMetaJobPayload,
   TranslateQuestionJobPayload,
   TranslateVariantJobPayload,
@@ -54,6 +56,7 @@ export class JobExecutorService {
     @Inject(TRANSLATION_MAINTENANCE_JOB_RUNNER)
     private readonly translationRunner: TranslationMaintenanceJobRunner,
     private readonly translationService: TranslationService,
+    private readonly assignmentFileService: AssignmentFileService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: JobExecutorService.name });
@@ -84,6 +87,9 @@ export class JobExecutorService {
           request.attemptsMade ?? 0,
           request.maxAttempts ?? 1,
         );
+      }
+      case JOB_QUEUE_NAMES.FILE_EXTRACT: {
+        return this.executeFileExtractJob(request.jobName, request.payload);
       }
       default: {
         throw new BadRequestException(
@@ -389,6 +395,26 @@ export class JobExecutorService {
       default: {
         throw new BadRequestException(
           `Unsupported translation job: ${jobName}`,
+        );
+      }
+    }
+  }
+
+  private async executeFileExtractJob(
+    jobName: JobName,
+    payload: unknown,
+  ): Promise<void> {
+    switch (jobName) {
+      case JOB_NAMES.FILE_EXTRACT: {
+        const jobPayload = payload as FileExtractJobPayload;
+        await this.assignmentFileService.runAssignmentFileExtraction(
+          jobPayload.fileId,
+        );
+        return;
+      }
+      default: {
+        throw new BadRequestException(
+          `Unsupported file-extract job: ${jobName}`,
         );
       }
     }
