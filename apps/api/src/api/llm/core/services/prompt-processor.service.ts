@@ -169,6 +169,7 @@ export class PromptProcessorService implements IPromptProcessor {
         tokenUsage.input,
         tokenUsage.output,
         llm.key,
+        tokenUsage.cachedInput,
       );
       return parsed;
     }
@@ -228,6 +229,7 @@ export class PromptProcessorService implements IPromptProcessor {
         tokenUsage.input,
         tokenUsage.output,
         llm.key,
+        tokenUsage.cachedInput,
       );
       return parsed;
     }
@@ -388,6 +390,7 @@ export class PromptProcessorService implements IPromptProcessor {
       result.tokenUsage?.input ?? 0,
       result.tokenUsage?.output ?? 0,
       llm.key,
+      result.tokenUsage?.cachedInput,
     );
 
     return response;
@@ -483,6 +486,7 @@ export class PromptProcessorService implements IPromptProcessor {
         result.tokenUsage?.input ?? 0,
         result.tokenUsage?.output ?? 0,
         llm.key,
+        result.tokenUsage?.cachedInput,
       );
 
       return response;
@@ -539,6 +543,7 @@ export class PromptProcessorService implements IPromptProcessor {
     tokensIn: number,
     tokensOut: number,
     modelKey?: string,
+    cachedTokensIn?: number,
   ): Promise<void> {
     try {
       await this.usageTracker.trackUsage(
@@ -547,6 +552,7 @@ export class PromptProcessorService implements IPromptProcessor {
         tokensIn,
         tokensOut,
         modelKey,
+        cachedTokensIn,
       );
     } catch (error) {
       this.logger.error(

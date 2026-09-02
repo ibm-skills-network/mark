@@ -60,6 +60,7 @@ describe("PromptProcessorService", () => {
       17,
       31,
       "gpt-4o-mini",
+      undefined,
     );
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -186,6 +187,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       10,
       5,
       "gpt-4o-mini",
+      7,
     );
   });
 
@@ -217,6 +219,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       3,
       4,
       "granite-4-h-small",
+      undefined,
     );
   });
 });

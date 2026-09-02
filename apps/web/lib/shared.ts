@@ -1444,12 +1444,18 @@ export interface AssignmentAnalyticsData {
       translation: number;
       other: number;
     };
+    exactCost?: number;
+    estimatedCost?: number;
+    unpricedRecordCount?: number;
   };
 }
 
 export interface AssignmentAnalyticsAggregates {
   totalAssignments: number;
   totalCost: number;
+  exactCost?: number;
+  estimatedCost?: number;
+  unpricedRecordCount?: number;
   totalLearnerAssignmentPairs: number;
   averageRating: number;
 }
@@ -2390,6 +2396,51 @@ export async function removeFailedJob(
   )}/admin-dashboard/queue-status/jobs/${encodeURIComponent(
     jobId,
   )}?queue=${encodeURIComponent(queueName)}`;
+  return apiClient.delete(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+export interface LearnerAttemptSummary {
+  id: number;
+  assignmentId: number;
+  assignmentName: string;
+  userId: string;
+  submitted: boolean;
+  grade: number | null;
+  passingGrade: number | null;
+  gradingStatus: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+/** Fetches one learner's attempts newest first using a case-insensitive user ID. */
+export async function getLearnerAttempts(
+  sessionToken: string,
+  userId: string,
+): Promise<LearnerAttemptSummary[]> {
+  const url = `${getBaseApiPath("v1")}/admin-dashboard/attempts?userId=${encodeURIComponent(
+    userId,
+  )}`;
+  return apiClient.get(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-token": sessionToken,
+    },
+  });
+}
+
+/** Deletes one learner attempt without changing the LMS grade. */
+export async function deleteLearnerAttempt(
+  sessionToken: string,
+  attemptId: number,
+): Promise<{ success: true; attemptId: number }> {
+  const url = `${getBaseApiPath(
+    "v1",
+  )}/admin-dashboard/attempts/${encodeURIComponent(String(attemptId))}`;
   return apiClient.delete(url, {
     headers: {
       "Content-Type": "application/json",

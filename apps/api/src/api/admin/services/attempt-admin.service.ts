@@ -15,11 +15,30 @@ export interface ForcePassResult {
   };
 }
 
-/**
- * Admin-only operations that act directly on a single learner attempt.
- * Kept separate from the large AdminService so the force-pass write path has a
- * narrow, well-tested surface and its own dependency on the LTI sync service.
- */
+export interface LearnerAttemptSummary {
+  id: number;
+  assignmentId: number;
+  assignmentName: string;
+  userId: string;
+  submitted: boolean;
+  grade: number | null;
+  passingGrade: number | null;
+  gradingStatus: GradingStatus | null;
+  createdAt: Date;
+  expiresAt: Date | null;
+}
+
+export interface DeleteAttemptResult {
+  success: true;
+  attemptId: number;
+  userId: string;
+  assignmentId: number;
+}
+
+/** Cap on a single learner lookup, so a wildcard-ish id can't page the world. */
+const LEARNER_ATTEMPT_LIMIT = 200;
+
+/** Admin-only operations for individual learner attempts. */
 @Injectable()
 export class AttemptAdminService {
   private readonly logger = new Logger(AttemptAdminService.name);
@@ -28,6 +47,88 @@ export class AttemptAdminService {
     private readonly prisma: PrismaService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {}
+
+  /** Lists a learner's attempts newest first, matching the user ID loosely so a partial id or email fragment still finds them. */
+  async listAttemptsForUser(userId: string): Promise<LearnerAttemptSummary[]> {
+    const attempts = await this.prisma.assignmentAttempt.findMany({
+      where: { userId: { contains: userId, mode: "insensitive" } },
+      orderBy: { createdAt: "desc" },
+      take: LEARNER_ATTEMPT_LIMIT,
+      select: {
+        id: true,
+        assignmentId: true,
+        userId: true,
+        submitted: true,
+        grade: true,
+        createdAt: true,
+        expiresAt: true,
+        gradingProgress: { select: { status: true } },
+      },
+    });
+
+    if (attempts.length === 0) {
+      return [];
+    }
+
+    // Resolve assignment names and live passing grades in one keyed query.
+    const assignments = await this.prisma.assignment.findMany({
+      where: { id: { in: [...new Set(attempts.map((a) => a.assignmentId))] } },
+      select: { id: true, name: true, passingGrade: true },
+    });
+    const assignmentById = new Map(assignments.map((a) => [a.id, a]));
+
+    return attempts.map((attempt) => {
+      const assignment = assignmentById.get(attempt.assignmentId);
+      return {
+        id: attempt.id,
+        assignmentId: attempt.assignmentId,
+        assignmentName:
+          assignment?.name ?? `Assignment ${attempt.assignmentId}`,
+        userId: attempt.userId,
+        submitted: attempt.submitted,
+        grade: attempt.grade,
+        passingGrade: assignment?.passingGrade ?? null,
+        gradingStatus: attempt.gradingProgress?.status ?? null,
+        createdAt: attempt.createdAt,
+        expiresAt: attempt.expiresAt,
+      };
+    });
+  }
+
+  /** Deletes an attempt and dependents without changing the LMS grade. */
+  async deleteAttempt(
+    attemptId: number,
+    adminEmail: string,
+  ): Promise<DeleteAttemptResult> {
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { id: true, userId: true, assignmentId: true },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(`Attempt ${attemptId} not found`);
+    }
+
+    // QuestionResponse is the only child that restricts the delete; the rest cascade.
+    await this.prisma.$transaction([
+      this.prisma.questionResponse.deleteMany({
+        where: { assignmentAttemptId: attemptId },
+      }),
+      this.prisma.assignmentAttempt.delete({ where: { id: attemptId } }),
+    ]);
+
+    this.logger.log(
+      `delete-attempt: admin=${adminEmail} attempt=${attemptId} ` +
+        `user=${attempt.userId} assignment=${attempt.assignmentId}`,
+    );
+
+    return {
+      success: true,
+      attemptId,
+      userId: attempt.userId,
+      assignmentId: attempt.assignmentId,
+    };
+  }
 
   /**
    * Force an attempt to a passing (or explicit) grade and mark it submitted.

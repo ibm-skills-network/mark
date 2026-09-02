@@ -140,6 +140,34 @@ describe("AdminDashboardController", () => {
     });
   });
 
+  describe("getDashboardStats date validation", () => {
+    const fakeRequest = {
+      userSession: { userId: "admin-1", role: "ADMIN" },
+    } as unknown as UserSessionRequest;
+
+    it("rejects a reversed date range before calling the service", async () => {
+      await expect(
+        controller.getDashboardStats(fakeRequest, {
+          startDate: "2026-02-02T00:00:00.000Z",
+          endDate: "2026-02-01T00:00:00.000Z",
+        }),
+      ).rejects.toThrow(
+        new BadRequestException("endDate must be after startDate"),
+      );
+      expect(mockAdminService.getDashboardStats).not.toHaveBeenCalled();
+    });
+
+    it("rejects malformed date strings through the DTO validation pipe", async () => {
+      const validationPipe = new ValidationPipe({ whitelist: true });
+      await expect(
+        validationPipe.transform(
+          { startDate: "not-a-date" },
+          { type: "query", metatype: DashboardStatsQueryDto },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe("getDashboardStats assignmentId validation", () => {
     const validationPipe = new ValidationPipe({ whitelist: true });
 

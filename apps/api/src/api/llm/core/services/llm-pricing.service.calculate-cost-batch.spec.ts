@@ -70,6 +70,33 @@ describe("LLMPricingService.calculateCostBatch", () => {
     });
   });
 
+  it("prices cached input tokens at the cached-input rate", async () => {
+    jest
+      .spyOn(service, "getPricingAtDate")
+      .mockResolvedValue(
+        pricing({ metadata: { cachedInputTokenPrice: 0.000_1 } }),
+      );
+
+    const [result] = await service.calculateCostBatch([
+      {
+        modelKey: "gpt-4o",
+        inputTokens: 1000,
+        cachedInputTokens: 400,
+        outputTokens: 500,
+        usageDate: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      cachedInputTokens: 400,
+      inputCost: 0.6,
+      cachedInputCost: 0.04,
+      outputCost: 1,
+      cachedInputTokenPrice: 0.000_1,
+    });
+    expect(result?.totalCost).toBeCloseTo(1.64);
+  });
+
   it("uses the GPT-5.6 long-context prices for the whole request above 272K input tokens", async () => {
     jest.spyOn(service, "getPricingAtDate").mockResolvedValue(
       pricing({

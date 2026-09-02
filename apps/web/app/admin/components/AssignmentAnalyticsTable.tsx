@@ -29,8 +29,6 @@ import {
   FileText,
   Star,
   ExternalLink,
-  CalendarIcon,
-  Filter,
   X,
   SortAsc,
   SortDesc,
@@ -48,20 +46,6 @@ interface AssignmentAnalyticsTableProps {
   quickActionTitle?: string;
   onClearQuickActionResults?: () => void;
   onQuickActionComplete?: (result: any) => void;
-  filters?: {
-    startDate?: string;
-    endDate?: string;
-    assignmentId?: number;
-    assignmentName?: string;
-    userId?: string;
-  };
-  onFiltersChange?: (filters: {
-    startDate?: string;
-    endDate?: string;
-    assignmentId?: number;
-    assignmentName?: string;
-    userId?: string;
-  }) => void;
 }
 
 export function AssignmentAnalyticsTable({
@@ -70,8 +54,6 @@ export function AssignmentAnalyticsTable({
   quickActionTitle,
   onClearQuickActionResults,
   onQuickActionComplete,
-  filters,
-  onFiltersChange,
 }: AssignmentAnalyticsTableProps) {
   const [data, setData] = useState<AssignmentAnalyticsData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,8 +72,6 @@ export function AssignmentAnalyticsTable({
   const [serverRowCount, setServerRowCount] = useState(0);
   const [aggregates, setAggregates] =
     useState<AssignmentAnalyticsAggregates | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [localFilters, setLocalFilters] = useState(filters || {});
 
   const isShowingQuickActionResults = !!quickActionResults;
   const currentQuickActionTitle = quickActionTitle;
@@ -124,10 +104,6 @@ export function AssignmentAnalyticsTable({
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [globalFilter, goToFirstPage]);
-
-  useEffect(() => {
-    setLocalFilters(filters || {});
-  }, [filters]);
 
   // Sequence guard: overlapping requests (rapid paging/filtering) can resolve
   // out of order, so only the most-recently-issued request is allowed to write
@@ -197,18 +173,6 @@ export function AssignmentAnalyticsTable({
   const handleClearQuickActionResults = () => {
     onClearQuickActionResults?.();
     resetServerView();
-  };
-
-  const handleFilterChange = (key: string, value: string | number) => {
-    const newFilters = {
-      ...localFilters,
-      [key]: value === "" ? undefined : value,
-    };
-    setLocalFilters(newFilters);
-  };
-
-  const applyFilters = () => {
-    onFiltersChange?.(localFilters);
   };
 
   const rawData = quickActionResults || data;
@@ -304,6 +268,11 @@ export function AssignmentAnalyticsTable({
                 {formatCurrency(row.original.insights.costBreakdown.grading)}
               </div>
             )}
+            {row.original.insights?.estimatedCost ? (
+              <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                Includes estimated spend
+              </div>
+            ) : null}
           </div>
         ),
         enableSorting: false,
@@ -456,9 +425,6 @@ export function AssignmentAnalyticsTable({
     },
   });
 
-  const hasAdvancedFilters = Object.values(filters || {}).some(
-    (value) => value !== undefined && value !== "",
-  );
   const hasTableFilters =
     !!debouncedGlobalFilter || publishedFilter !== undefined;
 
@@ -522,25 +488,11 @@ export function AssignmentAnalyticsTable({
                   </Button>
                 </div>
               )}
-
-              {!isShowingQuickActionResults && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="gap-2"
-                >
-                  <Filter className="h-4 w-4" />
-                  {showFilters ? "Hide" : "Show"} Advanced Filters
-                </Button>
-              )}
             </div>
           </div>
         </CardHeader>
 
-        {/* Search, status filter, and advanced filters are server-driven —
-            hidden for quick-action results because that data has its own
-            shape and is already pre-ranked. */}
+        {/* Hide server filters for pre-ranked quick-action results. */}
         {!isShowingQuickActionResults && (
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -602,134 +554,6 @@ export function AssignmentAnalyticsTable({
                 <div className="text-xs text-muted-foreground">25 per page</div>
               </div>
             </div>
-
-            {showFilters && (
-              <div className="space-y-4 border-t pt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Date Range
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
-                        <Input
-                          type="date"
-                          placeholder="Start Date"
-                          value={localFilters.startDate || ""}
-                          onChange={(e) =>
-                            handleFilterChange("startDate", e.target.value)
-                          }
-                          className="pl-10"
-                        />
-                      </div>
-                      <div className="relative flex-1">
-                        <CalendarIcon className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
-                        <Input
-                          type="date"
-                          placeholder="End Date"
-                          value={localFilters.endDate || ""}
-                          onChange={(e) =>
-                            handleFilterChange("endDate", e.target.value)
-                          }
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Assignment
-                    </label>
-                    <div className="space-y-2">
-                      <Input
-                        type="number"
-                        placeholder="Assignment ID"
-                        value={localFilters.assignmentId || ""}
-                        onChange={(e) =>
-                          handleFilterChange(
-                            "assignmentId",
-                            e.target.value ? parseInt(e.target.value, 10) : "",
-                          )
-                        }
-                      />
-
-                      <Input
-                        type="text"
-                        placeholder="Assignment Name"
-                        value={localFilters.assignmentName || ""}
-                        onChange={(e) =>
-                          handleFilterChange("assignmentName", e.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      User
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="User ID or Email"
-                      value={localFilters.userId || ""}
-                      onChange={(e) =>
-                        handleFilterChange("userId", e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={applyFilters} size="sm">
-                    Apply Advanced Filters
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setLocalFilters(filters || {})}
-                    size="sm"
-                  >
-                    Reset Advanced
-                  </Button>
-                </div>
-
-                {hasAdvancedFilters && (
-                  <div className="border-t pt-4">
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Active Advanced Filters:
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {filters?.startDate && (
-                        <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 text-xs px-2 py-1 rounded">
-                          From: {filters.startDate}
-                        </span>
-                      )}
-                      {filters?.endDate && (
-                        <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200 text-xs px-2 py-1 rounded">
-                          To: {filters.endDate}
-                        </span>
-                      )}
-                      {filters?.assignmentId && (
-                        <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200 text-xs px-2 py-1 rounded">
-                          Assignment ID: {filters.assignmentId}
-                        </span>
-                      )}
-                      {filters?.assignmentName && (
-                        <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200 text-xs px-2 py-1 rounded">
-                          Assignment: {filters.assignmentName}
-                        </span>
-                      )}
-                      {filters?.userId && (
-                        <span className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200 text-xs px-2 py-1 rounded">
-                          User: {filters.userId}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {hasTableFilters && (
               <div className="border-t pt-4">
@@ -825,6 +649,16 @@ export function AssignmentAnalyticsTable({
               </div>
             </div>
           </Card>
+          {(aggregates.estimatedCost ?? 0) > 0 ||
+          (aggregates.unpricedRecordCount ?? 0) > 0 ? (
+            <div className="col-span-full text-xs text-muted-foreground">
+              Verified: {formatCurrency(aggregates.exactCost ?? 0)} · Estimated:{" "}
+              {formatCurrency(aggregates.estimatedCost ?? 0)}
+              {(aggregates.unpricedRecordCount ?? 0) > 0
+                ? ` · ${aggregates.unpricedRecordCount} unpriced call${aggregates.unpricedRecordCount === 1 ? "" : "s"}`
+                : ""}
+            </div>
+          ) : null}
         </div>
       )}
 

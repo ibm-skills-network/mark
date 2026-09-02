@@ -83,6 +83,9 @@ interface DetailedInsightData {
       translation: number;
       other: number;
     };
+    exactCost?: number;
+    estimatedCost?: number;
+    unpricedRecordCount?: number;
     performanceInsights: string[];
   };
   questions: Array<{
@@ -127,17 +130,23 @@ interface DetailedInsightData {
   aiUsage?: Array<{
     usageType: string;
     tokensIn: number;
+    cachedTokensIn: number;
     tokensOut: number;
     usageCount: number;
     inputCost: number;
+    cachedInputCost: number;
     outputCost: number;
     totalCost: number;
     modelUsed: string;
     inputTokenPrice: number;
+    cachedInputTokenPrice: number;
     outputTokenPrice: number;
+    isEstimated: boolean;
+    pricingStatus: "exact" | "estimated" | "unpriced";
     pricingEffectiveDate: string;
     calculationSteps: {
       inputCalculation: string;
+      cachedInputCalculation: string;
       outputCalculation: string;
       totalCalculation: string;
     };
@@ -145,30 +154,47 @@ interface DetailedInsightData {
   }>;
   costCalculationDetails?: {
     totalCost: number;
+    exactCost?: number;
+    estimatedCost?: number;
+    unpricedRecordCount?: number;
+    /** Full-history cost per usage type, unaffected by the breakdown cap. */
+    costByUsageType?: Record<string, number>;
+    /** Calls behind the totals; the breakdown below may show only the newest. */
+    totalCalls?: number;
+    breakdownTruncated?: boolean;
     breakdown: Array<{
       usageType: string;
       tokensIn: number;
+      cachedTokensIn: number;
       tokensOut: number;
       modelUsed: string;
       inputTokenPrice: number;
+      cachedInputTokenPrice: number;
       outputTokenPrice: number;
       inputCost: number;
+      cachedInputCost: number;
       outputCost: number;
       totalCost: number;
       pricingEffectiveDate: string;
       usageDate: string;
+      isEstimated: boolean;
+      pricingStatus: "exact" | "estimated" | "unpriced";
       calculationSteps: {
         inputCalculation: string;
+        cachedInputCalculation: string;
         outputCalculation: string;
         totalCalculation: string;
       };
     }>;
     summary: {
       totalInputTokens: number;
+      totalCachedInputTokens: number;
       totalOutputTokens: number;
       totalInputCost: number;
+      totalCachedInputCost: number;
       totalOutputCost: number;
       averageInputPrice: number;
+      averageCachedInputPrice: number;
       averageOutputPrice: number;
       modelDistribution: Record<string, number>;
       usageTypeDistribution: {
@@ -208,6 +234,18 @@ export interface AssignmentInsightsContentProps {
    */
   mode: "admin" | "author";
 }
+
+const AUTHORING_USAGE_TYPES = [
+  "TRANSLATION",
+  "QUESTION_GENERATION",
+  "ASSIGNMENT_GENERATION",
+] as const;
+
+const GRADING_USAGE_TYPES = [
+  "LIVE_RECORDING_FEEDBACK",
+  "GRADING_VALIDATION",
+  "ASSIGNMENT_GRADING",
+] as const;
 
 export function AssignmentInsightsContent({
   assignmentId,
@@ -360,8 +398,21 @@ export function AssignmentInsightsContent({
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 4,
+      maximumFractionDigits: 8,
     }).format(amount ?? 0);
+  };
+
+  // Read the server's full-history totals; the per-call rows are capped and would undercount.
+  const costForUsageTypes = (usageTypes: readonly string[]) => {
+    const byType = data?.costCalculationDetails?.costByUsageType ?? {};
+    return usageTypes.reduce((sum, type) => sum + (byType[type] ?? 0), 0);
+  };
+
+  const usageTypeRows = (usageTypes: readonly string[]) => {
+    const byType = data?.costCalculationDetails?.costByUsageType ?? {};
+    return usageTypes
+      .filter((type) => byType[type] !== undefined)
+      .map((type) => ({ usageType: type, totalCost: byType[type] }));
   };
 
   const formatDate = (dateString: string) => {
@@ -738,18 +789,7 @@ export function AssignmentInsightsContent({
                         </div>
                         <div className="text-2xl font-bold text-green-700 dark:text-green-300">
                           {formatCurrency(
-                            (data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "TRANSLATION",
-                                  "QUESTION_GENERATION",
-                                  "ASSIGNMENT_GENERATION",
-                                ].includes(usage.usageType),
-                              )
-                              .reduce(
-                                (sum, usage) => sum + (usage.totalCost || 0),
-                                0,
-                              ),
+                            costForUsageTypes(AUTHORING_USAGE_TYPES),
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
@@ -766,18 +806,7 @@ export function AssignmentInsightsContent({
                         </div>
                         <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
                           {formatCurrency(
-                            (data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "LIVE_RECORDING_FEEDBACK",
-                                  "GRADING_VALIDATION",
-                                  "ASSIGNMENT_GRADING",
-                                ].includes(usage.usageType),
-                              )
-                              .reduce(
-                                (sum, usage) => sum + (usage.totalCost || 0),
-                                0,
-                              ),
+                            costForUsageTypes(GRADING_USAGE_TYPES),
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
@@ -793,15 +822,8 @@ export function AssignmentInsightsContent({
                             Authoring Details
                           </h4>
                           <div className="space-y-2">
-                            {(data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "TRANSLATION",
-                                  "QUESTION_GENERATION",
-                                  "ASSIGNMENT_GENERATION",
-                                ].includes(usage.usageType),
-                              )
-                              .map((usage, index) => (
+                            {usageTypeRows(AUTHORING_USAGE_TYPES).map(
+                              (usage, index) => (
                                 <div
                                   key={index}
                                   className="flex justify-between items-center py-1"
@@ -816,7 +838,8 @@ export function AssignmentInsightsContent({
                                     {formatCurrency(usage.totalCost || 0)}
                                   </span>
                                 </div>
-                              ))}
+                              ),
+                            )}
                           </div>
                         </div>
 
@@ -825,15 +848,8 @@ export function AssignmentInsightsContent({
                             Grading Details
                           </h4>
                           <div className="space-y-2">
-                            {(data.aiUsage ?? [])
-                              .filter((usage) =>
-                                [
-                                  "LIVE_RECORDING_FEEDBACK",
-                                  "GRADING_VALIDATION",
-                                  "ASSIGNMENT_GRADING",
-                                ].includes(usage.usageType),
-                              )
-                              .map((usage, index) => (
+                            {usageTypeRows(GRADING_USAGE_TYPES).map(
+                              (usage, index) => (
                                 <div
                                   key={index}
                                   className="flex justify-between items-center py-1"
@@ -848,7 +864,8 @@ export function AssignmentInsightsContent({
                                     {formatCurrency(usage.totalCost || 0)}
                                   </span>
                                 </div>
-                              ))}
+                              ),
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1599,31 +1616,11 @@ export function AssignmentInsightsContent({
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-green-700 dark:text-green-300 mb-4">
-                      {formatCurrency(
-                        (data.aiUsage ?? [])
-                          .filter((usage) =>
-                            [
-                              "TRANSLATION",
-                              "QUESTION_GENERATION",
-                              "ASSIGNMENT_GENERATION",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
-                      )}
+                      {formatCurrency(costForUsageTypes(AUTHORING_USAGE_TYPES))}
                     </div>
                     <div className="space-y-2">
-                      {(data.aiUsage ?? [])
-                        .filter((usage) =>
-                          [
-                            "TRANSLATION",
-                            "QUESTION_GENERATION",
-                            "ASSIGNMENT_GENERATION",
-                          ].includes(usage.usageType),
-                        )
-                        .map((usage, index) => (
+                      {usageTypeRows(AUTHORING_USAGE_TYPES).map(
+                        (usage, index) => (
                           <div
                             key={index}
                             className="flex justify-between items-center"
@@ -1638,7 +1635,8 @@ export function AssignmentInsightsContent({
                               {formatCurrency(usage.totalCost || 0)}
                             </span>
                           </div>
-                        ))}
+                        ),
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1652,31 +1650,11 @@ export function AssignmentInsightsContent({
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold text-purple-700 dark:text-purple-300 mb-4">
-                      {formatCurrency(
-                        (data.aiUsage ?? [])
-                          .filter((usage) =>
-                            [
-                              "LIVE_RECORDING_FEEDBACK",
-                              "GRADING_VALIDATION",
-                              "ASSIGNMENT_GRADING",
-                            ].includes(usage.usageType),
-                          )
-                          .reduce(
-                            (sum, usage) => sum + (usage.totalCost || 0),
-                            0,
-                          ),
-                      )}
+                      {formatCurrency(costForUsageTypes(GRADING_USAGE_TYPES))}
                     </div>
                     <div className="space-y-2">
-                      {(data.aiUsage ?? [])
-                        .filter((usage) =>
-                          [
-                            "LIVE_RECORDING_FEEDBACK",
-                            "GRADING_VALIDATION",
-                            "ASSIGNMENT_GRADING",
-                          ].includes(usage.usageType),
-                        )
-                        .map((usage, index) => (
+                      {usageTypeRows(GRADING_USAGE_TYPES).map(
+                        (usage, index) => (
                           <div
                             key={index}
                             className="flex justify-between items-center"
@@ -1691,11 +1669,58 @@ export function AssignmentInsightsContent({
                               {formatCurrency(usage.totalCost || 0)}
                             </span>
                           </div>
-                        ))}
+                        ),
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               </div>
+
+              {data.costCalculationDetails && (
+                <Card className="border-blue-200 dark:border-blue-900">
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Verified cost
+                        </div>
+                        <div className="text-xl font-semibold text-green-700 dark:text-green-300">
+                          {formatCurrency(
+                            data.costCalculationDetails.exactCost ?? 0,
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Event-level usage with a known model and rate
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Estimated cost
+                        </div>
+                        <div className="text-xl font-semibold text-amber-700 dark:text-amber-300">
+                          {formatCurrency(
+                            data.costCalculationDetails.estimatedCost ?? 0,
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Backfilled totals or forward-dated pricing
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Unpriced calls
+                        </div>
+                        <div className="text-xl font-semibold">
+                          {data.costCalculationDetails.unpricedRecordCount ?? 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Excluded until a verified model price exists
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
@@ -1721,6 +1746,13 @@ export function AssignmentInsightsContent({
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {data.costCalculationDetails?.breakdownTruncated && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Showing the {(data.aiUsage ?? []).length} most recent of{" "}
+                      {data.costCalculationDetails.totalCalls?.toLocaleString()}{" "}
+                      calls. The cost totals above cover all of them.
+                    </p>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1735,10 +1767,16 @@ export function AssignmentInsightsContent({
                               Tokens In
                             </TableHead>
                             <TableHead className="text-center">
+                              Cached In
+                            </TableHead>
+                            <TableHead className="text-center">
                               Tokens Out
                             </TableHead>
                             <TableHead className="text-center">
-                              Input Cost
+                              Uncached Cost
+                            </TableHead>
+                            <TableHead className="text-center">
+                              Cached Cost
                             </TableHead>
                             <TableHead className="text-center">
                               Output Cost
@@ -1778,13 +1816,33 @@ export function AssignmentInsightsContent({
                               <Badge variant="secondary">
                                 {usage.modelUsed}
                               </Badge>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  usage.pricingStatus === "estimated"
+                                    ? "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300"
+                                    : usage.pricingStatus === "unpriced"
+                                      ? "border-red-300 text-red-700 dark:border-red-700 dark:text-red-300"
+                                      : "border-green-300 text-green-700 dark:border-green-700 dark:text-green-300"
+                                }
+                              >
+                                {usage.pricingStatus === "estimated"
+                                  ? "Estimated"
+                                  : usage.pricingStatus === "unpriced"
+                                    ? "Unpriced"
+                                    : "Verified"}
+                              </Badge>
                               {showDetailedUsage && (
                                 <div className="text-xs text-muted-foreground">
                                   In:{" "}
                                   {formatPricePerMillionTokens(
                                     usage.inputTokenPrice,
                                   )}
-                                  /1M | Out:{" "}
+                                  /1M · Cached:{" "}
+                                  {formatPricePerMillionTokens(
+                                    usage.cachedInputTokenPrice,
+                                  )}
+                                  /1M · Out:{" "}
                                   {formatPricePerMillionTokens(
                                     usage.outputTokenPrice,
                                   )}
@@ -1794,7 +1852,9 @@ export function AssignmentInsightsContent({
                             </div>
                           </TableCell>
                           <TableCell className="text-center font-mono font-semibold text-green-600 dark:text-green-400">
-                            {formatCurrency(usage.totalCost)}
+                            {usage.pricingStatus === "unpriced"
+                              ? "Unpriced"
+                              : formatCurrency(usage.totalCost)}
                           </TableCell>
                           {showDetailedUsage && (
                             <>
@@ -1802,10 +1862,16 @@ export function AssignmentInsightsContent({
                                 {usage.tokensIn.toLocaleString()}
                               </TableCell>
                               <TableCell className="text-center font-mono">
+                                {usage.cachedTokensIn.toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
                                 {usage.tokensOut.toLocaleString()}
                               </TableCell>
                               <TableCell className="text-center font-mono text-blue-600 dark:text-blue-400">
                                 {formatCurrency(usage.inputCost)}
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-cyan-600 dark:text-cyan-400">
+                                {formatCurrency(usage.cachedInputCost)}
                               </TableCell>
                               <TableCell className="text-center font-mono text-purple-600 dark:text-purple-400">
                                 {formatCurrency(usage.outputCost)}
@@ -1850,6 +1916,9 @@ export function AssignmentInsightsContent({
                           <div className="font-mono text-sm space-y-1 text-slate-700 dark:text-slate-300">
                             <div className="text-blue-600 dark:text-blue-400">
                               {usage.calculationSteps.inputCalculation}
+                            </div>
+                            <div className="text-cyan-600 dark:text-cyan-400">
+                              {usage.calculationSteps.cachedInputCalculation}
                             </div>
                             <div className="text-purple-600 dark:text-purple-400">
                               {usage.calculationSteps.outputCalculation}

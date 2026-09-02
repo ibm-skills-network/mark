@@ -64,20 +64,29 @@ interface AssignmentAnalyticsResponse {
         translation: number;
         other: number;
       };
+      exactCost?: number;
+      estimatedCost?: number;
+      unpricedRecordCount?: number;
       detailedCostBreakdown?: Array<{
         tokensIn: number;
+        cachedTokensIn: number;
         tokensOut: number;
         inputCost: number;
+        cachedInputCost: number;
         outputCost: number;
         totalCost: number;
         usageDate: string;
         modelKey: string;
         inputTokenPrice: number;
+        cachedInputTokenPrice: number;
         outputTokenPrice: number;
         pricingEffectiveDate: string;
         usageType?: string;
+        isEstimated: boolean;
+        pricingStatus: "exact" | "estimated" | "unpriced";
         calculationSteps: {
           inputCalculation: string;
+          cachedInputCalculation: string;
           outputCalculation: string;
           totalCalculation: string;
         };
@@ -93,6 +102,9 @@ interface AssignmentAnalyticsResponse {
   aggregates: {
     totalAssignments: number;
     totalCost: number;
+    exactCost: number;
+    estimatedCost: number;
+    unpricedRecordCount: number;
     totalLearnerAssignmentPairs: number;
     averageRating: number;
   };
@@ -149,6 +161,9 @@ export class AdminDashboardController {
       const end = new Date(endDate);
       const diffDays =
         (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays < 0) {
+        throw new BadRequestException("endDate must be after startDate");
+      }
       if (diffDays > MAX_DATE_WINDOW_DAYS) {
         throw new BadRequestException(
           `Date range cannot exceed ${MAX_DATE_WINDOW_DAYS} days`,

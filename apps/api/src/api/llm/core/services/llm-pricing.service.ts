@@ -1,6 +1,6 @@
 /* eslint-disable */
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { PricingSource } from "@prisma/client";
+import { PricingSource, Prisma } from "@prisma/client";
 import * as cheerio from "cheerio";
 import { PrismaService } from "../../../../database/prisma.service";
 import { LLM_RESOLVER_SERVICE } from "../../llm.constants";
@@ -17,13 +17,16 @@ export interface ModelPricing {
 
 export interface CostBreakdown {
   inputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
   inputCost: number;
+  cachedInputCost: number;
   outputCost: number;
   totalCost: number;
   modelKey: string;
   pricingEffectiveDate: Date;
   inputTokenPrice: number;
+  cachedInputTokenPrice: number;
   outputTokenPrice: number;
 }
 
@@ -57,6 +60,13 @@ function positiveMetadataNumber(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+/** Narrows a Prisma Json metadata value to a plain object, or empty if it isn't one. */
+function asMetadataObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function resolveTokenPrices(
   pricing: ModelPricing,
   inputTokens: number,
@@ -65,15 +75,7 @@ function resolveTokenPrices(
     input: pricing.inputTokenPrice,
     output: pricing.outputTokenPrice,
   };
-  if (
-    !pricing.metadata ||
-    typeof pricing.metadata !== "object" ||
-    Array.isArray(pricing.metadata)
-  ) {
-    return base;
-  }
-
-  const metadata = pricing.metadata as Record<string, unknown>;
+  const metadata = asMetadataObject(pricing.metadata);
   const threshold = positiveMetadataNumber(
     metadata,
     "longContextInputThresholdTokens",
@@ -87,6 +89,30 @@ function resolveTokenPrices(
   );
 
   return input === null || output === null ? base : { input, output };
+}
+
+function resolveCachedInputTokenPrice(
+  pricing: ModelPricing,
+  inputTokens: number,
+): number {
+  const metadata = asMetadataObject(pricing.metadata);
+  const defaultPrice = pricing.inputTokenPrice;
+
+  const threshold = positiveMetadataNumber(
+    metadata,
+    "longContextInputThresholdTokens",
+  );
+  if (threshold !== null && inputTokens > threshold) {
+    return (
+      positiveMetadataNumber(metadata, "longContextCachedInputTokenPrice") ??
+      positiveMetadataNumber(metadata, "cachedInputTokenPrice") ??
+      defaultPrice
+    );
+  }
+
+  return (
+    positiveMetadataNumber(metadata, "cachedInputTokenPrice") ?? defaultPrice
+  );
 }
 
 const REGISTRY_PROVIDER_PRIORITY: Record<string, number> = {
@@ -1161,6 +1187,16 @@ export class LLMPricingService {
           continue;
         }
 
+        // Cached and cache-write rates are seeded by migration, never scraped, so carry them forward or cached tokens silently revert to the full input price.
+        const activePricing = await this.prisma.lLMPricing.findFirst({
+          where: { modelId: model.id, isActive: true },
+          orderBy: { effectiveDate: "desc" },
+        });
+        const metadata = {
+          ...asMetadataObject(activePricing?.metadata),
+          ...asMetadataObject(pricing.metadata),
+        } as Prisma.InputJsonObject;
+
         await this.prisma.lLMPricing.updateMany({
           where: {
             modelId: model.id,
@@ -1179,7 +1215,7 @@ export class LLMPricingService {
             effectiveDate: pricing.effectiveDate,
             source: pricing.source,
             isActive: true,
-            metadata: pricing.metadata,
+            metadata,
           },
         });
 
@@ -1333,6 +1369,7 @@ export class LLMPricingService {
     outputTokens: number,
     usageDate: Date,
     usageType?: string,
+    cachedInputTokens = 0,
   ): Promise<CostBreakdown | null> {
     return await this.calculateCostWithUpscaling(
       modelKey,
@@ -1340,6 +1377,7 @@ export class LLMPricingService {
       outputTokens,
       usageDate,
       usageType,
+      cachedInputTokens,
     );
   }
 
@@ -1536,6 +1574,7 @@ export class LLMPricingService {
     outputTokens: number,
     usageDate: Date,
     usageType?: string,
+    cachedInputTokens = 0,
   ): Promise<CostBreakdown | null> {
     const basePricing = await this.getPricingAtDate(modelKey, usageDate);
     if (!basePricing) {
@@ -1551,6 +1590,7 @@ export class LLMPricingService {
       outputTokens,
       upscaling,
       usageType,
+      cachedInputTokens,
     );
   }
 
@@ -1563,14 +1603,20 @@ export class LLMPricingService {
       ReturnType<LLMPricingService["getCurrentPriceUpscaling"]>
     >,
     usageType?: string,
+    cachedInputTokens = 0,
   ): CostBreakdown {
     const tokenPrices = resolveTokenPrices(basePricing, inputTokens);
     let finalInputPrice = tokenPrices.input;
+    let finalCachedInputPrice = resolveCachedInputTokenPrice(
+      basePricing,
+      inputTokens,
+    );
     let finalOutputPrice = tokenPrices.output;
 
     if (upscaling) {
       if (upscaling.globalFactor && upscaling.globalFactor > 0) {
         finalInputPrice *= upscaling.globalFactor;
+        finalCachedInputPrice *= upscaling.globalFactor;
         finalOutputPrice *= upscaling.globalFactor;
       }
 
@@ -1580,6 +1626,7 @@ export class LLMPricingService {
           const usageFactor = usageFactors[usageType];
           if (usageFactor && usageFactor > 0) {
             finalInputPrice *= usageFactor;
+            finalCachedInputPrice *= usageFactor;
             finalOutputPrice *= usageFactor;
           }
         } catch (error) {
@@ -1588,19 +1635,28 @@ export class LLMPricingService {
       }
     }
 
-    const inputCost = inputTokens * finalInputPrice;
+    const safeCachedInputTokens = Math.min(
+      Math.max(cachedInputTokens, 0),
+      inputTokens,
+    );
+    const uncachedInputTokens = inputTokens - safeCachedInputTokens;
+    const cachedInputCost = safeCachedInputTokens * finalCachedInputPrice;
+    const inputCost = uncachedInputTokens * finalInputPrice;
     const outputCost = outputTokens * finalOutputPrice;
-    const totalCost = inputCost + outputCost;
+    const totalCost = inputCost + cachedInputCost + outputCost;
 
     return {
       inputTokens,
+      cachedInputTokens: safeCachedInputTokens,
       outputTokens,
       inputCost,
+      cachedInputCost,
       outputCost,
       totalCost,
       modelKey,
       pricingEffectiveDate: basePricing.effectiveDate,
       inputTokenPrice: finalInputPrice,
+      cachedInputTokenPrice: finalCachedInputPrice,
       outputTokenPrice: finalOutputPrice,
     };
   }
@@ -1624,6 +1680,7 @@ export class LLMPricingService {
       outputTokens: number;
       usageDate: Date;
       usageType?: string;
+      cachedInputTokens?: number;
     }>,
   ): Promise<Array<CostBreakdown | null>> {
     if (records.length === 0) return [];
@@ -1654,6 +1711,7 @@ export class LLMPricingService {
             r.outputTokens,
             upscaling,
             r.usageType,
+            r.cachedInputTokens,
           )
         : null;
     }
