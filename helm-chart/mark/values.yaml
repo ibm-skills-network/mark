@@ -91,7 +91,26 @@ api:
   secretEnv:
     # SN Support ticket forwarding; unset leaves the integration disabled.
     SN_SUPPORT_URL: ""
+    # Legacy single-product key. Used only when no SUPPORT_TOKEN_* below
+    # matches the reporting portal's product.
     SN_SUPPORT_TOKEN: ""
+    # SN Support resolves a ticket's product from the API key alone, so Mark
+    # holds one key per product and picks by portal at report time. The var
+    # name is derived from the product name (uppercase, non-alphanumerics to
+    # "_"), so a new product needs a secret here and no code change.
+    SUPPORT_TOKEN_PORTALS: ""
+    SUPPORT_TOKEN_COGNITIVE_CLASS: ""
+    SUPPORT_TOKEN_COURSERA: ""
+    SUPPORT_TOKEN_EDX: ""
+    SUPPORT_TOKEN_ICE: ""
+    SUPPORT_TOKEN_LABS: ""
+    SUPPORT_TOKEN_FACULTY: ""
+    # portal-manager is the source of truth for which product owns a portal
+    # hostname. Unset means every ticket falls back to the Portals product.
+    PORTAL_MANAGER_API_BASE_URL: ""
+    PORTAL_MANAGER_TOKEN_URL: ""
+    PORTAL_MANAGER_UID: ""
+    PORTAL_MANAGER_SECRET: ""
 
 jobs:
   enabled: false

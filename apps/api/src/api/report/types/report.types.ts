@@ -1,4 +1,5 @@
 import { IsInt, IsOptional, IsString } from "class-validator";
+import { PortalContext } from "src/common/portal/portal-context";
 
 export class ReportIssueDto {
   issueType: string;
@@ -10,6 +11,8 @@ export class ReportIssueDto {
   category?: string;
   portalName?: string;
   userEmail?: string;
+  /** Derived from the signed session by the controller, never client-supplied. */
+  portal?: PortalContext;
   additionalDetails?: Record<string, any>;
 }
 

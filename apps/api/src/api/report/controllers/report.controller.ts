@@ -28,6 +28,7 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { derivePortalContext } from "src/common/portal/portal-context";
 import { ReportsService } from "../services/report.service";
 
 @ApiTags("Reports")
@@ -149,12 +150,25 @@ export class ReportsController {
       portalName?: string;
       userEmail?: string;
       userRole?: string;
+      pageUrl?: string;
+      browser?: string;
       additionalDetails?: Record<string, any>;
     },
     @UploadedFile() screenshot: Express.Multer.File,
     @Req() request: UserSessionRequest,
   ): Promise<{ message: string; reportId?: number }> {
     const resolvedUserEmail = dto.userEmail || request.userSession?.userId;
+    // Portal identity is taken from the signed session, never from the client,
+    // so a report cannot claim to come from a portal it did not launch from.
+    const portal = derivePortalContext(request.userSession);
+    const additionalDetails: Record<string, any> = {
+      ...dto.additionalDetails,
+      category: dto.category,
+      userEmail: resolvedUserEmail,
+    };
+    if (dto.pageUrl) additionalDetails.pageUrl = dto.pageUrl;
+    if (dto.browser) additionalDetails.browser = dto.browser;
+
     const reportDto = {
       issueType: dto.issueType,
       description: dto.description,
@@ -162,12 +176,13 @@ export class ReportsController {
       attemptId: dto.attemptId,
       severity: dto.severity,
       userEmail: resolvedUserEmail,
-      additionalDetails: {
-        ...dto.additionalDetails,
-        category: dto.category,
-        portalName: dto.portalName,
-        userEmail: resolvedUserEmail,
+      // A client without a launch session (the chat tool posts JSON) may still
+      // name its portal; the session wins whenever it has one.
+      portal: {
+        ...portal,
+        portalName: portal.portalName ?? dto.portalName,
       },
+      additionalDetails,
     };
     return this.reportsService.reportIssue(
       reportDto,
@@ -298,14 +313,18 @@ export class ReportsController {
     },
     @Req() request: UserSessionRequest,
   ) {
-    return this.reportsService.sendUserFeedback(
-      feedbackDto.title,
-      feedbackDto.description,
-      feedbackDto.rating,
-      feedbackDto.userEmail || request.userSession?.userId,
-      feedbackDto.portalName || "Mark AI Assistant",
-      request.userSession?.userId,
-      feedbackDto.assignmentId || request.userSession?.assignmentId,
-    );
+    const portal = derivePortalContext(request.userSession);
+    return this.reportsService.sendUserFeedback({
+      title: feedbackDto.title,
+      description: feedbackDto.description,
+      rating: feedbackDto.rating,
+      userEmail: feedbackDto.userEmail || request.userSession?.userId,
+      portalName:
+        portal.portalName || feedbackDto.portalName || "Mark AI Assistant",
+      portalUrl: portal.portalUrl,
+      userId: request.userSession?.userId,
+      assignmentId:
+        feedbackDto.assignmentId || request.userSession?.assignmentId,
+    });
   }
 }

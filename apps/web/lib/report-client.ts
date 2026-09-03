@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { getBaseApiPath } from "@/config/constants";
+import { getClientContext } from "@/lib/client-context";
 import type { User } from "@/config/types";
 
 export interface BugReportSubmission {
@@ -19,9 +20,9 @@ export interface BugReportSubmission {
  */
 export async function submitBugReport(
   value: BugReportSubmission,
-  options: { category: string; user?: User | null },
+  options: { category: string; user?: User | null; userRole?: string },
 ): Promise<boolean> {
-  const { category, user } = options;
+  const { category, user, userRole } = options;
 
   try {
     const formData = new FormData();
@@ -29,7 +30,7 @@ export async function submitBugReport(
     formData.append("description", value.description || "");
     formData.append("severity", value.severity || "info");
     formData.append("category", category);
-    formData.append("userRole", user?.role || "learner");
+    formData.append("userRole", userRole || user?.role || "learner");
 
     const resolvedEmail = value.userEmail || user?.userId;
     if (resolvedEmail) {
@@ -39,6 +40,16 @@ export async function submitBugReport(
     const assignmentId = value.assignmentId ?? user?.assignmentId;
     if (assignmentId) {
       formData.append("assignmentId", String(assignmentId));
+    }
+
+    // Support agents need the screen the reporter was on and what they were
+    // using; the portal itself is added server-side from the launch session.
+    const { pageUrl, browser } = getClientContext();
+    if (pageUrl) {
+      formData.append("pageUrl", pageUrl);
+    }
+    if (browser) {
+      formData.append("browser", browser);
     }
 
     if (value.screenshot) {
