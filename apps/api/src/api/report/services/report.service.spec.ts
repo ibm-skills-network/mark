@@ -131,14 +131,22 @@ describe("ReportsService.reportIssue", () => {
       },
     };
     const floService = { sendError: jest.fn().mockResolvedValue(undefined) };
+    const supportRouting = {
+      resolve: jest.fn().mockResolvedValue({
+        token: "sk_coursera",
+        productName: "Coursera",
+        via: "portal-manager",
+      }),
+    };
     const service = new ReportsService(
       floService as never,
       prisma as never,
       undefined as never,
       undefined as never,
       snSupportService as never,
+      supportRouting as never,
     );
-    return { service, prisma, floService };
+    return { service, prisma, floService, supportRouting };
   };
 
   it("creates the SN Support ticket with Mark context and no GitHub issue", async () => {
@@ -156,23 +164,68 @@ describe("ReportsService.reportIssue", () => {
     expect(
       prisma.report.create.mock.calls[0][0].data.issueNumber,
     ).toBeUndefined();
-    expect(snSupportService.createTicket).toHaveBeenCalledWith({
-      title: expect.stringContaining("Assignment 42 - Attempt 84"),
-      description: expect.stringContaining("The assignment submission fails"),
-      reporterEmail: "employee@ibm.com",
-      severity: "error",
-      issueType: "Submission",
-      pageUrl: undefined,
-      portalName: "Coursera",
-      courseTitle: undefined,
-      toolName: "Mark",
-      browser: undefined,
-      chatHistoryUrl: undefined,
-      screenshotUrl: undefined,
-    });
+    expect(snSupportService.createTicket).toHaveBeenCalledWith(
+      {
+        title: expect.stringContaining("Assignment 42 - Attempt 84"),
+        description: expect.stringContaining("The assignment submission fails"),
+        reporterEmail: "employee@ibm.com",
+        severity: "error",
+        issueType: "Submission",
+        pageUrl: undefined,
+        portalName: "Coursera",
+        portalUrl: undefined,
+        courseTitle: undefined,
+        toolName: "Mark",
+        browser: undefined,
+        chatHistoryUrl: undefined,
+        screenshotUrl: undefined,
+      },
+      // The product-scoped key is what routes the ticket to Coursera.
+      "sk_coursera",
+    );
     const sentTitle = snSupportService.createTicket.mock.calls[0][0].title;
     expect(sentTitle).not.toContain("[MARK CHAT]");
     expect(sentTitle).not.toContain("[PROD]");
+  });
+
+  it("forwards the portal and client context to SN Support and Flo", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-9" }),
+    };
+
+    const { service, floService } = makeForReportIssue(snSupportService);
+    await service.reportIssue(
+      {
+        ...reportDto,
+        additionalDetails: {
+          ...reportDto.additionalDetails,
+          portalUrl: "https://www.coursera.org",
+          pageUrl: "https://mark.skills.network/learner/42/questions",
+          browser: "Chrome 141 on macOS",
+        },
+      },
+      session,
+    );
+
+    expect(snSupportService.createTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portalName: "Coursera",
+        portalUrl: "https://www.coursera.org",
+        pageUrl: "https://mark.skills.network/learner/42/questions",
+        browser: "Chrome 141 on macOS",
+      }),
+      "sk_coursera",
+    );
+    // Flo's portal_name / portal_url were the fields reported as always null.
+    expect(floService.sendError).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        portalName: "Coursera",
+        portalUrl: "https://www.coursera.org",
+      }),
+    );
   });
 
   it("forwards flag-button reports with a symptom title and plain-text body", async () => {

@@ -16,6 +16,7 @@ export interface SnSupportTicket {
   issueType?: string;
   pageUrl?: string;
   portalName?: string;
+  portalUrl?: string;
   courseTitle?: string;
   toolName?: string;
   browser?: string;
@@ -69,21 +70,43 @@ export class SnSupportService {
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * Whether the SN Support endpoint is reachable. The credential is not part
+   * of this check: the API key decides which product a ticket lands in, so it
+   * is chosen per report by SupportRoutingService and passed to createTicket.
+   */
   isConfigured(): boolean {
-    return Boolean(
-      this.configService.get<string>("SN_SUPPORT_URL")?.trim() &&
-        this.configService.get<string>("SN_SUPPORT_TOKEN")?.trim(),
-    );
+    return Boolean(this.configService.get<string>("SN_SUPPORT_URL")?.trim());
   }
 
+  /**
+   * Every URL on a ticket is optional context, so a malformed one is dropped
+   * with a warning rather than throwing and losing the whole report.
+   */
+  private optionalHttpUrl(field: string, value?: string): string | undefined {
+    try {
+      return normalizeHttpUrl(field, value);
+    } catch {
+      this.logger.warn(`Dropping non-HTTP ${field} from SN ticket`);
+      return;
+    }
+  }
+
+  /**
+   * @param apiKeyOverride the product-scoped key this ticket should be filed
+   * with; falls back to SN_SUPPORT_TOKEN for local dev and pre-routing deploys.
+   */
   async createTicket(
     ticket: SnSupportTicket,
+    apiKeyOverride?: string,
   ): Promise<SnSupportTicketResponse> {
     const baseUrl = this.configService
       .get<string>("SN_SUPPORT_URL")
       ?.trim()
       .replace(/\/+$/, "");
-    const apiKey = this.configService.get<string>("SN_SUPPORT_TOKEN")?.trim();
+    const apiKey =
+      apiKeyOverride?.trim() ||
+      this.configService.get<string>("SN_SUPPORT_TOKEN")?.trim();
 
     if (!baseUrl || !apiKey) {
       throw new InternalServerErrorException(
@@ -130,20 +153,31 @@ export class SnSupportService {
       metadata[key] = normalizedValue;
     };
 
+    const pageUrl = this.optionalHttpUrl("page URL", ticket.pageUrl);
+
     addMetadata("portalName", ticket.portalName);
     addMetadata("toolName", ticket.toolName);
     addMetadata("courseTitle", ticket.courseTitle);
     addMetadata("mark.issueType", ticket.issueType);
-    // SN Support surfaces an opening screenshot from metadata.imageUrl; a
-    // malformed URL is dropped rather than failing the whole ticket.
-    try {
-      addMetadata(
-        "imageUrl",
-        normalizeHttpUrl("screenshot URL", ticket.screenshotUrl),
-      );
-    } catch {
-      this.logger.warn("Dropping non-HTTP screenshot URL from SN ticket");
-    }
+    // SN Support has an Issue.portalUrl column, but the v2 contract cannot set
+    // it — unknown top-level keys are rejected outright — so the portal URL
+    // rides as custom metadata, which is stored and displayed verbatim.
+    addMetadata(
+      "portalUrl",
+      this.optionalHttpUrl("portal URL", ticket.portalUrl),
+    );
+    // `source: "Mark"` is not one of SN Support's registered intake mappers, so
+    // its base mapper drops pageUrl, browser, chatHistoryUrl, courseTitle and
+    // toolName before they reach the Issue row. Custom metadata survives that
+    // path, so those values are duplicated here until SN Support registers a
+    // "Mark" mapper, after which this duplication can go.
+    addMetadata("mark.pageUrl", pageUrl);
+    addMetadata("mark.browser", ticket.browser);
+    // SN Support surfaces an opening screenshot from metadata.imageUrl.
+    addMetadata(
+      "imageUrl",
+      this.optionalHttpUrl("screenshot URL", ticket.screenshotUrl),
+    );
 
     const supportTicket = {
       title: ticket.title,
@@ -151,9 +185,9 @@ export class SnSupportService {
       reporterEmail,
       source: "Mark",
       reporterOrigin,
-      pageUrl: normalizeHttpUrl("page URL", ticket.pageUrl),
+      pageUrl,
       browser: ticket.browser,
-      chatHistoryUrl: normalizeHttpUrl(
+      chatHistoryUrl: this.optionalHttpUrl(
         "chat history URL",
         ticket.chatHistoryUrl,
       ),

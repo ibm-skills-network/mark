@@ -30,6 +30,7 @@ import {
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
+import { SupportRoutingService } from "./support-routing.service";
 
 interface FeedbackFilterParameters {
   page: number;
@@ -64,6 +65,7 @@ export class ReportsService {
     private readonly filesService: FilesService,
     private readonly adminEmailService: AdminEmailService,
     private readonly snSupportService: SnSupportService,
+    private readonly supportRouting: SupportRoutingService,
   ) {}
 
   private async getGithubConfig(
@@ -840,9 +842,21 @@ export class ReportsService {
     }>;
     isDuplicate?: boolean;
   }> {
-    const { issueType, description, attemptId, severity, additionalDetails } =
-      dto;
+    const {
+      issueType,
+      description,
+      attemptId,
+      severity,
+      additionalDetails,
+      portal = {},
+    } = dto;
     const assignmentId = userSession?.assignmentId;
+    // additionalDetails is a free-form bag filled by three different clients,
+    // so every read of it is guarded.
+    const detailString = (key: string): string | undefined =>
+      typeof additionalDetails?.[key] === "string"
+        ? additionalDetails[key]
+        : undefined;
 
     if (!issueType) {
       this.logger.error("submitReport: missing issueType in DTO", {
@@ -940,8 +954,28 @@ export class ReportsService {
 
     // SN Support is the support queue for new reports. The v2 API requires a
     // reporter email, so anonymous reports exist only as DB rows below.
+    //
+    // The token decides which SN Support product the ticket lands in, so it is
+    // resolved once here and reused: resolving twice could file duplicates in
+    // two products, since SN Support's idempotency is per product.
+    const portalContext = {
+      portalHost: portal.portalHost,
+      portalName: portal.portalName ?? detailString("portalName"),
+      portalUrl: portal.portalUrl ?? detailString("portalUrl"),
+    };
+    const canForward =
+      this.snSupportService.isConfigured() && safeUserEmail !== "Unknown";
+    // Only when a ticket is actually going out: routing calls portal-manager,
+    // and an anonymous report or a disabled integration has nowhere to send.
+    const route = canForward
+      ? await this.supportRouting.resolve(portalContext)
+      : undefined;
+    // portal-manager knows a portal's real display name; the host is only a
+    // stand-in until it answers.
+    const portalName = route?.portalName ?? portalContext.portalName;
+
     let snTicketKey: string | undefined;
-    if (this.snSupportService.isConfigured() && safeUserEmail !== "Unknown") {
+    if (canForward && route?.token) {
       const supportDescription = [
         stripSectionLabelMarkdown(description),
         "",
@@ -953,44 +987,41 @@ export class ReportsService {
       ].join("\n");
 
       try {
-        const snTicket = await this.snSupportService.createTicket({
-          title: ticketTitle,
-          description: supportDescription,
-          reporterEmail: safeUserEmail,
-          severity: issueSeverity,
-          issueType:
-            typeof additionalDetails?.category === "string"
-              ? additionalDetails.category
-              : issueType,
-          pageUrl:
-            typeof additionalDetails?.pageUrl === "string"
-              ? additionalDetails.pageUrl
-              : undefined,
-          portalName:
-            typeof additionalDetails?.portalName === "string"
-              ? additionalDetails.portalName
-              : undefined,
-          courseTitle:
-            typeof additionalDetails?.courseTitle === "string"
-              ? additionalDetails.courseTitle
-              : undefined,
-          toolName: "Mark",
-          browser:
-            typeof additionalDetails?.browser === "string"
-              ? additionalDetails.browser
-              : undefined,
-          chatHistoryUrl:
-            typeof additionalDetails?.chatHistoryUrl === "string"
-              ? additionalDetails.chatHistoryUrl
-              : undefined,
-          screenshotUrl: fullScreenshotUrl,
-        });
+        const snTicket = await this.snSupportService.createTicket(
+          {
+            title: ticketTitle,
+            description: supportDescription,
+            reporterEmail: safeUserEmail,
+            severity: issueSeverity,
+            issueType: detailString("category") ?? issueType,
+            pageUrl: detailString("pageUrl"),
+            portalName,
+            portalUrl: portalContext.portalUrl,
+            courseTitle: detailString("courseTitle"),
+            toolName: "Mark",
+            browser: detailString("browser"),
+            chatHistoryUrl: detailString("chatHistoryUrl"),
+            screenshotUrl: fullScreenshotUrl,
+          },
+          route.token,
+        );
         snTicketKey = snTicket.ticketKey;
+        // A ticket in the wrong product looks exactly like one in the right
+        // product, so how the product was chosen is logged on every report.
         this.logger.log("Created SN Support ticket for report", {
           ticket_key: snTicket.ticketKey,
           assignment_id: assignmentId,
           attempt_id: attemptId,
+          portal_host: portalContext.portalHost,
+          portal_name: portalName,
+          product: route.productName,
+          token_source: route.via,
         });
+        if (route.via === "default" || route.via === "legacy") {
+          this.logger.warn(
+            `SN ticket ${snTicket.ticketKey} filed under ${route.productName ?? "the legacy token"} — no product matched portal ${portalContext.portalHost ?? "(unknown)"}`,
+          );
+        }
       } catch (error) {
         // The report survives as a DB row (and in the admin dashboard), so
         // the submission itself is not failed — but nobody is watching that
@@ -1004,9 +1035,14 @@ export class ReportsService {
       }
     } else {
       // Without a ticket the report reaches no support queue — DB row only.
+      // portal_host is logged even here: while the integration is off it is
+      // the only way to sample what LTI actually sends as a return URL, which
+      // is what routing will key off once it is on.
       this.logger.warn("Report not forwarded to SN Support", {
         configured: this.snSupportService.isConfigured(),
+        has_token: Boolean(route?.token),
         has_reporter_email: safeUserEmail !== "Unknown",
+        portal_host: portalContext.portalHost,
         assignment_id: assignmentId,
         attempt_id: attemptId,
       });
@@ -1094,6 +1130,8 @@ export class ReportsService {
           sn_ticket: snTicketKey,
           report_id: report.id,
           is_duplicate: isDuplicate,
+          portalName,
+          portalUrl: portalContext.portalUrl,
         })
         .catch((error) => {
           this.logger.warn(
@@ -2353,21 +2391,34 @@ export class ReportsService {
     }
   }
 
-  async sendUserFeedback(
-    title: string,
-    description: string,
-    rating: string,
-    userEmail?: string,
-    portalName?: string,
-    userId?: string,
-    assignmentId?: number,
-  ): Promise<{ message: string; reportId?: number }> {
+  async sendUserFeedback(input: {
+    title: string;
+    description: string;
+    rating: string;
+    userEmail?: string;
+    portalName?: string;
+    portalUrl?: string;
+    userId?: string;
+    assignmentId?: number;
+  }): Promise<{ message: string; reportId?: number }> {
+    const {
+      title,
+      description,
+      rating,
+      userEmail,
+      portalName,
+      portalUrl,
+      userId,
+      assignmentId,
+    } = input;
+
     // Fire-and-forget: see floService.sendError comment in reportIssue.
     void this.floService
       .sendFeedback(title, description, {
         rating,
         userEmail,
         portalName: portalName || "Mark AI Assistant",
+        portalUrl,
       })
       .catch((error) => {
         this.logger.warn(
