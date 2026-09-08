@@ -341,7 +341,7 @@ export type LearnerState = {
   totalPointsPossible: number;
   translationOn: boolean;
   globalLanguage: string;
-  userPreferedLanguage: string;
+  userPreferedLanguage: string | null;
   isUploadingFiles: boolean;
 };
 
@@ -436,7 +436,7 @@ export type LearnerActions = {
     translatedChoices: string[],
   ) => void;
   setGlobalLanguage: (language: string) => void;
-  setUserPreferedLanguage: (language: string) => void;
+  setUserPreferedLanguage: (language: string | null) => void;
   getUserPreferedLanguageFromLTI: () => Promise<string>;
   clearLearnerAnswers: () => void;
   setIsUploadingFiles: (isUploading: boolean) => void;
@@ -765,6 +765,13 @@ export const useLearnerStore = createWithEqualityFn<
         },
         setGlobalLanguage: (language) => set({ globalLanguage: language }),
         setUserPreferedLanguage: (languageCode) => {
+          // A null reset (post-submit) must stay null. Intl.Locale(null)
+          // throws, and the catch below used to turn that into "en" — which
+          // the Header's uiLang URL sync then treated as a language change.
+          if (languageCode === null || languageCode === undefined) {
+            set({ userPreferedLanguage: null });
+            return;
+          }
           try {
             const parsedLocale = new Intl.Locale(languageCode);
             const baseLang = parsedLocale.language;

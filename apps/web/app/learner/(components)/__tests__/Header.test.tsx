@@ -17,6 +17,7 @@ import LearnerHeader from "../Header";
 const mockUseParams = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockSearchParams = jest.fn(() => new URLSearchParams());
 jest.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
   usePathname: () => "/learner/3428/questions",
@@ -25,7 +26,7 @@ jest.mock("next/navigation", () => ({
     replace: mockReplace,
     prefetch: jest.fn(),
   }),
-  useSearchParams: () => ({ get: () => null, toString: () => "" }),
+  useSearchParams: () => mockSearchParams(),
 }));
 
 // --- backend: submitAssignment is the call whose first arg must be the URL id ---
@@ -136,6 +137,7 @@ describe("LearnerHeader submit path", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
   });
 
   it("submits with the assignmentId from the URL, not the (null) store value", async () => {
@@ -258,5 +260,81 @@ describe("LearnerHeader submit path", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe("LearnerHeader post-submit language reset", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("does not re-navigate the questions route after submit when the UI language is not English", async () => {
+    // Prod signature (Sep 2026): for learners on ?uiLang=<non-en>, the reset
+    // after submit turned the store language into "en", the uiLang URL sync
+    // dropped the param with router.replace(<questions path>), and the server
+    // layout for that route created a fresh attempt — bouncing the learner
+    // off their results. English learners have no uiLang param, so nothing
+    // fired for them.
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSearchParams.mockImplementation(() => new URLSearchParams("uiLang=it"));
+    seedLearnerState(null);
+    useLearnerStore.setState({ userPreferedLanguage: "it" });
+    mockSubmitAssignment.mockResolvedValue({
+      id: 999,
+      grade: 0.9,
+      totalPointsEarned: 9,
+      totalPossiblePoints: 10,
+      passed: true,
+      showSubmissionFeedback: true,
+      feedbacksForQuestions: [],
+    });
+
+    jest.useFakeTimers();
+    try {
+      render(<LearnerHeader />);
+      await act(async () => {
+        window.dispatchEvent(new Event("triggerAssignmentSubmission"));
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockPush).toHaveBeenCalledWith("/learner/3428/successPage/999");
+      const questionsRouteNavigations = mockReplace.mock.calls.filter(([url]) =>
+        String(url).includes("/questions"),
+      );
+      expect(questionsRouteNavigations).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe("LearnerHeader duplicate-submit conflict", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+  });
+
+  it("sends the learner to their results when the API reports the attempt was already submitted", async () => {
+    // A retried PATCH (proxy timeout, lost stream) lands on an attempt that is
+    // already graded. The learner must land on those results, not be told
+    // grading is down and that nothing was submitted.
+    const { AttemptAlreadySubmittedError } =
+      jest.requireActual("@/lib/learner");
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    mockSubmitAssignment.mockRejectedValue(
+      new AttemptAlreadySubmittedError(999),
+    );
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockPush).toHaveBeenCalledWith("/learner/3428/successPage/999");
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("grading-modal")).not.toBeInTheDocument();
   });
 });
