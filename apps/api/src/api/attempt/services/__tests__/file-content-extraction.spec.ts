@@ -1,4 +1,5 @@
 /* eslint-disable  */
+import { createHash } from "crypto";
 import { Logger } from "@nestjs/common";
 import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
@@ -285,6 +286,273 @@ describe("FileContentExtractionService - existing .ipynb content handling", () =
 
     expect(result.content).toBe(existingText);
     expect(result.extractedText).toBeUndefined();
+  });
+});
+
+// ─── Notebook structured content (cell blocks + plot images) ──────────────
+
+describe("FileContentExtractionService - notebook structured content", () => {
+  let service: FileContentExtractionService;
+
+  const PNG =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+  function notebookWithCells(cells: unknown[]): Buffer {
+    return Buffer.from(
+      JSON.stringify({
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: { language_info: { name: "python" } },
+        cells,
+      }),
+      "utf8",
+    );
+  }
+
+  function plotCell(source: string, base64: string = PNG) {
+    return {
+      cell_type: "code",
+      source: [source],
+      execution_count: 1,
+      metadata: {},
+      outputs: [
+        {
+          output_type: "display_data",
+          data: {
+            "text/plain": ["<Figure size 640x480>"],
+            "image/png": [base64],
+          },
+        },
+      ],
+    };
+  }
+
+  async function extract(buffer: Buffer) {
+    return await (service as any).extractJupyterNotebook(
+      buffer,
+      "analysis.ipynb",
+    );
+  }
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  it("emits one block per cell with the plot as an image block after it", async () => {
+    const result = await extract(
+      notebookWithCells([
+        { cell_type: "markdown", source: ["# Title\n"], metadata: {} },
+        plotCell("df.plot()\n"),
+      ]),
+    );
+
+    const blocks = result.structuredContent.pages[0].blocks;
+    expect(result.structuredContent.metadata.sourceType).toBe("ipynb");
+    expect(blocks.map((b: any) => b.type)).toEqual([
+      "paragraph",
+      "code",
+      "image",
+    ]);
+    // The image must follow the cell that produced it, so a "code AND output"
+    // criterion can cite both.
+    expect(blocks[1].text).toContain("df.plot()");
+    expect(blocks[2].blockId).toContain("cell2");
+    expect(blocks[2].imageData).toBe(`data:image/png;base64,${PNG}`);
+    expect(blocks[2].imageHash).toHaveLength(64);
+  });
+
+  it("keeps every block on page 1 so feedback never cites a page that does not exist", async () => {
+    const result = await extract(
+      notebookWithCells([
+        plotCell("a()\n"),
+        plotCell("b()\n"),
+        plotCell("c()\n"),
+      ]),
+    );
+
+    const blocks = result.structuredContent.pages[0].blocks;
+    expect(blocks.every((b: any) => b.page === 1)).toBe(true);
+    expect(result.structuredContent.metadata.pageCount).toBe(1);
+  });
+
+  it("strips the line wrapping notebooks apply to base64 payloads", async () => {
+    const wrapped = [PNG.slice(0, 30) + "\n", PNG.slice(30) + "\n"];
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["plot()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              data: { "image/png": wrapped },
+            },
+          ],
+        },
+      ]),
+    );
+
+    const image = result.structuredContent.pages[0].blocks.find(
+      (b: any) => b.type === "image",
+    );
+    expect(image.imageData).toBe(`data:image/png;base64,${PNG}`);
+  });
+
+  it("gives identical plots the same hash so they can be described once", async () => {
+    const result = await extract(
+      notebookWithCells([plotCell("plot()\n"), plotCell("plot()\n")]),
+    );
+
+    const images = result.structuredContent.pages[0].blocks.filter(
+      (b: any) => b.type === "image",
+    );
+    expect(images).toHaveLength(2);
+    expect(images[0].imageHash).toBe(images[1].imageHash);
+  });
+
+  it("keeps the block but drops the payload once the image cap is reached", async () => {
+    // 14 distinct plots against a cap of 12.
+    const cells = Array.from({ length: 14 }, (_, index) =>
+      plotCell(
+        `plot${index}()\n`,
+        PNG.slice(0, -4) + `${index}`.padStart(4, "A"),
+      ),
+    );
+    const result = await extract(notebookWithCells(cells));
+
+    const images = result.structuredContent.pages[0].blocks.filter(
+      (b: any) => b.type === "image",
+    );
+    expect(images).toHaveLength(14);
+    expect(images.filter((b: any) => b.imageData).length).toBe(12);
+    // The grader must still learn a plot exists rather than seeing nothing.
+    expect(images[13].imageData).toBeUndefined();
+    expect(images[13].text).toContain("image cap reached");
+  });
+
+  it("skips vector output rather than sending markup to a vision model", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["plot()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              data: { "image/svg+xml": ["<svg></svg>"] },
+            },
+          ],
+        },
+      ]),
+    );
+
+    const blocks = result.structuredContent.pages[0].blocks;
+    expect(blocks.some((b: any) => b.type === "image")).toBe(false);
+    expect(result.extractedText).toContain("[image/svg+xml]:");
+  });
+
+  it("skips a single image larger than the per-image budget", async () => {
+    const huge = "A".repeat(2_100_000);
+    const result = await extract(
+      notebookWithCells([plotCell("plot()\n", huge)]),
+    );
+
+    const blocks = result.structuredContent.pages[0].blocks;
+    expect(blocks.some((b: any) => b.type === "image")).toBe(false);
+  });
+
+  it("hashes the notebook bytes, not the graded view", async () => {
+    const buffer = notebookWithCells([plotCell("plot()\n")]);
+    const result = await extract(buffer);
+
+    const expected = createHash("sha256").update(buffer).digest("hex");
+    expect(result.structuredContent.metadata.checksum).toBe(expected);
+  });
+
+  it("drops the matplotlib figure repr when a real image accompanies it", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["df.plot()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              data: {
+                "text/plain": ["<Figure size 800x500 with 1 Axes>"],
+                "image/png": [PNG],
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    // "<Figure size ... with 1 Axes>" is printed identically by an EMPTY figure,
+    // so it is not evidence a chart was drawn — graders read it as exactly that
+    // and credited blank plots. The described image replaces it.
+    expect(result.extractedText).not.toContain("<Figure size");
+    expect(result.extractedText).toContain("[image/png]: <image data present>");
+  });
+
+  it("keeps the figure repr when there is no image to describe", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["fig = plt.figure()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "execute_result",
+              execution_count: 1,
+              data: { "text/plain": ["<Figure size 640x480 with 0 Axes>"] },
+            },
+          ],
+        },
+      ]),
+    );
+
+    // With no image attached it is the only trace of the figure at all.
+    expect(result.extractedText).toContain("<Figure size 640x480 with 0 Axes>");
+  });
+
+  it("keeps ordinary text output that sits alongside an image", async () => {
+    const result = await extract(
+      notebookWithCells([
+        {
+          cell_type: "code",
+          source: ["report()\n"],
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              data: {
+                "text/plain": ["Revenue by month: 12 rows"],
+                "image/png": [PNG],
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(result.extractedText).toContain("Revenue by month: 12 rows");
+  });
+
+  it("returns no structured content when the notebook cannot be parsed", async () => {
+    const result = await extract(Buffer.from("{not json", "utf8"));
+
+    expect(result.structuredContent).toBeUndefined();
+    expect(result.extractedText).toContain("FALLBACK EXTRACTION");
   });
 });
 
@@ -1639,6 +1907,31 @@ describe("FileContentExtractionService.extractJupyterNotebook output handling", 
         {
           output_type: "display_data",
           data: {
+            "text/plain": ["Accuracy: 0.94 across 12 folds"],
+            "image/png": ["iVBORw0KGgoAAAANSUhEUg" + "A".repeat(500)],
+          },
+        },
+      ]),
+    ]);
+
+    expect(text).toContain("Accuracy: 0.94 across 12 folds");
+    expect(text).toContain("[image/png]: <image data present>");
+    expect(text).not.toContain("iVBORw0KGgo");
+  });
+
+  /**
+   * The one text payload that is NOT kept beside an image. matplotlib's figure
+   * repr is printed identically by an empty figure and a full one, so it is no
+   * evidence a chart was drawn — and graders read it as exactly that, awarding
+   * full marks to notebooks whose plots never rendered. The image itself is
+   * described at grading time, which supersedes the repr entirely.
+   */
+  it("drops the matplotlib figure repr when a describable image accompanies it", async () => {
+    const text = await extractNotebook([
+      codeCell("plt.plot(x, y)", [
+        {
+          output_type: "display_data",
+          data: {
             "text/plain": ["<Figure size 640x480 with 1 Axes>"],
             "image/png": ["iVBORw0KGgoAAAANSUhEUg" + "A".repeat(500)],
           },
@@ -1646,9 +1939,22 @@ describe("FileContentExtractionService.extractJupyterNotebook output handling", 
       ]),
     ]);
 
-    expect(text).toContain("<Figure size 640x480 with 1 Axes>");
+    expect(text).not.toContain("<Figure size");
     expect(text).toContain("[image/png]: <image data present>");
-    expect(text).not.toContain("iVBORw0KGgo");
+  });
+
+  it("keeps the figure repr when there is no image to describe", async () => {
+    const text = await extractNotebook([
+      codeCell("fig = plt.figure()", [
+        {
+          output_type: "execute_result",
+          data: { "text/plain": ["<Figure size 640x480 with 0 Axes>"] },
+        },
+      ]),
+    ]);
+
+    // With no image attached it is the only trace of the figure at all.
+    expect(text).toContain("<Figure size 640x480 with 0 Axes>");
   });
 
   it("caps an oversized rich-output text payload", async () => {

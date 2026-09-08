@@ -22,8 +22,37 @@ import {
 } from "../common/interfaces/attempt.interface";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
-import { CanonicalSubmission } from "./structured-content.models";
+import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../../llm/features/grading/constants";
+import { ContentBlock, CanonicalSubmission } from "./structured-content.models";
 import { PdfStructureExtractorService } from "./pdf-structure-extractor.service";
+
+/**
+ * Notebook plots are described by the vision pass at grading time, which costs
+ * a model call each. Cap how many carry image data; blocks past the cap are
+ * still emitted (so the grader knows a plot exists) but without the payload.
+ */
+const MAX_DESCRIBED_NOTEBOOK_IMAGES = 12;
+
+/** Skip absurd single images outright rather than holding them in memory. */
+const MAX_NOTEBOOK_IMAGE_BYTES = 1_500_000;
+
+/** Notebook output MIME types worth sending to a vision model. */
+const DESCRIBABLE_IMAGE_MIMES = new Set(["image/png", "image/jpeg"]);
+
+/**
+ * matplotlib's figure repr, e.g. "<Figure size 800x600 with 1 Axes>". An empty
+ * figure prints exactly the same line as a full one, so it carries no evidence
+ * about what was drawn.
+ */
+const MATPLOTLIB_FIGURE_REPR = /^<Figure size [\d.x]+ with \d+ Axes?>$/;
+
+interface NotebookImage {
+  mime: string;
+  /** Data URL — matches what the PDF extractor emits. */
+  imageData: string;
+  hash: string;
+  byteLength: number;
+}
 
 export interface ExtractedFileContent {
   filename: string;
@@ -723,6 +752,7 @@ export class FileContentExtractionService {
           content: notebookContent,
           fileType: file.fileType,
           extractedText: extractedNotebook.extractedText,
+          structuredContent: extractedNotebook.structuredContent,
           metadata: {
             size: file.content.length,
             encoding: extractedNotebook.encoding,
@@ -794,6 +824,7 @@ export class FileContentExtractionService {
       extractedText: extractedContent.extractedText,
       archiveListing: extractedContent.archiveListing,
       archiveEntries: extractedContent.archiveEntries,
+      structuredContent: extractedContent.structuredContent,
       metadata: {
         size: fileContent.length,
         encoding: extractedContent.encoding,
@@ -860,6 +891,7 @@ export class FileContentExtractionService {
     detectedLanguage?: string;
     archiveListing?: string;
     archiveEntries?: ArchiveEntryContent[];
+    structuredContent?: CanonicalSubmission;
     additionalMetadata?: Record<string, number | boolean | string>;
   }> {
     const fileExtension = filename.split(".").pop()?.toLowerCase() || "";
@@ -942,6 +974,7 @@ export class FileContentExtractionService {
     encoding?: string;
     archiveListing?: string;
     archiveEntries?: ArchiveEntryContent[];
+    structuredContent?: CanonicalSubmission;
     additionalMetadata?: Record<string, number | boolean | string>;
   } | null> {
     switch (extension) {
@@ -1462,6 +1495,7 @@ export class FileContentExtractionService {
     text: string;
     extractedText: string;
     encoding: string;
+    structuredContent?: CanonicalSubmission;
     additionalMetadata: { cellCount: number; outputCount: number };
   }> {
     try {
@@ -1493,6 +1527,17 @@ export class FileContentExtractionService {
       }
       extractedText += "\n";
 
+      // Each cell's text is built in isolation so the same pass can feed both
+      // views: `extractedText` (concatenated, byte-for-byte what this always
+      // produced) and the structured blocks below, where a cell is one block
+      // and its plots ride alongside as image blocks.
+      const cells: {
+        index: number;
+        type: JupyterCell["cell_type"];
+        text: string;
+        images: NotebookImage[];
+      }[] = [];
+
       for (const [index, cell] of (notebook.cells || []).entries()) {
         cellCount++;
         this.logger.debug(
@@ -1500,88 +1545,101 @@ export class FileContentExtractionService {
             `outputs=${cell.outputs?.length || 0}`,
         );
 
-        extractedText += `\n=== CELL ${
-          index + 1
-        } [${cell.cell_type.toUpperCase()}]`;
+        let cellText = "";
+        const cellImages: NotebookImage[] = [];
+
+        cellText += `\n=== CELL ${index + 1} [${cell.cell_type.toUpperCase()}]`;
         if (cell.execution_count) {
-          extractedText += ` [${cell.execution_count}]`;
+          cellText += ` [${cell.execution_count}]`;
         }
-        extractedText += " ===\n";
+        cellText += " ===\n";
 
         if (cell.metadata && Object.keys(cell.metadata).length > 0) {
-          extractedText += `Metadata: ${JSON.stringify(cell.metadata)}\n`;
+          cellText += `Metadata: ${JSON.stringify(cell.metadata)}\n`;
         }
 
         const source = Array.isArray(cell.source)
           ? cell.source.join("")
           : cell.source || "";
 
-        extractedText += source;
-        if (!source.endsWith("\n")) extractedText += "\n";
+        cellText += source;
+        if (!source.endsWith("\n")) cellText += "\n";
 
         if (
           cell.cell_type === "code" &&
           cell.outputs &&
           cell.outputs.length > 0
         ) {
-          extractedText += "\n--- OUTPUT ---\n";
+          cellText += "\n--- OUTPUT ---\n";
 
           for (const [outIdx, output] of cell.outputs.entries()) {
             outputCount++;
 
-            if (outIdx > 0) extractedText += "\n";
+            if (outIdx > 0) cellText += "\n";
 
             switch (output.output_type) {
               case "stream": {
                 const text = Array.isArray(output.text)
                   ? output.text.join("")
                   : output.text || "";
-                extractedText += `[${
+                cellText += `[${
                   output.name || "stdout"
                 }]:\n${this.capNotebookOutputText(text)}`;
                 break;
               }
 
               case "execute_result": {
-                extractedText += `[Execute Result`;
+                cellText += `[Execute Result`;
                 if (output.execution_count) {
-                  extractedText += ` #${output.execution_count}`;
+                  cellText += ` #${output.execution_count}`;
                 }
-                extractedText += `]:\n`;
+                cellText += `]:\n`;
 
                 if (output.data) {
-                  extractedText += this.extractJupyterOutputData(output.data);
+                  const extracted = this.extractJupyterOutputData(output.data);
+                  cellText += extracted.text;
+                  cellImages.push(...extracted.images);
                 }
                 break;
               }
 
               case "error": {
-                extractedText += `[ERROR: ${output.ename}]\n`;
-                extractedText += `${output.evalue}\n`;
+                cellText += `[ERROR: ${output.ename}]\n`;
+                cellText += `${output.evalue}\n`;
                 if (output.traceback && output.traceback.length > 0) {
-                  extractedText += "\nTraceback:\n";
+                  cellText += "\nTraceback:\n";
                   for (const line of output.traceback) {
-                    extractedText += this.stripAnsiCodes(line) + "\n";
+                    cellText += this.stripAnsiCodes(line) + "\n";
                   }
                 }
                 break;
               }
 
               case "display_data": {
-                extractedText += "[Display Data]:\n";
+                cellText += "[Display Data]:\n";
                 if (output.data) {
-                  extractedText += this.extractJupyterOutputData(output.data);
+                  const extracted = this.extractJupyterOutputData(output.data);
+                  cellText += extracted.text;
+                  cellImages.push(...extracted.images);
                 }
                 break;
               }
 
               default:
-                extractedText += `[Unknown output type: ${output.output_type}]\n`;
+                cellText += `[Unknown output type: ${output.output_type}]\n`;
             }
           }
         }
 
-        extractedText += "\n";
+        cellText += "\n";
+
+        extractedText += cellText;
+        cells.push({
+          index: index + 1,
+          type: cell.cell_type,
+          text: cellText,
+          images: cellImages,
+        });
       }
 
       this.logger.debug(
@@ -1589,10 +1647,18 @@ export class FileContentExtractionService {
           `(${extractedText.length} chars)`,
       );
 
+      const structuredContent = this.buildNotebookStructuredContent(
+        filename,
+        buffer,
+        notebook,
+        cells,
+      );
+
       return {
         text: extractedText,
         extractedText: extractedText,
         encoding: "utf8",
+        structuredContent,
         additionalMetadata: {
           cellCount,
           outputCount,
@@ -1642,8 +1708,142 @@ export class FileContentExtractionService {
     }
   }
 
-  private extractJupyterOutputData(data: Record<string, unknown>): string {
+  /**
+   * Build the canonical block view of a notebook: one block per cell, with each
+   * cell's plots as image blocks placed directly after the cell that produced
+   * them, so a "code AND its output" criterion can cite both together.
+   *
+   * `page` is deliberately always 1. A notebook is one document; page numbers
+   * are surfaced to learners in feedback, so mapping cell index onto page would
+   * cite pages that do not exist. Cell identity lives in the blockId instead.
+   */
+  private buildNotebookStructuredContent(
+    filename: string,
+    buffer: Buffer,
+    notebook: JupyterNotebook,
+    cells: {
+      index: number;
+      type: JupyterCell["cell_type"];
+      text: string;
+      images: NotebookImage[];
+    }[],
+  ): CanonicalSubmission {
+    const language = notebook.metadata?.language_info?.name;
+    const blocks: ContentBlock[] = [];
+    let blockIndex = 1;
+    let describedImages = 0;
+    let cappedImages = 0;
+    let truncatedAtCell: number | null = null;
+
+    for (const cell of cells) {
+      // A pathological notebook must not flood the evidence pipeline. Stop
+      // adding blocks and record where we stopped rather than throwing — a
+      // huge notebook should still grade, just on a bounded view of itself.
+      if (
+        blocks.length + 1 + cell.images.length >
+        MAX_EVIDENCE_BLOCKS_PER_SUBMISSION
+      ) {
+        truncatedAtCell = cell.index;
+        break;
+      }
+
+      const text = cell.text.trim();
+      let cellBlockId: string | undefined;
+      if (text) {
+        cellBlockId = `p1b${blockIndex}_cell${cell.index}`;
+        blocks.push({
+          blockId: cellBlockId,
+          type: cell.type === "code" ? "code" : "paragraph",
+          text,
+          page: 1,
+          ...(cell.type === "code" && language ? { language } : {}),
+        });
+        blockIndex += 1;
+      }
+
+      for (const [imageIndex, image] of cell.images.entries()) {
+        const withinCap = describedImages < MAX_DESCRIBED_NOTEBOOK_IMAGES;
+        if (withinCap) {
+          describedImages += 1;
+        } else {
+          cappedImages += 1;
+        }
+
+        blocks.push({
+          blockId: `p1b${blockIndex}_cell${cell.index}_img${imageIndex + 1}`,
+          type: "image",
+          // Text stands in for the picture until the vision pass fills in
+          // `imageDescription`, and remains the whole story for capped images.
+          text: withinCap
+            ? `[Image output of cell ${cell.index}]`
+            : `[Image output of cell ${cell.index} — not described, image cap reached]`,
+          page: 1,
+          // The cell that drew this plot, stated rather than inferred from
+          // adjacency — grading attaches the description back onto it.
+          ...(cellBlockId ? { producedByBlockId: cellBlockId } : {}),
+          ...(withinCap
+            ? {
+                imageData: image.imageData,
+                imageHash: image.hash,
+              }
+            : {}),
+        });
+        blockIndex += 1;
+      }
+    }
+
+    if (truncatedAtCell !== null) {
+      this.logger.warn(
+        `Notebook block budget exhausted for ${filename}: stopped at cell ` +
+          `${truncatedAtCell} of ${cells.length} (cap ${MAX_EVIDENCE_BLOCKS_PER_SUBMISSION})`,
+      );
+    }
+
+    if (cappedImages > 0) {
+      this.logger.warn(
+        `Notebook image cap reached for ${filename}: described ` +
+          `${describedImages}, left ${cappedImages} undescribed ` +
+          `(cap ${MAX_DESCRIBED_NOTEBOOK_IMAGES})`,
+      );
+    }
+
+    this.logger.debug(
+      `Built notebook structured content for ${filename}: ${blocks.length} blocks, ` +
+        `${describedImages} images carrying data`,
+    );
+
+    const blockText = blocks.map((block) => block.text).join("\n");
+
+    return {
+      submissionId: filename,
+      metadata: {
+        wordCount: blockText.split(/\s+/).filter(Boolean).length,
+        pageCount: 1,
+        blockCount: blocks.length,
+        sourceType: "ipynb",
+        // Identity of the submitted artifact, not of the graded view: hashing
+        // the notebook bytes keeps this stable and free of anything an LLM
+        // later writes onto the blocks.
+        checksum: crypto.createHash("sha256").update(buffer).digest("hex"),
+        extractedAt: new Date().toISOString(),
+      },
+      pages: [{ pageNumber: 1, blocks }],
+    };
+  }
+
+  /**
+   * Renders one output's data payload as text, and separately hands back any
+   * raster image found in it. The text is unchanged from what this always
+   * emitted — the image placeholder stays put, because `extractedText` is the
+   * back-compat view. The captured bytes ride along on the structured blocks
+   * instead, where the grading-time vision pass can turn them into prose.
+   */
+  private extractJupyterOutputData(data: Record<string, unknown>): {
+    text: string;
+    images: NotebookImage[];
+  } {
     let result = "";
+    const images: NotebookImage[] = [];
 
     // Alternate representations of the same result (text/plain + text/html +
     // text/latex) carry the same information; inlining more than the first is
@@ -1658,6 +1858,17 @@ export class FileContentExtractionService {
       "application/javascript",
     ];
 
+    // A plot's text/plain twin is matplotlib's object repr, e.g.
+    // "<Figure size 800x600 with 1 Axes>". It proves a figure OBJECT existed,
+    // never that a chart was drawn — an empty figure prints the identical
+    // line. Graders read it as proof of a rendered chart and awarded full
+    // marks for blank plots, so drop it when the same output carries an image
+    // we will describe properly. Kept when there is no image, where it is the
+    // only trace of the figure at all.
+    const describableImage = [...DESCRIBABLE_IMAGE_MIMES].some(
+      (mime) => data[mime],
+    );
+
     let textEmitted = false;
     for (const mime of textMimePreference) {
       const content = data[mime];
@@ -1669,6 +1880,15 @@ export class FileContentExtractionService {
         const text = Array.isArray(content)
           ? content.join("")
           : String(content);
+        // Skipping leaves textEmitted false so a genuinely informative mime
+        // later in the preference order can still be emitted.
+        if (
+          mime === "text/plain" &&
+          describableImage &&
+          MATPLOTLIB_FIGURE_REPR.test(text.trim())
+        ) {
+          continue;
+        }
         result += `[${mime}]:\n${this.capNotebookOutputText(text)}\n`;
         textEmitted = true;
       }
@@ -1680,12 +1900,51 @@ export class FileContentExtractionService {
     // base64 or oversized JSON strings.
     for (const [mime, content] of Object.entries(data)) {
       if (!content || textMimePreference.includes(mime)) continue;
-      result += mime.startsWith("image/")
-        ? `[${mime}]: <image data present>\n`
-        : `[${mime}]: <data present>\n`;
+      if (mime.startsWith("image/")) {
+        result += `[${mime}]: <image data present>\n`;
+        // The placeholder is all the TEXT ever carries; the bytes ride out on
+        // `images` so the grading-time vision pass can describe the plot.
+        const image = this.captureNotebookImage(mime, content);
+        if (image) images.push(image);
+        continue;
+      }
+      result += `[${mime}]: <data present>\n`;
     }
 
-    return result;
+    return { text: result, images };
+  }
+
+  /**
+   * Turn a notebook image payload into a data URL the vision pipeline accepts.
+   * Returns null for anything not worth describing: vector markup (SVG is XML,
+   * not a raster a vision model can read), or a single image large enough that
+   * holding it is worse than losing it.
+   */
+  private captureNotebookImage(
+    mime: string,
+    content: unknown,
+  ): NotebookImage | null {
+    if (!DESCRIBABLE_IMAGE_MIMES.has(mime)) return null;
+
+    const raw = Array.isArray(content) ? content.join("") : String(content);
+    // Notebook JSON wraps base64 across lines; strip whitespace before use.
+    const base64 = raw.replaceAll(/\s/g, "");
+    if (!base64) return null;
+
+    const byteLength = Math.floor((base64.length * 3) / 4);
+    if (byteLength > MAX_NOTEBOOK_IMAGE_BYTES) {
+      this.logger.debug(
+        `Skipping oversized notebook image: ${mime}, ~${byteLength} bytes`,
+      );
+      return null;
+    }
+
+    return {
+      mime,
+      imageData: `data:${mime};base64,${base64}`,
+      hash: crypto.createHash("sha256").update(base64).digest("hex"),
+      byteLength,
+    };
   }
 
   private capNotebookOutputText(text: string): string {
