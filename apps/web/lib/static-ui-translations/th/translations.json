@@ -865,6 +865,7 @@
   "Please select a language to continue.": "โปรดเลือกภาษาเพื่อดำเนินการต่อ",
   "Please select a Question Type first.": "โปรดเลือกประเภทคำถามก่อน",
   "Please select the number of variations to generate": "โปรดเลือกจำนวนรูปแบบที่จะสร้าง",
+  "Please wait {time} before retrying": "โปรดรอ {time} ก่อนลองอีกครั้ง",
   "Points": "คะแนน",
   "Points hidden": "จุดที่ซ่อนอยู่",
   "Points:": "คะแนน:",

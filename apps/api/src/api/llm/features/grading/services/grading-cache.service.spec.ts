@@ -231,6 +231,37 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
       expect(fakeRedis.data.has("mark:grading-cache:canonical-new")).toBe(true);
     });
 
+    it("scrubs NUL bytes before writing so Postgres does not reject the row", async () => {
+      // Prod: a learner response containing U+0000 made gradingCache.create
+      // throw 22P05 and failed the whole attempt.
+      const result = makeResult({
+        cacheKey: "canonical-nul",
+        overallFeedback: "fine\u0000work",
+        criteria: [
+          { name: "c1", feedback: "met\u0000" },
+        ] as unknown as ICachedGradingResult["criteria"],
+        metadata: {
+          learnerResponse: "Project Brief\u0000 created",
+        } as unknown as ICachedGradingResult["metadata"],
+      });
+      mockPrisma.gradingCache.create.mockResolvedValue(undefined);
+
+      await service.cacheGradingIfAbsent(result);
+
+      const written = mockPrisma.gradingCache.create.mock.calls[0][0].data;
+      expect(JSON.stringify(written)).not.toContain("\\u0000");
+      expect(written.overallFeedback).toBe("finework");
+    });
+
+    it("returns the graded result instead of failing grading when the cache write fails", async () => {
+      const result = makeResult({ cacheKey: "canonical-db-down" });
+      mockPrisma.gradingCache.create.mockRejectedValue(
+        new Error("connection refused"),
+      );
+
+      await expect(service.cacheGradingIfAbsent(result)).resolves.toBe(result);
+    });
+
     it("returns the existing result when another worker wins insertion", async () => {
       const attempted = makeResult({
         cacheKey: "canonical-race",

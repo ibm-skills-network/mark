@@ -865,6 +865,7 @@
   "Please select a language to continue.": "Veuillez sélectionner une langue pour continuer.",
   "Please select a Question Type first.": "Veuillez d'abord sélectionner un type de question.",
   "Please select the number of variations to generate": "Veuillez sélectionner le nombre de variantes à générer",
+  "Please wait {time} before retrying": "Veuillez patienter {time} avant de réessayer",
   "Points": "Points",
   "Points hidden": "Points cachés",
   "Points:": "Points :",

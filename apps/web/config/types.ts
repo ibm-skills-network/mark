@@ -240,6 +240,7 @@ export type RepoContentItem = {
 export type AuthorAssignmentState = {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
+  name?: string;
   questions: QuestionAuthorStore[];
   questionOrder: number[];
   introduction: string;
@@ -556,6 +557,7 @@ export interface QuestionAuthorStore extends Question {
   alreadyInBackend?: boolean;
   showPoints?: boolean;
   authorComment?: string;
+  gradingContextQuestionIds?: number[];
 }
 
 /**

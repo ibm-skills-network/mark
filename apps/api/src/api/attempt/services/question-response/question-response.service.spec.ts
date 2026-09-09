@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -595,6 +596,66 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
       }),
     );
     expect(result).toEqual({ id: 50, submitted: true, grade: 85 });
+  });
+
+  // Instrumentation wrapping the Prisma client (observed with Instana's
+  // prisma hook) can resolve a failed query with the Error object instead of
+  // rejecting. Each write in the commit path must reject that shape rather
+  // than carry on as if the write happened.
+
+  it("throws when questionResponse.create resolves without an id (swallowed failure)", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    mockTx.questionResponse.create.mockResolvedValue(
+      new Error("Invalid `prisma.questionResponse.create()` invocation"),
+    );
+
+    const gradedItems: GradedItem[] = [
+      {
+        questionId: 1,
+        learnerResponse: "foo",
+        responseDto: { questionId: 1, feedback: [] } as any,
+      },
+    ];
+
+    await expect(
+      service.commitAttemptWithResponses(50, gradedItems, 85, baseUpdateDto),
+    ).rejects.toThrow(InternalServerErrorException);
+    expect(mockTx.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("throws when updateMany resolves without a numeric count (swallowed failure)", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    jest
+      .spyOn(service as any, "saveResponseToDatabase")
+      .mockResolvedValue(undefined);
+    mockTx.assignmentAttempt.updateMany.mockResolvedValue(
+      new Error("Invalid `prisma.assignmentAttempt.updateMany()` invocation"),
+    );
+
+    await expect(
+      service.commitAttemptWithResponses(50, [], 85, baseUpdateDto),
+    ).rejects.toThrow(InternalServerErrorException);
+  });
+
+  it("throws when the post-commit read-back is not a submitted attempt", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    jest
+      .spyOn(service as any, "saveResponseToDatabase")
+      .mockResolvedValue(undefined);
+    mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.assignmentAttempt.findUnique.mockResolvedValue(
+      new Error("Invalid `prisma.assignmentAttempt.findUnique()` invocation"),
+    );
+
+    await expect(
+      service.commitAttemptWithResponses(50, [], 85, baseUpdateDto),
+    ).rejects.toThrow(InternalServerErrorException);
   });
 });
 

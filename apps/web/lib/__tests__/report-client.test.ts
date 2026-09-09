@@ -90,6 +90,27 @@ describe("submitBugReport", () => {
     expect(body.get("assignmentId")).toBe("42");
   });
 
+  it("posts the page URL and browser so the ticket carries the client context", async () => {
+    await submitBugReport(
+      { description: "it broke" },
+      { category: "Flag Button Report", user },
+    );
+
+    const body = (global.fetch as jest.Mock).mock.calls[0][1].body as FormData;
+    expect(body.get("pageUrl")).toBe(window.location.href);
+    expect(typeof body.get("browser")).toBe("string");
+  });
+
+  it("lets the caller override the reporter role", async () => {
+    await submitBugReport(
+      { description: "it broke" },
+      { category: "Issue Report", user, userRole: "author" },
+    );
+
+    const body = (global.fetch as jest.Mock).mock.calls[0][1].body as FormData;
+    expect(body.get("userRole")).toBe("author");
+  });
+
   it("resolves false and logs when the endpoint rejects", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,

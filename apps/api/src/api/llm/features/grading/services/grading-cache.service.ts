@@ -9,6 +9,7 @@ import {
 import { PrismaService } from "src/database/prisma.service";
 import { Prisma } from "@prisma/client";
 import { createRedisConnection } from "src/job-queue/redis.connection";
+import { sanitizeUnicodeForJson } from "src/helpers/sanitize-unicode";
 
 const REDIS_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
@@ -322,6 +323,18 @@ export class GradingCacheService
     }
 
     try {
+      // Postgres rejects NUL (U+0000) and lone surrogates in TEXT/jsonb; a
+      // learner response carrying one used to fail the whole attempt here.
+      const { value: clean, replaced } = sanitizeUnicodeForJson({
+        criteria: result.criteria,
+        overallFeedback: result.overallFeedback,
+        metadata: result.metadata,
+      });
+      if (replaced > 0) {
+        this.logger.warn(
+          `Scrubbed ${replaced} unsafe character(s) from grading cache entry for question ${result.questionId}`,
+        );
+      }
       await this.prisma.gradingCache.create({
         data: {
           cacheKey: result.cacheKey,
@@ -330,11 +343,11 @@ export class GradingCacheService
           answerHash: result.answerHash,
           totalScore: result.totalScore,
           maxScore: result.maxScore,
-          criteria: result.criteria as Prisma.InputJsonValue,
-          overallFeedback: result.overallFeedback,
+          criteria: clean.criteria as Prisma.InputJsonValue,
+          overallFeedback: clean.overallFeedback,
           cachedAt: result.cachedAt,
           hitCount: result.hitCount,
-          metadata: result.metadata as Prisma.InputJsonValue,
+          metadata: clean.metadata as Prisma.InputJsonValue,
         },
       });
       await this.redisSet(result);
@@ -347,7 +360,13 @@ export class GradingCacheService
         const canonical = await this.getCachedGrading(result.cacheKey);
         if (canonical) return canonical;
       }
-      throw error;
+      // The cache is an optimisation: a failed write must not fail the grade.
+      this.logger.error(
+        `Grading cache write failed for question ${result.questionId}; returning uncached result: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      return result;
     }
   }
 

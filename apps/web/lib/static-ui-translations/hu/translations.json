@@ -865,6 +865,7 @@
   "Please select a language to continue.": "A folytatáshoz válasszon nyelvet.",
   "Please select a Question Type first.": "Kérjük, először válasszon egy kérdéstípust.",
   "Please select the number of variations to generate": "Kérjük, válassza ki a generálandó változatok számát",
+  "Please wait {time} before retrying": "Kérjük, várjon {time}, mielőtt újra próbálkozna",
   "Points": "Pontok",
   "Points hidden": "Pontok rejtve",
   "Points:": "Pontok:",

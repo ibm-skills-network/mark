@@ -362,7 +362,11 @@ function Component(props: Props) {
           {effectiveTranslationOn && loadingTranslation && (
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400">
+                {/* Opted out so the 1.2s cycle does not re-scan the whole route. */}
+                <span
+                  data-no-ui-translate="true"
+                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400"
+                >
                   {currentWord}...
                 </span>
               </div>
@@ -515,7 +519,10 @@ function Component(props: Props) {
                   {loadingTranslation ? (
                     <div className="flex items-center justify-center py-8 min-h-[120px] sm:min-h-[200px]">
                       <div className="text-center">
-                        <div className="animate-pulse text-violet-600 mb-2 text-sm">
+                        <div
+                          data-no-ui-translate="true"
+                          className="animate-pulse text-violet-600 mb-2 text-sm"
+                        >
                           {currentWord}...
                         </div>
                         <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">

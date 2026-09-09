@@ -6,7 +6,7 @@ import Button from "../../../../components/Button";
 
 interface Props extends React.ComponentPropsWithoutRef<"div"> {
   disabled: boolean;
-  message: string;
+  message: React.ReactNode;
   label: string;
   href: string;
   className?: string;

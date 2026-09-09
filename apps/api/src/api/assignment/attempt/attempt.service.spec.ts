@@ -775,6 +775,58 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       expect(question.choices[0].feedback).toBeUndefined();
       expect(question.answer).toBeUndefined();
     });
+
+    // The response used to embed every language's translation of every
+    // question. With images inlined in question HTML that multiplied each
+    // image by the language count (assignment 2532 shipped ~4MB attempts,
+    // overflowing the client's localStorage quota). Only the requested
+    // language family may be fetched.
+    it("fetches translations only for the requested language family", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue({
+        ...baseAttempt,
+        questionOrder: [7],
+        questionVariants: [
+          { questionId: 7, questionVariant: null, randomizedChoices: null },
+        ],
+      });
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        questions: [
+          {
+            id: 7,
+            assignmentId: 42,
+            question: "Pick one",
+            type: "SINGLE_CORRECT",
+            totalPoints: 1,
+            choices: [{ choice: "A", isCorrect: true, points: 1 }],
+          },
+        ],
+      });
+      mockPrismaService.translation.findMany.mockResolvedValue([
+        {
+          questionId: 7,
+          variantId: null,
+          languageCode: "zh-CN",
+          translatedText: "选一个",
+          translatedChoices: [{ choice: "甲" }],
+        },
+      ]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "zh-CN");
+
+      expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            languageCode: { startsWith: "zh" },
+          }),
+        }),
+      );
+      const [question] = result.questions;
+      expect(question.translations["zh-CN"]).toEqual(
+        expect.objectContaining({ translatedText: "选一个" }),
+      );
+    });
   });
 
   describe("getLearnerAssignmentAttempt - correct answer visibility", () => {

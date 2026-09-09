@@ -14,6 +14,7 @@ import type {
   SubmitAssignmentResponse,
 } from "@/config/types";
 import {
+  getAttempt,
   getSupportedLanguages,
   getUser,
   submitAssignment,
@@ -44,7 +45,10 @@ import Button from "../../../components/Button";
 import GradingProgressModal, {
   type ProgressState,
 } from "./GradingProgressModal";
-import { isGradingStreamLostError } from "@/lib/learner";
+import {
+  isAttemptAlreadySubmittedError,
+  isGradingStreamLostError,
+} from "@/lib/learner";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -73,6 +77,7 @@ function LearnerHeader() {
   const [
     questions,
     setQuestion,
+    setQuestions,
     setShowSubmissionFeedback,
     activeAttemptId,
     setTotalPointsEarned,
@@ -81,6 +86,7 @@ function LearnerHeader() {
   ] = useLearnerStore((state) => [
     state.questions,
     state.setQuestion,
+    state.setQuestions,
     state.setShowSubmissionFeedback,
     state.activeAttemptId,
     state.setTotalPointsEarned,
@@ -181,6 +187,23 @@ function LearnerHeader() {
     if (!selectedLanguage) return;
     if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
+
+      // The attempt payload only carries the language it was fetched with, so
+      // an in-page switch pulls the new language's translations and merges
+      // them over the store (setQuestions keeps draft answers). Until the
+      // fetch lands the UI falls back to the server-translated question text.
+      if (isInQuestionPage && assignmentId && activeAttemptId) {
+        void getAttempt(
+          assignmentId,
+          activeAttemptId,
+          undefined,
+          selectedLanguage,
+        ).then((attempt) => {
+          if (attempt?.questions?.length) {
+            setQuestions(attempt.questions);
+          }
+        });
+      }
     }
 
     if (!isInQuestionPage && !isAttemptPage && !isSuccessPage) {
@@ -353,7 +376,7 @@ function LearnerHeader() {
         undefined,
       );
 
-      if (res) {
+      if (res && typeof res.id === "number") {
         const { grade, feedbacksForQuestions } = res;
         setTotalPointsEarned(res.totalPointsEarned);
         setTotalPointsPossible(res.totalPossiblePoints);
@@ -408,9 +431,12 @@ function LearnerHeader() {
           router.push(`/learner/${assignmentId}/successPage/${res.id}`);
         }, 1000);
       } else {
-        // submitAssignment resolved without a result (e.g. an SSE finalize
-        // event carrying no payload). Without this branch submitting/modal stay
-        // true forever and the grading modal spins with no error and no exit.
+        // submitAssignment resolved without a usable result: no payload at
+        // all (e.g. an SSE finalize event carrying none), or one missing the
+        // attempt id — navigating with an undefined id lands the learner on
+        // /successPage/undefined and a 404 dialog. Without this branch
+        // submitting/modal stay true forever and the grading modal spins with
+        // no error and no exit.
         toast.error("We couldn't complete your submission. Please try again.");
         setSubmitting(false);
         setShowGradingModal(false);
@@ -419,6 +445,14 @@ function LearnerHeader() {
     } catch (error) {
       setSubmitting(false);
       submitInFlightRef.current = false;
+
+      if (isAttemptAlreadySubmittedError(error)) {
+        // The attempt was already graded (this was a retried PATCH after a
+        // timeout or lost stream). Show those results instead of an error.
+        setShowGradingModal(false);
+        router.push(`/learner/${assignmentId}/successPage/${error.attemptId}`);
+        return;
+      }
 
       if (isGradingStreamLostError(error)) {
         // The submission itself succeeded — only our view of it died. Leave

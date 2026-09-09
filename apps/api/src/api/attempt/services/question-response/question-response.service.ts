@@ -499,6 +499,16 @@ export class QuestionResponseService {
           },
         });
 
+        // Shape check, not paranoia: instrumentation that wraps the Prisma
+        // client can resolve a failed query with the Error object instead of
+        // rejecting. `count` would then be undefined and the conflict check
+        // below would silently pass over a write that never happened.
+        if (typeof updateResult?.count !== "number") {
+          throw new InternalServerErrorException(
+            `Commit for attempt ${assignmentAttemptId} got a malformed updateMany result; aborting.`,
+          );
+        }
+
         if (updateResult.count === 0) {
           throw new ConflictException(
             `Attempt ${assignmentAttemptId} was concurrently submitted. ` +
@@ -506,10 +516,24 @@ export class QuestionResponseService {
           );
         }
 
-        return (tx as PrismaTransactionalClient).assignmentAttempt.findUnique({
+        const committed = await (
+          tx as PrismaTransactionalClient
+        ).assignmentAttempt.findUnique({
           where: { id: assignmentAttemptId },
           select: { id: true, submitted: true, grade: true },
         });
+
+        if (
+          !committed ||
+          typeof committed.id !== "number" ||
+          committed.submitted !== true
+        ) {
+          throw new InternalServerErrorException(
+            `Commit for attempt ${assignmentAttemptId} could not be read back as submitted; aborting.`,
+          );
+        }
+
+        return committed;
       },
       { timeout: 60_000 },
     );
@@ -1118,14 +1142,29 @@ export class QuestionResponseService {
         );
       }
 
-      const learnerResponseJson = sanitizeUnicodeForJson(
-        JSON.stringify(learnerResponse ?? ""),
+      // Sanitize the raw values BEFORE stringifying: JSON.stringify escapes
+      // NUL to the literal sequence `\u0000`, which the scrubber would then
+      // miss but Postgres jsonb still rejects (SqlState 22P05).
+      const learnerResponseClean = sanitizeUnicodeForJson(
+        JSON.parse(JSON.stringify(learnerResponse ?? "")) as unknown,
       );
+      const learnerResponseJson = {
+        value: JSON.stringify(learnerResponseClean.value),
+        replaced: learnerResponseClean.replaced,
+      };
       const feedbackClean = sanitizeUnicodeForJson(
         JSON.parse(JSON.stringify(responseDto.feedback)) as object,
       );
-      const metadataJson = responseDto.metadata
-        ? sanitizeUnicodeForJson(JSON.stringify(responseDto.metadata))
+      const metadataClean = responseDto.metadata
+        ? sanitizeUnicodeForJson(
+            JSON.parse(JSON.stringify(responseDto.metadata)) as object,
+          )
+        : null;
+      const metadataJson = metadataClean
+        ? {
+            value: JSON.stringify(metadataClean.value),
+            replaced: metadataClean.replaced,
+          }
         : null;
       const totalReplaced =
         learnerResponseJson.replaced +
@@ -1154,6 +1193,15 @@ export class QuestionResponseService {
           gradedAt: new Date(),
         },
       });
+
+      // Instrumentation wrapping the Prisma client can resolve a failed
+      // create with the Error object instead of rejecting; treat anything
+      // without a numeric id as the failure it is so the commit aborts.
+      if (typeof result?.id !== "number") {
+        throw new InternalServerErrorException(
+          `QuestionResponse create for attempt ${assignmentAttemptId} question ${questionId} returned no id.`,
+        );
+      }
 
       responseDto.id = result.id;
     } catch (error: unknown) {

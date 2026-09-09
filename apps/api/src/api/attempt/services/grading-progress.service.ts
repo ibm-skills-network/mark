@@ -266,8 +266,10 @@ export class GradingProgressService {
           // ready" signal and must never precede the commit; if a future
           // caller reintroduces that ordering this is how we find out.
           // Throwing here would strand the row at PROCESSING, which is worse
-          // for the learner than a momentarily early COMPLETED.
-          this.logger.warn(
+          // for the learner than a momentarily early COMPLETED. Logged at
+          // error because every firing means a learner was told "done" for
+          // an attempt that never persisted.
+          this.logger.error(
             `grading.progress.completed.before.commit attemptId=${attemptId}`,
           );
         }
@@ -321,14 +323,22 @@ export class GradingProgressService {
   async markFailed(attemptId: number, error: string): Promise<void> {
     try {
       if (attemptId > 0) {
-        await this.prisma.gradingProgress.update({
-          where: { attemptId },
+        // Never downgrade a finished grade: a duplicate submit (409) reaches
+        // this path after the first submit already completed, and overwriting
+        // the row showed "Grading Failed" on a graded attempt.
+        const { count } = await this.prisma.gradingProgress.updateMany({
+          where: { attemptId, status: { not: GradingStatus.COMPLETED } },
           data: {
             status: GradingStatus.FAILED,
             error,
             completedAt: new Date(),
           },
         });
+        if (count === 0) {
+          this.logger.warn(
+            `markFailed: attempt ${attemptId} has no non-completed progress row; left as-is (reason: ${error})`,
+          );
+        }
       }
     } catch (error_) {
       this.logger.error(
