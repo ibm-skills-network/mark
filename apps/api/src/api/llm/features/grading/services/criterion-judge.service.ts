@@ -135,22 +135,25 @@ EVIDENCE SUMMARY:
                 `${grade.criterionId}: ${grade.pointsAwarded}/${grade.maxPoints} | citations: ${grade.citations.join(", ")} | rationale: ${grade.rationale}`,
             )
             .join("\n"),
-        evidence: () =>
-          request.evidence
-            .map((item) => {
-              // The judge reviews grades, not the submission: an excerpt is
-              // enough context. Full-length quotes (sections and the pinned
-              // whole-document view run to 12KB) repeated per criterion would
-              // put a multi-hundred-KB prompt on every judged submission.
-              const citations = item.evidence
-                .map(
-                  (event) => `${event.chunkId}: ${event.quote.slice(0, 300)}`,
-                )
-                .slice(0, 3)
-                .join(" | ");
-              return `${item.criterionId}: ${citations}`;
-            })
-            .join("\n"),
+        evidence: () => {
+          // Judge exactly the evidence the graders saw. Short excerpts can
+          // cut valid source mid-statement and manufacture a grading defect.
+          // Share identical chunks across criteria instead of truncating them.
+          const chunks = new Map<string, string>();
+          const membership = request.evidence.map((item) => {
+            for (const entry of item.evidence) {
+              const key = JSON.stringify([entry.chunkId, entry.quote]);
+              chunks.set(key, `${entry.chunkId}:\n${entry.quote}`);
+            }
+            return `${item.criterionId}: ${
+              item.evidence.map((entry) => entry.chunkId).join(", ") ||
+              "No evidence"
+            }`;
+          });
+          return `${membership.join("\n")}\n\nEVIDENCE CHUNKS:\n${[
+            ...chunks.values(),
+          ].join("\n\n")}`;
+        },
         format_instructions: () => formatInstructions,
       },
     });

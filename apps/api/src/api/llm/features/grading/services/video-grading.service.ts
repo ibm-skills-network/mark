@@ -1,7 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
 import { VideoPresentationQuestionResponseModel } from "src/api/llm/model/video-presentation.question.response.model";
@@ -12,6 +11,16 @@ import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.inte
 import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IVideoPresentationGradingService } from "../interfaces/video-grading.interface";
 import { MODERATION_BLOCK_FEEDBACK } from "../constants";
+
+const VideoGradeSchema = z.object({
+  points: z.number().describe("Points awarded based on the criteria"),
+  feedback: z
+    .string()
+    .describe(
+      "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
+    ),
+});
+type VideoGradeResult = z.infer<typeof VideoGradeSchema>;
 
 @Injectable()
 export class VideoPresentationGradingService
@@ -71,19 +80,6 @@ export class VideoPresentationGradingService
       });
     }
 
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z.number().describe("Points awarded based on the criteria"),
-        feedback: z
-          .string()
-          .describe(
-            "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
-          ),
-      }),
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = new PromptTemplate({
       template: this.loadVideoPresentationGradingTemplate(),
       inputVariables: [],
@@ -101,26 +97,30 @@ export class VideoPresentationGradingService
         total_points: () => totalPoints.toString(),
         scoring_type: () => scoringCriteriaType,
         scoring_criteria: () => JSON.stringify(scoringCriteria),
-        format_instructions: () => formatInstructions,
         grading_type: () => responseType,
         video_config: () => JSON.stringify(videoPresentationConfig ?? {}),
       },
     });
 
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "video_grading",
-      undefined,
-      { safetyIdentifier },
-    );
-
     try {
-      const videoPresentationQuestionResponseModel =
-        await parser.parse(response);
-      return videoPresentationQuestionResponseModel as VideoPresentationQuestionResponseModel;
+      const result =
+        await this.promptProcessor.processStructuredPromptForFeature<VideoGradeResult>(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          "video_grading",
+          VideoGradeSchema,
+          undefined,
+          { safetyIdentifier },
+        );
+      return result as unknown as VideoPresentationQuestionResponseModel;
     } catch (error) {
+      // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that
+      // the structured call can throw — only genuine parse/format failures
+      // should surface as a generic 500.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         `Error parsing video presentation grading response: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -168,9 +168,6 @@ export class VideoPresentationGradingService
     4. Provide detailed, constructive feedback that explains your evaluation.
     5. Include specific examples from the transcript or slides when relevant.
     6. Suggest improvements for future presentations.
-    
-    Respond with a JSON object containing the points awarded and feedback according to the following format:
-    {format_instructions}
     `;
   }
 }

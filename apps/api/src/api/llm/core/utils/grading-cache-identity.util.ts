@@ -1,4 +1,4 @@
-const DEFAULT_GRADING_CACHE_REVISION = "2026-08-05-gpt56";
+const DEFAULT_GRADING_CACHE_REVISION = "2026-09-09-complete-judge-evidence";
 
 /**
  * Return the model identity used by persistent grading caches.

@@ -1,7 +1,6 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
@@ -20,6 +19,16 @@ import {
 } from "../../../llm.constants";
 import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 import { IUrlGradingService } from "../interfaces/url-grading.interface";
+
+const UrlGradeSchema = z.object({
+  points: z.number().describe("Points awarded based on the criteria"),
+  feedback: z
+    .string()
+    .describe(
+      "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
+    ),
+});
+type UrlGradeResult = z.infer<typeof UrlGradeSchema>;
 
 @Injectable()
 export class UrlGradingService implements IUrlGradingService {
@@ -107,19 +116,6 @@ export class UrlGradingService implements IUrlGradingService {
       return this.buildUrlResponseFromPipeline(pipelineResult, totalPoints);
     }
 
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z.number().describe("Points awarded based on the criteria"),
-        feedback: z
-          .string()
-          .describe(
-            "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
-          ),
-      }),
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const responseSpecificInstruction: string =
       RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS[responseType] ?? "";
 
@@ -139,18 +135,16 @@ export class UrlGradingService implements IUrlGradingService {
         total_points: () => totalPoints.toString(),
         scoring_type: () => scoringCriteriaType,
         scoring_criteria: () => JSON.stringify(scoringCriteria),
-        format_instructions: () => formatInstructions,
         grading_type: () => responseType,
         language: () => language ?? "en",
       },
     });
 
-    let response: string;
+    let parsed: UrlGradeResult;
     try {
-      response = await this.processPromptWithRetry(
+      parsed = await this.processStructuredWithRetry(
         prompt,
         assignmentId,
-        totalPoints,
         safetyIdentifier,
       );
     } catch (retryError) {
@@ -165,21 +159,7 @@ export class UrlGradingService implements IUrlGradingService {
       );
     }
 
-    try {
-      const urlBasedQuestionResponseModel = await parser.parse(response);
-      return urlBasedQuestionResponseModel as UrlBasedQuestionResponseModel;
-    } catch (error) {
-      this.logger.error(
-        `Error parsing LLM response: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }. Response: "${response?.slice(0, 200)}..."`,
-      );
-
-      return this.createFallbackUrlResponse(
-        totalPoints,
-        "Failed to parse LLM response",
-      );
-    }
+    return parsed as unknown as UrlBasedQuestionResponseModel;
   }
 
   /**
@@ -249,22 +229,18 @@ export class UrlGradingService implements IUrlGradingService {
     - NO subjective adjectives, NO encouragement, NO praise - be specific and objective
     
     LANGUAGE: {language}
-    
-    Respond with a JSON object containing the points awarded and feedback according to the following format:
-    {format_instructions}
     `;
   }
 
   /**
-   * Process prompt with retry mechanism and fallback model for URL grading
+   * Process prompt with retry mechanism for URL grading, returning a
+   * schema-validated object via native structured output.
    */
-  private async processPromptWithRetry(
+  private async processStructuredWithRetry(
     prompt: PromptTemplate,
     assignmentId: number,
-    _totalPoints: number,
     safetyIdentifier?: string,
-  ): Promise<string> {
-    void _totalPoints;
+  ): Promise<UrlGradeResult> {
     const maxRetries = 3;
     let lastError: Error | null = null;
 
@@ -272,33 +248,23 @@ export class UrlGradingService implements IUrlGradingService {
       try {
         this.logger.debug(`URL grading LLM attempt ${attempt}/${maxRetries}`);
 
-        const response = await this.promptProcessor.processPromptForFeature(
-          prompt,
-          assignmentId,
-          AIUsageType.ASSIGNMENT_GRADING,
-          "url_grading",
-          undefined,
-          { safetyIdentifier },
-        );
+        const result =
+          await this.promptProcessor.processStructuredPromptForFeature<UrlGradeResult>(
+            prompt,
+            assignmentId,
+            AIUsageType.ASSIGNMENT_GRADING,
+            "url_grading",
+            UrlGradeSchema,
+            undefined,
+            { safetyIdentifier },
+          );
 
-        if (this.isValidLLMResponse(response)) {
-          if (attempt > 1) {
-            this.logger.info(
-              `URL grading LLM succeeded on attempt ${attempt}/${maxRetries}`,
-            );
-          }
-          return response;
+        if (attempt > 1) {
+          this.logger.info(
+            `URL grading LLM succeeded on attempt ${attempt}/${maxRetries}`,
+          );
         }
-
-        this.logger.warn(
-          `URL grading LLM returned invalid response on attempt ${attempt}/${maxRetries}: "${response?.slice(
-            0,
-            100,
-          )}..."`,
-        );
-        lastError = new Error(
-          `Invalid LLM response: ${response?.slice(0, 100)}`,
-        );
+        return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         this.logger.warn(
@@ -311,29 +277,12 @@ export class UrlGradingService implements IUrlGradingService {
       }
     }
 
-    try {
-      this.logger.warn(
-        `URL grading primary model failed after ${maxRetries} attempts, trying fallback approach`,
-      );
-
-      throw lastError || new Error("All URL grading LLM attempts failed");
-    } catch (fallbackError) {
-      this.logger.error(
-        `URL grading fallback also failed: ${
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError)
-        }`,
-      );
-      throw lastError || new Error("All URL grading LLM attempts failed");
-    }
-  }
-
-  /**
-   * Check if LLM response is valid
-   */
-  private isValidLLMResponse(response: string): boolean {
-    return !!(response && response.trim() && response.length >= 10);
+    this.logger.error(
+      `URL grading failed after ${maxRetries} attempts: ${
+        lastError?.message ?? "unknown error"
+      }`,
+    );
+    throw lastError || new Error("All URL grading LLM attempts failed");
   }
 
   /**

@@ -16,10 +16,15 @@ import { USAGE_TRACKER } from "../../llm.constants";
 import {
   ILlmProvider,
   LlmRequestOptions,
+  LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
 import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { logAiInvocation } from "../utils/ai-invocation-log.util";
+import {
+  extractJsonPayload,
+  sanitizeJsonResponse,
+} from "../utils/json-salvage.util";
 import {
   toImageDataList,
   totalImageDataLength,
@@ -179,16 +184,15 @@ export class PromptProcessorService implements IPromptProcessor {
     this.logger.warn(
       `Provider ${llm.key} has no native structured output; falling back to text parsing for feature ${featureKey}`,
     );
-    const raw = await this._processPromptWithProvider(
+    return this.invokeWithTextFallback<T>(
       prompt,
       assignmentId,
       usageType,
       llm,
+      schema,
       options,
       featureKey,
     );
-    const parser = StructuredOutputParser.fromZodSchema(schema);
-    return (await parser.parse(raw)) as T;
   }
 
   async processStructuredPrompt<T>(
@@ -232,16 +236,15 @@ export class PromptProcessorService implements IPromptProcessor {
       return parsed;
     }
 
-    const raw = await this._processPromptWithProvider(
+    return this.invokeWithTextFallback<T>(
       prompt,
       assignmentId,
       usageType,
       llm,
+      schema,
       options,
       "structured_prompt",
     );
-    const parser = StructuredOutputParser.fromZodSchema(schema);
-    return (await parser.parse(raw)) as T;
   }
 
   /**
@@ -295,9 +298,10 @@ export class PromptProcessorService implements IPromptProcessor {
     prompt: PromptTemplate | string,
     assignmentId: number,
     usageType: AIUsageType,
-    llm: any,
+    llm: ILlmProvider,
     options?: LlmRequestOptions,
     purposeLabel?: string,
+    preserveResponse = false,
   ): Promise<string> {
     let input: string;
 
@@ -346,7 +350,7 @@ export class PromptProcessorService implements IPromptProcessor {
       }
     }
 
-    let result: any;
+    let result: LlmResponse;
 
     try {
       result = await llm.invoke(
@@ -366,7 +370,9 @@ export class PromptProcessorService implements IPromptProcessor {
       throw error_;
     }
 
-    const response = this.cleanResponse(result.content);
+    const response = preserveResponse
+      ? result.content
+      : this.cleanResponse(result.content);
 
     logAiInvocation(this.logger, {
       modelKey: llm.key,
@@ -520,6 +526,60 @@ export class PromptProcessorService implements IPromptProcessor {
   private async formatPromptInput(prompt: PromptTemplate): Promise<string> {
     const input = await prompt.format({});
     return decodeIfBase64(input) || input;
+  }
+
+  /**
+   * Text-parsing fallback for providers without native structured output.
+   * Grading prompts no longer embed {format_instructions} (native output does
+   * not need them, and shipping them to OpenAI every call wastes tokens), so
+   * this appends the schema's format instructions here, then salvages and
+   * parses the free-form response.
+   */
+  private async invokeWithTextFallback<T>(
+    prompt: PromptTemplate,
+    assignmentId: number,
+    usageType: AIUsageType,
+    llm: ILlmProvider,
+    schema: ZodTypeAny,
+    options: LlmRequestOptions | undefined,
+    purposeLabel: string,
+  ): Promise<T> {
+    const parser = StructuredOutputParser.fromZodSchema(schema);
+    const promptText = `${await this.formatPromptInput(
+      prompt,
+    )}\n\n${parser.getFormatInstructions()}`;
+    const raw = await this._processPromptWithProvider(
+      promptText,
+      assignmentId,
+      usageType,
+      llm,
+      options,
+      purposeLabel,
+      true,
+    );
+    return this.parseStructuredText<T>(raw, parser);
+  }
+
+  /**
+   * Parse a free-form model response into the schema, restoring the
+   * control-character salvage the per-service graders used to carry: escape raw
+   * control chars inside strings, and on failure retry against the extracted
+   * `{ ... }` payload.
+   */
+  private async parseStructuredText<T>(
+    raw: string,
+    parser: StructuredOutputParser<ZodTypeAny>,
+  ): Promise<T> {
+    const sanitized = sanitizeJsonResponse(raw);
+    try {
+      return (await parser.parse(sanitized)) as T;
+    } catch (error) {
+      const extracted = extractJsonPayload(sanitized);
+      if (extracted && extracted !== sanitized) {
+        return (await parser.parse(extracted)) as T;
+      }
+      throw error;
+    }
   }
 
   /**

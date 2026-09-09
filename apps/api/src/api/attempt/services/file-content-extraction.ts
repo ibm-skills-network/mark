@@ -22,6 +22,11 @@ import {
 } from "../common/interfaces/attempt.interface";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
+import {
+  describeBinaryArtifact,
+  isCompiledArtifact,
+} from "./compiled-artifact.util";
+
 import { CanonicalSubmission } from "./structured-content.models";
 import { PdfStructureExtractorService } from "./pdf-structure-extractor.service";
 
@@ -577,6 +582,33 @@ export class FileContentExtractionService {
       provenanceShadow?: boolean;
     },
   ): Promise<ExtractedFileContent> {
+    const inlineContent =
+      file.content && file.content !== "InCos" ? file.content : "";
+    const header =
+      file.buffer?.subarray(0, 8) ?? Buffer.from(inlineContent.slice(0, 8));
+    if (isCompiledArtifact(header, file.filename)) {
+      if (!file.buffer && !inlineContent && !(file.bucket && file.key)) {
+        throw new BadRequestException(
+          "Binary artifact has no uploaded content or storage reference",
+        );
+      }
+      // Known compiled uploads need only object metadata, not a download of
+      // executable bytes. Keep them present for artifact-based rubrics.
+      const size =
+        !file.buffer && file.bucket && file.key
+          ? ((await this.s3Service.getObjectMetadata(file.bucket, file.key))
+              .ContentLength ?? 0)
+          : (file.buffer?.length ?? Buffer.byteLength(inlineContent));
+      const artifact = describeBinaryArtifact(file.filename, size);
+      return {
+        filename: file.filename,
+        fileType: file.fileType,
+        content: artifact.text,
+        extractedText: artifact.extractedText,
+        metadata: { size, encoding: artifact.encoding },
+      };
+    }
+
     const shadowEnabled = this.isProvenanceShadowEnabled(
       options?.provenanceShadow,
     );
@@ -862,6 +894,10 @@ export class FileContentExtractionService {
     archiveEntries?: ArchiveEntryContent[];
     additionalMetadata?: Record<string, number | boolean | string>;
   }> {
+    if (isCompiledArtifact(buffer, filename)) {
+      return describeBinaryArtifact(filename, buffer.length);
+    }
+
     const fileExtension = filename.split(".").pop()?.toLowerCase() || "";
 
     // Forensic identifiers — computed once from the raw buffer. No PII risk:
@@ -896,7 +932,9 @@ export class FileContentExtractionService {
             `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
             `dispatch=extension durationMs=${Date.now() - startTime}`,
         );
-        return result;
+        return result.text.startsWith("[BINARY CONTENT:")
+          ? describeBinaryArtifact(filename, buffer.length)
+          : result;
       }
 
       const mimeResult = await this.extractByMimeType(
@@ -910,7 +948,9 @@ export class FileContentExtractionService {
             `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
             `dispatch=mimeType durationMs=${Date.now() - startTime}`,
         );
-        return mimeResult;
+        return mimeResult.text.startsWith("[BINARY CONTENT:")
+          ? describeBinaryArtifact(filename, buffer.length)
+          : mimeResult;
       }
 
       const fallbackResult = await this.extractWithFallback(buffer, filename);
@@ -944,6 +984,10 @@ export class FileContentExtractionService {
     archiveEntries?: ArchiveEntryContent[];
     additionalMetadata?: Record<string, number | boolean | string>;
   } | null> {
+    if (isCompiledArtifact(buffer, filename)) {
+      return describeBinaryArtifact(filename, buffer.length);
+    }
+
     switch (extension) {
       case "ipynb":
         return await this.extractJupyterNotebook(buffer, filename);
@@ -1148,14 +1192,6 @@ export class FileContentExtractionService {
       case "vcf":
         return await this.extractVCardContent(buffer);
 
-      // Java bytecode - binary, not readable as source
-      case "class":
-        return {
-          text: `[Java Bytecode: ${filename}]\nThis is a compiled Java .class file (binary bytecode). Source code is not available.`,
-          extractedText: "",
-          encoding: "binary",
-        };
-
       default:
         return null;
     }
@@ -1247,29 +1283,6 @@ export class FileContentExtractionService {
         }
         return null;
       },
-
-      async () => {
-        const strings = this.extractStringsFromBinary(buffer);
-        if (strings.length > 0) {
-          return {
-            text: `[BINARY FILE: ${filename}]\nExtracted strings:\n${strings.join(
-              "\n",
-            )}`,
-            encoding: "binary",
-            extractedText: `Found ${strings.length} text strings`,
-          };
-        }
-        return null;
-      },
-
-      async () => {
-        const analysis = this.analyzeBinaryStructure(buffer);
-        return {
-          text: `[BINARY FILE: ${filename}]\n${analysis}`,
-          encoding: "binary",
-          extractedText: "Binary structure analysis",
-        };
-      },
     ];
 
     for (const strategy of strategies) {
@@ -1281,11 +1294,10 @@ export class FileContentExtractionService {
 
     return {
       text:
-        `[UNRECOGNIZED FILE: ${filename}]\n` +
-        `Size: ${this.formatFileSize(buffer.length)}\n` +
-        `First 100 bytes (hex): ${buffer.slice(0, 100).toString("hex")}\n` +
-        `File signature: ${this.getFileSignature(buffer)}`,
-      encoding: "unknown",
+        `[BINARY ARTIFACT: ${JSON.stringify(filename)}]\n` +
+        `Size: ${buffer.length} bytes. Contents were not inspected as text.`,
+      extractedText: "",
+      encoding: "binary",
     };
   }
 
@@ -1317,33 +1329,6 @@ export class FileContentExtractionService {
         return uniqueChars > 1 && s.length / uniqueChars < 10;
       })
       .slice(0, 100);
-  }
-
-  private analyzeBinaryStructure(buffer: Buffer): string {
-    const analysis: string[] = [];
-
-    analysis.push(`File signature: ${this.getFileSignature(buffer)}`);
-
-    const entropy = this.calculateEntropy(buffer.slice(0, 1024));
-    analysis.push(`Entropy (first 1KB): ${entropy.toFixed(2)} bits`);
-
-    if (entropy > 7.5) {
-      analysis.push("High entropy suggests compressed or encrypted content");
-    } else if (entropy < 3) {
-      analysis.push("Low entropy suggests structured or sparse data");
-    }
-
-    const charDist = this.analyzeCharacterDistribution(
-      buffer.slice(0, this.BINARY_SAMPLE_SIZE),
-    );
-    analysis.push(`Character distribution: ${charDist}`);
-
-    const patterns = this.findCommonPatterns(buffer);
-    if (patterns.length > 0) {
-      analysis.push(`Common patterns found: ${patterns.join(", ")}`);
-    }
-
-    return analysis.join("\n");
   }
 
   private getFileSignature(buffer: Buffer): string {
@@ -1384,75 +1369,6 @@ export class FileContentExtractionService {
     }
 
     return sig;
-  }
-
-  private calculateEntropy(buffer: Buffer): number {
-    const freq = new Array(256).fill(0);
-
-    for (let i = 0; i < buffer.length; i++) {
-      freq[buffer[i]]++;
-    }
-
-    let entropy = 0;
-    const len = buffer.length;
-
-    for (let i = 0; i < 256; i++) {
-      if (freq[i] > 0) {
-        const p = freq[i] / len;
-        entropy -= p * Math.log2(p);
-      }
-    }
-
-    return entropy;
-  }
-
-  private analyzeCharacterDistribution(buffer: Buffer): string {
-    let printable = 0;
-    let control = 0;
-    let extended = 0;
-    let nullBytes = 0;
-
-    for (let i = 0; i < buffer.length; i++) {
-      const byte = buffer[i];
-      if (byte === 0) nullBytes++;
-      else if (byte >= 32 && byte <= 126) printable++;
-      else if (byte < 32 || byte === 127) control++;
-      else extended++;
-    }
-
-    const total = buffer.length;
-    return (
-      `${((printable / total) * 100).toFixed(1)}% printable, ` +
-      `${((control / total) * 100).toFixed(1)}% control, ` +
-      `${((extended / total) * 100).toFixed(1)}% extended, ` +
-      `${((nullBytes / total) * 100).toFixed(1)}% null`
-    );
-  }
-
-  private findCommonPatterns(buffer: Buffer): string[] {
-    const patterns: string[] = [];
-    const sample = buffer.slice(0, Math.min(buffer.length, 1024));
-
-    const sequences = new Map<string, number>();
-    const seqLength = 4;
-
-    for (let i = 0; i <= sample.length - seqLength; i++) {
-      const seq = sample.slice(i, i + seqLength).toString("hex");
-      sequences.set(seq, (sequences.get(seq) || 0) + 1);
-    }
-
-    const sorted = Array.from(sequences.entries())
-      .filter(([_, count]) => count > 5)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-
-    for (const [seq, count] of sorted) {
-      if (seq !== "00000000") {
-        patterns.push(`0x${seq} (${count}x)`);
-      }
-    }
-
-    return patterns;
   }
 
   private async extractJupyterNotebook(
@@ -1880,6 +1796,7 @@ export class FileContentExtractionService {
 
             try {
               const fileBuffer = await entry.buffer();
+              if (isCompiledArtifact(fileBuffer, entry.path)) continue;
               const textResult = this.extractPlainText(fileBuffer);
               if (!textResult.text || textResult.text.includes("[BINARY")) {
                 continue;
@@ -2885,6 +2802,24 @@ export class FileContentExtractionService {
           encoding: "utf16be-bom",
         };
       }
+    }
+
+    // BOM-labelled UTF-16 was decoded above. NULs and dense control bytes
+    // in the remaining input indicate binary data, not another text encoding.
+    const sample = buffer.subarray(0, this.BINARY_SAMPLE_SIZE);
+    const controls = [...sample].filter(
+      (byte) =>
+        byte < 32 && byte !== 9 && byte !== 10 && byte !== 12 && byte !== 13,
+    ).length;
+    if (
+      isCompiledArtifact(buffer) ||
+      sample.includes(0) ||
+      controls > sample.length * 0.01
+    ) {
+      return {
+        text: "[BINARY CONTENT: not inspected as source text]",
+        encoding: "binary",
+      };
     }
 
     const encodings: BufferEncoding[] = ["utf8", "utf16le", "latin1", "ascii"];
