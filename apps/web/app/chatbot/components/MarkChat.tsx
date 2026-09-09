@@ -53,7 +53,7 @@ import {
   uploadFileToStorage,
 } from "@/lib/shared";
 import { useDropzone } from "react-dropzone";
-import { getBaseApiPath } from "@/config/constants";
+import { submitBugReport } from "@/lib/report-client";
 import UserReportsPanel from "./UserReportsPanel";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
@@ -2541,67 +2541,38 @@ Please help me with this.`;
           const reportData = value || specialActions.data;
           const resolvedUserEmail = reportData?.userEmail || user?.userId;
 
-          const formData = new FormData();
-          formData.append("issueType", reportData.issueType);
-          formData.append("description", reportData.description);
-          formData.append("severity", reportData.severity || "info");
-          formData.append("category", reportData.category || "Issue Report");
-          formData.append("userRole", reportData.userRole || "learner");
-          if (resolvedUserEmail) {
-            formData.append("userEmail", resolvedUserEmail);
-          }
-          formData.append(
-            "assignmentId",
-            reportData.assignmentId?.toString() ??
-              learnerContext?.assignmentId?.toString() ??
-              authorContext?.activeAssignmentId?.toString() ??
-              "0",
+          // Shared with the flag button and the error dialog so all three
+          // reports carry the same fields (page URL, browser, toasts).
+          const submitted = await submitBugReport(
+            {
+              issueType: reportData.issueType,
+              description: reportData.description,
+              severity: reportData.severity,
+              screenshot: reportData.screenshot,
+              userEmail: resolvedUserEmail,
+              assignmentId:
+                reportData.assignmentId ??
+                learnerContext?.assignmentId ??
+                authorContext?.activeAssignmentId,
+            },
+            {
+              category: reportData.category || "Issue Report",
+              user,
+              userRole: reportData.userRole,
+            },
           );
 
-          if (reportData.screenshot) {
-            formData.append("screenshot", reportData.screenshot);
-            toast.info("Submitting report with screenshot...");
-          } else {
-            toast.info("Submitting report...");
-          }
+          if (!submitted) return;
 
-          const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
-            method: "POST",
-            headers: {
-              Cookie: document.cookie,
-            },
-            credentials: "include",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({}));
-            throw new Error(
-              errorBody.message || `HTTP error ${response.status}`,
-            );
-          }
-
-          const res = await response.json();
-
-          const resultMessage =
-            res?.content || "Report submitted successfully!";
           useMarkChatStore.getState().addMessage({
             id: Date.now().toString(),
             role: "assistant",
-            content: resultMessage,
+            content: "Report submitted successfully!",
             timestamp: new Date().toISOString(),
           });
 
           dismissAction("report", { assignmentId: reportData.assignmentId });
           setReportPreviewModal({ isOpen: false, type: "report", data: null });
-
-          if (reportData.screenshot) {
-            toast.success(
-              "Issue report with screenshot submitted successfully!",
-            );
-          } else {
-            toast.success("Issue report submitted successfully!");
-          }
         } catch (error) {
           console.error("Error submitting report:", error);
           toast.error("Failed to submit report. Please try again.");
