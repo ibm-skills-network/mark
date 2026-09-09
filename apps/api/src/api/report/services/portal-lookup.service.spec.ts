@@ -63,7 +63,6 @@ describe("PortalLookupService", () => {
       portalName: "Blitz Academy",
       productName: "ICE",
       productId: "fcb9d787-481b-4b3a-95c5-511b8b2b987f",
-      datacenter: "portals-prod-india-academic",
     });
 
     const [url, config] = httpService.get.mock.calls[0];
@@ -178,5 +177,65 @@ describe("PortalLookupService", () => {
     const { service, httpService } = make();
     await expect(service.findByHost("  ")).resolves.toBeUndefined();
     expect(httpService.get).not.toHaveBeenCalled();
+  });
+
+  it.each(["lookup", "token", "revoked token"])(
+    "recovers immediately after a failed %s request",
+    async (failure) => {
+      const { service, httpService } = make();
+      httpService.get.mockReturnValue(of({ data: { data: [portal()] } }));
+      if (failure === "token") {
+        httpService.post.mockReturnValueOnce(
+          throwError(() => new Error("unavailable")),
+        );
+      } else {
+        httpService.get.mockReturnValueOnce(
+          throwError(() =>
+            Object.assign(new Error("unavailable"), {
+              response: { status: failure === "revoked token" ? 401 : 503 },
+            }),
+          ),
+        );
+      }
+      await expect(
+        service.findByHost("blitzacademy.skillsnetwork.site"),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.findByHost("blitzacademy.skillsnetwork.site"),
+      ).resolves.toMatchObject({ productName: "ICE" });
+      expect(httpService.post).toHaveBeenCalledTimes(
+        failure === "lookup" ? 1 : 2,
+      );
+    },
+  );
+
+  it("normalizes domains the same way as portal-manager", async () => {
+    const { service, httpService } = make();
+    httpService.get.mockReturnValue(
+      of({
+        data: {
+          data: [
+            portal({
+              domain: "https://www.blitzacademy.skillsnetwork.site?x=1#section",
+            }),
+          ],
+        },
+      }),
+    );
+    await expect(
+      service.findByHost("WWW.BLITZACADEMY.SKILLSNETWORK.SITE"),
+    ).resolves.toMatchObject({ productName: "ICE" });
+  });
+
+  it("evicts old hosts instead of retaining every lookup forever", async () => {
+    const { service, httpService } = make();
+    httpService.get.mockReturnValue(of({ data: { data: [] } }));
+    for (let index = 0; index <= 1000; index++) {
+      await service.findByHost(`portal${index}.example`);
+    }
+    await service.findByHost("portal1000.example");
+    expect(httpService.get).toHaveBeenCalledTimes(1001);
+    await service.findByHost("portal0.example");
+    expect(httpService.get).toHaveBeenCalledTimes(1002);
   });
 });

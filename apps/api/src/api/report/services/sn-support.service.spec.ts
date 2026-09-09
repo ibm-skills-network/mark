@@ -43,7 +43,7 @@ describe("SnSupportService", () => {
     );
   };
 
-  it("reports configured only when both URL and token are set", () => {
+  it("reports configured when the endpoint is set", () => {
     expect(service.isConfigured()).toBe(true);
     configService.get.mockReturnValue(undefined);
     expect(service.isConfigured()).toBe(false);
@@ -264,6 +264,58 @@ describe("SnSupportService", () => {
       expect(sentBody.metadata.portalUrl).toBeUndefined();
     },
   );
+
+  it("keeps a valid long page URL without rejecting its metadata copy", async () => {
+    mockTicketResponse();
+    const pageUrl =
+      "https://mark.skills.network/learner?context=" + "x".repeat(600);
+    await expect(
+      service.createTicket({
+        title: "Report",
+        description: "Details",
+        reporterEmail: "learner@example.com",
+        pageUrl,
+      }),
+    ).resolves.toMatchObject({ ticketKey: "SUPPORT-104" });
+    const body = httpService.post.mock.calls[0][1];
+    expect(body.pageUrl).toBe(pageUrl);
+    expect(body.metadata["mark.pageUrl"]).toBeUndefined();
+  });
+
+  it("drops oversized optional URLs and bounds browser and portal names", async () => {
+    mockTicketResponse();
+    await service.createTicket({
+      title: "Report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      pageUrl: "https://mark.skills.network/" + "x".repeat(2000),
+      browser: "x".repeat(501),
+      portalName: "p".repeat(201),
+    });
+    const body = httpService.post.mock.calls[0][1];
+    expect(body.pageUrl).toBeUndefined();
+    expect(body.browser).toHaveLength(500);
+    expect(body.reporterOrigin).toHaveLength(200);
+  });
+
+  it("uses a product key without requiring the legacy token", async () => {
+    mockTicketResponse();
+    configService.get.mockImplementation((key: string) =>
+      key === "SN_SUPPORT_URL" ? "https://support.skills.network" : undefined,
+    );
+    expect(service.isConfigured()).toBe(true);
+    await service.createTicket(
+      {
+        title: "Report",
+        description: "Details",
+        reporterEmail: "learner@example.com",
+      },
+      "product-key",
+    );
+    expect(httpService.post.mock.calls[0][2].headers.Authorization).toBe(
+      "Bearer product-key",
+    );
+  });
 
   it("rejects a ticket without the reporter email required by v2", async () => {
     await expect(

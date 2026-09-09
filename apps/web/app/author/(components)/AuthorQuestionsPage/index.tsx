@@ -68,8 +68,6 @@ import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
 import { handleJumpToQuestionTitle } from "@/app/Helpers/handleJumpToQuestion";
 import ImportModal from "../ImportModal";
-// Browser/OS detection moved to @/lib/client-context, where the report
-// submitters use it; the snapshot builder that lived here had no callers.
 
 interface Props {
   assignmentId: number;

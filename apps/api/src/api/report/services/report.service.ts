@@ -960,8 +960,8 @@ export class ReportsService {
     // two products, since SN Support's idempotency is per product.
     const portalContext = {
       portalHost: portal.portalHost,
-      portalName: portal.portalName ?? detailString("portalName"),
-      portalUrl: portal.portalUrl ?? detailString("portalUrl"),
+      portalName: portal.portalName,
+      portalUrl: portal.portalUrl,
     };
     const canForward =
       this.snSupportService.isConfigured() && safeUserEmail !== "Unknown";

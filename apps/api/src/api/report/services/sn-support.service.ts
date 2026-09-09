@@ -84,6 +84,10 @@ export class SnSupportService {
    * with a warning rather than throwing and losing the whole report.
    */
   private optionalHttpUrl(field: string, value?: string): string | undefined {
+    if (value && value.length > 2000) {
+      this.logger.warn(`Dropping oversized ${field} from SN ticket`);
+      return;
+    }
     try {
       return normalizeHttpUrl(field, value);
     } catch {
@@ -130,10 +134,7 @@ export class SnSupportService {
       );
     }
 
-    const reporterOrigin = ticket.portalName?.trim();
-    if (reporterOrigin && reporterOrigin.length > 200) {
-      throw new BadRequestException("SN Support reporter origin is too long");
-    }
+    const reporterOrigin = ticket.portalName?.trim().slice(0, 200);
 
     const metadata: Record<string, string> = {
       "mark.requestedPriority":
@@ -146,14 +147,14 @@ export class SnSupportService {
       const normalizedValue = value?.trim();
       if (!normalizedValue) return;
       if (normalizedValue.length > 500) {
-        throw new BadRequestException(
-          `SN Support metadata value is too long: ${key}`,
-        );
+        this.logger.warn(`Dropping oversized SN Support metadata: ${key}`);
+        return;
       }
       metadata[key] = normalizedValue;
     };
 
     const pageUrl = this.optionalHttpUrl("page URL", ticket.pageUrl);
+    const browser = ticket.browser?.trim().slice(0, 500);
 
     addMetadata("portalName", ticket.portalName);
     addMetadata("toolName", ticket.toolName);
@@ -172,7 +173,7 @@ export class SnSupportService {
     // path, so those values are duplicated here until SN Support registers a
     // "Mark" mapper, after which this duplication can go.
     addMetadata("mark.pageUrl", pageUrl);
-    addMetadata("mark.browser", ticket.browser);
+    addMetadata("mark.browser", browser);
     // SN Support surfaces an opening screenshot from metadata.imageUrl.
     addMetadata(
       "imageUrl",
@@ -186,7 +187,7 @@ export class SnSupportService {
       source: "Mark",
       reporterOrigin,
       pageUrl,
-      browser: ticket.browser,
+      browser,
       chatHistoryUrl: this.optionalHttpUrl(
         "chat history URL",
         ticket.chatHistoryUrl,

@@ -106,7 +106,8 @@ api:
     SUPPORT_TOKEN_LABS: ""
     SUPPORT_TOKEN_FACULTY: ""
     # portal-manager is the source of truth for which product owns a portal
-    # hostname. Unset means every ticket falls back to the Portals product.
+    # hostname. Without it, known LTI platforms use their product key; other
+    # hosts use Portals, then the legacy key if Portals is unset.
     PORTAL_MANAGER_API_BASE_URL: ""
     PORTAL_MANAGER_TOKEN_URL: ""
     PORTAL_MANAGER_UID: ""

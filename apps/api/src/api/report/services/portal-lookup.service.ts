@@ -14,7 +14,6 @@ export interface PortalRecord {
   portalName: string;
   productName?: string;
   productId?: string;
-  datacenter?: string;
 }
 
 interface PortalManagerPortal {
@@ -22,7 +21,6 @@ interface PortalManagerPortal {
   domain?: string;
   support_product_id?: string;
   support_product_name?: string;
-  datacenter?: string;
   is_active?: boolean;
 }
 
@@ -33,6 +31,7 @@ const ENTRY_POINT_LABELS = new Set(["www", "apps", "courses"]);
 
 const REQUEST_TIMEOUT_MS = 3000;
 const CACHE_TTL_MS = 15 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 1000;
 // Refresh slightly early so a token cannot expire mid-flight.
 const TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
 
@@ -66,16 +65,21 @@ export class PortalLookupService {
    * never rejects: a lookup failure must degrade routing, not fail a report.
    */
   async findByHost(host?: string): Promise<PortalRecord | undefined> {
-    const normalizedHost = host?.trim().toLowerCase();
+    const normalizedHost = normalizeDomain(host);
     if (!normalizedHost || !this.isConfigured()) return;
 
-    const candidates = [normalizedHost, stripEntryPointLabel(normalizedHost)];
-    for (const candidate of candidates) {
-      if (!candidate) continue;
-      const record = await this.lookupCached(candidate);
+    try {
+      const record = await this.lookupCached(normalizedHost);
       if (record) return record;
+      const parent = stripEntryPointLabel(normalizedHost);
+      return parent ? await this.lookupCached(parent) : undefined;
+    } catch (error) {
+      this.logger.warn("portal-manager lookup failed", {
+        host: normalizedHost,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
     }
-    return;
   }
 
   private setting(key: string): string | undefined {
@@ -87,7 +91,11 @@ export class PortalLookupService {
     const cached = this.cache.get(host);
     if (cached && cached.expiresAt > Date.now()) return cached.record;
 
+    this.cache.delete(host);
     const record = await this.lookup(host);
+    if (this.cache.size >= MAX_CACHE_ENTRIES) {
+      this.cache.delete(this.cache.keys().next().value);
+    }
     // Misses are cached too, so an unknown host does not call out on every
     // report.
     this.cache.set(host, { record, expiresAt: Date.now() + CACHE_TTL_MS });
@@ -96,7 +104,7 @@ export class PortalLookupService {
 
   private async lookup(host: string): Promise<PortalRecord | undefined> {
     const token = await this.token();
-    if (!token) return;
+    if (!token) throw new Error("No portal-manager access token available");
 
     const baseUrl = this.setting("PORTAL_MANAGER_API_BASE_URL")?.replace(
       /\/+$/,
@@ -126,14 +134,16 @@ export class PortalLookupService {
         portalName: portal.name?.trim() || host,
         productName: portal.support_product_name?.trim() || undefined,
         productId: portal.support_product_id?.trim() || undefined,
-        datacenter: portal.datacenter?.trim() || undefined,
       };
     } catch (error) {
-      this.logger.warn("portal-manager lookup failed", {
-        host,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
+      // A revoked token must be refreshed on the next report. Do not cache
+      // transport/auth failures as unknown portals for the full cache TTL.
+      if (
+        (error as { response?: { status?: number } }).response?.status === 401
+      ) {
+        this.accessToken = undefined;
+      }
+      throw error;
     }
   }
 
@@ -202,7 +212,7 @@ function normalizeDomain(domain?: string): string | undefined {
   return trimmed
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
-    .replace(/[/:].*$/, "");
+    .replace(/[#/:?].*$/, "");
 }
 
 function stripEntryPointLabel(host: string): string | undefined {

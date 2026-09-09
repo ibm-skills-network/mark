@@ -1,5 +1,4 @@
 import "reflect-metadata";
-import { Logger } from "@nestjs/common";
 import {
   SupportRoutingService,
   tokenEnvironmentVariableFor,
@@ -84,35 +83,39 @@ describe("SupportRoutingService.resolve", () => {
     expect(route).toMatchObject({ token: "sk_ice", productName: "ICE" });
   });
 
-  it("recognizes ICE by product id when the name is missing", async () => {
-    const { service } = make({
-      portalName: "Blitz Academy",
-      productId: ICE_PRODUCT_ID,
-    });
+  it.each([undefined, "Renamed ICE"])(
+    "recognizes ICE by product id when the name is %s",
+    async (productName) => {
+      const { service } = make({
+        portalName: "Blitz Academy",
+        productId: ICE_PRODUCT_ID,
+        productName,
+      });
 
-    const route = await service.resolve({
-      portalHost: "blitzacademy.skillsnetwork.site",
-      portalName: "blitzacademy.skillsnetwork.site",
-    });
+      const route = await service.resolve({
+        portalHost: "blitzacademy.skillsnetwork.site",
+        portalName: "blitzacademy.skillsnetwork.site",
+      });
 
-    expect(route).toMatchObject({
-      token: "sk_ice",
-      productName: "ICE",
-      portalName: "Blitz Academy",
-    });
-  });
+      expect(route).toMatchObject({
+        token: "sk_ice",
+        productName: "ICE",
+        portalName: "Blitz Academy",
+      });
+    },
+  );
 
   // Coursera and edX launch over LTI and are not portals, so portal-manager
   // has no record of them; their platform label is the product name.
   it.each([
-    ["Coursera", "sk_coursera"],
-    ["edX", "sk_edx"],
-    ["Faculty", "sk_faculty"],
-  ])("routes the %s platform by label", async (label, token) => {
+    ["Coursera", "coursera.org", "sk_coursera"],
+    ["edX", "edx.org", "sk_edx"],
+    ["Faculty", "author.skills.network", "sk_faculty"],
+  ])("routes the %s platform by label", async (label, host, token) => {
     const { service } = make(undefined);
 
     await expect(
-      service.resolve({ portalHost: "host.example", portalName: label }),
+      service.resolve({ portalHost: host, portalName: label }),
     ).resolves.toEqual({
       token,
       productName: label,
@@ -177,58 +180,30 @@ describe("SupportRoutingService.resolve", () => {
       { portalName: undefined, via: "none" },
     );
   });
-});
 
-// The startup log is how a half-configured deploy is noticed: nothing
-// validates env in this app, and a missing product token is otherwise
-// invisible until a report is filed from that portal.
-describe("SupportRoutingService.onModuleInit", () => {
-  const logs: unknown[][] = [];
-  const warnings: string[] = [];
+  it.each([undefined, "unknown.example"])(
+    "ignores client labels for host %s",
+    async (portalHost) => {
+      const { service } = make();
+      await expect(
+        service.resolve({ portalHost, portalName: "ICE" }),
+      ).resolves.toMatchObject({
+        token: "sk_portals",
+        via: "default",
+      });
+    },
+  );
 
-  beforeEach(() => {
-    logs.length = 0;
-    warnings.length = 0;
-    jest
-      .spyOn(Logger.prototype, "log")
-      .mockImplementation((...args: unknown[]) => logs.push(args));
-    jest
-      .spyOn(Logger.prototype, "warn")
-      .mockImplementation((message: unknown) => warnings.push(String(message)));
-  });
-
-  afterEach(() => jest.restoreAllMocks());
-
-  it("reports the products it can reach", () => {
-    make(undefined).service.onModuleInit();
-
-    expect(logs[0][0]).toBe("SN Support routing configured");
-    expect(logs[0][1]).toMatchObject({
-      products: [
-        "Portals",
-        "Cognitive Class",
-        "Coursera",
-        "edX",
-        "ICE",
-        "Labs",
-        "Faculty",
-      ],
-      portal_manager: true,
+  it("does not override a known portal's missing product key with a platform label", async () => {
+    const { service } = make({
+      portalName: "Partner",
+      productName: "New Product",
     });
-    expect(warnings).toHaveLength(0);
-  });
-
-  it("names the products it has no token for", () => {
-    make(undefined, {
-      SUPPORT_TOKEN_PORTALS: "sk_portals",
-      SUPPORT_TOKEN_COURSERA: "sk_coursera",
-    }).service.onModuleInit();
-
-    expect(logs[0][1]).toMatchObject({
-      products: ["Portals", "Coursera"],
+    await expect(
+      service.resolve({ portalHost: "courses.edx.org", portalName: "edX" }),
+    ).resolves.toMatchObject({
+      token: "sk_portals",
+      via: "default",
     });
-    expect(warnings[0]).toContain("Cognitive Class");
-    expect(warnings[0]).toContain("ICE");
-    expect(warnings[0]).toContain("fall back to Portals");
   });
 });

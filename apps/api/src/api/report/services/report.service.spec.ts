@@ -21,6 +21,7 @@ const make = () =>
     undefined as never,
     adminEmailService as never,
     undefined as never,
+    undefined as never,
   );
 
 const baseReport = {
@@ -111,6 +112,7 @@ describe("ReportsService.reportIssue", () => {
     issueType: "technical",
     description: "The assignment submission fails",
     attemptId: 84,
+    portal: { portalHost: "coursera.org", portalName: "Coursera" },
     additionalDetails: {
       category: "Submission",
       portalName: "Coursera",
@@ -188,6 +190,30 @@ describe("ReportsService.reportIssue", () => {
     expect(sentTitle).not.toContain("[PROD]");
   });
 
+  it("does not route using untrusted additionalDetails", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-9" }),
+    };
+    const { service, supportRouting } = makeForReportIssue(snSupportService);
+    await service.reportIssue(
+      {
+        ...reportDto,
+        portal: {},
+        additionalDetails: {
+          portalName: "ICE",
+          portalUrl: "https://forged.example",
+        },
+      },
+      session,
+    );
+    expect(supportRouting.resolve).toHaveBeenCalledWith({
+      portalHost: undefined,
+      portalName: undefined,
+      portalUrl: undefined,
+    });
+  });
+
   it("forwards the portal and client context to SN Support and Flo", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(true),
@@ -198,6 +224,7 @@ describe("ReportsService.reportIssue", () => {
     await service.reportIssue(
       {
         ...reportDto,
+        portal: { ...reportDto.portal, portalUrl: "https://www.coursera.org" },
         additionalDetails: {
           ...reportDto.additionalDetails,
           portalUrl: "https://www.coursera.org",

@@ -76,7 +76,7 @@ describe("ReportsController.reportIssue", () => {
     expect(sentDto.portal.portalName).toBe("Coursera");
   });
 
-  it("falls back to the client's portal name when the session has no return URL", async () => {
+  it("ignores the client's portal name when the session has no return URL", async () => {
     await make().reportIssue(
       { ...dto, portalName: "Cognitive Class" } as never,
       undefined as never,
@@ -84,7 +84,7 @@ describe("ReportsController.reportIssue", () => {
     );
 
     const [sentDto] = service.reportIssue.mock.calls[0];
-    expect(sentDto.portal.portalName).toBe("Cognitive Class");
+    expect(sentDto.portal).toEqual({});
     expect(sentDto.portal.portalUrl).toBeUndefined();
   });
 

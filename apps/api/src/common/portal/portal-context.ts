@@ -41,7 +41,7 @@ const PLATFORM_LABEL_BY_HOST_SUFFIX: Record<string, string> = {
 const PORTAL_NAME_MAX_CHARS = 200;
 const PORTAL_URL_MAX_CHARS = 500;
 
-function platformLabelForHost(host: string): string | undefined {
+export function platformLabelForHost(host: string): string | undefined {
   for (const [suffix, label] of Object.entries(PLATFORM_LABEL_BY_HOST_SUFFIX)) {
     if (host === suffix || host.endsWith(`.${suffix}`)) return label;
   }

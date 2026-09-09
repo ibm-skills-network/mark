@@ -176,12 +176,7 @@ export class ReportsController {
       attemptId: dto.attemptId,
       severity: dto.severity,
       userEmail: resolvedUserEmail,
-      // A client without a launch session (the chat tool posts JSON) may still
-      // name its portal; the session wins whenever it has one.
-      portal: {
-        ...portal,
-        portalName: portal.portalName ?? dto.portalName,
-      },
+      portal,
       additionalDetails,
     };
     return this.reportsService.reportIssue(
