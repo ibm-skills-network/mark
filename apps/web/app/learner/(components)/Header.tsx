@@ -45,7 +45,10 @@ import Button from "../../../components/Button";
 import GradingProgressModal, {
   type ProgressState,
 } from "./GradingProgressModal";
-import { isGradingStreamLostError } from "@/lib/learner";
+import {
+  isAttemptAlreadySubmittedError,
+  isGradingStreamLostError,
+} from "@/lib/learner";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -442,6 +445,14 @@ function LearnerHeader() {
     } catch (error) {
       setSubmitting(false);
       submitInFlightRef.current = false;
+
+      if (isAttemptAlreadySubmittedError(error)) {
+        // The attempt was already graded (this was a retried PATCH after a
+        // timeout or lost stream). Show those results instead of an error.
+        setShowGradingModal(false);
+        router.push(`/learner/${assignmentId}/successPage/${error.attemptId}`);
+        return;
+      }
 
       if (isGradingStreamLostError(error)) {
         // The submission itself succeeded — only our view of it died. Leave
