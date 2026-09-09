@@ -27,7 +27,12 @@ function buildService(processStructuredPromptForFeature: jest.Mock) {
     require("../file-grading.service").FileGradingService.prototype,
   );
   service.logger = mockLogger;
-  service.promptProcessor = { processStructuredPromptForFeature };
+  service.promptProcessor = {
+    processStructuredPromptForFeature,
+    processStructuredPrompt: jest
+      .fn()
+      .mockRejectedValue(new Error("Fallback failed")),
+  };
   service.llmResolver = {
     getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
   };
@@ -81,7 +86,10 @@ describe("FileGradingService.processStructuredWithRetry context-length fail-fast
     ).rejects.toThrow();
 
     // 3 primary-model attempts then 1 fallback-model attempt.
-    expect(processStructuredPromptForFeature).toHaveBeenCalledTimes(4);
+    expect(processStructuredPromptForFeature).toHaveBeenCalledTimes(3);
+    expect(
+      service.promptProcessor.processStructuredPrompt,
+    ).toHaveBeenCalledTimes(1);
     expect(service.llmResolver.getModelKeyWithFallback).toHaveBeenCalledTimes(
       1,
     );
@@ -90,6 +98,40 @@ describe("FileGradingService.processStructuredWithRetry context-length fail-fast
     expect(mockLogger.error).not.toHaveBeenCalledWith(
       "file.grading.context.length.exceeded",
       expect.anything(),
+    );
+  });
+  it("invokes the resolved fallback directly after primary failures", async () => {
+    const primary = jest
+      .fn()
+      .mockRejectedValue(new Error("Primary unavailable"));
+    const { service } = buildService(primary);
+    const grade = {
+      points: 2,
+      feedback: "Feedback",
+      analysis: "Analysis",
+      evaluation: "Evaluation",
+      explanation: "Explanation",
+      guidance: "Guidance",
+    };
+    service.llmResolver.getModelKeyWithFallback.mockResolvedValue(
+      "gpt-4.1-mini",
+    );
+    service.promptProcessor.processStructuredPrompt.mockResolvedValue(grade);
+    const prompt = buildPrompt();
+
+    await expect(
+      service.processStructuredWithRetry(prompt, 42, "gpt-4o"),
+    ).resolves.toEqual(grade);
+    expect(primary).toHaveBeenCalledTimes(3);
+    expect(
+      service.promptProcessor.processStructuredPrompt,
+    ).toHaveBeenCalledWith(
+      prompt,
+      42,
+      expect.anything(),
+      expect.anything(),
+      "gpt-4.1-mini",
+      { safetyIdentifier: undefined },
     );
   });
 });

@@ -628,19 +628,12 @@ export class FileGradingService implements IFileGradingService {
               { safetyIdentifier },
             );
 
-        if (this.isValidGrade(result)) {
-          if (attempt > 1) {
-            this.logger.info(
-              `LLM succeeded on attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
-            );
-          }
-          return result;
+        if (attempt > 1) {
+          this.logger.info(
+            `LLM succeeded on attempt ${attempt}/${maxRetries} with model ${primaryModel}`,
+          );
         }
-
-        this.logger.warn(
-          `LLM returned invalid grade on attempt ${attempt}/${maxRetries}`,
-        );
-        lastError = new Error("Invalid LLM grade: missing numeric points");
+        return result;
       } catch (error) {
         // A context_length_exceeded 400 is deterministic for a given prompt:
         // neither a same-model retry nor the fallback-model resend below can
@@ -680,24 +673,17 @@ export class FileGradingService implements IFileGradingService {
       );
 
       const result =
-        await this.promptProcessor.processStructuredPromptForFeature<GradingOutput>(
+        await this.promptProcessor.processStructuredPrompt<GradingOutput>(
           prompt,
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
-          "file_grading",
           FileGradingSchema,
           fallbackModel,
           { safetyIdentifier },
         );
 
-      if (this.isValidGrade(result)) {
-        this.logger.info(`Fallback model ${fallbackModel} succeeded`);
-        return result;
-      }
-
-      this.logger.error(
-        `Fallback model ${fallbackModel} also returned invalid grade`,
-      );
+      this.logger.info(`Fallback model ${fallbackModel} succeeded`);
+      return result;
     } catch (fallbackError) {
       this.logger.error(
         `Fallback model also failed: ${
@@ -709,13 +695,6 @@ export class FileGradingService implements IFileGradingService {
     }
 
     throw lastError || new Error("All LLM attempts failed");
-  }
-
-  /**
-   * Check if a structured grade result is usable
-   */
-  private isValidGrade(result: GradingOutput | undefined | null): boolean {
-    return !!result && typeof result.points === "number";
   }
 
   /**

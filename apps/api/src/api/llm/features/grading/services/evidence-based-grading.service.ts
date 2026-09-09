@@ -412,30 +412,15 @@ LANGUAGE: {language}`,
 
     this.logger.debug(`Calling LLM for criterion: ${criterion.rubricQuestion}`);
 
-    let parsedOutput: EvidenceOutput;
-    try {
-      const structured =
-        await this.promptProcessor.processStructuredPromptForFeature<EvidenceOutput>(
-          prompt,
-          assignmentId,
-          AIUsageType.ASSIGNMENT_GRADING,
-          "file_grading",
-          EvidenceOutputSchema,
-          "gpt-4o-mini",
-        );
-      // Re-validate through the schema so downstream code keeps its guarantees
-      // regardless of which provider (native or text-fallback) produced it.
-      parsedOutput = EvidenceOutputSchema.parse(structured);
-    } catch (parseError) {
-      this.logger.error(
-        `Failed to parse LLM response: ${
-          parseError instanceof Error ? parseError.message : String(parseError)
-        }`,
+    const parsedOutput =
+      await this.promptProcessor.processStructuredPromptForFeature<EvidenceOutput>(
+        prompt,
+        assignmentId,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "file_grading",
+        EvidenceOutputSchema,
+        "gpt-4o-mini",
       );
-      throw new Error(
-        `LLM returned invalid format for criterion ${criterion.id}`,
-      );
-    }
 
     const allowedPoints = criterion.criteria.map((c) => c.points);
     if (!allowedPoints.includes(parsedOutput.pointsAwarded)) {

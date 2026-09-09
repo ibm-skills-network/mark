@@ -145,7 +145,6 @@ export class UrlGradingService implements IUrlGradingService {
       parsed = await this.processStructuredWithRetry(
         prompt,
         assignmentId,
-        UrlGradeSchema,
         safetyIdentifier,
       );
     } catch (retryError) {
@@ -240,7 +239,6 @@ export class UrlGradingService implements IUrlGradingService {
   private async processStructuredWithRetry(
     prompt: PromptTemplate,
     assignmentId: number,
-    schema: typeof UrlGradeSchema,
     safetyIdentifier?: string,
   ): Promise<UrlGradeResult> {
     const maxRetries = 3;
@@ -256,24 +254,17 @@ export class UrlGradingService implements IUrlGradingService {
             assignmentId,
             AIUsageType.ASSIGNMENT_GRADING,
             "url_grading",
-            schema,
+            UrlGradeSchema,
             undefined,
             { safetyIdentifier },
           );
 
-        if (this.isValidGrade(result)) {
-          if (attempt > 1) {
-            this.logger.info(
-              `URL grading LLM succeeded on attempt ${attempt}/${maxRetries}`,
-            );
-          }
-          return result;
+        if (attempt > 1) {
+          this.logger.info(
+            `URL grading LLM succeeded on attempt ${attempt}/${maxRetries}`,
+          );
         }
-
-        this.logger.warn(
-          `URL grading LLM returned invalid grade on attempt ${attempt}/${maxRetries}`,
-        );
-        lastError = new Error("Invalid LLM grade: missing numeric points");
+        return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         this.logger.warn(
@@ -292,17 +283,6 @@ export class UrlGradingService implements IUrlGradingService {
       }`,
     );
     throw lastError || new Error("All URL grading LLM attempts failed");
-  }
-
-  /**
-   * Check if a structured grade result is usable
-   */
-  private isValidGrade(result: UrlGradeResult | undefined | null): boolean {
-    return (
-      !!result &&
-      typeof result.points === "number" &&
-      typeof result.feedback === "string"
-    );
   }
 
   /**
