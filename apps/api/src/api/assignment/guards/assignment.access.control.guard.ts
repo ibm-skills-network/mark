@@ -10,6 +10,7 @@ import { Reflector } from "@nestjs/core";
 import { Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
+  UserRole,
   UserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
@@ -47,6 +48,23 @@ export class AssignmentAccessControlGuard implements CanActivate {
         url: originalUrl,
       });
       throw new ForbiddenException("Invalid assignment ID");
+    }
+
+    // A shared LTI group is not permission to edit every quiz in that group.
+    // AWB/CM authorize collaborators before issuing a launch for this quiz.
+    if (
+      userSession.role === UserRole.AUTHOR &&
+      userSession.assignmentId !== assignmentId
+    ) {
+      this.logger.warn(
+        "assignment_access_denied: author launch targets another assignment",
+        {
+          assignment_id: assignmentId,
+          session_assignment_id: userSession.assignmentId,
+          user_id: userSession.userId,
+        },
+      );
+      throw new ForbiddenException("Access denied to this assignment");
     }
 
     const [assignmentGroup, assignment] = await this.prisma.$transaction([

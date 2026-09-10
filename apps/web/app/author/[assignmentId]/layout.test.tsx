@@ -49,11 +49,12 @@ describe("author assignment layout", () => {
     );
   });
 
-  it("does not mutate the author store during render", () => {
+  it("does not mutate the author store during render", async () => {
     renderToString(
-      <Layout>
-        <div>child</div>
-      </Layout>,
+      await Layout({
+        params: Promise.resolve({ assignmentId: "123" }),
+        children: <div>child</div>,
+      }),
     );
 
     expect(mockSetState).not.toHaveBeenCalled();
@@ -61,9 +62,10 @@ describe("author assignment layout", () => {
 
   it("updates the active assignment id after mount", async () => {
     render(
-      <Layout>
-        <div>child</div>
-      </Layout>,
+      await Layout({
+        params: Promise.resolve({ assignmentId: "123" }),
+        children: <div>child</div>,
+      }),
     );
 
     await waitFor(() => {
