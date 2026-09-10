@@ -66,6 +66,47 @@ export default defineConfig({
         },
       },
     ]),
+
+    // Admin area (tests/admin): the admin flow uses an x-admin-token session,
+    // NOT the learner/author cookie, so these specs spin up FRESH browser
+    // contexts and never rely on a project storageState. Browser-driven, so it
+    // gets a Chrome device but no default auth. No setup dependency: the specs
+    // don't read the bootstrapped assignment cache.
+    {
+      name: "admin-chromium",
+      testMatch: /admin\/.*\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+    },
+
+    // LTI (tests/lti): browser-driven launch specs build their own context and
+    // perform the launch (no project storageState). lti-launch reads the
+    // bootstrapped learner assignment from the cache, so depend on setup. The
+    // pure-API passback spec also lives here and runs in the same project.
+    {
+      name: "lti-chromium",
+      testMatch: /lti\/.*\.spec\.ts/,
+      dependencies: ["setup"],
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+    },
+
+    // Authorization (tests/authz): API-level tests against the gateway. They
+    // mint their own per-request cookies and seed their own assignments, so
+    // they need NO storageState and NO browser. No setup dependency.
+    {
+      name: "authz",
+      testMatch: /authz\/.*\.spec\.ts/,
+    },
+
+    // Health smoke (tests/health): unauthenticated API probes against the api
+    // and gateway. No storageState, no browser, no setup dependency.
+    {
+      name: "health",
+      testMatch: /health\/.*\.spec\.ts/,
+    },
   ],
 
   webServer: [
