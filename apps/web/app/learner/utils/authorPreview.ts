@@ -18,12 +18,7 @@ const isMatchingAssignment = (
 ) =>
   assignmentDetails?.id === assignmentId &&
   typeof assignmentDetails.name === "string" &&
-  assignmentDetails.name.length > 0 &&
-  (assignmentDetails.displayOrder === "DEFINED" ||
-    assignmentDetails.displayOrder === "RANDOM") &&
-  typeof assignmentDetails.strictTimeLimit === "boolean" &&
-  typeof assignmentDetails.introduction === "string" &&
-  typeof assignmentDetails.instructions === "string";
+  assignmentDetails.name.length > 0;
 
 export function readAuthorPreviewPayload(
   assignmentId: number,
@@ -35,13 +30,27 @@ export function readAuthorPreviewPayload(
   const questions = getStoredData<QuestionStore[]>("questions", []);
 
   if (
+    !assignmentDetails ||
     !isMatchingAssignment(assignmentDetails, assignmentId) ||
     !Array.isArray(questions)
   ) {
     return null;
   }
 
-  return { assignmentDetails, questions };
+  // Older/incomplete settings must not discard unsaved overview text or questions.
+  return {
+    assignmentDetails: {
+      ...assignmentDetails,
+      displayOrder:
+        assignmentDetails.displayOrder === "RANDOM" ? "RANDOM" : "DEFINED",
+      strictTimeLimit:
+        assignmentDetails.strictTimeLimit ??
+        (assignmentDetails.allotedTimeMinutes ?? 0) > 0,
+      introduction: assignmentDetails.introduction ?? "",
+      instructions: assignmentDetails.instructions ?? "",
+    },
+    questions,
+  };
 }
 
 export function buildAuthorPreviewPayload(

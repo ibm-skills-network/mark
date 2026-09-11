@@ -43,7 +43,7 @@ Final acceptance needs all three updated versions connected at once. Mark + CM a
 
 Author and learner sessions are now saved separately (up to four quizzes per role). Browser requests and learner server rendering explicitly select the role for the quiz; authorMode=true selects a deliberate author preview. Context never grants a role: the selected token and the current same-account launch must both be valid. Forward the selected learner token to the API for the original grade callback. Existing attempt-ownership checks remain in force.
 
-This follow-up also rebuilds incomplete cached previews and supplies display order, time-limit state, introduction and instructions for preview grading. Persisted allotted minutes determine the time-limit flag; valid unsaved preview settings are retained.
+This follow-up also fills missing cached preview settings without discarding unsaved content, and supplies display order, time-limit state, introduction and instructions for preview grading. Persisted allotted minutes determine the time-limit flag; valid unsaved preview settings are retained.
 
 Deploy the gateway and web together. No AWB/CM change or migration is required for this follow-up. An existing browser needs a fresh learner launch to populate its learner cookie; a lost learner token cannot be recovered from an author token. Start testing from CM Launch Quiz, not an old URL containing authorMode=true.
 

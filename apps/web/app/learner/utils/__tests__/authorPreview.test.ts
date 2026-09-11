@@ -153,11 +153,28 @@ describe("buildAuthorPreviewPayload", () => {
   });
 });
 
-it("rejects incomplete cached preview details after a refresh", () => {
+it("fills missing preview settings without discarding unsaved overview content", () => {
   mockGetStoredData
-    .mockReturnValueOnce({ id: 1, name: "Assignment One" })
+    .mockReturnValueOnce({
+      id: 1,
+      name: "Assignment One",
+      introduction: "Unsaved introduction",
+      instructions: "Unsaved instructions",
+      gradingCriteriaOverview: "Unsaved rubric",
+    })
     .mockReturnValueOnce(VALID_QUESTIONS);
-  expect(readAuthorPreviewPayload(1)).toBeNull();
+  expect(readAuthorPreviewPayload(1)).toEqual({
+    assignmentDetails: {
+      id: 1,
+      name: "Assignment One",
+      introduction: "Unsaved introduction",
+      instructions: "Unsaved instructions",
+      gradingCriteriaOverview: "Unsaved rubric",
+      displayOrder: "DEFINED",
+      strictTimeLimit: false,
+    },
+    questions: VALID_QUESTIONS,
+  });
 });
 it("builds valid grading fields when optional assignment fields are missing", () => {
   const { assignmentDetails } = buildAuthorPreviewPayload({
@@ -181,4 +198,22 @@ it("preserves the time limit when rebuilding a timed preview", () => {
     questions: [],
   } as unknown as Assignment);
   expect(assignmentDetails.strictTimeLimit).toBe(true);
+});
+
+it("preserves explicit unsaved preview settings while filling missing text", () => {
+  mockGetStoredData
+    .mockReturnValueOnce({
+      id: 1,
+      name: "Quiz",
+      displayOrder: "RANDOM",
+      strictTimeLimit: false,
+      allotedTimeMinutes: 10,
+    })
+    .mockReturnValueOnce(VALID_QUESTIONS);
+  expect(readAuthorPreviewPayload(1)?.assignmentDetails).toMatchObject({
+    displayOrder: "RANDOM",
+    strictTimeLimit: false,
+    introduction: "",
+    instructions: "",
+  });
 });
