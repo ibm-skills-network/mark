@@ -18,7 +18,12 @@ const isMatchingAssignment = (
 ) =>
   assignmentDetails?.id === assignmentId &&
   typeof assignmentDetails.name === "string" &&
-  assignmentDetails.name.length > 0;
+  assignmentDetails.name.length > 0 &&
+  (assignmentDetails.displayOrder === "DEFINED" ||
+    assignmentDetails.displayOrder === "RANDOM") &&
+  typeof assignmentDetails.strictTimeLimit === "boolean" &&
+  typeof assignmentDetails.introduction === "string" &&
+  typeof assignmentDetails.instructions === "string";
 
 export function readAuthorPreviewPayload(
   assignmentId: number,
@@ -50,8 +55,8 @@ export function buildAuthorPreviewPayload(
     assignmentDetails: {
       id: assignment.id,
       name: assignment.name,
-      introduction: assignment.introduction,
-      instructions: assignment.instructions,
+      introduction: assignment.introduction ?? "",
+      instructions: assignment.instructions ?? "",
       gradingCriteriaOverview: assignment.gradingCriteriaOverview,
       graded: assignment.graded,
       numAttempts: assignment.numAttempts,
@@ -60,7 +65,9 @@ export function buildAuthorPreviewPayload(
       allotedTimeMinutes: assignment.allotedTimeMinutes,
       timeEstimateMinutes: assignment.timeEstimateMinutes,
       passingGrade: assignment.passingGrade,
-      displayOrder: assignment.displayOrder,
+      displayOrder: assignment.displayOrder ?? "DEFINED",
+      // Persisted assignments represent the time limit through allotted minutes.
+      strictTimeLimit: (assignment.allotedTimeMinutes ?? 0) > 0,
       questionDisplay: assignment.questionDisplay,
       numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
       requireAllQuestions: assignment.requireAllQuestions,

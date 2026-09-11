@@ -37,3 +37,14 @@ Final acceptance needs all three updated versions connected at once. Mark + CM a
 - Mark: 68 gateway tests pass (19 existing skipped), 25 assignment/question guard tests, 26 web tests including recovery and request context; full repository lint and gateway typecheck pass.
 - Mark web production build succeeds with `next build --webpack`. Default Turbopack rejects this worktree's external node_modules symlinks. Standalone web typecheck reports the same three VideoPresentationEditor BlobPart errors in the unchanged main checkout; the new author files have no remaining type errors.
 - Cross-app staging tests have not yet run. Dependency graph AST extraction was refreshed locally; the repository graph command reports disabled, and the visualizer skips HTML for graphs above its node limit.
+
+
+## Learner refresh follow-up
+
+Author and learner sessions are now saved separately (up to four quizzes per role). Browser requests and learner server rendering explicitly select the role for the quiz; authorMode=true selects a deliberate author preview. Context never grants a role: the selected token and the current same-account launch must both be valid. Forward the selected learner token to the API for the original grade callback. Existing attempt-ownership checks remain in force.
+
+This follow-up also rebuilds incomplete cached previews and supplies display order, time-limit state, introduction and instructions for preview grading. Persisted allotted minutes determine the time-limit flag; valid unsaved preview settings are retained.
+
+Deploy the gateway and web together. No AWB/CM change or migration is required for this follow-up. An existing browser needs a fresh learner launch to populate its learner cookie; a lost learner token cannot be recovered from an author token. Start testing from CM Launch Quiz, not an old URL containing authorMode=true.
+
+Staging acceptance: launch learner, answer without submitting, open author, refresh the original learner tab, confirm the same attempt/answers and no authorMode=true switch, then submit and verify grading/callback. Repeat in the reverse launch order. Separately use Check learner side from the editor and verify explicit author preview grading after refresh, including a timed quiz. Check logout/account switching/expiry fail closed and do not use another user's saved session.

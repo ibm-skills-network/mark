@@ -2002,11 +2002,19 @@ export async function removePriceUpscaling(
 
 const V1_USER_ROUTE = absoluteUrl("/api/v1/user-session");
 
-export async function getUser(cookies?: string): Promise<User | undefined> {
+export async function getUser(
+  cookies?: string,
+  context?: { assignmentId: number; role: "author" | "learner" },
+): Promise<User | undefined> {
   const res = await fetch(V1_USER_ROUTE, {
     cache: "no-store",
     headers: {
       ...authorSessionHeaders(false),
+      ...(context
+        ? {
+            [`x-mark-${context.role}-assignment`]: String(context.assignmentId),
+          }
+        : {}),
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });

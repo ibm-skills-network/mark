@@ -198,3 +198,93 @@ describe("verified author sessions", () => {
     );
   });
 });
+
+describe("learner sessions across author launches", () => {
+  const learnerContext = { "x-mark-learner-assignment": "4892" };
+  it("preserves a verified learner session and forwards its grade callback token", async () => {
+    const learner = token({ role: "learner", gradingCallbackRequired: true });
+    const cookie = `authentication=${token()}; mark_learner_4892=${learner}`;
+    await expect(
+      authenticate(
+        cookie,
+        learnerContext,
+        "/api/v2/assignments/4892/attempts/17",
+      ).result,
+    ).resolves.toMatchObject({
+      role: "learner",
+      assignmentId: 4892,
+      gradingCallbackRequired: true,
+    });
+    expect(dedupeAuthenticationCookieHeader(cookie, learnerContext)).toBe(
+      `authentication=${learner}`,
+    );
+  });
+  it("saves a verified learner cookie before the author launch", async () => {
+    const learner = token({ role: "learner" });
+    const { result, response } = authenticate(
+      `authentication=${learner}`,
+      learnerContext,
+    );
+    await result;
+    expect(response.cookie).toHaveBeenCalledWith(
+      "mark_learner_4892",
+      learner,
+      expect.objectContaining({ httpOnly: true }),
+    );
+  });
+  it.each([
+    ["signed out", ""],
+    ["account changed", token({ userID: "other@example.test" })],
+    ["forged current session", token({}, "wrong-secret")],
+    [
+      "expired current session",
+      sign({ userID: "author@example.test", exp: 1 }, secret),
+    ],
+  ])("rejects learner recovery when %s", async (_name, current) => {
+    await expect(
+      authenticate(
+        `authentication=${current}; mark_learner_4892=${token({ role: "learner" })}`,
+        learnerContext,
+      ).result,
+    ).rejects.toThrow();
+  });
+  it("rejects an expired saved learner token", async () => {
+    const expired = sign(
+      {
+        userID: "author@example.test",
+        role: "learner",
+        assignmentID: 4892,
+        exp: 1,
+      },
+      secret,
+    );
+    await expect(
+      authenticate(
+        `authentication=${token()}; mark_learner_4892=${expired}`,
+        learnerContext,
+      ).result,
+    ).rejects.toThrow();
+  });
+  it("does not grant learner role from a context hint", async () => {
+    await expect(
+      authenticate(`authentication=${token()}`, learnerContext).result,
+    ).rejects.toThrow();
+  });
+  it("keeps deliberate author previews on their signed author session", async () => {
+    const cookie = `authentication=${token({ role: "learner" })}; mark_author_4892=${token()}`;
+    await expect(
+      authenticate(cookie, {
+        referer: "https://mark.example/learner/4892/questions?authorMode=true",
+      }).result,
+    ).resolves.toMatchObject({ role: "author" });
+  });
+  it("rejects a learner request for another assignment", async () => {
+    await expect(
+      authenticate(
+        `authentication=${token()}; mark_learner_4892=${token({ role: "learner" })}`,
+        learnerContext,
+        "/api/v2/assignments/4941/attempts/17",
+      ).result,
+    ).rejects.toThrow();
+  });
+});

@@ -3,22 +3,31 @@ import { Request } from "express";
 const COOKIE_NAME = "authentication";
 export const AUTHOR_COOKIE_PREFIX = "mark_author_";
 
-/** A routing hint only: the selected token is still signature/expiry checked. */
-export function authorAssignmentContext(
+export const LEARNER_COOKIE_PREFIX = "mark_learner_";
+
+/** Context selects a token; it never grants a role or assignment access. */
+export function quizSessionContext(
   headers: Request["headers"],
-): number | undefined {
-  const explicit = headers["x-mark-author-assignment"];
-  if (typeof explicit === "string" && /^[1-9]\d*$/.test(explicit)) {
-    const id = Number(explicit);
-    return Number.isSafeInteger(id) ? id : undefined;
+): { role: "author" | "learner"; assignmentId: number } | undefined {
+  for (const role of ["author", "learner"] as const) {
+    const explicit = headers[`x-mark-${role}-assignment`];
+    if (typeof explicit === "string" && /^[1-9]\d*$/.test(explicit)) {
+      const assignmentId = Number(explicit);
+      return Number.isSafeInteger(assignmentId)
+        ? { role, assignmentId }
+        : undefined;
+    }
   }
   if (typeof headers.referer !== "string") return undefined;
   try {
-    const match = new URL(headers.referer).pathname.match(
-      /^\/author\/([1-9]\d*)(?:\/|$)/,
-    );
-    const id = match ? Number(match[1]) : undefined;
-    return Number.isSafeInteger(id) ? id : undefined;
+    const url = new URL(headers.referer);
+    const match = url.pathname.match(/^\/(author|learner)\/([1-9]\d*)(?:\/|$)/);
+    if (!match || !Number.isSafeInteger(Number(match[2]))) return undefined;
+    const role =
+      match[1] === "author" || url.searchParams.get("authorMode") === "true"
+        ? "author"
+        : "learner";
+    return { role, assignmentId: Number(match[2]) };
   } catch {
     return undefined;
   }
@@ -78,19 +87,23 @@ export function selectAuthenticationCookie(
   },
 ): AuthCookieSelection {
   const rawHeader = request.headers?.cookie;
-  const context = authorAssignmentContext(request.headers ?? {});
+  const context = quizSessionContext(request.headers ?? {});
   if (context !== undefined) {
     const legacy = selectAuthenticationCookie({
       headers: { cookie: rawHeader },
       cookies: request.cookies,
     });
     const scoped = parseCookiePairs(rawHeader)
-      .filter((pair) => pair.name === `${AUTHOR_COOKIE_PREFIX}${context}`)
+      .filter(
+        (pair) =>
+          pair.name ===
+          `${context.role === "author" ? AUTHOR_COOKIE_PREFIX : LEARNER_COOKIE_PREFIX}${context.assignmentId}`,
+      )
       .map((pair) => tryDecodeUriComponent(pair.rawValue));
     const legacyClaims = unverifiedSession(legacy.token);
     if (scoped.length > 0) {
       const newest = scoped[pickNewestIatIndex(scoped)];
-      // Switching accounts must not revive the previous user's author session.
+      // Switching accounts must not revive the previous user's saved session.
       if (
         !legacy.token ||
         legacyClaims.userID !== unverifiedSession(newest).userID
@@ -98,8 +111,8 @@ export function selectAuthenticationCookie(
         return legacy;
       if (
         legacy.token &&
-        legacyClaims.role === "author" &&
-        legacyClaims.assignmentID === context
+        legacyClaims.role === context.role &&
+        legacyClaims.assignmentID === context.assignmentId
       )
         scoped.push(legacy.token);
       return {
@@ -142,10 +155,12 @@ export function dedupeAuthenticationCookieHeader(
 ): string | undefined {
   const pairs = parseCookiePairs(rawHeader);
   const authPairs = pairs.filter((pair) => pair.name === COOKIE_NAME);
-  const hasAuthorCookies = pairs.some((pair) =>
-    pair.name.startsWith(AUTHOR_COOKIE_PREFIX),
+  const hasScopedCookies = pairs.some(
+    (pair) =>
+      pair.name.startsWith(AUTHOR_COOKIE_PREFIX) ||
+      pair.name.startsWith(LEARNER_COOKIE_PREFIX),
   );
-  if (authPairs.length <= 1 && !hasAuthorCookies) {
+  if (authPairs.length <= 1 && !hasScopedCookies) {
     return undefined;
   }
 
@@ -155,7 +170,9 @@ export function dedupeAuthenticationCookieHeader(
 
   const kept = pairs.filter(
     (pair) =>
-      pair.name !== COOKIE_NAME && !pair.name.startsWith(AUTHOR_COOKIE_PREFIX),
+      pair.name !== COOKIE_NAME &&
+      !pair.name.startsWith(AUTHOR_COOKIE_PREFIX) &&
+      !pair.name.startsWith(LEARNER_COOKIE_PREFIX),
   );
   if (token)
     kept.push({ name: COOKIE_NAME, rawValue: encodeURIComponent(token) });

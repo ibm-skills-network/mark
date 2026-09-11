@@ -163,3 +163,28 @@ describe("LearnerLayout attempt resolution", () => {
     expect(createAttemptMock).not.toHaveBeenCalled();
   });
 });
+
+it("carries learner context through a server-rendered refresh and resumes the attempt", async () => {
+  getUserMock.mockResolvedValue({ role: "learner" });
+  getAttemptsMock.mockResolvedValue([inProgressAttempt(456)]);
+  const element = await LearnerLayout(props);
+  expect(getUserMock).toHaveBeenLastCalledWith("", {
+    assignmentId: 123,
+    role: "learner",
+  });
+  expect(getAttemptsMock).toHaveBeenLastCalledWith(123, "", {
+    throwOnAuthError: true,
+    learnerContext: true,
+  });
+  expect(element.props.children.props.attemptId).toBe(456);
+  expect(element.props.children.props.isNewAttempt).toBe(false);
+});
+
+it("explicit author previews request author context during server rendering", async () => {
+  getUserMock.mockResolvedValue({ role: "author" });
+  await LearnerLayout({ ...props, searchParams: { authorMode: "true" } });
+  expect(getUserMock).toHaveBeenLastCalledWith("", {
+    assignmentId: 123,
+    role: "author",
+  });
+});

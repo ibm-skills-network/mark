@@ -21,7 +21,14 @@ const mockProcessQuestions = processQuestions as jest.MockedFunction<
   typeof processQuestions
 >;
 
-const VALID_DETAILS = { id: 1, name: "Assignment One" };
+const VALID_DETAILS = {
+  id: 1,
+  name: "Assignment One",
+  displayOrder: "DEFINED",
+  strictTimeLimit: false,
+  introduction: "",
+  instructions: "",
+};
 const VALID_QUESTIONS = [{ id: 10, question: "Q1" }];
 
 describe("readAuthorPreviewPayload", () => {
@@ -144,4 +151,34 @@ describe("buildAuthorPreviewPayload", () => {
     });
     expect(mockProcessQuestions).toHaveBeenCalledWith([]);
   });
+});
+
+it("rejects incomplete cached preview details after a refresh", () => {
+  mockGetStoredData
+    .mockReturnValueOnce({ id: 1, name: "Assignment One" })
+    .mockReturnValueOnce(VALID_QUESTIONS);
+  expect(readAuthorPreviewPayload(1)).toBeNull();
+});
+it("builds valid grading fields when optional assignment fields are missing", () => {
+  const { assignmentDetails } = buildAuthorPreviewPayload({
+    id: 1,
+    name: "Quiz",
+    questions: [],
+  } as unknown as Assignment);
+  expect(assignmentDetails).toMatchObject({
+    displayOrder: "DEFINED",
+    strictTimeLimit: false,
+    introduction: "",
+    instructions: "",
+  });
+});
+
+it("preserves the time limit when rebuilding a timed preview", () => {
+  const { assignmentDetails } = buildAuthorPreviewPayload({
+    id: 1,
+    name: "Quiz",
+    allotedTimeMinutes: 10,
+    questions: [],
+  } as unknown as Assignment);
+  expect(assignmentDetails.strictTimeLimit).toBe(true);
 });
