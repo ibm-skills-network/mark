@@ -21,7 +21,14 @@ const mockProcessQuestions = processQuestions as jest.MockedFunction<
   typeof processQuestions
 >;
 
-const VALID_DETAILS = { id: 1, name: "Assignment One" };
+const VALID_DETAILS = {
+  id: 1,
+  name: "Assignment One",
+  displayOrder: "DEFINED",
+  strictTimeLimit: false,
+  introduction: "",
+  instructions: "",
+};
 const VALID_QUESTIONS = [{ id: 10, question: "Q1" }];
 
 describe("readAuthorPreviewPayload", () => {
@@ -143,5 +150,70 @@ describe("buildAuthorPreviewPayload", () => {
       questions: null as any,
     });
     expect(mockProcessQuestions).toHaveBeenCalledWith([]);
+  });
+});
+
+it("fills missing preview settings without discarding unsaved overview content", () => {
+  mockGetStoredData
+    .mockReturnValueOnce({
+      id: 1,
+      name: "Assignment One",
+      introduction: "Unsaved introduction",
+      instructions: "Unsaved instructions",
+      gradingCriteriaOverview: "Unsaved rubric",
+    })
+    .mockReturnValueOnce(VALID_QUESTIONS);
+  expect(readAuthorPreviewPayload(1)).toEqual({
+    assignmentDetails: {
+      id: 1,
+      name: "Assignment One",
+      introduction: "Unsaved introduction",
+      instructions: "Unsaved instructions",
+      gradingCriteriaOverview: "Unsaved rubric",
+      displayOrder: "DEFINED",
+      strictTimeLimit: false,
+    },
+    questions: VALID_QUESTIONS,
+  });
+});
+it("builds valid grading fields when optional assignment fields are missing", () => {
+  const { assignmentDetails } = buildAuthorPreviewPayload({
+    id: 1,
+    name: "Quiz",
+    questions: [],
+  } as unknown as Assignment);
+  expect(assignmentDetails).toMatchObject({
+    displayOrder: "DEFINED",
+    strictTimeLimit: false,
+    introduction: "",
+    instructions: "",
+  });
+});
+
+it("preserves the time limit when rebuilding a timed preview", () => {
+  const { assignmentDetails } = buildAuthorPreviewPayload({
+    id: 1,
+    name: "Quiz",
+    allotedTimeMinutes: 10,
+    questions: [],
+  } as unknown as Assignment);
+  expect(assignmentDetails.strictTimeLimit).toBe(true);
+});
+
+it("preserves explicit unsaved preview settings while filling missing text", () => {
+  mockGetStoredData
+    .mockReturnValueOnce({
+      id: 1,
+      name: "Quiz",
+      displayOrder: "RANDOM",
+      strictTimeLimit: false,
+      allotedTimeMinutes: 10,
+    })
+    .mockReturnValueOnce(VALID_QUESTIONS);
+  expect(readAuthorPreviewPayload(1)?.assignmentDetails).toMatchObject({
+    displayOrder: "RANDOM",
+    strictTimeLimit: false,
+    introduction: "",
+    instructions: "",
   });
 });

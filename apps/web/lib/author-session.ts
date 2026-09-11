@@ -9,11 +9,20 @@ export function authorSessionHeaders(
   includeIdentity = true,
 ): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const match = window.location.pathname.match(/^\/author\/([1-9]\d*)(?:\/|$)/);
-  if (!match || !Number.isSafeInteger(Number(match[1]))) return {};
+  const match = window.location.pathname.match(
+    /^\/(author|learner)\/([1-9]\d*)(?:\/|$)/,
+  );
+  if (!match || !Number.isSafeInteger(Number(match[2]))) return {};
+  const role =
+    match[1] === "author" ||
+    new URLSearchParams(window.location.search).get("authorMode") === "true"
+      ? "author"
+      : "learner";
   return {
-    "x-mark-author-assignment": match[1],
-    ...(includeIdentity && editor?.assignmentId === Number(match[1])
+    [`x-mark-${role}-assignment`]: match[2],
+    ...(includeIdentity &&
+    role === "author" &&
+    editor?.assignmentId === Number(match[2])
       ? { "x-mark-author-user": editor.userId }
       : {}),
   };

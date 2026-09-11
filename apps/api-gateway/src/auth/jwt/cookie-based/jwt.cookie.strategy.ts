@@ -10,7 +10,8 @@ import {
 import { JwtConfigService } from "../jwt.config.service";
 import {
   AUTHOR_COOKIE_PREFIX,
-  authorAssignmentContext,
+  quizSessionContext,
+  LEARNER_COOKIE_PREFIX,
   selectAuthenticationCookie,
   unverifiedSession,
 } from "./jwt.cookie.extractor";
@@ -60,7 +61,7 @@ export class JwtCookieStrategy extends PassportStrategy(
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   validate(request: IRequestWithCookies, payload: IJwtPayload): UserSession {
-    const context = authorAssignmentContext(request.headers ?? {});
+    const context = quizSessionContext(request.headers ?? {});
     const routeId = request.originalUrl?.match(
       /\/assignments\/([1-9]\d*)(?:[/?]|$)/,
     )?.[1];
@@ -69,10 +70,14 @@ export class JwtCookieStrategy extends PassportStrategy(
         routeId &&
         Number(routeId) !== payload.assignmentID) ||
       (context !== undefined &&
-        (payload.role !== "author" || payload.assignmentID !== context))
+        (payload.role !== context.role ||
+          payload.assignmentID !== context.assignmentId ||
+          (routeId && Number(routeId) !== context.assignmentId)))
     ) {
-      logger.warn("Author session does not match requested workspace");
-      throw new UnauthorizedException("Relaunch this quiz as an author");
+      logger.warn("Quiz session does not match requested role or assignment");
+      throw new UnauthorizedException(
+        "Relaunch this quiz in the requested role",
+      );
     }
     const editorUser = request.headers?.["x-mark-author-user"];
     if (
@@ -86,7 +91,7 @@ export class JwtCookieStrategy extends PassportStrategy(
       );
     }
     // A scoped cookie must not revive an expired, tampered, or signed-out
-    // browser session. Passport verifies the selected author token; verify the
+    // browser session. Passport verifies the selected token; verify the
     // current launch separately before using it as the account-switch boundary.
     const selected = selectAuthenticationCookie(request).token;
     const current = selectAuthenticationCookie({
@@ -100,20 +105,26 @@ export class JwtCookieStrategy extends PassportStrategy(
         if (typeof claims === "string" || claims.userID !== payload.userID)
           throw new Error("Account changed");
       } catch {
-        logger.warn("Author recovery requires a valid current session");
-        throw new UnauthorizedException("Relaunch this quiz as an author");
+        logger.warn("Quiz session recovery requires a valid current session");
+        throw new UnauthorizedException(
+          "Relaunch this quiz in the requested role",
+        );
       }
     }
     // Only persist tokens after passport has verified their signature and expiry.
-    // A bounded set keeps previews and other quiz tabs from overwriting authors.
+    // A bounded set per role keeps author and learner launches independent.
     if (
-      payload.role === "author" &&
+      (payload.role === "author" || payload.role === "learner") &&
       Number.isSafeInteger(payload.assignmentID) &&
       payload.assignmentID > 0 &&
       request.res
     ) {
       const { token } = selectAuthenticationCookie(request);
-      const name = `${AUTHOR_COOKIE_PREFIX}${payload.assignmentID}`;
+      const prefix =
+        payload.role === "author"
+          ? AUTHOR_COOKIE_PREFIX
+          : LEARNER_COOKIE_PREFIX;
+      const name = `${prefix}${payload.assignmentID}`;
       if (token && request.cookies?.[name] !== token) {
         const secure = process.env.NODE_ENV === "production";
         const options = {
@@ -123,9 +134,7 @@ export class JwtCookieStrategy extends PassportStrategy(
           path: "/",
         };
         const others = Object.entries(request.cookies ?? {})
-          .filter(
-            ([key]) => key.startsWith(AUTHOR_COOKIE_PREFIX) && key !== name,
-          )
+          .filter(([key]) => key.startsWith(prefix) && key !== name)
           .sort(
             (a, b) =>
               (unverifiedSession(b[1]).iat ?? 0) -

@@ -63,7 +63,12 @@ export async function createAttempt(
       {
         headers: {
           "Content-Type": "application/json",
-          ...(cookies ? { Cookie: cookies } : {}),
+          ...(cookies
+            ? {
+                Cookie: cookies,
+                "x-mark-learner-assignment": String(assignmentId),
+              }
+            : {}),
         },
       },
     );
@@ -235,7 +240,12 @@ export async function getAttempt(
       apiClient.get<AssignmentAttemptWithQuestions>(endpointURL, {
         quiet: true,
         headers: {
-          ...(cookies ? { Cookie: cookies } : {}),
+          ...(cookies
+            ? {
+                Cookie: cookies,
+                "x-mark-learner-assignment": String(assignmentId),
+              }
+            : {}),
         },
       }),
     );

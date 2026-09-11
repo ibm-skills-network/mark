@@ -623,7 +623,7 @@ export async function deleteQuestion(
 export async function getAttempts(
   assignmentId: number,
   cookies?: string,
-  options?: { throwOnAuthError?: boolean },
+  options?: { throwOnAuthError?: boolean; learnerContext?: boolean },
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
 
@@ -635,6 +635,9 @@ export async function getAttempts(
         quiet: true,
         headers: {
           ...(cookies ? { Cookie: cookies } : {}),
+          ...(options?.learnerContext
+            ? { "x-mark-learner-assignment": String(assignmentId) }
+            : {}),
         },
       }),
     )) as AssignmentAttempt[];

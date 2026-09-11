@@ -131,7 +131,10 @@ async function LearnerLayout(props: Props) {
 
   let user = null;
   try {
-    user = await getUser(cookieHeader);
+    user = await getUser(cookieHeader, {
+      assignmentId,
+      role: authorMode === "true" ? "author" : "learner",
+    });
     log("User fetched", `Role: ${user?.role ?? "unknown"}`);
   } catch (error) {
     const status = statusFromError(error);
@@ -168,6 +171,7 @@ async function LearnerLayout(props: Props) {
   try {
     listOfAttempts = await getAttempts(assignmentId, cookieHeader, {
       throwOnAuthError: true,
+      learnerContext: true,
     });
   } catch (error) {
     // An expired session or revoked access is the learner's situation, not a
@@ -203,7 +207,9 @@ async function LearnerLayout(props: Props) {
       // The server just vouched an attempt is active, so when the client-clock
       // in-progress filter disagrees (clock skew), fall back to the latest
       // unsubmitted attempt rather than dead-ending.
-      const refreshedAttempts = await getAttempts(assignmentId, cookieHeader);
+      const refreshedAttempts = await getAttempts(assignmentId, cookieHeader, {
+        learnerContext: true,
+      });
       const resumableAttempt = refreshedAttempts
         ? (getLatestAttempt(refreshedAttempts.filter(isAttemptInProgress)) ??
           getLatestAttempt(
