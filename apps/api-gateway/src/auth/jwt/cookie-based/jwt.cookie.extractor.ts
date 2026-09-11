@@ -1,6 +1,51 @@
 import { Request } from "express";
 
 const COOKIE_NAME = "authentication";
+export const AUTHOR_COOKIE_PREFIX = "mark_author_";
+
+/** A routing hint only: the selected token is still signature/expiry checked. */
+export function authorAssignmentContext(
+  headers: Request["headers"],
+): number | undefined {
+  const explicit = headers["x-mark-author-assignment"];
+  if (typeof explicit === "string" && /^[1-9]\d*$/.test(explicit)) {
+    const id = Number(explicit);
+    return Number.isSafeInteger(id) ? id : undefined;
+  }
+  if (typeof headers.referer !== "string") return undefined;
+  try {
+    const match = new URL(headers.referer).pathname.match(
+      /^\/author\/([1-9]\d*)(?:\/|$)/,
+    );
+    const id = match ? Number(match[1]) : undefined;
+    return Number.isSafeInteger(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function unverifiedSession(token: string | undefined): {
+  userID?: string;
+  role?: string;
+  assignmentID?: number;
+  iat?: number;
+} {
+  try {
+    const value: unknown = JSON.parse(
+      Buffer.from(token?.split(".")[1] ?? "", "base64url").toString("utf8"),
+    );
+    return value && typeof value === "object"
+      ? (value as {
+          userID?: string;
+          role?: string;
+          assignmentID?: number;
+          iat?: number;
+        })
+      : {};
+  } catch {
+    return {};
+  }
+}
 
 export interface AuthCookieSelection {
   /** The chosen cookie value, or undefined when none is present. */
@@ -33,6 +78,36 @@ export function selectAuthenticationCookie(
   },
 ): AuthCookieSelection {
   const rawHeader = request.headers?.cookie;
+  const context = authorAssignmentContext(request.headers ?? {});
+  if (context !== undefined) {
+    const legacy = selectAuthenticationCookie({
+      headers: { cookie: rawHeader },
+      cookies: request.cookies,
+    });
+    const scoped = parseCookiePairs(rawHeader)
+      .filter((pair) => pair.name === `${AUTHOR_COOKIE_PREFIX}${context}`)
+      .map((pair) => tryDecodeUriComponent(pair.rawValue));
+    const legacyClaims = unverifiedSession(legacy.token);
+    if (scoped.length > 0) {
+      const newest = scoped[pickNewestIatIndex(scoped)];
+      // Switching accounts must not revive the previous user's author session.
+      if (
+        !legacy.token ||
+        legacyClaims.userID !== unverifiedSession(newest).userID
+      )
+        return legacy;
+      if (
+        legacy.token &&
+        legacyClaims.role === "author" &&
+        legacyClaims.assignmentID === context
+      )
+        scoped.push(legacy.token);
+      return {
+        token: scoped[pickNewestIatIndex(scoped)],
+        candidateCount: scoped.length,
+      };
+    }
+  }
   const candidates = parseCookiePairs(rawHeader)
     .filter((pair) => pair.name === COOKIE_NAME)
     .map((pair) => tryDecodeUriComponent(pair.rawValue));
@@ -63,20 +138,27 @@ export function selectAuthenticationCookie(
  */
 export function dedupeAuthenticationCookieHeader(
   rawHeader?: string,
+  headers: Request["headers"] = {},
 ): string | undefined {
   const pairs = parseCookiePairs(rawHeader);
   const authPairs = pairs.filter((pair) => pair.name === COOKIE_NAME);
-  if (authPairs.length <= 1) {
+  const hasAuthorCookies = pairs.some((pair) =>
+    pair.name.startsWith(AUTHOR_COOKIE_PREFIX),
+  );
+  if (authPairs.length <= 1 && !hasAuthorCookies) {
     return undefined;
   }
 
-  const winnerIndex = pickNewestIatIndex(
-    authPairs.map((pair) => tryDecodeUriComponent(pair.rawValue)),
-  );
-  const winner = authPairs[winnerIndex];
+  const { token } = selectAuthenticationCookie({
+    headers: { ...headers, cookie: rawHeader },
+  });
 
-  const kept = pairs.filter((pair) => pair.name !== COOKIE_NAME);
-  kept.push(winner);
+  const kept = pairs.filter(
+    (pair) =>
+      pair.name !== COOKIE_NAME && !pair.name.startsWith(AUTHOR_COOKIE_PREFIX),
+  );
+  if (token)
+    kept.push({ name: COOKIE_NAME, rawValue: encodeURIComponent(token) });
   return kept.map((pair) => `${pair.name}=${pair.rawValue}`).join("; ");
 }
 

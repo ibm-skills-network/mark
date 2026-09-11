@@ -1,3 +1,4 @@
+import { authorSessionHeaders } from "./author-session";
 /* eslint-disable */
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
@@ -2003,13 +2004,15 @@ const V1_USER_ROUTE = absoluteUrl("/api/v1/user-session");
 
 export async function getUser(cookies?: string): Promise<User | undefined> {
   const res = await fetch(V1_USER_ROUTE, {
+    cache: "no-store",
     headers: {
+      ...authorSessionHeaders(false),
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });
 
   if (res.status === 401) {
-    throw new Error("Unauthorized");
+    throw new APIError("Sign in to continue", 401, "Unauthorized");
   }
 
   if (!res.ok) {

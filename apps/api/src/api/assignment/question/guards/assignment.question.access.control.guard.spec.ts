@@ -74,6 +74,18 @@ describe("AssignmentQuestionAccessControlGuard — hostile input", () => {
     guard = module.get(AssignmentQuestionAccessControlGuard);
   });
 
+  it("rejects a different quiz even when a shared group link exists", async () => {
+    prisma.$transaction.mockResolvedValue([
+      { id: 456 },
+      { groupId: "group-1" },
+      { id: 7 },
+    ]);
+    await expect(
+      guard.canActivate(buildContext({ assignmentId: "456", id: "7" })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it("rejects missing :assignmentId with ForbiddenException BEFORE touching Prisma", async () => {
     const context = buildContext({ id: "7" }); // no assignmentId at all
 

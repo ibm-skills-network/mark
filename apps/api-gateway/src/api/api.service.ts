@@ -129,6 +129,7 @@ export class ApiService {
         // overrides the client's `cookie` header in normalizeOutgoingHeaders.
         const dedupedCookieHeader = dedupeAuthenticationCookieHeader(
           request.headers?.cookie,
+          request.headers,
         );
         if (dedupedCookieHeader !== undefined) {
           extraHeaders.cookie = dedupedCookieHeader;
