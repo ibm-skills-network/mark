@@ -10,6 +10,7 @@ import {
   RubricType,
   Scoring,
 } from "@/config/types";
+import { APIError } from "@/lib/api-client";
 import { extractAssignmentId } from "@/lib/strings";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
@@ -222,6 +223,7 @@ export type AuthorActions = {
   ) => void;
   setPoints: (questionId: number, points: number) => void;
   setPageState: (state: "loading" | "success" | "error") => void;
+  setPageError: (error: unknown) => void;
   setUpdatedAt: (updatedAt: number) => void;
   setQuestionTitle: (questionTitle: string, questionId: number) => void;
   setQuestionVariantTitle: (
@@ -1717,6 +1719,12 @@ export const useAuthorStore = createWithEqualityFn<
         },
         pageState: "loading" as const,
         setPageState: (pageState) => set({ pageState }),
+        setPageError: (error) => {
+          // AuthorAccess handles 401s while keeping the draft mounted. Do not
+          // turn a recoverable session failure into a permanent workspace error.
+          if (error instanceof APIError && error.status === 401) return;
+          set({ pageState: "error" });
+        },
         updatedAt: undefined,
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         setAuthorStore: (state) => {

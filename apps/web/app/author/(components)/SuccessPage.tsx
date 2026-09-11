@@ -43,7 +43,7 @@ function SuccessPage() {
         setPageState("success");
         return;
       } catch (error) {
-        setPageState("error");
+        useAuthorStore.getState().setPageError(error);
         return;
       }
     }
