@@ -612,20 +612,33 @@ function Component(props: Props) {
         />
       )}
 
-      {questionDisplay === "ONE_PER_PAGE" && (
-        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveQuestionNumber(questionNumber - 1)}
-            disabled={questionNumber === 1}
-            className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 dark:text-gray-400 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 dark:hover:text-violet-400 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
-          >
-            <ArrowLongLeftIcon
-              strokeWidth={2}
-              className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
-            />
+      {/* Every layout needs a submit control the learner can reach by
+          scrolling: the header button sits outside the scroll container and
+          is easy to miss, and on a long single page there was nothing else. */}
+      {(questionDisplay === "ONE_PER_PAGE" ||
+        questionNumber === lastQuestionNumber) && (
+        <div
+          className={cn(
+            "flex flex-col sm:flex-row gap-3 sm:gap-0 pt-4 border-t border-gray-200 dark:border-gray-700",
+            questionDisplay === "ONE_PER_PAGE"
+              ? "justify-between"
+              : "sm:justify-end",
+          )}
+        >
+          {questionDisplay === "ONE_PER_PAGE" && (
+            <button
+              onClick={() => setActiveQuestionNumber(questionNumber - 1)}
+              disabled={questionNumber === 1}
+              className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 dark:text-gray-400 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 dark:hover:text-violet-400 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
+            >
+              <ArrowLongLeftIcon
+                strokeWidth={2}
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
+              />
 
-            <span className="text-sm sm:text-base">Previous Question</span>
-          </button>
+              <span className="text-sm sm:text-base">Previous Question</span>
+            </button>
+          )}
           {questionNumber === lastQuestionNumber ? (
             <button
               onClick={() => {
