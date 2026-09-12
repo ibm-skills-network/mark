@@ -58,10 +58,16 @@ export const useAppConfig = createWithEqualityFn<AppConfigState>()(
     devtools(
       withUpdatedAt<AppConfigState>((set, get) => ({
         DEBUG_MODE: false,
-        tips: !readSessionDismissal(),
+        // Deliberately not read from sessionStorage here: the store is built
+        // at module scope, which on the server has no sessionStorage. Reading
+        // it only on the client makes the first client render disagree with
+        // the server HTML, and React responds by throwing the hydrated
+        // question grid away and repainting it. `applyTipsSessionDismissal`
+        // puts the dismissal back after mount, when both sides already agree.
+        tips: true,
         tipsVersion: "v1.0",
         persistTips: false,
-        tipsDismissedForSession: readSessionDismissal(),
+        tipsDismissedForSession: false,
         setPersistTips: (persistTips: boolean) => set({ persistTips }),
         setTips: (tips: boolean) => {
           writeSessionDismissal(!tips);
@@ -117,3 +123,18 @@ export const useAppConfig = createWithEqualityFn<AppConfigState>()(
     },
   ),
 );
+
+/**
+ * Applies a dismissal made earlier in this browser session. Must run after
+ * mount: the session flag exists only in the browser, so folding it into the
+ * store's initial state would make the client's first render disagree with the
+ * server HTML.
+ */
+export function applyTipsSessionDismissal(): void {
+  if (!readSessionDismissal()) return;
+
+  const { tips, tipsDismissedForSession } = useAppConfig.getState();
+  if (!tips && tipsDismissedForSession) return;
+
+  useAppConfig.setState({ tips: false, tipsDismissedForSession: true });
+}
