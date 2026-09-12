@@ -142,7 +142,7 @@ async function LearnerLayout(props: Props) {
       "User fetch failed",
       status === 401 ? "Unauthorized" : `Status ${status}`,
     );
-    return <ErrorScreen status={status} />;
+    return <ErrorScreen status={status} error={error} />;
   }
 
   const role = user?.role;
@@ -178,7 +178,7 @@ async function LearnerLayout(props: Props) {
     // server fault — route it to the matching screen instead of a 500 modal.
     const status = statusFromError(error);
     log("Attempts fetch unauthorized", `Status ${status}`);
-    return <ErrorScreen status={status} />;
+    return <ErrorScreen status={status} error={error} />;
   }
   if (!listOfAttempts) {
     log("Attempts fetch failed");
@@ -342,7 +342,7 @@ async function AttemptLoader({
       { throwOnAuthError: true },
     );
   } catch (error) {
-    return <ErrorScreen status={statusFromError(error)} />;
+    return <ErrorScreen status={statusFromError(error)} error={error} />;
   }
   if (!attempt) {
     // Transient failures were already retried inside getAttempt and auth

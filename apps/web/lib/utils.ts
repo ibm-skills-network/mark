@@ -73,6 +73,14 @@ export function mergeData<T extends DataWithUpdatedAt>(
   return backendData;
 }
 
+/**
+ * Reloads the current page. Wrapped so retry actions can be exercised in
+ * tests — jsdom's `location.reload` is read-only and cannot be spied on.
+ */
+export const reloadPage = () => {
+  globalThis.location.reload();
+};
+
 export const useDebugLog = () => {
   const debugMode = process.env.NODE_ENV === "development";
 

@@ -127,3 +127,43 @@ describe("submitBugReport", () => {
     expect(console.error).toHaveBeenCalled();
   });
 });
+
+// Reports auto-filed from a stalled or dropped browser request used to arrive
+// as "Status: 408 — Something went wrong on our side", indistinguishable from
+// a real server fault. They still get filed, but tagged.
+describe("buildErrorReportPrefills for a client network failure", () => {
+  const networkError = {
+    statusCode: 0,
+    statusLabel: "Network",
+    headline: "The request timed out",
+    message: "We didn't get a response in time.",
+    fault: "client-network" as const,
+  };
+
+  it("labels the failure as a client network problem", () => {
+    const prefills = buildErrorReportPrefills(networkError, {
+      pagePath: "/learner/42",
+    });
+
+    expect(prefills.actual).toContain("client network");
+    expect(prefills.actual).toContain("The request timed out");
+  });
+
+  it("does not print a status the server never sent", () => {
+    const prefills = buildErrorReportPrefills(networkError);
+
+    expect(prefills.actual).not.toMatch(/\b408\b/);
+    expect(prefills.actual).not.toMatch(/\b500\b/);
+    expect(prefills.actual).toContain("Network");
+  });
+
+  it("leaves server-fault reports untouched", () => {
+    const prefills = buildErrorReportPrefills({
+      statusCode: 500,
+      headline: "Something went wrong on our side",
+    });
+
+    expect(prefills.actual).toContain("500");
+    expect(prefills.actual).not.toContain("client network");
+  });
+});

@@ -46,6 +46,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   const [error, setError] = useState<{
     code: number;
     message: string;
+    cause: unknown;
   } | null>(null);
   const fetchData = async (signal?: { cancelled: boolean }) => {
     setIsLoading(true);
@@ -79,6 +80,8 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           // Preserve the real HTTP status so a 401 (expired session) routes to
           // SessionExpired, not AccessRestricted. apiClient throws APIError with
           // a `.status`; statusFromError falls back to 500 for anything opaque.
+          // The thrown value is kept as well, because a request that never got
+          // a response has no status and must not be shown as a server fault.
           const status = statusFromError(error);
           setError({
             code: status,
@@ -86,6 +89,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
               status === 403
                 ? "You are not authorized to view this page"
                 : "We couldn't load this assignment.",
+            cause: error,
           });
           if (!signal?.cancelled) {
             setAssignment(null);
@@ -144,7 +148,13 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     return <LoadingPage animationData={animationData} />;
   }
   if (error) {
-    return <ErrorScreen status={error.code} message={error.message} />;
+    return (
+      <ErrorScreen
+        status={error.code}
+        message={error.message}
+        error={error.cause}
+      />
+    );
   }
   if (!assignment) {
     const errorMessage =
