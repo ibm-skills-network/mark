@@ -18,8 +18,12 @@ import {
   HighlightLevel,
 } from "@/config/types";
 import {
+  consumeGithubAuthorizationCode,
+  describeGithubAuthFailure,
+  exchangeGithubAuthorizationCode,
+} from "@/lib/github-oauth";
+import {
   AuthorizeGithubBackend,
-  exchangeGithubCodeForToken,
   getStoredGithubToken,
 } from "@/lib/talkToBackend";
 import { parseLearnerResponse } from "@/lib/utils";
@@ -398,26 +402,29 @@ const Question: FC<Props> = ({
     const initialize = async () => {
       if (token) return;
 
-      const code = urlParams.get("code");
+      // Reads the code once and clears it from the address bar whatever the
+      // outcome, so a failed exchange cannot be replayed on the next render.
+      const pending = consumeGithubAuthorizationCode();
 
-      if (code) {
-        const returnedToken = await exchangeGithubCodeForToken(code);
-        if (returnedToken && (await validateToken(returnedToken))) {
-          setToken(returnedToken);
-          setOctokit(new Octokit({ auth: returnedToken }));
-
-          const newUrl = window.location.href.replace(
-            window.location.search,
-            "",
+      if (pending) {
+        const result = await exchangeGithubAuthorizationCode(
+          pending.code,
+          pending.state,
+        );
+        if (result.failure || !result.token) {
+          toast.warning(
+            describeGithubAuthFailure(result.failure ?? "unknown").message,
           );
-          window.history.replaceState({}, document.title, newUrl);
+          return;
+        }
+        if (await validateToken(result.token)) {
+          setToken(result.token);
+          setOctokit(new Octokit({ auth: result.token }));
           toast.success(
             "Github token has been authenticated successfully. You can now view files.",
           );
         } else {
-          toast.warning(
-            "Looks like there was an issue with the authentication. Please try to check your github file again.",
-          );
+          toast.warning(describeGithubAuthFailure("token_rejected").message);
         }
         return;
       }
@@ -485,10 +492,7 @@ const Question: FC<Props> = ({
       setToken(backendToken);
       setOctokit(new Octokit({ auth: backendToken }));
     } else {
-      if (urlParams.get("code")) {
-        const newUrl = window.location.href.replace(window.location.search, "");
-        window.history.replaceState({}, document.title, newUrl);
-      }
+      consumeGithubAuthorizationCode();
       void authenticateUser();
     }
   };
