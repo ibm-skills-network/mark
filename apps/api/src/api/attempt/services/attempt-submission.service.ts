@@ -1004,6 +1004,7 @@ export class AttemptSubmissionService {
       await this.translationService.getTranslationsForAttempt(
         assignmentAttempt,
         questionsForTranslation,
+        normalizedLanguage,
       );
 
     const formattedAttempt: AssignmentAttemptWithRelations = {

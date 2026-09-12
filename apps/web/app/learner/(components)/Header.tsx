@@ -183,10 +183,51 @@ function LearnerHeader() {
     };
   }, [assignmentId]);
 
+  // A questions page can be opened without a `lang` parameter — a bookmark, or
+  // a link made before the language was chosen — in which case the server sent
+  // the attempt in English while the learner's chosen language is something
+  // else. Pull the right one once. Tracked in a ref so a language that has no
+  // stored translations yet (they are generated lazily) is attempted once, not
+  // refetched on every render.
+  const reconciledLanguageRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isInQuestionPage || !assignmentId || !activeAttemptId) return;
+    if (!userPreferedLanguage || userPreferedLanguage === "en") return;
+    if (questions.length === 0) return;
+    if (reconciledLanguageRef.current === userPreferedLanguage) return;
+    if (
+      questions.some(
+        (question) => question.translations?.[userPreferedLanguage],
+      )
+    ) {
+      return;
+    }
+
+    reconciledLanguageRef.current = userPreferedLanguage;
+    void getAttempt(
+      assignmentId,
+      activeAttemptId,
+      undefined,
+      userPreferedLanguage,
+    ).then((attempt) => {
+      if (attempt?.questions?.length) {
+        setQuestions(attempt.questions);
+      }
+    });
+  }, [
+    isInQuestionPage,
+    assignmentId,
+    activeAttemptId,
+    userPreferedLanguage,
+    questions,
+    setQuestions,
+  ]);
+
   const handleChangeLanguage = (selectedLanguage: string) => {
     if (!selectedLanguage) return;
     if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
+      reconciledLanguageRef.current = selectedLanguage;
 
       // The attempt payload only carries the language it was fetched with, so
       // an in-page switch pulls the new language's translations and merges

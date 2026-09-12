@@ -31,10 +31,12 @@ jest.mock("next/navigation", () => ({
 
 // --- backend: submitAssignment is the call whose first arg must be the URL id ---
 const mockSubmitAssignment = jest.fn();
+const mockGetAttempt = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/lib/talkToBackend", () => ({
   submitAssignment: (...args: unknown[]) => mockSubmitAssignment(...args),
   getSupportedLanguages: jest.fn().mockResolvedValue([]),
   getUser: jest.fn().mockResolvedValue({ role: "learner", returnUrl: "" }),
+  getAttempt: (...args: unknown[]) => mockGetAttempt(...args),
 }));
 
 jest.mock("@/lib/learner", () => ({
@@ -336,5 +338,104 @@ describe("LearnerHeader duplicate-submit conflict", () => {
     expect(mockPush).toHaveBeenCalledWith("/learner/3428/successPage/999");
     expect(toast.error).not.toHaveBeenCalled();
     expect(screen.queryByTestId("grading-modal")).not.toBeInTheDocument();
+  });
+});
+
+// The attempt response now carries only the language it was requested in, so
+// the page has to notice when the server sent a language the learner did not
+// ask for — otherwise a learner reaching /questions without a `lang` parameter
+// silently reads the whole assignment in English.
+describe("LearnerHeader content language reconciliation", () => {
+  const questionInEnglishOnly = {
+    id: 1,
+    status: "unedited",
+    question: "Pick one",
+    translations: { en: { translatedText: "Pick one" } },
+  } as unknown as QuestionStore;
+
+  const questionInSpanish = {
+    ...questionInEnglishOnly,
+    translations: {
+      en: { translatedText: "Pick one" },
+      es: { translatedText: "Elige una" },
+    },
+  } as unknown as QuestionStore;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    mockGetAttempt.mockResolvedValue({ questions: [questionInSpanish] });
+  });
+
+  it("refetches the attempt when the payload lacks the learner's language", async () => {
+    useLearnerStore.setState({
+      questions: [questionInEnglishOnly],
+      activeAttemptId: 999,
+      userPreferedLanguage: "es",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).toHaveBeenCalledWith(3428, 999, undefined, "es");
+    expect(
+      useLearnerStore.getState().questions[0].translations?.es,
+    ).toBeDefined();
+  });
+
+  it("does not refetch when the payload already has the language", async () => {
+    useLearnerStore.setState({
+      questions: [questionInSpanish],
+      activeAttemptId: 999,
+      userPreferedLanguage: "es",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).not.toHaveBeenCalled();
+  });
+
+  it("does not refetch for an English learner", async () => {
+    useLearnerStore.setState({
+      questions: [questionInEnglishOnly],
+      activeAttemptId: 999,
+      userPreferedLanguage: "en",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).not.toHaveBeenCalled();
+  });
+
+  // Translations are generated lazily, so a language may genuinely have none
+  // yet. Retrying on every render would put the page in a fetch loop.
+  it("asks once for a language that has no translations at all", async () => {
+    mockGetAttempt.mockResolvedValue({ questions: [questionInEnglishOnly] });
+    useLearnerStore.setState({
+      questions: [questionInEnglishOnly],
+      activeAttemptId: 999,
+      userPreferedLanguage: "es",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    const { rerender } = render(<LearnerHeader />);
+    await act(async () => {
+      rerender(<LearnerHeader />);
+    });
+    await act(async () => {
+      rerender(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).toHaveBeenCalledTimes(1);
   });
 });
