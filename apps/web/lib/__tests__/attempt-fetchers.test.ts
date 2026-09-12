@@ -4,7 +4,7 @@
 
 import { APIError } from "../api-client";
 import { getAttempts } from "../author";
-import { getAttempt } from "../learner";
+import { getAttempt, getCompletedAttempt } from "../learner";
 
 jest.mock("../api-client", () => {
   const actual = jest.requireActual("../api-client");
@@ -120,5 +120,45 @@ describe("getAttempt", () => {
     await expect(
       getAttempt(1, 7, undefined, "en", { throwOnAuthError: true }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("getCompletedAttempt", () => {
+  it("propagates an access failure instead of reporting the attempt as missing", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 403, "Forbidden"));
+
+    await expect(
+      getCompletedAttempt(1, 7, undefined, { throwOnAuthError: true }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("propagates an expired session", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 401, "Unauthorized"));
+
+    await expect(
+      getCompletedAttempt(1, 7, undefined, { throwOnAuthError: true }),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("still resolves to undefined for a genuinely missing attempt", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 404, "Not Found"));
+
+    await expect(
+      getCompletedAttempt(1, 7, undefined, { throwOnAuthError: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("logs the failure it swallows rather than discarding it silently", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 500, "Server Error"));
+
+    await expect(getCompletedAttempt(1, 7)).resolves.toBeUndefined();
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it("never calls the API for the author-preview sentinel id", async () => {
+    await expect(
+      getCompletedAttempt(1, -1, undefined, { throwOnAuthError: true }),
+    ).resolves.toBeUndefined();
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 });

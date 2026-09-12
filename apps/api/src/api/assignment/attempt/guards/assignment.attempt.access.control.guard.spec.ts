@@ -262,3 +262,223 @@ describe("AssignmentAttemptAccessControlGuard", () => {
     expect(mockPrisma.assignmentAttempt.findUnique).not.toHaveBeenCalled();
   });
 });
+
+describe("AssignmentAttemptAccessControlGuard — session replaced by another launch", () => {
+  const mockPrisma = {
+    assignment: { findUnique: jest.fn() },
+    assignmentGroup: { findFirst: jest.fn() },
+    assignmentAttempt: { findFirst: jest.fn(), findUnique: jest.fn() },
+    question: { findFirst: jest.fn() },
+    $transaction: jest.fn(),
+  } as unknown as PrismaService;
+
+  const warn = jest.fn();
+  const logger = {
+    child: jest.fn().mockReturnValue({ warn }),
+  };
+
+  let guard: AssignmentAttemptAccessControlGuard;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    guard = new AssignmentAttemptAccessControlGuard(
+      new Reflector(),
+      mockPrisma,
+      logger as never,
+    );
+  });
+
+  const ROUTE_ASSIGNMENT = 3532;
+  const ATTEMPT = 2486;
+  // The session was minted by a launch of a different quiz, so it carries that
+  // course's group — which has no link to the assignment in the URL.
+  const replacedSession = {
+    userId: "learner-1",
+    role: UserRole.LEARNER,
+    assignmentId: 3528,
+    groupId: "group-of-the-other-quiz",
+  };
+
+  const contextFor = (overrides: {
+    method?: string;
+    role?: UserRole;
+    params?: Record<string, string>;
+    url?: string;
+  }): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          userSession: {
+            ...replacedSession,
+            role: overrides.role ?? UserRole.LEARNER,
+          },
+          params: overrides.params ?? {
+            assignmentId: String(ROUTE_ASSIGNMENT),
+            attemptId: String(ATTEMPT),
+          },
+          method: overrides.method ?? "GET",
+          originalUrl:
+            overrides.url ??
+            `/api/v2/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}/completed`,
+        }),
+      }),
+    }) as ExecutionContext;
+
+  /** assignment found, NO group link for the session's group, attempt row as given */
+  const transactionWithoutGroupLink = (attempt: unknown) => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([{ id: ROUTE_ASSIGNMENT }, null, attempt, undefined]);
+  };
+
+  const ownedAttempt = {
+    id: ATTEMPT,
+    assignmentId: ROUTE_ASSIGNMENT,
+    userId: "learner-1",
+  };
+
+  describe.each([
+    [
+      "v2 completed",
+      `/api/v2/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}/completed`,
+    ],
+    [
+      "v1 completed",
+      `/api/v1/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}/completed`,
+    ],
+    [
+      "v2 attempt",
+      `/api/v2/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}`,
+    ],
+    [
+      "v1 attempt",
+      `/api/v1/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}`,
+    ],
+    [
+      "v2 feedback",
+      `/api/v2/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}/feedback`,
+    ],
+  ])("reading own submitted work (%s)", (_label, url) => {
+    it("is allowed even though the live session belongs to another assignment", async () => {
+      transactionWithoutGroupLink(ownedAttempt);
+
+      await expect(guard.canActivate(contextFor({ url }))).resolves.toBe(true);
+    });
+  });
+
+  it("records why the read was allowed so the replaced-session rate stays measurable", async () => {
+    transactionWithoutGroupLink(ownedAttempt);
+
+    await expect(guard.canActivate(contextFor({}))).resolves.toBe(true);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        allow_reason: "owner_read_without_group_link",
+        assignment_id: ROUTE_ASSIGNMENT,
+        attempt_id: ATTEMPT,
+        session_assignment_id: 3528,
+        user_id: "learner-1",
+      }),
+    );
+  });
+
+  it("proves ownership with a user-scoped database query, never a client-supplied id", async () => {
+    transactionWithoutGroupLink(ownedAttempt);
+
+    await guard.canActivate(contextFor({}));
+
+    expect(mockPrisma.assignmentAttempt.findFirst).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.assignmentAttempt.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: ATTEMPT,
+        assignmentId: ROUTE_ASSIGNMENT,
+        userId: "learner-1",
+      },
+    });
+  });
+
+  it("still denies an attempt the learner does not own", async () => {
+    transactionWithoutGroupLink(null);
+
+    await expect(guard.canActivate(contextFor({}))).resolves.toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ denial_reason: "no_group_link" }),
+    );
+  });
+
+  it.each([
+    ["submitting the attempt", "PATCH"],
+    ["abandoning the attempt", "POST"],
+    ["deleting the attempt", "DELETE"],
+  ])("still denies %s under the replaced session", async (_label, method) => {
+    transactionWithoutGroupLink(ownedAttempt);
+
+    await expect(guard.canActivate(contextFor({ method }))).resolves.toBe(
+      false,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ denial_reason: "no_group_link" }),
+    );
+  });
+
+  it("still denies listing the assignment's attempts under the replaced session", async () => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([{ id: ROUTE_ASSIGNMENT }, null]);
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          params: { assignmentId: String(ROUTE_ASSIGNMENT) },
+          url: `/api/v2/assignments/${ROUTE_ASSIGNMENT}/attempts`,
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it("still denies an author whose session has no link to the assignment", async () => {
+    // The author branch of the attempt query is not user-scoped, so a matching
+    // row proves nothing about ownership — the group link stays mandatory.
+    transactionWithoutGroupLink({
+      id: ATTEMPT,
+      assignmentId: ROUTE_ASSIGNMENT,
+      userId: "someone-else",
+    });
+
+    await expect(
+      guard.canActivate(contextFor({ role: UserRole.AUTHOR })),
+    ).resolves.toBe(false);
+  });
+
+  it("still refuses an attempt that belongs to a different assignment", async () => {
+    // The attempt query is scoped to the route assignment, so a cross-assignment
+    // id comes back empty and must not be readable.
+    transactionWithoutGroupLink(null);
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          params: { assignmentId: String(ROUTE_ASSIGNMENT), attemptId: "999" },
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it("still 404s an unowned attempt when the group link is present", async () => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { id: ROUTE_ASSIGNMENT },
+        { id: 1, assignmentId: ROUTE_ASSIGNMENT, groupId: "group-1" },
+        null,
+        undefined,
+      ]);
+
+    await expect(guard.canActivate(contextFor({}))).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+});

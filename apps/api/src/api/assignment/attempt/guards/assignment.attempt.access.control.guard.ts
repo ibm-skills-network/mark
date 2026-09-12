@@ -16,6 +16,10 @@ import {
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeForLog } from "../../../../logger/sanitize";
 
+// Verbs that can only reach a read handler. A write always re-enters the guard
+// under its own verb, so this cannot be widened by a crafted request.
+const READ_ONLY_METHODS = new Set(["GET", "HEAD"]);
+
 // Strict positive-integer parser. Rejects NaN, decimals (`"1.5"`),
 // exponent form (`"1e3"`), hex (`"0x1"`), whitespace, leading `+`, and
 // leading zeros — anything that `Number()` would coerce but that is
@@ -155,15 +159,50 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
     }
 
     if (!assignmentGroup) {
-      this.logger.warn("attempt_access_denied: no group link", {
-        denial_reason: "no_group_link",
-        assignment_id: assignmentId,
-        user_id: sanitizeForLog(userSession?.userId),
-        group_id: sanitizeForLog(userSession?.groupId),
-        method,
-        url: sanitizeForLog(originalUrl),
-      });
-      return false;
+      // The browser session is a single unscoped cookie, so launching any
+      // other quiz replaces this tab's groupId and the learner can no longer
+      // open the results of work they already submitted here.
+      //
+      // An AssignmentGroup row answers "does this course embed this quiz?" —
+      // it is not the authority on "is this the learner's own attempt?". For a
+      // read of one specific attempt the server has already answered the
+      // second question: the row was matched on (id, routeAssignmentId,
+      // userId), all three from the route or the signed session, never from a
+      // request body. So allow the read and keep the group rule everywhere
+      // else — writes, and any read not tied to an attempt this learner owns,
+      // still require the link, which is what stops a session belonging to
+      // another quiz from mutating or enumerating this one.
+      const ownsRequestedAttempt =
+        userSession.role === UserRole.LEARNER &&
+        attemptId !== undefined &&
+        attempt !== null &&
+        attempt !== undefined;
+
+      if (!ownsRequestedAttempt || !READ_ONLY_METHODS.has(method)) {
+        this.logger.warn("attempt_access_denied: no group link", {
+          denial_reason: "no_group_link",
+          assignment_id: assignmentId,
+          user_id: sanitizeForLog(userSession?.userId),
+          group_id: sanitizeForLog(userSession?.groupId),
+          method,
+          url: sanitizeForLog(originalUrl),
+        });
+        return false;
+      }
+
+      this.logger.warn(
+        "attempt_access_allowed: own attempt read without a current group link",
+        {
+          allow_reason: "owner_read_without_group_link",
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+          session_assignment_id: userSession?.assignmentId,
+          user_id: sanitizeForLog(userSession?.userId),
+          group_id: sanitizeForLog(userSession?.groupId),
+          method,
+          url: sanitizeForLog(originalUrl),
+        },
+      );
     }
 
     if (
