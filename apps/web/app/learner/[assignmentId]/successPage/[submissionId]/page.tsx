@@ -20,6 +20,11 @@ import {
   resolveStoreGrade,
   type MissingGradeReason,
 } from "@/lib/gradeDisplay";
+import {
+  resolveAttemptViewError,
+  type AttemptViewError,
+} from "@/lib/attempt-error";
+import { statusFromError } from "@/lib/error-screen";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
@@ -117,12 +122,7 @@ function SuccessPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [BackendComments, setBackendComments] = useState("");
   const [userId, setUserId] = useState<string>(null);
-  const [errorConfig, setErrorConfig] = useState<{
-    message: string;
-    headline?: string;
-    statusCode?: number;
-    primaryActionHref?: string;
-  } | null>(null);
+  const [errorConfig, setErrorConfig] = useState<AttemptViewError | null>(null);
   const [stateTimeline, setStateTimeline] = useState<
     { step: string; detail?: string; timestamp?: string }[]
   >([]);
@@ -142,21 +142,62 @@ function SuccessPage() {
       `Assignment ${assignmentId}, attempt ${attemptId}`,
     );
     const fetchData = async () => {
-      const user = await getUser();
+      let user: Awaited<ReturnType<typeof getUser>>;
+      try {
+        user = await getUser();
+      } catch (error) {
+        if (cancelled) return;
+        const status = statusFromError(error);
+        logState("User fetch failed", `Status ${status}`);
+        setErrorConfig(
+          resolveAttemptViewError({ status, routeAssignmentId: assignmentId }),
+        );
+        setLoading(false);
+        return;
+      }
       if (cancelled) return;
       setRole(user.role);
       setUserId(user.userId);
       logState("User loaded", `Role: ${user.role}`);
       if (user.role === "learner") {
         try {
-          const submissionDetails: AssignmentAttemptWithQuestions =
-            await getCompletedAttempt(assignmentId, attemptId);
+          let submissionDetails: AssignmentAttemptWithQuestions;
+          try {
+            submissionDetails = await getCompletedAttempt(
+              assignmentId,
+              attemptId,
+              undefined,
+              { throwOnAuthError: true },
+            );
+          } catch (error) {
+            if (cancelled) return;
+            const status = statusFromError(error);
+            logState("Attempt fetch denied", `Status ${status}`);
+            setErrorConfig(
+              resolveAttemptViewError({
+                status,
+                routeAssignmentId: assignmentId,
+                sessionAssignmentId: user.assignmentId,
+                returnUrl: user.returnUrl,
+              }),
+            );
+            setLoading(false);
+            return;
+          }
           if (!submissionDetails) {
-            logState("Attempt fetch failed", "Attempt not found or not owned");
-            let resolvedHref: string | undefined = `/learner/${assignmentId}`;
+            logState("Attempt fetch failed", "Attempt not found");
+            const viewError = resolveAttemptViewError({
+              status: 404,
+              routeAssignmentId: assignmentId,
+              sessionAssignmentId: user.assignmentId,
+              returnUrl: user.returnUrl,
+            });
+            let resolvedHref = viewError.primaryActionHref;
             try {
               logState("Looking up other attempts for learner");
-              const attempts = await getAttempts(assignmentId);
+              const attempts = await getAttempts(assignmentId, undefined, {
+                throwOnAuthError: true,
+              });
               const submittedAttempt =
                 attempts?.find((att) => att.submitted) || attempts?.[0];
               if (submittedAttempt) {
@@ -166,17 +207,14 @@ function SuccessPage() {
                 );
                 resolvedHref = `/learner/${assignmentId}/successPage/${submittedAttempt.id}`;
               }
-            } catch {
-              logState("Failed to fetch other attempts for learner");
+            } catch (error) {
+              logState(
+                "Failed to fetch other attempts for learner",
+                `Status ${statusFromError(error)}`,
+              );
             }
 
-            setErrorConfig({
-              statusCode: 404,
-              headline: "Attempt not found",
-              message:
-                "This submission does not belong to your account or no longer exists. Please open the assignment from your course to view your own attempts.",
-              primaryActionHref: resolvedHref,
-            });
+            setErrorConfig({ ...viewError, primaryActionHref: resolvedHref });
             setLoading(false);
             return;
           }
@@ -480,26 +518,19 @@ function SuccessPage() {
         statusCode={errorConfig.statusCode ?? 404}
         headline={errorConfig.headline ?? "Attempt not available"}
         error={errorConfig.message}
-        userSteps={[
-          {
-            title: "Open your assignments",
-            description:
-              "Return to your assignments list and open your own submission.",
-            cta: "Go to my assignments",
-          },
-          {
-            title: "Check you are logged in",
-            description:
-              "Make sure you are signed in with the correct account.",
-          },
-        ]}
-        primaryActionHref={`/learner/${assignmentId}`}
-        primaryActionLabel="Go to my assignments"
+        userSteps={errorConfig.userSteps}
+        // No link when the session cannot reach this assignment: the obvious
+        // "go to my assignments" target fails exactly the same way.
+        primaryActionHref={errorConfig.primaryActionHref}
+        primaryActionLabel={
+          errorConfig.primaryActionHref
+            ? errorConfig.primaryActionLabel
+            : undefined
+        }
         debugDetails={[
           { label: "AssignmentId", value: String(assignmentId) },
           { label: "AttemptId", value: String(attemptId) },
         ]}
-        primaryActionHrefOverride={errorConfig.primaryActionHref}
         stateTimeline={stateTimeline}
       />
     );

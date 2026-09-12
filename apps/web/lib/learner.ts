@@ -283,6 +283,7 @@ export async function getCompletedAttempt(
   assignmentId: number,
   attemptId: number,
   cookies?: string,
+  options?: { throwOnAuthError?: boolean },
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   // Author-preview attempts use the sentinel id -1 and are never persisted
   // server-side, so requesting one is a guaranteed 403 — which the api-client
@@ -315,6 +316,16 @@ export async function getCompletedAttempt(
 
     return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
+    // A session/permission failure is not a missing attempt: swallowing it
+    // here is what made every replaced session and every expired one look
+    // like "this submission does not belong to your account".
+    if (options?.throwOnAuthError && isAuthApiError(err)) {
+      throw err;
+    }
+    console.error(
+      `getCompletedAttempt failed for assignment ${assignmentId}, attempt ${attemptId}:`,
+      err,
+    );
     return undefined;
   }
 }
