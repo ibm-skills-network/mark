@@ -6,6 +6,8 @@ import { createElement, forwardRef, type ReactNode, type Ref } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { resetGithubHandoffForTesting } from "@/lib/github-oauth";
+
 import GithubUploadModal from "../GithubUploadModal";
 
 const mockAuthorizeGithubBackend = jest.fn();
@@ -236,6 +238,73 @@ describe("GithubUploadModal — failure copy", () => {
     expect(
       await screen.findByRole("button", { name: /connect to github/i }),
     ).toBeInTheDocument();
+  });
+});
+
+// Cancelling on GitHub's consent screen comes back as `?error=access_denied`
+// with no code. The parameters used to survive in the URL, nothing counted the
+// refusal, and the modal reopened from its persisted flag and sent the learner
+// straight back to the screen they had just declined.
+describe("GithubUploadModal — declined on GitHub's consent screen", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sessionStorage.clear();
+    fetchMock.mockReset();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    mockGetUser.mockResolvedValue({ role: "learner" });
+    mockGetStoredGithubToken.mockResolvedValue(null);
+    mockAuthorizeGithubBackend.mockResolvedValue({
+      url: "https://github.com/login/oauth/authorize?client_id=x&state=st-1",
+    });
+    resetGithubHandoffForTesting();
+  });
+
+  const decline = () =>
+    setUrl(
+      "/learner/3601/questions?error=access_denied" +
+        "&error_description=The+user+has+denied+your+application+access" +
+        "&state=st-1",
+    );
+
+  it("does not send the learner straight back to the screen they declined", async () => {
+    decline();
+
+    await renderModal();
+
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(mockAuthorizeGithubBackend).not.toHaveBeenCalled();
+    expect(countCallbackPosts()).toBe(0);
+  });
+
+  it("says what happened and leaves the direct-upload way out", async () => {
+    decline();
+
+    await renderModal();
+
+    expect(
+      await screen.findByText(/approve access to continue/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /upload a file instead/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("counts a refusal against the connection budget", async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      decline();
+      const view = await renderModal();
+      await waitFor(() => expect(window.location.search).toBe(""));
+      view.unmount();
+      resetGithubHandoffForTesting();
+    }
+
+    setUrl("/learner/3601/questions");
+    await renderModal();
+
+    expect(
+      await screen.findByText(/upload your file directly/i),
+    ).toBeInTheDocument();
+    expect(mockAuthorizeGithubBackend).not.toHaveBeenCalled();
   });
 });
 
