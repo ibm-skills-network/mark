@@ -43,6 +43,8 @@ import Question from "../Question";
 import "@smastrom/react-rating/style.css";
 
 import Button from "@/components/Button";
+import ConnectionProblem from "@/components/ConnectionProblem";
+import { isNetworkError, type NetworkFailureKind } from "@/lib/api-client";
 import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
@@ -123,6 +125,10 @@ function SuccessPage() {
   const [BackendComments, setBackendComments] = useState("");
   const [userId, setUserId] = useState<string>(null);
   const [errorConfig, setErrorConfig] = useState<AttemptViewError | null>(null);
+  // Set only when the request produced no HTTP response at all, which is a
+  // different screen from any status the server could return.
+  const [connectionFailure, setConnectionFailure] =
+    useState<NetworkFailureKind | null>(null);
   const [stateTimeline, setStateTimeline] = useState<
     { step: string; detail?: string; timestamp?: string }[]
   >([]);
@@ -174,6 +180,15 @@ function SuccessPage() {
             );
           } catch (error) {
             if (cancelled) return;
+            // A request that produced no response has no status to report and
+            // nothing failed on our side, so it gets the connection screen
+            // rather than being dressed up as a missing attempt.
+            if (isNetworkError(error)) {
+              logState("Attempt fetch failed", `No response (${error.kind})`);
+              setConnectionFailure(error.kind);
+              setLoading(false);
+              return;
+            }
             const status = statusFromError(error);
             logState("Attempt fetch failed", `Status ${status}`);
             setErrorConfig(
@@ -187,6 +202,7 @@ function SuccessPage() {
             setLoading(false);
             return;
           }
+          if (cancelled) return;
           if (!submissionDetails) {
             logState("Attempt fetch failed", "Attempt not found");
             const viewError = resolveAttemptViewError({
@@ -285,10 +301,23 @@ function SuccessPage() {
         }
       } else if (user.role === "author") {
         logState("Author mode load");
-        const submissionDetails = await getCompletedAttempt(
-          assignmentId,
-          attemptId,
-        );
+        let submissionDetails: AssignmentAttemptWithQuestions | undefined;
+        try {
+          submissionDetails = await getCompletedAttempt(
+            assignmentId,
+            attemptId,
+          );
+        } catch (error) {
+          if (!isNetworkError(error)) {
+            throw error;
+          }
+          // An author preview keeps its own copy of the attempt, so a
+          // request that never reached the server falls back to it rather
+          // than replacing the preview with an error screen.
+          logState("Attempt fetch failed", `No response (${error.kind})`);
+          submissionDetails = undefined;
+        }
+        if (cancelled) return;
 
         if (submissionDetails) {
           setQuestions(submissionDetails.questions);
@@ -514,6 +543,10 @@ function SuccessPage() {
       },
     },
   };
+
+  if (connectionFailure) {
+    return <ConnectionProblem kind={connectionFailure} />;
+  }
 
   if (errorConfig) {
     return (

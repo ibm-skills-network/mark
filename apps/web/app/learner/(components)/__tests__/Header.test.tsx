@@ -11,6 +11,10 @@ import {
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
+import {
+  UI_LANGUAGE_CHANGED_EVENT,
+  UI_LANGUAGE_STORAGE_KEY,
+} from "@/lib/ui-language";
 import LearnerHeader from "../Header";
 
 // --- next/navigation: useParams is the source of truth we are locking in ---
@@ -311,6 +315,55 @@ describe("LearnerHeader post-submit language reset", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe("LearnerHeader uiLang URL sync", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+  });
+
+  // Defence in depth for the ghost-attempt class above: the questions route
+  // re-runs its server component on every navigation, and that is where a new
+  // attempt is created. The sibling `lang` sync is already route-guarded; this
+  // one was not, so any render on /questions with a non-English language was
+  // one push away from re-arming the same mechanism.
+  it("does not rewrite the questions URL to carry the UI language", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    useLearnerStore.setState({ userPreferedLanguage: "it" });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    const questionsRouteNavigations = mockReplace.mock.calls.filter(([url]) =>
+      String(url).includes("/questions"),
+    );
+    expect(questionsRouteNavigations).toEqual([]);
+  });
+
+  // The URL is not what drives translation — storage plus the change event is
+  // — so skipping the navigation must not cost the learner their language.
+  it("still records the UI language for the translator", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    useLearnerStore.setState({ userPreferedLanguage: "it" });
+
+    const broadcast = jest.fn();
+    window.addEventListener(UI_LANGUAGE_CHANGED_EVENT, broadcast);
+    try {
+      await act(async () => {
+        render(<LearnerHeader />);
+      });
+    } finally {
+      window.removeEventListener(UI_LANGUAGE_CHANGED_EVENT, broadcast);
+    }
+
+    expect(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe("it");
+    expect(broadcast).toHaveBeenCalled();
   });
 });
 
