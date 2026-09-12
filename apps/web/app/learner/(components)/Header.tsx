@@ -215,6 +215,23 @@ function LearnerHeader() {
   };
 
   const CheckNoFlaggedQuestions = useCallback(() => {
+    // The header's Submit button is disabled on this status, but the in-page
+    // submit control reaches this handler through a window event and has no
+    // such button state to disable. Re-checking here makes this the one gate
+    // every submission passes, so an upload still in flight (or a half-filled
+    // attempt) cannot be posted from the page body.
+    const submitStatus = getSubmitButtonStatus(
+      questions,
+      submitting,
+      isUploadingFiles,
+      assignmentDetails?.requireAllQuestions,
+      assignmentDetails?.optionalQuestionIds,
+    );
+    if (submitStatus.disabled) {
+      toast.error(submitStatus.reason);
+      return;
+    }
+
     const optionalQuestionSet = new Set(
       assignmentDetails?.optionalQuestionIds ?? [],
     );
@@ -246,7 +263,7 @@ function LearnerHeader() {
         setToggleWarning(true);
       }
     }
-  }, [questions, assignmentDetails]);
+  }, [questions, assignmentDetails, submitting, isUploadingFiles]);
 
   const handleCloseModal = () => {
     setToggleWarning(false);

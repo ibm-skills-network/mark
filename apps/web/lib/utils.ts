@@ -196,13 +196,21 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
     );
   });
 
+/**
+ * Discriminated so a blocked submission always carries the reason to show the
+ * learner; callers that gate on `disabled` get the message without a fallback.
+ */
+export type SubmitButtonStatus =
+  | { disabled: true; reason: string }
+  | { disabled: false; reason: null };
+
 export const getSubmitButtonStatus = (
   questions: QuestionStore[],
   submitting: boolean,
   isUploadingFiles?: boolean,
   requireAllQuestions?: boolean,
   optionalQuestionIds?: number[],
-) => {
+): SubmitButtonStatus => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
   }
