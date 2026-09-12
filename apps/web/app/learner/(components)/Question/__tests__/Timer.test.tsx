@@ -19,14 +19,24 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
-// Report the timer as already expired so the auto-submit effect fires on mount.
+// Countdown state the tests drive directly; defaults to "already expired" so
+// the auto-submit effect fires on mount.
+const mockCountdownState: {
+  countdown: number | undefined;
+  timerExpired: boolean;
+  resetCountdown: jest.Mock;
+} = {
+  countdown: 0,
+  timerExpired: true,
+  resetCountdown: jest.fn(),
+};
+const mockCountdownCalls: unknown[][] = [];
 jest.mock("@/hooks/use-countdown", () => ({
   __esModule: true,
-  default: () => ({
-    countdown: 0,
-    timerExpired: true,
-    resetCountdown: jest.fn(),
-  }),
+  default: (...args: unknown[]) => {
+    mockCountdownCalls.push(args);
+    return mockCountdownState;
+  },
 }));
 
 const mockSubmitAssignment = jest.fn();
@@ -44,21 +54,33 @@ const answeredQuestion = {
   learnerTextResponse: "my answer",
 } as unknown as QuestionStore;
 
+/** An attempt the learner has genuinely been sitting on for ten minutes. */
+const anEstablishedAttempt = () => Date.now() - 10 * 60 * 1000;
+
 describe("Timer auto-submit", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     localStorage.clear();
+    mockCountdownState.countdown = 0;
+    mockCountdownState.timerExpired = true;
+    mockCountdownCalls.length = 0;
     useLearnerStore.setState({
       questions: [answeredQuestion],
       activeAttemptId: 999,
       userPreferedLanguage: null,
+      attemptStartedAt: anEstablishedAttempt(),
+      serverTimeOffsetMs: 0,
     });
     useAssignmentDetails.setState({ assignmentDetails: null });
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
+    // Inside act(): draining the minimum-age hold re-runs the auto-submit
+    // effect, and React warns about unwrapped updates otherwise.
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
@@ -120,5 +142,144 @@ describe("Timer auto-submit", () => {
 
     expect(mockSubmitAssignment).toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith(lostStreamMessage);
+  });
+});
+
+describe("Timer clock-skew guards", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    localStorage.clear();
+    mockCountdownState.countdown = 0;
+    mockCountdownState.timerExpired = true;
+    mockCountdownCalls.length = 0;
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSubmitAssignment.mockResolvedValue(undefined);
+    useAssignmentDetails.setState({ assignmentDetails: null });
+  });
+
+  afterEach(() => {
+    // Inside act(): draining the minimum-age hold re-runs the auto-submit
+    // effect, and React warns about unwrapped updates otherwise.
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+  });
+
+  it("runs the countdown against the server clock offset held in the store", () => {
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 999,
+      userPreferedLanguage: null,
+      expiresAt: Date.now() + 600_000,
+      attemptStartedAt: anEstablishedAttempt(),
+      serverTimeOffsetMs: -600_000,
+    });
+    mockCountdownState.timerExpired = false;
+    mockCountdownState.countdown = 600_000;
+
+    render(<Timer />);
+
+    expect(mockCountdownCalls[0][1]).toBe(-600_000);
+  });
+
+  it("does not auto-submit an attempt that was created seconds ago", async () => {
+    // The exact reported failure: a device clock far ahead of the server marks
+    // a brand-new attempt as expired, and the old code posted blank answers.
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 999,
+      userPreferedLanguage: null,
+      attemptStartedAt: Date.now() - 3000,
+      serverTimeOffsetMs: 0,
+    });
+
+    render(<Timer />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+  });
+
+  it("auto-submits once the attempt is past the minimum age", async () => {
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 999,
+      userPreferedLanguage: null,
+      attemptStartedAt: Date.now() - 3000,
+      serverTimeOffsetMs: 0,
+    });
+
+    render(<Timer />);
+
+    // Past the minimum age...
+    await act(async () => {
+      jest.advanceTimersByTime(27_100);
+      await Promise.resolve();
+    });
+    // ...then the usual two-second grace before the submit fires.
+    await act(async () => {
+      jest.advanceTimersByTime(2100);
+      await Promise.resolve();
+    });
+
+    expect(mockSubmitAssignment).toHaveBeenCalled();
+  });
+
+  it("falls back to the time the attempt was opened when the server gave no creation time", async () => {
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 999,
+      userPreferedLanguage: null,
+      attemptStartedAt: undefined,
+      serverTimeOffsetMs: 0,
+    });
+
+    render(<Timer />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+  });
+
+  it("does not warn about one minute remaining when the countdown is negative", () => {
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 999,
+      userPreferedLanguage: null,
+      expiresAt: Date.now() + 600_000,
+      attemptStartedAt: Date.now() - 3000,
+      serverTimeOffsetMs: 0,
+    });
+    mockCountdownState.timerExpired = false;
+    mockCountdownState.countdown = -300_000;
+
+    render(<Timer />);
+
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("still warns when a real minute is left", () => {
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 999,
+      userPreferedLanguage: null,
+      expiresAt: Date.now() + 45_000,
+      attemptStartedAt: anEstablishedAttempt(),
+      serverTimeOffsetMs: 0,
+    });
+    mockCountdownState.timerExpired = false;
+    mockCountdownState.countdown = 45_000;
+
+    render(<Timer />);
+
+    expect(toast.warning).toHaveBeenCalled();
   });
 });

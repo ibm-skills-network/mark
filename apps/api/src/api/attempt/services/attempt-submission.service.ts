@@ -30,6 +30,8 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { countAnsweredResponses } from "src/api/assignment/attempt/helper/blank-submission.helper";
+import { readServerClock } from "src/api/assignment/attempt/helper/server-clock.helper";
 import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
@@ -188,6 +190,7 @@ export class AttemptSubmissionService {
       return {
         id: existingAttempt.id,
         success: true,
+        serverNow: readServerClock(),
       };
     }
 
@@ -249,6 +252,7 @@ export class AttemptSubmissionService {
           return {
             id: concurrentAttempt.id,
             success: true,
+            serverNow: readServerClock(),
           };
         }
 
@@ -473,6 +477,7 @@ export class AttemptSubmissionService {
     return {
       id: assignmentAttempt.id,
       success: true,
+      serverNow: readServerClock(),
     };
   }
 
@@ -869,6 +874,7 @@ export class AttemptSubmissionService {
 
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       grade: displayGrade,
       questions: finalQuestions,
       totalPossiblePoints,
@@ -1077,6 +1083,7 @@ export class AttemptSubmissionService {
     // success page. Pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       // The spread carries the persisted grade, which must not reach a learner
       // whose assignment hides the score.
       grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
@@ -1167,6 +1174,18 @@ export class AttemptSubmissionService {
       if (
         this.validationService.isAttemptExpired(assignmentAttempt.expiresAt)
       ) {
+        // A submission that arrives past the deadline carrying nothing the
+        // learner typed is the signature of a client-side timer firing on a
+        // clock it should not have trusted. Record it so the pattern is
+        // visible without changing what happens to the attempt.
+        if (countAnsweredResponses(updateDto.responsesForQuestions) === 0) {
+          this.logger.warn(
+            `updateLearnerAttempt: expired attempt submitted without any answers ` +
+              `attempt=${attemptId} assignment=${assignmentId} ` +
+              `user=${request.userSession.userId} ` +
+              `responses=${updateDto.responsesForQuestions?.length ?? 0}`,
+          );
+        }
         const expiredResult = await this.handleExpiredAttempt(attemptId);
         return expiredResult;
       }

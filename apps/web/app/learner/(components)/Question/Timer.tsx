@@ -24,6 +24,17 @@ import { toast } from "sonner";
 
 type Props = ComponentPropsWithoutRef<"div">;
 
+/**
+ * An attempt is never auto-submitted before it has been open this long. A
+ * device clock running ahead of the server used to mark a brand-new attempt as
+ * expired on arrival, and the timed submit then posted empty answers seconds
+ * after the learner opened the quiz.
+ */
+const MIN_AUTO_SUBMIT_ATTEMPT_AGE_MS = 30_000;
+
+/** Breathing room between "time's up" and the submit, as before. */
+const AUTO_SUBMIT_DELAY_MS = 2000;
+
 function Timer(props: Props) {
   const router = useRouter();
   const userPreferedLanguage = useLearnerStore(
@@ -31,6 +42,8 @@ function Timer(props: Props) {
   );
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  // Bumped when the minimum-age hold elapses, to re-run the auto-submit check.
+  const [autoSubmitRecheck, setAutoSubmitRecheck] = useState(0);
   // The auto-submit effect deliberately omits role from its deps; reading the
   // role through a ref keeps the timed submit from capturing the stale "learner"
   // default when getUser() resolves to "author" after the effect has run. (Only
@@ -41,6 +54,8 @@ function Timer(props: Props) {
     questions,
     setQuestion,
     expiresAt,
+    serverTimeOffsetMs,
+    attemptStartedAt,
     setTotalPointsEarned,
     setTotalPointsPossible,
     setShowSubmissionFeedback,
@@ -50,6 +65,8 @@ function Timer(props: Props) {
     state.questions,
     state.setQuestion,
     state.expiresAt,
+    state.serverTimeOffsetMs,
+    state.attemptStartedAt,
     state.setTotalPointsEarned,
     state.setTotalPointsPossible,
     state.setShowSubmissionFeedback,
@@ -74,7 +91,13 @@ function Timer(props: Props) {
       : assignmentDetails
         ? (assignmentDetails as ReplaceAssignmentRequest)
         : undefined;
-  const { countdown, timerExpired, resetCountdown } = useCountdown(expiresAt);
+  const { countdown, timerExpired, resetCountdown } = useCountdown(
+    expiresAt,
+    serverTimeOffsetMs,
+  );
+  // Set on mount and on every attempt change: the fallback for attempts whose
+  // payload carried no server creation time.
+  const attemptOpenedAtRef = useRef(Date.now());
   const hasCountdown = typeof countdown === "number";
   const safeCountdown = hasCountdown ? countdown : 0;
 
@@ -238,6 +261,7 @@ function Timer(props: Props) {
     setLearnerStore({
       activeAttemptId: null,
       expiresAt: undefined,
+      attemptStartedAt: undefined,
     });
     useLearnerStore.getState().setActiveQuestionNumber(null);
     setTimeout(() => {
@@ -247,9 +271,12 @@ function Timer(props: Props) {
   }
 
   useEffect(() => {
+    // countdown > 0 matters: a countdown that is already at or below zero on
+    // arrival is not "one minute left", it is a clock the client cannot trust.
     if (
       expiresAt &&
       hasCountdown &&
+      countdown > 0 &&
       countdown <= 60000 &&
       !oneMinuteAlertShown
     ) {
@@ -269,11 +296,33 @@ function Timer(props: Props) {
     if (activeAttemptId) {
       setOneMinuteAlertShown(false);
       setIsSubmitted(false);
+      attemptOpenedAtRef.current = Date.now();
     }
   }, [activeAttemptId]);
 
   useEffect(() => {
     if (timerExpired && !isSubmitted && assignmentId && activeAttemptId) {
+      // How long the learner has actually had this attempt. With the server's
+      // clock in hand the attempt's own creation time is usable; without it,
+      // fall back to how long this tab has held the attempt, which is the only
+      // elapsed time a wrong device clock cannot inflate.
+      const canTrustAttemptStart =
+        typeof serverTimeOffsetMs === "number" &&
+        typeof attemptStartedAt === "number";
+      const attemptAgeMs = canTrustAttemptStart
+        ? Date.now() + serverTimeOffsetMs - attemptStartedAt
+        : Date.now() - attemptOpenedAtRef.current;
+
+      if (attemptAgeMs < MIN_AUTO_SUBMIT_ATTEMPT_AGE_MS) {
+        // Too soon to be a real expiry. Hold the submit — and stay silent —
+        // until the attempt is old enough to be credibly out of time.
+        const retryTimer = setTimeout(
+          () => setAutoSubmitRecheck((count) => count + 1),
+          MIN_AUTO_SUBMIT_ATTEMPT_AGE_MS - attemptAgeMs,
+        );
+        return () => clearTimeout(retryTimer);
+      }
+
       setIsSubmitted(true);
       toast.message(
         "Time's up! Your responses have been saved and will be graded automatically.",
@@ -281,9 +330,17 @@ function Timer(props: Props) {
 
       setTimeout(() => {
         void handleSubmitAssignment();
-      }, 2000);
+      }, AUTO_SUBMIT_DELAY_MS);
     }
-  }, [timerExpired, isSubmitted, assignmentId, activeAttemptId]);
+  }, [
+    timerExpired,
+    isSubmitted,
+    assignmentId,
+    activeAttemptId,
+    attemptStartedAt,
+    serverTimeOffsetMs,
+    autoSubmitRecheck,
+  ]);
 
   return (
     <div className="flex items-center space-x-2" {...props}>

@@ -335,6 +335,16 @@ export type LearnerState = {
   activeAttemptId: number | null;
   activeQuestionNumber: number | null | undefined;
   expiresAt: number | undefined;
+  /**
+   * `serverNow - deviceNow`, measured when the attempt payload arrived. Every
+   * countdown runs against `Date.now() + serverTimeOffsetMs` so a device clock
+   * that is minutes fast cannot shorten — or instantly end — a timed attempt.
+   * Undefined when the payload carried no server clock, which is also the
+   * signal that nothing derived from the device clock can be trusted.
+   */
+  serverTimeOffsetMs: number | undefined;
+  /** When the server says the attempt was created (ms, server clock). */
+  attemptStartedAt: number | undefined;
   questions: QuestionStore[];
   role?: "learner" | "author";
   totalPointsEarned: number;
@@ -851,6 +861,8 @@ export const useLearnerStore = createWithEqualityFn<
         setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
         assignmentDetails: null,
         expiresAt: undefined,
+        serverTimeOffsetMs: undefined,
+        attemptStartedAt: undefined,
         questions: [],
         isUploadingFiles: false,
         setIsUploadingFiles: (isUploading) =>
