@@ -14,6 +14,12 @@ import { reloadPage } from "@/lib/utils";
  * wrong on our side" and invited to report an outage. Nothing failed on our
  * side, so this screen says so and offers the retry that actually helps.
  */
+/**
+ * Badge text in place of an HTTP status. The server never answered, so there
+ * is no status to print.
+ */
+const NETWORK_STATUS_LABEL = "Network";
+
 const COPY: Record<
   NetworkFailureKind,
   {
@@ -63,6 +69,23 @@ const COPY: Record<
   },
 };
 
+/**
+ * Every English string this screen renders, deduplicated. The UI translation
+ * catalogs are keyed by exact source text, so new copy is invisible to them
+ * until it is added; exporting the list is what lets a test say so rather than
+ * a non-English learner finding out.
+ */
+export const CONNECTION_PROBLEM_SOURCE_STRINGS: readonly string[] = Array.from(
+  new Set([
+    NETWORK_STATUS_LABEL,
+    ...Object.values(COPY).flatMap((copy) => [
+      copy.headline,
+      copy.message,
+      ...copy.steps.flatMap((step) => [step.title, step.description]),
+    ]),
+  ]),
+);
+
 export default function ConnectionProblem({
   kind,
   variant,
@@ -78,7 +101,7 @@ export default function ConnectionProblem({
     <ErrorPage
       error={copy.message}
       // No status: the server never answered, so it has none to report.
-      statusLabel="Network"
+      statusLabel={NETWORK_STATUS_LABEL}
       fault="client-network"
       headline={copy.headline}
       userSteps={copy.steps}
