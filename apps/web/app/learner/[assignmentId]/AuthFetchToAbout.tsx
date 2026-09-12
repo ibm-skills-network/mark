@@ -53,10 +53,14 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     try {
       if (role === "learner") {
         try {
+          // quiet: this component renders the failure as an error screen, so
+          // a toast would only double up on it — and a momentary failure that
+          // the retry absorbs must not flash anything at all.
           const assignmentData = await getAssignment(
             assignmentId,
             userPreferedLanguage,
             cookie,
+            { quiet: true },
           );
 
           const attemptsData = await getAttempts(assignmentId, cookie);
@@ -99,7 +103,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
         const previewPayload = readAuthorPreviewPayload(assignmentId);
         const backendAssignment = previewPayload
           ? null
-          : await getAssignment(assignmentId, userPreferedLanguage, cookie);
+          : await getAssignment(assignmentId, userPreferedLanguage, cookie, {
+              quiet: true,
+            });
         if (!previewPayload && !backendAssignment) {
           throw new Error("Failed to fetch assignment.");
         }

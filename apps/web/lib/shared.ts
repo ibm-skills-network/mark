@@ -2044,6 +2044,13 @@ export async function getAssignment(
   id: number,
   userPreferedLanguage?: string,
   cookies?: string,
+  options?: {
+    /**
+     * Suppresses the default error toast. Only for callers that render the
+     * failure themselves — without it a hard failure is silent.
+     */
+    quiet?: boolean;
+  },
 ): Promise<Assignment> {
   const url = userPreferedLanguage
     ? `${getApiRoutes().assignments}/${id}?lang=${userPreferedLanguage}`
@@ -2052,10 +2059,10 @@ export async function getAssignment(
   // The assignment is the one fetch the learner's About page cannot render
   // without, so a single dropped socket used to go straight to an error
   // dialog. Retried once like every other learner fetch (getAttempt,
-  // getAttempts); quiet so the recovered attempt never flashes a toast.
+  // getAttempts).
   const responseBody = (await withTransientRetry(() =>
     apiClient.get(url, {
-      quiet: true,
+      quiet: options?.quiet ?? false,
       headers: {
         "Cache-Control": "no-cache",
         ...(cookies ? { Cookie: cookies } : {}),

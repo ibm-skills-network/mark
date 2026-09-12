@@ -67,13 +67,18 @@ describe("getAssignment", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(2);
   });
 
-  it("does not toast on the recovered attempt", async () => {
-    apiClient.get
-      .mockRejectedValueOnce(new APIError("x", 502, "Bad Gateway"))
-      .mockResolvedValueOnce(assignmentRow);
+  // Only callers that render the failure themselves may silence the toast;
+  // for everyone else it is the sole signal that anything went wrong.
+  it("stays loud unless the caller says it renders the error itself", async () => {
+    apiClient.get.mockResolvedValue(assignmentRow);
 
     await getAssignment(42);
+    expect(apiClient.get).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ quiet: false }),
+    );
 
+    await getAssignment(42, "en", undefined, { quiet: true });
     expect(apiClient.get).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.objectContaining({ quiet: true }),
