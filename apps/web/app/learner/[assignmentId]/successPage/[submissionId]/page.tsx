@@ -38,6 +38,8 @@ import Question from "../Question";
 import "@smastrom/react-rating/style.css";
 
 import Button from "@/components/Button";
+import ConnectionProblem from "@/components/ConnectionProblem";
+import { isNetworkError, type NetworkFailureKind } from "@/lib/api-client";
 import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
@@ -123,6 +125,10 @@ function SuccessPage() {
     statusCode?: number;
     primaryActionHref?: string;
   } | null>(null);
+  // Set only when the request produced no HTTP response at all, which is a
+  // different screen from any status the server could return.
+  const [connectionFailure, setConnectionFailure] =
+    useState<NetworkFailureKind | null>(null);
   const [stateTimeline, setStateTimeline] = useState<
     { step: string; detail?: string; timestamp?: string }[]
   >([]);
@@ -149,8 +155,25 @@ function SuccessPage() {
       logState("User loaded", `Role: ${user.role}`);
       if (user.role === "learner") {
         try {
-          const submissionDetails: AssignmentAttemptWithQuestions =
-            await getCompletedAttempt(assignmentId, attemptId);
+          let submissionDetails: AssignmentAttemptWithQuestions;
+          try {
+            submissionDetails = await getCompletedAttempt(
+              assignmentId,
+              attemptId,
+            );
+          } catch (error) {
+            // Only a request that produced no response is handled here: it
+            // has no status to report and nothing failed on our side, so it
+            // must not be dressed up as a missing attempt or a server fault.
+            if (!isNetworkError(error)) {
+              throw error;
+            }
+            if (cancelled) return;
+            logState("Attempt fetch failed", `No response (${error.kind})`);
+            setConnectionFailure(error.kind);
+            return;
+          }
+          if (cancelled) return;
           if (!submissionDetails) {
             logState("Attempt fetch failed", "Attempt not found or not owned");
             let resolvedHref: string | undefined = `/learner/${assignmentId}`;
@@ -244,10 +267,23 @@ function SuccessPage() {
         }
       } else if (user.role === "author") {
         logState("Author mode load");
-        const submissionDetails = await getCompletedAttempt(
-          assignmentId,
-          attemptId,
-        );
+        let submissionDetails: AssignmentAttemptWithQuestions | undefined;
+        try {
+          submissionDetails = await getCompletedAttempt(
+            assignmentId,
+            attemptId,
+          );
+        } catch (error) {
+          if (!isNetworkError(error)) {
+            throw error;
+          }
+          // An author preview keeps its own copy of the attempt, so a
+          // request that never reached the server falls back to it rather
+          // than replacing the preview with an error screen.
+          logState("Attempt fetch failed", `No response (${error.kind})`);
+          submissionDetails = undefined;
+        }
+        if (cancelled) return;
 
         if (submissionDetails) {
           setQuestions(submissionDetails.questions);
@@ -473,6 +509,10 @@ function SuccessPage() {
       },
     },
   };
+
+  if (connectionFailure) {
+    return <ConnectionProblem kind={connectionFailure} />;
+  }
 
   if (errorConfig) {
     return (

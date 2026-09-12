@@ -20,7 +20,7 @@ import type {
 } from "@config/types";
 import { toast } from "sonner";
 import { submitReportAuthor } from "@/lib/talkToBackend";
-import { apiClient, APIError } from "./api-client";
+import { apiClient, APIError, isNetworkError } from "./api-client";
 import { isAuthApiError, withTransientRetry } from "./api-retry";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 import {
@@ -315,6 +315,18 @@ export async function getCompletedAttempt(
 
     return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
+    // A request that never got a response is not a missing attempt: returning
+    // undefined here is what made a dropped connection reach the learner as
+    // "this submission does not belong to your account". The callers decide
+    // how to show it — they are the only ones who know whether a stale copy
+    // of the attempt is available to fall back on.
+    if (isNetworkError(err)) {
+      throw err;
+    }
+    console.error(
+      `getCompletedAttempt failed for assignment ${assignmentId}, attempt ${attemptId}:`,
+      err,
+    );
     return undefined;
   }
 }

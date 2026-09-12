@@ -2,9 +2,9 @@
  * @jest-environment node
  */
 
-import { APIError } from "../api-client";
+import { APIError, NetworkError } from "../api-client";
 import { getAttempts } from "../author";
-import { getAttempt } from "../learner";
+import { getAttempt, getCompletedAttempt } from "../learner";
 
 jest.mock("../api-client", () => {
   const actual = jest.requireActual("../api-client");
@@ -120,5 +120,28 @@ describe("getAttempt", () => {
     await expect(
       getAttempt(1, 7, undefined, "en", { throwOnAuthError: true }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("getCompletedAttempt", () => {
+  // A request that produced no response is not a missing attempt. Returning
+  // undefined for it is what let the results page tell a learner on a dropped
+  // connection that their submission belonged to someone else.
+  it("rethrows a request that never reached the server", async () => {
+    apiClient.get.mockRejectedValue(
+      new NetworkError("Request timed out after 30000ms", "timeout"),
+    );
+
+    await expect(getCompletedAttempt(1, 7)).rejects.toMatchObject({
+      name: "NetworkError",
+      kind: "timeout",
+    });
+  });
+
+  it("still resolves undefined when the server answered with a failure", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 404, "Not Found"));
+
+    await expect(getCompletedAttempt(1, 7)).resolves.toBeUndefined();
+    expect(console.error).toHaveBeenCalled();
   });
 });
