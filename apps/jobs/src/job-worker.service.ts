@@ -28,6 +28,7 @@ import {
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
 import { traceJob } from "./instrumentation/instana-job-tracing";
 import { createRedisConnection } from "./redis.connection";
+import { calculateAttemptRetryDelayMs } from "../../api/src/job-queue/attempt-retry-backoff";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
@@ -354,6 +355,23 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       {
         connection: this.getConnection(),
         concurrency,
+        settings: {
+          // BullMQ looks a job's backoff up by name; the attempt-grading
+          // queues are enqueued with the custom type this resolves, so a
+          // worker that fails to register it would throw "Unknown backoff
+          // strategy" on the first retry. Registered on every worker rather
+          // than only the attempt ones so a future queue that adopts the same
+          // backoff cannot half-arrive. The strategy returns 0 — retry
+          // immediately, unchanged — for every failure that is not a
+          // transient URL fetch.
+          backoffStrategy: (
+            attemptsMade: number,
+            backoffType?: string,
+            error?: Error,
+            job?: { id?: string },
+          ): number =>
+            this.resolveRetryDelayMs(queueName, attemptsMade, error, job?.id),
+        },
         ...(options.lockDuration !== undefined && {
           lockDuration: options.lockDuration,
         }),
@@ -375,6 +393,32 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     });
 
     return worker;
+  }
+
+  // Backoff decision for one failed job, in milliseconds. 0 keeps BullMQ's
+  // immediate retry, which is what every failure got before the transient
+  // URL-fetch class existed and what everything outside that class still
+  // gets. A delayed retry is logged because it is otherwise invisible: the
+  // job simply sits in the delayed set, and the gap between the failure line
+  // and the next attempt would look like a stall.
+  private resolveRetryDelayMs(
+    queueName: string,
+    attemptsMade: number,
+    error: Error | undefined,
+    jobId: string | undefined,
+  ): number {
+    const delayMs = calculateAttemptRetryDelayMs(attemptsMade, error);
+    if (delayMs > 0) {
+      this.structuredLogger.warn("attempt.grade.retry.delayed", {
+        attemptsMade,
+        delayMs,
+        errorClass: error?.name,
+        jobId,
+        queueName,
+        reason: error ? this.messageOf(error) : undefined,
+      });
+    }
+    return delayMs;
   }
 
   private getConnection(): IORedis {

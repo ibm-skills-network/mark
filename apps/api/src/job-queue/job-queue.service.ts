@@ -2,6 +2,10 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { Job, JobsOptions, JobState, Queue } from "bullmq";
 import IORedis from "ioredis";
 import {
+  ATTEMPT_RETRY_BACKOFF,
+  queueUsesAttemptRetryBackoff,
+} from "./attempt-retry-backoff";
+import {
   JOB_PRIORITIES,
   JOB_QUEUE_NAMES,
   JobName,
@@ -81,6 +85,16 @@ export class JobQueueService implements OnModuleDestroy {
       connection: this.getConnection(),
       defaultJobOptions: {
         attempts: 3,
+        // Attempt grading reads learner-submitted links, so a share of its
+        // failures are "the upstream was momentarily unavailable" rather than
+        // "this job is broken". Retrying those three times inside a second
+        // just burns the attempts against the same outage. The custom
+        // strategy the worker registers decides the wait per failure and
+        // returns 0 — an immediate retry, as before — for every other class,
+        // so only the transient-fetch case is paced.
+        ...(queueUsesAttemptRetryBackoff(queueName) && {
+          backoff: ATTEMPT_RETRY_BACKOFF,
+        }),
         // Cap retained job history by count. BullMQ keeps completed and failed
         // jobs — each carrying a full encrypted payload — until evicted; at 1000
         // per state across every queue this history dominated Redis memory. A
