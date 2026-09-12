@@ -30,6 +30,27 @@ import {
 import { CanonicalSubmission } from "./structured-content.models";
 import { PdfStructureExtractorService } from "./pdf-structure-extractor.service";
 
+/**
+ * Caps on the OOXML parts a single workbook may force this service to
+ * decompress and scan. Real submissions carry a handful of each; the caps stop
+ * a crafted package from turning chart/pivot description into unbounded work.
+ */
+const MAX_WORKBOOK_CHART_PARTS = 50;
+const MAX_WORKBOOK_PIVOT_PARTS = 50;
+const MAX_WORKBOOK_PART_BYTES = 5_000_000;
+
+/** Series references reported per chart, enough to show what it plots. */
+const MAX_CHART_SERIES_RANGES = 8;
+
+/** OOXML c:legendPos codes, spelled out for the grading prompt. */
+const LEGEND_POSITION_LABELS: Record<string, string> = {
+  b: "bottom",
+  l: "left",
+  r: "right",
+  t: "top",
+  tr: "top right",
+};
+
 export interface ExtractedFileContent {
   filename: string;
   content: string;
@@ -3246,6 +3267,8 @@ export class FileContentExtractionService {
       sheetCount: number;
       chartCount: number;
       imageCount: number;
+      legendCount: number;
+      pivotCount: number;
     };
   }> {
     try {
@@ -3331,13 +3354,17 @@ export class FileContentExtractionService {
         }
       }
 
-      // Extract charts and embedded images (XLSX is a ZIP archive)
+      // Extract charts, pivot tables and embedded images (XLSX is a ZIP archive)
       let chartCount = 0;
       let imageCount = 0;
+      let legendCount = 0;
+      let pivotCount = 0;
       if (isXlsx) {
         const chartsAndImages = await this.extractExcelChartsAndImages(buffer);
         chartCount = chartsAndImages.chartCount;
         imageCount = chartsAndImages.imageCount;
+        legendCount = chartsAndImages.legendCount ?? 0;
+        pivotCount = chartsAndImages.pivotCount ?? 0;
         if (chartsAndImages.section) {
           allText += chartsAndImages.section;
         }
@@ -3361,6 +3388,8 @@ export class FileContentExtractionService {
           totalUsedCells,
           chartCount,
           imageCount,
+          legendCount,
+          pivotCount,
         })}`,
       );
 
@@ -3371,6 +3400,8 @@ export class FileContentExtractionService {
           sheetCount: sheetNames.length,
           chartCount,
           imageCount,
+          legendCount,
+          pivotCount,
         },
       };
     } catch (error) {
@@ -3393,75 +3424,134 @@ export class FileContentExtractionService {
   }
 
   /**
-   * Parse the XLSX file as a ZIP archive to detect embedded charts and images.
-   * XLSX files are ZIP archives containing XML files for chart data (xl/charts/)
-   * and media files for embedded images (xl/media/).
+   * Parse the XLSX file as a ZIP archive to describe embedded charts, pivot
+   * tables and images.
+   *
+   * A spreadsheet rubric asks about things that only exist in the OOXML parts:
+   * whether a chart is a column chart or a bar chart (same c:barChart element,
+   * different c:barDir), whether it has a legend and where, which worksheet it
+   * sits on, and how a pivot table lays its fields out. None of that survives
+   * the flattened cell dump, so it is read here from the package the workbook
+   * already ships.
    */
   private async extractExcelChartsAndImages(buffer: Buffer): Promise<{
     section: string;
     chartCount: number;
     imageCount: number;
+    legendCount: number;
+    pivotCount: number;
   }> {
     let section = "";
     let chartCount = 0;
     let imageCount = 0;
+    let legendCount = 0;
+    let pivotCount = 0;
 
     try {
       const zip = await unzipper.Open.buffer(buffer);
-      const chartDescriptions: string[] = [];
-      const imageNames: string[] = [];
-
+      const entries = new Map<string, unzipper.File>();
       for (const entry of zip.files) {
-        // Detect embedded charts in data sheets (xl/charts/chartN.xml)
-        // and standalone chart sheets (xl/chartsheets/sheetN.xml)
-        if (
-          (entry.path.startsWith("xl/charts/chart") ||
-            entry.path.startsWith("xl/chartsheets/sheet")) &&
-          entry.path.endsWith(".xml")
-        ) {
-          try {
-            const xmlBuffer = await entry.buffer();
-            const xmlString = xmlBuffer.toString("utf8");
-            const chartType = this.detectChartTypeFromXml(xmlString);
-            const title = this.extractChartTitleFromXml(xmlString);
-            const chartNum = chartCount + 1;
-            let description = `Chart ${chartNum}: ${chartType}`;
-            if (title) description += ` - "${title}"`;
-            chartDescriptions.push(description);
-            chartCount++;
-          } catch {
-            chartCount++;
-            chartDescriptions.push(`Chart ${chartCount}: (unable to parse)`);
-          }
+        entries.set(entry.path, entry);
+      }
+
+      const partOwners = await this.mapPackagePartsToSheets(entries);
+
+      const chartParts = this.selectPackageParts(
+        entries,
+        (entryPath) =>
+          entryPath.startsWith("xl/charts/chart") && entryPath.endsWith(".xml"),
+        MAX_WORKBOOK_CHART_PARTS,
+        "charts",
+      );
+
+      const chartDescriptions: string[] = [];
+      for (const chartPath of chartParts) {
+        const chartNumber = chartDescriptions.length + 1;
+        const sheetName = partOwners.charts.get(chartPath);
+        const heading =
+          sheetName === undefined
+            ? `Chart ${chartNumber}`
+            : `Chart ${chartNumber} on sheet "${sheetName}"`;
+
+        const xmlString = await this.readPackagePart(entries, chartPath);
+        if (xmlString === undefined) {
+          chartDescriptions.push(`${heading}: (unable to parse)`);
+          continue;
         }
 
-        // Detect embedded images in xl/media/
-        if (entry.path.startsWith("xl/media/")) {
-          const ext = path.extname(entry.path).toLowerCase().replace(".", "");
-          const imageExtensions = [
-            "png",
-            "jpg",
-            "jpeg",
-            "gif",
-            "bmp",
-            "wmf",
-            "emf",
-            "svg",
-            "tiff",
-          ];
-          if (imageExtensions.includes(ext)) {
-            imageNames.push(
-              `${path.basename(entry.path)} (${ext.toUpperCase()})`,
-            );
-            imageCount++;
-          }
+        const chart = this.describeChartXml(xmlString);
+        let description = `${heading}: ${chart.type}`;
+        if (chart.title) description += ` - "${chart.title}"`;
+        description +=
+          chart.legendPosition === undefined
+            ? "\n  Legend: not present"
+            : `\n  Legend: present (${chart.legendPosition})`;
+        if (chart.legendPosition !== undefined) legendCount++;
+        if (chart.seriesRanges.length > 0) {
+          description += `\n  Series ranges: ${chart.seriesRanges.join(", ")}`;
+        }
+        chartDescriptions.push(description);
+      }
+      chartCount = chartDescriptions.length;
+
+      const pivotParts = this.selectPackageParts(
+        entries,
+        (entryPath) =>
+          entryPath.startsWith("xl/pivotTables/pivotTable") &&
+          entryPath.endsWith(".xml"),
+        MAX_WORKBOOK_PIVOT_PARTS,
+        "pivot tables",
+      );
+
+      const pivotDescriptions: string[] = [];
+      for (const pivotPath of pivotParts) {
+        const description = await this.describePivotTablePart(
+          entries,
+          pivotPath,
+          partOwners.pivots.get(pivotPath),
+          pivotDescriptions.length + 1,
+        );
+        if (description) pivotDescriptions.push(description);
+      }
+      pivotCount = pivotDescriptions.length;
+
+      const imageNames: string[] = [];
+      for (const entryPath of entries.keys()) {
+        if (!entryPath.startsWith("xl/media/")) continue;
+        const extension = path
+          .extname(entryPath)
+          .toLowerCase()
+          .replace(".", "");
+        const imageExtensions = [
+          "png",
+          "jpg",
+          "jpeg",
+          "gif",
+          "bmp",
+          "wmf",
+          "emf",
+          "svg",
+          "tiff",
+        ];
+        if (imageExtensions.includes(extension)) {
+          imageNames.push(
+            `${path.basename(entryPath)} (${extension.toUpperCase()})`,
+          );
+          imageCount++;
         }
       }
 
       if (chartDescriptions.length > 0) {
         section += `\n=== CHARTS (${chartDescriptions.length} total) ===\n`;
-        for (const desc of chartDescriptions) {
-          section += `- ${desc}\n`;
+        for (const description of chartDescriptions) {
+          section += `- ${description}\n`;
+        }
+      }
+
+      if (pivotDescriptions.length > 0) {
+        section += `\n=== PIVOT TABLES (${pivotDescriptions.length} total) ===\n`;
+        for (const description of pivotDescriptions) {
+          section += `- ${description}\n`;
         }
       }
 
@@ -3480,7 +3570,339 @@ export class FileContentExtractionService {
       );
     }
 
-    return { section, chartCount, imageCount };
+    return { section, chartCount, imageCount, legendCount, pivotCount };
+  }
+
+  /**
+   * Package parts matching a predicate, in natural (chart2 before chart10)
+   * order and capped. The cap bounds the work a crafted workbook can force:
+   * every selected part is decompressed and scanned.
+   */
+  private selectPackageParts(
+    entries: Map<string, unzipper.File>,
+    matches: (entryPath: string) => boolean,
+    cap: number,
+    label: string,
+  ): string[] {
+    const selected = [...entries.keys()].filter((entryPath) =>
+      matches(entryPath),
+    );
+    selected.sort((left, right) => {
+      const leftNumber = Number.parseInt(
+        /(\d+)\.xml$/.exec(left)?.[1] ?? "0",
+        10,
+      );
+      const rightNumber = Number.parseInt(
+        /(\d+)\.xml$/.exec(right)?.[1] ?? "0",
+        10,
+      );
+      return leftNumber === rightNumber
+        ? left.localeCompare(right)
+        : leftNumber - rightNumber;
+    });
+
+    if (selected.length > cap) {
+      this.logger.warn(
+        `xlsx.parts.capped ${JSON.stringify({
+          part: label,
+          found: selected.length,
+          cap,
+        })}`,
+      );
+      return selected.slice(0, cap);
+    }
+    return selected;
+  }
+
+  /** Read one package part as UTF-8, refusing parts bigger than the budget. */
+  private async readPackagePart(
+    entries: Map<string, unzipper.File>,
+    partPath: string,
+  ): Promise<string | undefined> {
+    const entry = entries.get(partPath);
+    if (!entry) return undefined;
+
+    if (entry.uncompressedSize > MAX_WORKBOOK_PART_BYTES) {
+      this.logger.warn(
+        `xlsx.part.oversized ${JSON.stringify({
+          part: partPath,
+          size: entry.uncompressedSize,
+          cap: MAX_WORKBOOK_PART_BYTES,
+        })}`,
+      );
+      return undefined;
+    }
+
+    try {
+      const partBuffer = await entry.buffer();
+      return partBuffer.toString("utf8");
+    } catch (error) {
+      this.logger.debug(
+        `Workbook part ${partPath} could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    }
+  }
+
+  /** Relationships declared by one .rels part. */
+  private parseRelationships(
+    relationshipsXml: string,
+  ): Array<{ id: string; type: string; target: string }> {
+    const relationships: Array<{ id: string; type: string; target: string }> =
+      [];
+    for (const match of relationshipsXml.matchAll(/<Relationship\b[^>]*>/g)) {
+      const element = match[0];
+      const id = /\bId="([^"]*)"/.exec(element)?.[1];
+      const type = /\bType="([^"]*)"/.exec(element)?.[1];
+      const target = /\bTarget="([^"]*)"/.exec(element)?.[1];
+      if (id && type && target) relationships.push({ id, type, target });
+    }
+    return relationships;
+  }
+
+  /** Resolve a relationship target against the part that declared it. */
+  private resolvePackagePath(fromPart: string, target: string): string {
+    if (target.startsWith("/")) return target.slice(1);
+    const segments = fromPart.split("/").slice(0, -1);
+    for (const piece of target.split("/")) {
+      if (piece === "" || piece === ".") continue;
+      if (piece === "..") segments.pop();
+      else segments.push(piece);
+    }
+    return segments.join("/");
+  }
+
+  /** The .rels part that describes a given package part. */
+  private relationshipPartFor(partPath: string): string {
+    const separator = partPath.lastIndexOf("/");
+    const directory = partPath.slice(0, separator);
+    const name = partPath.slice(separator + 1);
+    return `${directory}/_rels/${name}.rels`;
+  }
+
+  /**
+   * Walk workbook -> worksheet -> drawing -> chart (and worksheet -> pivot
+   * table) relationships so every chart and pivot table can be attributed to
+   * the worksheet a learner actually put it on.
+   */
+  private async mapPackagePartsToSheets(
+    entries: Map<string, unzipper.File>,
+  ): Promise<{ charts: Map<string, string>; pivots: Map<string, string> }> {
+    const charts = new Map<string, string>();
+    const pivots = new Map<string, string>();
+
+    const workbookXml = await this.readPackagePart(entries, "xl/workbook.xml");
+    const workbookRelsXml = await this.readPackagePart(
+      entries,
+      "xl/_rels/workbook.xml.rels",
+    );
+    if (!workbookXml || !workbookRelsXml) return { charts, pivots };
+
+    const workbookRelationships = new Map(
+      this.parseRelationships(workbookRelsXml).map((relationship) => [
+        relationship.id,
+        relationship.target,
+      ]),
+    );
+
+    for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/g)) {
+      const element = match[0];
+      const sheetName = /\bname="([^"]*)"/.exec(element)?.[1];
+      const relationshipId = /\br:id="([^"]*)"/.exec(element)?.[1];
+      if (!sheetName || !relationshipId) continue;
+
+      const sheetTarget = workbookRelationships.get(relationshipId);
+      if (!sheetTarget) continue;
+      const sheetPath = this.resolvePackagePath("xl/workbook.xml", sheetTarget);
+
+      const sheetRelsXml = await this.readPackagePart(
+        entries,
+        this.relationshipPartFor(sheetPath),
+      );
+      if (!sheetRelsXml) continue;
+
+      for (const relationship of this.parseRelationships(sheetRelsXml)) {
+        const targetPath = this.resolvePackagePath(
+          sheetPath,
+          relationship.target,
+        );
+
+        if (relationship.type.endsWith("/pivotTable")) {
+          pivots.set(targetPath, sheetName);
+          continue;
+        }
+        if (!relationship.type.endsWith("/drawing")) continue;
+
+        const drawingRelsXml = await this.readPackagePart(
+          entries,
+          this.relationshipPartFor(targetPath),
+        );
+        if (!drawingRelsXml) continue;
+
+        for (const drawingRelationship of this.parseRelationships(
+          drawingRelsXml,
+        )) {
+          if (!drawingRelationship.type.endsWith("/chart")) continue;
+          charts.set(
+            this.resolvePackagePath(targetPath, drawingRelationship.target),
+            sheetName,
+          );
+        }
+      }
+    }
+
+    return { charts, pivots };
+  }
+
+  /** Type, title, legend and series ranges of a single chart part. */
+  private describeChartXml(xmlString: string): {
+    type: string;
+    title: string;
+    legendPosition?: string;
+    seriesRanges: string[];
+  } {
+    const type = this.detectChartTypeFromXml(xmlString);
+    const title = this.extractChartTitleFromXml(xmlString);
+
+    let legendPosition: string | undefined;
+    if (xmlString.includes("<c:legend")) {
+      const positionCode = /<c:legendPos\b[^>]*\bval="([^"]*)"/.exec(
+        xmlString,
+      )?.[1];
+      legendPosition =
+        LEGEND_POSITION_LABELS[positionCode ?? ""] ?? "position unspecified";
+    }
+
+    const seriesRanges: string[] = [];
+    for (const match of xmlString.matchAll(/<c:f>([^<]+)<\/c:f>/g)) {
+      const reference = match[1].trim();
+      if (reference && !seriesRanges.includes(reference)) {
+        seriesRanges.push(reference);
+      }
+      if (seriesRanges.length >= MAX_CHART_SERIES_RANGES) break;
+    }
+
+    return { type, title, legendPosition, seriesRanges };
+  }
+
+  /**
+   * Summarize one pivot table: which worksheet it is on, what it is built
+   * from, and which cache fields sit in the row, column and data areas. The
+   * flattened cell dump shows the rendered result but not this layout, which
+   * is what pivot-table criteria are usually written against.
+   */
+  private async describePivotTablePart(
+    entries: Map<string, unzipper.File>,
+    pivotPath: string,
+    sheetName: string | undefined,
+    pivotNumber: number,
+  ): Promise<string | undefined> {
+    const pivotXml = await this.readPackagePart(entries, pivotPath);
+    if (pivotXml === undefined) return undefined;
+
+    const definition =
+      /<pivotTableDefinition\b[^>]*>/.exec(pivotXml)?.[0] ?? "";
+    const name =
+      /\bname="([^"]*)"/.exec(definition)?.[1] ?? `Pivot table ${pivotNumber}`;
+
+    const cacheRelsXml = await this.readPackagePart(
+      entries,
+      this.relationshipPartFor(pivotPath),
+    );
+    let cacheFields: string[] = [];
+    let source = "";
+    if (cacheRelsXml) {
+      const cacheRelationship = this.parseRelationships(cacheRelsXml).find(
+        (relationship) => relationship.type.endsWith("/pivotCacheDefinition"),
+      );
+      if (cacheRelationship) {
+        const cacheXml = await this.readPackagePart(
+          entries,
+          this.resolvePackagePath(pivotPath, cacheRelationship.target),
+        );
+        if (cacheXml !== undefined) {
+          cacheFields = [
+            ...cacheXml.matchAll(/<cacheField\b[^>]*\bname="([^"]*)"/g),
+          ].map((match) => match[1]);
+          const worksheetSource =
+            /<worksheetSource\b[^>]*>/.exec(cacheXml)?.[0] ?? "";
+          const sourceSheet = /\bsheet="([^"]*)"/.exec(worksheetSource)?.[1];
+          const sourceReference = /\bref="([^"]*)"/.exec(worksheetSource)?.[1];
+          const sourceTable = /\bname="([^"]*)"/.exec(worksheetSource)?.[1];
+          if (sourceSheet && sourceReference) {
+            source = `${sourceSheet}!${sourceReference}`;
+          } else if (sourceSheet && sourceTable) {
+            source = `${sourceSheet} (table ${sourceTable})`;
+          } else if (sourceSheet) {
+            source = sourceSheet;
+          } else if (sourceTable) {
+            source = `table ${sourceTable}`;
+          }
+        }
+      }
+    }
+
+    const pivotFieldElements = [
+      ...(
+        /<pivotFields\b[^>]*>([\s\S]*?)<\/pivotFields>/.exec(pivotXml)?.[1] ??
+        ""
+      ).matchAll(/<pivotField\b[^>]*>/g),
+    ].map((match) => match[0]);
+
+    const fieldLabel = (index: number): string => {
+      if (index < 0) return "Values";
+      const label = cacheFields[index] ?? `Field ${index + 1}`;
+      const sortType = /\bsortType="([^"]*)"/.exec(
+        pivotFieldElements[index] ?? "",
+      )?.[1];
+      return sortType && sortType !== "manual"
+        ? `${label} (sorted ${sortType})`
+        : label;
+    };
+
+    const axisFields = (section: "rowFields" | "colFields"): string[] => {
+      const block = new RegExp(
+        `<${section}\\b[^>]*>([\\s\\S]*?)</${section}>`,
+      ).exec(pivotXml)?.[1];
+      if (!block) return [];
+      return [...block.matchAll(/<field\b[^>]*\bx="(-?\d+)"/g)].map((match) =>
+        fieldLabel(Number.parseInt(match[1], 10)),
+      );
+    };
+
+    const dataFields = [
+      ...(
+        /<dataFields\b[^>]*>([\s\S]*?)<\/dataFields>/.exec(pivotXml)?.[1] ?? ""
+      ).matchAll(/<dataField\b[^>]*>/g),
+    ].map((match) => {
+      const element = match[0];
+      const explicitName = /\bname="([^"]*)"/.exec(element)?.[1];
+      if (explicitName) return explicitName;
+      const fieldIndex = Number.parseInt(
+        /\bfld="(-?\d+)"/.exec(element)?.[1] ?? "-1",
+        10,
+      );
+      return fieldIndex >= 0
+        ? (cacheFields[fieldIndex] ?? `Field ${fieldIndex + 1}`)
+        : "Values";
+    });
+
+    const heading =
+      sheetName === undefined
+        ? `Pivot table "${name}"`
+        : `Pivot table "${name}" on sheet "${sheetName}"`;
+
+    const rowFields = axisFields("rowFields");
+    const columnFields = axisFields("colFields");
+
+    return (
+      `${heading}${source ? ` (source: ${source})` : ""}` +
+      `\n  Row fields: ${rowFields.length > 0 ? rowFields.join(", ") : "(none)"}` +
+      `\n  Column fields: ${columnFields.length > 0 ? columnFields.join(", ") : "(none)"}` +
+      `\n  Data fields: ${dataFields.length > 0 ? dataFields.join(", ") : "(none)"}`
+    );
   }
 
   /**
@@ -3508,6 +3930,15 @@ export class FileContentExtractionService {
 
     for (const [tag, label] of chartTypes) {
       if (xmlString.includes(`<${tag}`) || xmlString.includes(`<${tag}>`)) {
+        // A column chart is a c:barChart with barDir="col"; only barDir="bar"
+        // is a bar chart. Reporting both as "Bar Chart" fails workbooks that
+        // built exactly the chart the rubric asked for.
+        if (tag === "c:barChart" || tag === "c:bar3DChart") {
+          const direction = /<c:barDir\b[^>]*\bval="([^"]*)"/.exec(
+            xmlString,
+          )?.[1];
+          if (direction === "col") return label.replace("Bar", "Column");
+        }
         return label;
       }
     }
