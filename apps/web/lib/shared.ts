@@ -3,6 +3,7 @@ import { authorSessionHeaders } from "./author-session";
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import { apiClient, APIError } from "./api-client";
+import { withTransientRetry } from "./api-retry";
 import {
   DIRECT_UPLOAD_FALLBACK_MAX_BYTES,
   failureKindOf,
@@ -2048,12 +2049,19 @@ export async function getAssignment(
     ? `${getApiRoutes().assignments}/${id}?lang=${userPreferedLanguage}`
     : `${getApiRoutes().assignments}/${id}`;
 
-  const responseBody = (await apiClient.get(url, {
-    headers: {
-      "Cache-Control": "no-cache",
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  })) as GetAssignmentResponse & BaseBackendResponse;
+  // The assignment is the one fetch the learner's About page cannot render
+  // without, so a single dropped socket used to go straight to an error
+  // dialog. Retried once like every other learner fetch (getAttempt,
+  // getAttempts); quiet so the recovered attempt never flashes a toast.
+  const responseBody = (await withTransientRetry(() =>
+    apiClient.get(url, {
+      quiet: true,
+      headers: {
+        "Cache-Control": "no-cache",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    }),
+  )) as GetAssignmentResponse & BaseBackendResponse;
 
   const { success: _success, ...remainingData } = responseBody;
 
