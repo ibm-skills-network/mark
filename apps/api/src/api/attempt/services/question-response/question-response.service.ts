@@ -33,8 +33,9 @@ import {
   convertGitHubUrlToRaw,
   fetchUrlContentForGrading,
 } from "src/api/attempt/common/utils/github-content-fetch.util";
+import { normalizeLearnerUrl } from "src/api/attempt/common/utils/learner-url.util";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
-import { GithubRateLimitedError } from "../../../llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "../../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
@@ -1006,11 +1007,11 @@ export class QuestionResponseService {
         throw error;
       }
 
-      // Same reasoning as above: a rate-limited GitHub fetch is a transient
-      // system fault the caller must be able to retry, not a 400. Wrapping
-      // it here would erase the class identity the retry classification
-      // depends on.
-      if (error instanceof GithubRateLimitedError) {
+      // Same reasoning as above: a rate-limited or otherwise transient URL
+      // fetch is a system fault the caller must be able to retry, not a 400.
+      // Wrapping it here would erase the class identity the retry
+      // classification depends on.
+      if (error instanceof RetryableUrlFetchError) {
         throw error;
       }
 
@@ -1051,7 +1052,13 @@ export class QuestionResponseService {
       const urlGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.URL,
       );
-      const url = requestDto.learnerUrlResponse;
+      // Normalize first: the blob-to-raw rewrite below only recognises a
+      // fully-qualified https://github.com/... URL, so a link the learner
+      // pasted without a scheme would otherwise skip it entirely.
+      const url =
+        normalizeLearnerUrl(requestDto.learnerUrlResponse) ||
+        requestDto.learnerUrlResponse;
+      requestDto.learnerUrlResponse = url;
       const rawUrl = convertGitHubUrlToRaw(url);
       if (rawUrl) {
         requestDto.learnerUrlResponse = rawUrl;
