@@ -14,3 +14,7 @@ docs/
 /dev.env
 
 apps/**/main.ts
+
+# Vendored build artefacts — reformatting this emscripten glue has broken the
+# browser video pipeline before; it is replaced from node_modules on build.
+apps/web/public/ffmpeg-core/
