@@ -52,7 +52,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
-import { GithubRateLimitedError } from "../../llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import {
   AssignmentAttemptWithRelations,
@@ -133,10 +133,10 @@ export class AttemptSubmissionService {
       if (error instanceof LearnerFacingGradingError) {
         throw new BadRequestException(error.learnerMessage);
       }
-      // A rate-limited GitHub fetch is a temporary system fault, not a
-      // problem with the learner's submission — surface it as a retryable
-      // 503 instead of letting it fall through to a generic 500.
-      if (error instanceof GithubRateLimitedError) {
+      // A rate-limited or timed-out URL fetch is a temporary system fault,
+      // not a problem with the learner's submission — surface it as a
+      // retryable 503 instead of letting it fall through to a generic 500.
+      if (error instanceof RetryableUrlFetchError) {
         throw new ServiceUnavailableException(
           "Temporarily unable to fetch the submitted URL's content. Please try again shortly.",
         );

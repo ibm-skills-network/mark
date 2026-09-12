@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "src/api/llm/features/grading/errors/retryable-url-fetch.error";
 import { safeGet } from "./ssrf-safe-http";
 import {
   clearGithubDefaultBranchCache,
@@ -29,6 +30,11 @@ function axiosError(status: number, headers: Record<string, string> = {}) {
     message: `Request failed with status code ${status}`,
     response: { status, headers, data: {} },
   };
+}
+
+/** A transport-level axios failure: no response, just a code. */
+function networkError(code: string) {
+  return { isAxiosError: true, code, message: `network failure: ${code}` };
 }
 
 describe("githubApiGet", () => {
@@ -385,6 +391,97 @@ describe("fetchUrlContentForGrading", () => {
 
       expect(result).toEqual({ body: "", isFunctional: false });
     });
+
+    it("treats a 410 and an unresolvable host as confirmed misses", async () => {
+      mockedSafeGet.mockRejectedValueOnce(axiosError(410));
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/gone.js",
+        ),
+      ).resolves.toEqual({ body: "", isFunctional: false });
+
+      mockedSafeGet.mockRejectedValueOnce(networkError("ENOTFOUND"));
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/gone.js",
+        ),
+      ).resolves.toEqual({ body: "", isFunctional: false });
+    });
+
+    it("throws a rate-limit error rather than scoring a 429 as unreadable", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(429, { "retry-after": "60" }));
+
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/index.js",
+        ),
+      ).rejects.toBeInstanceOf(GithubRateLimitedError);
+    });
+
+    it("throws a retryable error on a read timeout", async () => {
+      mockedSafeGet.mockRejectedValue(networkError("ECONNABORTED"));
+
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/index.js",
+        ),
+      ).rejects.toMatchObject({
+        name: "RetryableUrlFetchError",
+        reason: "timeout",
+      });
+    });
+
+    it("throws a retryable error on a connection reset", async () => {
+      mockedSafeGet.mockRejectedValue(networkError("ECONNRESET"));
+
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/index.js",
+        ),
+      ).rejects.toBeInstanceOf(RetryableUrlFetchError);
+    });
+
+    it("throws a retryable error when raw.githubusercontent.com 5xxs", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(503));
+
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/index.js",
+        ),
+      ).rejects.toMatchObject({
+        name: "RetryableUrlFetchError",
+        reason: "server_error",
+        status: 503,
+      });
+    });
+
+    it("throws a retryable error when the raw response is a non-200 5xx status", async () => {
+      mockedSafeGet.mockResolvedValue({ data: "", status: 502 } as any);
+
+      await expect(
+        fetchUrlContentForGrading(
+          "https://github.com/octocat/hello-world/blob/main/index.js",
+        ),
+      ).rejects.toBeInstanceOf(RetryableUrlFetchError);
+    });
+  });
+
+  describe("non-GitHub URLs — transient vs confirmed failures", () => {
+    it("throws a retryable error on a timeout instead of scoring zero", async () => {
+      mockedSafeGet.mockRejectedValue(networkError("ETIMEDOUT"));
+
+      await expect(
+        fetchUrlContentForGrading("https://learner.example.com/report"),
+      ).rejects.toBeInstanceOf(RetryableUrlFetchError);
+    });
+
+    it("still reports a confirmed 404 as unreadable content", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(404));
+
+      await expect(
+        fetchUrlContentForGrading("https://learner.example.com/missing"),
+      ).resolves.toEqual({ body: "", isFunctional: false });
+    });
   });
 
   describe("repo-root URLs — the reported bug", () => {
@@ -610,8 +707,11 @@ describe("fetchUrlContentForGrading", () => {
       expect(result).toEqual({ body: "Hello world", isFunctional: true });
     });
 
-    it("returns isFunctional:false (does not throw) when the fetch fails", async () => {
-      mockedSafeGet.mockRejectedValue(axiosError(500));
+    it("returns isFunctional:false (does not throw) on a confirmed miss", async () => {
+      // 4xx means the grader looked and there is nothing there. A 5xx or a
+      // timeout is transient and raises a retryable error instead — covered
+      // in "transient vs confirmed failures" below.
+      mockedSafeGet.mockRejectedValue(axiosError(404));
 
       const result = await fetchUrlContentForGrading(
         "https://example.com/unreachable",
