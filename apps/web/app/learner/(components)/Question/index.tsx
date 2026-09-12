@@ -356,8 +356,16 @@ function QuestionPage(props: Props) {
         return;
       }
 
+      // Read the stored details at the moment of the comparison rather than
+      // closing over them: when `assignmentDetails` was a dependency of this
+      // effect, storing what the effect had just fetched re-ran the effect,
+      // and the second pass issued the same assignment GET again — half a
+      // megabyte paid twice on a large assignment, every page load.
       if (
-        shouldUpdateAssignmentDetails(assignmentDetails, nextAssignmentDetails)
+        shouldUpdateAssignmentDetails(
+          useAssignmentDetails.getState().assignmentDetails,
+          nextAssignmentDetails,
+        )
       ) {
         setAssignmentDetails(nextAssignmentDetails);
       }
@@ -428,7 +436,6 @@ function QuestionPage(props: Props) {
   }, [
     attempt,
     assignmentId,
-    assignmentDetails,
     questions,
     id,
     expiresAt,

@@ -3,6 +3,7 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import { NetworkError } from "../api-client";
 import { ErrorScreen, statusFromError } from "../error-screen";
 
 // Stub the three screens to distinctive markers so the test asserts the
@@ -19,6 +20,12 @@ jest.mock("@/components/ErrorPage", () => ({
   __esModule: true,
   default: (props: { statusCode?: number }) => (
     <div data-testid="error-page">{props.statusCode}</div>
+  ),
+}));
+jest.mock("@/components/ConnectionProblem", () => ({
+  __esModule: true,
+  default: (props: { kind: string }) => (
+    <div data-testid="connection-problem">{props.kind}</div>
   ),
 }));
 
@@ -58,5 +65,40 @@ describe("ErrorScreen mapping", () => {
     const page = screen.getByTestId("error-page");
     expect(page).toBeInTheDocument();
     expect(page).toHaveTextContent("500");
+  });
+});
+
+// A stalled or dropped browser request produced no HTTP response at all, so
+// presenting it as one of the server's statuses ("408 — Something went wrong
+// on our side") both misinforms the learner and files a server fault against
+// a connection problem.
+describe("ErrorScreen with a client network failure", () => {
+  it("shows the connection screen for a timeout instead of a status page", () => {
+    const error = new NetworkError("timed out", "timeout");
+
+    render(<ErrorScreen status={statusFromError(error)} error={error} />);
+
+    expect(screen.getByTestId("connection-problem")).toHaveTextContent(
+      "timeout",
+    );
+    expect(screen.queryByTestId("error-page")).not.toBeInTheDocument();
+  });
+
+  it("shows the connection screen when the server could not be reached", () => {
+    const error = new NetworkError("dropped", "unreachable");
+
+    render(<ErrorScreen status={statusFromError(error)} error={error} />);
+
+    expect(screen.getByTestId("connection-problem")).toHaveTextContent(
+      "unreachable",
+    );
+  });
+
+  it("still renders real statuses when an error is passed alongside", () => {
+    const error = { status: 403 };
+
+    render(<ErrorScreen status={statusFromError(error)} error={error} />);
+
+    expect(screen.getByTestId("access-restricted")).toBeInTheDocument();
   });
 });

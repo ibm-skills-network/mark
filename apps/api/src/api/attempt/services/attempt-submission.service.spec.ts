@@ -1290,6 +1290,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         assignmentVersionId: 12,
         questionVersions: [],
       });
+      // The requested language has to reach the translation read: without it
+      // the attempt response carries every language of every question.
       expect(
         mockTranslationService.getTranslationsForAttempt,
       ).toHaveBeenCalledWith(
@@ -1298,6 +1300,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           expect.objectContaining({ id: 101, answer: true }),
           expect.objectContaining({ id: 202, answer: false }),
         ]),
+        "fr",
       );
       expect(translationBuildSpy).toHaveBeenCalled();
       expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
