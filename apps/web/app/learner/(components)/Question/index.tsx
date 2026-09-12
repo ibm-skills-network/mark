@@ -432,7 +432,9 @@ function QuestionPage(props: Props) {
       )}
       <div
         className={cn(
-          "bg-gray-50 dark:bg-gray-900 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
+          // relative so the small-viewport tips sheet can cover the question
+          // area without covering the header and its submit button.
+          "relative bg-gray-50 dark:bg-gray-900 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
           tips ? "md:grid-cols-[260px_1fr_265px]" : "md:grid-cols-[260px_1fr]",
         )}
       >
