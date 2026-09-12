@@ -17,6 +17,7 @@ import {
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
 import {
@@ -156,6 +157,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
       }
 
       if (
+        context.userRole === UserRole.LEARNER &&
         this.consistencyService &&
         typeof this.consistencyService.generateResponseHash === "function"
       ) {
@@ -553,6 +555,11 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
             learnerKey: context.userId
               ? deriveLearnerKey(context.userId)
               : undefined,
+            // And read back there: the marks this grade was scored out of. The
+            // response payload carries no maximum of its own, and without one
+            // a reuse cannot tell full marks from a score out of a total the
+            // author has since changed.
+            maxPoints: question.totalPoints,
           },
         },
         context.tx,
@@ -625,10 +632,23 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
     responseDto: CreateQuestionResponseAttemptResponseDto,
-    _context: GradingContext,
+    context: GradingContext,
     modelIdentity?: string,
   ): Promise<void> {
-    void _context;
+    // An author preview grades a question body taken from the request, under
+    // the id of a real question. Recording it would let that score be served
+    // to a learner answering the question as it is actually stored.
+    if (context.userRole !== UserRole.LEARNER) {
+      this.logger?.debug(
+        "Grading was not a learner submission - not recording it for reuse",
+        {
+          questionId: question.id,
+          userRole: context.userRole,
+        },
+      );
+      return;
+    }
+
     if (!this.consistencyService) {
       this.logger?.debug(
         "Consistency service not available - skipping consistency recording",

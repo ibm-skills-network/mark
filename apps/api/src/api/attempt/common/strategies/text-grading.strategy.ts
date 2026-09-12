@@ -20,6 +20,7 @@ import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/gr
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
 import { TextBasedQuestionEvaluateModel } from "src/api/llm/model/text.based.question.evaluate.model";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import {
   GRADING_AUDIT_SERVICE,
@@ -181,9 +182,10 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
   /**
    * Attempt to reuse a previous grading for this answer.
    *
-   * Identity comes from the attempt's own context — the owner resolved from the
-   * attempt row and the question's own points — never from the submitted
-   * payload, so a crafted request cannot widen what it is allowed to match.
+   * Runs for learner submissions only. There the question, its points and the
+   * attempt owner are all read from the database, so a crafted request cannot
+   * widen what it is allowed to match. An author preview grades a question
+   * carried in the request body, so it is graded fresh every time.
    */
   private async tryReuseFromConsistency(
     question: QuestionDto,
@@ -194,17 +196,35 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
       return null;
     }
 
+    if (context.userRole !== UserRole.LEARNER) {
+      this.logger.debug("Not a learner submission - grading it fresh", {
+        questionId: question.id,
+        attemptId: context.attemptId,
+        userRole: context.userRole,
+      });
+      return null;
+    }
+
     try {
+      // Scope reuse to the model that will actually grade this response, so a
+      // change of grading model does not serve the previous model's grades. If
+      // the model cannot be resolved, nothing is reusable.
+      const modelIdentity =
+        await this.llmFacadeService.getTextGradingModelIdentity();
+
+      if (!modelIdentity) {
+        this.logger.debug("Grading model unknown - grading this answer again", {
+          questionId: question.id,
+          attemptId: context.attemptId,
+        });
+        return null;
+      }
+
       const responseHash = this.consistencyService.generateResponseHash(
         learnerResponse,
         question.id,
         question.type,
       );
-
-      // Scope reuse to the model that will actually grade this response, so a
-      // change of grading model does not serve the previous model's grades.
-      const modelIdentity =
-        await this.llmFacadeService.getTextGradingModelIdentity();
 
       const check = await this.consistencyService.checkConsistency(
         question.id,
@@ -241,8 +261,13 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         return null;
       }
 
+      // Last line of defence on the points themselves: a reuse returns
+      // directly from gradeResponse, so nothing downstream caps them.
       const responseDto = new CreateQuestionResponseAttemptResponseDto();
-      responseDto.totalPoints = this.sanitizePoints(check.previousGrade);
+      responseDto.totalPoints = Math.min(
+        this.sanitizePoints(check.previousGrade),
+        question.totalPoints,
+      );
 
       const feedbackText =
         typeof check.previousFeedback === "string"
