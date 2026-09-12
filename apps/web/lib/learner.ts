@@ -476,6 +476,13 @@ export async function getLiveRecordingFeedback(
     );
     return data;
   } catch (err) {
+    // Coaching feedback is optional, so the recording still counts as answered
+    // without it — but a silent empty string hid a broken endpoint for months.
+    console.error("liveRecordingFeedback.request_failed", {
+      assignmentId,
+      errorName: err instanceof Error ? err.name : typeof err,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { feedback: "" };
   }
 }
