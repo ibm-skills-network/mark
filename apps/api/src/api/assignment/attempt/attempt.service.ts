@@ -97,6 +97,8 @@ import {
 } from "./dto/question-response/create.question.response.attempt.response.dto";
 import type { GetQuestionResponseAttemptResponseDto } from "./dto/question-response/get.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
+import { countAnsweredResponses } from "./helper/blank-submission.helper";
+import { readServerClock } from "./helper/server-clock.helper";
 import { isLanguageInFlight } from "./translation-state-redis";
 
 type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
@@ -526,6 +528,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     return {
       id: assignmentAttempt.id,
       success: true,
+      serverNow: readServerClock(),
     };
   }
 
@@ -617,6 +620,23 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         assignmentAttempt.expiresAt &&
         tenSecondsBeforeNow > assignmentAttempt.expiresAt
       ) {
+        // A submission that arrives past the deadline carrying nothing the
+        // learner typed is the signature of a client-side timer firing on a
+        // clock it should not have trusted. Record it so the pattern is
+        // visible without changing what happens to the attempt.
+        if (
+          countAnsweredResponses(
+            updateAssignmentAttemptDto.responsesForQuestions,
+          ) === 0
+        ) {
+          this.logger.warn("Expired attempt submitted without any answers", {
+            assignmentAttemptId,
+            assignmentId,
+            userId: attemptOwnerUserId ?? userId,
+            responseCount:
+              updateAssignmentAttemptDto.responsesForQuestions?.length ?? 0,
+          });
+        }
         const savedResponses = await this.prisma.questionResponse.findMany({
           where: { assignmentAttemptId },
         });
@@ -1156,6 +1176,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       questions: finalQuestions.map((question) => ({
         ...question,
         choices:
@@ -1553,6 +1574,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     // attempt; pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       // The spread carries the persisted grade, which must not reach a learner
       // whose assignment hides the score.
       grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,

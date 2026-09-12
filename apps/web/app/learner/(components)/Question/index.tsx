@@ -1,6 +1,10 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
+import {
+  deriveServerTimeOffsetMs,
+  getAttemptStartedAtMs,
+} from "@/app/learner/utils/attempts";
 import Loading from "@/components/Loading";
 import type {
   Assignment,
@@ -19,7 +23,12 @@ import {
   useLearnerStore,
 } from "@/stores/learner";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
@@ -294,7 +303,13 @@ const shouldUpdateAssignmentDetails = (
 
 function QuestionPage(props: Props) {
   const { attempt, assignmentId, isNewAttempt } = props;
-  const { questions, id, expiresAt } = attempt;
+  const {
+    questions,
+    id,
+    expiresAt,
+    serverNow: attemptServerNow,
+    createdAt: attemptCreatedAt,
+  } = attempt;
   const debugLog = useDebugLog();
   const router = useRouter();
   const questionsStore = useLearnerStore((state) => state.questions);
@@ -309,6 +324,8 @@ function QuestionPage(props: Props) {
   >("loading");
   const tips = useAppConfig((state) => state.tips);
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
+  // The attempt whose server-clock offset has already been recorded.
+  const clockCaptureRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isNewAttempt) {
@@ -364,19 +381,36 @@ function QuestionPage(props: Props) {
           ? expiresAtMs
           : undefined;
 
-      debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
+      // Taken here, in the browser, so the subtraction is against the same
+      // device clock the countdown will read.
+      const serverTimeOffsetMs = deriveServerTimeOffsetMs(attemptServerNow);
+      const attemptStartedAt = getAttemptStartedAtMs(attemptCreatedAt);
+
+      debugLog(
+        "attemptId, expiresAt, serverTimeOffsetMs",
+        id,
+        normalizedExpiresAt,
+        serverTimeOffsetMs,
+      );
 
       setQuestions(questionsWithStatus);
 
       const currentStoreUpdate = {
         activeAttemptId: id,
         expiresAt: normalizedExpiresAt,
+        serverTimeOffsetMs,
+        attemptStartedAt,
       };
 
+      const storeState = useLearnerStore.getState();
       const hasOtherChanges =
-        id !== useLearnerStore.getState().activeAttemptId ||
-        normalizedExpiresAt !== useLearnerStore.getState().expiresAt;
+        clockCaptureRef.current !== id ||
+        id !== storeState.activeAttemptId ||
+        normalizedExpiresAt !== storeState.expiresAt;
       if (hasOtherChanges) {
+        // One reading per attempt: re-measuring on every render would let a
+        // later, noisier sample overwrite the one taken closest to the fetch.
+        clockCaptureRef.current = id;
         setLearnerStore(currentStoreUpdate);
       }
       if (questions.length) {
@@ -398,6 +432,8 @@ function QuestionPage(props: Props) {
     questions,
     id,
     expiresAt,
+    attemptServerNow,
+    attemptCreatedAt,
     setQuestions,
     setLearnerStore,
     setAssignmentDetails,
