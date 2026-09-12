@@ -1268,6 +1268,41 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       buildSpy.mockRestore();
     });
 
+    it("serves a region-coded language its own translation instead of the authored English", async () => {
+      const removeSensitiveSpy = jest
+        .spyOn(service as never, "removeSensitiveData")
+        .mockImplementation(() => undefined);
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map([
+          [
+            "question-101",
+            {
+              en: { translatedText: "Question 101", translatedChoices: [] },
+              "zh-CN": { translatedText: "问题一零一", translatedChoices: [] },
+              "zh-TW": { translatedText: "問題一零一", translatedChoices: [] },
+            },
+          ],
+          [
+            "question-202",
+            {
+              en: { translatedText: "Question 202", translatedChoices: [] },
+              "zh-CN": { translatedText: "问题二零二", translatedChoices: [] },
+              "zh-TW": { translatedText: "問題二零二", translatedChoices: [] },
+            },
+          ],
+        ]),
+      );
+
+      const result = await service.getAssignmentAttempt(71, "zh-CN");
+
+      expect(result.questions?.map((question) => question.question)).toEqual([
+        "问题一零一",
+        "问题二零二",
+      ]);
+
+      removeSensitiveSpy.mockRestore();
+    });
+
     it("uses cached questions for translation-aware attempt reads", async () => {
       const translationMap = new Map();
       mockTranslationService.getTranslationsForAttempt.mockResolvedValue(

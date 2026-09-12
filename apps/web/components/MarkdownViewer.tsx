@@ -30,15 +30,25 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
  * reaches the viewer without that span (round-tripped through translation, or
  * authored elsewhere) would otherwise render as an unmarked list, because
  * `.ql-editor li` sets `list-style-type: none`.
+ *
+ * The repair is done on the parsed DOM, never on the sanitized string. An
+ * attribute value is allowed to contain `>`, so a string edit cannot tell a
+ * real tag boundary from one inside a value: splicing a span after the wrong
+ * `>` ends the `<li>` early and re-parsing turns the rest of that value into
+ * live elements, which is how sanitized content becomes an injection again.
  */
-const LIST_ITEM_MISSING_MARKER =
-  /(<li\b[^>]*\bdata-list=[^>]*>)(?!\s*<span[^>]*\bql-ui\b)/gi;
+const addMissingListMarkers = (editor: HTMLElement): void => {
+  for (const item of editor.querySelectorAll<HTMLElement>("li[data-list]")) {
+    if (item.firstElementChild?.classList.contains("ql-ui")) {
+      continue;
+    }
 
-const withListMarkers = (html: string): string =>
-  html.replaceAll(
-    LIST_ITEM_MISSING_MARKER,
-    '$1<span class="ql-ui" contenteditable="false"></span>',
-  );
+    const marker = document.createElement("span");
+    marker.className = "ql-ui";
+    marker.setAttribute("contenteditable", "false");
+    item.prepend(marker);
+  }
+};
 
 /**
  * MarkdownViewer
@@ -61,7 +71,7 @@ const MarkdownViewer: FC<Props> = (props) => {
   const html = useMemo(() => {
     const raw =
       children === null || children === undefined ? "" : String(children);
-    return withListMarkers(sanitizeHtml(raw));
+    return sanitizeHtml(raw);
   }, [children]);
 
   // Sanitization needs a DOM, so the first paint stays empty and the content
@@ -77,6 +87,8 @@ const MarkdownViewer: FC<Props> = (props) => {
     if (!editor) {
       return;
     }
+
+    addMissingListMarkers(editor);
 
     for (const block of editor.querySelectorAll<HTMLElement>(
       ".ql-code-block[data-language]",

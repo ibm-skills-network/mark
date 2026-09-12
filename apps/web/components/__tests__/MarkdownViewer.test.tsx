@@ -18,6 +18,36 @@ const INSTRUCTIONS_HTML =
   '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Review your notes.</li>' +
   '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Upload the workbook.</li></ol>';
 
+/**
+ * A `data-list` value that carries an unescaped `>`. DOMPurify keeps it — the
+ * value is inert when the browser parses it, and `data-` attributes are
+ * allowed — so anything that rewrites the sanitized string with a regex can
+ * terminate the tag early and turn the parked markup into live elements.
+ */
+const ATTRIBUTE_BREAKOUT_HTML =
+  '<li data-list="a><img src=q onerror=alert(document.domain)>b">c</li>';
+
+const ACTIVE_ELEMENT_HTML: [string, string][] = [
+  [
+    "form",
+    '<p>hi</p><form action="//evil.example"><span>go</span></form>',
+  ],
+  ["input", '<p>hi</p><input name="u" value="steal">'],
+  ["button", "<p>hi</p><button>go</button>"],
+  ["textarea", "<p>hi</p><textarea>go</textarea>"],
+  ["object", '<p>hi</p><object data="https://evil.example/x"></object>'],
+  ["embed", '<p>hi</p><embed src="https://evil.example/x">'],
+  ["iframe", '<p>hi</p><iframe src="https://evil.example/phish"></iframe>'],
+];
+
+const elementsWithEventHandlers = (root: Element | null): string[] =>
+  [...(root?.querySelectorAll("*") ?? [])].flatMap((element) =>
+    element
+      .getAttributeNames()
+      .filter((name) => name.toLowerCase().startsWith("on"))
+      .map((name) => `${element.tagName.toLowerCase()}[${name}]`),
+  );
+
 const flushEffects = async () => {
   await act(async () => {
     await Promise.resolve();
@@ -123,5 +153,42 @@ describe("MarkdownViewer", () => {
     await flushEffects();
 
     expect(container.querySelector(".ql-editor")?.textContent).toBe("");
+  });
+
+  it("keeps an attribute value that contains '>' from becoming live markup", async () => {
+    const { container } = render(
+      <MarkdownViewer>{ATTRIBUTE_BREAKOUT_HTML}</MarkdownViewer>,
+    );
+    await flushEffects();
+
+    const editor = container.querySelector(".ql-editor");
+    expect(editor?.querySelector("img")).toBeNull();
+    expect(elementsWithEventHandlers(editor)).toEqual([]);
+    expect(editor?.textContent).toContain("c");
+  });
+
+  it.each(ACTIVE_ELEMENT_HTML)(
+    "does not render a <%s> that arrives in the content",
+    async (tag, html) => {
+      const { container } = render(<MarkdownViewer>{html}</MarkdownViewer>);
+      await flushEffects();
+
+      const editor = container.querySelector(".ql-editor");
+      expect(editor?.querySelector(tag)).toBeNull();
+      expect(editor?.textContent).toContain("hi");
+    },
+  );
+
+  it("keeps a video embed from a known host and confines it", async () => {
+    const { container } = render(
+      <MarkdownViewer>
+        {'<iframe class="ql-video" src="https://www.youtube.com/embed/abc123"></iframe>'}
+      </MarkdownViewer>,
+    );
+    await flushEffects();
+
+    const frame = container.querySelector(".ql-editor iframe");
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute("sandbox")).toContain("allow-scripts");
   });
 });

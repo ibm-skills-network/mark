@@ -193,4 +193,150 @@ describe("AttemptQuestionsMapper.buildQuestionsWithTranslations", () => {
 
     expect(questions[0].question).toBe(translatedHtml);
   });
+
+  it.each([
+    ["zh-CN", "<p>简体中文题目。</p>", "简体"],
+    ["zh-TW", "<p>繁體中文題目。</p>", "繁體"],
+    ["uk-UA", "<p>Українське запитання.</p>", "Українське"],
+  ])(
+    "serves the %s translation instead of the authored English",
+    async (languageCode, translatedText, marker) => {
+      const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation();
+
+      const questions =
+        await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+          buildAttempt(null),
+          buildAssignment(),
+          buildTranslations({
+            "question-42": {
+              en: {
+                translatedText: QUESTION_HTML,
+                translatedChoices: BASE_CHOICES,
+              },
+              "zh-CN": {
+                translatedText: "<p>简体中文题目。</p>",
+                translatedChoices: [
+                  { id: 11, choice: "甲" },
+                  { id: 12, choice: "乙" },
+                ],
+              },
+              "zh-TW": {
+                translatedText: "<p>繁體中文題目。</p>",
+                translatedChoices: [
+                  { id: 11, choice: "甲體" },
+                  { id: 12, choice: "乙體" },
+                ],
+              },
+              "uk-UA": {
+                translatedText: "<p>Українське запитання.</p>",
+                translatedChoices: [
+                  { id: 11, choice: "Альфа" },
+                  { id: 12, choice: "Бета" },
+                ],
+              },
+            },
+          }),
+          languageCode,
+        );
+
+      expect(questions[0].question).toBe(translatedText);
+      expect(String(questions[0].choices?.[0]?.choice)).not.toBe(
+        "<strong>Alpha</strong>",
+      );
+      expect(translatedText).toContain(marker);
+      expect(warn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("falls back to the base code when the region has no row of its own", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation();
+
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(null),
+        buildAssignment(),
+        buildTranslations({
+          "question-42": {
+            pt: {
+              translatedText: "<p>Pergunta em portugues.</p>",
+              translatedChoices: [
+                { id: 11, choice: "Alfa" },
+                { id: 12, choice: "Beta" },
+              ],
+            },
+          },
+        }),
+        "pt-BR",
+      );
+
+    expect(questions[0].question).toBe("<p>Pergunta em portugues.</p>");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("matches a stored language code whatever case the client asks in", async () => {
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(null),
+        buildAssignment(),
+        buildTranslations({
+          "question-42": {
+            "zh-CN": {
+              translatedText: "<p>简体中文题目。</p>",
+              translatedChoices: BASE_CHOICES,
+            },
+          },
+        }),
+        "zh-cn",
+      );
+
+    expect(questions[0].question).toBe("<p>简体中文题目。</p>");
+  });
+
+  it("serves the regional translation for a question that has no variant", async () => {
+    const attempt = buildAttempt(null);
+    attempt.questionVariants = [];
+
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        attempt,
+        buildAssignment(),
+        buildTranslations({
+          "question-42": {
+            "zh-CN": {
+              translatedText: "<p>简体中文题目。</p>",
+              translatedChoices: [
+                { id: 11, choice: "甲" },
+                { id: 12, choice: "乙" },
+              ],
+            },
+          },
+        }),
+        "zh-CN",
+      );
+
+    expect(questions[0].question).toBe("<p>简体中文题目。</p>");
+    expect(questions[0].choices).toEqual([
+      { id: 11, choice: "甲" },
+      { id: 12, choice: "乙" },
+    ]);
+  });
+
+  it("still serves the authored content when nothing in the family matches", async () => {
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(null),
+        buildAssignment(),
+        buildTranslations({
+          "question-42": {
+            "zh-CN": {
+              translatedText: "<p>简体中文题目。</p>",
+              translatedChoices: BASE_CHOICES,
+            },
+          },
+        }),
+        "ko",
+      );
+
+    expect(questions[0].question).toBe(QUESTION_HTML);
+  });
 });
