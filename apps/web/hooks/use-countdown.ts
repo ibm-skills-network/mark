@@ -1,5 +1,5 @@
 import { useDebugLog } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface CountdownResult {
   countdown: number | undefined;
@@ -38,17 +38,24 @@ const useCountdown = (
   const [timerExpired, setTimerExpired] = useState(false);
   const debugLog = useDebugLog();
 
-  const resetCountdown = (newExpiresAt?: number) => {
-    if (typeof newExpiresAt !== "number") {
-      setCountdown(undefined);
-      setTimerExpired(false);
-      return;
-    }
+  // Memoised on purpose. Callers put this in effect dependency arrays, and a
+  // fresh closure per render re-runs those effects after every render — which
+  // clears `timerExpired` the instant it is set, and tears down whatever the
+  // caller's effect had scheduled off the back of the expiry.
+  const resetCountdown = useCallback(
+    (newExpiresAt?: number) => {
+      if (typeof newExpiresAt !== "number") {
+        setCountdown(undefined);
+        setTimerExpired(false);
+        return;
+      }
 
-    debugLog("resetting countdown", new Date(newExpiresAt).toLocaleString());
-    setCountdown(Math.max(0, newExpiresAt - (Date.now() + offset)));
-    setTimerExpired(false);
-  };
+      debugLog("resetting countdown", new Date(newExpiresAt).toLocaleString());
+      setCountdown(Math.max(0, newExpiresAt - (Date.now() + offset)));
+      setTimerExpired(false);
+    },
+    [offset, debugLog],
+  );
 
   useEffect(() => {
     if (typeof expiresAt !== "number") {
