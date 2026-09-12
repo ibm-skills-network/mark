@@ -94,11 +94,21 @@ describe("TipsView", () => {
       render(<TipsView />);
 
       const dialog = screen.getByRole("dialog");
-      expect(dialog).toHaveAttribute("aria-modal", "true");
       expect(dialog).toHaveAccessibleName("Tips");
       expect(
         screen.getByRole("button", { name: /close tips/i }),
       ).toBeInTheDocument();
+    });
+
+    it("does not mark the rest of the page inert for screen-reader users", () => {
+      // The sheet deliberately covers only the question area so the header —
+      // and its submit button — stays reachable. aria-modal="true" tells
+      // assistive tech that everything outside the dialog is unavailable, which
+      // puts screen-reader users back in the trap this sheet was reshaped to
+      // remove.
+      render(<TipsView />);
+
+      expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-modal");
     });
 
     it("closes on the close button", () => {
