@@ -2,11 +2,21 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
-  Logger,
 } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "src/database/prisma.service";
+import { Logger } from "winston";
+import {
+  GITHUB_OAUTH_ERROR_CODES,
+  classifyGithubOauthError,
+  githubOauthException,
+  isOperatorFault,
+} from "./github-oauth-errors";
+import { GithubOauthStateService } from "./github-oauth-state.service";
 
+const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 // Uses the platform's native fetch (Node's global fetch / undici) rather than
@@ -30,43 +40,94 @@ const delay = (ms: number): Promise<void> =>
 
 @Injectable()
 export class GithubService {
-  private readonly logger = new Logger(GithubService.name);
+  private readonly logger: Logger;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    private readonly prisma: PrismaService,
+    private readonly oauthState: GithubOauthStateService,
+  ) {
+    this.logger = parentLogger.child({ context: GithubService.name });
+  }
 
-  getOAuthUrl(assignmentId: number, redirectUrl: string): Promise<string> {
-    const clientId =
-      process.env.NODE_ENV === "development"
-        ? process.env.GITHUB_CLIENT_ID_LOCAL
-        : process.env.GITHUB_CLIENT_ID;
+  // async so that every rejection reaches the caller as a rejected promise
+  // rather than a synchronous throw.
+  async getOAuthUrl(
+    assignmentId: number,
+    redirectUrl: string,
+    userId: string,
+  ): Promise<string> {
+    await Promise.resolve();
+    const clientId = this.clientId();
     if (!clientId) {
-      throw new BadRequestException("GitHub client ID is missing");
+      this.logger.error("GitHub client id is not configured", {
+        stage: "oauth_url",
+        user_id: userId,
+        assignment_id: assignmentId,
+      });
+      throw githubOauthException(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
     }
     if (!assignmentId) {
       throw new BadRequestException("Assignment ID is required");
     }
-    return Promise.resolve(
-      `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUrl}&scope=repo`,
-    );
-  }
-  async exchangeCodeForToken(code: string, userId: string): Promise<string> {
-    const clientId =
-      process.env.NODE_ENV === "development"
-        ? process.env.GITHUB_CLIENT_ID_LOCAL
-        : process.env.GITHUB_CLIENT_ID;
-    const clientSecret =
-      process.env.NODE_ENV === "development"
-        ? process.env.GITHUB_CLIENT_SECRET_LOCAL
-        : process.env.GITHUB_CLIENT_SECRET;
+    if (!userId) {
+      throw new BadRequestException("User ID is required");
+    }
 
-    if (!clientId || !clientSecret) {
-      throw new BadRequestException(
-        "GitHub client ID or client secret is missing",
+    const redirectTarget = this.resolveRedirectTarget(redirectUrl, userId);
+
+    // URLSearchParams encodes every value: interpolating the redirect raw let
+    // its own query string swallow the parameters that followed it, and let a
+    // caller smuggle extra parameters into the authorize request.
+    const parameters = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectTarget,
+      scope: "repo",
+      state: this.oauthState.issue(userId, assignmentId),
+    });
+
+    this.logger.info("Issued a GitHub authorization URL", {
+      stage: "oauth_url",
+      user_id: userId,
+      assignment_id: assignmentId,
+    });
+
+    return `${GITHUB_AUTHORIZE_URL}?${parameters.toString()}`;
+  }
+
+  async exchangeCodeForToken(
+    code: string,
+    userId: string,
+    state: string | undefined,
+  ): Promise<string> {
+    if (!userId) {
+      throw new BadRequestException("User ID is required");
+    }
+
+    // Verify the handoff belongs to this session before spending the code.
+    if (!this.oauthState.verify(state, userId)) {
+      this.logger.warn(
+        "Rejected a GitHub callback that this session did not start",
+        {
+          stage: "state_verification",
+          user_id: userId,
+          state_present: Boolean(state),
+        },
+      );
+      throw githubOauthException(
+        GITHUB_OAUTH_ERROR_CODES.AUTHORIZATION_INVALID,
       );
     }
 
-    if (!userId) {
-      throw new BadRequestException("User ID is required");
+    const clientId = this.clientId();
+    const clientSecret = this.clientSecret();
+
+    if (!clientId || !clientSecret) {
+      this.logger.error("GitHub OAuth credentials are not configured", {
+        stage: "token_exchange",
+        user_id: userId,
+      });
+      throw githubOauthException(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
     }
 
     const body = new URLSearchParams({
@@ -75,24 +136,28 @@ export class GithubService {
       code,
     }).toString();
 
-    const { ok, data } = await this.requestGithubToken(body, userId);
+    const { ok, status, data } = await this.requestGithubToken(body, userId);
 
-    if (!ok) {
-      this.logger.warn(
-        `GitHub rejected token exchange for ${userId}: ${data.error ?? "unknown error"}`,
-      );
-      throw new BadRequestException(
-        data.error || "Failed to retrieve GitHub access token",
-      );
-    }
-
-    if (!data.access_token) {
-      this.logger.warn(
-        `GitHub returned no access token for ${userId}: ${data.error ?? "no error provided"}`,
-      );
-      throw new BadRequestException(
-        data.error || "Access token not returned from GitHub",
-      );
+    if (!ok || !data.access_token) {
+      const errorCode = classifyGithubOauthError(data.error);
+      const context = {
+        stage: "token_exchange",
+        user_id: userId,
+        github_status: status,
+        github_error: data.error,
+        error_code: errorCode,
+      };
+      // A configuration fault is ours and affects every learner, so it is an
+      // error; the rest are ordinary, learner-recoverable outcomes.
+      if (isOperatorFault(errorCode)) {
+        this.logger.error(
+          "GitHub rejected the token exchange because of our OAuth configuration",
+          context,
+        );
+      } else {
+        this.logger.warn("GitHub rejected the token exchange", context);
+      }
+      throw githubOauthException(errorCode);
     }
 
     try {
@@ -117,17 +182,22 @@ export class GithubService {
             },
           }));
     } catch (error) {
-      this.logger.error(
-        `Failed to persist GitHub token for ${userId}`,
-        error instanceof Error ? error.stack : undefined,
-      );
+      this.logger.error("Failed to persist the GitHub token", {
+        stage: "token_persist",
+        user_id: userId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw new HttpException(
         "Database error",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
-    this.logger.log(`GitHub token exchange succeeded for ${userId}`);
+    this.logger.info("GitHub token exchange succeeded", {
+      stage: "token_exchange",
+      user_id: userId,
+    });
     return data.access_token;
   }
 
@@ -160,25 +230,31 @@ export class GithubService {
         return { ok: response.ok, status: response.status, data };
       } catch (error) {
         lastError = error;
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `GitHub token exchange attempt ${attempt}/${GITHUB_TOKEN_MAX_ATTEMPTS} ` +
-            `failed for ${userId}: ${message}`,
-        );
+        this.logger.warn("GitHub token exchange transport attempt failed", {
+          stage: "token_exchange_transport",
+          user_id: userId,
+          attempt,
+          max_attempts: GITHUB_TOKEN_MAX_ATTEMPTS,
+          error: error instanceof Error ? error.message : String(error),
+        });
         if (attempt < GITHUB_TOKEN_MAX_ATTEMPTS) {
           await delay(GITHUB_TOKEN_RETRY_DELAY_MS * attempt);
         }
       }
     }
 
-    const message =
-      lastError instanceof Error ? lastError.message : String(lastError);
-    this.logger.error(
-      `GitHub token exchange failed for ${userId} after ` +
-        `${GITHUB_TOKEN_MAX_ATTEMPTS} attempts: ${message}`,
-    );
+    this.logger.error("GitHub token exchange gave up after repeated failures", {
+      stage: "token_exchange_transport",
+      user_id: userId,
+      max_attempts: GITHUB_TOKEN_MAX_ATTEMPTS,
+      error: lastError instanceof Error ? lastError.message : String(lastError),
+    });
     throw new HttpException(
-      "GitHub authentication is temporarily unavailable. Please try again.",
+      {
+        statusCode: HttpStatus.BAD_GATEWAY,
+        message: "GitHub sign-in is unavailable.",
+        code: GITHUB_OAUTH_ERROR_CODES.UNAVAILABLE,
+      },
       HttpStatus.BAD_GATEWAY,
     );
   }
@@ -195,5 +271,78 @@ export class GithubService {
     }
 
     return userCredential.githubToken;
+  }
+
+  private clientId(): string | undefined {
+    return process.env.NODE_ENV === "development"
+      ? process.env.GITHUB_CLIENT_ID_LOCAL
+      : process.env.GITHUB_CLIENT_ID;
+  }
+
+  private clientSecret(): string | undefined {
+    return process.env.NODE_ENV === "development"
+      ? process.env.GITHUB_CLIENT_SECRET_LOCAL
+      : process.env.GITHUB_CLIENT_SECRET;
+  }
+
+  /**
+   * The redirect target is browser-supplied, so it is checked against the
+   * origins this deployment actually serves before it is handed to GitHub.
+   * The rejection is deliberately generic: it never echoes the value back.
+   */
+  private resolveRedirectTarget(redirectUrl: string, userId: string): string {
+    const allowed = this.allowedRedirectOrigins();
+    let parsed: URL;
+    try {
+      parsed = new URL(redirectUrl);
+    } catch {
+      this.logger.warn("Rejected a GitHub redirect target that is not a URL", {
+        stage: "oauth_url",
+        user_id: userId,
+      });
+      throw new BadRequestException("Invalid redirect target");
+    }
+
+    if (!allowed.has(parsed.origin)) {
+      this.logger.warn("Rejected an off-platform GitHub redirect target", {
+        stage: "oauth_url",
+        user_id: userId,
+        redirect_origin: parsed.origin,
+      });
+      throw new BadRequestException("Invalid redirect target");
+    }
+
+    return parsed.toString();
+  }
+
+  private allowedRedirectOrigins(): Set<string> {
+    const origins = new Set<string>();
+    for (const candidate of [
+      process.env.WEB_APP_URL,
+      process.env.STAGING_WEB_APP_URL,
+    ]) {
+      if (!candidate) continue;
+      try {
+        origins.add(new URL(candidate).origin);
+      } catch {
+        this.logger.warn("Configured web app URL is not a valid URL", {
+          stage: "oauth_url",
+        });
+      }
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      origins.add("http://localhost:3000");
+      origins.add("http://localhost:3010");
+    }
+
+    if (origins.size === 0) {
+      this.logger.error(
+        "No web app origin is configured, so every GitHub redirect target is refused",
+        { stage: "oauth_url" },
+      );
+    }
+
+    return origins;
   }
 }

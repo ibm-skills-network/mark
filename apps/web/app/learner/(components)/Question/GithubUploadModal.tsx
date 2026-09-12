@@ -4,8 +4,17 @@ import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import Modal from "@/components/Modal";
 import { RepoContentItem, RepoType } from "@/config/types";
 import {
+  GITHUB_AUTH_MAX_ATTEMPTS,
+  GithubAuthFailure,
+  clearGithubAuthFailures,
+  consumeGithubAuthorizationCode,
+  describeGithubAuthFailure,
+  exchangeGithubAuthorizationCode,
+  readGithubAuthFailureCount,
+  recordGithubAuthFailure,
+} from "@/lib/github-oauth";
+import {
   AuthorizeGithubBackend,
-  exchangeGithubCodeForToken,
   getStoredGithubToken,
   getUser,
 } from "@/lib/talkToBackend";
@@ -19,7 +28,6 @@ import {
 import { Octokit } from "@octokit/rest";
 import { IconSearch } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useSearchParams } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -60,10 +68,17 @@ const GithubModal: React.FC<{
   onFileChange,
 }) => {
   const [token, setToken] = useState<string | null>(null);
-  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(false);
   const [authAttempted, setAuthAttempted] = useState(false);
+  const [authFailure, setAuthFailure] = useState<GithubAuthFailure | null>(
+    null,
+  );
+  const [failureCount, setFailureCount] = useState(0);
+  // One exchange at a time, and never twice for the same mount: React runs the
+  // effect twice in development, and the modal re-renders while the request is
+  // in flight.
+  const exchangeInFlightRef = useRef(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
@@ -84,9 +99,9 @@ const GithubModal: React.FC<{
 
   const authenticateUser = async () => {
     try {
-      const localUrl = window.location.href;
-      const urlWithoutCode = localUrl.split("?")[0];
-      window.history.replaceState({}, document.title, urlWithoutCode);
+      // Drop any spent OAuth parameters before we ask for a fresh redirect, so
+      // the target we hand GitHub is a clean page URL.
+      consumeGithubAuthorizationCode();
       const role = await getUserRole();
       const redirectUrl =
         role === "author"
@@ -95,68 +110,92 @@ const GithubModal: React.FC<{
       const { url } = await AuthorizeGithubBackend(assignmentId, redirectUrl);
       if (url) {
         window.open(url, "_self");
+      } else {
+        setAuthFailure("unavailable");
       }
     } catch (error) {
-      showErrorOnce("Failed to authenticate with GitHub.");
+      setAuthFailure("unavailable");
     }
+  };
+
+  const noteFailure = (failure: GithubAuthFailure) => {
+    setAuthFailure(failure);
+    setFailureCount(recordGithubAuthFailure());
   };
 
   useEffect(() => {
     const initialize = async () => {
+      if (token || exchangeInFlightRef.current) {
+        return;
+      }
+      exchangeInFlightRef.current = true;
       setLoading(true);
 
-      if (token) {
-        setLoading(false);
-        return;
-      }
+      try {
+        const attemptsSoFar = readGithubAuthFailureCount();
+        setFailureCount(attemptsSoFar);
 
-      const code = searchParams?.get("code");
-      if (code && code.length > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const returnedToken = await exchangeGithubCodeForToken(code);
-        if (returnedToken) {
-          const isValid = await validateToken(returnedToken);
-          if (isValid) {
-            setToken(returnedToken);
-
-            const localUrl = window.location.href;
-            const urlWithoutCode = localUrl.split("?")[0];
-            window.history.replaceState({}, document.title, urlWithoutCode);
-          }
-        }
-        setLoading(false);
-        return;
-      }
-
-      const backendToken = await getStoredGithubToken();
-      if (backendToken) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const isValid = await validateToken(backendToken);
-        if (isValid) {
-          setToken(backendToken);
-        } else {
-          showErrorOnce(
-            "Stored token is invalid or expired. Please reauthenticate.",
+        // Reads the code once and strips it from the URL whatever happens
+        // next, so a remount or a reload cannot re-post a code GitHub has
+        // already spent.
+        const pending = consumeGithubAuthorizationCode();
+        if (pending) {
+          const result = await exchangeGithubAuthorizationCode(
+            pending.code,
+            pending.state,
           );
+          if (result.failure || !result.token) {
+            noteFailure(result.failure ?? "unknown");
+            return;
+          }
+          if (await validateToken(result.token)) {
+            clearGithubAuthFailures();
+            setFailureCount(0);
+            setAuthFailure(null);
+            setToken(result.token);
+          } else {
+            noteFailure("token_rejected");
+          }
+          return;
         }
-        setLoading(false);
-        return;
-      }
 
-      if (!authAttempted) {
-        setAuthAttempted(true);
+        const backendToken = await getStoredGithubToken();
+        if (backendToken) {
+          const isValid = await validateToken(backendToken);
+          if (isValid) {
+            clearGithubAuthFailures();
+            setFailureCount(0);
+            setAuthFailure(null);
+            setToken(backendToken);
+          } else {
+            noteFailure("token_rejected");
+          }
+          return;
+        }
+
+        // Nothing stored and nothing to exchange: start the handoff, but only
+        // while there is budget left. Without the cap this is the re-authorize
+        // loop learners reported — GitHub has already granted consent, so it
+        // bounces straight back and fails again.
+        if (attemptsSoFar >= GITHUB_AUTH_MAX_ATTEMPTS) {
+          setAuthFailure((current) => current ?? "configuration");
+          return;
+        }
+        if (!authAttempted) {
+          setAuthAttempted(true);
+          void authenticateUser();
+        }
+      } finally {
+        exchangeInFlightRef.current = false;
         setLoading(false);
-        void authenticateUser();
-      } else {
-        setLoading(false);
-        showErrorOnce(
-          "Unable to authenticate with GitHub. Please try again later.",
-        );
       }
     };
 
     void initialize();
-  }, [token, searchParams, authAttempted]);
+    // Deliberately keyed on the token alone: authenticateUser and the storage
+    // helpers are stable for the life of the modal, and re-running on anything
+    // else would re-enter the handoff.
+  }, [token]);
 
   async function validateToken(testToken: string): Promise<boolean> {
     const testOctokit = new Octokit({ auth: testToken });
@@ -417,6 +456,13 @@ const GithubModal: React.FC<{
     );
   }
 
+  const described = authFailure ? describeGithubAuthFailure(authFailure) : null;
+  // Out of budget: stop offering a button that sends the learner round the same
+  // loop, and point at the upload box that is sitting behind this dialog.
+  const connectionExhausted = failureCount >= GITHUB_AUTH_MAX_ATTEMPTS;
+  const canRetryConnection =
+    !connectionExhausted && (described?.canRetry ?? true);
+
   return (
     <Modal onClose={onClose} Title="GitHub File Selector">
       <AnimatePresence>
@@ -431,13 +477,26 @@ const GithubModal: React.FC<{
           {!token ? (
             <div className="flex flex-col items-center gap-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
-                Your GitHub token is invalid or expired.
+                {connectionExhausted
+                  ? "The GitHub connection is unavailable. You can upload your " +
+                    "file directly on this question instead — close this " +
+                    "dialog and drop it into the upload box."
+                  : (described?.message ??
+                    "Connect your GitHub account to browse your repositories.")}
               </p>
+              {canRetryConnection && (
+                <button
+                  onClick={() => void authenticateUser()}
+                  className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 ease-in-out"
+                >
+                  Connect to GitHub
+                </button>
+              )}
               <button
-                onClick={authenticateUser}
-                className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 ease-in-out"
+                onClick={onClose}
+                className="text-violet-600 dark:text-violet-400 font-semibold py-2 px-6 rounded-lg underline transition-colors duration-200 ease-in-out"
               >
-                Re-Authorize
+                Upload a file instead
               </button>
             </div>
           ) : selectedRepo ? (
