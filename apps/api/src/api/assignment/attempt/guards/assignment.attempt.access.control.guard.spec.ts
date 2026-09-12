@@ -482,3 +482,138 @@ describe("AssignmentAttemptAccessControlGuard — session replaced by another la
     );
   });
 });
+
+describe("AssignmentAttemptAccessControlGuard — ownership is proven, not inferred", () => {
+  const mockPrisma = {
+    assignment: { findUnique: jest.fn() },
+    assignmentGroup: { findFirst: jest.fn() },
+    assignmentAttempt: { findFirst: jest.fn(), findUnique: jest.fn() },
+    question: { findFirst: jest.fn() },
+    $transaction: jest.fn(),
+  } as unknown as PrismaService;
+
+  const warn = jest.fn();
+  const logger = {
+    child: jest.fn().mockReturnValue({ warn }),
+  };
+
+  let guard: AssignmentAttemptAccessControlGuard;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    guard = new AssignmentAttemptAccessControlGuard(
+      new Reflector(),
+      mockPrisma,
+      logger as never,
+    );
+  });
+
+  const ROUTE_ASSIGNMENT = 3532;
+  const ATTEMPT = 2486;
+
+  const contextFor = (session: Partial<UserSession>): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          userSession: {
+            role: UserRole.LEARNER,
+            assignmentId: ROUTE_ASSIGNMENT,
+            groupId: "group-1",
+            ...session,
+          },
+          params: {
+            assignmentId: String(ROUTE_ASSIGNMENT),
+            attemptId: String(ATTEMPT),
+          },
+          method: "GET",
+          originalUrl: `/api/v2/assignments/${ROUTE_ASSIGNMENT}/attempts/${ATTEMPT}/completed`,
+        }),
+      }),
+    }) as ExecutionContext;
+
+  const someoneElsesAttempt = {
+    id: ATTEMPT,
+    assignmentId: ROUTE_ASSIGNMENT,
+    userId: "another-learner",
+  };
+
+  it.each([
+    ["no user id at all", undefined],
+    ["an empty user id", ""],
+  ])(
+    "refuses a learner session with %s instead of reading an unscoped row",
+    async (_label, userId) => {
+      // A `where` value of `undefined` is "no filter" to Prisma, so an
+      // ownership query built from a session with no user id would match any
+      // learner's attempt. The request must be refused before it is issued.
+      mockPrisma.$transaction = jest
+        .fn()
+        .mockResolvedValue([
+          { id: ROUTE_ASSIGNMENT },
+          null,
+          someoneElsesAttempt,
+          undefined,
+        ]);
+
+      await expect(
+        guard.canActivate(contextFor({ userId: userId as string })),
+      ).resolves.toBe(false);
+
+      expect(mockPrisma.assignmentAttempt.findFirst).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ denial_reason: "missing_session_user_id" }),
+      );
+    },
+  );
+
+  it("refuses a row that is not this learner's even if the query returned one", async () => {
+    // Defence in depth for the group-link allowance: a returned row is only
+    // proof of ownership when it carries this session's user id.
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { id: ROUTE_ASSIGNMENT },
+        null,
+        someoneElsesAttempt,
+        undefined,
+      ]);
+
+    await expect(
+      guard.canActivate(contextFor({ userId: "learner-1" })),
+    ).resolves.toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ denial_reason: "no_group_link" }),
+    );
+  });
+
+  it("refuses a row that is not this learner's even when the group link is present", async () => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { id: ROUTE_ASSIGNMENT },
+        { id: 1, assignmentId: ROUTE_ASSIGNMENT, groupId: "group-1" },
+        someoneElsesAttempt,
+        undefined,
+      ]);
+
+    await expect(
+      guard.canActivate(contextFor({ userId: "learner-1" })),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("still allows the learner's own attempt", async () => {
+    mockPrisma.$transaction = jest.fn().mockResolvedValue([
+      { id: ROUTE_ASSIGNMENT },
+      null,
+      { id: ATTEMPT, assignmentId: ROUTE_ASSIGNMENT, userId: "learner-1" },
+      undefined,
+    ]);
+
+    await expect(
+      guard.canActivate(contextFor({ userId: "learner-1" })),
+    ).resolves.toBe(true);
+  });
+});

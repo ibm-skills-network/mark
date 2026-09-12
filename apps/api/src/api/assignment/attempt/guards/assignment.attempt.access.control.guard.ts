@@ -32,6 +32,20 @@ const parsePositiveIntId = (raw: string | undefined): number | undefined => {
   return n;
 };
 
+const readNonEmptyString = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
+
+/**
+ * Owner of an attempt row returned by the transaction. The rows come back from
+ * a loosely typed `$transaction` array, so the owner is read defensively: an
+ * absent or non-string `userId` yields `undefined` and therefore matches no
+ * session.
+ */
+const readAttemptOwnerId = (attempt: unknown): string | undefined => {
+  if (typeof attempt !== "object" || attempt === null) return undefined;
+  return readNonEmptyString((attempt as { userId?: unknown }).userId);
+};
+
 @Injectable()
 export class AssignmentAttemptAccessControlGuard implements CanActivate {
   private readonly logger: Logger;
@@ -101,6 +115,32 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       }
     }
 
+    // The user id an attempt must carry for this session to read it. A learner
+    // reaches an attempt row only through this value, so a session that does
+    // not supply one has to stop the request rather than fall through: Prisma
+    // reads `undefined` in a `where` as "no filter supplied", which would turn
+    // the ownership query into a lookup matching any learner's attempt.
+    const learnerUserId =
+      userSession?.role === UserRole.LEARNER
+        ? readNonEmptyString(userSession.userId)
+        : undefined;
+
+    if (
+      attemptId !== undefined &&
+      userSession?.role === UserRole.LEARNER &&
+      learnerUserId === undefined
+    ) {
+      this.logger.warn("attempt_access_denied: session carries no user id", {
+        denial_reason: "missing_session_user_id",
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+        group_id: sanitizeForLog(userSession?.groupId),
+        method,
+        url: sanitizeForLog(originalUrl),
+      });
+      return false;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
       this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
@@ -123,8 +163,8 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
         assignmentId: assignmentId,
       };
 
-      if (userSession.role === UserRole.LEARNER) {
-        whereClause.userId = userSession.userId;
+      if (learnerUserId !== undefined) {
+        whereClause.userId = learnerUserId;
       }
 
       queries.push(
@@ -147,6 +187,13 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
     const [assignment, assignmentGroup, attempt, questionInAssignment] =
       await this.prisma.$transaction(queries);
 
+    // Ownership is asserted against the row itself rather than inferred from
+    // "a row came back", so the allowance below holds even if the query that
+    // produced the row were ever widened.
+    const attemptBelongsToLearner =
+      learnerUserId !== undefined &&
+      readAttemptOwnerId(attempt) === learnerUserId;
+
     if (!assignment) {
       this.logger.warn("attempt_access_denied: assignment not found", {
         denial_reason: "assignment_not_found",
@@ -168,15 +215,13 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       // read of one specific attempt the server has already answered the
       // second question: the row was matched on (id, routeAssignmentId,
       // userId), all three from the route or the signed session, never from a
-      // request body. So allow the read and keep the group rule everywhere
+      // request body, and the row that came back is re-checked against the
+      // session's user id. So allow the read and keep the group rule everywhere
       // else — writes, and any read not tied to an attempt this learner owns,
       // still require the link, which is what stops a session belonging to
       // another quiz from mutating or enumerating this one.
       const ownsRequestedAttempt =
-        userSession.role === UserRole.LEARNER &&
-        attemptId !== undefined &&
-        attempt !== null &&
-        attempt !== undefined;
+        attemptId !== undefined && attemptBelongsToLearner;
 
       if (!ownsRequestedAttempt || !READ_ONLY_METHODS.has(method)) {
         this.logger.warn("attempt_access_denied: no group link", {
@@ -207,8 +252,8 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
     if (
       attemptId !== undefined &&
-      !attempt &&
-      userSession.role === UserRole.LEARNER
+      userSession.role === UserRole.LEARNER &&
+      !attemptBelongsToLearner
     ) {
       this.logger.warn(
         "attempt_access_denied: attempt not found or not owned",
