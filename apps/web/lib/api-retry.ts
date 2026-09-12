@@ -37,6 +37,15 @@ export function isAuthApiError(error: unknown): boolean {
 }
 
 /**
+ * True only when the server said the thing does not exist. Every other failure
+ * — a fault, a gateway error, a dropped connection — means "we could not find
+ * out", which is not the same answer and must not be shown as one.
+ */
+export function isNotFoundApiError(error: unknown): boolean {
+  return error instanceof APIError && error.status === 404;
+}
+
+/**
  * Runs `fn`, retrying exactly once (after a short pause) if the first attempt
  * fails transiently. Definitive failures propagate immediately.
  */

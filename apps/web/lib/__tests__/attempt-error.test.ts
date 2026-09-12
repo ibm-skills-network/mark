@@ -82,6 +82,24 @@ describe("resolveAttemptViewError", () => {
     expect(resolved.primaryActionHref).toBe(`/learner/${ROUTE_ASSIGNMENT}`);
   });
 
+  it.each([500, 502, 503, 504])(
+    "does not blame a replaced session for a %s from the server",
+    (status) => {
+      // The session really was replaced, but the request failed on the server
+      // side: telling the learner to reopen the assignment hides an outage and
+      // sends them round a loop that cannot work.
+      const resolved = resolveAttemptViewError({
+        status,
+        routeAssignmentId: ROUTE_ASSIGNMENT,
+        sessionAssignmentId: 3528,
+      });
+
+      expect(resolved.statusCode).toBe(status);
+      expect(resolved.headline).not.toMatch(/another assignment/i);
+      expect(resolved.message).toMatch(/try again/i);
+    },
+  );
+
   it("does not claim a replaced session when the session assignment is unknown", () => {
     const resolved = resolveAttemptViewError({
       status: 403,
