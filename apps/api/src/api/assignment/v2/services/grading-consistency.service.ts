@@ -5,6 +5,7 @@ import { Inject, Injectable, OnModuleDestroy } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { PrismaService } from "../../../../database/prisma.service";
 import {
@@ -41,9 +42,17 @@ export type GradeReuseReason =
   | "same_learner_near_match";
 
 /**
- * Everything a reuse decision needs beyond the answer itself. All of it is
- * derived server-side: the question's own full marks, the grading model that
- * will run, and the attempt owner. Nothing here may come from the request body.
+ * Everything a reuse decision needs beyond the answer itself.
+ *
+ * Callers pass this only for a learner submission, where every field is read
+ * server-side: the question row and its full marks from the database, the
+ * grading model from the model router, the owner from the attempt row. An
+ * author preview grades a question carried in the request body, so it neither
+ * looks up nor records reusable grades at all - see the role checks in
+ * `TextGradingStrategy.tryReuseFromConsistency` and
+ * `AbstractGradingStrategy.recordConsistencyData`. Candidates are additionally
+ * filtered on the role recorded with them, so a preview that predates those
+ * checks is still refused here.
  */
 export interface GradeReuseLookup {
   /** Type of the question being graded, used to normalise both answers. */
@@ -102,6 +111,10 @@ interface ParsedResponsePayload {
 interface ParsedAuditMetadata {
   modelSnapshot?: string;
   learnerKey?: string;
+  /** Marks the candidate was scored out of when it was graded. */
+  maxPoints?: number;
+  /** Role of whoever the grading ran for; only a learner's grade is reusable. */
+  userRole?: string;
   [key: string]: unknown;
 }
 
@@ -187,6 +200,21 @@ export class GradingConsistencyService implements OnModuleDestroy {
       lookup;
 
     try {
+      // A grade carries the judgement of whichever model produced it. When the
+      // model about to grade cannot be identified, no stored grade can be shown
+      // to have come from it, so nothing is reusable.
+      if (!modelIdentity) {
+        this.logRejectedCandidate(
+          questionId,
+          attemptId,
+          "unknown_grading_model",
+        );
+        return {
+          similar: false,
+          shouldAdjust: false,
+        };
+      }
+
       const cacheKey = this.buildCacheKey(questionId, modelIdentity);
       const cachedRecords = this.gradingCache.get(cacheKey) || [];
 
@@ -253,11 +281,24 @@ export class GradingConsistencyService implements OnModuleDestroy {
           // and which makes a model A/B measure the model it replaced.
           // Records predating model tracking carry no snapshot and are treated
           // as not reusable rather than assumed to match.
-          if (modelIdentity && auditMetadata?.modelSnapshot !== modelIdentity) {
+          if (auditMetadata?.modelSnapshot !== modelIdentity) {
             this.logRejectedCandidate(
               questionId,
               attemptId,
               "grading_model_mismatch",
+              grading.id,
+            );
+            continue;
+          }
+
+          // An author preview is graded against a question body supplied in
+          // the request, so its score describes whatever the author typed, not
+          // the stored question a learner is answering.
+          if (auditMetadata?.userRole !== UserRole.LEARNER) {
+            this.logRejectedCandidate(
+              questionId,
+              attemptId,
+              "not_a_learner_grading",
               grading.id,
             );
             continue;
@@ -311,7 +352,9 @@ export class GradingConsistencyService implements OnModuleDestroy {
 
           const rejection = this.rejectUnlessFullMarks(
             responseData.totalPoints,
-            responseData.maxPoints ?? responseData.metadata?.maxPossiblePoints,
+            responseData.maxPoints ??
+              responseData.metadata?.maxPossiblePoints ??
+              auditMetadata?.maxPoints,
             maxPoints,
           );
           if (rejection) {
@@ -372,21 +415,34 @@ export class GradingConsistencyService implements OnModuleDestroy {
       return "unknown_max_points";
     }
 
+    // A candidate that never recorded the total it was scored out of cannot be
+    // shown to have earned full marks for the question being graded now. It is
+    // refused rather than assumed to match: that assumption is how a 20/20
+    // grade was replayed onto the same question after its total was lowered to
+    // 10, awarding 20 points on a 10-point question.
+    if (
+      typeof recordedMaxPoints !== "number" ||
+      !Number.isFinite(recordedMaxPoints)
+    ) {
+      return "recorded_max_points_missing";
+    }
+
     // The candidate was scored out of a different total, so its points do not
     // describe this question's marks at all.
-    if (
-      typeof recordedMaxPoints === "number" &&
-      recordedMaxPoints !== requestedMaxPoints
-    ) {
+    if (recordedMaxPoints !== requestedMaxPoints) {
       return "max_points_changed";
     }
 
-    if (
-      typeof points !== "number" ||
-      !Number.isFinite(points) ||
-      points < requestedMaxPoints
-    ) {
+    if (typeof points !== "number" || !Number.isFinite(points)) {
+      return "unknown_points";
+    }
+
+    if (points < requestedMaxPoints) {
       return "below_full_marks";
+    }
+
+    if (points > requestedMaxPoints) {
+      return "above_full_marks";
     }
 
     return undefined;

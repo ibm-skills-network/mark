@@ -23,6 +23,7 @@ const mockPrisma = { gradingAudit: { findMany } };
 
 const QUESTION_ID = 4242;
 const MAX_POINTS = 12;
+const MODEL = "grading-model@rev";
 
 // Same answer text in both the stored audit and the incoming response, so the
 // similarity test passes and only the model check can reject reuse.
@@ -35,28 +36,41 @@ const LEARNER_B = deriveLearnerKey("learner-b@example.com");
 interface AuditRowOptions {
   modelSnapshot?: string;
   learnerKey?: string;
+  userRole?: string;
   response?: string;
   totalPoints?: number;
   maxPoints?: number;
+  /** Record no maximum in the response payload, as older rows do. */
+  withoutRecordedMaxPoints?: boolean;
+  /** Maximum carried in the audit metadata instead of the payload. */
+  metadataMaxPoints?: number;
 }
 
 function auditRow(options: AuditRowOptions = {}) {
-  const metadata: Record<string, string> = {};
+  const metadata: Record<string, string | number> = {
+    userRole: options.userRole ?? "learner",
+  };
   if (options.modelSnapshot) metadata.modelSnapshot = options.modelSnapshot;
   if (options.learnerKey) metadata.learnerKey = options.learnerKey;
+  if (typeof options.metadataMaxPoints === "number") {
+    metadata.maxPoints = options.metadataMaxPoints;
+  }
+
+  const responsePayload: Record<string, unknown> = {
+    totalPoints: options.totalPoints ?? MAX_POINTS,
+    feedback: "prior feedback",
+  };
+  if (!options.withoutRecordedMaxPoints) {
+    responsePayload.maxPoints = options.maxPoints ?? MAX_POINTS;
+  }
 
   return {
     id: 1,
     requestPayload: JSON.stringify({
       learnerTextResponse: options.response ?? ANSWER,
     }),
-    responsePayload: JSON.stringify({
-      totalPoints: options.totalPoints ?? MAX_POINTS,
-      maxPoints: options.maxPoints ?? MAX_POINTS,
-      feedback: "prior feedback",
-    }),
-    metadata:
-      Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
+    responsePayload: JSON.stringify(responsePayload),
+    metadata: JSON.stringify(metadata),
     timestamp: new Date(),
   };
 }
@@ -128,13 +142,35 @@ describe("GradingConsistencyService model-scoped reuse", () => {
     expect(result.similar).toBe(false);
   });
 
-  it("keeps model-agnostic behaviour when no identity is supplied", async () => {
+  it("refuses every candidate when the grading model cannot be identified", async () => {
+    // Resolving the grading model can fail. When it does, the stored grade's
+    // grader is unknowable, so nothing is reusable - the alternative is
+    // serving one model's judgement under another model's name.
     findMany.mockResolvedValue([auditRow({ modelSnapshot: "gpt-4o@rev" })]);
 
     const result = await check(undefined);
 
-    expect(result.similar).toBe(true);
-    expect(result.previousGrade).toBe(MAX_POINTS);
+    expect(result.similar).toBe(false);
+    expect(result.previousGrade).toBeUndefined();
+  });
+
+  it("refuses an in-memory record when the grading model cannot be identified", async () => {
+    findMany.mockResolvedValue([]);
+
+    const hash = service.generateResponseHash(
+      ANSWER,
+      QUESTION_ID,
+      QuestionType.TEXT,
+    );
+    await service.recordGrading(
+      QUESTION_ID,
+      hash,
+      MAX_POINTS,
+      MAX_POINTS,
+      "prior feedback",
+    );
+
+    await expect(check(undefined)).resolves.toMatchObject({ similar: false });
   });
 
   it("does not serve an in-memory record across grading models", async () => {
@@ -197,6 +233,11 @@ describe("GradingConsistencyService reuse safety", () => {
     service.onModuleDestroy?.();
   });
 
+  /** A candidate written by the same grader that is about to grade again. */
+  function priorGrade(options: AuditRowOptions = {}) {
+    return auditRow({ modelSnapshot: MODEL, ...options });
+  }
+
   function lookupFor(
     response: string,
     overrides: Partial<{
@@ -214,6 +255,7 @@ describe("GradingConsistencyService reuse safety", () => {
       lookup: {
         questionType: QuestionType.TEXT,
         maxPoints: overrides.maxPoints ?? 1,
+        modelIdentity: MODEL,
         learnerKey: overrides.learnerKey ?? LEARNER_A,
         attemptId: overrides.attemptId ?? 555,
       },
@@ -231,7 +273,7 @@ describe("GradingConsistencyService reuse safety", () => {
   describe("a grade below full marks is never reused", () => {
     it("refuses a byte-identical answer whose prior grade was not full marks", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: CORRECT_SQL,
           learnerKey: LEARNER_A,
           totalPoints: 0,
@@ -246,7 +288,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("refuses the learner's own near-identical resubmission of a sub-full grade", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: WRONG_SQL,
           learnerKey: LEARNER_A,
           totalPoints: 0,
@@ -262,7 +304,15 @@ describe("GradingConsistencyService reuse safety", () => {
     it("refuses a sub-full in-memory record for the identical answer", async () => {
       findMany.mockResolvedValue([]);
       const { hash, lookup } = lookupFor(CORRECT_SQL);
-      await service.recordGrading(QUESTION_ID, hash, 0, 1, "prior feedback");
+      await service.recordGrading(
+        QUESTION_ID,
+        hash,
+        0,
+        1,
+        "prior feedback",
+        undefined,
+        MODEL,
+      );
 
       await expect(
         service.checkConsistency(QUESTION_ID, hash, CORRECT_SQL, lookup),
@@ -271,7 +321,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("still reuses a full-marks grade for the identical answer", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: CORRECT_SQL,
           learnerKey: LEARNER_B,
           totalPoints: 1,
@@ -287,7 +337,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("refuses reuse when the question's full marks are unknown", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: CORRECT_SQL,
           learnerKey: LEARNER_A,
           totalPoints: 1,
@@ -313,7 +363,7 @@ describe("GradingConsistencyService reuse safety", () => {
   describe("another learner's grade is reusable only on an exact match", () => {
     it("refuses a near-miss match against another learner's full-marks grade", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: WRONG_SQL,
           learnerKey: LEARNER_B,
           totalPoints: 1,
@@ -328,7 +378,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("refuses a long rewrite that shares another learner's vocabulary", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: LONG_WEAK,
           learnerKey: LEARNER_B,
           totalPoints: 4,
@@ -343,7 +393,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("refuses a near-miss match when the prior grade has no learner recorded", async () => {
       findMany.mockResolvedValue([
-        auditRow({ response: WRONG_SQL, totalPoints: 1, maxPoints: 1 }),
+        priorGrade({ response: WRONG_SQL, totalPoints: 1, maxPoints: 1 }),
       ]);
 
       await expect(checkFor(CORRECT_SQL)).resolves.toMatchObject({
@@ -353,7 +403,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("accepts an exact normalized match from another learner at full marks", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: `  ${CORRECT_SQL.toUpperCase()}  `,
           learnerKey: LEARNER_B,
           totalPoints: 1,
@@ -369,7 +419,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("accepts the learner's own near-identical answer at full marks", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: WRONG_SQL,
           learnerKey: LEARNER_A,
           totalPoints: 1,
@@ -384,10 +434,99 @@ describe("GradingConsistencyService reuse safety", () => {
     });
   });
 
+  describe("a reused grade never exceeds the question's own maximum", () => {
+    it("refuses a candidate that recorded no maximum of its own", async () => {
+      // The response payload of a text grading carries no maximum, so without
+      // one in the audit metadata there is no way to tell full marks from a
+      // score out of some other total.
+      findMany.mockResolvedValue([
+        priorGrade({
+          response: CORRECT_SQL,
+          learnerKey: LEARNER_A,
+          totalPoints: 1,
+          withoutRecordedMaxPoints: true,
+        }),
+      ]);
+
+      await expect(checkFor(CORRECT_SQL)).resolves.toMatchObject({
+        similar: false,
+      });
+    });
+
+    it("refuses a candidate worth more than the question is now worth", async () => {
+      // Authored at 20 points, scored 20/20, then lowered to 10. Replaying
+      // that grade would award 20 on a 10-point question.
+      findMany.mockResolvedValue([
+        priorGrade({
+          response: CORRECT_SQL,
+          learnerKey: LEARNER_A,
+          totalPoints: 20,
+          withoutRecordedMaxPoints: true,
+        }),
+      ]);
+
+      await expect(
+        checkFor(CORRECT_SQL, { maxPoints: 10 }),
+      ).resolves.toMatchObject({ similar: false });
+    });
+
+    it("refuses a candidate scored out of a different maximum", async () => {
+      findMany.mockResolvedValue([
+        priorGrade({
+          response: CORRECT_SQL,
+          learnerKey: LEARNER_A,
+          totalPoints: 20,
+          maxPoints: 20,
+        }),
+      ]);
+
+      await expect(
+        checkFor(CORRECT_SQL, { maxPoints: 10 }),
+      ).resolves.toMatchObject({ similar: false });
+    });
+
+    it("reuses a candidate whose maximum was recorded in the audit metadata", async () => {
+      findMany.mockResolvedValue([
+        priorGrade({
+          response: CORRECT_SQL,
+          learnerKey: LEARNER_B,
+          totalPoints: 1,
+          withoutRecordedMaxPoints: true,
+          metadataMaxPoints: 1,
+        }),
+      ]);
+
+      await expect(checkFor(CORRECT_SQL)).resolves.toMatchObject({
+        similar: true,
+        previousGrade: 1,
+      });
+    });
+  });
+
+  describe("only grades from a learner submission are reusable", () => {
+    it("refuses a grade recorded while an author previewed the question", async () => {
+      // An author preview grades a question body supplied in the request, so
+      // its score describes whatever the author typed, not the real question.
+      findMany.mockResolvedValue([
+        priorGrade({
+          response: CORRECT_SQL,
+          learnerKey: LEARNER_B,
+          userRole: "author",
+          totalPoints: 1,
+          maxPoints: 1,
+        }),
+      ]);
+
+      await expect(checkFor(CORRECT_SQL)).resolves.toMatchObject({
+        similar: false,
+      });
+    });
+  });
+
   describe("the reuse decision is observable", () => {
     it("logs one structured line when a grade is reused", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: CORRECT_SQL,
           learnerKey: LEARNER_B,
           totalPoints: 1,
@@ -410,7 +549,7 @@ describe("GradingConsistencyService reuse safety", () => {
 
     it("logs a debug line for a rejected candidate", async () => {
       findMany.mockResolvedValue([
-        auditRow({
+        priorGrade({
           response: WRONG_SQL,
           learnerKey: LEARNER_B,
           totalPoints: 0,
@@ -435,8 +574,8 @@ describe("GradingConsistencyService reuse safety", () => {
   describe("grading statistics are unaffected", () => {
     it("still summarises recent gradings for a question", async () => {
       findMany.mockResolvedValue([
-        auditRow({ totalPoints: 1, maxPoints: 1 }),
-        auditRow({ totalPoints: 0, maxPoints: 1 }),
+        priorGrade({ totalPoints: 1, maxPoints: 1 }),
+        priorGrade({ totalPoints: 0, maxPoints: 1 }),
       ]);
 
       const stats = await service.getGradingStatistics(QUESTION_ID);

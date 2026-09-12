@@ -1,4 +1,5 @@
 import { QuestionType } from "@prisma/client";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { deriveLearnerKey } from "../../../assignment/v2/services/grading-consistency.service";
 import { TextGradingStrategy } from "./text-grading.strategy";
 
@@ -30,7 +31,13 @@ const QUESTION = {
 const LEARNER = "learner@example.com";
 const ANSWER = "CREATE INDEX idx_billed ON billdata(billedamount);";
 
-function buildStrategy(consistencyResult: ConsistencyResult) {
+/** `unresolvedModel` stands for a grading model the facade could not name. */
+const unresolvedModel = Symbol("unresolved grading model");
+
+function buildStrategy(
+  consistencyResult: ConsistencyResult,
+  modelIdentity: string | typeof unresolvedModel = "model@rev",
+) {
   const checkConsistency = jest.fn().mockResolvedValue(consistencyResult);
   const gradeTextBasedQuestion = jest
     .fn()
@@ -54,7 +61,11 @@ function buildStrategy(consistencyResult: ConsistencyResult) {
     checkConsistency,
   };
   strategy.llmFacadeService = {
-    getTextGradingModelIdentity: jest.fn().mockResolvedValue("model@rev"),
+    getTextGradingModelIdentity: jest
+      .fn()
+      .mockResolvedValue(
+        modelIdentity === unresolvedModel ? undefined : modelIdentity,
+      ),
     gradeTextBasedQuestion,
   };
   strategy.recordGrading = jest.fn();
@@ -85,6 +96,7 @@ describe("TextGradingStrategy prior-grade reuse", () => {
       assignmentInstructions: "",
       questionAnswerContext: [],
       assignmentId: 2645,
+      userRole: UserRole.LEARNER,
       userId: LEARNER,
       attemptId: 1_503_465,
     });
@@ -110,6 +122,7 @@ describe("TextGradingStrategy prior-grade reuse", () => {
     const result = await reuse(strategy as unknown as Record<string, unknown>, {
       assignmentInstructions: "",
       questionAnswerContext: [],
+      userRole: UserRole.LEARNER,
       userId: LEARNER,
       attemptId: 1_503_465,
     });
@@ -129,6 +142,7 @@ describe("TextGradingStrategy prior-grade reuse", () => {
     const result = await reuse(strategy as unknown as Record<string, unknown>, {
       assignmentInstructions: "",
       questionAnswerContext: [],
+      userRole: UserRole.LEARNER,
       userId: LEARNER,
       attemptId: 1_503_465,
     });
@@ -142,5 +156,74 @@ describe("TextGradingStrategy prior-grade reuse", () => {
         reason: "exact_match",
       }),
     );
+  });
+
+  it("never awards more than the question is worth", async () => {
+    // A grade recorded when the question was worth 20 points, replayed after
+    // the author lowered it to 1.
+    const { strategy } = buildStrategy({
+      similar: true,
+      previousGrade: 20,
+      previousFeedback: "prior feedback",
+      shouldAdjust: false,
+      reuseReason: "exact_match",
+    });
+
+    const result = await reuse(strategy as unknown as Record<string, unknown>, {
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+      userRole: UserRole.LEARNER,
+      userId: LEARNER,
+      attemptId: 1_503_465,
+    });
+
+    expect(result?.totalPoints).toBe(QUESTION.totalPoints);
+  });
+
+  it("does not look up prior grades for an author preview", async () => {
+    // An author preview grades the question body carried in the request, so it
+    // must neither read nor write the shared grading history.
+    const { strategy, checkConsistency } = buildStrategy({
+      similar: true,
+      previousGrade: 1,
+      previousFeedback: "prior feedback",
+      shouldAdjust: false,
+      reuseReason: "exact_match",
+    });
+
+    const result = await reuse(strategy as unknown as Record<string, unknown>, {
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+      userRole: UserRole.AUTHOR,
+      userId: "author@example.com",
+      attemptId: 1_503_466,
+    });
+
+    expect(result).toBeNull();
+    expect(checkConsistency).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a grade when the grading model cannot be identified", async () => {
+    const { strategy, checkConsistency } = buildStrategy(
+      {
+        similar: true,
+        previousGrade: 1,
+        previousFeedback: "prior feedback",
+        shouldAdjust: false,
+        reuseReason: "exact_match",
+      },
+      unresolvedModel,
+    );
+
+    const result = await reuse(strategy as unknown as Record<string, unknown>, {
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+      userRole: UserRole.LEARNER,
+      userId: LEARNER,
+      attemptId: 1_503_465,
+    });
+
+    expect(result).toBeNull();
+    expect(checkConsistency).not.toHaveBeenCalled();
   });
 });
