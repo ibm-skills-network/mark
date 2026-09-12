@@ -891,6 +891,7 @@ export class QuestionResponseService {
       language,
       userRole: role,
       userId,
+      attemptId: assignmentAttemptId,
       metadata: {
         attemptId: assignmentAttemptId,
         questionType: question.type,
