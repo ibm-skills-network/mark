@@ -1,4 +1,6 @@
+import { getBaseApiPath } from "@/config/constants";
 import { TranscriptSegment } from "@/config/types";
+import { createRateLimiter } from "@/lib/rate-limit";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
@@ -11,66 +13,82 @@ const RATE_LIMIT_MAX_TRACKED_SESSIONS = 5000;
 const TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
 const TRANSCRIPTION_MODEL = "whisper-1";
 
-const recentRequests = new Map<string, number[]>();
+const transcriptionRateLimiter = createRateLimiter({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  maxRequests: RATE_LIMIT_MAX_REQUESTS,
+  maxTrackedKeys: RATE_LIMIT_MAX_TRACKED_SESSIONS,
+});
 
-function readSessionCookie(request: Request): string | null {
-  const header = request.headers.get("cookie");
-  if (!header) return null;
-
-  const cookie = header
+function hasSessionCookie(cookieHeader: string): boolean {
+  return cookieHeader
     .split(";")
     .map((part) => part.trim())
-    .find((part) => part.startsWith("authentication="));
-
-  if (!cookie) return null;
-  const value = cookie.slice("authentication=".length);
-  return value.length > 0 ? value : null;
+    .some(
+      (part) =>
+        part.startsWith("authentication=") &&
+        part.length > "authentication=".length,
+    );
 }
 
-/** Identifies a caller for rate limiting without holding on to their session token. */
-function sessionKey(sessionCookie: string): string {
-  return createHash("sha256").update(sessionCookie).digest("hex").slice(0, 16);
+/** Identifies a caller in logs and rate-limit buckets without recording who they are. */
+function callerKey(userId: string): string {
+  return createHash("sha256").update(userId).digest("hex").slice(0, 16);
 }
 
-function isRateLimited(key: string): boolean {
-  const now = Date.now();
-  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+/**
+ * Asks the API whose session this is. The cookie only carries a session: whether
+ * it is valid, and who it belongs to, is never inferred from its value.
+ */
+async function resolveUserId(cookieHeader: string): Promise<string | null> {
+  const response = await fetch(`${getBaseApiPath("v1")}/user-session`, {
+    headers: { Cookie: cookieHeader },
+  });
 
-  if (recentRequests.size > RATE_LIMIT_MAX_TRACKED_SESSIONS) {
-    for (const [trackedKey, timestamps] of recentRequests) {
-      if (timestamps.every((timestamp) => timestamp <= cutoff)) {
-        recentRequests.delete(trackedKey);
-      }
-    }
-  }
+  if (!response.ok) return null;
 
-  const timestamps = (recentRequests.get(key) ?? []).filter(
-    (timestamp) => timestamp > cutoff,
-  );
-  if (timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-    recentRequests.set(key, timestamps);
-    return true;
-  }
-
-  timestamps.push(now);
-  recentRequests.set(key, timestamps);
-  return false;
+  const session = (await response.json()) as { userId?: unknown };
+  return typeof session.userId === "string" && session.userId.length > 0
+    ? session.userId
+    : null;
 }
 
 export async function POST(req: Request) {
   const startedAt = Date.now();
-  const sessionCookie = readSessionCookie(req);
-  const session = sessionCookie ? sessionKey(sessionCookie) : null;
 
   console.info("transcribe.request.received", {
-    session,
     contentLength: req.headers.get("content-length"),
   });
 
-  if (!session) {
+  const cookieHeader = req.headers.get("cookie");
+  if (!cookieHeader || !hasSessionCookie(cookieHeader)) {
     console.warn("transcribe.request.rejected", { reason: "no_session" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  let userId: string | null;
+  try {
+    userId = await resolveUserId(cookieHeader);
+  } catch (error) {
+    // The session service is the only thing that can authorize this call, so a
+    // failure to reach it has to fail closed rather than let the request run.
+    console.error("transcribe.request.failed", {
+      reason: "session_check_unavailable",
+      durationMs: Date.now() - startedAt,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { error: "Transcription unavailable" },
+      { status: 503 },
+    );
+  }
+
+  if (!userId) {
+    console.warn("transcribe.request.rejected", { reason: "invalid_session" });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const session = callerKey(userId);
 
   try {
     const apiKey = process.env.OPENAI_API_SPEECH_TEXT_KEY;
@@ -85,7 +103,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (isRateLimited(session)) {
+    if (transcriptionRateLimiter.isRateLimited(session)) {
       console.warn("transcribe.request.rejected", {
         session,
         reason: "rate_limited",
