@@ -2211,13 +2211,18 @@ export class AttemptSubmissionService {
     return value as T;
   }
   /**
-   * Get normalized language code
+   * Normalize the language code a client asked for.
+   *
+   * The region is kept. Stored translations are keyed by the code the
+   * translation catalogue uses, and three of those codes carry a region
+   * (`uk-UA`, `zh-CN`, `zh-TW`); cutting at the hyphen made every one of them
+   * unmatchable, so Ukrainian and both Chinese variants were served the
+   * authored English even when their translation existed. Widening the code to
+   * its family is the job of whatever selects rows to read, not of the code
+   * used to pick one.
    */
   private getNormalizedLanguage(language?: string): string {
-    if (!language) {
-      return "en";
-    }
-    return language.toLowerCase().split("-")[0];
+    return language?.trim().toLowerCase() || "en";
   }
 
   /**
