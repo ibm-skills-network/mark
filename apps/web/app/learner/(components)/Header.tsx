@@ -561,6 +561,16 @@ function LearnerHeader() {
 
     setStoredUiLanguage(userPreferedLanguage);
 
+    // Storing the language above is what actually switches the UI: the
+    // translator reads storage and the change event, not the URL. So the
+    // routes that must not be re-navigated stop here, the way the sibling
+    // `lang` sync already does. Replacing the URL of an attempt route re-runs
+    // its server component, which is where an attempt gets created — that is
+    // how a language change used to land a learner on a fresh attempt.
+    if (isInQuestionPage || isAttemptPage || isSuccessPage) {
+      return;
+    }
+
     const currentUiLanguage = searchParams.get("uiLang") || DEFAULT_UI_LANGUAGE;
     if (currentUiLanguage === userPreferedLanguage) {
       return;
@@ -575,7 +585,15 @@ function LearnerHeader() {
 
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, undefined);
-  }, [pathname, router, searchParams, userPreferedLanguage]);
+  }, [
+    isInQuestionPage,
+    isAttemptPage,
+    isSuccessPage,
+    pathname,
+    router,
+    searchParams,
+    userPreferedLanguage,
+  ]);
 
   useEffect(() => {
     const handleSubmitEvent = () => {
