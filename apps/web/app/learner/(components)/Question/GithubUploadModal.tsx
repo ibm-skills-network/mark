@@ -135,11 +135,22 @@ const GithubModal: React.FC<{
         const attemptsSoFar = readGithubAuthFailureCount();
         setFailureCount(attemptsSoFar);
 
-        // Reads the code once and strips it from the URL whatever happens
-        // next, so a remount or a reload cannot re-post a code GitHub has
-        // already spent.
+        // Reads whatever GitHub sent back once and strips it from the URL
+        // whatever happens next, so a remount or a reload cannot re-post a code
+        // GitHub has already spent or carry a stale refusal into the next
+        // redirect target.
         const pending = consumeGithubAuthorizationCode();
-        if (pending) {
+
+        // GitHub refused: the learner cancelled on the consent screen, or the
+        // app is misconfigured. Either way there is nothing to exchange, and
+        // sending them back to the screen they just came from is the trap they
+        // reported. Show what happened and let them close the dialog.
+        if (pending?.denial) {
+          noteFailure(pending.denial);
+          return;
+        }
+
+        if (pending?.code) {
           const result = await exchangeGithubAuthorizationCode(
             pending.code,
             pending.state,

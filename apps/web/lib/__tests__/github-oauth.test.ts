@@ -8,8 +8,11 @@ import {
   consumeGithubAuthorizationCode,
   describeGithubAuthFailure,
   exchangeGithubAuthorizationCode,
+  isGithubExchangeInFlight,
   readGithubAuthFailureCount,
   recordGithubAuthFailure,
+  resetGithubHandoffForTesting,
+  wasGithubAuthorizationConsumed,
 } from "@/lib/github-oauth";
 
 const setUrl = (url: string) => window.history.replaceState({}, "", url);
@@ -34,7 +37,7 @@ describe("consumeGithubAuthorizationCode", () => {
 
     const pending = consumeGithubAuthorizationCode();
 
-    expect(pending).toEqual({ code: "abc123", state: "st-1" });
+    expect(pending).toEqual({ code: "abc123", state: "st-1", denial: null });
     expect(window.location.search).toBe("");
   });
 
@@ -54,6 +57,7 @@ describe("consumeGithubAuthorizationCode", () => {
     expect(consumeGithubAuthorizationCode()).toEqual({
       code: "abc123",
       state: "st-1",
+      denial: null,
     });
 
     setUrl("/learner/3601/questions?code=abc123&state=st-1");
@@ -69,11 +73,60 @@ describe("consumeGithubAuthorizationCode", () => {
     expect(consumeGithubAuthorizationCode()).toEqual({
       code: "def456",
       state: "st-2",
+      denial: null,
     });
   });
 
   it("returns null when there is no code to consume", () => {
     expect(consumeGithubAuthorizationCode()).toBeNull();
+  });
+
+  // Clicking "Cancel" on GitHub's consent screen returns an error and no code.
+  // Leaving those parameters in the address bar baked them into the next
+  // redirect_uri and left the learner going round the same loop.
+  it("strips GitHub's refusal from the address bar and reports it", () => {
+    setUrl(
+      "/learner/3601/questions?error=access_denied" +
+        "&error_description=The+user+has+denied+your+application+access" +
+        "&error_uri=https%3A%2F%2Fdocs.github.com%2Foauth&state=st-1",
+    );
+
+    expect(consumeGithubAuthorizationCode()).toEqual({
+      code: null,
+      state: "st-1",
+      denial: "access_denied",
+    });
+    expect(window.location.search).toBe("");
+  });
+
+  it("keeps unrelated parameters when it strips a refusal", () => {
+    setUrl("/learner/3601/questions?authorMode=true&error=access_denied");
+
+    consumeGithubAuthorizationCode();
+
+    expect(window.location.search).toBe("?authorMode=true");
+  });
+
+  // Everything GitHub can return here other than access_denied is an
+  // application-configuration fault, not something the learner can clear.
+  it("reports any other authorize error as a configuration fault", () => {
+    setUrl("/learner/3601/questions?error=redirect_uri_mismatch");
+
+    expect(consumeGithubAuthorizationCode()).toEqual({
+      code: null,
+      state: null,
+      denial: "configuration",
+    });
+  });
+
+  it("reports a code as a code, with no denial", () => {
+    setUrl("/learner/3601/questions?code=abc123&state=st-1");
+
+    expect(consumeGithubAuthorizationCode()).toEqual({
+      code: "abc123",
+      state: "st-1",
+      denial: null,
+    });
   });
 });
 
@@ -139,6 +192,70 @@ describe("exchangeGithubAuthorizationCode", () => {
     await expect(
       exchangeGithubAuthorizationCode("abc", "st-1"),
     ).resolves.toEqual({ token: null, failure: "unavailable" });
+  });
+});
+
+// A submission with two or more GitHub answers renders one component per
+// question, and each ran the same bootstrap. Whichever one lost the race for
+// the code used to navigate the whole page to github.com, killing the exchange
+// the winner was still awaiting.
+describe("one authorization handoff per page load", () => {
+  const fetchMock = jest.fn();
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    fetchMock.mockReset();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    setUrl("/learner/3601/questions");
+    resetGithubHandoffForTesting();
+  });
+
+  it("reports no handoff on a page that GitHub did not redirect to", () => {
+    expect(isGithubExchangeInFlight()).toBe(false);
+    expect(wasGithubAuthorizationConsumed()).toBe(false);
+  });
+
+  it("stays flagged for the rest of the page load once a code is consumed", () => {
+    setUrl("/learner/3601/questions?code=abc123&state=st-1");
+    consumeGithubAuthorizationCode();
+
+    expect(wasGithubAuthorizationConsumed()).toBe(true);
+    // A second reader gets nothing, and still sees that the handoff is owned.
+    expect(consumeGithubAuthorizationCode()).toBeNull();
+    expect(wasGithubAuthorizationConsumed()).toBe(true);
+  });
+
+  it("flags a consumed refusal too", () => {
+    setUrl("/learner/3601/questions?error=access_denied");
+    consumeGithubAuthorizationCode();
+
+    expect(wasGithubAuthorizationConsumed()).toBe(true);
+  });
+
+  it("reports an exchange as in flight until it settles", async () => {
+    let settle: (value: Response) => void = () => undefined;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          settle = resolve;
+        }),
+    );
+
+    const exchange = exchangeGithubAuthorizationCode("abc", "st-1");
+    expect(isGithubExchangeInFlight()).toBe(true);
+
+    settle(jsonResponse(200, { token: "gho_abc" }));
+    await exchange;
+
+    expect(isGithubExchangeInFlight()).toBe(false);
+  });
+
+  it("stops reporting an exchange as in flight when it fails", async () => {
+    fetchMock.mockRejectedValue(new Error("network down"));
+
+    await exchangeGithubAuthorizationCode("abc", "st-1");
+
+    expect(isGithubExchangeInFlight()).toBe(false);
   });
 });
 

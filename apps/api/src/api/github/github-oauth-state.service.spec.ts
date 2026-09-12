@@ -1,5 +1,9 @@
 import "reflect-metadata";
 
+import { createHash, createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { GithubOauthStateService } from "./github-oauth-state.service";
 
 describe("GithubOauthStateService", () => {
@@ -74,5 +78,96 @@ describe("GithubOauthStateService", () => {
     expect(
       new GithubOauthStateService().verify(state, "learner@example.com"),
     ).toBe(false);
+  });
+
+  it("signs the user id and the payload with a separator neither can contain", () => {
+    process.env.GITHUB_OAUTH_STATE_SECRET = "state-secret"; // pragma: allowlist secret
+    const state = new GithubOauthStateService().issue(
+      "learner@example.com",
+      3601,
+    );
+    const [payload, signature] = state.split(".");
+
+    const expected = createHmac(
+      "sha256",
+      createHash("sha256")
+        .update("mark-github-oauth-state:state-secret")
+        .digest(),
+    )
+      .update(`learner@example.com\u0000${payload}`)
+      .digest("base64url");
+
+    expect(signature).toBe(expected);
+  });
+});
+
+describe("GithubOauthStateService without key material", () => {
+  const saved = {
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    localClientSecret: process.env.GITHUB_CLIENT_SECRET_LOCAL,
+    stateSecret: process.env.GITHUB_OAUTH_STATE_SECRET,
+  };
+
+  beforeEach(() => {
+    delete process.env.GITHUB_CLIENT_SECRET;
+    delete process.env.GITHUB_CLIENT_SECRET_LOCAL;
+    delete process.env.GITHUB_OAUTH_STATE_SECRET;
+  });
+
+  afterEach(() => {
+    const restore = (name: string, value: string | undefined): void => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    };
+    restore("GITHUB_CLIENT_SECRET", saved.clientSecret);
+    restore("GITHUB_CLIENT_SECRET_LOCAL", saved.localClientSecret);
+    restore("GITHUB_OAUTH_STATE_SECRET", saved.stateSecret);
+  });
+
+  it("reports that it cannot sign", () => {
+    expect(new GithubOauthStateService().isConfigured()).toBe(false);
+  });
+
+  it("refuses to issue a state rather than signing with a derivable key", () => {
+    expect(() =>
+      new GithubOauthStateService().issue("learner@example.com", 3601),
+    ).toThrow(/not configured/i);
+  });
+
+  // With no key material the key used to be a constant derived from this file
+  // alone, so anyone who knew a victim's user id could mint a state that passed
+  // verification — which is the single thing the parameter exists to prevent.
+  it("rejects a state forged from the publicly derivable key", () => {
+    const derivableKey = createHash("sha256")
+      .update("mark-github-oauth-state:")
+      .digest();
+    const payload = Buffer.from(
+      ["forged", "3601", String(Date.now() + 600_000)].join("~"),
+    ).toString("base64url");
+    const signature = createHmac("sha256", derivableKey)
+      .update(`victim@example.com\u0000${payload}`)
+      .digest("base64url");
+
+    expect(
+      new GithubOauthStateService().verify(
+        `${payload}.${signature}`,
+        "victim@example.com",
+      ),
+    ).toBe(false);
+  });
+});
+
+// The separator was written as a literal 0x00 byte, which makes git classify
+// the file as binary: no reviewable diff, and grep skips it entirely. Both the
+// service and this spec have to spell it as an escape.
+describe("the state files on disk", () => {
+  it.each([
+    "github-oauth-state.service.ts",
+    "github-oauth-state.service.spec.ts",
+  ])("%s is a text file", (name) => {
+    expect(readFileSync(join(__dirname, name)).includes(0)).toBe(false);
   });
 });
