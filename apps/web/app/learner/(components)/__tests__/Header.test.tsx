@@ -122,6 +122,7 @@ function seedLearnerState(assignmentIdInStore: number | null) {
     questions: [answeredQuestion],
     activeAttemptId: 999,
     userPreferedLanguage: null,
+    isUploadingFiles: false,
   });
   useLearnerOverviewStore.setState({ assignmentId: assignmentIdInStore });
   useAssignmentDetails.setState({ assignmentDetails: null });
@@ -437,5 +438,83 @@ describe("LearnerHeader content language reconciliation", () => {
     });
 
     expect(mockGetAttempt).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("LearnerHeader submit gating", () => {
+  // The header's own Submit button is disabled by getSubmitButtonStatus, but
+  // the in-page submit control reaches the same handler through a window
+  // event. The gate has to live on the handler or that route skips every check.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSubmitAssignment.mockResolvedValue(undefined);
+  });
+
+  it("refuses to submit while a file upload is still running", async () => {
+    // Submitting mid-upload posts the attempt without the file the learner is
+    // waiting on; it grades as an empty answer.
+    seedLearnerState(null);
+    useLearnerStore.setState({ isUploadingFiles: true });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/file upload in progress/i),
+    );
+  });
+
+  it("refuses to submit when no question has been answered", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [{ id: 1, status: "unedited" } as unknown as QuestionStore],
+    });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/no questions have been answered/i),
+    );
+  });
+
+  it("refuses to submit an answer whose URL is not valid", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [
+        {
+          id: 1,
+          status: "edited",
+          learnerUrlResponse: "not a url",
+        } as unknown as QuestionStore,
+      ],
+    });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/doesn't look like a web address|invalid url/i),
+    );
+  });
+
+  it("still submits once everything the header checks is satisfied", async () => {
+    seedLearnerState(null);
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringMatching(
+        /file upload in progress|no questions have been answered|web address|invalid url/i,
+      ),
+    );
   });
 });

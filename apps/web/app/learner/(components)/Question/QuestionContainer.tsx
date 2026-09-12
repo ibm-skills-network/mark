@@ -29,6 +29,9 @@ import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";
 
+// Same wording the header's Submit tooltip uses for this state.
+const UPLOAD_IN_PROGRESS_TOOLTIP = "File upload in progress...";
+
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
 
@@ -65,6 +68,11 @@ function Component(props: Props) {
   // author comment visiblity
   const role = useLearnerStore((state) => state.role);
   const isAuthorView = role === "author";
+
+  // The header owns the full submit gate; this button only needs the one
+  // condition a learner can plausibly race, and subscribing to a boolean keeps
+  // every question on the page from re-rendering as answers are typed.
+  const isUploadingFiles = useLearnerStore((state) => state.isUploadingFiles);
 
   const setQuestionStatus = useLearnerStore((state) => state.setQuestionStatus);
   const getQuestionStatusById = useLearnerStore(
@@ -647,7 +655,9 @@ function Component(props: Props) {
                 );
                 window.dispatchEvent(submitEvent);
               }}
-              className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md"
+              disabled={isUploadingFiles}
+              title={isUploadingFiles ? UPLOAD_IN_PROGRESS_TOOLTIP : undefined}
+              className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md disabled:opacity-50 disabled:pointer-events-none"
             >
               <span className="text-sm sm:text-base">Submit Assignment</span>
               <PaperAirplaneIcon

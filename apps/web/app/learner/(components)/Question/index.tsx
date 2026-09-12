@@ -16,7 +16,7 @@ import { QuestionDisplayType } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
 import { parseLearnerResponse, useDebugLog } from "@/lib/utils";
-import { useAppConfig } from "@/stores/appConfig";
+import { applyTipsSessionDismissal, useAppConfig } from "@/stores/appConfig";
 import {
   type learnerFileResponse,
   useAssignmentDetails,
@@ -335,6 +335,10 @@ function QuestionPage(props: Props) {
 
   useEffect(() => {
     setTipsVersion("v1.0");
+    // Only after mount: the dismissal lives in sessionStorage, which the
+    // server cannot see, so folding it into the first render would make the
+    // client disagree with the server HTML and repaint the whole grid.
+    applyTipsSessionDismissal();
   }, []);
 
   useEffect(() => {

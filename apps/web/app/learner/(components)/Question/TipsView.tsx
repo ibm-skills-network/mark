@@ -141,7 +141,10 @@ function TipsView() {
         <div
           ref={dialogRef}
           role="dialog"
-          aria-modal="true"
+          // No aria-modal: the sheet covers the question area only, so the
+          // header and its submit button stay reachable. Claiming the rest of
+          // the page is inert would put screen-reader users back behind the
+          // layer this sheet was reshaped to get out from under.
           aria-labelledby="tips-sheet-title"
           tabIndex={-1}
           onKeyDown={handleDialogKeyDown}
