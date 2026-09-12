@@ -40,7 +40,10 @@ export function resolveAttemptViewError(params: {
   /** Course URL carried by the session, when the launch supplied one. */
   returnUrl?: string;
 }): AttemptViewError {
-  const { status, routeAssignmentId, sessionAssignmentId, returnUrl } = params;
+  const { status, routeAssignmentId, sessionAssignmentId } = params;
+  // A launch without a return URL sends an empty string; treat it as absent so
+  // the screen hides the action rather than rendering a dead link.
+  const returnUrl = params.returnUrl || undefined;
 
   // The session belongs to a different assignment, so this tab's session was
   // replaced by a later launch. Say that instead of implying the learner is
