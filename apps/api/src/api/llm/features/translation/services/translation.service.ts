@@ -15,6 +15,11 @@ import { LlmRequestOptions } from "../../../core/interfaces/llm-provider.interfa
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { PROMPT_PROCESSOR } from "../../../llm.constants";
 import { ITranslationService } from "../interfaces/translation.interface";
+import {
+  hasLostMarkup,
+  prepareHtmlForTranslation,
+  restoreTranslatedHtml,
+} from "../utils/translatable-html.util";
 
 interface LanguageMapping {
   code: string;
@@ -391,8 +396,8 @@ INSTRUCTIONS:
   ): Promise<string> {
     const decodedQuestionText = decodeIfBase64(questionText) || questionText;
 
-    const { cleanedText, placeholders } =
-      this.stripHtmlPreserveImages(decodedQuestionText);
+    const { preparedText, placeholders } =
+      prepareHtmlForTranslation(decodedQuestionText);
 
     const targetLanguageName = this.getLanguageName(targetLanguage);
 
@@ -408,7 +413,7 @@ INSTRUCTIONS:
       template: this.getQuestionTranslationTemplate(),
       inputVariables: [],
       partialVariables: {
-        question_text: cleanedText,
+        question_text: preparedText,
         target_language: targetLanguageName,
         format_instructions: formatInstructions,
       },
@@ -426,9 +431,11 @@ INSTRUCTIONS:
 
       try {
         const parsedResponse = await parser.parse(response);
-        return this.restoreImagePlaceholders(
+        return this.finalizeQuestionTranslation(
           parsedResponse.translatedText,
+          preparedText,
           placeholders,
+          targetLanguage,
         );
       } catch (parseError) {
         this.logger.warn(
@@ -442,12 +449,14 @@ INSTRUCTIONS:
         const fallbackPrompt = new PromptTemplate({
           template:
             `Translate the following question into {target_language}.\n` +
+            `The question may contain HTML. Keep every tag and attribute exactly as written, ` +
+            `in the same order, and translate only the text between the tags.\n` +
             `Preserve any placeholders like [[IMAGE_0]] exactly as written.\n` +
             `Return ONLY the translated text. No quotes, no JSON, no markdown, no explanations.\n\n` +
             `QUESTION:\n{question_text}`,
           inputVariables: [],
           partialVariables: {
-            question_text: cleanedText,
+            question_text: preparedText,
             target_language: targetLanguageName,
           },
         });
@@ -459,9 +468,11 @@ INSTRUCTIONS:
           "gpt-4o-mini",
           TranslationService.LLM_CALL_OPTIONS,
         );
-        return this.restoreImagePlaceholders(
+        return this.finalizeQuestionTranslation(
           plain?.trim?.() ?? plain,
+          preparedText,
           placeholders,
+          targetLanguage,
         );
       }
     } catch (error) {
@@ -910,46 +921,43 @@ INSTRUCTIONS:
     1. Maintain the original meaning, context, and intent of the question.
     2. Adapt any idiomatic expressions or culture-specific references appropriately.
     3. Ensure the translation is natural and fluent in the target language.
-    4. Preserve formatting elements such as bullet points or numbered lists.
-    5. Translate any proper names only if they have standard translations in the target language.
-    6. Preserve any words already in another language—tech terms, proper names, acronyms, quotes—exactly as written.
-    7. Preserve placeholder tokens like [[IMAGE_0]] exactly as written and keep their position.
+    4. The question may contain HTML. Reproduce every tag and attribute exactly as written, in the same order and nesting, and translate only the text between the tags. Never add, drop or reorder tags, and never translate attribute values such as href, class or data-list.
+    5. Preserve formatting elements such as bullet points or numbered lists.
+    6. Translate any proper names only if they have standard translations in the target language.
+    7. Preserve any words already in another language—tech terms, proper names, acronyms, quotes—exactly as written.
+    8. Preserve placeholder tokens like [[IMAGE_0]] exactly as written and keep their position.
     
     {format_instructions}
     `;
   }
 
-  private stripHtmlPreserveImages(text: string): {
-    cleanedText: string;
-    placeholders: string[];
-  } {
-    const placeholders: string[] = [];
-    const withPlaceholders = text.replaceAll(
-      /<img\b[^>]*>/gi,
-      (match: string) => {
-        const token = `[[IMAGE_${placeholders.length}]]`;
-        placeholders.push(match);
-        return token;
-      },
-    );
-
-    const cleanedText = withPlaceholders.replaceAll(/<[^>]*>?/gm, "");
-    return { cleanedText, placeholders };
-  }
-
-  private restoreImagePlaceholders(
+  /**
+   * Sanitize the model's translation, put the images back, and flag the case
+   * where the translation came back as plain text even though the source was
+   * formatted — the learner would get one unbroken paragraph, with any link
+   * targets gone.
+   *
+   * @param translatedText - Raw text returned by the model
+   * @param preparedText - The sanitized source that was sent to the model
+   * @param placeholders - Image tags removed before prompting
+   * @param targetLanguage - Language the question was translated into
+   * @returns Storable translated HTML
+   */
+  private finalizeQuestionTranslation(
     translatedText: string,
+    preparedText: string,
     placeholders: string[],
+    targetLanguage: string,
   ): string {
-    if (!translatedText || placeholders.length === 0) {
-      return translatedText;
+    const restored = restoreTranslatedHtml(translatedText, placeholders);
+
+    if (hasLostMarkup(preparedText, restored)) {
+      this.logger.warn(
+        `Question translation to ${targetLanguage} came back without the formatting of its source; ` +
+          `the learner will see unformatted text`,
+      );
     }
 
-    let restored = translatedText;
-    for (const [index, tag] of placeholders.entries()) {
-      const token = `[[IMAGE_${index}]]`;
-      restored = restored.replaceAll(token, tag);
-    }
     return restored;
   }
 
