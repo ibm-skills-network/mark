@@ -10,7 +10,10 @@ import {
   RubricDto,
   ScoringDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
-import { GradingConsistencyService } from "src/api/assignment/v2/services/grading-consistency.service";
+import {
+  deriveLearnerKey,
+  GradingConsistencyService,
+} from "src/api/assignment/v2/services/grading-consistency.service";
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
@@ -168,7 +171,14 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
               question.id,
               responseHash,
               learnerResponseText,
-              question.type,
+              {
+                questionType: question.type,
+                maxPoints: question.totalPoints,
+                learnerKey: context.userId
+                  ? deriveLearnerKey(context.userId)
+                  : undefined,
+                attemptId: context.attemptId,
+              },
             );
 
           if (consistencyCheck.similar && consistencyCheck.shouldAdjust) {
@@ -537,6 +547,12 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
             // Read back by GradingConsistencyService.checkConsistency to keep
             // grade reuse within a single grading model.
             modelSnapshot: modelIdentity,
+            // Also read back there: a near match only qualifies for reuse
+            // against the same learner's own earlier answers. Hashed, so the
+            // audit trail never carries the learner's address.
+            learnerKey: context.userId
+              ? deriveLearnerKey(context.userId)
+              : undefined,
           },
         },
         context.tx,

@@ -30,6 +30,53 @@ interface ConsistencyCheck {
   previousFeedback?: string;
   deviationPercentage?: number;
   shouldAdjust: boolean;
+  /** Why the grade was reused, for the caller's own logging and metadata. */
+  reuseReason?: GradeReuseReason;
+}
+
+/** How a prior grade qualified for reuse. */
+export type GradeReuseReason =
+  | "exact_match_in_session"
+  | "exact_match"
+  | "same_learner_near_match";
+
+/**
+ * Everything a reuse decision needs beyond the answer itself. All of it is
+ * derived server-side: the question's own full marks, the grading model that
+ * will run, and the attempt owner. Nothing here may come from the request body.
+ */
+export interface GradeReuseLookup {
+  /** Type of the question being graded, used to normalise both answers. */
+  questionType: QuestionType;
+  /**
+   * Full marks for the question. A prior grade below this is never reused —
+   * replaying a full-marks grade can only ever be generous, replaying anything
+   * lower hands one submission's loss to another.
+   */
+  maxPoints?: number;
+  /** Grading model identity that must have produced any reusable grade. */
+  modelIdentity?: string;
+  /**
+   * Stable, non-reversible identifier of the learner being graded, from
+   * `deriveLearnerKey`. Only this learner's own prior answers qualify for a
+   * near match; everyone else's need an exact one.
+   */
+  learnerKey?: string;
+  /** Attempt being graded, so a reuse can be traced back to a submission. */
+  attemptId?: number;
+}
+
+/**
+ * Derive the identifier used to tell one learner's prior grades from another's.
+ * userId is an email in this system, so it is hashed rather than stored beside
+ * every grading record.
+ */
+export function deriveLearnerKey(userId: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(userId.trim().toLowerCase())
+    .digest("hex")
+    .slice(0, 32);
 }
 
 interface NormalizedScore {
@@ -48,11 +95,13 @@ interface ParsedResponsePayload {
   totalPoints?: number;
   maxPoints?: number;
   feedback?: unknown;
+  metadata?: { maxPossiblePoints?: number; [key: string]: unknown };
   [key: string]: unknown;
 }
 
 interface ParsedAuditMetadata {
   modelSnapshot?: string;
+  learnerKey?: string;
   [key: string]: unknown;
 }
 
@@ -115,29 +164,54 @@ export class GradingConsistencyService implements OnModuleDestroy {
   }
 
   /**
-   * Check for similar previous responses
+   * Find a previous grade that may be served for this answer instead of
+   * grading it again.
+   *
+   * Two things make a prior grade reusable and both are required:
+   *
+   * 1. It awarded full marks. A cached full score replayed onto a near-identical
+   *    answer is at worst generous; a cached partial or zero is how one
+   *    submission's loss became everybody else's.
+   * 2. It is either the same learner's own earlier answer (which may differ in
+   *    small ways) or *any* learner's byte-for-byte equivalent answer after
+   *    normalisation. Nothing else: a near match across learners is exactly the
+   *    case where a single token decides correctness.
    */
   async checkConsistency(
     questionId: number,
     responseHash: string,
     currentResponse: string,
-    questionType: QuestionType,
-    modelIdentity?: string,
+    lookup: GradeReuseLookup,
   ): Promise<ConsistencyCheck> {
+    const { questionType, maxPoints, modelIdentity, learnerKey, attemptId } =
+      lookup;
+
     try {
       const cacheKey = this.buildCacheKey(questionId, modelIdentity);
       const cachedRecords = this.gradingCache.get(cacheKey) || [];
 
       for (const record of cachedRecords) {
-        if (this.isSimilarHash(responseHash, record.responseHash)) {
-          return {
-            similar: true,
-            previousGrade: record.points,
-            previousFeedback: record.feedback,
-            deviationPercentage: 0,
-            shouldAdjust: false,
-          };
+        if (!this.isSimilarHash(responseHash, record.responseHash)) {
+          continue;
         }
+
+        const rejection = this.rejectUnlessFullMarks(
+          record.points,
+          record.maxPoints,
+          maxPoints,
+        );
+        if (rejection) {
+          this.logRejectedCandidate(questionId, attemptId, rejection);
+          continue;
+        }
+
+        return this.acceptReuse(
+          questionId,
+          attemptId,
+          "exact_match_in_session",
+          record.points,
+          record.feedback,
+        );
       }
 
       const recentGradings = await this.prisma.gradingAudit.findMany({
@@ -169,19 +243,24 @@ export class GradingConsistencyService implements OnModuleDestroy {
 
           if (!requestData || !responseData) continue;
 
+          const auditMetadata = this.safeJsonParse<ParsedAuditMetadata>(
+            grading.metadata ?? "",
+          );
+
           // A grade is only reusable if the same grader produced it. Reusing
           // across models silently serves the previous model's judgement under
           // the new model's name, which no cache-identity elsewhere can undo
           // and which makes a model A/B measure the model it replaced.
           // Records predating model tracking carry no snapshot and are treated
           // as not reusable rather than assumed to match.
-          if (modelIdentity) {
-            const auditMetadata = this.safeJsonParse<ParsedAuditMetadata>(
-              grading.metadata ?? "",
+          if (modelIdentity && auditMetadata?.modelSnapshot !== modelIdentity) {
+            this.logRejectedCandidate(
+              questionId,
+              attemptId,
+              "grading_model_mismatch",
+              grading.id,
             );
-            if (auditMetadata?.modelSnapshot !== modelIdentity) {
-              continue;
-            }
+            continue;
           }
 
           const previousResponse =
@@ -189,23 +268,70 @@ export class GradingConsistencyService implements OnModuleDestroy {
             requestData.learnerResponse ||
             "";
 
-          if (
-            this.isSimilarResponse(
-              currentResponse,
+          const exactMatch =
+            previousResponse.length > 0 &&
+            this.generateResponseHash(
               previousResponse,
+              questionId,
               questionType,
-            )
-          ) {
-            const deviationPercentage = 0;
+            ) === responseHash;
 
-            return {
-              similar: true,
-              previousGrade: responseData.totalPoints || 0,
-              previousFeedback: JSON.stringify(responseData.feedback || ""),
-              deviationPercentage,
-              shouldAdjust: false,
-            };
+          const sameLearner =
+            typeof learnerKey === "string" &&
+            learnerKey.length > 0 &&
+            auditMetadata?.learnerKey === learnerKey;
+
+          if (!exactMatch) {
+            if (!sameLearner) {
+              this.logRejectedCandidate(
+                questionId,
+                attemptId,
+                "another_learner_without_exact_match",
+                grading.id,
+              );
+              continue;
+            }
+
+            if (
+              !this.isSimilarResponse(
+                currentResponse,
+                previousResponse,
+                questionType,
+              )
+            ) {
+              this.logRejectedCandidate(
+                questionId,
+                attemptId,
+                "answer_not_similar",
+                grading.id,
+              );
+              continue;
+            }
           }
+
+          const rejection = this.rejectUnlessFullMarks(
+            responseData.totalPoints,
+            responseData.maxPoints ?? responseData.metadata?.maxPossiblePoints,
+            maxPoints,
+          );
+          if (rejection) {
+            this.logRejectedCandidate(
+              questionId,
+              attemptId,
+              rejection,
+              grading.id,
+            );
+            continue;
+          }
+
+          return this.acceptReuse(
+            questionId,
+            attemptId,
+            exactMatch ? "exact_match" : "same_learner_near_match",
+            responseData.totalPoints ?? 0,
+            JSON.stringify(responseData.feedback || ""),
+            grading.id,
+          );
         } catch (error) {
           this.logger.debug(
             `Error parsing grading record ${grading.id}:`,
@@ -225,6 +351,85 @@ export class GradingConsistencyService implements OnModuleDestroy {
         shouldAdjust: false,
       };
     }
+  }
+
+  /**
+   * Reasons a candidate grade was refused, or undefined when it awarded full
+   * marks for the question being graded right now. Anything unknown counts as
+   * a refusal: without both numbers there is no way to tell a full score from
+   * a zero.
+   */
+  private rejectUnlessFullMarks(
+    points: number | undefined,
+    recordedMaxPoints: number | undefined,
+    requestedMaxPoints: number | undefined,
+  ): string | undefined {
+    if (
+      typeof requestedMaxPoints !== "number" ||
+      !Number.isFinite(requestedMaxPoints) ||
+      requestedMaxPoints <= 0
+    ) {
+      return "unknown_max_points";
+    }
+
+    // The candidate was scored out of a different total, so its points do not
+    // describe this question's marks at all.
+    if (
+      typeof recordedMaxPoints === "number" &&
+      recordedMaxPoints !== requestedMaxPoints
+    ) {
+      return "max_points_changed";
+    }
+
+    if (
+      typeof points !== "number" ||
+      !Number.isFinite(points) ||
+      points < requestedMaxPoints
+    ) {
+      return "below_full_marks";
+    }
+
+    return undefined;
+  }
+
+  private acceptReuse(
+    questionId: number,
+    attemptId: number | undefined,
+    reason: GradeReuseReason,
+    points: number,
+    feedback: string,
+    auditId?: number,
+  ): ConsistencyCheck {
+    this.logger.info("Reusing a prior grade instead of grading again", {
+      questionId,
+      attemptId,
+      reason,
+      points,
+      auditId,
+    });
+
+    return {
+      similar: true,
+      previousGrade: points,
+      previousFeedback: feedback,
+      deviationPercentage: 0,
+      shouldAdjust: false,
+      reuseReason: reason,
+    };
+  }
+
+  private logRejectedCandidate(
+    questionId: number,
+    attemptId: number | undefined,
+    reason: string,
+    auditId?: number,
+  ): void {
+    this.logger.debug("Refused a prior grade as a reuse candidate", {
+      questionId,
+      attemptId,
+      reason,
+      auditId,
+    });
   }
 
   /**
@@ -497,7 +702,12 @@ export class GradingConsistencyService implements OnModuleDestroy {
   }
 
   /**
-   * Check if two responses are similar
+   * Check if two responses are close enough to count as the same answer.
+   *
+   * Only reachable for a learner's own earlier answers. Across learners a near
+   * match is worthless — on short code, SQL or numeric answers a single token
+   * is the whole difference between right and wrong, and both sides of that
+   * line score well above any threshold this could use.
    */
   private isSimilarResponse(
     response1: string,
