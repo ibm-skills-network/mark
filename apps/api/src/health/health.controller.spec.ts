@@ -1,6 +1,7 @@
 import { TerminusModule } from "@nestjs/terminus";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { GithubCredentialCheckService } from "../api/github/github-credential-check.service";
 import { DatabaseCircuitBreakerService } from "../database/circuit-breaker/database-circuit-breaker.service";
 import { DatabaseHealthIndicator } from "../database/health/database-health.indicator";
 import { PrismaService } from "../database/prisma.service";
@@ -42,6 +43,7 @@ describe("HealthController", () => {
         PrismaService,
         DatabaseHealthIndicator,
         DatabaseCircuitBreakerService,
+        GithubCredentialCheckService,
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
@@ -51,5 +53,13 @@ describe("HealthController", () => {
 
   it("should be defined", () => {
     expect(controller).toBeDefined();
+  });
+
+  it("serves the integration report without failing the pod's probes", () => {
+    const report = controller.integrations();
+
+    expect(report.checks.map((check) => check.name)).toContain("github_oauth");
+    // A broken integration must never take the pod out of rotation.
+    expect(report.status).toBeDefined();
   });
 });
