@@ -16,14 +16,14 @@ import {
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeForLog } from "../../../../logger/sanitize";
 
-// Strict positive-integer parser. Rejects NaN, decimals (`"1.5"`),
-// exponent form (`"1e3"`), hex (`"0x1"`), whitespace, leading `+`, and
-// leading zeros — anything that `Number()` would coerce but that is
-// not a clean canonical positive integer string.
 // Verbs that can only reach a read handler. A write always re-enters the guard
 // under its own verb, so this cannot be widened by a crafted request.
 const READ_ONLY_METHODS = new Set(["GET", "HEAD"]);
 
+// Strict positive-integer parser. Rejects NaN, decimals (`"1.5"`),
+// exponent form (`"1e3"`), hex (`"0x1"`), whitespace, leading `+`, and
+// leading zeros — anything that `Number()` would coerce but that is
+// not a clean canonical positive integer string.
 const parsePositiveIntId = (raw: string | undefined): number | undefined => {
   if (typeof raw !== "string" || raw.length === 0) return undefined;
   const n = Number(raw);
