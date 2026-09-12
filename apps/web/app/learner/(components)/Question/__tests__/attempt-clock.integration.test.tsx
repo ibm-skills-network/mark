@@ -169,3 +169,149 @@ describe("learner attempt clock, end to end", () => {
     expect(mockSubmitAssignment).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The minimum-age hold delays a suspicious expiry; it must never cancel it.
+ * These cases drive the real `useCountdown` past the hold and assert the
+ * submission actually lands — the mocked-hook Timer spec cannot express this,
+ * because its `timerExpired` is pinned and its `resetCountdown` is inert.
+ */
+describe("timed auto-submit survives the minimum-age hold", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    localStorage.clear();
+    mockSubmitAssignment.mockResolvedValue({
+      id: 8811,
+      totalPointsEarned: 0,
+      totalPossiblePoints: 1,
+      showSubmissionFeedback: true,
+      feedbacksForQuestions: [],
+    });
+    useLearnerStore.setState({
+      questions: [],
+      activeAttemptId: null,
+      expiresAt: undefined,
+      serverTimeOffsetMs: undefined,
+      attemptStartedAt: undefined,
+      userPreferedLanguage: null,
+    });
+    useAssignmentDetails.setState({ assignmentDetails: null });
+  });
+
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+  });
+
+  /**
+   * One second at a time, flushing React between ticks: the countdown, the
+   * hold's retry timer and the submit delay are three separate timers and the
+   * effects that chain them only run when React commits in between.
+   */
+  const advanceBy = async (totalMs: number) => {
+    for (let elapsed = 0; elapsed < totalMs; elapsed += 1000) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+    }
+  };
+
+  it("submits once when an attempt the learner has held for ten minutes runs out", async () => {
+    jest.setSystemTime(SERVER_NOW);
+
+    await renderLearnerPage(
+      buildAttempt({
+        createdAt: new Date(SERVER_NOW - 10 * MINUTE).toISOString(),
+        expiresAt: new Date(SERVER_NOW + 10 * 1000).toISOString(),
+      }),
+    );
+
+    // Ten seconds to the deadline, two more for the submit delay.
+    await advanceBy(20 * 1000);
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits once, after the hold, for an attempt that expires in its first seconds", async () => {
+    jest.setSystemTime(SERVER_NOW);
+
+    // Three seconds old with two seconds left: the hold engages, because an
+    // attempt this young expiring is exactly the shape a wrong clock produces.
+    // It is still a real deadline, so the submit must land once the attempt is
+    // old enough to be credible.
+    await renderLearnerPage(
+      buildAttempt({
+        createdAt: new Date(SERVER_NOW - 3 * 1000).toISOString(),
+        expiresAt: new Date(SERVER_NOW + 2 * 1000).toISOString(),
+      }),
+    );
+
+    await advanceBy(20 * 1000);
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+
+    await advanceBy(100 * 1000);
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits once on a payload with no server time and a device clock 25 minutes fast", async () => {
+    jest.setSystemTime(SERVER_NOW + 25 * MINUTE);
+
+    await renderLearnerPage(buildAttempt({ serverNow: undefined }));
+
+    // The uncorrected device clock reads the attempt as already over. The hold
+    // measures how long this tab has held it instead, so nothing is posted for
+    // the first thirty seconds...
+    await advanceBy(20 * 1000);
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+
+    // ...and then the deadline is honoured rather than dropped.
+    await advanceBy(70 * 1000);
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not carry a held expiry over to the next attempt", async () => {
+    jest.setSystemTime(SERVER_NOW);
+
+    // An attempt that expires while still too young to submit: the hold is
+    // engaged and the expiry is remembered.
+    const view = await renderLearnerPage(
+      buildAttempt({
+        createdAt: new Date(SERVER_NOW - 3 * 1000).toISOString(),
+        expiresAt: new Date(SERVER_NOW + 2 * 1000).toISOString(),
+      }),
+    );
+    await advanceBy(5 * 1000);
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+
+    // The learner starts a fresh attempt with a full twenty minutes before the
+    // hold elapses. The remembered expiry belongs to the old deadline and must
+    // not submit this one out from under them.
+    const restartedAt = Date.now();
+    view.rerender(
+      <>
+        <QuestionPage
+          attempt={buildAttempt({
+            id: 2494,
+            createdAt: new Date(restartedAt).toISOString(),
+            serverNow: new Date(restartedAt).toISOString(),
+            expiresAt: new Date(restartedAt + 20 * MINUTE).toISOString(),
+          })}
+          assignmentId={3663}
+        />
+        <Timer />
+      </>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await advanceBy(120 * 1000);
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(useLearnerStore.getState().activeAttemptId).toBe(2494);
+  });
+});

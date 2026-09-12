@@ -98,6 +98,12 @@ function Timer(props: Props) {
   // Set on mount and on every attempt change: the fallback for attempts whose
   // payload carried no server creation time.
   const attemptOpenedAtRef = useRef(Date.now());
+  // The countdown hook's `timerExpired` is transient — anything that resets the
+  // countdown clears it. Auto-submit must not be, or the minimum-age hold below
+  // would turn a delayed submission into no submission at all. The latch is set
+  // and cleared in effects, in declaration order, so a deadline change always
+  // clears it before the expiry of the deadline that replaced it can set it.
+  const expiryLatchedRef = useRef(false);
   const hasCountdown = typeof countdown === "number";
   const safeCountdown = hasCountdown ? countdown : 0;
 
@@ -289,8 +295,18 @@ function Timer(props: Props) {
   }, [expiresAt, countdown, oneMinuteAlertShown]);
 
   useEffect(() => {
+    // A new attempt, or a moved deadline: the previous expiry no longer stands.
+    // `timerExpired` still reads true here on an attempt change, until
+    // resetCountdown lands, which is why the latch is not set in this effect.
+    expiryLatchedRef.current = false;
     resetCountdown(expiresAt);
   }, [activeAttemptId, expiresAt, resetCountdown]);
+
+  useEffect(() => {
+    if (timerExpired) {
+      expiryLatchedRef.current = true;
+    }
+  }, [timerExpired]);
 
   useEffect(() => {
     if (activeAttemptId) {
@@ -301,7 +317,12 @@ function Timer(props: Props) {
   }, [activeAttemptId]);
 
   useEffect(() => {
-    if (timerExpired && !isSubmitted && assignmentId && activeAttemptId) {
+    if (
+      expiryLatchedRef.current &&
+      !isSubmitted &&
+      assignmentId &&
+      activeAttemptId
+    ) {
       // How long the learner has actually had this attempt. With the server's
       // clock in hand the attempt's own creation time is usable; without it,
       // fall back to how long this tab has held the attempt, which is the only
