@@ -1,6 +1,13 @@
 "use client";
 
-import { FC, useEffect, useRef, type ComponentPropsWithoutRef } from "react";
+import {
+  FC,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import "quill/dist/quill.snow.css";
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
@@ -18,80 +25,81 @@ interface Props extends ComponentPropsWithoutRef<"div"> {
 }
 
 /**
+ * The editor writes list items as `<li data-list="…">` plus an empty marker
+ * span that the stylesheet turns into the bullet or number. Content that
+ * reaches the viewer without that span (round-tripped through translation, or
+ * authored elsewhere) would otherwise render as an unmarked list, because
+ * `.ql-editor li` sets `list-style-type: none`.
+ */
+const LIST_ITEM_MISSING_MARKER =
+  /(<li\b[^>]*\bdata-list=[^>]*>)(?!\s*<span[^>]*\bql-ui\b)/gi;
+
+const withListMarkers = (html: string): string =>
+  html.replaceAll(
+    LIST_ITEM_MISSING_MARKER,
+    '$1<span class="ql-ui" contenteditable="false"></span>',
+  );
+
+/**
  * MarkdownViewer
  *
- * This component displays Quill-formatted content in read-only mode.
- * It uses the Quill editor without a toolbar and applies syntax highlighting via Highlight.js.
+ * Read-only renderer for the rich text the authoring editor produces. It
+ * renders sanitized, static HTML inside the editor's own class names so the
+ * stylesheet applies, and deliberately does NOT instantiate an editor: a live
+ * editor keeps a MutationObserver on this subtree and re-derives its internal
+ * model from whatever is written to it, which can discard markup it cannot map
+ * — losing the text of a list item while its bullet survives. Static markup has
+ * no observer, so what is sanitized is what the learner sees.
+ *
+ * Code blocks keep their syntax highlighting, applied once per content change.
  */
 const MarkdownViewer: FC<Props> = (props) => {
   const { className, children, allowCopy = true, ...restOfProps } = props;
-  const quillRef = useRef<HTMLDivElement>(null);
-  const quillInstanceRef = useRef<any>(null);
-  const latestChildrenRef = useRef(children);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    latestChildrenRef.current = children;
+  const html = useMemo(() => {
+    const raw =
+      children === null || children === undefined ? "" : String(children);
+    return withListMarkers(sanitizeHtml(raw));
   }, [children]);
 
+  // Sanitization needs a DOM, so the first paint stays empty and the content
+  // is committed on the client. Rendering the server-side fallback instead
+  // would leave a hydration mismatch that React cannot repair for raw HTML.
   useEffect(() => {
-    const container = quillRef.current;
-    if (!container) {
-      return;
-    }
-
-    let isDisposed = false;
+    setIsMounted(true);
     window.hljs = hljs;
-
-    void import("quill").then((QuillModule) => {
-      if (
-        isDisposed ||
-        !container.isConnected ||
-        quillRef.current !== container ||
-        quillInstanceRef.current
-      ) {
-        return;
-      }
-
-      const Quill = QuillModule.default;
-      const quill = new Quill(container, {
-        theme: "snow",
-        readOnly: true,
-        modules: {
-          toolbar: false,
-          syntax: {
-            highlight: (text: string) => hljs.highlightAuto(text).value,
-          },
-        },
-      });
-
-      quill.root.innerHTML = sanitizeHtml(
-        String(latestChildrenRef.current) || "",
-      );
-      quill.disable();
-      quillInstanceRef.current = quill;
-    });
-
-    return () => {
-      isDisposed = true;
-
-      if (quillInstanceRef.current) {
-        quillInstanceRef.current.root.innerHTML = "";
-        quillInstanceRef.current = null;
-      }
-
-      if (container.isConnected) {
-        container.innerHTML = "";
-      }
-    };
   }, []);
 
   useEffect(() => {
-    if (quillInstanceRef.current) {
-      quillInstanceRef.current.root.innerHTML = sanitizeHtml(
-        String(children) || "",
-      );
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
     }
-  }, [children]);
+
+    for (const block of editor.querySelectorAll<HTMLElement>(
+      ".ql-code-block[data-language]",
+    )) {
+      const language = block.dataset.language;
+      const source = block.textContent ?? "";
+
+      if (!language || language === "plain" || !source) {
+        continue;
+      }
+
+      if (!hljs.getLanguage(language)) {
+        continue;
+      }
+
+      // highlight.js escapes the source it is given, so its output carries no
+      // markup from the content itself.
+      block.innerHTML = hljs.highlight(source, {
+        language,
+        ignoreIllegals: true,
+      }).value;
+    }
+  }, [html, isMounted]);
 
   // Style injection (copy control + typography)
   useEffect(() => {
@@ -118,16 +126,16 @@ const MarkdownViewer: FC<Props> = (props) => {
       .quill-viewer .ql-editor p,
       .quill-viewer .ql-editor li,
       .quill-viewer .ql-editor blockquote {
-        margin: 0.25em 0 !important; 
+        margin: 0.25em 0 !important;
       }
       .quill-viewer .ql-editor ul,
       .quill-viewer .ql-editor ol {
-        padding-left: 1em !important; 
-        margin: 0.25em 0 !important; 
+        padding-left: 1em !important;
+        margin: 0.25em 0 !important;
       }
       .quill-viewer .ql-editor code {
         white-space: pre-wrap !important;
-        line-height: 1 !important; 
+        line-height: 1 !important;
         padding: 0.1em 0.2em !important;
         background-color: #f5f5f5 !important;
       }
@@ -148,7 +156,14 @@ const MarkdownViewer: FC<Props> = (props) => {
 
   return (
     <div className={cn(className, "quill-viewer")} {...restOfProps}>
-      <div ref={quillRef} />
+      <div className="ql-container ql-snow">
+        <div
+          ref={editorRef}
+          className="ql-editor"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: isMounted ? html : "" }}
+        />
+      </div>
     </div>
   );
 };
