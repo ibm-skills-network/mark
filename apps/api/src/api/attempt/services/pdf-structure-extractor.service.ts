@@ -38,11 +38,59 @@ type NormalizedTextItem = Pick<
 };
 
 interface PdfImageData {
-  data: Uint8ClampedArray | number[];
+  data: Uint8ClampedArray | Uint8Array | number[];
   width: number;
   height: number;
   kind?: number;
 }
+
+/**
+ * pdfjs publishes decoded images either on the page-local object store or, for
+ * images it caches across pages, on the document-wide one. Both expose the same
+ * two-form getter: synchronous once the object has arrived, callback-based
+ * before that.
+ */
+interface PdfObjectStore {
+  has(objectId: string): boolean;
+  get(objectId: string): unknown;
+  get(objectId: string, callback: (value: unknown) => void): null;
+}
+
+/** One image-painting site found in a page's operator list. */
+interface PdfImageReference {
+  /** pdfjs operator that painted it, for diagnostics. */
+  operator: string;
+  /** Object id to resolve from the page/document object store, when the operator uses one. */
+  objectId?: string;
+  /** Image data carried directly in the operator arguments (inline images). */
+  inline?: unknown;
+}
+
+/** Remaining document-wide image allowance, shared across pages. */
+interface PdfImageBudget {
+  remaining: number;
+}
+
+/**
+ * Ceiling on the pixels a single embedded image may expand to. Conversion
+ * materializes width x height x 4 bytes of RGBA before encoding, so 12M pixels
+ * is ~48 MB — comfortably above a 300 dpi full-page scan (~8.4M pixels) and far
+ * below anything that would threaten the pod.
+ */
+export const MAX_IMAGE_PIXELS = 12_000_000;
+
+/** Ceiling on images extracted from one page. */
+export const MAX_IMAGES_PER_PAGE = 20;
+
+/** Ceiling on images extracted from one document, across all pages. */
+export const MAX_IMAGES_PER_DOCUMENT = 60;
+
+/**
+ * How long to wait for the pdfjs worker to publish a page's image objects.
+ * They arrive shortly after getOperatorList() resolves, so this is a safety
+ * net rather than a normal cost. Tunable via PDF_IMAGE_RESOLVE_TIMEOUT_MS.
+ */
+const DEFAULT_IMAGE_RESOLVE_TIMEOUT_MS = 10_000;
 
 @Injectable()
 export class PdfStructureExtractorService {
@@ -101,12 +149,18 @@ export class PdfStructureExtractorService {
       );
 
       const pages: StructuredPage[] = [];
+      // Shared across pages so a document cannot accumulate an unbounded
+      // number of decoded images no matter how they are distributed.
+      const imageBudget: PdfImageBudget = {
+        remaining: MAX_IMAGES_PER_DOCUMENT,
+      };
       for (let pageNumber = 1; pageNumber <= numberPages; pageNumber++) {
         try {
           const page = await this.extractPageStructure(
             pdfDocument,
             pageNumber,
             warnings,
+            imageBudget,
           );
           pages.push(page);
         } catch (error) {
@@ -229,6 +283,7 @@ export class PdfStructureExtractorService {
     pdfDocument: PDFDocumentProxy,
     pageNumber: number,
     warnings: string[],
+    imageBudget?: PdfImageBudget,
   ): Promise<StructuredPage> {
     const pageTask = pdfDocument.getPage(pageNumber);
     pageTask.catch((lateError: unknown) => {
@@ -263,6 +318,7 @@ export class PdfStructureExtractorService {
         page,
         pageNumber,
         warnings,
+        imageBudget,
       );
 
       const allBlocks = [...typedBlocks, ...imageBlocks];
@@ -514,21 +570,201 @@ export class PdfStructureExtractorService {
     );
   }
 
+  private imageResolveTimeoutMs(): number {
+    const parsed = Number.parseInt(
+      process.env.PDF_IMAGE_RESOLVE_TIMEOUT_MS ?? "",
+      10,
+    );
+    return Number.isInteger(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_IMAGE_RESOLVE_TIMEOUT_MS;
+  }
+
+  private getObjectStores(page: PDFPageProxy): PdfObjectStore[] {
+    const candidate = page as unknown as {
+      objs?: PdfObjectStore;
+      commonObjs?: PdfObjectStore;
+    };
+    return [candidate.objs, candidate.commonObjs].filter(
+      (store): store is PdfObjectStore =>
+        !!store && typeof store.get === "function",
+    );
+  }
+
+  /**
+   * Resolve a decoded image from the pdfjs object stores.
+   *
+   * The worker publishes image objects asynchronously, AFTER getOperatorList()
+   * resolves, so a synchronous `has()` immediately after the await is false for
+   * every image in the document. Prefer the value if it has already landed,
+   * otherwise register the callback form on both stores (page-local and
+   * document-wide) and wait, bounded by the caller's deadline.
+   *
+   * Resolves to undefined when the object never arrives in time.
+   */
+  private async resolveImageObject(
+    page: PDFPageProxy,
+    objectId: string,
+    timeoutMs: number,
+  ): Promise<unknown> {
+    const stores = this.getObjectStores(page);
+
+    for (const store of stores) {
+      if (store.has(objectId)) {
+        try {
+          return store.get(objectId);
+        } catch (storeError) {
+          // Published-but-unreadable: fall through to the async wait rather
+          // than dropping the image on a transient store state.
+          this.logger.debug(
+            `Image ${objectId} reported present but not readable: ` +
+              `${storeError instanceof Error ? storeError.message : String(storeError)}`,
+          );
+        }
+      }
+    }
+
+    if (timeoutMs <= 0) {
+      return undefined;
+    }
+
+    return await new Promise<unknown>((resolve) => {
+      let settled = false;
+      const settle = (value?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => settle(), timeoutMs);
+      // Never hold the process open for an image that will not arrive.
+      timer.unref?.();
+      for (const store of stores) {
+        store.get(objectId, settle);
+      }
+    });
+  }
+
+  /**
+   * Collect every image-painting site in a page's operator list.
+   *
+   * Operators are matched through the pdfjs OPS enum rather than literal ids,
+   * and each operator family carries its image differently: an object id
+   * string, mask parameters whose `data` field holds the object id, an array of
+   * such parameters, or the decoded image inline. Object ids are de-duplicated
+   * so an image painted repeatedly on one page is extracted once.
+   */
+  private collectImageReferences(operatorList: PDFOperatorList): {
+    references: PdfImageReference[];
+    operatorCount: number;
+  } {
+    const { OPS } = pdfjs;
+    const references: PdfImageReference[] = [];
+    const seenObjectIds = new Set<string>();
+    let operatorCount = 0;
+
+    const addObjectReference = (operator: string, value: unknown): void => {
+      if (typeof value !== "string" || seenObjectIds.has(value)) return;
+      seenObjectIds.add(value);
+      references.push({ operator, objectId: value });
+    };
+
+    // Mask operators pass { data: <objectId>, width, height, ... } rather than
+    // a bare name.
+    const addMaskReference = (operator: string, value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      addObjectReference(operator, (value as { data?: unknown }).data);
+    };
+
+    for (const [index, functionId] of operatorList.fnArray.entries()) {
+      const argumentsEntry: unknown = operatorList.argsArray[index];
+      const arguments_: unknown[] = Array.isArray(argumentsEntry)
+        ? argumentsEntry
+        : [];
+
+      switch (functionId) {
+        case OPS.paintImageXObject: {
+          operatorCount++;
+          addObjectReference("paintImageXObject", arguments_[0]);
+          break;
+        }
+        case OPS.paintImageXObjectRepeat: {
+          operatorCount++;
+          addObjectReference("paintImageXObjectRepeat", arguments_[0]);
+          break;
+        }
+        case OPS.paintImageMaskXObject: {
+          operatorCount++;
+          addMaskReference("paintImageMaskXObject", arguments_[0]);
+          break;
+        }
+        case OPS.paintImageMaskXObjectRepeat: {
+          operatorCount++;
+          addMaskReference("paintImageMaskXObjectRepeat", arguments_[0]);
+          break;
+        }
+        case OPS.paintImageMaskXObjectGroup: {
+          operatorCount++;
+          if (Array.isArray(arguments_[0])) {
+            for (const entry of arguments_[0] as unknown[]) {
+              addMaskReference("paintImageMaskXObjectGroup", entry);
+            }
+          }
+          break;
+        }
+        case OPS.paintInlineImageXObject: {
+          operatorCount++;
+          references.push({
+            operator: "paintInlineImageXObject",
+            inline: arguments_[0],
+          });
+          break;
+        }
+        case OPS.paintInlineImageXObjectGroup: {
+          operatorCount++;
+          references.push({
+            operator: "paintInlineImageXObjectGroup",
+            inline: arguments_[0],
+          });
+          break;
+        }
+        case OPS.paintSolidColorImageMask: {
+          // A single opaque pixel — counted so the page log is honest, but it
+          // carries no picture worth describing.
+          operatorCount++;
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+
+    return { references, operatorCount };
+  }
+
   private async extractImagesFromPage(
     page: PDFPageProxy,
     pageNumber: number,
     warnings: string[],
+    budget?: PdfImageBudget,
   ): Promise<ContentBlock[]> {
     const imageBlocks: ContentBlock[] = [];
+    const startTime = Date.now();
+    let operatorCount = 0;
+    let candidateCount = 0;
+    let unresolved = 0;
+    let skipped = 0;
+    let dropped = 0;
 
     try {
       // NOTE: we deliberately do NOT render the page to a canvas here. The
-      // previous full-page page.render() produced a canvas that was never
-      // read (image data is taken from the operator list + page.objs below),
-      // called the pdfjs v4 render API under v5 (which rejects with "Image or
-      // Canvas expected"), and was the native-crash trigger — a SIGSEGV in the
-      // canvas addon and the unhandled AbortException that exited the worker.
-      // Removing it eliminates the crash with no loss of extraction fidelity.
+      // previous full-page page.render() called the pdfjs v4 render API under
+      // v5 (which rejects with "Image or Canvas expected") and was the
+      // native-crash trigger — a SIGSEGV in the canvas addon and the unhandled
+      // AbortException that exited the worker. Image data comes from the
+      // operator list plus the object stores below instead; because those are
+      // populated asynchronously, each image is awaited rather than probed.
       const operatorListTask = page.getOperatorList();
       // Same late-rejection guard for getOperatorList — it returns a Promise
       // directly, so attach .catch to the Promise itself.
@@ -540,46 +776,63 @@ export class PdfStructureExtractorService {
       });
       const operatorList: PDFOperatorList = await operatorListTask;
 
+      const collected = this.collectImageReferences(operatorList);
+      operatorCount = collected.operatorCount;
+      candidateCount = collected.references.length;
+
+      // One deadline for the whole page: the worker publishes the page's
+      // images together, so waiting per-image would multiply the worst case.
+      const deadline = Date.now() + this.imageResolveTimeoutMs();
+
       let imageIndex = 0;
-      const imageNames: string[] = [];
 
-      for (const [index, functionId] of operatorList.fnArray.entries()) {
-        const argumentsEntry: unknown = operatorList.argsArray[index];
-        const arguments_: unknown[] = Array.isArray(argumentsEntry)
-          ? argumentsEntry
-          : [];
-
+      for (const reference of collected.references) {
         if (
-          (functionId === 85 || functionId === 88) &&
-          Array.isArray(arguments_) &&
-          typeof arguments_[0] === "string"
+          imageIndex >= MAX_IMAGES_PER_PAGE ||
+          (budget && budget.remaining <= 0)
         ) {
-          imageNames.push(arguments_[0]);
+          dropped = candidateCount - imageIndex - skipped - unresolved;
+          break;
         }
-      }
 
-      for (const imageName of imageNames) {
+        const label = reference.objectId ?? reference.operator;
+
         try {
-          if (!page.objs.has(imageName)) {
-            this.logger.debug(
-              `Skipping unresolved image ${imageName} on page ${pageNumber}`,
-            );
-            continue;
-          }
+          const image = reference.objectId
+            ? await this.resolveImageObject(
+                page,
+                reference.objectId,
+                deadline - Date.now(),
+              )
+            : reference.inline;
 
-          let image: unknown;
-          try {
-            image = page.objs.get(imageName);
-          } catch {
-            this.logger.debug(
-              `Image ${imageName} not yet resolved on page ${pageNumber}, skipping`,
-            );
+          if (image === undefined || image === null) {
+            unresolved++;
             continue;
           }
 
           if (!this.isRenderableImage(image)) {
+            skipped++;
             this.logger.debug(
-              `Skipping invalid image ${imageName} on page ${pageNumber}: no data or dimensions`,
+              `Skipping unusable image ${label} on page ${pageNumber}: no data or dimensions`,
+            );
+            continue;
+          }
+
+          const pixels = image.width * image.height;
+          if (!Number.isFinite(pixels) || pixels <= 0) {
+            skipped++;
+            continue;
+          }
+          if (pixels > MAX_IMAGE_PIXELS) {
+            skipped++;
+            this.logger.warn(
+              `pdf.images.oversized ${JSON.stringify({
+                page: pageNumber,
+                width: image.width,
+                height: image.height,
+                cap: MAX_IMAGE_PIXELS,
+              })}`,
             );
             continue;
           }
@@ -603,23 +856,62 @@ export class PdfStructureExtractorService {
           });
 
           imageIndex++;
+          if (budget) budget.remaining--;
         } catch (imageError) {
+          skipped++;
           const errorMessage =
             imageError instanceof Error
               ? imageError.message
               : String(imageError);
           warnings.push(
-            `Failed to extract image ${imageName} from page ${pageNumber}: ${errorMessage}`,
+            `Failed to extract image ${label} from page ${pageNumber}: ${errorMessage}`,
           );
-          this.logger.debug(
+          this.logger.warn(
             `Image extraction error on page ${pageNumber}: ${errorMessage} (skipping)`,
           );
         }
       }
 
-      if (imageIndex > 0) {
-        this.logger.debug(
-          `Extracted ${imageIndex} images from page ${pageNumber}`,
+      // Dropping a learner's diagram must never be invisible: surface it as an
+      // extraction warning (which feeds structureQuality) and a warn log.
+      if (unresolved > 0) {
+        warnings.push(
+          `${unresolved} image(s) on page ${pageNumber} were not published by the PDF reader in time`,
+        );
+        this.logger.warn(
+          `pdf.images.unresolved ${JSON.stringify({
+            page: pageNumber,
+            unresolved,
+            timeoutMs: this.imageResolveTimeoutMs(),
+          })}`,
+        );
+      }
+      if (dropped > 0) {
+        warnings.push(
+          `${dropped} image(s) on page ${pageNumber} were dropped by the extraction limit`,
+        );
+        this.logger.warn(
+          `pdf.images.capped ${JSON.stringify({
+            page: pageNumber,
+            dropped,
+            perPageCap: MAX_IMAGES_PER_PAGE,
+            documentBudgetRemaining: budget?.remaining,
+          })}`,
+        );
+      }
+
+      if (operatorCount > 0) {
+        this.logger.log(
+          `pdf.images.extracted ${JSON.stringify({
+            page: pageNumber,
+            imageOperators: operatorCount,
+            candidates: candidateCount,
+            extracted: imageIndex,
+            skipped,
+            unresolved,
+            dropped,
+            durationMs: Date.now() - startTime,
+          })}`,
         );
       }
     } catch (error) {
@@ -630,6 +922,41 @@ export class PdfStructureExtractorService {
     }
 
     return imageBlocks;
+  }
+
+  /**
+   * A pdfjs stencil mask: no colour `kind`, and exactly one bit per pixel.
+   * Monochrome diagram exports commonly paint through these.
+   */
+  private isPackedImageMask(image: PdfImageData): boolean {
+    if (image.kind !== undefined) return false;
+    const expectedLength = ((image.width + 7) >> 3) * image.height;
+    return expectedLength > 0 && image.data.length === expectedLength;
+  }
+
+  /**
+   * Expand a 1-bit stencil mask into opaque RGBA. pdfjs has already folded any
+   * /Decode inversion into the data, so a clear bit means "paint".
+   */
+  private writeImageMaskPixels(
+    destination: Uint8ClampedArray,
+    image: PdfImageData,
+  ): void {
+    const { width, height, data: source } = image;
+    const rowBytes = (width + 7) >> 3;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const byte = source[y * rowBytes + (x >> 3)] ?? 0xff;
+        const painted = (byte & (0b1000_0000 >> (x & 7))) === 0;
+        const value = painted ? 0 : 255;
+        const offset = (y * width + x) * 4;
+        destination[offset] = value;
+        destination[offset + 1] = value;
+        destination[offset + 2] = value;
+        destination[offset + 3] = 255;
+      }
+    }
   }
 
   /**
@@ -654,6 +981,21 @@ export class PdfStructureExtractorService {
 
       const imageData = context.createImageData(width, height);
       const data = image.data;
+
+      if (this.isPackedImageMask(image)) {
+        // Stencil masks arrive as 1 bit per pixel with no `kind`. Render them
+        // opaque black-on-white: transparent pixels would leave a vision model
+        // nothing to look at.
+        this.writeImageMaskPixels(imageData.data, image);
+        context.putImageData(imageData, 0, 0);
+
+        return {
+          imageData: canvas.toDataURL(`image/${format}`),
+          format,
+          width,
+          height,
+        };
+      }
 
       const kind = image.kind ?? 2;
 
