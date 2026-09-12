@@ -155,6 +155,39 @@ describe("getCompletedAttempt", () => {
     expect(console.error).toHaveBeenCalled();
   });
 
+  it.each([
+    ["a server fault", new APIError("x", 500, "Server Error"), 500],
+    ["a gateway failure", new APIError("x", 502, "Bad Gateway"), 502],
+  ])(
+    "propagates %s so the page reports the real status, not a missing attempt",
+    async (_label, thrown, status) => {
+      apiClient.get.mockRejectedValue(thrown);
+
+      await expect(
+        getCompletedAttempt(1, 7, undefined, { throwOnError: true }),
+      ).rejects.toMatchObject({ status });
+    },
+  );
+
+  it("propagates a dropped connection instead of reporting the attempt as missing", async () => {
+    // fetch rejects with a TypeError when the connection fails; reporting that
+    // as "no such attempt" is how a learner gets told their own submission is
+    // not theirs.
+    apiClient.get.mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(
+      getCompletedAttempt(1, 7, undefined, { throwOnError: true }),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("still resolves to undefined for a genuinely missing attempt when propagating", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 404, "Not Found"));
+
+    await expect(
+      getCompletedAttempt(1, 7, undefined, { throwOnError: true }),
+    ).resolves.toBeUndefined();
+  });
+
   it("never calls the API for the author-preview sentinel id", async () => {
     await expect(
       getCompletedAttempt(1, -1, undefined, { throwOnAuthError: true }),

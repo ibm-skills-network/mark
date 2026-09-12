@@ -49,11 +49,14 @@ export function resolveAttemptViewError(params: {
   // replaced by a later launch. Say that instead of implying the learner is
   // looking at someone else's work — and do not offer a link back into this
   // assignment, which fails for the same reason.
+  // A 5xx is the server failing, not the session being wrong: the replaced-
+  // session copy would hide an outage behind advice that cannot work.
   const sessionWasReplaced =
     typeof sessionAssignmentId === "number" &&
-    sessionAssignmentId !== routeAssignmentId;
+    sessionAssignmentId !== routeAssignmentId &&
+    status < 500;
 
-  if (sessionWasReplaced && status !== 500) {
+  if (sessionWasReplaced) {
     return {
       statusCode: status,
       headline: "You opened another assignment",

@@ -167,12 +167,15 @@ function SuccessPage() {
               assignmentId,
               attemptId,
               undefined,
-              { throwOnAuthError: true },
+              // Every failure except a real 404 comes back as a throw, so the
+              // screen shows the status the server returned instead of
+              // telling the learner their own submission is not theirs.
+              { throwOnError: true },
             );
           } catch (error) {
             if (cancelled) return;
             const status = statusFromError(error);
-            logState("Attempt fetch denied", `Status ${status}`);
+            logState("Attempt fetch failed", `Status ${status}`);
             setErrorConfig(
               resolveAttemptViewError({
                 status,
