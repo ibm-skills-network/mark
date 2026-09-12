@@ -35,17 +35,20 @@ describe("deriveServerTimeOffsetMs", () => {
     ).toBe(-1000);
   });
 
-  it("falls back to no correction when the payload carries no server clock", () => {
-    expect(deriveServerTimeOffsetMs(undefined, SERVER_NOW_MS)).toBe(0);
-    expect(deriveServerTimeOffsetMs(null, SERVER_NOW_MS)).toBe(0);
-    expect(deriveServerTimeOffsetMs("", SERVER_NOW_MS)).toBe(0);
-    expect(deriveServerTimeOffsetMs("not a date", SERVER_NOW_MS)).toBe(0);
+  it("reports no reading at all when the payload carries no server clock", () => {
+    // Distinct from an offset of 0, which means the clocks genuinely agree.
+    expect(deriveServerTimeOffsetMs(undefined, SERVER_NOW_MS)).toBeUndefined();
+    expect(deriveServerTimeOffsetMs(null, SERVER_NOW_MS)).toBeUndefined();
+    expect(deriveServerTimeOffsetMs("", SERVER_NOW_MS)).toBeUndefined();
+    expect(
+      deriveServerTimeOffsetMs("not a date", SERVER_NOW_MS),
+    ).toBeUndefined();
   });
 
   it("defaults to the caller's own clock", () => {
     const offset = deriveServerTimeOffsetMs(new Date().toISOString());
 
-    expect(Math.abs(offset)).toBeLessThan(1000);
+    expect(Math.abs(offset ?? Number.NaN)).toBeLessThan(1000);
   });
 });
 

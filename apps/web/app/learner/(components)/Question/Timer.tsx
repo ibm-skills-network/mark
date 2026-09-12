@@ -302,12 +302,16 @@ function Timer(props: Props) {
 
   useEffect(() => {
     if (timerExpired && !isSubmitted && assignmentId && activeAttemptId) {
-      // How long the learner has actually had this attempt, on the server's
-      // clock where one is available.
-      const attemptAgeMs =
-        typeof attemptStartedAt === "number"
-          ? Date.now() + serverTimeOffsetMs - attemptStartedAt
-          : Date.now() - attemptOpenedAtRef.current;
+      // How long the learner has actually had this attempt. With the server's
+      // clock in hand the attempt's own creation time is usable; without it,
+      // fall back to how long this tab has held the attempt, which is the only
+      // elapsed time a wrong device clock cannot inflate.
+      const canTrustAttemptStart =
+        typeof serverTimeOffsetMs === "number" &&
+        typeof attemptStartedAt === "number";
+      const attemptAgeMs = canTrustAttemptStart
+        ? Date.now() + serverTimeOffsetMs - attemptStartedAt
+        : Date.now() - attemptOpenedAtRef.current;
 
       if (attemptAgeMs < MIN_AUTO_SUBMIT_ATTEMPT_AGE_MS) {
         // Too soon to be a real expiry. Hold the submit — and stay silent —

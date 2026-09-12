@@ -57,15 +57,16 @@ export const getExpiresAtMs = (
  * deadline. Call this in the browser the moment the attempt payload lands, then
  * count down against `Date.now() + offset`.
  *
- * Returns 0 when the payload carries no usable server timestamp, which is the
- * pre-existing behaviour.
+ * Returns undefined when the payload carries no usable server timestamp. That
+ * is not the same as an offset of zero: callers that need to know whether the
+ * device clock can be trusted at all check for it.
  */
 export const deriveServerTimeOffsetMs = (
   serverNow: string | Date | null | undefined,
   deviceNowMs: number = Date.now(),
-): number => {
+): number | undefined => {
   const serverNowMs = getTimestampMs(serverNow);
-  return Number.isNaN(serverNowMs) ? 0 : serverNowMs - deviceNowMs;
+  return Number.isNaN(serverNowMs) ? undefined : serverNowMs - deviceNowMs;
 };
 
 /** The attempt's creation time on the server clock, if the payload has one. */
