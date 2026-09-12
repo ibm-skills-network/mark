@@ -132,6 +132,22 @@ describe("GithubService", () => {
         ),
       ).rejects.toBeInstanceOf(HttpException);
     });
+
+    // A state parameter signed with a key derived from nothing binds nothing.
+    // Refuse to start the handoff rather than hand out a forgeable one.
+    it("refuses to start a handoff it cannot bind to the session", async () => {
+      delete process.env.GITHUB_CLIENT_SECRET;
+      delete process.env.GITHUB_OAUTH_STATE_SECRET;
+
+      expect.assertions(3);
+      try {
+        await make().getOAuthUrl(ASSIGNMENT, REDIRECT, LEARNER);
+      } catch (error) {
+        expect(error).toBeInstanceOf(HttpException);
+        expect(bodyOf(error).code).toBe(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
+        expect(logged.error).toHaveBeenCalled();
+      }
+    });
   });
 
   describe("exchangeCodeForToken", () => {
@@ -149,6 +165,21 @@ describe("GithubService", () => {
           GITHUB_OAUTH_ERROR_CODES.AUTHORIZATION_INVALID,
         );
         // No state, no outbound call.
+        expect(mockedFetch).not.toHaveBeenCalled();
+      }
+    });
+
+    it("reports an unsignable callback as a configuration fault, not as a bad authorization", async () => {
+      const state = validState();
+      delete process.env.GITHUB_CLIENT_SECRET;
+      delete process.env.GITHUB_OAUTH_STATE_SECRET;
+
+      expect.assertions(3);
+      try {
+        await make().exchangeCodeForToken("the-code", LEARNER, state);
+      } catch (error) {
+        expect(bodyOf(error).code).toBe(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
+        expect(logged.error).toHaveBeenCalled();
         expect(mockedFetch).not.toHaveBeenCalled();
       }
     });

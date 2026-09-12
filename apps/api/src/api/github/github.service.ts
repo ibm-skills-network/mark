@@ -73,6 +73,21 @@ export class GithubService {
     if (!userId) {
       throw new BadRequestException("User ID is required");
     }
+    // A handoff that cannot be signed cannot be bound to this session, and an
+    // unbound state is the same as no state at all. Stop here rather than hand
+    // the browser a parameter that proves nothing.
+    if (!this.oauthState.isConfigured()) {
+      this.logger.error(
+        "GitHub OAuth state secret is not configured, so no handoff can be " +
+          "bound to the session that started it",
+        {
+          stage: "oauth_url",
+          user_id: userId,
+          assignment_id: assignmentId,
+        },
+      );
+      throw githubOauthException(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
+    }
 
     const redirectTarget = this.resolveRedirectTarget(redirectUrl, userId);
 
@@ -102,6 +117,18 @@ export class GithubService {
   ): Promise<string> {
     if (!userId) {
       throw new BadRequestException("User ID is required");
+    }
+
+    // Without key material no state can be checked, so every callback would be
+    // refused as an invalid authorization — which blames the learner for an
+    // operator fault. Say what it actually is.
+    if (!this.oauthState.isConfigured()) {
+      this.logger.error(
+        "GitHub OAuth state secret is not configured, so no callback can be " +
+          "verified",
+        { stage: "state_verification", user_id: userId },
+      );
+      throw githubOauthException(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
     }
 
     // Verify the handoff belongs to this session before spending the code.
