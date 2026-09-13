@@ -527,3 +527,84 @@ describe("LoggerMiddleware", () => {
     });
   });
 });
+
+function setWritableEnded(target: object, value: boolean): void {
+  Object.defineProperty(target, "writableEnded", { value, configurable: true });
+}
+
+describe("LoggerMiddleware URL redaction", () => {
+  let middleware: LoggerMiddleware;
+  let mockLogger: Logger;
+  let mockRequest: Partial<Request>;
+  let mockResponse: Partial<Response> & EventEmitter;
+  let mockNext: NextFunction;
+
+  beforeEach(() => {
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    middleware = new LoggerMiddleware(mockLogger);
+
+    mockRequest = {
+      method: "GET",
+      originalUrl: "/api/test",
+      get: jest.fn().mockReturnValue(null),
+    };
+
+    mockResponse = new EventEmitter() as any;
+    mockResponse.statusCode = 200;
+    mockResponse.get = jest.fn().mockReturnValue(null);
+    setWritableEnded(mockResponse, true);
+
+    mockNext = jest.fn();
+  });
+
+  it("replaces the value of a deny-listed query parameter", (done) => {
+    mockRequest.originalUrl = "/api/v2/github/oauth-callback?code=abc&lang=en";
+
+    middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+    mockResponse.emit("finish");
+
+    setTimeout(() => {
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "/api/v2/github/oauth-callback?code=[redacted]&lang=en",
+        ),
+        expect.objectContaining({
+          url: "/api/v2/github/oauth-callback?code=[redacted]&lang=en",
+        }),
+      );
+
+      const logged = JSON.stringify([
+        (mockLogger.debug as jest.Mock).mock.calls,
+        (mockLogger.info as jest.Mock).mock.calls,
+      ]);
+      expect(logged).not.toContain("code=abc");
+      done();
+    }, 10);
+  });
+
+  it("keeps the URL redacted when the client disconnects", (done) => {
+    mockRequest.originalUrl = "/api/v2/github/oauth-callback?code=abc";
+    setWritableEnded(mockResponse, false);
+
+    middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+    mockResponse.emit("close");
+
+    setTimeout(() => {
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("client_disconnected"),
+        expect.objectContaining({
+          url: "/api/v2/github/oauth-callback?code=[redacted]",
+        }),
+      );
+      done();
+    }, 10);
+  });
+});
