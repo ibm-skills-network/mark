@@ -629,22 +629,34 @@ function LearnerHeader() {
 
   return (
     <>
-      <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
-        <div className="flex flex-col gap-3 sm:hidden">
-          <div className="flex items-center gap-3">
+      {/* Two layouts, picked by width. The single row needs ~960px of
+          min-content (an untruncated assignment name, five nowrap controls),
+          so it only runs from `lg` up; every narrower viewport — a phone, and
+          a desktop browser inside a narrow course-player iframe — gets the
+          stacked layout, which wraps. The route root is overflow-hidden, so a
+          row that does not fit is clipped away rather than scrolled to. */}
+      <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 w-full px-4 sm:px-6 py-4 lg:py-6 min-h-[80px] lg:h-[100px]">
+        <div
+          data-testid="learner-header-compact"
+          className="flex flex-col gap-3 lg:hidden"
+        >
+          <div className="flex items-center gap-3 min-w-0">
             <SNIcon />
-            <Title className="text-base font-semibold truncate flex-1">
+            <Title className="text-base font-semibold truncate flex-1 min-w-0">
               {assignmentDetails?.name || "Untitled Assignment"}
             </Title>
           </div>
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-1">
+          <div
+            data-testid="learner-header-compact-controls"
+            className="flex flex-wrap items-center justify-between gap-2"
+          >
+            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
               <ThemeToggle />
               {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
                 <>
                   {languages.length > 1 ? (
-                    <div className="flex-1 max-w-[180px]">
+                    <div className="flex-1 min-w-[96px] max-w-[180px]">
                       <Dropdown
                         items={languages.map((lang) => ({
                           label: getLanguageName(lang),
@@ -677,7 +689,12 @@ function LearnerHeader() {
             </div>
 
             {isInQuestionPage ? (
-              <div className="relative group">
+              // Secondary controls wrap away first; the submit control never
+              // shrinks and never wraps out of reach.
+              <div
+                data-testid="learner-header-compact-submit"
+                className="relative group shrink-0"
+              >
                 <Button
                   disabled={buttonStatus.disabled}
                   className="disabled:opacity-70 btn-secondary text-sm px-4 py-2"
@@ -711,17 +728,25 @@ function LearnerHeader() {
           ) : null}
         </div>
 
-        <div className="hidden sm:flex justify-between items-center h-full">
-          <div className="flex">
-            <div className="flex justify-center gap-x-6 items-center">
+        <div
+          data-testid="learner-header-wide"
+          className="hidden lg:flex justify-between items-center gap-x-4 h-full"
+        >
+          <div data-testid="learner-header-wide-title" className="flex min-w-0">
+            <div className="flex justify-center gap-x-6 items-center min-w-0">
               <SNIcon />
-              <Title className="text-lg font-semibold">
+              {/* A flex item's automatic minimum size is its content, so an
+                  untruncated name pushed the controls past the right edge. */}
+              <Title className="text-lg font-semibold truncate">
                 {assignmentDetails?.name || "Untitled Assignment"}
               </Title>
             </div>
           </div>
 
-          <div className="flex items-center gap-x-4">
+          <div
+            data-testid="learner-header-wide-controls"
+            className="flex items-center gap-x-4 shrink-0"
+          >
             <ThemeToggle />
             {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
               <>

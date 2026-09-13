@@ -293,7 +293,7 @@ async function LearnerLayout(props: Props) {
     log(rejection.logStep);
     return (
       <ErrorModal
-        className="h-[calc(100vh-100px)]"
+        className="h-full"
         statusCode={rejection.statusCode}
         error={rejection.error}
         headline={rejection.headline}
@@ -356,10 +356,10 @@ async function AttemptLoader({
 
   return (
     role === "learner" && (
-      <main
-        id="exam-root"
-        className="flex flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden"
-      >
+      // h-full, not viewport minus a hard-coded header height: the header is
+      // as tall as its content needs at the current width, and the pane it
+      // sits above is the one the route root sizes for it.
+      <main id="exam-root" className="flex flex-col h-full overflow-hidden">
         <QuestionPage
           attempt={attempt}
           assignmentId={assignmentId}
