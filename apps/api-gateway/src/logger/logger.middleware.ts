@@ -2,6 +2,7 @@ import { Inject, Injectable, NestMiddleware } from "@nestjs/common";
 import { NextFunction, Request, Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { redactSensitiveQueryForLog } from "./sanitize";
 
 const SLOW_REQUEST_THRESHOLD_MS = 5000;
 
@@ -16,9 +17,13 @@ export class LoggerMiddleware implements NestMiddleware {
 
     const requestId = request.get("akamai-grn") ?? request.get("x-request-id");
 
-    this.logger.debug(`→ ${request.method} ${request.originalUrl}`, {
+    // Query parameters that carry a credential or a single-use grant are
+    // replaced so they cannot end up in the access log.
+    const url = redactSensitiveQueryForLog(request.originalUrl);
+
+    this.logger.debug(`→ ${request.method} ${url}`, {
       method: request.method,
-      url: request.originalUrl,
+      url,
       request_id: requestId,
       client_ip: request.get("true-client-ip"),
       user_agent: request.get("user-agent") || "",
@@ -34,7 +39,7 @@ export class LoggerMiddleware implements NestMiddleware {
         transaction_id: request.get("x-transaction-id"),
         request_id: requestId,
         method: request.method,
-        url: request.originalUrl,
+        url,
         status_code: response.statusCode,
         content_length: response.get("content-length"),
         user_agent: request.get("user-agent") || "",
@@ -72,10 +77,10 @@ export class LoggerMiddleware implements NestMiddleware {
         const diff = process.hrtime(start);
         const responseTimeMs = diff[0] * 1e3 + diff[1] * 1e-6;
         this.logger.warn(
-          `client_disconnected: ${request.method} ${request.originalUrl} after ${responseTimeMs.toFixed(2)}ms`,
+          `client_disconnected: ${request.method} ${url} after ${responseTimeMs.toFixed(2)}ms`,
           {
             method: request.method,
-            url: request.originalUrl,
+            url,
             request_id: requestId,
             response_time_ms: Number(responseTimeMs.toFixed(2)),
             client_disconnected: true,
