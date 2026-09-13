@@ -24,7 +24,10 @@ import { FileContentExtractionService } from "src/api/attempt/services/file-cont
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { logAiInvocation } from "src/api/llm/core/utils/ai-invocation-log.util";
-import { UserSession } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSession,
+} from "src/auth/interfaces/user.session.interface";
 import { ChatRole, Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -44,8 +47,15 @@ interface MarkChatMessage {
   id?: string;
 }
 
+type MarkChatToolRole = "author" | "learner";
+
 interface MarkChatRequest {
-  userRole: "author" | "learner";
+  /**
+   * What the client believes its role is. Kept so existing clients keep
+   * working, but it never decides anything: the tool set and the system
+   * prompt follow the authenticated session.
+   */
+  userRole?: MarkChatToolRole;
   userText: string;
   conversation: MarkChatMessage[];
 }
@@ -307,6 +317,66 @@ export class MarkChatService {
     );
   }
 
+  /**
+   * The tool set and the system prompt follow the authenticated session, not
+   * the request body: a learner who posts `userRole: "author"` must not be
+   * handed the author tools. A body that disagrees is logged and discarded.
+   */
+  private resolveChatRole(
+    userSession: UserSession,
+    requestedRole: MarkChatToolRole | undefined,
+    context: { chatId: string; mode: string },
+  ): MarkChatToolRole {
+    const role: MarkChatToolRole =
+      userSession.role === UserRole.AUTHOR ? "author" : "learner";
+
+    if (requestedRole && requestedRole !== role) {
+      this.logger.warn("chat_role_from_session: request role ignored", {
+        chat_id: context.chatId,
+        mode: context.mode,
+        session_role: userSession.role,
+        requested_role: requestedRole,
+        user_id: userSession.userId,
+      });
+    }
+
+    return role;
+  }
+
+  /**
+   * The assignment a chat is scoped to comes from the session too. The
+   * conversation carries a client-written "Assignment ID: n" line; it is only
+   * used to notice a disagreement.
+   */
+  private resolveAssignmentScope(
+    userSession: UserSession,
+    conversationAssignmentId: number | undefined,
+    context: { chatId: string; mode: string },
+  ): number | undefined {
+    const assignmentId =
+      Number.isInteger(userSession.assignmentId) && userSession.assignmentId > 0
+        ? userSession.assignmentId
+        : undefined;
+
+    if (
+      conversationAssignmentId !== undefined &&
+      conversationAssignmentId !== assignmentId
+    ) {
+      this.logger.warn(
+        "chat_assignment_from_session: conversation assignment ignored",
+        {
+          chat_id: context.chatId,
+          mode: context.mode,
+          assignment_id: assignmentId,
+          requested_assignment_id: conversationAssignmentId,
+          user_id: userSession.userId,
+        },
+      );
+    }
+
+    return assignmentId;
+  }
+
   async respond(
     chatId: string,
     request: MarkChatRequest,
@@ -320,11 +390,16 @@ export class MarkChatService {
     }[];
     functionCalled?: boolean;
   }> {
-    const { userRole, userText, conversation } = request;
+    const { userText, conversation } = request;
 
-    if (!userRole || !userText || !conversation) {
+    if (!userText || !conversation) {
       throw new BadRequestException("Missing required fields");
     }
+
+    const userRole = this.resolveChatRole(userSession, request.userRole, {
+      chatId,
+      mode: "respond",
+    });
 
     // Kill-switch: short-circuit with a polite message instead of calling the
     // provider when the AI chat component is disabled.
@@ -338,7 +413,10 @@ export class MarkChatService {
     }
 
     const { systemPrompt, systemContextMessages, assignmentInfo } =
-      this.getSystemPromptParts(userRole, conversation);
+      this.getSystemPromptParts(userRole, conversation, userSession, {
+        chatId,
+        mode: "respond",
+      });
 
     const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
       systemPrompt,
@@ -417,11 +495,16 @@ export class MarkChatService {
     userSession: UserSession,
     response: Response,
   ): Promise<void> {
-    const { userRole, userText, conversation } = request;
+    const { userText, conversation } = request;
 
-    if (!userRole || !userText || !conversation) {
+    if (!userText || !conversation) {
       throw new BadRequestException("Missing required fields");
     }
+
+    const userRole = this.resolveChatRole(userSession, request.userRole, {
+      chatId,
+      mode: "stream",
+    });
 
     // Kill-switch: stream a single polite message and end the response without
     // touching the provider when the AI chat component is disabled.
@@ -441,7 +524,10 @@ export class MarkChatService {
     }
 
     const { systemPrompt, systemContextMessages, assignmentInfo } =
-      this.getSystemPromptParts(userRole, conversation);
+      this.getSystemPromptParts(userRole, conversation, userSession, {
+        chatId,
+        mode: "stream",
+      });
 
     const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
       systemPrompt,
@@ -671,8 +757,10 @@ export class MarkChatService {
   }
 
   private getSystemPromptParts(
-    userRole: MarkChatRequest["userRole"],
+    userRole: MarkChatToolRole,
     conversation: MarkChatMessage[],
+    userSession: UserSession,
+    context: { chatId: string; mode: string },
   ) {
     const systemContextMessages = conversation.filter(
       (message) => message.role === "system" && message.id?.includes("context"),
@@ -696,10 +784,11 @@ export class MarkChatService {
       }
     }
 
-    const assignmentId =
-      userRole === "learner"
-        ? this.extractAssignmentIdFromContext(assignmentInfo?.content)
-        : undefined;
+    const assignmentId = this.resolveAssignmentScope(
+      userSession,
+      this.extractAssignmentIdFromContext(assignmentInfo?.content),
+      context,
+    );
 
     const systemPrompt = this.generateSystemPrompt(userRole, {
       mode: assignmentMode,
@@ -719,7 +808,7 @@ export class MarkChatService {
   }
 
   private generateSystemPrompt(
-    userRole: MarkChatRequest["userRole"],
+    userRole: MarkChatToolRole,
     assignmentInfo: {
       mode?: string;
       submitted?: boolean;
@@ -1666,10 +1755,13 @@ FILE LINK WORKFLOW:
             assignmentId?: number;
             reason: string;
           }) => {
+            // The session owns the assignment a regrade can name; the
+            // model-supplied and conversation-supplied ids are fallbacks for
+            // sessions that carry no assignment.
             const resolvedAssignmentId =
+              userSession.assignmentId ||
               assignmentId ||
               assignmentIdFromContext ||
-              userSession.assignmentId ||
               0;
             const requestId = `RG-${Date.now().toString(36).toUpperCase()}`;
             return `Your request for regrading of assignment ${resolvedAssignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is ${requestId}.`;
