@@ -98,6 +98,11 @@ api:
     # holds one key per product and picks by portal at report time. The var
     # name is derived from the product name (uppercase, non-alphanumerics to
     # "_"), so a new product needs a secret here and no code change.
+    #
+    # SUPPORT_TOKEN_MARK is the catch-all: a report whose portal nothing
+    # recognizes is filed against Mark's own product rather than dropped into a
+    # portal team's queue.
+    SUPPORT_TOKEN_MARK: ""
     SUPPORT_TOKEN_PORTALS: ""
     SUPPORT_TOKEN_COGNITIVE_CLASS: ""
     SUPPORT_TOKEN_COURSERA: ""
@@ -107,7 +112,7 @@ api:
     SUPPORT_TOKEN_FACULTY: ""
     # portal-manager is the source of truth for which product owns a portal
     # hostname. Without it, known LTI platforms use their product key; other
-    # hosts use Portals, then the legacy key if Portals is unset.
+    # hosts use Mark, then the legacy key if Mark is unset.
     PORTAL_MANAGER_API_BASE_URL: ""
     PORTAL_MANAGER_TOKEN_URL: ""
     PORTAL_MANAGER_UID: ""
