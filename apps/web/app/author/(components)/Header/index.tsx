@@ -329,7 +329,7 @@ function AuthorHeader() {
 
       setPageState("success");
     } catch (error) {
-      setPageState("error");
+      useAuthorStore.getState().setPageError(error);
     }
   };
 
@@ -348,7 +348,7 @@ function AuthorHeader() {
         setPageState("success");
         return;
       } catch (error) {
-        setPageState("error");
+        useAuthorStore.getState().setPageError(error);
         return;
       }
     }

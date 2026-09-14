@@ -4,6 +4,7 @@ import {
 } from "@/app/Helpers/data-transformer";
 import { API_DECODE_CONFIG } from "@/app/Helpers/transform-config";
 import { toast } from "sonner";
+import { authorSessionHeaders } from "./author-session";
 
 interface APIClientConfig {
   baseURL?: string;
@@ -139,6 +140,7 @@ export class APIClient {
       "Content-Type": "application/json",
       ...this.defaultHeaders,
       ...headers,
+      ...authorSessionHeaders(),
     };
 
     const controller = new AbortController();
@@ -156,6 +158,13 @@ export class APIClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (
+          response.status === 401 &&
+          typeof window !== "undefined" &&
+          window.location.pathname.startsWith("/author/")
+        ) {
+          window.dispatchEvent(new Event("mark-author-auth-required"));
+        }
         let errorBody: unknown;
         try {
           errorBody = await response.json();

@@ -32,7 +32,7 @@ describe("JwtCookieStrategy", () => {
         exp: 1_234_567_890 + 3600,
       };
 
-      const result = strategy.validate(payload);
+      const result = strategy.validate({ headers: {} } as any, payload);
 
       expect(result).toEqual({
         userId: "user123",
@@ -58,7 +58,7 @@ describe("JwtCookieStrategy", () => {
         exp: 1_234_567_890 + 3600,
       } as any;
 
-      const result = strategy.validate(payload);
+      const result = strategy.validate({ headers: {} } as any, payload);
 
       expect(result.userId).toBe("user123");
       expect(result.role).toBe(UserRole.AUTHOR);
@@ -79,7 +79,7 @@ describe("JwtCookieStrategy", () => {
         exp: 1_234_567_890 + 3600,
       } as any;
 
-      const result = strategy.validate(payload);
+      const result = strategy.validate({ headers: {} } as any, payload);
 
       expect(result.userId).toBe("user123");
       expect(result.role).toBe(UserRole.ADMIN);
@@ -98,7 +98,7 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate(payload);
+        const result = strategy.validate({ headers: {} } as any, payload);
         expect(result.role).toBe(role);
       }
     });
@@ -117,7 +117,7 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate(payload);
+        const result = strategy.validate({ headers: {} } as any, payload);
         expect(result.launch_presentation_locale).toBe(locale);
       }
     });
@@ -134,7 +134,7 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate(payload);
+        const result = strategy.validate({ headers: {} } as any, payload);
         expect(result.gradingCallbackRequired).toBe(value);
       }
     });
@@ -158,7 +158,7 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate(payload);
+        const result = strategy.validate({ headers: {} } as any, payload);
         expect(result.returnUrl).toBe(url);
       }
     });

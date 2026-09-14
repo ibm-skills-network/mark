@@ -1,6 +1,60 @@
 import { Request } from "express";
 
 const COOKIE_NAME = "authentication";
+export const AUTHOR_COOKIE_PREFIX = "mark_author_";
+
+export const LEARNER_COOKIE_PREFIX = "mark_learner_";
+
+/** Context selects a token; it never grants a role or assignment access. */
+export function quizSessionContext(
+  headers: Request["headers"],
+): { role: "author" | "learner"; assignmentId: number } | undefined {
+  for (const role of ["author", "learner"] as const) {
+    const explicit = headers[`x-mark-${role}-assignment`];
+    if (typeof explicit === "string" && /^[1-9]\d*$/.test(explicit)) {
+      const assignmentId = Number(explicit);
+      return Number.isSafeInteger(assignmentId)
+        ? { role, assignmentId }
+        : undefined;
+    }
+  }
+  if (typeof headers.referer !== "string") return undefined;
+  try {
+    const url = new URL(headers.referer);
+    const match = url.pathname.match(/^\/(author|learner)\/([1-9]\d*)(?:\/|$)/);
+    if (!match || !Number.isSafeInteger(Number(match[2]))) return undefined;
+    const role =
+      match[1] === "author" || url.searchParams.get("authorMode") === "true"
+        ? "author"
+        : "learner";
+    return { role, assignmentId: Number(match[2]) };
+  } catch {
+    return undefined;
+  }
+}
+
+export function unverifiedSession(token: string | undefined): {
+  userID?: string;
+  role?: string;
+  assignmentID?: number;
+  iat?: number;
+} {
+  try {
+    const value: unknown = JSON.parse(
+      Buffer.from(token?.split(".")[1] ?? "", "base64url").toString("utf8"),
+    );
+    return value && typeof value === "object"
+      ? (value as {
+          userID?: string;
+          role?: string;
+          assignmentID?: number;
+          iat?: number;
+        })
+      : {};
+  } catch {
+    return {};
+  }
+}
 
 export interface AuthCookieSelection {
   /** The chosen cookie value, or undefined when none is present. */
@@ -33,6 +87,40 @@ export function selectAuthenticationCookie(
   },
 ): AuthCookieSelection {
   const rawHeader = request.headers?.cookie;
+  const context = quizSessionContext(request.headers ?? {});
+  if (context !== undefined) {
+    const legacy = selectAuthenticationCookie({
+      headers: { cookie: rawHeader },
+      cookies: request.cookies,
+    });
+    const scoped = parseCookiePairs(rawHeader)
+      .filter(
+        (pair) =>
+          pair.name ===
+          `${context.role === "author" ? AUTHOR_COOKIE_PREFIX : LEARNER_COOKIE_PREFIX}${context.assignmentId}`,
+      )
+      .map((pair) => tryDecodeUriComponent(pair.rawValue));
+    const legacyClaims = unverifiedSession(legacy.token);
+    if (scoped.length > 0) {
+      const newest = scoped[pickNewestIatIndex(scoped)];
+      // Switching accounts must not revive the previous user's saved session.
+      if (
+        !legacy.token ||
+        legacyClaims.userID !== unverifiedSession(newest).userID
+      )
+        return legacy;
+      if (
+        legacy.token &&
+        legacyClaims.role === context.role &&
+        legacyClaims.assignmentID === context.assignmentId
+      )
+        scoped.push(legacy.token);
+      return {
+        token: scoped[pickNewestIatIndex(scoped)],
+        candidateCount: scoped.length,
+      };
+    }
+  }
   const candidates = parseCookiePairs(rawHeader)
     .filter((pair) => pair.name === COOKIE_NAME)
     .map((pair) => tryDecodeUriComponent(pair.rawValue));
@@ -63,20 +151,31 @@ export function selectAuthenticationCookie(
  */
 export function dedupeAuthenticationCookieHeader(
   rawHeader?: string,
+  headers: Request["headers"] = {},
 ): string | undefined {
   const pairs = parseCookiePairs(rawHeader);
   const authPairs = pairs.filter((pair) => pair.name === COOKIE_NAME);
-  if (authPairs.length <= 1) {
+  const hasScopedCookies = pairs.some(
+    (pair) =>
+      pair.name.startsWith(AUTHOR_COOKIE_PREFIX) ||
+      pair.name.startsWith(LEARNER_COOKIE_PREFIX),
+  );
+  if (authPairs.length <= 1 && !hasScopedCookies) {
     return undefined;
   }
 
-  const winnerIndex = pickNewestIatIndex(
-    authPairs.map((pair) => tryDecodeUriComponent(pair.rawValue)),
-  );
-  const winner = authPairs[winnerIndex];
+  const { token } = selectAuthenticationCookie({
+    headers: { ...headers, cookie: rawHeader },
+  });
 
-  const kept = pairs.filter((pair) => pair.name !== COOKIE_NAME);
-  kept.push(winner);
+  const kept = pairs.filter(
+    (pair) =>
+      pair.name !== COOKIE_NAME &&
+      !pair.name.startsWith(AUTHOR_COOKIE_PREFIX) &&
+      !pair.name.startsWith(LEARNER_COOKIE_PREFIX),
+  );
+  if (token)
+    kept.push({ name: COOKIE_NAME, rawValue: encodeURIComponent(token) });
   return kept.map((pair) => `${pair.name}=${pair.rawValue}`).join("; ");
 }
 
