@@ -8,6 +8,7 @@ import {
   GithubAuthFailure,
   clearGithubAuthFailures,
   consumeGithubAuthorizationCode,
+  wasGithubAuthorizationConsumed,
   describeGithubAuthFailure,
   exchangeGithubAuthorizationCode,
   readGithubAuthFailureCount,
@@ -103,10 +104,9 @@ const GithubModal: React.FC<{
       // the target we hand GitHub is a clean page URL.
       consumeGithubAuthorizationCode();
       const role = await getUserRole();
-      const redirectUrl =
-        role === "author"
-          ? `${window.location.href}?authorMode=true`
-          : window.location.href;
+      const returnUrl = new URL(window.location.href);
+      if (role === "author") returnUrl.searchParams.set("authorMode", "true");
+      const redirectUrl = returnUrl.toString();
       const { url } = await AuthorizeGithubBackend(assignmentId, redirectUrl);
       if (url) {
         window.open(url, "_self");
@@ -192,6 +192,7 @@ const GithubModal: React.FC<{
           setAuthFailure((current) => current ?? "configuration");
           return;
         }
+        if (wasGithubAuthorizationConsumed()) return;
         if (!authAttempted) {
           setAuthAttempted(true);
           void authenticateUser();

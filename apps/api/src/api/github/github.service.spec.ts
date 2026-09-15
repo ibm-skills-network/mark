@@ -30,6 +30,7 @@ const winston = { child: jest.fn(() => logged) } as unknown as WinstonLogger;
 const LEARNER = "user@example.com";
 const ASSIGNMENT = 3601;
 const REDIRECT = "https://mark.staging.skills.network/learner/3601/questions";
+const CALLBACK = "https://mark.staging.skills.network/api/github/callback";
 
 let stateService: GithubOauthStateService;
 
@@ -90,10 +91,10 @@ describe("GithubService", () => {
       expect(url.origin + url.pathname).toBe(
         "https://github.com/login/oauth/authorize",
       );
-      expect(url.searchParams.get("redirect_uri")).toBe(REDIRECT);
+      expect(url.searchParams.get("redirect_uri")).toBe(CALLBACK);
       // Encoded, not raw: the raw form lets a redirect's own query string
       // swallow the parameters that follow it.
-      expect(url.search).toContain(encodeURIComponent(REDIRECT));
+      expect(url.search).toContain(encodeURIComponent(CALLBACK));
       const state = url.searchParams.get("state");
       expect(state).toBeTruthy();
       expect(stateService.verify(state ?? undefined, LEARNER)).toBe(true);
@@ -147,6 +148,149 @@ describe("GithubService", () => {
         expect(bodyOf(error).code).toBe(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
         expect(logged.error).toHaveBeenCalled();
       }
+    });
+  });
+
+  describe("fixed callback", () => {
+    it.each([
+      "https://mark.skills.network",
+      "https://mark.staging.skills.network",
+    ])(
+      "uses one callback for every assignment at %s and restores the signed destination",
+      async (origin) => {
+        process.env.WEB_APP_URL = origin;
+        mockedFetch.mockResolvedValue(
+          jsonResponse(200, { access_token: "ghu_test" }),
+        );
+        for (const id of [42, 3601]) {
+          const destination = `${origin}/learner/${id}/questions?lang=zh-TW&authorMode=true#question-2`;
+          const authorize = new URL(
+            await make().getOAuthUrl(id, destination, LEARNER),
+          );
+          expect(authorize.searchParams.get("redirect_uri")).toBe(
+            `${origin}/api/github/callback`,
+          );
+          expect(authorize.searchParams.has("scope")).toBe(false);
+          const state = authorize.searchParams.get("state")!;
+          const result = await make().completeOAuth(LEARNER, state, "the-code");
+          expect(result.returnPath).toBe(
+            `/learner/${id}/questions?lang=zh-TW&authorMode=true&github_auth=success#question-2`,
+          );
+          const body = new URLSearchParams(
+            mockedFetch.mock.calls.at(-1)![1].body,
+          );
+          expect(body.get("redirect_uri")).toBe(
+            `${origin}/api/github/callback`,
+          );
+          expect(JSON.stringify(result)).not.toContain("ghu_test");
+          expect(JSON.stringify(result)).not.toContain("the-code");
+        }
+      },
+    );
+
+    it("returns to results after cancellation without exchanging a code", async () => {
+      const destination =
+        "https://mark.staging.skills.network/learner/3601/successPage/99?lang=fr";
+      const authorize = new URL(
+        await make().getOAuthUrl(ASSIGNMENT, destination, LEARNER),
+      );
+      expect(
+        await make().completeOAuth(
+          LEARNER,
+          authorize.searchParams.get("state")!,
+          undefined,
+          "access_denied",
+        ),
+      ).toEqual({
+        returnPath:
+          "/learner/3601/successPage/99?lang=fr&github_auth=access_denied",
+      });
+      expect(mockedFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      "https://evil.example/learner/3601/questions",
+      "https://mark.staging.skills.network/api/github/callback",
+      "https://user:pass@mark.staging.skills.network/learner/3601/questions",
+    ])("refuses unsafe return destination %s", async (destination) => {
+      await expect(
+        make().getOAuthUrl(ASSIGNMENT, destination, LEARNER),
+      ).rejects.toBeInstanceOf(HttpException);
+    });
+
+    it("cleans prior OAuth parameters before signing the destination", async () => {
+      const authorize = new URL(
+        await make().getOAuthUrl(
+          ASSIGNMENT,
+          `${REDIRECT}?lang=fr&code=old&state=old&error=old&github_auth=old`,
+          LEARNER,
+        ),
+      );
+      expect(
+        stateService.returnUrl(authorize.searchParams.get("state")!, LEARNER),
+      ).toBe(`${REDIRECT}?lang=fr`);
+    });
+
+    it("rejects another user's state before exchanging or redirecting", async () => {
+      const state = stateService.issue(
+        "other@example.com",
+        ASSIGNMENT,
+        REDIRECT,
+      );
+      await expect(
+        make().completeOAuth(LEARNER, state, "the-code"),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(mockedFetch).not.toHaveBeenCalled();
+    });
+
+    it("rejects a changed return destination before exchanging", async () => {
+      const state = stateService.issue(LEARNER, ASSIGNMENT, REDIRECT);
+      const [encoded, signature] = state.split(".");
+      const parts = Buffer.from(encoded, "base64url").toString().split("~");
+      parts[3] = Buffer.from("https://evil.example/steal").toString(
+        "base64url",
+      );
+      const tampered = `${Buffer.from(parts.join("~")).toString("base64url")}.${signature}`;
+      await expect(
+        make().completeOAuth(LEARNER, tampered, "the-code"),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(mockedFetch).not.toHaveBeenCalled();
+    });
+
+    it("rejects expired state and legacy state with no return destination", async () => {
+      const now = Date.now();
+      const expired = stateService.issue(LEARNER, ASSIGNMENT, REDIRECT);
+      jest.spyOn(Date, "now").mockReturnValue(now + 16 * 60 * 1000);
+      await expect(
+        make().completeOAuth(LEARNER, expired, "the-code"),
+      ).rejects.toBeInstanceOf(HttpException);
+      await expect(
+        make().completeOAuth(
+          LEARNER,
+          stateService.issue(LEARNER, ASSIGNMENT),
+          "the-code",
+        ),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(mockedFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["bad_verification_code", "authorization_expired"],
+      ["incorrect_client_credentials", "configuration"],
+      ["access_denied", "access_denied"],
+    ])("returns a safe outcome for %s", async (error, outcome) => {
+      mockedFetch.mockResolvedValue(jsonResponse(200, { error }));
+      expect(
+        await make().completeOAuth(
+          LEARNER,
+          stateService.issue(LEARNER, ASSIGNMENT, REDIRECT),
+          "the-code",
+        ),
+      ).toEqual({
+        returnPath: `/learner/3601/questions?github_auth=${outcome}`,
+      });
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+      expect(prisma.userCredential.create).not.toHaveBeenCalled();
     });
   });
 
