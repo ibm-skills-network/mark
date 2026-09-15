@@ -27,6 +27,23 @@ export class GithubOauthCallbackDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MaxLength(MAX_OPAQUE_LENGTH)
+  @MaxLength(4096)
   state?: string;
+}
+
+/** The fixed web callback forwards either a code or GitHub's denial. */
+export class GithubOauthCompleteDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_OPAQUE_LENGTH)
+  code?: string;
+
+  @IsString()
+  @MaxLength(4096)
+  state: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_OPAQUE_LENGTH)
+  error?: string;
 }

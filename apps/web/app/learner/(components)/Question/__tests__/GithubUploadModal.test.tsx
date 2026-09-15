@@ -138,6 +138,29 @@ describe("GithubUploadModal — returning from GitHub", () => {
     setUrl("/learner/3601/questions");
   });
 
+  it("loads the token saved by the fixed callback without exchanging again", async () => {
+    resetGithubHandoffForTesting();
+    setUrl("/learner/3601/questions?lang=fr&github_auth=success");
+    mockGetStoredGithubToken.mockResolvedValue("ghu_saved");
+    mockOctokitRequest.mockResolvedValue({ data: { login: "learner" } });
+    await renderModal();
+    expect(mockGetStoredGithubToken).toHaveBeenCalled();
+    expect(countCallbackPosts()).toBe(0);
+    expect(mockAuthorizeGithubBackend).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("?lang=fr");
+  });
+
+  it("shows a fixed-callback denial without starting another handoff", async () => {
+    resetGithubHandoffForTesting();
+    setUrl("/learner/3601/questions?github_auth=access_denied");
+    await renderModal();
+    expect(countCallbackPosts()).toBe(0);
+    expect(mockAuthorizeGithubBackend).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/GitHub did not give Mark access/i),
+    ).toBeInTheDocument();
+  });
+
   it("strips the authorization code from the URL even when the exchange fails", async () => {
     setUrl("/learner/3601/questions?code=code-1&state=st-1");
     fetchMock.mockResolvedValue(

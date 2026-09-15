@@ -33,6 +33,7 @@ const OAUTH_QUERY_PARAMS = [
   "error",
   "error_description",
   "error_uri",
+  "github_auth",
 ];
 
 export type GithubAuthFailure =
@@ -175,7 +176,8 @@ export function consumeGithubAuthorizationCode(): PendingGithubAuthorization | n
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
-  if (!code && !error) {
+  const outcome = url.searchParams.get("github_auth");
+  if (!code && !error && !outcome) {
     return null;
   }
   const state = url.searchParams.get("state");
@@ -192,6 +194,19 @@ export function consumeGithubAuthorizationCode(): PendingGithubAuthorization | n
   // One handoff per page load, however it turned out: a second component that
   // renders after this must not start its own trip to github.com.
   authorizationConsumed = true;
+
+  if (outcome) {
+    return {
+      code: null,
+      state: null,
+      denial:
+        outcome === "success"
+          ? null
+          : Object.hasOwn(FAILURE_COPY, outcome)
+            ? (outcome as GithubAuthFailure)
+            : "unknown",
+    };
+  }
 
   if (!code) {
     return {

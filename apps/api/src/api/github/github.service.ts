@@ -96,9 +96,8 @@ export class GithubService {
     // caller smuggle extra parameters into the authorize request.
     const parameters = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirectTarget,
-      scope: "repo",
-      state: this.oauthState.issue(userId, assignmentId),
+      redirect_uri: this.callbackUrl(redirectTarget),
+      state: this.oauthState.issue(userId, assignmentId, redirectTarget),
     });
 
     this.logger.info("Issued a GitHub authorization URL", {
@@ -108,6 +107,53 @@ export class GithubService {
     });
 
     return `${GITHUB_AUTHORIZE_URL}?${parameters.toString()}`;
+  }
+
+  /** Complete the fixed callback without sending tokens back through the URL. */
+  async completeOAuth(
+    userId: string,
+    state: string,
+    code?: string,
+    error?: string,
+  ): Promise<{ returnPath: string }> {
+    const signedReturnUrl = this.oauthState.returnUrl(state, userId);
+    if (!signedReturnUrl) {
+      throw githubOauthException(
+        GITHUB_OAUTH_ERROR_CODES.AUTHORIZATION_INVALID,
+      );
+    }
+    // Recheck the deployment allowlist in case configuration changed in flight.
+    const target = new URL(this.resolveRedirectTarget(signedReturnUrl, userId));
+    let outcome = "success";
+    if (error) {
+      outcome = error === "access_denied" ? "access_denied" : "configuration";
+    } else if (code) {
+      try {
+        await this.exchangeCodeForToken(code, userId, state);
+      } catch (error_) {
+        outcome = "unavailable";
+        if (error_ instanceof HttpException) {
+          const response = error_.getResponse();
+          if (typeof response === "object" && "code" in response) {
+            const outcomes: Record<string, string> = {
+              github_configuration_error: "configuration",
+              github_authorization_expired: "authorization_expired",
+              github_authorization_invalid: "authorization_invalid",
+              github_access_denied: "access_denied",
+            };
+            outcome = outcomes[String(response.code)] ?? "unavailable";
+          }
+        }
+      }
+    } else {
+      outcome = "authorization_invalid";
+    }
+    target.searchParams.set("github_auth", outcome);
+    return { returnPath: `${target.pathname}${target.search}${target.hash}` };
+  }
+
+  private callbackUrl(returnUrl: string): string {
+    return new URL("/api/github/callback", returnUrl).toString();
   }
 
   async exchangeCodeForToken(
@@ -157,10 +203,14 @@ export class GithubService {
       throw githubOauthException(GITHUB_OAUTH_ERROR_CODES.CONFIGURATION);
     }
 
+    const signedReturnUrl = this.oauthState.returnUrl(state, userId);
     const body = new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
       code,
+      ...(signedReturnUrl
+        ? { redirect_uri: this.callbackUrl(signedReturnUrl) }
+        : {}),
     }).toString();
 
     const { ok, status, data } = await this.requestGithubToken(body, userId);
@@ -330,7 +380,14 @@ export class GithubService {
       throw new BadRequestException("Invalid redirect target");
     }
 
-    if (!allowed.has(parsed.origin)) {
+    if (
+      parsed.username ||
+      parsed.password ||
+      !allowed.has(parsed.origin) ||
+      !/^\/learner\/\d+\/(?:questions|successPage(?:\/[^/]+)?)$/.test(
+        parsed.pathname,
+      )
+    ) {
       this.logger.warn("Rejected an off-platform GitHub redirect target", {
         stage: "oauth_url",
         user_id: userId,
@@ -339,6 +396,17 @@ export class GithubService {
       throw new BadRequestException("Invalid redirect target");
     }
 
+    for (const key of [
+      "code",
+      "state",
+      "iss",
+      "error",
+      "error_description",
+      "error_uri",
+      "github_auth",
+    ]) {
+      parsed.searchParams.delete(key);
+    }
     return parsed.toString();
   }
 

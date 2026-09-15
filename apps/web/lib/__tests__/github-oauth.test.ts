@@ -30,6 +30,30 @@ describe("consumeGithubAuthorizationCode", () => {
     setUrl("/learner/3601/questions");
   });
 
+  it.each([
+    ["success", null],
+    ["access_denied", "access_denied"],
+    ["authorization_expired", "authorization_expired"],
+    ["configuration", "configuration"],
+    ["unrecognized", "unknown"],
+  ])(
+    "consumes the server callback outcome %s without a second exchange",
+    (outcome, denial) => {
+      resetGithubHandoffForTesting();
+      setUrl(
+        `/learner/3601/questions?lang=fr&authorMode=true&github_auth=${outcome}`,
+      );
+      expect(consumeGithubAuthorizationCode()).toEqual({
+        code: null,
+        state: null,
+        denial,
+      });
+      expect(window.location.search).toBe("?lang=fr&authorMode=true");
+      expect(wasGithubAuthorizationConsumed()).toBe(true);
+      expect(consumeGithubAuthorizationCode()).toBeNull();
+    },
+  );
+
   it("returns the code and state and strips them from the address bar", () => {
     setUrl(
       "/learner/3601/questions?code=abc123&state=st-1&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth",
