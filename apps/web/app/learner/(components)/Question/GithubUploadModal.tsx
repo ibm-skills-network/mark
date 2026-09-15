@@ -1,5 +1,6 @@
 "use client";
 
+import { listGithubRepositories } from "@/lib/github-repositories";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import Modal from "@/components/Modal";
 import { RepoContentItem, RepoType } from "@/config/types";
@@ -83,6 +84,8 @@ const GithubModal: React.FC<{
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [repoLoadFailed, setRepoLoadFailed] = useState(false);
   const errorShownRef = useRef<boolean>(false);
   const getUserRole = async (): Promise<string | undefined> => {
     const user = await getUser();
@@ -220,49 +223,40 @@ const GithubModal: React.FC<{
   }
 
   useEffect(() => {
-    if (token && owner === null) {
+    if (token) {
       void fetchRepos();
     }
-  }, [token, owner]);
+  }, [token]);
 
   const octokit = token ? new Octokit({ auth: token }) : null;
 
   const fetchRepos = async () => {
     if (!octokit || !token) return;
+    setLoadingRepos(true);
+    setRepoLoadFailed(false);
     try {
-      const { data } = await octokit.repos.listForAuthenticatedUser();
-
-      const orgs = await octokit.orgs.listForAuthenticatedUser();
-      const orgRepos = await Promise.all(
-        orgs.data.map(async (org) => {
-          const orgRepos = await octokit.repos.listForOrg({
-            org: org.login,
-          });
-          return orgRepos.data.map((repo) => ({
-            ...repo,
-            owner: { login: org.login },
-          }));
-        }),
-      );
-      const allRepos = [...data, ...orgRepos.flat()];
+      const allRepos = await listGithubRepositories(octokit);
       setRepos(allRepos);
-      setOwner(data[0]?.owner?.login || null);
     } catch (error) {
-      showErrorOnce(
-        "Your GitHub token might have expired. Please reauthenticate.",
-      );
-
-      setToken(null);
+      setRepoLoadFailed(true);
+    } finally {
+      setLoadingRepos(false);
     }
   };
 
-  const fetchRepoContents = async (repo: string, path: string[] = []) => {
+  const fetchRepoContents = async (
+    repo: string,
+    path: string[] = [],
+    repoOwner = owner,
+  ) => {
     if (!octokit) return;
 
-    const selectedRepoData = repos.find((r) => r.name === repo);
+    const selectedRepoData = repos.find(
+      (r) => r.name === repo && r.owner.login === repoOwner,
+    );
 
     try {
-      const ownerName = selectedRepoData?.owner?.login || owner;
+      const ownerName = selectedRepoData?.owner?.login || repoOwner;
 
       const { data } = await octokit.repos.getContent({
         owner: ownerName,
@@ -756,6 +750,24 @@ const GithubModal: React.FC<{
                 <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
                   Select a repository to browse its files:
                 </p>
+                {loadingRepos && <p role="status">Loading repositories...</p>}
+                {repoLoadFailed && (
+                  <div role="alert">
+                    <p>Could not load your repositories. Please try again.</p>
+                    <button
+                      type="button"
+                      onClick={() => void fetchRepos()}
+                      className="text-violet-600 underline"
+                    >
+                      Retry loading repositories
+                    </button>
+                  </div>
+                )}
+                {!loadingRepos && !repoLoadFailed && repos.length === 0 && (
+                  <p>
+                    No repositories are available to this GitHub connection.
+                  </p>
+                )}
                 <div className="my-4">
                   {Object.entries(
                     repos.reduce((acc: Record<string, RepoType[]>, repo) => {
@@ -788,7 +800,13 @@ const GithubModal: React.FC<{
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ duration: 0.2 }}
                                 className="p-4 bg-white dark:bg-gray-800 border border-transparent dark:border-gray-700 rounded-lg shadow hover:shadow-md transition-shadow duration-200 flex items-center justify-between hover:cursor-pointer"
-                                onClick={() => fetchRepoContents(repo.name)}
+                                onClick={() =>
+                                  fetchRepoContents(
+                                    repo.name,
+                                    [],
+                                    repo.owner.login,
+                                  )
+                                }
                               >
                                 <span className="text-gray-700 dark:text-gray-200 font-medium truncate">
                                   {repo.name}

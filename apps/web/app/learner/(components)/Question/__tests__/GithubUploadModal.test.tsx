@@ -14,6 +14,8 @@ const mockAuthorizeGithubBackend = jest.fn();
 const mockGetStoredGithubToken = jest.fn();
 const mockGetUser = jest.fn();
 const mockOctokitRequest = jest.fn();
+const mockPaginate = jest.fn().mockResolvedValue([]);
+const mockGetContent = jest.fn().mockResolvedValue({ data: [] });
 
 jest.mock("@/lib/talkToBackend", () => ({
   AuthorizeGithubBackend: (...args: unknown[]) =>
@@ -25,10 +27,11 @@ jest.mock("@/lib/talkToBackend", () => ({
 jest.mock("@octokit/rest", () => ({
   Octokit: class {
     request = (...args: unknown[]) => mockOctokitRequest(...args);
+    paginate = (...args: unknown[]) => mockPaginate(...args);
 
     repos = {
       listForAuthenticatedUser: jest.fn().mockResolvedValue({ data: [] }),
-      getContent: jest.fn().mockResolvedValue({ data: [] }),
+      getContent: (...args: unknown[]) => mockGetContent(...args),
       listForOrg: jest.fn().mockResolvedValue({ data: [] }),
     };
 
@@ -89,7 +92,9 @@ const onClose = jest.fn();
 // The suite's MessageChannel stub keeps React's scheduler from flushing work
 // queued outside act(), so every render that kicks off the OAuth effect is
 // awaited inside act — the repo's convention for async effects.
-const renderModal = async () => {
+const renderModal = async (
+  overrides: Partial<React.ComponentProps<typeof GithubUploadModal>> = {},
+) => {
   let view: ReturnType<typeof render> | undefined;
   await act(async () => {
     view = render(
@@ -111,6 +116,7 @@ const renderModal = async () => {
         selectedRepo={null}
         setSelectedRepo={jest.fn()}
         onFileChange={jest.fn()}
+        {...overrides}
       />,
     );
   });
@@ -386,5 +392,70 @@ describe("GithubUploadModal — capped re-authorize loop", () => {
     await userEvent.click(closeButton);
 
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("GithubUploadModal repository listing", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetGithubHandoffForTesting();
+    sessionStorage.clear();
+    setUrl("/learner/3601/questions");
+    mockGetStoredGithubToken.mockResolvedValue("saved-token");
+    mockOctokitRequest.mockResolvedValue({ data: { login: "me" } });
+    mockPaginate.mockReset().mockResolvedValue([]);
+    mockGetContent.mockReset().mockResolvedValue({ data: [] });
+  });
+
+  it("passes all paginated repositories to the picker even when an owner was previously selected", async () => {
+    const repositories = Array.from({ length: 201 }, (_, i) => ({
+      id: i + 1,
+      name: `repo-${i}`,
+      full_name: `me/repo-${i}`,
+      owner: { login: "me" },
+      private: false,
+    }));
+    mockPaginate.mockResolvedValue(repositories);
+    const setRepos = jest.fn();
+    await renderModal({ owner: "previous-owner", setRepos });
+    expect(setRepos).toHaveBeenCalledWith(repositories);
+    expect(mockPaginate).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the selected owner's repository when names collide", async () => {
+    const repositories = ["organization", "me"].map((owner, i) => ({
+      id: i + 1,
+      name: "project",
+      full_name: `${owner}/project`,
+      owner: { login: owner },
+      private: false,
+    }));
+    await renderModal({ owner: "organization", repos: repositories });
+    // The groups are alphabetic, so the personal repository is first.
+    await userEvent.click(screen.getAllByText("project")[0]);
+    expect(mockGetContent).toHaveBeenCalledWith({
+      owner: "me",
+      repo: "project",
+      path: "",
+    });
+  });
+
+  it("keeps the connection and retries listing after a transient failure", async () => {
+    mockPaginate
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValueOnce([]);
+    await renderModal();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not load your repositories",
+    );
+    expect(mockAuthorizeGithubBackend).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading repositories" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(mockPaginate).toHaveBeenCalledTimes(2);
+    expect(mockAuthorizeGithubBackend).not.toHaveBeenCalled();
   });
 });
