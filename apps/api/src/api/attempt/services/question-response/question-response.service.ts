@@ -42,9 +42,14 @@ import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
+import {
+  applyQuestionTranslation,
+  findQuestionTranslation,
+} from "../../common/utils/translation-language.util";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import {
+  buildTranslationCacheKey,
   newJobScopedCache,
   type JobScopedCache,
 } from "../grading/job-scoped-cache";
@@ -325,6 +330,7 @@ export class QuestionResponseService {
                 preTranslatedQuestions,
                 tx as PrismaTransactionalClient,
                 effectiveCache,
+                language,
               );
               return question;
             }),
@@ -597,6 +603,8 @@ export class QuestionResponseService {
                   assignmentId,
                   preTranslatedQuestions,
                   tx as PrismaTransactionalClient,
+                  undefined,
+                  language,
                 );
                 return question;
               } else if (role === UserRole.AUTHOR) {
@@ -816,6 +824,8 @@ export class QuestionResponseService {
         assignmentId,
         preTranslatedQuestions,
         tx,
+        undefined,
+        language,
       ));
     } else if (role === UserRole.AUTHOR) {
       ({ question, assignmentContext } = this.getAuthorQuestion(
@@ -1238,6 +1248,7 @@ export class QuestionResponseService {
     preTranslatedQuestions?: Map<number, QuestionDto>,
     tx?: PrismaTransactionalClient,
     cache?: JobScopedCache,
+    language?: string,
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -1311,6 +1322,23 @@ export class QuestionResponseService {
       };
     } else {
       question = await this.questionService.findOne(questionId, tx, cache);
+    }
+
+    if (language && language !== "en") {
+      const variantId = variantMapping?.questionVariant?.id ?? null;
+      const key = buildTranslationCacheKey(language, questionId, variantId);
+      let translation = cache?.translations.get(key);
+      if (!cache?.translations.has(key)) {
+        translation =
+          (await findQuestionTranslation(
+            prisma,
+            questionId,
+            variantId,
+            language,
+          )) ?? null;
+        cache?.translations.set(key, translation);
+      }
+      question = applyQuestionTranslation(question, translation);
     }
 
     const assignmentContext = await this.getAssignmentContext(

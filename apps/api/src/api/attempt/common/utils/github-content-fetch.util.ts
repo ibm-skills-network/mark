@@ -87,6 +87,7 @@ export async function githubApiGet<T>(
         retryAfterSeconds,
       });
     }
+    throwIfRetryable(error, requestUrl, "github_api");
     throw error;
   }
 }
@@ -166,11 +167,8 @@ export function clearGithubDefaultBranchCache(): void {
 /**
  * Resolves a GitHub repository's actual default branch via
  * `GET /repos/{owner}/{repo}`, memoized per owner/repo (see cache doc
- * comment above). Returns undefined (never throws, other than
- * GithubRateLimitedError) when the lookup fails for any other reason —
- * network hiccup, private/nonexistent repo, unexpected response shape — so
- * callers can fall back to guessing main/master exactly like before this
- * function existed.
+ * comment above). Confirmed misses return undefined; transient failures retain
+ * their retryable error so callers can try another content source before retrying.
  */
 export async function resolveGithubDefaultBranch(
   owner: string,
@@ -193,7 +191,7 @@ export async function resolveGithubDefaultBranch(
     }
     return data.default_branch;
   } catch (error) {
-    if (error instanceof GithubRateLimitedError) {
+    if (error instanceof RetryableUrlFetchError) {
       throw error;
     }
     logger.warn(
@@ -227,7 +225,7 @@ export function convertGitHubUrlToRaw(url: string): string | null {
 
 /**
  * Fetches README.md from a specific branch's raw content. Never throws for
- * an ordinary miss (404, network hiccup) — returns undefined so callers can
+ * a confirmed miss (404) — returns undefined so callers can
  * try the next candidate branch. raw.githubusercontent.com is a separate
  * surface from api.github.com and is not subject to the same rate limit, so
  * this is safe to try even when the default-branch API call was itself
@@ -251,7 +249,7 @@ export async function fetchReadmeForBranch(
     const response = await safeGet<string>(readmeUrl);
     return response.status === 200 ? truncate(response.data) : undefined;
   } catch (error) {
-    // swallow: caller tries the next branch candidate
+    throwIfRetryable(error, readmeUrl, "readme");
     logger.debug(
       `No README for ${owner}/${repo}@${branch}: ${
         error instanceof Error ? error.message : String(error)
@@ -308,7 +306,10 @@ function stripNoiseNodes($: ReturnType<typeof cheerio.load>): void {
 }
 
 /** DOM-scrape fallback for a GitHub page (repo root or otherwise). Last resort, unchanged selectors from the pre-existing implementation. */
-async function scrapeGithubPage(url: string): Promise<string | undefined> {
+async function scrapeGithubPage(
+  url: string,
+  requireReadme = false,
+): Promise<string | undefined> {
   try {
     const response = await safeGet<string>(url);
     const $ = cheerio.load(response.data);
@@ -318,7 +319,7 @@ async function scrapeGithubPage(url: string): Promise<string | undefined> {
     const readmeElement = $("article.markdown-body");
     if (readmeElement.length > 0) {
       content = readmeElement.text().trim();
-    } else {
+    } else if (!requireReadme) {
       const aboutSection = $(".Box-body");
       if (aboutSection.length > 0) {
         content += `${aboutSection.text().trim()}\n\n`;
@@ -340,6 +341,7 @@ async function scrapeGithubPage(url: string): Promise<string | undefined> {
 
     return content ? content.replaceAll(/\s+/g, " ").trim() : undefined;
   } catch (error) {
+    throwIfRetryable(error, url, "github_page");
     logger.warn(
       `GitHub HTML-scrape fallback failed for ${url}: ${
         error instanceof Error ? error.message : String(error)
@@ -532,59 +534,57 @@ async function fetchGithubRepoRootContent(
   owner: string,
   repo: string,
 ): Promise<GithubFetchResult> {
-  let rateLimitError: GithubRateLimitedError | undefined;
+  let transientError: RetryableUrlFetchError | undefined;
   let defaultBranch: string | undefined;
 
   try {
     defaultBranch = await resolveGithubDefaultBranch(owner, repo);
   } catch (error) {
-    if (!(error instanceof GithubRateLimitedError)) {
-      throw error;
-    }
-    rateLimitError = error;
+    if (!(error instanceof RetryableUrlFetchError)) throw error;
+    transientError = error;
   }
 
   const candidateBranches = defaultBranch
     ? [defaultBranch]
     : ["main", "master"];
-
   for (const branch of candidateBranches) {
-    const body = await fetchReadmeForBranch(owner, repo, branch);
-    if (body) {
-      return { body, isFunctional: true };
+    try {
+      const body = await fetchReadmeForBranch(owner, repo, branch);
+      if (body) return { body, isFunctional: true };
+    } catch (error) {
+      if (!(error instanceof RetryableUrlFetchError)) throw error;
+      transientError ??= error;
     }
   }
 
-  if (rateLimitError) {
-    // Already know the api.github.com surface is exhausted — skip straight
-    // to the retryable failure instead of burning another call on the
-    // metadata fallback below. Rethrow the error caught above rather than
-    // constructing a new one, so resetAt/retryAfterSeconds (populated from
-    // the actual response headers) survive to the caller instead of coming
-    // back undefined.
-    throw rateLimitError;
+  // Preserve the provider's retry timing and avoid another call to an
+  // exhausted API. Raw README guesses above use a separate surface.
+  if (transientError instanceof GithubRateLimitedError) throw transientError;
+
+  // Metadata alone cannot replace a README we failed to read temporarily.
+  if (!transientError) {
+    try {
+      const summary = await fetchRepoMetadataSummary(owner, repo);
+      if (summary) return { body: summary, isFunctional: true };
+    } catch (error) {
+      if (error instanceof GithubRateLimitedError) throw error;
+      if (error instanceof RetryableUrlFetchError) transientError = error;
+      else
+        logger.warn(
+          `GitHub repository metadata fallback failed for ${owner}/${repo}`,
+        );
+    }
   }
 
   try {
-    const summary = await fetchRepoMetadataSummary(owner, repo);
-    if (summary) {
-      return { body: summary, isFunctional: true };
-    }
+    const scraped = await scrapeGithubPage(url, Boolean(transientError));
+    if (scraped) return { body: scraped, isFunctional: true };
   } catch (error) {
-    if (error instanceof GithubRateLimitedError) {
-      throw error;
-    }
-    logger.warn(
-      `GitHub repository metadata fallback failed for ${owner}/${repo}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    if (!(error instanceof RetryableUrlFetchError)) throw error;
+    transientError ??= error;
   }
-
-  const scraped = await scrapeGithubPage(url);
-  return scraped
-    ? { body: scraped, isFunctional: true }
-    : { body: "", isFunctional: false };
+  if (transientError) throw transientError;
+  return { body: "", isFunctional: false };
 }
 
 async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {

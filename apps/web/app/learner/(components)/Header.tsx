@@ -183,43 +183,59 @@ function LearnerHeader() {
     };
   }, [assignmentId]);
 
-  // A questions page can be opened without a `lang` parameter — a bookmark, or
-  // a link made before the language was chosen — in which case the server sent
-  // the attempt in English while the learner's chosen language is something
-  // else. Pull the right one once. Tracked in a ref so a language that has no
-  // stored translations yet (they are generated lazily) is attempted once, not
-  // refetched on every render.
+  // Reconcile content once per assignment/attempt/language. Reading the question
+  // list from the store avoids restarting a pending request on every keystroke.
   const reconciledLanguageRef = useRef<string | null>(null);
+  const questionCount = questions.length;
   useEffect(() => {
     if (!isInQuestionPage || !assignmentId || !activeAttemptId) return;
-    if (!userPreferedLanguage || userPreferedLanguage === "en") return;
-    if (questions.length === 0) return;
-    if (reconciledLanguageRef.current === userPreferedLanguage) return;
+    if (!userPreferedLanguage || questionCount === 0) return;
+    const key = `${assignmentId}:${activeAttemptId}:${userPreferedLanguage}`;
+    if (reconciledLanguageRef.current === key) return;
     if (
-      questions.some(
-        (question) => question.translations?.[userPreferedLanguage],
-      )
-    ) {
+      useLearnerStore
+        .getState()
+        .questions.some(
+          (question) => question.translations?.[userPreferedLanguage],
+        )
+    )
       return;
-    }
 
-    reconciledLanguageRef.current = userPreferedLanguage;
+    reconciledLanguageRef.current = key;
+    let cancelled = false;
     void getAttempt(
       assignmentId,
       activeAttemptId,
       undefined,
       userPreferedLanguage,
-    ).then((attempt) => {
-      if (attempt?.questions?.length) {
-        setQuestions(attempt.questions);
+    )
+      .then((attempt) => {
+        const current = useLearnerStore.getState();
+        if (
+          !cancelled &&
+          current.activeAttemptId === activeAttemptId &&
+          current.userPreferedLanguage === userPreferedLanguage &&
+          attempt?.questions?.length
+        ) {
+          setQuestions(attempt.questions);
+        }
+      })
+      .catch(() => {
+        // The learner can retry by switching language or reopening the attempt.
+        // Preserve their current content and drafts on a failed read.
+      });
+    return () => {
+      cancelled = true;
+      if (reconciledLanguageRef.current === key) {
+        reconciledLanguageRef.current = null;
       }
-    });
+    };
   }, [
     isInQuestionPage,
     assignmentId,
     activeAttemptId,
     userPreferedLanguage,
-    questions,
+    questionCount,
     setQuestions,
   ]);
 
@@ -227,24 +243,6 @@ function LearnerHeader() {
     if (!selectedLanguage) return;
     if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
-      reconciledLanguageRef.current = selectedLanguage;
-
-      // The attempt payload only carries the language it was fetched with, so
-      // an in-page switch pulls the new language's translations and merges
-      // them over the store (setQuestions keeps draft answers). Until the
-      // fetch lands the UI falls back to the server-translated question text.
-      if (isInQuestionPage && assignmentId && activeAttemptId) {
-        void getAttempt(
-          assignmentId,
-          activeAttemptId,
-          undefined,
-          selectedLanguage,
-        ).then((attempt) => {
-          if (attempt?.questions?.length) {
-            setQuestions(attempt.questions);
-          }
-        });
-      }
     }
 
     if (!isInQuestionPage && !isAttemptPage && !isSuccessPage) {

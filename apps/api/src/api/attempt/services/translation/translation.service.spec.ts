@@ -56,7 +56,7 @@ describe("TranslationService.getTranslationsForAttempt", () => {
     expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          languageCode: { startsWith: "de" },
+          languageCode: { startsWith: "de", mode: "insensitive" },
         }),
       }),
     );
@@ -92,7 +92,7 @@ describe("TranslationService.getTranslationsForAttempt", () => {
     expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          languageCode: { startsWith: "zh" },
+          languageCode: { startsWith: "zh", mode: "insensitive" },
         }),
       }),
     );
@@ -119,7 +119,7 @@ describe("TranslationService.getTranslationsForAttempt", () => {
     expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          languageCode: { startsWith: "en" },
+          languageCode: { startsWith: "en", mode: "insensitive" },
         }),
       }),
     );
@@ -136,7 +136,7 @@ describe("TranslationService.getTranslationsForAttempt", () => {
     expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          languageCode: { startsWith: "en" },
+          languageCode: { startsWith: "en", mode: "insensitive" },
         }),
       }),
     );

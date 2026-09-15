@@ -13,6 +13,10 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { PrismaService } from "../../../../database/prisma.service";
+import {
+  applyQuestionTranslation,
+  findQuestionTranslation,
+} from "../../common/utils/translation-language.util";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
 import {
   buildTranslationCacheKey,
@@ -130,7 +134,7 @@ export class TranslationService {
     // The client refetches the attempt when the learner switches language.
     const translations = await this.prisma.translation.findMany({
       where: {
-        languageCode: { startsWith: languageFamily },
+        languageCode: { startsWith: languageFamily, mode: "insensitive" },
         OR: [
           { questionId: { in: questionIds } },
           ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
@@ -218,56 +222,17 @@ export class TranslationService {
     if (cache?.translations.has(cacheKey)) {
       translation = cache.translations.get(cacheKey) ?? null;
     } else {
-      if (variantMapping && variantMapping.questionVariant !== null) {
-        translation = await this.prisma.translation.findFirst({
-          where: {
-            questionId: variantMapping.questionId,
-            variantId: variantMapping.questionVariant.id,
-            languageCode: language,
-          },
-        });
-
-        if (!translation) {
-          translation = await this.prisma.translation.findFirst({
-            where: {
-              questionId: question.id,
-              variantId: null,
-              languageCode: language,
-            },
-          });
-        }
-      } else {
-        translation = await this.prisma.translation.findFirst({
-          where: {
-            questionId: question.id,
-            variantId: null,
-            languageCode: language,
-          },
-        });
-      }
+      translation =
+        (await findQuestionTranslation(
+          this.prisma,
+          question.id,
+          variantId,
+          language,
+        )) ?? null;
       if (cache) cache.translations.set(cacheKey, translation);
     }
 
-    if (translation) {
-      question.question = translation.translatedText;
-
-      if (translation.translatedChoices) {
-        if (typeof translation.translatedChoices === "string") {
-          try {
-            question.choices = JSON.parse(
-              translation.translatedChoices,
-            ) as Choice[];
-          } catch {
-            question.choices = [];
-          }
-        } else if (Array.isArray(translation.translatedChoices)) {
-          question.choices =
-            translation.translatedChoices as unknown as Choice[];
-        }
-      }
-    }
-
-    return question;
+    return applyQuestionTranslation(question, translation);
   }
 
   /**

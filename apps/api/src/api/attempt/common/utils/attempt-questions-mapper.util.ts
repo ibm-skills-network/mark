@@ -5,7 +5,6 @@ import {
   QuestionResponse,
   QuestionType,
   ResponseType,
-  Translation,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { AssignmentAttemptQuestions } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
@@ -17,6 +16,11 @@ import {
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { PrismaService } from "../../../../database/prisma.service";
+
+import {
+  findQuestionTranslation,
+  pickTranslation,
+} from "./translation-language.util";
 
 const logger = new Logger("AttemptQuestionsMapper");
 
@@ -239,11 +243,11 @@ export class AttemptQuestionsMapper {
           ? translations.get(questionKey) || {}
           : {};
 
-        const variantTranslation = this.pickTranslation(
+        const variantTranslation = pickTranslation(
           variantTranslations,
           language,
         );
-        const questionTranslation = this.pickTranslation(
+        const questionTranslation = pickTranslation(
           questionTranslations,
           language,
         );
@@ -354,7 +358,7 @@ export class AttemptQuestionsMapper {
           ? translations.get(questionKey) || {}
           : {};
 
-        const translationForLanguage = this.pickTranslation(
+        const translationForLanguage = pickTranslation(
           questionTranslations,
           language,
         );
@@ -401,52 +405,6 @@ export class AttemptQuestionsMapper {
         : allQuestions;
 
     return finalQuestions;
-  }
-
-  /**
-   * Select the stored translation for the language the learner asked for.
-   *
-   * Rows are keyed by the code the translation catalogue uses, and three of
-   * those carry a region (`uk-UA`, `zh-CN`, `zh-TW`) while the rest do not. A
-   * plain `record[language]` lookup therefore misses whenever the request and
-   * the stored key disagree about the region, in either direction, and the
-   * learner is served the authored English with a translation sitting in the
-   * database. Preference order: the exact code, then the bare base code, then
-   * any other row in the same family — a different region is a last resort
-   * because it can be a different script (`zh-CN` is Simplified, `zh-TW`
-   * Traditional), but it is still closer than English. Family candidates are
-   * ordered so the choice does not depend on the order rows came back in.
-   *
-   * @param translations - Stored translations for one question or variant
-   * @param language - The language code the learner asked for
-   * @returns The best matching translation, or undefined when the family has none
-   */
-  private static pickTranslation(
-    translations: Record<string, TranslatedContent>,
-    language: string,
-  ): TranslatedContent | undefined {
-    const requested = language.toLowerCase();
-    const family = requested.split("-")[0];
-
-    let baseMatch: string | undefined;
-    const regionalMatches: string[] = [];
-
-    for (const code of Object.keys(translations)) {
-      const stored = code.toLowerCase();
-
-      if (stored === requested) {
-        return translations[code];
-      }
-
-      if (stored === family) {
-        baseMatch = code;
-      } else if (stored.split("-")[0] === family) {
-        regionalMatches.push(code);
-      }
-    }
-
-    const fallback = baseMatch ?? regionalMatches.sort()[0];
-    return fallback === undefined ? undefined : translations[fallback];
   }
 
   /**
@@ -581,21 +539,12 @@ export class AttemptQuestionsMapper {
     language: string,
   ): Promise<void> {
     for (const question of questions) {
-      const translation: Translation | null = await (question.variantId
-        ? prisma.translation.findFirst({
-            where: {
-              questionId: question.id,
-              variantId: question.variantId,
-              languageCode: language,
-            },
-          })
-        : prisma.translation.findFirst({
-            where: {
-              questionId: question.id,
-              variantId: null,
-              languageCode: language,
-            },
-          }));
+      const translation = await findQuestionTranslation(
+        prisma,
+        question.id,
+        question.variantId,
+        language,
+      );
 
       if (translation) {
         question.question = translation.translatedText;

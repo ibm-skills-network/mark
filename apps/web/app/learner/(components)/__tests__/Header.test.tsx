@@ -571,3 +571,39 @@ describe("LearnerHeader submit gating", () => {
     );
   });
 });
+
+describe("Regression: stale automatic language fetch", () => {
+  it("ignores the prior attempt response after the attempt changes", async () => {
+    jest.clearAllMocks();
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSearchParams.mockReturnValue(new URLSearchParams());
+    seedLearnerState(3428);
+    useLearnerStore.setState({ userPreferedLanguage: "fr" });
+    let finishOldFetch!: (a: unknown) => void;
+    mockGetAttempt
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishOldFetch = resolve;
+        }),
+      )
+      .mockResolvedValue(undefined);
+    render(<LearnerHeader />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockGetAttempt).toHaveBeenCalledWith(3428, 999, undefined, "fr");
+    await act(async () => {
+      useLearnerStore.setState({
+        activeAttemptId: 1000,
+        questions: [{ id: 2, question: "new attempt" }] as any,
+      });
+    });
+    await act(async () => {
+      finishOldFetch({
+        questions: [{ id: 1, question: "old attempt French" }],
+      });
+    });
+    expect(useLearnerStore.getState().activeAttemptId).toBe(1000);
+    expect(useLearnerStore.getState().questions.map((q) => q.id)).toEqual([2]);
+  });
+});

@@ -326,6 +326,10 @@ function QuestionPage(props: Props) {
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
   // The attempt whose server-clock offset has already been recorded.
   const clockCaptureRef = useRef<number | null>(null);
+  const clockSampleRef = useRef<{
+    id: number;
+    offset: number | undefined;
+  } | null>(null);
 
   useEffect(() => {
     if (isNewAttempt) {
@@ -343,6 +347,16 @@ function QuestionPage(props: Props) {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Sample at receipt, before the assignment request can add latency.
+    if (clockSampleRef.current?.id !== id) {
+      clockSampleRef.current = {
+        id,
+        offset: deriveServerTimeOffsetMs(attemptServerNow),
+      };
+    }
+    const serverTimeOffsetMs = clockSampleRef.current.offset;
+    const attemptStartedAt = getAttemptStartedAtMs(attemptCreatedAt);
 
     const hydratePage = async () => {
       let nextAssignmentDetails = buildAssignmentDetailsFromAttempt(attempt);
@@ -392,11 +406,6 @@ function QuestionPage(props: Props) {
         typeof expiresAtMs === "number" && !Number.isNaN(expiresAtMs)
           ? expiresAtMs
           : undefined;
-
-      // Taken here, in the browser, so the subtraction is against the same
-      // device clock the countdown will read.
-      const serverTimeOffsetMs = deriveServerTimeOffsetMs(attemptServerNow);
-      const attemptStartedAt = getAttemptStartedAtMs(attemptCreatedAt);
 
       debugLog(
         "attemptId, expiresAt, serverTimeOffsetMs",

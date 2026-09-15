@@ -251,8 +251,12 @@ describe("resolveGithubDefaultBranch caching", () => {
   it("does not cache a non-rate-limit failure — the next call retries", async () => {
     mockedSafeGet.mockRejectedValue(axiosError(500));
 
-    await resolveGithubDefaultBranch("octocat", "hello-world");
-    await resolveGithubDefaultBranch("octocat", "hello-world");
+    await expect(
+      resolveGithubDefaultBranch("octocat", "hello-world"),
+    ).rejects.toBeInstanceOf(RetryableUrlFetchError);
+    await expect(
+      resolveGithubDefaultBranch("octocat", "hello-world"),
+    ).rejects.toBeInstanceOf(RetryableUrlFetchError);
 
     expect(mockedSafeGet).toHaveBeenCalledTimes(2);
   });
@@ -804,4 +808,57 @@ describe("fetchUrlContentForGrading", () => {
       warnSpy.mockRestore();
     });
   });
+});
+
+describe("GitHub transient fallback boundaries", () => {
+  beforeEach(() => {
+    mockedSafeGet.mockReset();
+    clearGithubDefaultBranchCache();
+  });
+
+  it.each([
+    "https://github.com/review/repo",
+    "https://github.com/review/repo/issues/1",
+  ])("retries a timeout fetching %s", async (url) => {
+    mockedSafeGet.mockRejectedValue(networkError("ETIMEDOUT"));
+    await expect(fetchUrlContentForGrading(url)).rejects.toBeInstanceOf(
+      RetryableUrlFetchError,
+    );
+  });
+
+  it.each([false, true])(
+    "only recovers a README outage from actual README content (available=%s)",
+    async (readmeAvailable) => {
+      mockedSafeGet.mockImplementation(async (url: string) => {
+        if (url.startsWith("https://api.github.com/")) {
+          return {
+            status: 200,
+            data: { default_branch: "main", full_name: "review/repo" },
+          } as any;
+        }
+        if (url.startsWith("https://raw.githubusercontent.com/"))
+          throw networkError("ETIMEDOUT");
+        return {
+          status: 200,
+          data: readmeAvailable
+            ? '<article class="markdown-body">Recovered assignment evidence</article>'
+            : '<div class="Box-body">Repository metadata only</div>',
+        } as any;
+      });
+      const result = fetchUrlContentForGrading(
+        "https://github.com/review/repo",
+      );
+      if (readmeAvailable)
+        await expect(result).resolves.toEqual({
+          body: "Recovered assignment evidence",
+          isFunctional: true,
+        });
+      else await expect(result).rejects.toBeInstanceOf(RetryableUrlFetchError);
+      expect(
+        mockedSafeGet.mock.calls.filter(([url]) =>
+          url.startsWith("https://api.github.com/"),
+        ),
+      ).toHaveLength(1);
+    },
+  );
 });

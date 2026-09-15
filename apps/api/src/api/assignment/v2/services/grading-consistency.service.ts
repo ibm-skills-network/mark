@@ -153,7 +153,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
   }
 
   /**
-   * Generate a hash for response similarity checking
+   * Generate a versioned, lossless hash for exact-answer reuse
    */
   generateResponseHash(
     response: string,
@@ -161,15 +161,15 @@ export class GradingConsistencyService implements OnModuleDestroy {
     questionType: QuestionType,
   ): string {
     try {
-      const normalized = this.normalizeResponse(response, questionType);
-
       const hash = crypto
         .createHash("sha256")
-        .update(`${questionId}:${normalized}`)
+        .update(
+          JSON.stringify(["exact-v2", questionId, questionType, response]),
+        )
         .digest("hex")
         .slice(0, 32);
 
-      return hash;
+      return `exact-v2:${hash}`;
     } catch (error) {
       this.logger.error("Error generating response hash:", error);
       return crypto.randomBytes(16).toString("hex");
@@ -186,9 +186,8 @@ export class GradingConsistencyService implements OnModuleDestroy {
    *    answer is at worst generous; a cached partial or zero is how one
    *    submission's loss became everybody else's.
    * 2. It is either the same learner's own earlier answer (which may differ in
-   *    small ways) or *any* learner's byte-for-byte equivalent answer after
-   *    normalisation. Nothing else: a near match across learners is exactly the
-   *    case where a single token decides correctness.
+   *    small ways) or *any* learner's byte-for-byte equivalent answer. A near
+   *    match across learners is exactly where a single token decides correctness.
    */
   async checkConsistency(
     questionId: number,

@@ -24,7 +24,7 @@ const PART_BYTE_CAP = 5_000_000;
 
 interface CraftedFile {
   path: string;
-  content: string;
+  content: string | Buffer;
   /**
    * What the central directory should claim the part inflates to. Real zip
    * writers put the truth here; nothing in the format makes them.
@@ -44,7 +44,10 @@ function craftZip(files: CraftedFile[]): Buffer {
 
   for (const file of files) {
     const name = Buffer.from(file.path, "utf8");
-    const raw = Buffer.from(file.content, "utf8");
+    const raw =
+      typeof file.content === "string"
+        ? Buffer.from(file.content, "utf8")
+        : file.content;
     const deflated = zlib.deflateRawSync(raw, { level: 9 });
     const crc = zlib.crc32(raw) >>> 0;
     const declared = file.declaredUncompressedSize ?? raw.length;
@@ -434,4 +437,57 @@ describe("workbook relationship walk", () => {
     expect(result.section).toContain('Chart 1 on sheet "Dashboard"');
     expect(result.section).toContain("Line Chart");
   });
+});
+
+describe("Regression: malformed relationship opener", () => {
+  it("bounds malformed relationship scanning through a compressed workbook package", async () => {
+    const service = createService();
+    const results = [];
+    for (const count of [4000, 8000, 16000]) {
+      const zip = craftZip([
+        {
+          path: "xl/workbook.xml",
+          content:
+            '<workbook><sheets><sheet name="Sheet1" r:id="rId1"/></sheets></workbook>',
+        },
+        {
+          path: "xl/_rels/workbook.xml.rels",
+          content: "<Relationship ".repeat(count),
+        },
+      ]);
+      const start = performance.now();
+      await (service as any).extractExcelChartsAndImages(zip);
+      results.push({
+        xmlBytes: count * 14,
+        zipBytes: zip.length,
+        ms: Math.round(performance.now() - start),
+      });
+    }
+    expect(results[2].ms).toBeLessThan(500);
+  });
+});
+
+test("regression: full Excel extraction accepts workbook then hits malformed rels", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const fixture = fs.readFileSync(
+    path.join(__dirname, "fixtures/xlsx-charts-legends-pivot.xlsx"),
+  );
+  const original = await unzipper.Open.buffer(fixture);
+  const files = await Promise.all(
+    original.files
+      .filter((e) => e.type === "File")
+      .map(async (e) => ({ path: e.path, content: await e.buffer() })),
+  );
+  const rels = files.find((e) => e.path === "xl/_rels/workbook.xml.rels")!;
+  rels.content = Buffer.concat([
+    rels.content,
+    Buffer.from("<Relationship ".repeat(16000)),
+  ]);
+  const start = performance.now();
+  const result = await (createService() as any).extractExcelText(
+    craftZip(files),
+  );
+  expect(result.additionalMetadata.sheetCount).toBeGreaterThan(0);
+  expect(performance.now() - start).toBeLessThan(500);
 });

@@ -101,3 +101,25 @@ describe("GithubCredentialCheckService", () => {
     expect(make().getStatus().state).toBe("unknown");
   });
 });
+
+describe("credential probe unexpected responses", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedFetch = jest.spyOn(globalThis, "fetch");
+    process.env.GITHUB_CLIENT_ID = "client-id";
+    process.env.GITHUB_CLIENT_SECRET = "client-secret"; // pragma: allowlist secret
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it.each([
+    [503, { message: "unavailable" }],
+    [429, { error: "rate_limited" }],
+    [200, {}],
+    [200, { error: "unexpected_error" }],
+    [503, { error: "bad_verification_code" }],
+  ])("does not report healthy for HTTP %s with %j", async (status, body) => {
+    mockedFetch.mockResolvedValue({ ...jsonResponse(body), status });
+    expect((await make().run()).state).toBe("unreachable");
+    expect(logged.info).not.toHaveBeenCalled();
+  });
+});

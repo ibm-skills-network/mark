@@ -12,6 +12,7 @@ import type { AssignmentAttemptWithQuestions } from "@/config/types";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "../index";
 import Timer from "../Timer";
+import { getAssignment } from "@/lib/talkToBackend";
 
 jest.mock("next/navigation", () => ({
   useParams: () => ({ assignmentId: "3663" }),
@@ -313,5 +314,58 @@ describe("timed auto-submit survives the minimum-age hold", () => {
 
     expect(mockSubmitAssignment).not.toHaveBeenCalled();
     expect(useLearnerStore.getState().activeAttemptId).toBe(2494);
+  });
+});
+
+describe("clock capture with a delayed assignment request", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("submits at the real deadline after a slow assignment fetch", async () => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    jest.setSystemTime(SERVER_NOW);
+    mockSubmitAssignment.mockResolvedValue({
+      id: 8811,
+      feedbacksForQuestions: [],
+    });
+    useLearnerStore.setState({
+      questions: [],
+      activeAttemptId: null,
+      expiresAt: undefined,
+      serverTimeOffsetMs: undefined,
+      attemptStartedAt: undefined,
+    });
+    useAssignmentDetails.setState({ assignmentDetails: null });
+    let finishAssignment!: (data: unknown) => void;
+    (getAssignment as jest.Mock).mockReturnValue(
+      new Promise((resolve) => {
+        finishAssignment = resolve;
+      }),
+    );
+    const attempt = buildAttempt({
+      assignmentDetails: undefined,
+      expiresAt: new Date(SERVER_NOW + 60000).toISOString(),
+    });
+    render(
+      <>
+        <QuestionPage attempt={attempt} assignmentId={3663} />
+        <Timer />
+      </>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    jest.setSystemTime(SERVER_NOW + 45000);
+    await act(async () => {
+      finishAssignment({ id: 3663, name: "Quiz" });
+    });
+    expect(useLearnerStore.getState().serverTimeOffsetMs).toBe(0);
+    expect(timerReadout()).toBe("00:00:15");
+    for (let seconds = 0; seconds < 20; seconds++) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+    }
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
   });
 });

@@ -401,7 +401,7 @@ describe("GradingConsistencyService reuse safety", () => {
       });
     });
 
-    it("accepts an exact normalized match from another learner at full marks", async () => {
+    it("refuses a normalized-only match from another learner at full marks", async () => {
       findMany.mockResolvedValue([
         priorGrade({
           response: `  ${CORRECT_SQL.toUpperCase()}  `,
@@ -412,8 +412,7 @@ describe("GradingConsistencyService reuse safety", () => {
       ]);
 
       await expect(checkFor(CORRECT_SQL)).resolves.toMatchObject({
-        similar: true,
-        previousGrade: 1,
+        similar: false,
       });
     });
 

@@ -3777,15 +3777,17 @@ export class FileContentExtractionService {
     relationshipsXml: string,
     context: string,
   ): PackageRelationship[] {
+    // Stop each candidate at the next opener as well as at its terminator.
+    // An unterminated tag must not rescan every subsequent tag (quadratic CPU).
     const relationships: PackageRelationship[] = [];
     let declared = 0;
-    for (const match of relationshipsXml.matchAll(/<Relationship\b[^>]*>/g)) {
+    for (const match of relationshipsXml.matchAll(/<Relationship\b[^<>]*>/g)) {
       declared++;
       if (relationships.length >= MAX_WORKBOOK_RELATIONSHIPS) continue;
       const element = match[0];
-      const id = /\bId="([^"]*)"/.exec(element)?.[1];
-      const type = /\bType="([^"]*)"/.exec(element)?.[1];
-      const target = /\bTarget="([^"]*)"/.exec(element)?.[1];
+      const id = /\bId="([^"<>]*)"/.exec(element)?.[1];
+      const type = /\bType="([^"<>]*)"/.exec(element)?.[1];
+      const target = /\bTarget="([^"<>]*)"/.exec(element)?.[1];
       if (id && type && target) relationships.push({ id, type, target });
     }
     if (declared > MAX_WORKBOOK_RELATIONSHIPS) {
@@ -3843,7 +3845,7 @@ export class FileContentExtractionService {
    * The content of the first `<tag ...>...</tag>` block, or "" when the
    * element is absent, self-closing or never closed.
    *
-   * Scanned rather than matched. `<tag\b[^>]*>([\s\S]*?)</tag>` looks
+   * Scanned rather than matched. `<tag\b[^<>]*>([\s\S]*?)</tag>` looks
    * equivalent but restarts a search that runs to end-of-input at every
    * opening tag, so a part carrying tens of thousands of unclosed openers —
    * which costs an attacker a few hundred kilobytes — blocks the event loop
@@ -3907,7 +3909,7 @@ export class FileContentExtractionService {
     if (workbookRelationships.size === 0) return { charts, pivots };
 
     let sheetsWalked = 0;
-    for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/g)) {
+    for (const match of workbookXml.matchAll(/<sheet\b[^<>]*>/g)) {
       if (sheetsWalked >= MAX_WORKBOOK_SHEETS_WALKED) {
         this.logger.warn(
           `xlsx.sheets.capped ${JSON.stringify({
@@ -3918,8 +3920,8 @@ export class FileContentExtractionService {
       }
 
       const element = match[0];
-      const sheetName = /\bname="([^"]*)"/.exec(element)?.[1];
-      const relationshipId = /\br:id="([^"]*)"/.exec(element)?.[1];
+      const sheetName = /\bname="([^"<>]*)"/.exec(element)?.[1];
+      const relationshipId = /\br:id="([^"<>]*)"/.exec(element)?.[1];
       if (!sheetName || !relationshipId) continue;
 
       const sheetTarget = workbookRelationships.get(relationshipId);
@@ -3974,7 +3976,7 @@ export class FileContentExtractionService {
 
     let legendPosition: string | undefined;
     if (xmlString.includes("<c:legend")) {
-      const positionCode = /<c:legendPos\b[^>]*\bval="([^"]*)"/.exec(
+      const positionCode = /<c:legendPos\b[^<>]*\bval="([^"<>]*)"/.exec(
         xmlString,
       )?.[1];
       legendPosition =
@@ -4009,9 +4011,10 @@ export class FileContentExtractionService {
     if (pivotXml === undefined) return undefined;
 
     const definition =
-      /<pivotTableDefinition\b[^>]*>/.exec(pivotXml)?.[0] ?? "";
+      /<pivotTableDefinition\b[^<>]*>/.exec(pivotXml)?.[0] ?? "";
     const name =
-      /\bname="([^"]*)"/.exec(definition)?.[1] ?? `Pivot table ${pivotNumber}`;
+      /\bname="([^"<>]*)"/.exec(definition)?.[1] ??
+      `Pivot table ${pivotNumber}`;
 
     const cacheRelsPath = this.relationshipPartFor(pivotPath);
     let cacheFields: string[] = [];
@@ -4028,13 +4031,13 @@ export class FileContentExtractionService {
       );
       if (cacheXml !== undefined) {
         cacheFields = [
-          ...cacheXml.matchAll(/<cacheField\b[^>]*\bname="([^"]*)"/g),
+          ...cacheXml.matchAll(/<cacheField\b[^<>]*\bname="([^"<>]*)"/g),
         ].map((match) => match[1]);
         const worksheetSource =
-          /<worksheetSource\b[^>]*>/.exec(cacheXml)?.[0] ?? "";
-        const sourceSheet = /\bsheet="([^"]*)"/.exec(worksheetSource)?.[1];
-        const sourceReference = /\bref="([^"]*)"/.exec(worksheetSource)?.[1];
-        const sourceTable = /\bname="([^"]*)"/.exec(worksheetSource)?.[1];
+          /<worksheetSource\b[^<>]*>/.exec(cacheXml)?.[0] ?? "";
+        const sourceSheet = /\bsheet="([^"<>]*)"/.exec(worksheetSource)?.[1];
+        const sourceReference = /\bref="([^"<>]*)"/.exec(worksheetSource)?.[1];
+        const sourceTable = /\bname="([^"<>]*)"/.exec(worksheetSource)?.[1];
         if (sourceSheet && sourceReference) {
           source = `${sourceSheet}!${sourceReference}`;
         } else if (sourceSheet && sourceTable) {
@@ -4049,14 +4052,14 @@ export class FileContentExtractionService {
 
     const pivotFieldElements = [
       ...this.xmlBlockContent(pivotXml, "pivotFields").matchAll(
-        /<pivotField\b[^>]*>/g,
+        /<pivotField\b[^<>]*>/g,
       ),
     ].map((match) => match[0]);
 
     const fieldLabel = (index: number): string => {
       if (index < 0) return "Values";
       const label = cacheFields[index] ?? `Field ${index + 1}`;
-      const sortType = /\bsortType="([^"]*)"/.exec(
+      const sortType = /\bsortType="([^"<>]*)"/.exec(
         pivotFieldElements[index] ?? "",
       )?.[1];
       return sortType && sortType !== "manual"
@@ -4066,18 +4069,18 @@ export class FileContentExtractionService {
 
     const axisFields = (section: "rowFields" | "colFields"): string[] => {
       const block = this.xmlBlockContent(pivotXml, section);
-      return [...block.matchAll(/<field\b[^>]*\bx="(-?\d+)"/g)].map((match) =>
+      return [...block.matchAll(/<field\b[^<>]*\bx="(-?\d+)"/g)].map((match) =>
         fieldLabel(Number.parseInt(match[1], 10)),
       );
     };
 
     const dataFields = [
       ...this.xmlBlockContent(pivotXml, "dataFields").matchAll(
-        /<dataField\b[^>]*>/g,
+        /<dataField\b[^<>]*>/g,
       ),
     ].map((match) => {
       const element = match[0];
-      const explicitName = /\bname="([^"]*)"/.exec(element)?.[1];
+      const explicitName = /\bname="([^"<>]*)"/.exec(element)?.[1];
       if (explicitName) return explicitName;
       const fieldIndex = Number.parseInt(
         /\bfld="(-?\d+)"/.exec(element)?.[1] ?? "-1",
@@ -4133,7 +4136,7 @@ export class FileContentExtractionService {
         // is a bar chart. Reporting both as "Bar Chart" fails workbooks that
         // built exactly the chart the rubric asked for.
         if (tag === "c:barChart" || tag === "c:bar3DChart") {
-          const direction = /<c:barDir\b[^>]*\bval="([^"]*)"/.exec(
+          const direction = /<c:barDir\b[^<>]*\bval="([^"<>]*)"/.exec(
             xmlString,
           )?.[1];
           if (direction === "col") return label.replace("Bar", "Column");
@@ -4154,11 +4157,11 @@ export class FileContentExtractionService {
     if (!titleSection) return "";
 
     // Look for <a:t> text nodes within the title section
-    const textMatches = titleSection.match(/<a:t[^>]*>([^<]+)<\/a:t>/g);
+    const textMatches = titleSection.match(/<a:t[^<>]*>([^<]+)<\/a:t>/g);
     if (textMatches && textMatches.length > 0) {
       const texts = textMatches
         .map((m) => {
-          const inner = m.match(/<a:t[^>]*>([^<]+)<\/a:t>/);
+          const inner = m.match(/<a:t[^<>]*>([^<]+)<\/a:t>/);
           return inner ? inner[1].trim() : "";
         })
         .filter(Boolean);
