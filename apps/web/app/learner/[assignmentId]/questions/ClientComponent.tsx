@@ -217,7 +217,7 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   }
 
   return (
-    <main className="flex flex-col h-[calc(100vh-100px)]">
+    <main className="flex flex-col h-full">
       <QuestionPage
         attempt={{
           id: generateTempQuestionId(),

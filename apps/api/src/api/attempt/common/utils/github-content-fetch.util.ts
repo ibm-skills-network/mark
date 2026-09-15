@@ -1,6 +1,7 @@
 import { Logger } from "@nestjs/common";
 import * as cheerio from "cheerio";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "src/api/llm/features/grading/errors/retryable-url-fetch.error";
 import { getGithubGradingApiToken } from "src/config/github-grading-token";
 import {
   isGithubRateLimitResponse,
@@ -86,6 +87,7 @@ export async function githubApiGet<T>(
         retryAfterSeconds,
       });
     }
+    throwIfRetryable(error, requestUrl, "github_api");
     throw error;
   }
 }
@@ -165,11 +167,8 @@ export function clearGithubDefaultBranchCache(): void {
 /**
  * Resolves a GitHub repository's actual default branch via
  * `GET /repos/{owner}/{repo}`, memoized per owner/repo (see cache doc
- * comment above). Returns undefined (never throws, other than
- * GithubRateLimitedError) when the lookup fails for any other reason —
- * network hiccup, private/nonexistent repo, unexpected response shape — so
- * callers can fall back to guessing main/master exactly like before this
- * function existed.
+ * comment above). Confirmed misses return undefined; transient failures retain
+ * their retryable error so callers can try another content source before retrying.
  */
 export async function resolveGithubDefaultBranch(
   owner: string,
@@ -192,7 +191,7 @@ export async function resolveGithubDefaultBranch(
     }
     return data.default_branch;
   } catch (error) {
-    if (error instanceof GithubRateLimitedError) {
+    if (error instanceof RetryableUrlFetchError) {
       throw error;
     }
     logger.warn(
@@ -226,7 +225,7 @@ export function convertGitHubUrlToRaw(url: string): string | null {
 
 /**
  * Fetches README.md from a specific branch's raw content. Never throws for
- * an ordinary miss (404, network hiccup) — returns undefined so callers can
+ * a confirmed miss (404) — returns undefined so callers can
  * try the next candidate branch. raw.githubusercontent.com is a separate
  * surface from api.github.com and is not subject to the same rate limit, so
  * this is safe to try even when the default-branch API call was itself
@@ -250,7 +249,7 @@ export async function fetchReadmeForBranch(
     const response = await safeGet<string>(readmeUrl);
     return response.status === 200 ? truncate(response.data) : undefined;
   } catch (error) {
-    // swallow: caller tries the next branch candidate
+    throwIfRetryable(error, readmeUrl, "readme");
     logger.debug(
       `No README for ${owner}/${repo}@${branch}: ${
         error instanceof Error ? error.message : String(error)
@@ -307,7 +306,10 @@ function stripNoiseNodes($: ReturnType<typeof cheerio.load>): void {
 }
 
 /** DOM-scrape fallback for a GitHub page (repo root or otherwise). Last resort, unchanged selectors from the pre-existing implementation. */
-async function scrapeGithubPage(url: string): Promise<string | undefined> {
+async function scrapeGithubPage(
+  url: string,
+  requireReadme = false,
+): Promise<string | undefined> {
   try {
     const response = await safeGet<string>(url);
     const $ = cheerio.load(response.data);
@@ -317,7 +319,7 @@ async function scrapeGithubPage(url: string): Promise<string | undefined> {
     const readmeElement = $("article.markdown-body");
     if (readmeElement.length > 0) {
       content = readmeElement.text().trim();
-    } else {
+    } else if (!requireReadme) {
       const aboutSection = $(".Box-body");
       if (aboutSection.length > 0) {
         content += `${aboutSection.text().trim()}\n\n`;
@@ -339,6 +341,7 @@ async function scrapeGithubPage(url: string): Promise<string | undefined> {
 
     return content ? content.replaceAll(/\s+/g, " ").trim() : undefined;
   } catch (error) {
+    throwIfRetryable(error, url, "github_page");
     logger.warn(
       `GitHub HTML-scrape fallback failed for ${url}: ${
         error instanceof Error ? error.message : String(error)
@@ -346,6 +349,149 @@ async function scrapeGithubPage(url: string): Promise<string | undefined> {
     );
     return undefined;
   }
+}
+
+/**
+ * Classifies a failed learner-URL fetch as transient or confirmed.
+ *
+ * `isFunctional: false` means "the grader read the URL and there is nothing
+ * gradeable there" — a hard zero the learner can act on. A rate limit, a read
+ * timeout, a reset connection or a 5xx means the opposite: the content may be
+ * perfectly good and we simply could not see it this time. Collapsing the two
+ * is what awarded zeros for links that succeeded minutes earlier, so anything
+ * transient is raised as a retryable error and left to the job's retry policy.
+ *
+ * DNS and connection-refused failures are treated as confirmed: a host that
+ * does not resolve will not resolve on a retry either, and retrying would turn
+ * a graded zero into a failed attempt.
+ */
+function classifyFetchFailure(error: unknown): {
+  retryable: boolean;
+  reason: string;
+  status?: number;
+  rateLimited: boolean;
+  headers?: Record<string, unknown>;
+} {
+  const response = (
+    error as {
+      response?: { status?: number; headers?: Record<string, unknown> };
+    }
+  )?.response;
+  const status =
+    typeof response?.status === "number" ? response.status : undefined;
+
+  if (
+    status !== undefined &&
+    isGithubRateLimitResponse(status, response?.headers)
+  ) {
+    return {
+      retryable: true,
+      reason: "rate_limited",
+      status,
+      rateLimited: true,
+      headers: response?.headers,
+    };
+  }
+  if (status === 429) {
+    return {
+      retryable: true,
+      reason: "rate_limited",
+      status,
+      rateLimited: true,
+      headers: response?.headers,
+    };
+  }
+  if (status !== undefined && status >= 500) {
+    return {
+      retryable: true,
+      reason: "server_error",
+      status,
+      rateLimited: false,
+    };
+  }
+  if (status !== undefined) {
+    return {
+      retryable: false,
+      reason: "http_error",
+      status,
+      rateLimited: false,
+    };
+  }
+
+  const rawCode = (error as { code?: unknown })?.code;
+  const code = typeof rawCode === "string" ? rawCode : undefined;
+  if (code && TRANSIENT_NETWORK_CODES.has(code)) {
+    return {
+      retryable: true,
+      reason:
+        code === "ECONNABORTED" || code === "ETIMEDOUT"
+          ? "timeout"
+          : "connection_reset",
+      rateLimited: false,
+    };
+  }
+  if (code && CONFIRMED_NETWORK_CODES.has(code)) {
+    return { retryable: false, reason: code, rateLimited: false };
+  }
+  return { retryable: false, reason: code ?? "unknown", rateLimited: false };
+}
+
+/** Codes that mean "try again", not "this URL has nothing to grade". */
+const TRANSIENT_NETWORK_CODES = new Set([
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "EPIPE",
+  "EAI_AGAIN",
+  "ERR_SOCKET_CONNECTION_TIMEOUT",
+]);
+
+/** Codes that will fail the same way on every retry. */
+const CONFIRMED_NETWORK_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_NONAME",
+  "ECONNREFUSED",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "CERT_HAS_EXPIRED",
+]);
+
+/**
+ * Turns a transient failure into the typed retryable error, or returns so the
+ * caller can report a confirmed miss as unreadable content.
+ */
+function throwIfRetryable(
+  error: unknown,
+  requestUrl: string,
+  logSuffix: string,
+): void {
+  const classification = classifyFetchFailure(error);
+  if (!classification.retryable) {
+    return;
+  }
+  if (classification.rateLimited) {
+    const { owner, repo } = extractOwnerRepoForLogging(requestUrl);
+    const { resetAt, retryAfterSeconds } = parseGithubRateLimitInfo(
+      classification.headers,
+    );
+    logger.warn(
+      `Rate limited while fetching learner URL content (${logSuffix}, resetAt=${resetAt ?? "unknown"})`,
+    );
+    throw new GithubRateLimitedError({
+      owner: owner ?? "unknown",
+      repo: repo ?? "unknown",
+      requestUrl,
+      resetAt,
+      retryAfterSeconds,
+    });
+  }
+  logger.warn(
+    `Transient failure fetching learner URL content (${logSuffix}, reason=${classification.reason}, status=${classification.status ?? "none"})`,
+  );
+  throw new RetryableUrlFetchError({
+    requestUrl,
+    reason: classification.reason,
+    status: classification.status,
+  });
 }
 
 async function fetchGithubBlobContent(
@@ -356,8 +502,22 @@ async function fetchGithubBlobContent(
     if (response.status === 200) {
       return { body: truncate(response.data), isFunctional: true };
     }
+    if (response.status >= 500) {
+      logger.warn(
+        `GitHub blob raw content returned ${response.status} for ${rawUrl}; treating as retryable`,
+      );
+      throw new RetryableUrlFetchError({
+        requestUrl: rawUrl,
+        reason: "server_error",
+        status: response.status,
+      });
+    }
     return { body: "", isFunctional: false };
   } catch (error) {
+    if (error instanceof RetryableUrlFetchError) {
+      throw error;
+    }
+    throwIfRetryable(error, rawUrl, `url=${rawUrl}`);
     logger.warn(
       `Failed to fetch GitHub blob raw content from ${rawUrl}: ${
         error instanceof Error ? error.message : String(error)
@@ -374,59 +534,57 @@ async function fetchGithubRepoRootContent(
   owner: string,
   repo: string,
 ): Promise<GithubFetchResult> {
-  let rateLimitError: GithubRateLimitedError | undefined;
+  let transientError: RetryableUrlFetchError | undefined;
   let defaultBranch: string | undefined;
 
   try {
     defaultBranch = await resolveGithubDefaultBranch(owner, repo);
   } catch (error) {
-    if (!(error instanceof GithubRateLimitedError)) {
-      throw error;
-    }
-    rateLimitError = error;
+    if (!(error instanceof RetryableUrlFetchError)) throw error;
+    transientError = error;
   }
 
   const candidateBranches = defaultBranch
     ? [defaultBranch]
     : ["main", "master"];
-
   for (const branch of candidateBranches) {
-    const body = await fetchReadmeForBranch(owner, repo, branch);
-    if (body) {
-      return { body, isFunctional: true };
+    try {
+      const body = await fetchReadmeForBranch(owner, repo, branch);
+      if (body) return { body, isFunctional: true };
+    } catch (error) {
+      if (!(error instanceof RetryableUrlFetchError)) throw error;
+      transientError ??= error;
     }
   }
 
-  if (rateLimitError) {
-    // Already know the api.github.com surface is exhausted — skip straight
-    // to the retryable failure instead of burning another call on the
-    // metadata fallback below. Rethrow the error caught above rather than
-    // constructing a new one, so resetAt/retryAfterSeconds (populated from
-    // the actual response headers) survive to the caller instead of coming
-    // back undefined.
-    throw rateLimitError;
+  // Preserve the provider's retry timing and avoid another call to an
+  // exhausted API. Raw README guesses above use a separate surface.
+  if (transientError instanceof GithubRateLimitedError) throw transientError;
+
+  // Metadata alone cannot replace a README we failed to read temporarily.
+  if (!transientError) {
+    try {
+      const summary = await fetchRepoMetadataSummary(owner, repo);
+      if (summary) return { body: summary, isFunctional: true };
+    } catch (error) {
+      if (error instanceof GithubRateLimitedError) throw error;
+      if (error instanceof RetryableUrlFetchError) transientError = error;
+      else
+        logger.warn(
+          `GitHub repository metadata fallback failed for ${owner}/${repo}`,
+        );
+    }
   }
 
   try {
-    const summary = await fetchRepoMetadataSummary(owner, repo);
-    if (summary) {
-      return { body: summary, isFunctional: true };
-    }
+    const scraped = await scrapeGithubPage(url, Boolean(transientError));
+    if (scraped) return { body: scraped, isFunctional: true };
   } catch (error) {
-    if (error instanceof GithubRateLimitedError) {
-      throw error;
-    }
-    logger.warn(
-      `GitHub repository metadata fallback failed for ${owner}/${repo}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    if (!(error instanceof RetryableUrlFetchError)) throw error;
+    transientError ??= error;
   }
-
-  const scraped = await scrapeGithubPage(url);
-  return scraped
-    ? { body: scraped, isFunctional: true }
-    : { body: "", isFunctional: false };
+  if (transientError) throw transientError;
+  return { body: "", isFunctional: false };
 }
 
 async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
@@ -437,6 +595,9 @@ async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
     const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
     return { body: plainText, isFunctional: true };
   } catch (error) {
+    // Same rule as the blob path: a timeout or a 5xx on a learner's own site
+    // is a retry, not evidence that the page has nothing on it.
+    throwIfRetryable(error, url, `url=${url}`);
     logger.warn(
       `Failed to fetch non-GitHub URL for grading: ${
         error instanceof Error ? error.message : String(error)
@@ -524,10 +685,14 @@ function buildLogContextSuffix(
  * the top-level entry and final outcome the caller needs for correlating a
  * grading failure back to an assignment/question.
  *
- * Throws GithubRateLimitedError when the api.github.com surface is
- * exhausted and no README guess landed — callers must NOT swallow this into
- * a 0-point "invalid URL" response; it is a retryable system failure, not a
- * problem with the learner's submission (see the error class doc comment).
+ * Throws a RetryableUrlFetchError (GithubRateLimitedError when a rate limit
+ * is the cause) whenever the failure is transient — an exhausted
+ * api.github.com budget with no README guess left, a read timeout, a reset
+ * connection, or a 5xx. Callers must NOT swallow these into a 0-point
+ * response; they are retryable system failures, not a problem with the
+ * learner's submission (see the error class doc comments). A confirmed miss
+ * — a 404/410, a host that does not resolve — still comes back as
+ * `isFunctional: false` so grading can award a zero with an explanation.
  */
 export async function fetchUrlContentForGrading(
   url: string,
@@ -549,7 +714,7 @@ export async function fetchUrlContentForGrading(
     }
     return result;
   } catch (error) {
-    // Re-thrown deliberately: GithubRateLimitedError (the only expected
+    // Re-thrown deliberately: a RetryableUrlFetchError (the only expected
     // throw here) must propagate to the caller as a retryable failure, not
     // be swallowed into a graded-0 outcome. This is the outcome log for that
     // path.

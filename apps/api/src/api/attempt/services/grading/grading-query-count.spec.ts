@@ -42,7 +42,7 @@ const buildMockPrisma = () => {
       findMany: jest.fn().mockResolvedValue(findManyResult),
     },
     translation: {
-      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     assignmentAttempt: {
       findUnique: jest.fn().mockResolvedValue({
@@ -234,11 +234,11 @@ describe("Grading per-job query-count regression", () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  it("issues Translation.findFirst calls at most once per (language, questionId, variantId) tuple", async () => {
+  it("issues Translation.findMany calls at most once per (language, questionId, variantId) tuple", async () => {
     const cache = newJobScopedCache();
     // Drive the spec across BOTH languages by running gradeQuestionsForLearner once per language
     // with the same cache (cache lifetime spans the whole job).
-    for (const lang of fixtureLanguages) {
+    for (const lang of [...fixtureLanguages, ...fixtureLanguages]) {
       const responsesForQuestions = fixtureQuestionIds.map((id) => ({
         id,
         learnerTextResponse: "answer",
@@ -255,16 +255,18 @@ describe("Grading per-job query-count regression", () => {
       );
     }
 
-    const calls = mockPrisma.translation.findFirst.mock.calls;
+    const calls = mockPrisma.translation.findMany.mock.calls;
     const tuples = new Set(
       calls.map((args: any[]) => {
         const where = args[0]?.where ?? {};
-        return `${where.languageCode ?? ""}:${where.questionId ?? ""}:${where.variantId ?? "null"}`;
+        return JSON.stringify(where);
       }),
     );
     // distinct tuples should match the call count (no repeats)
     expect(calls.length).toBe(tuples.size);
-    // upper bound: 2 languages x 10 questions x 3-step fallback chain = 60. Cache must keep us well under.
-    expect(calls.length).toBeLessThanOrEqual(2 * fixtureQuestionIds.length * 3);
+    // Every question/language is read once; the second pass must use cached misses.
+    expect(calls.length).toBe(
+      fixtureLanguages.length * fixtureQuestionIds.length,
+    );
   });
 });

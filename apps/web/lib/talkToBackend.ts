@@ -87,7 +87,6 @@ export const submitReportLearner = apiLearner.submitReportLearner;
 
 export const AuthorizeGithubBackend = apiGithub.authorizeGithubBackend;
 export const getStoredGithubToken = apiGithub.getStoredGithubToken;
-export const exchangeGithubCodeForToken = apiGithub.exchangeGithubCodeForToken;
 
 export const setApiVersion = (
   version: (typeof API_VERSIONS)[keyof typeof API_VERSIONS],

@@ -3,6 +3,8 @@ import { JobsOptions, Queue } from "bullmq";
 import { encryptJobPayload } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
 import { JobQueueService } from "./job-queue.service";
+import { ATTEMPT_RETRY_BACKOFF } from "./attempt-retry-backoff";
+import { JOB_QUEUE_NAMES } from "./job-queue.constants";
 
 jest.mock("./job-payload.crypto", () => ({
   encryptJobPayload: jest.fn(),
@@ -233,6 +235,47 @@ describe("JobQueueService", () => {
       expect(sample.avgSample).toEqual([
         { timestamp: 1000, processedOn: 1500, finishedOn: 3000 },
       ]);
+    });
+  });
+
+  describe("retry backoff on the attempt-grading queues", () => {
+    it("gives the attempt queues a backoff the worker resolves per failure", async () => {
+      await service.enqueue(JOB_QUEUE_NAMES.ATTEMPT, "attempt.grade", {
+        id: 1,
+      });
+      await service.enqueue(JOB_QUEUE_NAMES.ATTEMPT_HEAVY, "attempt.grade", {
+        id: 2,
+      });
+
+      for (const queueName of [
+        JOB_QUEUE_NAMES.ATTEMPT,
+        JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+      ]) {
+        expect(Queue).toHaveBeenCalledWith(queueName, {
+          connection: mockConnection,
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: ATTEMPT_RETRY_BACKOFF,
+            removeOnComplete: { count: 100 },
+            removeOnFail: { count: 100 },
+          },
+        });
+      }
+    });
+
+    it("leaves every other queue on the immediate retry it had", async () => {
+      await service.enqueue(JOB_QUEUE_NAMES.ASSIGNMENT_V2, "publish", {
+        id: 3,
+      });
+
+      expect(Queue).toHaveBeenCalledWith(JOB_QUEUE_NAMES.ASSIGNMENT_V2, {
+        connection: mockConnection,
+        defaultJobOptions: {
+          attempts: 3,
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 100 },
+        },
+      });
     });
   });
 });

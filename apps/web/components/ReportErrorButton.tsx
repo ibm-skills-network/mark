@@ -7,6 +7,7 @@ import type { User } from "@/config/types";
 import {
   buildErrorReportPrefills,
   submitBugReport,
+  CLIENT_NETWORK_REPORT_CATEGORY,
   type BugReportSubmission,
   type ErrorReportContext,
 } from "@/lib/report-client";
@@ -62,11 +63,17 @@ export default function ReportErrorButton({
     async (action: string, value?: BugReportSubmission) => {
       if (action !== "submit" || !value) return;
       await submitBugReport(value, {
-        category: "Error Dialog Report",
+        // A failure that never reached our servers is filed under its own
+        // category so triage can separate connection problems from outages
+        // instead of chasing a status the server never sent.
+        category:
+          error.fault === "client-network"
+            ? CLIENT_NETWORK_REPORT_CATEGORY
+            : "Error Dialog Report",
         user,
       });
     },
-    [user],
+    [user, error.fault],
   );
 
   return (

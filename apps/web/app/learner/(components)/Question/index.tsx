@@ -1,6 +1,10 @@
 "use client";
 
 import animationData from "@/animations/LoadSN.json";
+import {
+  deriveServerTimeOffsetMs,
+  getAttemptStartedAtMs,
+} from "@/app/learner/utils/attempts";
 import Loading from "@/components/Loading";
 import type {
   Assignment,
@@ -12,14 +16,19 @@ import { QuestionDisplayType } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
 import { parseLearnerResponse, useDebugLog } from "@/lib/utils";
-import { useAppConfig } from "@/stores/appConfig";
+import { applyTipsSessionDismissal, useAppConfig } from "@/stores/appConfig";
 import {
   type learnerFileResponse,
   useAssignmentDetails,
   useLearnerStore,
 } from "@/stores/learner";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from "react";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
@@ -294,7 +303,13 @@ const shouldUpdateAssignmentDetails = (
 
 function QuestionPage(props: Props) {
   const { attempt, assignmentId, isNewAttempt } = props;
-  const { questions, id, expiresAt } = attempt;
+  const {
+    questions,
+    id,
+    expiresAt,
+    serverNow: attemptServerNow,
+    createdAt: attemptCreatedAt,
+  } = attempt;
   const debugLog = useDebugLog();
   const router = useRouter();
   const questionsStore = useLearnerStore((state) => state.questions);
@@ -309,6 +324,12 @@ function QuestionPage(props: Props) {
   >("loading");
   const tips = useAppConfig((state) => state.tips);
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
+  // The attempt whose server-clock offset has already been recorded.
+  const clockCaptureRef = useRef<number | null>(null);
+  const clockSampleRef = useRef<{
+    id: number;
+    offset: number | undefined;
+  } | null>(null);
 
   useEffect(() => {
     if (isNewAttempt) {
@@ -318,10 +339,24 @@ function QuestionPage(props: Props) {
 
   useEffect(() => {
     setTipsVersion("v1.0");
+    // Only after mount: the dismissal lives in sessionStorage, which the
+    // server cannot see, so folding it into the first render would make the
+    // client disagree with the server HTML and repaint the whole grid.
+    applyTipsSessionDismissal();
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Sample at receipt, before the assignment request can add latency.
+    if (clockSampleRef.current?.id !== id) {
+      clockSampleRef.current = {
+        id,
+        offset: deriveServerTimeOffsetMs(attemptServerNow),
+      };
+    }
+    const serverTimeOffsetMs = clockSampleRef.current.offset;
+    const attemptStartedAt = getAttemptStartedAtMs(attemptCreatedAt);
 
     const hydratePage = async () => {
       let nextAssignmentDetails = buildAssignmentDetailsFromAttempt(attempt);
@@ -339,8 +374,16 @@ function QuestionPage(props: Props) {
         return;
       }
 
+      // Read the stored details at the moment of the comparison rather than
+      // closing over them: when `assignmentDetails` was a dependency of this
+      // effect, storing what the effect had just fetched re-ran the effect,
+      // and the second pass issued the same assignment GET again — half a
+      // megabyte paid twice on a large assignment, every page load.
       if (
-        shouldUpdateAssignmentDetails(assignmentDetails, nextAssignmentDetails)
+        shouldUpdateAssignmentDetails(
+          useAssignmentDetails.getState().assignmentDetails,
+          nextAssignmentDetails,
+        )
       ) {
         setAssignmentDetails(nextAssignmentDetails);
       }
@@ -364,19 +407,31 @@ function QuestionPage(props: Props) {
           ? expiresAtMs
           : undefined;
 
-      debugLog("attemptId, expiresAt", id, normalizedExpiresAt);
+      debugLog(
+        "attemptId, expiresAt, serverTimeOffsetMs",
+        id,
+        normalizedExpiresAt,
+        serverTimeOffsetMs,
+      );
 
       setQuestions(questionsWithStatus);
 
       const currentStoreUpdate = {
         activeAttemptId: id,
         expiresAt: normalizedExpiresAt,
+        serverTimeOffsetMs,
+        attemptStartedAt,
       };
 
+      const storeState = useLearnerStore.getState();
       const hasOtherChanges =
-        id !== useLearnerStore.getState().activeAttemptId ||
-        normalizedExpiresAt !== useLearnerStore.getState().expiresAt;
+        clockCaptureRef.current !== id ||
+        id !== storeState.activeAttemptId ||
+        normalizedExpiresAt !== storeState.expiresAt;
       if (hasOtherChanges) {
+        // One reading per attempt: re-measuring on every render would let a
+        // later, noisier sample overwrite the one taken closest to the fetch.
+        clockCaptureRef.current = id;
         setLearnerStore(currentStoreUpdate);
       }
       if (questions.length) {
@@ -394,10 +449,11 @@ function QuestionPage(props: Props) {
   }, [
     attempt,
     assignmentId,
-    assignmentDetails,
     questions,
     id,
     expiresAt,
+    attemptServerNow,
+    attemptCreatedAt,
     setQuestions,
     setLearnerStore,
     setAssignmentDetails,
@@ -432,7 +488,9 @@ function QuestionPage(props: Props) {
       )}
       <div
         className={cn(
-          "bg-gray-50 dark:bg-gray-900 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
+          // relative so the small-viewport tips sheet can cover the question
+          // area without covering the header and its submit button.
+          "relative bg-gray-50 dark:bg-gray-900 flex-grow min-h-0 flex flex-col md:grid gap-2 md:gap-4",
           tips ? "md:grid-cols-[260px_1fr_265px]" : "md:grid-cols-[260px_1fr]",
         )}
       >

@@ -6,12 +6,14 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from "class-validator";
 import {
   LearnerFileUpload,
   RepoType,
 } from "src/api/attempt/common/interfaces/attempt.interface";
+import { MAX_LEARNER_URL_LENGTH } from "src/api/attempt/common/utils/learner-url.util";
 import { LearnerPresentationResponse } from "../assignment-attempt/types";
 
 // Define supporting classes first to avoid circular dependency issues
@@ -159,6 +161,12 @@ export class CreateQuestionResponseAttemptRequestDto {
     type: String,
   })
   @IsOptional()
+  // Shape and size only. A stricter URL rule here would reject at the HTTP
+  // boundary what the grader reads perfectly well once normalized (a pasted
+  // trailing space, a missing scheme), turning a gradeable answer into a 400;
+  // normalization and the parse check live in the shared learner-url helper.
+  @IsString()
+  @MaxLength(MAX_LEARNER_URL_LENGTH)
   learnerUrlResponse: string;
 
   @ApiPropertyOptional({

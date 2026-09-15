@@ -183,27 +183,66 @@ function LearnerHeader() {
     };
   }, [assignmentId]);
 
+  // Reconcile content once per assignment/attempt/language. Reading the question
+  // list from the store avoids restarting a pending request on every keystroke.
+  const reconciledLanguageRef = useRef<string | null>(null);
+  const questionCount = questions.length;
+  useEffect(() => {
+    if (!isInQuestionPage || !assignmentId || !activeAttemptId) return;
+    if (!userPreferedLanguage || questionCount === 0) return;
+    const key = `${assignmentId}:${activeAttemptId}:${userPreferedLanguage}`;
+    if (reconciledLanguageRef.current === key) return;
+    if (
+      useLearnerStore
+        .getState()
+        .questions.some(
+          (question) => question.translations?.[userPreferedLanguage],
+        )
+    )
+      return;
+
+    reconciledLanguageRef.current = key;
+    let cancelled = false;
+    void getAttempt(
+      assignmentId,
+      activeAttemptId,
+      undefined,
+      userPreferedLanguage,
+    )
+      .then((attempt) => {
+        const current = useLearnerStore.getState();
+        if (
+          !cancelled &&
+          current.activeAttemptId === activeAttemptId &&
+          current.userPreferedLanguage === userPreferedLanguage &&
+          attempt?.questions?.length
+        ) {
+          setQuestions(attempt.questions);
+        }
+      })
+      .catch(() => {
+        // The learner can retry by switching language or reopening the attempt.
+        // Preserve their current content and drafts on a failed read.
+      });
+    return () => {
+      cancelled = true;
+      if (reconciledLanguageRef.current === key) {
+        reconciledLanguageRef.current = null;
+      }
+    };
+  }, [
+    isInQuestionPage,
+    assignmentId,
+    activeAttemptId,
+    userPreferedLanguage,
+    questionCount,
+    setQuestions,
+  ]);
+
   const handleChangeLanguage = (selectedLanguage: string) => {
     if (!selectedLanguage) return;
     if (selectedLanguage !== userPreferedLanguage) {
       setUserPreferedLanguage(selectedLanguage);
-
-      // The attempt payload only carries the language it was fetched with, so
-      // an in-page switch pulls the new language's translations and merges
-      // them over the store (setQuestions keeps draft answers). Until the
-      // fetch lands the UI falls back to the server-translated question text.
-      if (isInQuestionPage && assignmentId && activeAttemptId) {
-        void getAttempt(
-          assignmentId,
-          activeAttemptId,
-          undefined,
-          selectedLanguage,
-        ).then((attempt) => {
-          if (attempt?.questions?.length) {
-            setQuestions(attempt.questions);
-          }
-        });
-      }
     }
 
     if (!isInQuestionPage && !isAttemptPage && !isSuccessPage) {
@@ -215,6 +254,23 @@ function LearnerHeader() {
   };
 
   const CheckNoFlaggedQuestions = useCallback(() => {
+    // The header's Submit button is disabled on this status, but the in-page
+    // submit control reaches this handler through a window event and has no
+    // such button state to disable. Re-checking here makes this the one gate
+    // every submission passes, so an upload still in flight (or a half-filled
+    // attempt) cannot be posted from the page body.
+    const submitStatus = getSubmitButtonStatus(
+      questions,
+      submitting,
+      isUploadingFiles,
+      assignmentDetails?.requireAllQuestions,
+      assignmentDetails?.optionalQuestionIds,
+    );
+    if (submitStatus.disabled) {
+      toast.error(submitStatus.reason);
+      return;
+    }
+
     const optionalQuestionSet = new Set(
       assignmentDetails?.optionalQuestionIds ?? [],
     );
@@ -246,7 +302,7 @@ function LearnerHeader() {
         setToggleWarning(true);
       }
     }
-  }, [questions, assignmentDetails]);
+  }, [questions, assignmentDetails, submitting, isUploadingFiles]);
 
   const handleCloseModal = () => {
     setToggleWarning(false);
@@ -520,6 +576,16 @@ function LearnerHeader() {
 
     setStoredUiLanguage(userPreferedLanguage);
 
+    // Storing the language above is what actually switches the UI: the
+    // translator reads storage and the change event, not the URL. So the
+    // routes that must not be re-navigated stop here, the way the sibling
+    // `lang` sync already does. Replacing the URL of an attempt route re-runs
+    // its server component, which is where an attempt gets created — that is
+    // how a language change used to land a learner on a fresh attempt.
+    if (isInQuestionPage || isAttemptPage || isSuccessPage) {
+      return;
+    }
+
     const currentUiLanguage = searchParams.get("uiLang") || DEFAULT_UI_LANGUAGE;
     if (currentUiLanguage === userPreferedLanguage) {
       return;
@@ -534,7 +600,15 @@ function LearnerHeader() {
 
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, undefined);
-  }, [pathname, router, searchParams, userPreferedLanguage]);
+  }, [
+    isInQuestionPage,
+    isAttemptPage,
+    isSuccessPage,
+    pathname,
+    router,
+    searchParams,
+    userPreferedLanguage,
+  ]);
 
   useEffect(() => {
     const handleSubmitEvent = () => {
@@ -553,22 +627,34 @@ function LearnerHeader() {
 
   return (
     <>
-      <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 w-full px-4 sm:px-6 py-4 sm:py-6 min-h-[80px] sm:h-[100px]">
-        <div className="flex flex-col gap-3 sm:hidden">
-          <div className="flex items-center gap-3">
+      {/* Two layouts, picked by width. The single row needs ~960px of
+          min-content (an untruncated assignment name, five nowrap controls),
+          so it only runs from `lg` up; every narrower viewport — a phone, and
+          a desktop browser inside a narrow course-player iframe — gets the
+          stacked layout, which wraps. The route root is overflow-hidden, so a
+          row that does not fit is clipped away rather than scrolled to. */}
+      <header className="border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 w-full px-4 sm:px-6 py-4 lg:py-6 min-h-[80px] lg:h-[100px]">
+        <div
+          data-testid="learner-header-compact"
+          className="flex flex-col gap-3 lg:hidden"
+        >
+          <div className="flex items-center gap-3 min-w-0">
             <SNIcon />
-            <Title className="text-base font-semibold truncate flex-1">
+            <Title className="text-base font-semibold truncate flex-1 min-w-0">
               {assignmentDetails?.name || "Untitled Assignment"}
             </Title>
           </div>
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-1">
+          <div
+            data-testid="learner-header-compact-controls"
+            className="flex flex-wrap items-center justify-between gap-2"
+          >
+            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
               <ThemeToggle />
               {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
                 <>
                   {languages.length > 1 ? (
-                    <div className="flex-1 max-w-[180px]">
+                    <div className="flex-1 min-w-[96px] max-w-[180px]">
                       <Dropdown
                         items={languages.map((lang) => ({
                           label: getLanguageName(lang),
@@ -601,7 +687,12 @@ function LearnerHeader() {
             </div>
 
             {isInQuestionPage ? (
-              <div className="relative group">
+              // Secondary controls wrap away first; the submit control never
+              // shrinks and never wraps out of reach.
+              <div
+                data-testid="learner-header-compact-submit"
+                className="relative group shrink-0"
+              >
                 <Button
                   disabled={buttonStatus.disabled}
                   className="disabled:opacity-70 btn-secondary text-sm px-4 py-2"
@@ -635,17 +726,25 @@ function LearnerHeader() {
           ) : null}
         </div>
 
-        <div className="hidden sm:flex justify-between items-center h-full">
-          <div className="flex">
-            <div className="flex justify-center gap-x-6 items-center">
+        <div
+          data-testid="learner-header-wide"
+          className="hidden lg:flex justify-between items-center gap-x-4 h-full"
+        >
+          <div data-testid="learner-header-wide-title" className="flex min-w-0">
+            <div className="flex justify-center gap-x-6 items-center min-w-0">
               <SNIcon />
-              <Title className="text-lg font-semibold">
+              {/* A flex item's automatic minimum size is its content, so an
+                  untruncated name pushed the controls past the right edge. */}
+              <Title className="text-lg font-semibold truncate">
                 {assignmentDetails?.name || "Untitled Assignment"}
               </Title>
             </div>
           </div>
 
-          <div className="flex items-center gap-x-4">
+          <div
+            data-testid="learner-header-wide-controls"
+            className="flex items-center gap-x-4 shrink-0"
+          >
             <ThemeToggle />
             {!isSuccessPage && (role === "learner" || isAuthorPreview) && (
               <>

@@ -1,5 +1,6 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
+import { isLearnerUrlSubmittable } from "@/lib/url-response";
 import { type ClassValue, clsx } from "clsx";
 import { useCallback } from "react";
 import { twMerge } from "tailwind-merge";
@@ -73,6 +74,14 @@ export function mergeData<T extends DataWithUpdatedAt>(
   return backendData;
 }
 
+/**
+ * Reloads the current page. Wrapped so retry actions can be exercised in
+ * tests — jsdom's `location.reload` is read-only and cannot be spied on.
+ */
+export const reloadPage = () => {
+  globalThis.location.reload();
+};
+
 export const useDebugLog = () => {
   const debugMode = process.env.NODE_ENV === "development";
 
@@ -124,19 +133,6 @@ function isValidJSON(str: string): boolean {
   }
 }
 
-const validateURL = (str: string) => {
-  const pattern = new RegExp(
-    "^(https?:\\/\\/)?" +
-      "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" +
-      "((\\d{1,3}\\.){3}\\d{1,3}))" +
-      "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" +
-      "(\\?[;&a-z\\d%_.~+=-]*)?" +
-      "(\\#[-a-z\\d_]*)?$",
-    "i",
-  );
-  return pattern.test(str);
-};
-
 const hasPresentationResponse = (
   response?: QuestionStore["presentationResponse"],
 ): boolean => {
@@ -176,8 +172,10 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter((q) => {
     const text = q.learnerTextResponse?.trim() ?? "";
     const hasText = text.length > 0 && q.learnerTextResponse !== "<p><br></p>";
-    const urlResponse = q.learnerUrlResponse?.trim();
-    const hasValidUrl = urlResponse ? validateURL(urlResponse) : false;
+    // Presence, not validity: a link the learner typed is an answer even when
+    // it does not parse. Treating it as unanswered used to trip the
+    // "you have unanswered questions" modal on a question they had filled in.
+    const hasUrl = Boolean(q.learnerUrlResponse?.trim());
     const hasChoices = (q.learnerChoices?.length ?? 0) > 0;
     const hasAnswerChoice =
       q.learnerAnswerChoice !== null && q.learnerAnswerChoice !== undefined;
@@ -188,7 +186,7 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
 
     return (
       hasText ||
-      hasValidUrl ||
+      hasUrl ||
       hasChoices ||
       hasAnswerChoice ||
       hasFiles ||
@@ -196,13 +194,21 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
     );
   });
 
+/**
+ * Discriminated so a blocked submission always carries the reason to show the
+ * learner; callers that gate on `disabled` get the message without a fallback.
+ */
+export type SubmitButtonStatus =
+  | { disabled: true; reason: string }
+  | { disabled: false; reason: null };
+
 export const getSubmitButtonStatus = (
   questions: QuestionStore[],
   submitting: boolean,
   isUploadingFiles?: boolean,
   requireAllQuestions?: boolean,
   optionalQuestionIds?: number[],
-) => {
+): SubmitButtonStatus => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
   }
@@ -217,14 +223,25 @@ export const getSubmitButtonStatus = (
     return { disabled: true, reason: "No questions have been answered" };
   }
 
-  const questionsWithInvalidUrls = questionsWithResponses.filter(
-    (q) => q.learnerUrlResponse && !validateURL(q.learnerUrlResponse),
-  );
+  // Only a value that cannot become a web address at all blocks submitting.
+  // A pasted trailing space or a missing scheme is normalized by the shared
+  // helper on both sides, so those submit and grade normally.
+  const invalidUrlPositions = questions
+    .map((question, index) => ({ question, position: index + 1 }))
+    .filter(
+      ({ question }) =>
+        Boolean(question.learnerUrlResponse?.trim()) &&
+        !isLearnerUrlSubmittable(question.learnerUrlResponse),
+    )
+    .map(({ position }) => position);
 
-  if (questionsWithInvalidUrls.length > 0) {
+  if (invalidUrlPositions.length > 0) {
+    const plural = invalidUrlPositions.length > 1;
     return {
       disabled: true,
-      reason: `${questionsWithInvalidUrls.length} question${questionsWithInvalidUrls.length > 1 ? "s have" : " has"} invalid URL${questionsWithInvalidUrls.length > 1 ? "s" : ""}`,
+      reason: `Check the link on question ${invalidUrlPositions.join(", ")} — ${
+        plural ? "they don't" : "it doesn't"
+      } look like a web address yet`,
     };
   }
 

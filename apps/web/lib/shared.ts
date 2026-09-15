@@ -3,6 +3,7 @@ import { authorSessionHeaders } from "./author-session";
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import { apiClient, APIError } from "./api-client";
+import { withTransientRetry } from "./api-retry";
 import {
   DIRECT_UPLOAD_FALLBACK_MAX_BYTES,
   failureKindOf,
@@ -2043,17 +2044,31 @@ export async function getAssignment(
   id: number,
   userPreferedLanguage?: string,
   cookies?: string,
+  options?: {
+    /**
+     * Suppresses the default error toast. Only for callers that render the
+     * failure themselves — without it a hard failure is silent.
+     */
+    quiet?: boolean;
+  },
 ): Promise<Assignment> {
   const url = userPreferedLanguage
     ? `${getApiRoutes().assignments}/${id}?lang=${userPreferedLanguage}`
     : `${getApiRoutes().assignments}/${id}`;
 
-  const responseBody = (await apiClient.get(url, {
-    headers: {
-      "Cache-Control": "no-cache",
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  })) as GetAssignmentResponse & BaseBackendResponse;
+  // The assignment is the one fetch the learner's About page cannot render
+  // without, so a single dropped socket used to go straight to an error
+  // dialog. Retried once like every other learner fetch (getAttempt,
+  // getAttempts).
+  const responseBody = (await withTransientRetry(() =>
+    apiClient.get(url, {
+      quiet: options?.quiet ?? false,
+      headers: {
+        "Cache-Control": "no-cache",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    }),
+  )) as GetAssignmentResponse & BaseBackendResponse;
 
   const { success: _success, ...remainingData } = responseBody;
 

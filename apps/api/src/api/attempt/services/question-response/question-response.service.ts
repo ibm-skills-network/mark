@@ -33,17 +33,23 @@ import {
   convertGitHubUrlToRaw,
   fetchUrlContentForGrading,
 } from "src/api/attempt/common/utils/github-content-fetch.util";
+import { normalizeLearnerUrl } from "src/api/attempt/common/utils/learner-url.util";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
-import { GithubRateLimitedError } from "../../../llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "../../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
+import {
+  applyQuestionTranslation,
+  findQuestionTranslation,
+} from "../../common/utils/translation-language.util";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import {
+  buildTranslationCacheKey,
   newJobScopedCache,
   type JobScopedCache,
 } from "../grading/job-scoped-cache";
@@ -324,6 +330,7 @@ export class QuestionResponseService {
                 preTranslatedQuestions,
                 tx as PrismaTransactionalClient,
                 effectiveCache,
+                language,
               );
               return question;
             }),
@@ -596,6 +603,8 @@ export class QuestionResponseService {
                   assignmentId,
                   preTranslatedQuestions,
                   tx as PrismaTransactionalClient,
+                  undefined,
+                  language,
                 );
                 return question;
               } else if (role === UserRole.AUTHOR) {
@@ -815,6 +824,8 @@ export class QuestionResponseService {
         assignmentId,
         preTranslatedQuestions,
         tx,
+        undefined,
+        language,
       ));
     } else if (role === UserRole.AUTHOR) {
       ({ question, assignmentContext } = this.getAuthorQuestion(
@@ -891,6 +902,7 @@ export class QuestionResponseService {
       language,
       userRole: role,
       userId,
+      attemptId: assignmentAttemptId,
       metadata: {
         attemptId: assignmentAttemptId,
         questionType: question.type,
@@ -1006,11 +1018,11 @@ export class QuestionResponseService {
         throw error;
       }
 
-      // Same reasoning as above: a rate-limited GitHub fetch is a transient
-      // system fault the caller must be able to retry, not a 400. Wrapping
-      // it here would erase the class identity the retry classification
-      // depends on.
-      if (error instanceof GithubRateLimitedError) {
+      // Same reasoning as above: a rate-limited or otherwise transient URL
+      // fetch is a system fault the caller must be able to retry, not a 400.
+      // Wrapping it here would erase the class identity the retry
+      // classification depends on.
+      if (error instanceof RetryableUrlFetchError) {
         throw error;
       }
 
@@ -1051,7 +1063,13 @@ export class QuestionResponseService {
       const urlGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.URL,
       );
-      const url = requestDto.learnerUrlResponse;
+      // Normalize first: the blob-to-raw rewrite below only recognises a
+      // fully-qualified https://github.com/... URL, so a link the learner
+      // pasted without a scheme would otherwise skip it entirely.
+      const url =
+        normalizeLearnerUrl(requestDto.learnerUrlResponse) ||
+        requestDto.learnerUrlResponse;
+      requestDto.learnerUrlResponse = url;
       const rawUrl = convertGitHubUrlToRaw(url);
       if (rawUrl) {
         requestDto.learnerUrlResponse = rawUrl;
@@ -1230,6 +1248,7 @@ export class QuestionResponseService {
     preTranslatedQuestions?: Map<number, QuestionDto>,
     tx?: PrismaTransactionalClient,
     cache?: JobScopedCache,
+    language?: string,
   ): Promise<{
     question: QuestionDto;
     assignmentContext: {
@@ -1303,6 +1322,23 @@ export class QuestionResponseService {
       };
     } else {
       question = await this.questionService.findOne(questionId, tx, cache);
+    }
+
+    if (language && language !== "en") {
+      const variantId = variantMapping?.questionVariant?.id ?? null;
+      const key = buildTranslationCacheKey(language, questionId, variantId);
+      let translation = cache?.translations.get(key);
+      if (!cache?.translations.has(key)) {
+        translation =
+          (await findQuestionTranslation(
+            prisma,
+            questionId,
+            variantId,
+            language,
+          )) ?? null;
+        cache?.translations.set(key, translation);
+      }
+      question = applyQuestionTranslation(question, translation);
     }
 
     const assignmentContext = await this.getAssignmentContext(
