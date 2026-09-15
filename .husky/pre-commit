@@ -1,3 +1,5 @@
+set -e
+
 echo "Checking lti-sync-drain script sync..."
 scripts/check-drain-script-sync.sh
 
@@ -9,3 +11,25 @@ yarn build
 
 echo "Running lint-staged..."
 npx lint-staged
+
+# Runs after lint-staged so it scans the content that will actually be committed,
+# not the pre-format version.
+if ! command -v detect-secrets-hook > /dev/null 2>&1; then
+  echo "ERROR: detect-secrets is not installed, so staged files were not scanned for secrets."
+  echo "Install it with:"
+  echo '  pip install --upgrade "git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets"'
+  echo "Already installed? Your git client's PATH is probably missing pip's bin dir (often ~/.local/bin)."
+  exit 1
+fi
+
+# ACM skips deletions: a deleted path is still staged, and the hook errors on a file that is gone.
+# NUL-delimited so paths containing spaces survive the pipe.
+staged_for_scan=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$staged_for_scan" ]; then
+  # --fail-on-unaudited blocks the commit whenever any baseline entry has no verdict,
+  # including entries in files this commit does not touch. That is what keeps the
+  # baseline an audit record: you cannot park a finding in it and move on.
+  printf '%s\n' "$staged_for_scan" | tr '\n' '\0' \
+    | xargs -0 detect-secrets-hook --no-version-check --baseline .secrets.baseline \
+        --use-all-plugins --fail-on-unaudited
+fi
