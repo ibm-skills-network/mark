@@ -40,18 +40,19 @@ export class GithubOauthStateService {
     return this.keySource().length > 0;
   }
 
-  issue(userId: string, assignmentId: number): string {
+  issue(userId: string, assignmentId: number, returnUrl?: string): string {
     const payload = [
       randomBytes(12).toString("base64url"),
       String(assignmentId),
       String(Date.now() + STATE_TTL_MS),
+      ...(returnUrl ? [Buffer.from(returnUrl).toString("base64url")] : []),
     ].join("~");
     const encoded = Buffer.from(payload).toString("base64url");
     return `${encoded}.${this.sign(encoded, userId)}`;
   }
 
   verify(state: string | undefined, userId: string): boolean {
-    if (!state || !userId || !this.isConfigured()) {
+    if (!state || state.length > 4096 || !userId || !this.isConfigured()) {
       return false;
     }
 
@@ -67,12 +68,22 @@ export class GithubOauthStateService {
     }
 
     const parts = Buffer.from(encoded, "base64url").toString("utf8").split("~");
-    if (parts.length !== 3) {
+    if (parts.length !== 3 && parts.length !== 4) {
       return false;
     }
 
     const expiresAt = Number(parts[2]);
     return Number.isFinite(expiresAt) && expiresAt > Date.now();
+  }
+
+  /** Read a return destination only after checking its signature and lifetime. */
+  returnUrl(state: string | undefined, userId: string): string | undefined {
+    if (!this.verify(state, userId)) return undefined;
+    const encoded = state.slice(0, state.lastIndexOf("."));
+    const parts = Buffer.from(encoded, "base64url").toString("utf8").split("~");
+    return parts.length === 4
+      ? Buffer.from(parts[3], "base64url").toString("utf8")
+      : undefined;
   }
 
   /**

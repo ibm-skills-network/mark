@@ -13,6 +13,7 @@ import { Throttle } from "@nestjs/throttler";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import {
   GithubOauthCallbackDto,
+  GithubOauthCompleteDto,
   GithubOauthUrlDto,
 } from "./dto/github-oauth.dto";
 import { UserThrottlerGuard } from "../files/guards/user-throttler.guard";
@@ -88,6 +89,24 @@ export class GithubController {
       token,
       message: "GitHub authentication successful",
     };
+  }
+
+  @Post("oauth-complete")
+  @UseGuards(UserThrottlerGuard)
+  @Throttle(OAUTH_RATE_LIMIT)
+  async completeOAuth(
+    @Body() body: GithubOauthCompleteDto,
+    @Req() request: UserSessionRequest,
+  ): Promise<{ returnPath: string }> {
+    const userId = request.userSession?.userId;
+    if (!userId)
+      throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
+    return this.githubService.completeOAuth(
+      userId,
+      body.state,
+      body.code,
+      body.error,
+    );
   }
 
   @Get("github_token")
