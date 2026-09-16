@@ -81,6 +81,7 @@ import {
   GradedItem,
   QuestionResponseService,
 } from "./question-response/question-response.service";
+import { hasRichTextContent } from "rich-text";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
 
@@ -1678,9 +1679,7 @@ export class AttemptSubmissionService {
     if (!response) {
       return false;
     }
-    const text = response.learnerTextResponse?.trim() ?? "";
-    const hasText =
-      text.length > 0 && response.learnerTextResponse !== "<p><br></p>";
+    const hasText = hasRichTextContent(response.learnerTextResponse);
     const hasUrl = Boolean(response.learnerUrlResponse?.trim());
     const hasChoices = (response.learnerChoices?.length ?? 0) > 0;
     const hasAnswerChoice =

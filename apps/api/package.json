@@ -38,6 +38,7 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "rich-text": "*",
     "@ai-sdk/openai": "^2.0.0",
     "@aws-sdk/client-s3": "^3.994.0",
     "@aws-sdk/s3-request-presigner": "^3.994.0",

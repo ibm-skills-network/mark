@@ -16,6 +16,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { hasRichTextContent, isRichTextEmpty } from "rich-text";
 import { useAssignmentConfig } from "../../../../stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "../../../../stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "../../../../stores/author";
@@ -1651,17 +1652,9 @@ function Component() {
             content={introduction}
             link={`/author/${activeAssignmentId}`}
             hasChanges={changes.introduction}
-            isValid={
-              !!introduction &&
-              introduction.trim() !== "" &&
-              introduction.trim() !== "<p><br></p>"
-            }
+            isValid={hasRichTextContent(introduction)}
             errorMessage={
-              !introduction ||
-              introduction.trim() === "" ||
-              introduction.trim() === "<p><br></p>"
-                ? "Introduction is required"
-                : ""
+              isRichTextEmpty(introduction) ? "Introduction is required" : ""
             }
           />
 

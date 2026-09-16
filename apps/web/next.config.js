@@ -21,6 +21,9 @@ if (
 }
 const nextConfig = {
   reactStrictMode: true,
+  // Workspace package shipped as TypeScript source; Next has to compile it
+  // rather than treating it as a prebuilt node_module.
+  transpilePackages: ["rich-text"],
   compiler: {
     styledComponents: true,
   },
