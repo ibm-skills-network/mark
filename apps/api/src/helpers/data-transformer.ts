@@ -204,7 +204,7 @@ function transformDataRecursive(
               transformedFields.push(childPath);
               return operation === "encode"
                 ? encodeValue(item)
-                : decodeValue(item);
+                : decodeValue(item, false);
             }
             if (item && typeof item === "object") {
               return transformDataRecursive(
@@ -330,21 +330,37 @@ function encodeValue(value: unknown): string {
 }
 
 /**
- * Decode a single value with automatic type detection
+ * Text that decoded to structured JSON came from an object or array the
+ * encoder stringified. A primitive did not: the encoder only ever stringifies
+ * non-strings inside configured text fields, so "1.620", "true" or a sentence
+ * the author wrapped in quotation marks is the text itself. Reading those as
+ * JSON changes the text (1.62, true, quotes stripped), and choice answers are
+ * graded by matching text.
  */
-function decodeValue(value: unknown): unknown {
+function parseStructuredOrKeepText(text: string, allowStructured: boolean) {
+  if (!allowStructured) return text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === "object" ? parsed : text;
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Decode a single value. Array items are only ever encoded from strings, so
+ * callers pass `allowStructured = false` for them.
+ */
+export function decodeValue(value: unknown, allowStructured = true): unknown {
   if (!value || typeof value !== "string") return value;
 
   if (value.startsWith("comp:")) {
     try {
-      const base64Data = value.slice(5);
-      const decoded = Buffer.from(base64Data, "base64").toString("utf8");
-      const fullyDecoded = decodeBase64Layers(decoded);
-      try {
-        return JSON.parse(fullyDecoded);
-      } catch {
-        return fullyDecoded;
-      }
+      const decoded = Buffer.from(value.slice(5), "base64").toString("utf8");
+      return parseStructuredOrKeepText(
+        decodeBase64Layers(decoded),
+        allowStructured,
+      );
     } catch {
       return value;
     }
@@ -355,11 +371,7 @@ function decodeValue(value: unknown): unknown {
     return value;
   }
 
-  try {
-    return JSON.parse(fullyDecoded);
-  } catch {
-    return fullyDecoded;
-  }
+  return parseStructuredOrKeepText(fullyDecoded, allowStructured);
 }
 
 /**
