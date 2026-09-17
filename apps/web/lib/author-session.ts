@@ -27,3 +27,19 @@ export function authorSessionHeaders(
       : {}),
   };
 }
+
+/**
+ * Results path for an attempt. An author preview must stay marked as one:
+ * the gateway picks the session by this context, so a results page without
+ * `authorMode` asks for a learner session the author never had.
+ */
+export function learnerSuccessPath(
+  assignmentId: number | string,
+  attemptId: number | string,
+): string {
+  const path = `/learner/${assignmentId}/successPage/${attemptId}`;
+  const isAuthorPreview =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("authorMode") === "true";
+  return isAuthorPreview ? `${path}?authorMode=true` : path;
+}

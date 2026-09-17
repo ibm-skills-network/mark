@@ -5,6 +5,7 @@ import type {
 } from "@/config/types";
 import { useAssignmentId } from "@/hooks/use-assignment-id";
 import useCountdown from "@/hooks/use-countdown";
+import { learnerSuccessPath } from "@/lib/author-session";
 import { isGradingStreamLostError } from "@/lib/learner";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
@@ -273,7 +274,7 @@ function Timer(props: Props) {
     setTimeout(() => {
       useLearnerStore.getState().setUserPreferedLanguage(null);
     }, 1000);
-    router.push(`/learner/${assignmentId}/successPage/${res.id}`);
+    router.push(learnerSuccessPath(assignmentId, res.id));
   }
 
   useEffect(() => {
