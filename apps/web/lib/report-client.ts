@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { getBaseApiPath } from "@/config/constants";
 import { getClientContext } from "@/lib/client-context";
+import { collectReportDiagnostics } from "@/lib/report-diagnostics";
 import type { User } from "@/config/types";
 
 export interface BugReportSubmission {
@@ -50,6 +51,16 @@ export async function submitBugReport(
     }
     if (browser) {
       formData.append("browser", browser);
+    }
+
+    // Browser state for triage, never shown to the reporter. It returns
+    // undefined rather than throwing, so a failed capture cannot block a report.
+    const diagnostics = collectReportDiagnostics({
+      role: userRole || user?.role,
+      assignmentId: assignmentId ? Number(assignmentId) : undefined,
+    });
+    if (diagnostics) {
+      formData.append("diagnostics", JSON.stringify(diagnostics));
     }
 
     if (value.screenshot) {

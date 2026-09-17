@@ -7,6 +7,7 @@ import {
   Get,
   Header,
   Injectable,
+  Logger,
   Param,
   ParseIntPipe,
   Patch,
@@ -29,6 +30,7 @@ import {
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
 import { derivePortalContext } from "src/common/portal/portal-context";
+import { sanitizeReportDiagnostics } from "../helpers/report-diagnostics";
 import { ReportsService } from "../services/report.service";
 
 @ApiTags("Reports")
@@ -38,6 +40,8 @@ import { ReportsService } from "../services/report.service";
   version: "1",
 })
 export class ReportsController {
+  private readonly logger = new Logger(ReportsController.name);
+
   constructor(private readonly reportsService: ReportsService) {}
   @Get("feedback")
   @UseGuards(AdminGuard)
@@ -152,6 +156,7 @@ export class ReportsController {
       userRole?: string;
       pageUrl?: string;
       browser?: string;
+      diagnostics?: string;
       additionalDetails?: Record<string, any>;
     },
     @UploadedFile() screenshot: Express.Multer.File,
@@ -169,6 +174,18 @@ export class ReportsController {
     if (dto.pageUrl) additionalDetails.pageUrl = dto.pageUrl;
     if (dto.browser) additionalDetails.browser = dto.browser;
 
+    // Written by the browser, so it is rebuilt from known keys before anything
+    // keeps it, and a bad capture never fails the report it rides on.
+    const diagnostics = sanitizeReportDiagnostics(dto.diagnostics);
+    if (dto.diagnostics !== undefined && !diagnostics) {
+      this.logger.warn("reportIssue: dropped an unusable diagnostics field", {
+        user_id: request.userSession?.userId,
+        assignment_id: request.userSession?.assignmentId,
+        bytes:
+          typeof dto.diagnostics === "string" ? dto.diagnostics.length : -1,
+      });
+    }
+
     const reportDto = {
       issueType: dto.issueType,
       description: dto.description,
@@ -178,12 +195,29 @@ export class ReportsController {
       userEmail: resolvedUserEmail,
       portal,
       additionalDetails,
+      diagnostics,
     };
     return this.reportsService.reportIssue(
       reportDto,
       request.userSession,
       screenshot,
     );
+  }
+
+  @Get(":id/diagnostics")
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: "What the reporter's browser held when the report was filed",
+  })
+  async getReportDiagnostics(
+    @Param("id", ParseIntPipe) id: number,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.log("getReportDiagnostics: admin read", {
+      report_id: id,
+      admin: request.userSession?.userId,
+    });
+    return this.reportsService.getReportDiagnostics(id);
   }
 
   @Get("assignment/:id")

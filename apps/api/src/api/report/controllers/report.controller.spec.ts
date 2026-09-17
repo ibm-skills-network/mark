@@ -143,3 +143,45 @@ describe("ReportsController.sendUserFeedback", () => {
     );
   });
 });
+
+describe("ReportsController diagnostics", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("hands the service a rebuilt capture, not the client's field", async () => {
+    const field = JSON.stringify({
+      v: 1,
+      isAdmin: true,
+      session: { attemptId: 84, cookie: "authentication=secret" },
+    });
+
+    await make().reportIssue(
+      { ...dto, diagnostics: field } as never,
+      undefined as never,
+      req(),
+    );
+
+    const [sentDto] = service.reportIssue.mock.calls[0];
+    expect(sentDto.diagnostics).toEqual({ v: 1, session: { attemptId: 84 } });
+  });
+
+  it("still files the report when the capture is unusable", async () => {
+    const result = await make().reportIssue(
+      { ...dto, diagnostics: "{not json" } as never,
+      undefined as never,
+      req(),
+    );
+
+    const [sentDto] = service.reportIssue.mock.calls[0];
+    expect(sentDto.diagnostics).toBeUndefined();
+    expect(result.reportId).toBe(7);
+  });
+
+  it("guards the diagnostics read with the admin guard", () => {
+    const guards = Reflect.getMetadata(
+      "__guards__",
+      ReportsController.prototype.getReportDiagnostics,
+    ) as { name: string }[];
+
+    expect(guards.map((guard) => guard.name)).toEqual(["AdminGuard"]);
+  });
+});

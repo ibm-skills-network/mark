@@ -27,6 +27,10 @@ import {
   defaultSeverityForIssueType,
   stripSectionLabelMarkdown,
 } from "../helpers/issue-template";
+import {
+  ReportDiagnostics,
+  summarizeReportDiagnostics,
+} from "../helpers/report-diagnostics";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
@@ -849,6 +853,7 @@ export class ReportsService {
       severity,
       additionalDetails,
       portal = {},
+      diagnostics,
     } = dto;
     const assignmentId = userSession?.assignmentId;
     // additionalDetails is a free-form bag filled by three different clients,
@@ -984,6 +989,7 @@ export class ReportsService {
         `Severity: ${issueSeverity}`,
         `Assignment ID: ${assignmentId ?? "N/A"}`,
         `Attempt ID: ${attemptId ?? "N/A"}`,
+        ...(diagnostics ? [summarizeReportDiagnostics(diagnostics)] : []),
       ].join("\n");
 
       try {
@@ -1118,6 +1124,10 @@ export class ReportsService {
     try {
       const report = await this.prisma.report.create({ data: reportData });
 
+      if (diagnostics) {
+        await this.storeReportDiagnostics(report.id, diagnostics);
+      }
+
       // Fire-and-forget: Flo is best-effort telemetry. Never block the
       // request on its NATS publish — the underlying ts-nats client opens a
       // fresh connection per call and has no built-in deadline.
@@ -1196,6 +1206,53 @@ export class ReportsService {
           "We encountered an issue while submitting your report. Your feedback is still important to us - please try again later.",
       };
     }
+  }
+
+  /**
+   * The capture is context for whoever triages the report. Losing it must not
+   * lose the report, so a failure here is logged and the submission carries on.
+   */
+  private async storeReportDiagnostics(
+    reportId: number,
+    diagnostics: ReportDiagnostics,
+  ): Promise<void> {
+    try {
+      await this.prisma.reportDiagnostics.create({
+        data: {
+          reportId,
+          data: diagnostics as unknown as Prisma.InputJsonValue,
+        },
+      });
+      this.logger.log("Stored report diagnostics", {
+        report_id: reportId,
+        attempt_id: diagnostics.session?.attemptId,
+        recent_requests: diagnostics.requests?.length ?? 0,
+      });
+    } catch (error) {
+      this.logger.error("Failed to store report diagnostics", {
+        report_id: reportId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  }
+
+  /**
+   * Admin-only read (the route carries the guard). Diagnostics live in their
+   * own table so no report query that serves a learner or author returns them.
+   */
+  async getReportDiagnostics(reportId: number) {
+    const row = await this.prisma.reportDiagnostics.findUnique({
+      where: { reportId },
+    });
+    if (!row) {
+      throw new NotFoundException("No diagnostics for this report");
+    }
+    return {
+      reportId: row.reportId,
+      capturedAt: row.createdAt,
+      diagnostics: row.data,
+    };
   }
 
   async getReportsForAssignment(assignmentId: number) {
