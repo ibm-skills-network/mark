@@ -317,6 +317,40 @@ describe("DataTransformer API", () => {
       expect(result.jsonField).toEqual(originalObject);
     });
 
+    it.each([
+      ["a decimal with a trailing zero", "1.620"],
+      ["a whole number", "27"],
+      ["a boolean word", "true"],
+      ["the word null", "null"],
+      ["text the author wrapped in quotation marks", '"We have an inconsistent user experience"'],
+    ])("keeps %s exactly as the text that was sent", (_label, text) => {
+      const b64 = Buffer.from(text, "utf8").toString("base64");
+
+      const result = smartDecode(
+        { learnerChoices: [b64], learnerTextResponse: b64 },
+        { fields: ["learnerChoices", "learnerTextResponse"] },
+      );
+
+      // A choice is graded by matching its text, so reading "1.620" as the
+      // number 1.62 or stripping an author's quotation marks makes a real
+      // selection unmatchable.
+      expect(result.learnerChoices).toEqual([text]);
+      expect(result.learnerTextResponse).toBe(text);
+    });
+
+    it("keeps an array item as text even when it looks like structured JSON", () => {
+      const text = '["a","b"]';
+      const b64 = Buffer.from(text, "utf8").toString("base64");
+
+      const result = smartDecode(
+        { learnerChoices: [b64] },
+        { fields: ["learnerChoices"] },
+      );
+
+      // Array items are only ever encoded from strings.
+      expect(result.learnerChoices).toEqual([text]);
+    });
+
     it("should return plain strings when JSON.parse fails", () => {
       const plainText = "This is just plain text";
       const encoded = Buffer.from(plainText, "utf8").toString("base64");
