@@ -13,6 +13,7 @@ import type {
   ReplaceAssignmentRequest,
   SubmitAssignmentResponse,
 } from "@/config/types";
+import { learnerSuccessPath } from "@/lib/author-session";
 import {
   getAttempt,
   getSupportedLanguages,
@@ -484,7 +485,7 @@ function LearnerHeader() {
         setTimeout(() => {
           setShowGradingModal(false);
           useLearnerStore.getState().setUserPreferedLanguage(null);
-          router.push(`/learner/${assignmentId}/successPage/${res.id}`);
+          router.push(learnerSuccessPath(assignmentId, res.id));
         }, 1000);
       } else {
         // submitAssignment resolved without a usable result: no payload at
@@ -506,7 +507,7 @@ function LearnerHeader() {
         // The attempt was already graded (this was a retried PATCH after a
         // timeout or lost stream). Show those results instead of an error.
         setShowGradingModal(false);
-        router.push(`/learner/${assignmentId}/successPage/${error.attemptId}`);
+        router.push(learnerSuccessPath(assignmentId, error.attemptId));
         return;
       }
 
@@ -832,7 +833,7 @@ function LearnerHeader() {
             ? () => {
                 setShowGradingModal(false);
                 router.push(
-                  `/learner/${assignmentId}/successPage/${currentAttemptId}`,
+                  learnerSuccessPath(assignmentId, currentAttemptId),
                 );
               }
             : undefined
