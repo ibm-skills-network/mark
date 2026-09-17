@@ -414,6 +414,7 @@ function QuestionPage(props: Props) {
         serverTimeOffsetMs,
       );
 
+      useLearnerStore.getState().beginAttempt(id);
       setQuestions(questionsWithStatus);
 
       const currentStoreUpdate = {

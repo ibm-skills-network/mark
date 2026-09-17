@@ -399,6 +399,7 @@ export type LearnerActions = {
   ) => void;
   setSlidesData: (questionId: number, slidesData: slideMetaData[]) => void;
   setActiveAttemptId: (id: number) => void;
+  beginAttempt: (id: number) => void;
   setActiveQuestionNumber: (id: number | null) => void;
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: Partial<QuestionStore>) => void;
@@ -854,6 +855,16 @@ export const useLearnerStore = createWithEqualityFn<
         activeAttemptId: null,
         totalPointsEarned: 0,
         totalPointsPossible: 0,
+        // Drafts belong to one attempt. Selections are positions in that
+        // attempt's shuffled choices, so anything left from another attempt
+        // (a submit the client saw fail, an expiry, an abandoned tab) must go
+        // before the new attempt's questions are merged over it.
+        beginAttempt: (id) =>
+          set((state) =>
+            state.activeAttemptId === id
+              ? state
+              : { activeAttemptId: id, questions: [] },
+          ),
         setActiveAttemptId: (id) => {
           set({ activeAttemptId: id });
         },
