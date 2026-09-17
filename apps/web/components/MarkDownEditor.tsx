@@ -15,6 +15,15 @@ import { cn } from "@/lib/strings";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import hljs from "highlight.js";
 
+// The editor's syntax module reads the highlighter off `window`. The
+// declaration used to live in the viewer, which no longer touches highlight.js
+// directly; it belongs with the code that actually assigns it.
+declare global {
+  interface Window {
+    hljs: typeof hljs;
+  }
+}
+
 interface Props extends ComponentPropsWithoutRef<"section"> {
   value: string;
   setValue: (value: string) => void;

@@ -1,0 +1,361 @@
+/**
+ * Styling for rendered rich text.
+ *
+ * The previous editor shipped a stylesheet that supplied element defaults as a
+ * side effect. Tailwind's preflight resets those to nothing, so anything that
+ * stylesheet was quietly providing has to be stated here or it simply
+ * disappears — list markers above all.
+ *
+ * `.rich-text-content` is the shared surface: it styles the viewer today and
+ * the editor's editable area once that moves too, so the two cannot drift.
+ */
+
+.rich-text-content {
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.3;
+  text-align: left;
+  word-wrap: break-word;
+}
+
+.rich-text-content > *:first-child {
+  margin-top: 0;
+}
+
+.rich-text-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-content p,
+.rich-text-content li,
+.rich-text-content blockquote {
+  margin: 0.25em 0;
+}
+
+/**
+ * Preflight sets `list-style: none` on ul and ol, and the previous editor drew
+ * its own markers from a marker span that no longer exists. Without these rules
+ * every bullet and number in the product disappears.
+ *
+ * Written as longhands on purpose. The shorthand resets an omitted longhand to
+ * its initial value, so `list-style: disc outside` minifies to
+ * `list-style: outside` — correct, but it reads as though the marker was
+ * dropped, and this is the one rule here that must be obviously right.
+ */
+.rich-text-content ul {
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.rich-text-content ol {
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+
+.rich-text-content ul,
+.rich-text-content ol {
+  padding-left: 1.5em;
+  margin: 0.25em 0;
+}
+
+.rich-text-content ul ul {
+  list-style-type: circle;
+}
+
+.rich-text-content ul ul ul {
+  list-style-type: square;
+}
+
+.rich-text-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.rich-text-content ol ol ol {
+  list-style-type: lower-roman;
+}
+
+/**
+ * A list item holds a paragraph, so the paragraph margin above would make every
+ * item taller than it used to be.
+ */
+.rich-text-content li > p {
+  margin: 0;
+}
+
+/**
+ * Empty paragraphs are used as deliberate spacing throughout stored content.
+ * The previous editor kept them open with a `<br>`; an empty paragraph collapses
+ * to nothing, which tightens every older body of text.
+ */
+.rich-text-content p:empty::before {
+  content: "";
+  display: inline-block;
+  height: 1em;
+}
+
+.rich-text-content h1 {
+  font-size: 2em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h3 {
+  font-size: 1.17em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h5 {
+  font-size: 0.83em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h6 {
+  font-size: 0.67em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.rich-text-content blockquote {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 1em;
+  margin-left: 0;
+}
+
+.rich-text-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.rich-text-content iframe {
+  display: block;
+  max-width: 100%;
+}
+
+.rich-text-content code {
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 85%;
+  white-space: pre-wrap;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background-color: #f5f5f5;
+}
+
+.rich-text-content pre {
+  background-color: #f5f5f5;
+  color: inherit;
+  padding: 0.6em 0.8em;
+  border-radius: 5px;
+  overflow-x: auto;
+}
+
+/* A code block is one <pre><code>; the inner element must not paint again. */
+.rich-text-content pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.95em;
+  white-space: pre;
+}
+
+/**
+ * Tables previously had no styling at all — the add-on that produced them was
+ * installed but its stylesheet was never imported, so stored tables render
+ * without borders today.
+ */
+.rich-text-content table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.rich-text-content th,
+.rich-text-content td {
+  border: 1px solid #e5e7eb;
+  padding: 0.25em 0.5em;
+  vertical-align: top;
+}
+
+.rich-text-content th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+/* Wide tables and code scroll inside the block rather than the page. */
+.rich-text-viewer {
+  overflow-x: auto;
+}
+
+/* Syntax highlighting, scoped here rather than imported as a global theme.
+   Two different highlight.js themes used to be imported from two components,
+   so whichever loaded last decided the colours for the whole page. */
+.rich-text-content .hljs-comment,
+.rich-text-content .hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.rich-text-content .hljs-keyword,
+.rich-text-content .hljs-selector-tag,
+.rich-text-content .hljs-literal,
+.rich-text-content .hljs-doctag {
+  color: #d73a49;
+}
+
+.rich-text-content .hljs-string,
+.rich-text-content .hljs-meta .hljs-string {
+  color: #032f62;
+}
+
+.rich-text-content .hljs-number,
+.rich-text-content .hljs-symbol,
+.rich-text-content .hljs-bullet {
+  color: #005cc5;
+}
+
+.rich-text-content .hljs-title,
+.rich-text-content .hljs-section,
+.rich-text-content .hljs-name {
+  color: #6f42c1;
+}
+
+.rich-text-content .hljs-attr,
+.rich-text-content .hljs-attribute,
+.rich-text-content .hljs-variable,
+.rich-text-content .hljs-template-variable {
+  color: #e36209;
+}
+
+.rich-text-content .hljs-type,
+.rich-text-content .hljs-built_in,
+.rich-text-content .hljs-builtin-name {
+  color: #22863a;
+}
+
+.rich-text-content .hljs-addition {
+  color: #22863a;
+  background-color: #f0fff4;
+}
+
+.rich-text-content .hljs-deletion {
+  color: #b31d28;
+  background-color: #ffeef0;
+}
+
+.rich-text-content .hljs-emphasis {
+  font-style: italic;
+}
+
+.rich-text-content .hljs-strong {
+  font-weight: 600;
+}
+
+/* Dark mode */
+
+.dark .rich-text-content {
+  color: #e5e7eb;
+}
+
+.dark .rich-text-content a {
+  color: #93c5fd;
+}
+
+.dark .rich-text-content blockquote {
+  border-left-color: #374151;
+}
+
+.dark .rich-text-content code,
+.dark .rich-text-content pre {
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+.dark .rich-text-content th,
+.dark .rich-text-content td {
+  border-color: #374151;
+}
+
+.dark .rich-text-content th {
+  background-color: #1f2937;
+}
+
+.dark .rich-text-content .hljs-comment,
+.dark .rich-text-content .hljs-quote {
+  color: #8b949e;
+}
+
+.dark .rich-text-content .hljs-keyword,
+.dark .rich-text-content .hljs-selector-tag,
+.dark .rich-text-content .hljs-literal,
+.dark .rich-text-content .hljs-doctag {
+  color: #ff7b72;
+}
+
+.dark .rich-text-content .hljs-string,
+.dark .rich-text-content .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+
+.dark .rich-text-content .hljs-number,
+.dark .rich-text-content .hljs-symbol,
+.dark .rich-text-content .hljs-bullet {
+  color: #79c0ff;
+}
+
+.dark .rich-text-content .hljs-title,
+.dark .rich-text-content .hljs-section,
+.dark .rich-text-content .hljs-name {
+  color: #d2a8ff;
+}
+
+.dark .rich-text-content .hljs-attr,
+.dark .rich-text-content .hljs-attribute,
+.dark .rich-text-content .hljs-variable,
+.dark .rich-text-content .hljs-template-variable {
+  color: #ffa657;
+}
+
+.dark .rich-text-content .hljs-type,
+.dark .rich-text-content .hljs-built_in,
+.dark .rich-text-content .hljs-builtin-name {
+  color: #7ee787;
+}
+
+.dark .rich-text-content .hljs-addition {
+  color: #7ee787;
+  background-color: #033a16;
+}
+
+.dark .rich-text-content .hljs-deletion {
+  color: #ffa198;
+  background-color: #67060c;
+}
+
+@media (max-width: 768px) {
+  .rich-text-content {
+    font-size: 15px;
+  }
+
+  .rich-text-content pre {
+    padding: 0.5em;
+  }
+}

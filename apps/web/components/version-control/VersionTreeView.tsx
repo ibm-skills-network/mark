@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useChatbot } from "@/hooks/useChatbot";
-import { sanitizeHtml } from "@/lib/sanitize-html";
+import MarkdownViewer from "@/components/MarkdownViewer";
 import { UnpublishedActivationModal } from "./UnpublishedActivationModal";
 import {
   GitBranch,
@@ -1195,18 +1195,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                             <span>Introduction</span>
                           </label>
-                          <div className="quill-viewer bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto">
-                            <div
-                              className="text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
-                              suppressHydrationWarning
-                              dangerouslySetInnerHTML={{
-                                __html: sanitizeHtml(
-                                  (selectedVersionDetails || selectedVersion)
-                                    .introduction,
-                                ),
-                              }}
-                            />
-                          </div>
+                          <MarkdownViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
+                            {
+                              (selectedVersionDetails || selectedVersion)
+                                .introduction
+                            }
+                          </MarkdownViewer>
                         </div>
 
                         <div>
@@ -1214,18 +1208,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
                             <span>Instructions</span>
                           </label>
-                          <div className="quill-viewer bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto">
-                            <div
-                              className="text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
-                              suppressHydrationWarning
-                              dangerouslySetInnerHTML={{
-                                __html: sanitizeHtml(
-                                  (selectedVersionDetails || selectedVersion)
-                                    .instructions,
-                                ),
-                              }}
-                            />
-                          </div>
+                          <MarkdownViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
+                            {
+                              (selectedVersionDetails || selectedVersion)
+                                .instructions
+                            }
+                          </MarkdownViewer>
                         </div>
 
                         {(selectedVersionDetails || selectedVersion)
@@ -1235,18 +1223,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                               <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                               <span>Grading Criteria</span>
                             </label>
-                            <div className="quill-viewer bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto">
-                              <div
-                                className="text-gray-900 dark:text-gray-100 prose prose-sm max-w-none"
-                                suppressHydrationWarning
-                                dangerouslySetInnerHTML={{
-                                  __html: sanitizeHtml(
-                                    (selectedVersionDetails || selectedVersion)
-                                      .gradingCriteriaOverview,
-                                  ),
-                                }}
-                              />
-                            </div>
+                            <MarkdownViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
+                              {
+                                (selectedVersionDetails || selectedVersion)
+                                  .gradingCriteriaOverview
+                              }
+                            </MarkdownViewer>
                           </div>
                         )}
                       </div>
