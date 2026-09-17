@@ -33,6 +33,7 @@ import {
   QuestionDto,
   VariantDto,
 } from "../../dto/update.questions.request.dto";
+import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
 import type { PerJobTranslationEntry } from "./publish-job-result.types";
 
@@ -220,6 +221,7 @@ export class TranslationService implements OnModuleDestroy {
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly llmResolver: LLMResolverService,
     private readonly aiFlags: AiFeatureFlagsService,
+    private readonly assignmentRepository: AssignmentRepository,
   ) {
     this._languageTranslation =
       process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";
@@ -1179,16 +1181,13 @@ export class TranslationService implements OnModuleDestroy {
 
     this.checkLimiterHealth();
 
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: {
-        id: true,
-        name: true,
-        introduction: true,
-        instructions: true,
-        gradingCriteriaOverview: true,
-      },
-    });
+    // Read through the repository, not the base row: publishing writes the
+    // title to the active version only, so `Assignment.name` is the title as it
+    // was before versioning. Translating that produced a translation of a title
+    // no learner is shown — and, because the stale value never changed, the
+    // "has the name changed?" check below skipped the title on every rerun.
+    const assignment =
+      await this.assignmentRepository.findMetaById(assignmentId);
 
     if (!assignment) {
       throw new NotFoundException(
@@ -1264,16 +1263,11 @@ export class TranslationService implements OnModuleDestroy {
     try {
       this.checkLimiterHealth();
 
-      assignment = (await this.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-        select: {
-          id: true,
-          name: true,
-          introduction: true,
-          instructions: true,
-          gradingCriteriaOverview: true,
-        },
-      })) as unknown as
+      // Same reason as translateAssignmentForLanguages: the live text lives on
+      // the active version, not the base row.
+      assignment = (await this.assignmentRepository.findMetaById(
+        assignmentId,
+      )) as unknown as
         | GetAssignmentResponseDto
         | LearnerGetAssignmentResponseDto;
 

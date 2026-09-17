@@ -26,6 +26,12 @@ import {
   InitiateAssignmentFilesResponseDto,
 } from "../assignment/v2/dtos/assignment-file-upload.dto";
 import {
+  ASSIGNMENT_META_SELECT,
+  ASSIGNMENT_NAME_SELECT,
+  resolveAssignmentMeta,
+  resolveAssignmentName,
+} from "../assignment/v2/repositories/assignment.repository";
+import {
   AssignmentFileResponse,
   AssignmentFileService,
 } from "../assignment/v2/services/assignment-file.service";
@@ -1228,7 +1234,7 @@ export class AdminService {
         take: limit,
         select: {
           id: true,
-          name: true,
+          ...ASSIGNMENT_NAME_SELECT,
           published: true,
           updatedAt: true,
         },
@@ -1436,7 +1442,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalCost,
           uniqueLearners,
           totalAttempts,
@@ -1825,10 +1831,10 @@ export class AdminService {
       ];
       const assignments = await this.prisma.assignment.findMany({
         where: { id: { in: uniqueAssignmentIds } },
-        select: { id: true, name: true },
+        select: { id: true, ...ASSIGNMENT_NAME_SELECT },
       });
       for (const assignment of assignments) {
-        assignmentNames.set(assignment.id, assignment.name);
+        assignmentNames.set(assignment.id, resolveAssignmentName(assignment));
       }
     }
 
@@ -1893,6 +1899,10 @@ export class AdminService {
               }),
         },
         include: {
+          currentVersion: {
+            select: ASSIGNMENT_META_SELECT.currentVersion.select,
+          },
+          versions: ASSIGNMENT_META_SELECT.versions,
           questions: {
             where: { isDeleted: false },
             include: {
@@ -2152,14 +2162,18 @@ export class AdminService {
         }
       }
 
+      // The live text, not the base row's: publishing writes these to the
+      // active version only.
+      const assignmentText = resolveAssignmentMeta(assignment);
+
       const insights = {
         assignment: {
           id: assignment.id,
-          name: assignment.name,
+          name: assignmentText.name,
           type: assignment.type,
           published: assignment.published,
-          introduction: assignment.introduction,
-          instructions: assignment.instructions,
+          introduction: assignmentText.introduction,
+          instructions: assignmentText.instructions,
           timeEstimateMinutes: assignment.timeEstimateMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           passingGrade: assignment.passingGrade,
@@ -2355,7 +2369,7 @@ export class AdminService {
 
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id },
-      select: { id: true, name: true, type: true },
+      select: { id: true, ...ASSIGNMENT_NAME_SELECT, type: true },
     });
 
     if (!assignmentExists) {
@@ -2374,7 +2388,7 @@ export class AdminService {
     return {
       id: id,
       success: true,
-      name: assignmentExists.name || "",
+      name: resolveAssignmentName(assignmentExists) || "",
       type: assignmentExists.type || "AI_GRADED",
     };
   }
@@ -2527,6 +2541,10 @@ export class AdminService {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
+        currentVersion: {
+          select: ASSIGNMENT_META_SELECT.currentVersion.select,
+        },
+        versions: ASSIGNMENT_META_SELECT.versions,
         questions: {
           where: { isDeleted: false },
           include: {
@@ -2545,6 +2563,11 @@ export class AdminService {
       return;
     }
 
+    // Read the live text before republishing it. Taking these off the base row
+    // would snapshot the pre-versioning title into the new version, overwriting
+    // the current one with a stale value.
+    const assignmentText = resolveAssignmentMeta(assignment);
+
     const questions = assignment.questions.map((question) =>
       this.mapQuestionToDto(question),
     );
@@ -2554,11 +2577,11 @@ export class AdminService {
         : questions.map((q) => q.id);
 
     const publishPayload: UpdateAssignmentQuestionsDto = {
-      name: assignment.name,
+      name: assignmentText.name,
       questions,
-      introduction: assignment.introduction ?? null,
-      instructions: assignment.instructions ?? null,
-      gradingCriteriaOverview: assignment.gradingCriteriaOverview ?? null,
+      introduction: assignmentText.introduction ?? null,
+      instructions: assignmentText.instructions ?? null,
+      gradingCriteriaOverview: assignmentText.gradingCriteriaOverview ?? null,
       timeEstimateMinutes: assignment.timeEstimateMinutes ?? null,
       graded: assignment.graded ?? false,
       numAttempts: assignment.numAttempts ?? null,
@@ -2718,7 +2741,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AIUsage: {
@@ -2749,7 +2772,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalCost: costData.totalCost,
           costBreakdown: costData.costBreakdown,
           attempts: attemptCount,
@@ -2776,7 +2799,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -2804,7 +2827,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalAttempts: attempts.length,
           submittedAttempts,
           uniqueUsers: new Set(attempts.map((a) => a.userId)).size,
@@ -2832,7 +2855,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -2857,7 +2880,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           uniqueLearners,
           completedLearners,
           totalAttempts: attempts.length,
@@ -2893,7 +2916,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         Report: {
@@ -2925,7 +2948,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalReports: assignment.Report.length,
           openReports,
           recentReports,
@@ -2953,7 +2976,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: {
@@ -2994,7 +3017,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           averageRating,
           averageAiRating,
           totalRatings: ratings.length,
@@ -3052,7 +3075,7 @@ export class AdminService {
       },
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -3087,7 +3110,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           recentAttempts: recentAttempts.length,
           uniqueRecentUsers,
           recentCompletions,
@@ -3112,7 +3135,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AIUsage: {
@@ -3148,7 +3171,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalCost: costData.totalCost,
           uniqueLearners,
           costPerLearner,
@@ -3173,7 +3196,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -3200,7 +3223,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           uniqueUsers,
           completedUsers,
           totalAttempts: attempts.length,
