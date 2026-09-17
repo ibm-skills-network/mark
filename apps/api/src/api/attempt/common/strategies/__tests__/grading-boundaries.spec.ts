@@ -146,6 +146,81 @@ describe("Grading boundaries", () => {
     });
   });
 
+  test("grades the choice a non-English learner picks on a shuffled attempt", async () => {
+    const q: any = {
+      id: 42,
+      assignmentId: 500,
+      question: "Pick red",
+      type: QuestionType.SINGLE_CORRECT,
+      totalPoints: 1,
+      randomizedChoices: true,
+      choices: [
+        { id: 11, choice: "Red", isCorrect: true, points: 1 },
+        { id: 12, choice: "Blue", isCorrect: false, points: 0 },
+      ],
+    };
+    const rows = [
+      {
+        questionId: 42,
+        variantId: null,
+        languageCode: "es",
+        translatedText: "Elige rojo",
+        translatedChoices: [
+          { id: 11, choice: "Rojo", isCorrect: true, points: 1 },
+          { id: 12, choice: "Azul", isCorrect: false, points: 0 },
+        ],
+      },
+    ];
+    const prisma: any = {
+      translation: { findMany: jest.fn().mockResolvedValue(rows) },
+    };
+    const service = new TranslationService(prisma, {} as any);
+    // The attempt stores its own shuffle of the authored choices.
+    const attempt: any = {
+      questionOrder: [42],
+      questionVariants: [
+        {
+          questionId: 42,
+          questionVariant: {},
+          randomizedChoices: JSON.stringify([q.choices[1], q.choices[0]]),
+        },
+      ],
+    };
+    const map = await service.getTranslationsForAttempt(attempt, [q], "es");
+    const shown = await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+      attempt,
+      { questions: [q], questionOrder: [42] } as any,
+      map,
+      "es",
+    );
+
+    // The learner client submits the text at the picked index of its own
+    // language's choices; here the learner picks the correct option.
+    const offered = shown[0].translations?.es?.translatedChoices as {
+      id: number;
+      choice: string;
+    }[];
+    const picked = offered.findIndex((choice) => choice.id === 11);
+    const submitted = offered[picked].choice;
+    expect(shown[0].choices[picked].choice).toBe(submitted);
+
+    const forGrading = await service.applyTranslationToQuestion({ ...q }, "es");
+    const grader = new ChoiceGradingStrategy(
+      { getLocalizedString: (s: string) => s } as any,
+      {} as any,
+      logger,
+    );
+    const result = await grader.handleResponse(
+      forGrading,
+      { learnerChoices: [submitted] } as any,
+      { language: "es" } as any,
+    );
+    expect(result.responseDto).toMatchObject({
+      totalPoints: 1,
+      metadata: { isCorrect: true },
+    });
+  });
+
   test("retries a GitHub repo when every upstream is unavailable", async () => {
     clearGithubDefaultBranchCache();
     (safeGet as jest.Mock).mockRejectedValue({
