@@ -1,4 +1,4 @@
-/** A rule reports what it changed so callers can gate writes on real work. */
+/** A rule reports what it changed, so a caller can tell real work from a no-op. */
 export interface RuleContext {
   /** Incremented once per element a rule actually rewrites. */
   changes: number;
@@ -9,13 +9,15 @@ export interface RuleContext {
 export interface NormalizeResult {
   html: string;
   /**
-   * How many elements were rewritten. **Gate writes on this, never on
-   * `html !== input`**: parsing and re-serialising is not byte-identical even
-   * when nothing is transformed (entity re-encoding, attribute quoting), so an
-   * inequality check rewrites rows that did not need it.
+   * How many elements were rewritten. **Ask this, never `html !== input`**:
+   * parsing and re-serialising is not byte-identical even when nothing is
+   * transformed (entity re-encoding, attribute quoting), so an inequality check
+   * reports a change on content that was left alone. `normalizeQuillHtml`
+   * returns the original string untouched when this is 0, which is what keeps
+   * the read path byte-exact on already-converted content.
    */
   changes: number;
-  /** Names of the rules that changed something, for audit trails. */
+  /** Names of the rules that changed something. Read by the rule tests. */
   rulesFired: string[];
   warnings: string[];
 }

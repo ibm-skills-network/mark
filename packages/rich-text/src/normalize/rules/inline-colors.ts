@@ -29,9 +29,9 @@ const MEANINGLESS_COLORS = new Set([
  *
  * The CSS object model silently discards values it considers invalid, and which
  * values those are differs between a browser and a Node DOM implementation — so
- * reading through it would make this rule behave one way in the editor and
- * another way in the backfill, which is precisely what a shared rule exists to
- * prevent.
+ * reading through it would make this rule behave one way in the browser and
+ * another way under jsdom, which is precisely what a shared rule exists to
+ * prevent: the verification runs would then disagree with what users see.
  */
 function parseStyle(text: string): Declaration[] {
   return text

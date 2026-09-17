@@ -8,8 +8,8 @@ import { normalizeQuillHtml } from "rich-text";
  * The shared package takes its HTML parser from the caller so that no Node DOM
  * implementation can be pulled into the browser bundle. In a browser it falls
  * back to the platform's own `DOMParser`, and that fallback is only exercised
- * here — the package's own suite injects a parser, because that is the path the
- * database backfill takes.
+ * here — the package's own suite injects a parser, because that is the path
+ * every Node caller takes.
  */
 describe("normalizeQuillHtml in a browser", () => {
   it("converts stored markup without being given a parser", () => {

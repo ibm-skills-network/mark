@@ -31,6 +31,7 @@ export function resolveParser(parse?: ParseFragment): ParseFragment {
   }
   throw new Error(
     "rich-text: no DOMParser in this environment — pass `parse` explicitly " +
-      "(see createJsdomParser in the backfill script).",
+      "(see jsdomParseFragment in normalize/test-parser.ts, or the parser " +
+      "built in scripts/validate-rows.js).",
   );
 }
