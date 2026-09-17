@@ -4,34 +4,29 @@
 
 import React from "react";
 import { act, render, waitFor } from "@testing-library/react";
+
 import MarkdownViewer from "../MarkdownViewer";
 
-const mockQuillConstructor = jest.fn();
-
-jest.mock("quill", () => ({
-  __esModule: true,
-  default: mockQuillConstructor,
-}));
-
+/**
+ * Markup the previous editor produced, which is what the database still holds.
+ * It stored every list as `<ol>` and put the real kind on each item, so a
+ * bulleted list read literally comes back numbered.
+ */
 const INSTRUCTIONS_HTML =
   "<p>Complete the lab before you begin.</p>" +
   '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Review your notes.</li>' +
   '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Upload the workbook.</li></ol>';
 
 /**
- * A `data-list` value that carries an unescaped `>`. DOMPurify keeps it — the
- * value is inert when the browser parses it, and `data-` attributes are
- * allowed — so anything that rewrites the sanitized string with a regex can
- * terminate the tag early and turn the parked markup into live elements.
+ * A `data-list` value carrying an unescaped `>`. Sanitizing keeps it — the
+ * value is inert once parsed — so anything that rewrites the sanitized string
+ * with a regex could terminate the tag early and make the parked markup live.
  */
 const ATTRIBUTE_BREAKOUT_HTML =
   '<li data-list="a><img src=q onerror=alert(document.domain)>b">c</li>';
 
 const ACTIVE_ELEMENT_HTML: [string, string][] = [
-  [
-    "form",
-    '<p>hi</p><form action="//evil.example"><span>go</span></form>',
-  ],
+  ["form", '<p>hi</p><form action="//evil.example"><span>go</span></form>'],
   ["input", '<p>hi</p><input name="u" value="steal">'],
   ["button", "<p>hi</p><button>go</button>"],
   ["textarea", "<p>hi</p><textarea>go</textarea>"],
@@ -54,22 +49,38 @@ const flushEffects = async () => {
   });
 };
 
-describe("MarkdownViewer", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+const contentOf = (container: HTMLElement) =>
+  container.querySelector(".rich-text-content");
 
+describe("MarkdownViewer", () => {
   it("renders the content as static markup, without an editor instance", async () => {
     const { container } = render(
       <MarkdownViewer>{INSTRUCTIONS_HTML}</MarkdownViewer>,
     );
     await flushEffects();
 
-    const editor = container.querySelector(".ql-snow .ql-editor");
-    expect(editor).not.toBeNull();
-    expect(editor?.textContent).toContain("Complete the lab before you begin.");
-    expect(editor?.querySelectorAll("li")).toHaveLength(2);
-    expect(mockQuillConstructor).not.toHaveBeenCalled();
+    const content = contentOf(container);
+    expect(content).not.toBeNull();
+    expect(content?.textContent).toContain(
+      "Complete the lab before you begin.",
+    );
+    expect(content?.querySelectorAll("li")).toHaveLength(2);
+    // A live editor would re-derive its own model from whatever is written
+    // here and drop what it cannot map; static markup cannot.
+    expect(container.querySelector(".ProseMirror")).toBeNull();
+  });
+
+  it("renders a stored bulleted list as a bulleted list, not a numbered one", async () => {
+    const { container } = render(
+      <MarkdownViewer>{INSTRUCTIONS_HTML}</MarkdownViewer>,
+    );
+    await flushEffects();
+
+    const content = contentOf(container);
+    expect(content?.querySelector("ul")).not.toBeNull();
+    expect(content?.querySelector("ol")).toBeNull();
+    // The marker span was editor furniture, not content.
+    expect(content?.querySelector(".ql-ui")).toBeNull();
   });
 
   it("keeps the list text when the content changes after the first paint", async () => {
@@ -86,11 +97,8 @@ describe("MarkdownViewer", () => {
     rerender(<MarkdownViewer>{translated}</MarkdownViewer>);
     await flushEffects();
 
-    const editor = container.querySelector(".ql-editor");
-    const listItems = [...(editor?.querySelectorAll("li") ?? [])];
-
-    expect(listItems).toHaveLength(2);
-    expect(listItems.map((li) => li.textContent?.trim())).toEqual([
+    const items = [...(contentOf(container)?.querySelectorAll("li") ?? [])];
+    expect(items.map((li) => li.textContent?.trim())).toEqual([
       "Revisa tus notas.",
       "Sube el libro de trabajo.",
     ]);
@@ -104,55 +112,35 @@ describe("MarkdownViewer", () => {
     );
     await flushEffects();
 
-    const html = container.querySelector(".ql-editor")?.innerHTML ?? "";
+    const html = contentOf(container)?.innerHTML ?? "";
     expect(html).toContain("safe");
     expect(html).not.toMatch(/onerror/i);
     expect(html).not.toMatch(/<script/i);
   });
 
-  it("adds the list marker element when stored markup omits it", async () => {
+  it("rebuilds a stored code block and highlights it", async () => {
     const { container } = render(
       <MarkdownViewer>
-        {'<ol><li data-list="bullet">bare item</li></ol>'}
-      </MarkdownViewer>,
-    );
-    await flushEffects();
-
-    const item = container.querySelector("li[data-list='bullet']");
-    expect(item?.firstElementChild?.className).toContain("ql-ui");
-    expect(item?.textContent).toContain("bare item");
-  });
-
-  it("does not duplicate a list marker that is already stored", async () => {
-    const { container } = render(
-      <MarkdownViewer>{INSTRUCTIONS_HTML}</MarkdownViewer>,
-    );
-    await flushEffects();
-
-    expect(container.querySelectorAll(".ql-ui")).toHaveLength(2);
-  });
-
-  it("syntax-highlights code blocks", async () => {
-    const { container } = render(
-      <MarkdownViewer>
-        {
-          '<div class="ql-code-block-container"><div class="ql-code-block" data-language="python">value = 1</div></div>'
-        }
+        {'<div class="ql-code-block-container">' +
+          '<div class="ql-code-block" data-language="python">value = 1</div>' +
+          '<div class="ql-code-block" data-language="python">print(value)</div>' +
+          "</div>"}
       </MarkdownViewer>,
     );
 
     await waitFor(() => {
-      expect(
-        container.querySelector(".ql-code-block")?.innerHTML ?? "",
-      ).toContain("hljs-");
+      expect(container.querySelector("pre code")?.innerHTML ?? "").toContain(
+        "hljs-",
+      );
     });
+    expect(container.querySelector(".ql-code-block")).toBeNull();
   });
 
   it("renders nothing for empty content instead of the string 'undefined'", async () => {
     const { container } = render(<MarkdownViewer>{undefined}</MarkdownViewer>);
     await flushEffects();
 
-    expect(container.querySelector(".ql-editor")?.textContent).toBe("");
+    expect(contentOf(container)?.textContent).toBe("");
   });
 
   it("keeps an attribute value that contains '>' from becoming live markup", async () => {
@@ -161,10 +149,10 @@ describe("MarkdownViewer", () => {
     );
     await flushEffects();
 
-    const editor = container.querySelector(".ql-editor");
-    expect(editor?.querySelector("img")).toBeNull();
-    expect(elementsWithEventHandlers(editor)).toEqual([]);
-    expect(editor?.textContent).toContain("c");
+    const content = contentOf(container);
+    expect(content?.querySelector("img")).toBeNull();
+    expect(elementsWithEventHandlers(content)).toEqual([]);
+    expect(content?.textContent).toContain("c");
   });
 
   it.each(ACTIVE_ELEMENT_HTML)(
@@ -173,22 +161,33 @@ describe("MarkdownViewer", () => {
       const { container } = render(<MarkdownViewer>{html}</MarkdownViewer>);
       await flushEffects();
 
-      const editor = container.querySelector(".ql-editor");
-      expect(editor?.querySelector(tag)).toBeNull();
-      expect(editor?.textContent).toContain("hi");
+      const content = contentOf(container);
+      expect(content?.querySelector(tag)).toBeNull();
+      expect(content?.textContent).toContain("hi");
     },
   );
 
   it("keeps a video embed from a known host and confines it", async () => {
     const { container } = render(
       <MarkdownViewer>
-        {'<iframe class="ql-video" src="https://www.youtube.com/embed/abc123"></iframe>'}
+        {
+          '<iframe class="ql-video" src="https://www.youtube.com/embed/abc123"></iframe>'
+        }
       </MarkdownViewer>,
     );
     await flushEffects();
 
-    const frame = container.querySelector(".ql-editor iframe");
+    const frame = contentOf(container)?.querySelector("iframe");
     expect(frame).not.toBeNull();
     expect(frame?.getAttribute("sandbox")).toContain("allow-scripts");
+  });
+
+  it("prevents selection when copying is disallowed", async () => {
+    const { container } = render(
+      <MarkdownViewer allowCopy={false}>{INSTRUCTIONS_HTML}</MarkdownViewer>,
+    );
+    await flushEffects();
+
+    expect(contentOf(container)?.className).toContain("select-none");
   });
 });

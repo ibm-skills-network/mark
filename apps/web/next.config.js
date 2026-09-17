@@ -21,6 +21,12 @@ if (
 }
 const nextConfig = {
   reactStrictMode: true,
+  // Workspace package shipped as TypeScript source; Next has to compile it
+  // rather than treating it as a prebuilt node_module.
+  // rich-text ships TypeScript source; lowlight and its deps are ESM-only and
+  // have no CommonJS build. Declaring them here covers both the production
+  // build and next/jest, which derives its transform exceptions from this list.
+  transpilePackages: ["rich-text", "lowlight", "devlop", "highlight.js"],
   compiler: {
     styledComponents: true,
   },
