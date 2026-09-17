@@ -259,9 +259,9 @@ export class AttemptQuestionsMapper {
         // Translations are generated lazily per language, so a learner can ask
         // for one that has no row yet. Serve the authored content in that case
         // instead of dereferencing an absent translation.
+        const storedTranslation = variantTranslation || questionTranslation;
         const primaryTranslation =
-          variantTranslation ||
-          questionTranslation ||
+          storedTranslation ||
           this.buildUntranslatedContent(
             variant,
             originalQ,
@@ -310,7 +310,14 @@ export class AttemptQuestionsMapper {
           ? { ...questionTranslations, ...variantTranslations }
           : questionTranslations;
 
-        if (qv.randomizedChoices && finalChoices.length > 0) {
+        // A stored translation was already put in the attempt's order above.
+        // Only the authored stand-in still needs it; overwriting a real
+        // translation here would serve choices the grader cannot match.
+        if (
+          !storedTranslation &&
+          qv.randomizedChoices &&
+          finalChoices.length > 0
+        ) {
           primaryTranslation.translatedChoices = finalChoices;
         }
 
