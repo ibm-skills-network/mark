@@ -7,6 +7,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
+import { decodeValue as decodeTransportValue } from "../../helpers/data-transformer";
 import { TRANSFORM_FIELDS } from "../../helpers/transform-config";
 
 export interface TransformOptions {
@@ -15,91 +16,6 @@ export interface TransformOptions {
   encodeResponse?: boolean;
   decodeRequest?: boolean;
   deep?: boolean;
-}
-
-/**
- * Check if a string contains mostly printable text
- * Used to validate that decoded base64 produces readable content
- */
-function isPrintableText(value: string): boolean {
-  if (!value) return true;
-
-  let printableCount = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const charCode = value.codePointAt(index);
-    const isPrintable =
-      charCode === 9 ||
-      charCode === 10 ||
-      charCode === 13 ||
-      (charCode >= 32 && charCode !== 127);
-
-    if (isPrintable) {
-      printableCount += 1;
-    }
-  }
-
-  return printableCount / value.length >= 0.85;
-}
-
-/**
- * Strictly validate and decode a base64 string
- * Returns decoded string only if:
- * 1. Input is valid base64 format
- * 2. Decoded content is printable text
- * 3. Re-encoding produces the same result (round-trip validation)
- */
-function tryDecodeBase64(value: string): string | null {
-  if (!value || typeof value !== "string") return null;
-
-  const trimmed = value.trim();
-
-  if (trimmed.length < 4) return null;
-
-  if (!BASE64_REGEX.test(trimmed)) return null;
-
-  const paddingNeeded = (4 - (trimmed.length % 4)) % 4;
-  const padded = trimmed + "=".repeat(paddingNeeded);
-
-  try {
-    const decoded = Buffer.from(padded, "base64").toString("utf8");
-
-    if (!isPrintableText(decoded)) {
-      return null;
-    }
-
-    const normalizedInput = trimmed.replaceAll(/=+$/g, "");
-    const reencoded = Buffer.from(decoded, "utf8")
-      .toString("base64")
-      .replaceAll(/=+$/g, "");
-
-    return reencoded === normalizedInput ? decoded : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Decode multiple layers of base64 encoding
- * Handles cases where data was encoded multiple times
- */
-function decodeBase64Layers(value: string): string {
-  if (!value || typeof value !== "string") return value;
-
-  let current = value;
-  let depth = 0;
-
-  while (depth < MAX_BASE64_DEPTH) {
-    const decoded = tryDecodeBase64(current);
-
-    if (decoded === null || decoded === current) {
-      break;
-    }
-
-    current = decoded;
-    depth += 1;
-  }
-
-  return current;
 }
 
 function normalizeFieldPath(path: string): string[] {
@@ -138,9 +54,6 @@ function matchesConfiguredField(
 }
 
 export const TRANSFORM_METADATA_KEY = "data-transform";
-
-const BASE64_REGEX = /^[\d+/A-Za-z]+=*$/;
-const MAX_BASE64_DEPTH = 5;
 
 /**
  * Decorator to configure data transformation for endpoints
@@ -286,7 +199,7 @@ export class DataTransformInterceptor implements NestInterceptor {
             if (typeof item === "string") {
               return operation === "encode"
                 ? this.encodeValue(item)
-                : this.decodeValue(item);
+                : this.decodeValue(item, false);
             }
             if (item && typeof item === "object") {
               return this.transformData(item, options, operation, childPath);
@@ -354,35 +267,10 @@ export class DataTransformInterceptor implements NestInterceptor {
   }
 
   /**
-   * Decode a single value
+   * Decode a single value. Shares the helper's rules so a request body and a
+   * stored record read the same text the same way.
    */
-  private decodeValue(value: unknown): unknown {
-    if (typeof value !== "string") return value;
-
-    if (value.startsWith("comp:")) {
-      try {
-        const base64Data = value.slice(5);
-        const decoded = Buffer.from(base64Data, "base64").toString("utf8");
-        const fullyDecoded = decodeBase64Layers(decoded);
-        try {
-          return JSON.parse(fullyDecoded);
-        } catch {
-          return fullyDecoded;
-        }
-      } catch {
-        return value;
-      }
-    }
-
-    const fullyDecoded = decodeBase64Layers(value);
-    if (fullyDecoded === value) {
-      return value;
-    }
-
-    try {
-      return JSON.parse(fullyDecoded);
-    } catch {
-      return fullyDecoded;
-    }
+  private decodeValue(value: unknown, allowStructured = true): unknown {
+    return decodeTransportValue(value, allowStructured);
   }
 }
