@@ -25,6 +25,8 @@ export const getFileAccess = apiShared.getFileAccess;
 // Admin functions
 export const getAdminFeedback = apiShared.getAdminFeedback;
 export const getAdminReports = apiShared.getAdminReports;
+export const getAdminReportDiagnostics = apiShared.getAdminReportDiagnostics;
+export type AdminReportDiagnostics = apiShared.AdminReportDiagnostics;
 export const getDashboardAssignments = apiShared.getDashboardAssignments;
 export const getDashboardReports = apiShared.getDashboardReports;
 export const getDashboardFeedback = apiShared.getDashboardFeedback;

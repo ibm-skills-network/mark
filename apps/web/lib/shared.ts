@@ -1599,6 +1599,57 @@ export async function getAdminReports(
   return (await apiClient.get(url, { headers })) as ReportsResponse;
 }
 
+export interface AdminReportDiagnostics {
+  reportId: number;
+  capturedAt: string;
+  diagnostics: {
+    session?: Record<string, string | number | undefined>;
+    page?: Record<string, string | number | boolean | undefined>;
+    draft?: {
+      activeAttemptId?: number | null;
+      questions: {
+        id: number;
+        status?: string;
+        selected?: string[];
+        textLength?: number;
+      }[];
+    };
+    rendered?: {
+      questionId: number;
+      type?: string;
+      choices: { text: string; selected: boolean }[];
+    }[];
+    requests?: {
+      method: string;
+      path: string;
+      status: number | null;
+      ms?: number;
+      requestId?: string;
+      at?: string;
+    }[];
+  };
+}
+
+/**
+ * What the reporter's browser held when a report was filed. Admin only: the
+ * API rejects the call without a valid admin token. Resolves null when the
+ * report has no capture (older reports, or collection failed in the browser).
+ */
+export async function getAdminReportDiagnostics(
+  reportId: number,
+  adminToken: string,
+): Promise<AdminReportDiagnostics | null> {
+  try {
+    return (await apiClient.get(
+      `${getBaseApiPath("v1")}/reports/${reportId}/diagnostics`,
+      { headers: { "x-admin-token": adminToken }, quiet: true },
+    )) as AdminReportDiagnostics;
+  } catch (error) {
+    if (error instanceof APIError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 /**
  * Get assignment analytics data with detailed insights
  */
