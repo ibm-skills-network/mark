@@ -1018,17 +1018,32 @@ export class AdminService {
   async getAssignment(id: number): Promise<AdminGetAssignmentResponseDto> {
     const result = await this.prisma.assignment.findUnique({
       where: { id },
+      include: {
+        currentVersion: {
+          select: ASSIGNMENT_NAME_SELECT.currentVersion.select,
+        },
+        versions: ASSIGNMENT_NAME_SELECT.versions,
+      },
     });
 
     if (!result) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
+
+    // The version rows are here only to resolve the live name; keep them out of
+    // `metadata`, which callers read as the assignment row.
+    const {
+      currentVersion: _currentVersion,
+      versions: _versions,
+      ...metadata
+    } = result;
+
     return {
       id: result.id,
       success: true,
-      name: result.name,
+      name: resolveAssignmentName(result) ?? "",
       type: result.type,
-      metadata: result,
+      metadata,
     };
   }
 
@@ -1552,10 +1567,17 @@ export class AdminService {
       assignmentWhere.id = filters.assignmentId;
     }
     if (filters?.assignmentName) {
-      assignmentWhere.name = {
+      // Match either side of the split: the listings below render the active
+      // version's name, so filtering on the base row alone finds nothing for
+      // any assignment renamed after versioning came in.
+      const nameMatch = {
         contains: filters.assignmentName,
-        mode: "insensitive",
+        mode: "insensitive" as const,
       };
+      assignmentWhere.OR = [
+        { name: nameMatch },
+        { versions: { some: { isActive: true, name: nameMatch } } },
+      ];
     }
 
     const dateFilter: any = {};
@@ -2541,10 +2563,6 @@ export class AdminService {
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
-        currentVersion: {
-          select: ASSIGNMENT_META_SELECT.currentVersion.select,
-        },
-        versions: ASSIGNMENT_META_SELECT.versions,
         questions: {
           where: { isDeleted: false },
           include: {
@@ -2563,10 +2581,16 @@ export class AdminService {
       return;
     }
 
-    // Read the live text before republishing it. Taking these off the base row
-    // would snapshot the pre-versioning title into the new version, overwriting
-    // the current one with a stale value.
-    const assignmentText = resolveAssignmentMeta(assignment);
+    // The base row is the live text here: addContentToAssignment has just
+    // written the imported name/introduction/instructions/grading criteria to
+    // it, and no version carries them yet. Resolving through the active version
+    // would republish the pre-import text and throw the import away.
+    const assignmentText = {
+      name: assignment.name,
+      introduction: assignment.introduction,
+      instructions: assignment.instructions,
+      gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+    };
 
     const questions = assignment.questions.map((question) =>
       this.mapQuestionToDto(question),

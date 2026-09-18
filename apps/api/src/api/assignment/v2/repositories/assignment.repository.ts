@@ -77,18 +77,6 @@ function prefer<T>(...vals: Array<T | null | undefined>): T | null {
   return null;
 }
 
-/**
- * The author-written text fields. Callers that only need what an assignment
- * *says* (the translator, admin listings) read these rather than loading every
- * version, question and variant through `findById`.
- */
-export const ASSIGNMENT_META_FIELDS = [
-  "name",
-  "introduction",
-  "instructions",
-  "gradingCriteriaOverview",
-] as const satisfies readonly FieldKey[];
-
 export interface AssignmentMeta {
   id: number;
   name: string | null;

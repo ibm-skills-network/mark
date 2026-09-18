@@ -35,6 +35,7 @@ import {
 } from "../../dto/update.questions.request.dto";
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
+import type { TranslateMetaTextPayload } from "src/job-queue/job-queue.types";
 import type { PerJobTranslationEntry } from "./publish-job-result.types";
 
 // Per-publish translation status hash key. The publish job HGETALLs this on
@@ -1235,6 +1236,7 @@ export class TranslationService implements OnModuleDestroy {
     jobId?: string,
     progressRange?: { start: number; end: number },
     markTerminalFailure = false,
+    publishedText?: TranslateMetaTextPayload,
   ): Promise<TranslationOutcome> {
     if (!this._languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
@@ -1264,10 +1266,26 @@ export class TranslationService implements OnModuleDestroy {
       this.checkLimiterHealth();
 
       // Same reason as translateAssignmentForLanguages: the live text lives on
-      // the active version, not the base row.
-      assignment = (await this.assignmentRepository.findMetaById(
-        assignmentId,
-      )) as unknown as
+      // the active version, not the base row. Still read it even when the
+      // caller supplied text — it is the existence check, and it fills any
+      // field the caller left out.
+      const liveText =
+        await this.assignmentRepository.findMetaById(assignmentId);
+
+      // Publish hands us the text it just published. Prefer it: the publish job
+      // enqueues this work before it writes the new version, so re-reading here
+      // would resolve the previous version and translate last publish's text.
+      assignment = (liveText
+        ? {
+            ...liveText,
+            name: publishedText?.name ?? liveText.name,
+            introduction: publishedText?.introduction ?? liveText.introduction,
+            instructions: publishedText?.instructions ?? liveText.instructions,
+            gradingCriteriaOverview:
+              publishedText?.gradingCriteriaOverview ??
+              liveText.gradingCriteriaOverview,
+          }
+        : liveText) as unknown as
         | GetAssignmentResponseDto
         | LearnerGetAssignmentResponseDto;
 
