@@ -5,6 +5,7 @@ import { Logger } from "winston";
 import { redactSensitiveQueryForLog } from "./sanitize";
 
 const SLOW_REQUEST_THRESHOLD_MS = 5000;
+const SAFE_REQUEST_ID = /^[\w.:-]{1,128}$/;
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -16,6 +17,12 @@ export class LoggerMiddleware implements NestMiddleware {
     const start = process.hrtime();
 
     const requestId = request.get("akamai-grn") ?? request.get("x-request-id");
+
+    // The id arrives in a request header, so it is only reflected when it is
+    // plainly an id: anything else could split the response headers.
+    if (requestId && SAFE_REQUEST_ID.test(requestId)) {
+      response.setHeader("x-request-id", requestId);
+    }
 
     // Query parameters that carry a credential or a single-use grant are
     // replaced so they cannot end up in the access log.

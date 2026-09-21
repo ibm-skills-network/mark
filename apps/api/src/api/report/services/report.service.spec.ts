@@ -151,6 +151,108 @@ describe("ReportsService.reportIssue", () => {
     return { service, prisma, floService, supportRouting };
   };
 
+  describe("report diagnostics", () => {
+    const diagnostics = {
+      v: 1 as const,
+      session: { attemptId: 84, attemptLanguage: "es" },
+      rendered: [
+        {
+          questionId: 1,
+          choices: [{ text: "Apache Kafka and Apache Flink", selected: true }],
+        },
+      ],
+      requests: [
+        { method: "PATCH", path: "/api/v2/assignments/42/attempts/84", status: 504 },
+      ],
+    };
+    const sn = () => ({
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-3" }),
+    });
+    const withDiagnosticsTable = (
+      prisma: Record<string, unknown>,
+      create: jest.Mock,
+    ) => {
+      prisma.reportDiagnostics = { create };
+    };
+
+    it("stores the capture against the new report", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      const create = jest.fn().mockResolvedValue({ id: 1 });
+      withDiagnosticsTable(prisma, create);
+
+      await service.reportIssue({ ...reportDto, diagnostics }, session);
+
+      expect(create).toHaveBeenCalledWith({
+        data: { reportId: 7, data: diagnostics },
+      });
+    });
+
+    it("gives the support ticket a one-line summary, never the capture", async () => {
+      const snSupportService = sn();
+      const { service, prisma } = makeForReportIssue(snSupportService);
+      withDiagnosticsTable(prisma, jest.fn().mockResolvedValue({ id: 1 }));
+
+      await service.reportIssue({ ...reportDto, diagnostics }, session);
+
+      const sent = snSupportService.createTicket.mock.calls[0][0].description;
+      expect(sent).toContain("Diagnostics captured: attempt 84, language es");
+      expect(sent).not.toContain("Apache Kafka");
+    });
+
+    it("still files the report when the capture cannot be stored", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      withDiagnosticsTable(
+        prisma,
+        jest.fn().mockRejectedValue(new Error("db unavailable")),
+      );
+
+      const result = await service.reportIssue(
+        { ...reportDto, diagnostics },
+        session,
+      );
+
+      expect(result.reportId).toBe(7);
+    });
+
+    it("writes nothing when the report carries no capture", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      const create = jest.fn();
+      withDiagnosticsTable(prisma, create);
+
+      await service.reportIssue(reportDto, session);
+
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("reads a stored capture back for the admin route", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      const createdAt = new Date("2026-09-17T15:00:00Z");
+      prisma.reportDiagnostics = {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ reportId: 7, data: diagnostics, createdAt }),
+      };
+
+      await expect(service.getReportDiagnostics(7)).resolves.toEqual({
+        reportId: 7,
+        capturedAt: createdAt,
+        diagnostics,
+      });
+    });
+
+    it("answers not-found when a report has no capture", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      prisma.reportDiagnostics = {
+        findUnique: jest.fn().mockResolvedValue(null),
+      };
+
+      await expect(service.getReportDiagnostics(7)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   it("creates the SN Support ticket with Mark context and no GitHub issue", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(true),

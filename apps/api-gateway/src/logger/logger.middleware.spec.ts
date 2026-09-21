@@ -31,11 +31,50 @@ describe("LoggerMiddleware", () => {
     mockResponse = new EventEmitter() as any;
     mockResponse.statusCode = 200;
     mockResponse.get = jest.fn();
+    mockResponse.setHeader = jest.fn();
 
     mockNext = jest.fn();
   });
 
   describe("use", () => {
+    it("echoes the request id so a client bug report can name the request", () => {
+      (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
+        header === "akamai-grn" ? "0.9d3b3017.1758100000.1a2b3c" : undefined,
+      );
+      mockResponse.setHeader = jest.fn();
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        "x-request-id",
+        "0.9d3b3017.1758100000.1a2b3c",
+      );
+    });
+
+    it.each([
+      ["a header-splitting value", "abc\r\nSet-Cookie: authentication=evil"],
+      ["an oversized value", "a".repeat(500)],
+      ["nothing", undefined],
+    ])("does not echo %s", (_label, value) => {
+      (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
+        header === "x-request-id" ? value : undefined,
+      );
+      mockResponse.setHeader = jest.fn();
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(mockResponse.setHeader).not.toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalledTimes(1);
+    });
+
     it("should call next function immediately", () => {
       middleware.use(
         mockRequest as Request,
