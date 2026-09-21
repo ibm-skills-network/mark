@@ -359,3 +359,70 @@
     padding: 0.5em;
   }
 }
+
+/* ==========================================================================
+   The editable surface.
+
+   Everything above also applies here: the editable area carries
+   `.rich-text-content`, so what an author types is styled by the same rules
+   that render it back to a learner. Only what is specific to editing lives
+   below.
+   ========================================================================== */
+
+.rich-text-editor-surface {
+  /* The shell around it owns the border, padding and focus ring. */
+  min-height: 98px;
+  padding: 0;
+}
+
+/* The shell draws a focus ring via `focus-within`, so the inner outline would
+   be a second, tighter box inside the first. */
+.rich-text-editor-surface:focus,
+.rich-text-editor-surface:focus-visible {
+  outline: none;
+}
+
+/* Placeholder text. The editor marks the first node of an empty document, and
+   the text itself comes from the Placeholder extension's `data-placeholder`. */
+.rich-text-editor-surface p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: #9ca3af;
+}
+
+/* A selected atom — an image or a video embed — has no text selection to show,
+   so without this there is no indication it is about to be replaced. */
+.rich-text-editor-surface .ProseMirror-selectednode {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
+}
+
+/* Table editing affordances, only meaningful while editing. */
+.rich-text-editor-surface .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(124 58 237 / 12%);
+  pointer-events: none;
+}
+
+.rich-text-editor-surface th,
+.rich-text-editor-surface td {
+  position: relative;
+}
+
+.rich-text-editor-surface .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  background-color: #7c3aed;
+  pointer-events: none;
+}
+
+.dark .rich-text-editor-surface p.is-editor-empty:first-child::before {
+  color: #6b7280;
+}
