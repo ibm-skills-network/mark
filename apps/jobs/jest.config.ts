@@ -24,6 +24,10 @@ const config: Config = {
   // "Cannot find module 'src/...'". Map the same prefix to api's src/.
   moduleNameMapper: {
     "^src/(.*)$": "<rootDir>/../api/src/$1",
+    // Same reason, one level out: the api files pulled in above import the
+    // shared package, and resolving it here would need it built first. Point at
+    // its source, as api's own config does.
+    "^rich-text$": "<rootDir>/../../packages/rich-text/src/index.ts",
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
       "<rootDir>/../api/test/__mocks__/pdfjs-dist.ts",
     // ibm-cloud-sdk-core (transitive via @ibm-cloud/watsonx-ai used in

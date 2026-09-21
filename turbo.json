@@ -8,7 +8,9 @@
       "dependsOn": ["^build", "^download-models"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
-    "lint": {},
+    "lint": {
+      "dependsOn": ["^build"]
+    },
     "seed": {},
     "seed:update": {},
     "lint:staged": {},
