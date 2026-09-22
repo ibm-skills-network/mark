@@ -423,6 +423,14 @@ function QuestionPage(props: Props) {
         serverTimeOffsetMs,
       );
 
+      // Read the attempt the store was on *before* beginAttempt adopts this
+      // one: afterwards activeAttemptId always equals `id`, so comparing
+      // against it below would never detect that the store had drifted (the
+      // timer resets it to null with expiresAt/attemptStartedAt on submit)
+      // and the clock state would never be re-published.
+      const storeState = useLearnerStore.getState();
+
+      useLearnerStore.getState().beginAttempt(id);
       setQuestions(questionsWithStatus);
 
       const currentStoreUpdate = {
@@ -432,7 +440,6 @@ function QuestionPage(props: Props) {
         attemptStartedAt,
       };
 
-      const storeState = useLearnerStore.getState();
       const hasOtherChanges =
         clockCaptureRef.current !== id ||
         id !== storeState.activeAttemptId ||
