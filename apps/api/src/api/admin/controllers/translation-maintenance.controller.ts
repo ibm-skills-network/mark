@@ -26,6 +26,10 @@ import {
 } from "class-validator";
 import { getAllLanguageCodes } from "src/api/assignment/attempt/helper/languages";
 import { JobStatusServiceV2 } from "src/api/assignment/v2/services/job-status.service";
+import {
+  ASSIGNMENT_NAME_SELECT,
+  resolveAssignmentName,
+} from "src/api/assignment/v2/repositories/assignment.repository";
 import { TranslationService } from "src/api/assignment/v2/services/translation.service";
 import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
@@ -1743,14 +1747,18 @@ export class TranslationMaintenanceController {
     limit?: number,
   ): Promise<Array<{ id: number; name: string }>> {
     if (assignmentIds && assignmentIds.length > 0) {
-      return this.prisma.assignment.findMany({
+      const rows = await this.prisma.assignment.findMany({
         where: { id: { in: assignmentIds } },
-        select: { id: true, name: true },
+        select: { id: true, ...ASSIGNMENT_NAME_SELECT },
         orderBy: { id: "desc" },
       });
+      return rows.map((row) => ({
+        id: row.id,
+        name: resolveAssignmentName(row) ?? "",
+      }));
     }
 
-    return this.prisma.assignment.findMany({
+    const rows = await this.prisma.assignment.findMany({
       where: includeAll
         ? {}
         : {
@@ -1760,10 +1768,15 @@ export class TranslationMaintenanceController {
               isDraft: false,
             },
           },
-      select: { id: true, name: true },
+      select: { id: true, ...ASSIGNMENT_NAME_SELECT },
       take: limit,
       orderBy: { id: "desc" },
     });
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: resolveAssignmentName(row) ?? "",
+    }));
   }
 
   private async scanAssignment(
@@ -1778,9 +1791,12 @@ export class TranslationMaintenanceController {
         id: true,
         name: true,
         questionOrder: true,
+        versions: ASSIGNMENT_NAME_SELECT.versions,
         currentVersion: {
           select: {
             id: true,
+            isActive: true,
+            name: true,
             questionVersions: {
               select: {
                 questionId: true,
@@ -1914,7 +1930,7 @@ export class TranslationMaintenanceController {
 
     return {
       assignmentId: assignment.id,
-      assignmentName: assignment.name,
+      assignmentName: resolveAssignmentName(assignment) ?? "",
       missingAssignmentLanguages,
       missingItems,
       hasAnyTranslations,

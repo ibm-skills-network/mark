@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
   PortalContext,
@@ -29,13 +29,30 @@ export interface SupportRoute {
 }
 
 const TOKEN_ENV_PREFIX = "SUPPORT_TOKEN_";
-const DEFAULT_PRODUCT = "Portals";
+// Where a report goes when nothing claims its portal. Mark's own product, not
+// another team's: an unrecognized portal is Mark's problem to triage, and
+// dumping it in a portal product would put it in a queue whose owners have no
+// context for it.
+const DEFAULT_PRODUCT = "Mark";
 
 // portal-manager stamps this product on every portal in the two India
 // datacenters; matching by id as well as name survives a display-name change.
 const PRODUCT_NAME_BY_ID: Record<string, string> = {
   "fcb9d787-481b-4b3a-95c5-511b8b2b987f": "ICE",
 };
+
+// Only used for the startup diagnostic below — routing itself never consults
+// this list, so a new product needs a secret and no code change.
+const EXPECTED_PRODUCTS = [
+  "Mark",
+  "Portals",
+  "Cognitive Class",
+  "Coursera",
+  "edX",
+  "ICE",
+  "Labs",
+  "Faculty",
+];
 
 /** "Cognitive Class" -> "SUPPORT_TOKEN_COGNITIVE_CLASS" */
 export function tokenEnvironmentVariableFor(productName: string): string {
@@ -48,13 +65,37 @@ export function tokenEnvironmentVariableFor(productName: string): string {
 }
 
 @Injectable()
-export class SupportRoutingService {
+export class SupportRoutingService implements OnModuleInit {
   private readonly logger = new Logger(SupportRoutingService.name);
 
   constructor(
     private readonly configService: ConfigService,
     private readonly portalLookup: PortalLookupService,
   ) {}
+
+  /**
+   * Nothing validates env at boot in this app, and a missing token is
+   * invisible until a report is filed against that portal — so say which
+   * products can be reached while someone is still watching the deploy.
+   */
+  onModuleInit(): void {
+    const configured = EXPECTED_PRODUCTS.filter((product) =>
+      this.tokenFor(product),
+    );
+    const missing = EXPECTED_PRODUCTS.filter(
+      (product) => !this.tokenFor(product),
+    );
+
+    this.logger.log("SN Support routing configured", {
+      products: configured,
+      portal_manager: this.portalLookup.isConfigured(),
+    });
+    if (missing.length > 0) {
+      this.logger.warn(
+        `No SN Support token for: ${missing.join(", ")} — reports from those portals fall back to ${DEFAULT_PRODUCT}`,
+      );
+    }
+  }
 
   async resolve(portal: PortalContext): Promise<SupportRoute> {
     const record = await this.portalLookup.findByHost(portal.portalHost);

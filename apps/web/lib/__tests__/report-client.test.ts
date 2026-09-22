@@ -3,6 +3,11 @@
  */
 
 import { buildErrorReportPrefills, submitBugReport } from "../report-client";
+import { collectReportDiagnostics } from "../report-diagnostics";
+
+jest.mock("@/lib/report-diagnostics", () => ({
+  collectReportDiagnostics: jest.fn(),
+}));
 
 jest.mock("sonner", () => ({
   toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() },
@@ -88,6 +93,42 @@ describe("submitBugReport", () => {
     expect(body.get("userRole")).toBe("learner");
     expect(body.get("userEmail")).toBe("learner@example.com");
     expect(body.get("assignmentId")).toBe("42");
+  });
+
+  it("attaches the browser capture as a hidden field", async () => {
+    (collectReportDiagnostics as jest.Mock).mockReturnValue({
+      v: 1,
+      session: { attemptId: 84 },
+    });
+
+    await submitBugReport(
+      { description: "Broken", assignmentId: 42 },
+      { category: "Bug", user },
+    );
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const sent = (init.body as FormData).get("diagnostics");
+    expect(JSON.parse(sent as string)).toEqual({
+      v: 1,
+      session: { attemptId: 84 },
+    });
+    expect(collectReportDiagnostics).toHaveBeenCalledWith({
+      role: "learner",
+      assignmentId: 42,
+    });
+  });
+
+  it("still submits the report when nothing could be captured", async () => {
+    (collectReportDiagnostics as jest.Mock).mockReturnValue(undefined);
+
+    const ok = await submitBugReport(
+      { description: "Broken" },
+      { category: "Bug", user },
+    );
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    expect((init.body as FormData).has("diagnostics")).toBe(false);
+    expect(ok).toBe(true);
   });
 
   it("posts the page URL and browser so the ticket carries the client context", async () => {

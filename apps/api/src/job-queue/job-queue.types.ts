@@ -89,6 +89,25 @@ export interface TranslateVariantJobPayload {
   forceRetranslation?: boolean;
 }
 
+/**
+ * The assignment text a TRANSLATE_META job should translate, as published.
+ *
+ * Carried in the payload for the same reason TRANSLATE_QUESTION carries its
+ * `question`: the worker starts within milliseconds of the enqueue, while
+ * publish is still writing. Publish enqueues this job before it snapshots the
+ * new version, so a worker that re-read the assignment would resolve the
+ * *previous* active version and translate the text one publish out of date.
+ *
+ * Fields left undefined fall back to the assignment's live text, which is what
+ * the enqueue sites outside publish rely on.
+ */
+export interface TranslateMetaTextPayload {
+  name?: string | null;
+  introduction?: string | null;
+  instructions?: string | null;
+  gradingCriteriaOverview?: string | null;
+}
+
 export interface TranslateMetaJobPayload {
   // parentJobId is optional: the publish-driven enqueue passes the publish jobId so
   // the worker can HSET into the per-publish translation-status hash. The
@@ -97,6 +116,9 @@ export interface TranslateMetaJobPayload {
   parentJobId?: string;
   assignmentId: number;
   forceRetranslation?: boolean;
+  // Absent on the standalone and retry enqueues, which have no published text
+  // in hand and want whatever is live when the worker runs.
+  text?: TranslateMetaTextPayload;
 }
 
 export interface AttemptAuthorPreviewJobPayload {

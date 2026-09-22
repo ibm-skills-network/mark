@@ -172,6 +172,104 @@ describe("AttemptQuestionsMapper.buildQuestionsWithTranslations", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("keeps the translated choices, in the attempt's order, when choices are randomized", async () => {
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(JSON.stringify([{ id: 12 }, { id: 11 }])),
+        buildAssignment(),
+        buildTranslations({
+          "question-42": {
+            es: {
+              translatedText: "<p>Elige la mejor opción.</p>",
+              translatedChoices: [
+                { id: 11, choice: "Alfa" },
+                { id: 12, choice: "Beta (es)" },
+              ],
+            },
+          },
+        }),
+        "es",
+      );
+
+    // The grader matches a submitted choice against the translated text, so
+    // serving the authored choices here makes every answer unmatchable.
+    const translatedInAttemptOrder = [
+      { id: 12, choice: "Beta (es)" },
+      { id: 11, choice: "Alfa" },
+    ];
+    expect(questions[0].choices).toEqual(translatedInAttemptOrder);
+    expect(questions[0].translations?.es?.translatedChoices).toEqual(
+      translatedInAttemptOrder,
+    );
+  });
+
+  // The translation catalogue holds an "en" row for questions authored in
+  // English: a machine paraphrase of the authored text. The grader never
+  // applies it (English is the authored language), so serving it makes every
+  // English learner submit text the grader cannot match.
+  describe.each([
+    ["randomized", JSON.stringify([{ id: 12 }, { id: 11 }])],
+    ["not randomized", null],
+  ])("when an English learner's choices are %s", (_label, randomized) => {
+    // A factory: the mapper reorders translation objects in place.
+    const paraphrasedEnglish = () => ({
+      en: {
+        translatedText: "<p>Choose the best answer.</p>",
+        translatedChoices: [
+          { id: 11, choice: "<strong>Alpha (paraphrased)</strong>" },
+          { id: 12, choice: "Beta (paraphrased)" },
+        ],
+      },
+      es: {
+        translatedText: "<p>Elige la mejor opción.</p>",
+        translatedChoices: [
+          { id: 11, choice: "Alfa" },
+          { id: 12, choice: "Beta (es)" },
+        ],
+      },
+    });
+
+    it("serves the authored English, never the stored en paraphrase", async () => {
+      const questions =
+        await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+          buildAttempt(randomized),
+          buildAssignment(),
+          buildTranslations({ "question-42": paraphrasedEnglish() }),
+          "en",
+        );
+
+      const authored = randomized
+        ? [
+            { id: 12, choice: "Beta" },
+            { id: 11, choice: "<strong>Alpha</strong>" },
+          ]
+        : [
+            { id: 11, choice: "<strong>Alpha</strong>" },
+            { id: 12, choice: "Beta" },
+          ];
+      expect(questions[0].question).toBe(QUESTION_HTML);
+      expect(questions[0].choices).toEqual(authored);
+      // The client submits `translations[language]` when it exists, so the
+      // paraphrase must not be offered under any English code either.
+      expect(questions[0].translations?.en).toBeUndefined();
+    });
+
+    it("still serves a stored translation for another language", async () => {
+      const questions =
+        await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+          buildAttempt(randomized),
+          buildAssignment(),
+          buildTranslations({ "question-42": paraphrasedEnglish() }),
+          "es",
+        );
+
+      expect(questions[0].question).toBe("<p>Elige la mejor opción.</p>");
+      expect(questions[0].choices.map((c) => c.choice)).toEqual(
+        randomized ? ["Beta (es)", "Alfa"] : ["Alfa", "Beta (es)"],
+      );
+    });
+  });
+
   it("serves stored markup unchanged so the learner payload keeps its formatting", async () => {
     const translatedHtml =
       '<p>Párrafo uno.</p><ol><li data-list="bullet">uno</li></ol>';

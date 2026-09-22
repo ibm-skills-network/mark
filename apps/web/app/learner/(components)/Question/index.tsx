@@ -313,6 +313,9 @@ function QuestionPage(props: Props) {
   const debugLog = useDebugLog();
   const router = useRouter();
   const questionsStore = useLearnerStore((state) => state.questions);
+  const userPreferedLanguage = useLearnerStore(
+    (state) => state.userPreferedLanguage,
+  );
 
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const setQuestions = useLearnerStore((state) => state.setQuestions);
@@ -362,7 +365,13 @@ function QuestionPage(props: Props) {
       let nextAssignmentDetails = buildAssignmentDetailsFromAttempt(attempt);
 
       if (!nextAssignmentDetails) {
-        nextAssignmentDetails = await getAssignment(assignmentId);
+        // Pass the learner's language: without it the backend skips translation
+        // entirely and returns the source-language name, which then overwrites
+        // the translated title the About page had already put in the store.
+        nextAssignmentDetails = await getAssignment(
+          assignmentId,
+          userPreferedLanguage ?? undefined,
+        );
       }
 
       if (!nextAssignmentDetails) {
@@ -414,6 +423,14 @@ function QuestionPage(props: Props) {
         serverTimeOffsetMs,
       );
 
+      // Read the attempt the store was on *before* beginAttempt adopts this
+      // one: afterwards activeAttemptId always equals `id`, so comparing
+      // against it below would never detect that the store had drifted (the
+      // timer resets it to null with expiresAt/attemptStartedAt on submit)
+      // and the clock state would never be re-published.
+      const storeState = useLearnerStore.getState();
+
+      useLearnerStore.getState().beginAttempt(id);
       setQuestions(questionsWithStatus);
 
       const currentStoreUpdate = {
@@ -423,7 +440,6 @@ function QuestionPage(props: Props) {
         attemptStartedAt,
       };
 
-      const storeState = useLearnerStore.getState();
       const hasOtherChanges =
         clockCaptureRef.current !== id ||
         id !== storeState.activeAttemptId ||
@@ -457,6 +473,10 @@ function QuestionPage(props: Props) {
     setQuestions,
     setLearnerStore,
     setAssignmentDetails,
+    // Safe as a dependency — unlike `assignmentDetails`, this is not written by
+    // the effect, so a change means the learner actually switched language and
+    // the assignment text has to be refetched in the new one.
+    userPreferedLanguage,
   ]);
 
   const [activeQuestionNumber] = useLearnerStore((state) => [
