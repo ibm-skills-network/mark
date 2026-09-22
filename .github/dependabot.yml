@@ -1,13 +1,19 @@
 version: 2
 
-# Dependabot runs MONTHLY per workspace. Minor + patch updates are grouped into
-# a single PR per ecosystem so CI cost stays bounded. Major version bumps are
-# ignored entirely — we handle major upgrades manually because they almost
-# always need a deliberate migration. Security advisories are NOT affected by
-# the ignore rules; Dependabot still raises individual security PRs immediately.
+# One npm entry only. This repo is a yarn workspaces monorepo with a single
+# root yarn.lock, so Dependabot has to resolve from "/" to be able to write it.
+# The per-workspace entries that used to live here (/apps/api, /apps/web, ...)
+# could edit that app's package.json but not the root lockfile, so every PR
+# they raised landed package.json and yarn.lock out of sync — CI then resolved
+# the new ranges ad hoc and pulled duplicate copies of hoisted packages.
+#
+# Minor + patch updates are grouped into a single PR so CI cost stays bounded.
+# Major version bumps are ignored entirely — we handle major upgrades manually
+# because they almost always need a deliberate migration. Security advisories
+# are NOT affected by the ignore rules; Dependabot still raises individual
+# security PRs immediately.
 
 updates:
-  # Root workspace
   - package-ecosystem: npm
     directory: "/"
     schedule:
@@ -15,7 +21,7 @@ updates:
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 5
     versioning-strategy: increase
     labels:
       - dependencies
@@ -24,124 +30,12 @@ updates:
         update-types:
           - version-update:semver-major
     groups:
-      root-minor-and-patch:
+      npm-minor-and-patch:
         applies-to: version-updates
         update-types:
           - minor
           - patch
-      root-security:
-        applies-to: security-updates
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: npm
-    directory: "/apps/api"
-    schedule:
-      interval: monthly
-      day: monday
-      time: "06:00"
-      timezone: Etc/UTC
-    open-pull-requests-limit: 2
-    versioning-strategy: increase
-    labels:
-      - dependencies
-      - api
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
-    groups:
-      api-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - minor
-          - patch
-      api-security:
-        applies-to: security-updates
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: npm
-    directory: "/apps/api-gateway"
-    schedule:
-      interval: monthly
-      day: monday
-      time: "06:00"
-      timezone: Etc/UTC
-    open-pull-requests-limit: 2
-    versioning-strategy: increase
-    labels:
-      - dependencies
-      - api-gateway
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
-    groups:
-      api-gateway-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - minor
-          - patch
-      api-gateway-security:
-        applies-to: security-updates
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: npm
-    directory: "/apps/web"
-    schedule:
-      interval: monthly
-      day: monday
-      time: "06:00"
-      timezone: Etc/UTC
-    open-pull-requests-limit: 2
-    versioning-strategy: increase
-    labels:
-      - dependencies
-      - web
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
-    groups:
-      web-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - minor
-          - patch
-      web-security:
-        applies-to: security-updates
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: npm
-    directory: "/apps/jobs"
-    schedule:
-      interval: monthly
-      day: monday
-      time: "06:00"
-      timezone: Etc/UTC
-    open-pull-requests-limit: 2
-    versioning-strategy: increase
-    labels:
-      - dependencies
-      - jobs
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
-    groups:
-      jobs-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - minor
-          - patch
-      jobs-security:
+      npm-security:
         applies-to: security-updates
         update-types:
           - minor
