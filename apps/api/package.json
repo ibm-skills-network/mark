@@ -67,6 +67,7 @@
     "axios": "^1.19.0",
     "bottleneck": "^2.19.5",
     "bullmq": "^5.21.1",
+    "canvas": "3.1.2",
     "chardet": "^2.1.0",
     "cheerio": "^1.1.2",
     "class-transformer": "^0.5.1",

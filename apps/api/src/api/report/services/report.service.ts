@@ -14,7 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
-import * as natural from "natural";
+import { WordTokenizer } from "natural/lib/natural/tokenizers";
 import { FilesService } from "src/api/files/services/files.service";
 import {
   UserRole,
@@ -638,7 +638,7 @@ export class ReportsService {
 
   private calculateTextSimilarity(text1: string, text2: string): number {
     try {
-      const tokenizer = new natural.WordTokenizer();
+      const tokenizer = new WordTokenizer();
       const tokens1 = tokenizer.tokenize(text1.toLowerCase()) || [];
       const tokens2 = tokenizer.tokenize(text2.toLowerCase()) || [];
 
