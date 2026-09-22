@@ -282,8 +282,17 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
         setCurrentPath: (path) => set({ currentPath: path }),
         setSelectedFiles: (files) => set({ selectedFiles: files }),
         clearGithubStore: () => {
+          // The live fields are what persistStateForQuestion writes back into
+          // questionGitHubState, so emptying only the map leaves the previous
+          // selection to be re-persisted the next time a question is opened.
           set({
             questionGitHubState: {},
+            activeQuestionId: null,
+            selectedRepo: null,
+            repoContents: [],
+            currentPath: [],
+            selectedFiles: [],
+            isGithubModalOpen: false,
           });
         },
         persistStateForQuestion: () => {
@@ -398,7 +407,6 @@ export type LearnerActions = {
     presentationResponse: PresentationQuestionResponse,
   ) => void;
   setSlidesData: (questionId: number, slidesData: slideMetaData[]) => void;
-  setActiveAttemptId: (id: number) => void;
   beginAttempt: (id: number) => void;
   setActiveQuestionNumber: (id: number | null) => void;
   addQuestion: (question: QuestionStore) => void;
@@ -859,14 +867,16 @@ export const useLearnerStore = createWithEqualityFn<
         // attempt's shuffled choices, so anything left from another attempt
         // (a submit the client saw fail, an expiry, an abandoned tab) must go
         // before the new attempt's questions are merged over it.
-        beginAttempt: (id) =>
-          set((state) =>
-            state.activeAttemptId === id
-              ? state
-              : { activeAttemptId: id, questions: [] },
-          ),
-        setActiveAttemptId: (id) => {
-          set({ activeAttemptId: id });
+        beginAttempt: (id) => {
+          if (get().activeAttemptId === id) {
+            return;
+          }
+          // GitHub file picks live in their own store and are only cleared on
+          // a submit the client saw succeed — the same condition that cannot
+          // be relied on here — so they have to be dropped with the drafts or
+          // the new attempt opens with the last attempt's repo files attached.
+          useGitHubStore.getState().clearGithubStore();
+          set({ activeAttemptId: id, questions: [] });
         },
         activeQuestionNumber: 1,
         setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
