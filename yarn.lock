@@ -12980,9 +12980,9 @@ node-xlsx@^0.24.0:
     xlsx "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
 
 nodemailer@^9.0.5:
-  version "9.0.5"
-  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-9.0.5.tgz#edf488e2d25b1688614922d7e733f551114099fc"
-  integrity sha512-wvjiKvjczmsN7U/8006JOdXubgBk2XFAbioDMbT+sM7cPs0QrhJTa6KBRX7P5REGGkDcLUz/EarWidb8G8C1jQ==
+  version "9.1.1"
+  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-9.1.1.tgz#fb991992723657f34dbe1d829139aa66be008e96"
+  integrity sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ==
 
 normalize-package-data@^2.5.0:
   version "2.5.0"
@@ -16359,9 +16359,9 @@ undici-types@~7.8.0:
   integrity sha512-9UJ2xGDvQ43tYyVMpuHlsgApydB8ZKfVYTsLDhXkFL/6gfkp+U8xTGdh8pMJv1SpZna0zxG1DwsKZsreLbXBxw==
 
 undici@^5.29.0, undici@^7.19.0, undici@^7.29.0:
-  version "7.29.0"
-  resolved "https://registry.yarnpkg.com/undici/-/undici-7.29.0.tgz#ae0f6f62e06e057a9cbb7b2b5fde2bb74f791b8f"
-  integrity sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==
+  version "7.29.1"
+  resolved "https://registry.yarnpkg.com/undici/-/undici-7.29.1.tgz#7741c6fc8b3e1a48e30323833642bfbe841443ad"
+  integrity sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==
 
 unicorn-magic@^0.1.0:
   version "0.1.0"

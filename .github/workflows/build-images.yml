@@ -271,7 +271,14 @@ jobs:
 
       - name: Run linting for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn turbo run lint --filter=${{ matrix.service }} --only
+        # No `--only`: the shared `rich-text` package must be built before a
+        # consumer can be linted. Its `main` points at `dist/`, so without the
+        # build ESLint reports `import/no-unresolved`, and the type-aware rules
+        # then treat everything from it as `any` and fail on safe code. `--only`
+        # skips task dependencies, which is exactly the `^build` lint needs.
+        # `test` below keeps `--only`: the jest configs map the package to its
+        # source, so tests need no build.
+        run: yarn turbo run lint --filter=${{ matrix.service }}
 
   test:
     name: Test - ${{ matrix.service }}
