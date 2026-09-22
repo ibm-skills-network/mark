@@ -218,3 +218,40 @@ describe("LLMPricingService.calculateCostBatch", () => {
     expect(results[1]).toBeNull();
   });
 });
+
+describe("GPT-6 Luna fallback pricing", () => {
+  it.each([
+    [272_000, 0.000_000_1, 0.000_000_5],
+    [272_001, 0.000_000_2, 0.000_000_75],
+  ])(
+    "prices %s input tokens with the correct context tier",
+    async (inputTokens, inputPrice, outputPrice) => {
+      const service = new LLMPricingService({} as never, {} as never);
+      const fallback = service["getFallbackPricing"]("gpt-6-luna");
+      expect(fallback?.metadata).toMatchObject({
+        cachedInputTokenPrice: 0.000_000_01,
+        cacheWriteTokenPrice: 0.000_000_125,
+        longContextCachedInputTokenPrice: 0.000_000_02,
+        longContextCacheWriteTokenPrice: 0.000_000_25,
+      });
+      jest.spyOn(service, "getPricingAtDate").mockResolvedValue(fallback!);
+      jest
+        .spyOn(service, "getCurrentPriceUpscaling")
+        .mockResolvedValue(null as never);
+      const [result] = await service.calculateCostBatch([
+        {
+          modelKey: "gpt-6-luna",
+          inputTokens,
+          outputTokens: 1000,
+          usageDate: new Date("2026-09-22T00:00:00Z"),
+        },
+      ]);
+      expect(result?.inputTokenPrice).toBeCloseTo(inputPrice, 12);
+      expect(result?.outputTokenPrice).toBeCloseTo(outputPrice, 12);
+      expect(result?.totalCost).toBeCloseTo(
+        inputTokens * inputPrice + 1000 * outputPrice,
+        12,
+      );
+    },
+  );
+});

@@ -83,3 +83,53 @@ describe("CriterionJudgeService evidence", () => {
     expect(prompt).toContain("different excerpt");
   });
 });
+
+it("gives the judge every scoring level instead of only the rubric heading", async () => {
+  let rendered = "";
+  const service = new CriterionJudgeService(
+    {
+      processStructuredPrompt: async (prompt: {
+        format: (input: object) => Promise<string>;
+      }) => {
+        rendered = await prompt.format({});
+        return { approved: true, issues: [], summary: "Valid" };
+      },
+    } as any,
+    { getModelKeyWithFallback: async () => "gpt-6-luna" } as any,
+  );
+  await service.judge({
+    question: "Show a merge",
+    assignmentId: 1,
+    grades: [],
+    evidence: [],
+    criteria: [
+      {
+        id: "merge",
+        rubricQuestion: "Did README.md change?",
+        description: "Assess the merge transcript",
+        maxPoints: 2,
+        criteria: [
+          { points: 0, description: "Both required commands are missing" },
+          {
+            points: 1,
+            description: "Commands present but change output missing",
+          },
+          {
+            points: 2,
+            description:
+              "Must show git checkout main AND git merge bug-fix-typo AND the file-change output",
+          },
+        ],
+      },
+    ],
+  });
+  for (const text of [
+    "Both required commands are missing",
+    "Commands present but change output missing",
+    "Must show git checkout main AND git merge bug-fix-typo AND the file-change output",
+  ])
+    expect(rendered).toContain(text);
+  expect(rendered).toContain('"points":0');
+  expect(rendered).toContain('"points":1');
+  expect(rendered).toContain('"points":2');
+});
