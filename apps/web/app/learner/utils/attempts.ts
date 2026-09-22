@@ -48,6 +48,35 @@ export const getExpiresAtMs = (
   return Number.isNaN(timestamp) ? undefined : timestamp;
 };
 
+/**
+ * How far the server's clock is ahead of this device's, in milliseconds.
+ *
+ * `expiresAt` is an absolute server timestamp, so a countdown that measures it
+ * against a bare `Date.now()` charges the learner for every minute their device
+ * clock is fast — and expires the attempt outright once the device is past the
+ * deadline. Call this in the browser the moment the attempt payload lands, then
+ * count down against `Date.now() + offset`.
+ *
+ * Returns undefined when the payload carries no usable server timestamp. That
+ * is not the same as an offset of zero: callers that need to know whether the
+ * device clock can be trusted at all check for it.
+ */
+export const deriveServerTimeOffsetMs = (
+  serverNow: string | Date | null | undefined,
+  deviceNowMs: number = Date.now(),
+): number | undefined => {
+  const serverNowMs = getTimestampMs(serverNow);
+  return Number.isNaN(serverNowMs) ? undefined : serverNowMs - deviceNowMs;
+};
+
+/** The attempt's creation time on the server clock, if the payload has one. */
+export const getAttemptStartedAtMs = (
+  createdAt: AssignmentAttempt["createdAt"],
+): number | undefined => {
+  const createdAtMs = getTimestampMs(createdAt);
+  return Number.isNaN(createdAtMs) ? undefined : createdAtMs;
+};
+
 export const isAttemptSubmitted = (attempt: AssignmentAttempt): boolean =>
   coerceSubmitted(attempt.submitted);
 

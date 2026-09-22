@@ -46,16 +46,21 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   const [error, setError] = useState<{
     code: number;
     message: string;
+    cause: unknown;
   } | null>(null);
   const fetchData = async (signal?: { cancelled: boolean }) => {
     setIsLoading(true);
     try {
       if (role === "learner") {
         try {
+          // quiet: this component renders the failure as an error screen, so
+          // a toast would only double up on it — and a momentary failure that
+          // the retry absorbs must not flash anything at all.
           const assignmentData = await getAssignment(
             assignmentId,
             userPreferedLanguage,
             cookie,
+            { quiet: true },
           );
 
           const attemptsData = await getAttempts(assignmentId, cookie);
@@ -79,6 +84,8 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           // Preserve the real HTTP status so a 401 (expired session) routes to
           // SessionExpired, not AccessRestricted. apiClient throws APIError with
           // a `.status`; statusFromError falls back to 500 for anything opaque.
+          // The thrown value is kept as well, because a request that never got
+          // a response has no status and must not be shown as a server fault.
           const status = statusFromError(error);
           setError({
             code: status,
@@ -86,6 +93,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
               status === 403
                 ? "You are not authorized to view this page"
                 : "We couldn't load this assignment.",
+            cause: error,
           });
           if (!signal?.cancelled) {
             setAssignment(null);
@@ -95,7 +103,9 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
         const previewPayload = readAuthorPreviewPayload(assignmentId);
         const backendAssignment = previewPayload
           ? null
-          : await getAssignment(assignmentId, userPreferedLanguage, cookie);
+          : await getAssignment(assignmentId, userPreferedLanguage, cookie, {
+              quiet: true,
+            });
         if (!previewPayload && !backendAssignment) {
           throw new Error("Failed to fetch assignment.");
         }
@@ -144,7 +154,13 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     return <LoadingPage animationData={animationData} />;
   }
   if (error) {
-    return <ErrorScreen status={error.code} message={error.message} />;
+    return (
+      <ErrorScreen
+        status={error.code}
+        message={error.message}
+        error={error.cause}
+      />
+    );
   }
   if (!assignment) {
     const errorMessage =

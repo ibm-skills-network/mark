@@ -11,6 +11,10 @@ import {
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
+import {
+  UI_LANGUAGE_CHANGED_EVENT,
+  UI_LANGUAGE_STORAGE_KEY,
+} from "@/lib/ui-language";
 import LearnerHeader from "../Header";
 
 // --- next/navigation: useParams is the source of truth we are locking in ---
@@ -31,10 +35,12 @@ jest.mock("next/navigation", () => ({
 
 // --- backend: submitAssignment is the call whose first arg must be the URL id ---
 const mockSubmitAssignment = jest.fn();
+const mockGetAttempt = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/lib/talkToBackend", () => ({
   submitAssignment: (...args: unknown[]) => mockSubmitAssignment(...args),
   getSupportedLanguages: jest.fn().mockResolvedValue([]),
   getUser: jest.fn().mockResolvedValue({ role: "learner", returnUrl: "" }),
+  getAttempt: (...args: unknown[]) => mockGetAttempt(...args),
 }));
 
 jest.mock("@/lib/learner", () => ({
@@ -120,6 +126,7 @@ function seedLearnerState(assignmentIdInStore: number | null) {
     questions: [answeredQuestion],
     activeAttemptId: 999,
     userPreferedLanguage: null,
+    isUploadingFiles: false,
   });
   useLearnerOverviewStore.setState({ assignmentId: assignmentIdInStore });
   useAssignmentDetails.setState({ assignmentDetails: null });
@@ -311,6 +318,55 @@ describe("LearnerHeader post-submit language reset", () => {
   });
 });
 
+describe("LearnerHeader uiLang URL sync", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+  });
+
+  // Defence in depth for the ghost-attempt class above: the questions route
+  // re-runs its server component on every navigation, and that is where a new
+  // attempt is created. The sibling `lang` sync is already route-guarded; this
+  // one was not, so any render on /questions with a non-English language was
+  // one push away from re-arming the same mechanism.
+  it("does not rewrite the questions URL to carry the UI language", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    useLearnerStore.setState({ userPreferedLanguage: "it" });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    const questionsRouteNavigations = mockReplace.mock.calls.filter(([url]) =>
+      String(url).includes("/questions"),
+    );
+    expect(questionsRouteNavigations).toEqual([]);
+  });
+
+  // The URL is not what drives translation — storage plus the change event is
+  // — so skipping the navigation must not cost the learner their language.
+  it("still records the UI language for the translator", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    useLearnerStore.setState({ userPreferedLanguage: "it" });
+
+    const broadcast = jest.fn();
+    window.addEventListener(UI_LANGUAGE_CHANGED_EVENT, broadcast);
+    try {
+      await act(async () => {
+        render(<LearnerHeader />);
+      });
+    } finally {
+      window.removeEventListener(UI_LANGUAGE_CHANGED_EVENT, broadcast);
+    }
+
+    expect(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe("it");
+    expect(broadcast).toHaveBeenCalled();
+  });
+});
+
 describe("LearnerHeader duplicate-submit conflict", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -336,5 +392,218 @@ describe("LearnerHeader duplicate-submit conflict", () => {
     expect(mockPush).toHaveBeenCalledWith("/learner/3428/successPage/999");
     expect(toast.error).not.toHaveBeenCalled();
     expect(screen.queryByTestId("grading-modal")).not.toBeInTheDocument();
+  });
+});
+
+// The attempt response now carries only the language it was requested in, so
+// the page has to notice when the server sent a language the learner did not
+// ask for — otherwise a learner reaching /questions without a `lang` parameter
+// silently reads the whole assignment in English.
+describe("LearnerHeader content language reconciliation", () => {
+  const questionInEnglishOnly = {
+    id: 1,
+    status: "unedited",
+    question: "Pick one",
+    translations: { en: { translatedText: "Pick one" } },
+  } as unknown as QuestionStore;
+
+  const questionInSpanish = {
+    ...questionInEnglishOnly,
+    translations: {
+      en: { translatedText: "Pick one" },
+      es: { translatedText: "Elige una" },
+    },
+  } as unknown as QuestionStore;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    mockGetAttempt.mockResolvedValue({ questions: [questionInSpanish] });
+  });
+
+  it("refetches the attempt when the payload lacks the learner's language", async () => {
+    useLearnerStore.setState({
+      questions: [questionInEnglishOnly],
+      activeAttemptId: 999,
+      userPreferedLanguage: "es",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).toHaveBeenCalledWith(3428, 999, undefined, "es");
+    expect(
+      useLearnerStore.getState().questions[0].translations?.es,
+    ).toBeDefined();
+  });
+
+  it("does not refetch when the payload already has the language", async () => {
+    useLearnerStore.setState({
+      questions: [questionInSpanish],
+      activeAttemptId: 999,
+      userPreferedLanguage: "es",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).not.toHaveBeenCalled();
+  });
+
+  it("does not refetch for an English learner", async () => {
+    useLearnerStore.setState({
+      questions: [questionInEnglishOnly],
+      activeAttemptId: 999,
+      userPreferedLanguage: "en",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).not.toHaveBeenCalled();
+  });
+
+  // Translations are generated lazily, so a language may genuinely have none
+  // yet. Retrying on every render would put the page in a fetch loop.
+  it("asks once for a language that has no translations at all", async () => {
+    mockGetAttempt.mockResolvedValue({ questions: [questionInEnglishOnly] });
+    useLearnerStore.setState({
+      questions: [questionInEnglishOnly],
+      activeAttemptId: 999,
+      userPreferedLanguage: "es",
+    });
+    useLearnerOverviewStore.setState({ assignmentId: 3428 });
+
+    const { rerender } = render(<LearnerHeader />);
+    await act(async () => {
+      rerender(<LearnerHeader />);
+    });
+    await act(async () => {
+      rerender(<LearnerHeader />);
+    });
+
+    expect(mockGetAttempt).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("LearnerHeader submit gating", () => {
+  // The header's own Submit button is disabled by getSubmitButtonStatus, but
+  // the in-page submit control reaches the same handler through a window
+  // event. The gate has to live on the handler or that route skips every check.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSubmitAssignment.mockResolvedValue(undefined);
+  });
+
+  it("refuses to submit while a file upload is still running", async () => {
+    // Submitting mid-upload posts the attempt without the file the learner is
+    // waiting on; it grades as an empty answer.
+    seedLearnerState(null);
+    useLearnerStore.setState({ isUploadingFiles: true });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/file upload in progress/i),
+    );
+  });
+
+  it("refuses to submit when no question has been answered", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [{ id: 1, status: "unedited" } as unknown as QuestionStore],
+    });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/no questions have been answered/i),
+    );
+  });
+
+  it("refuses to submit an answer whose URL is not valid", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [
+        {
+          id: 1,
+          status: "edited",
+          learnerUrlResponse: "not a url",
+        } as unknown as QuestionStore,
+      ],
+    });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/doesn't look like a web address|invalid url/i),
+    );
+  });
+
+  it("still submits once everything the header checks is satisfied", async () => {
+    seedLearnerState(null);
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringMatching(
+        /file upload in progress|no questions have been answered|web address|invalid url/i,
+      ),
+    );
+  });
+});
+
+describe("Regression: stale automatic language fetch", () => {
+  it("ignores the prior attempt response after the attempt changes", async () => {
+    jest.clearAllMocks();
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSearchParams.mockReturnValue(new URLSearchParams());
+    seedLearnerState(3428);
+    useLearnerStore.setState({ userPreferedLanguage: "fr" });
+    let finishOldFetch!: (a: unknown) => void;
+    mockGetAttempt
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishOldFetch = resolve;
+        }),
+      )
+      .mockResolvedValue(undefined);
+    render(<LearnerHeader />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockGetAttempt).toHaveBeenCalledWith(3428, 999, undefined, "fr");
+    await act(async () => {
+      useLearnerStore.setState({
+        activeAttemptId: 1000,
+        questions: [{ id: 2, question: "new attempt" }] as any,
+      });
+    });
+    await act(async () => {
+      finishOldFetch({
+        questions: [{ id: 1, question: "old attempt French" }],
+      });
+    });
+    expect(useLearnerStore.getState().activeAttemptId).toBe(1000);
+    expect(useLearnerStore.getState().questions.map((q) => q.id)).toEqual([2]);
   });
 });

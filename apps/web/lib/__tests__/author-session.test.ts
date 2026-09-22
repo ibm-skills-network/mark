@@ -1,4 +1,8 @@
-import { authorSessionHeaders, bindAuthorSession } from "../author-session";
+import {
+  authorSessionHeaders,
+  bindAuthorSession,
+  learnerSuccessPath,
+} from "../author-session";
 
 beforeEach(() => window.history.replaceState({}, "", "/"));
 afterEach(() => window.history.replaceState({}, "", "/"));
@@ -40,4 +44,20 @@ it("selects author context only for deliberate author previews", () => {
   expect(authorSessionHeaders(false)).toEqual({
     "x-mark-author-assignment": "4892",
   });
+});
+
+it("keeps an author preview in author context on the results page", () => {
+  window.history.replaceState(
+    {},
+    "",
+    "/learner/4892/questions?authorMode=true&lang=en",
+  );
+  expect(learnerSuccessPath(4892, 77)).toBe(
+    "/learner/4892/successPage/77?authorMode=true",
+  );
+});
+
+it("leaves a learner's results path untouched", () => {
+  window.history.replaceState({}, "", "/learner/4892/questions?lang=en");
+  expect(learnerSuccessPath(4892, 77)).toBe("/learner/4892/successPage/77");
 });

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import ReportErrorButton from "@/components/ReportErrorButton";
+import type { ErrorFault } from "@/lib/report-client";
 import { cn } from "@/lib/strings";
 
 type UserStep = {
@@ -27,6 +28,7 @@ const DEFAULT_HEADLINES: Record<number, string> = {
   401: "Authentication required",
   403: "Access is restricted",
   404: "We couldn't find that",
+  408: "The request took too long",
   409: "There's a conflict to resolve",
   422: "We couldn't process that request",
   429: "You're sending too many requests",
@@ -66,6 +68,16 @@ const DEFAULT_STEPS: Record<number, UserStep[]> = {
       description: "Navigate from your course home to reopen this activity.",
     },
   ],
+  408: [
+    {
+      title: "Try again",
+      description: "The request ran out of time before it finished.",
+    },
+    {
+      title: "Check your connection",
+      description: "A slow or unstable connection is the usual cause.",
+    },
+  ],
   422: [
     {
       title: "Review your inputs",
@@ -98,22 +110,34 @@ function parseErrorMessage(error: ErrorInput): string {
 export default function ErrorPage({
   error,
   statusCode = 500,
+  statusLabel,
+  fault = "server",
   className,
   headline,
   userSteps,
   context,
   debugDetails = [],
   stateTimeline = [],
+  onRetry,
   variant = "page",
 }: {
   error: ErrorInput;
   statusCode?: number;
+  /**
+   * Badge text when the failure has no HTTP status of its own. Printing a
+   * status the server never sent misleads the reader and misroutes the report.
+   */
+  statusLabel?: string;
+  /** Whose failure this is, so support triage can tell the two apart. */
+  fault?: ErrorFault;
   className?: string;
   headline?: string;
   userSteps?: UserStep[];
   context?: string;
   debugDetails?: DebugEntry[];
   stateTimeline?: StateEvent[];
+  /** Rendered as a "Try again" action when the failure is worth re-attempting. */
+  onRetry?: () => void;
   variant?: "page" | "modal";
 }) {
   const errorMessage = useMemo(() => parseErrorMessage(error), [error]);
@@ -155,7 +179,7 @@ export default function ErrorPage({
         <div className={`flex flex-col gap-6 ${paddingClasses}`}>
           <div className="flex items-baseline gap-3">
             <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 tabular-nums">
-              {statusCode}
+              {statusLabel ?? statusCode}
             </span>
             <div className="space-y-1">
               <h1 className="text-xl font-bold text-gray-900">
@@ -170,10 +194,24 @@ export default function ErrorPage({
             </div>
           </div>
 
+          {onRetry ? (
+            <div>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                Try again
+              </button>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
             <ReportErrorButton
               error={{
                 statusCode,
+                statusLabel,
+                fault,
                 headline: resolvedHeadline,
                 message: errorMessage,
                 context,

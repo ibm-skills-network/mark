@@ -447,6 +447,13 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
         );
 
       await this.assignmentRepository.update(assignmentId, {
+        // `name` belongs with the other three: leaving it out is what let the
+        // base row drift from the published title, and createVersion snapshots
+        // this row, so a rename that arrived only in the publish payload
+        // reached neither the row nor the new version. An absent name is
+        // `undefined`, which Prisma ignores, so a payload without one still
+        // leaves the stored title alone.
+        name: updateDto.name,
         introduction: updateDto.introduction,
         instructions: updateDto.instructions,
         gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
@@ -602,6 +609,17 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
               {
                 parentJobId: jobId,
                 assignmentId,
+                // Send the text being published rather than letting the worker
+                // re-read it. The version snapshot is written further down this
+                // method, and the worker starts long before it lands — a worker
+                // that re-read would resolve the previous active version and
+                // translate the last publish's title and introduction.
+                text: {
+                  name: updateDto.name,
+                  introduction: updateDto.introduction,
+                  instructions: updateDto.instructions,
+                  gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
+                },
               } satisfies TranslateMetaJobPayload,
               {
                 attempts: 3,

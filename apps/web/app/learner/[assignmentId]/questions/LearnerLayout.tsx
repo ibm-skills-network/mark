@@ -142,7 +142,7 @@ async function LearnerLayout(props: Props) {
       "User fetch failed",
       status === 401 ? "Unauthorized" : `Status ${status}`,
     );
-    return <ErrorScreen status={status} />;
+    return <ErrorScreen status={status} error={error} />;
   }
 
   const role = user?.role;
@@ -178,7 +178,7 @@ async function LearnerLayout(props: Props) {
     // server fault — route it to the matching screen instead of a 500 modal.
     const status = statusFromError(error);
     log("Attempts fetch unauthorized", `Status ${status}`);
-    return <ErrorScreen status={status} />;
+    return <ErrorScreen status={status} error={error} />;
   }
   if (!listOfAttempts) {
     log("Attempts fetch failed");
@@ -293,7 +293,7 @@ async function LearnerLayout(props: Props) {
     log(rejection.logStep);
     return (
       <ErrorModal
-        className="h-[calc(100vh-100px)]"
+        className="h-full"
         statusCode={rejection.statusCode}
         error={rejection.error}
         headline={rejection.headline}
@@ -342,7 +342,7 @@ async function AttemptLoader({
       { throwOnAuthError: true },
     );
   } catch (error) {
-    return <ErrorScreen status={statusFromError(error)} />;
+    return <ErrorScreen status={statusFromError(error)} error={error} />;
   }
   if (!attempt) {
     // Transient failures were already retried inside getAttempt and auth
@@ -356,10 +356,10 @@ async function AttemptLoader({
 
   return (
     role === "learner" && (
-      <main
-        id="exam-root"
-        className="flex flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden"
-      >
+      // h-full, not viewport minus a hard-coded header height: the header is
+      // as tall as its content needs at the current width, and the pane it
+      // sits above is the one the route root sizes for it.
+      <main id="exam-root" className="flex flex-col h-full overflow-hidden">
         <QuestionPage
           attempt={attempt}
           assignmentId={assignmentId}

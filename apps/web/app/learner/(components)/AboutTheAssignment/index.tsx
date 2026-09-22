@@ -294,10 +294,21 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     setToggleLanguageSelectionModal(false);
   };
 
-  const url =
-    role === "learner"
-      ? `/learner/${assignmentId}/questions`
-      : `/learner/${assignmentId}/questions?authorMode=true`;
+  // The attempt is fetched server-side from this URL's `lang`, and it now
+  // carries only the language it was asked for — so the learner's chosen
+  // language has to travel with the link, or they would open their attempt in
+  // English and have to switch it back by hand.
+  const questionsParams = new URLSearchParams();
+  if (role !== "learner") {
+    questionsParams.set("authorMode", "true");
+  }
+  if (userPreferedLanguage) {
+    questionsParams.set("lang", userPreferedLanguage);
+  }
+  const questionsQuery = questionsParams.toString();
+  const url = `/learner/${assignmentId}/questions${
+    questionsQuery ? `?${questionsQuery}` : ""
+  }`;
 
   // One translatable key with the duration as a parameter, resolved here rather
   // than by RouteUiTranslator rewriting the DOM afterwards. Opted out because it

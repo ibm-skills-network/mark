@@ -1,5 +1,11 @@
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { getFfmpeg } from "@/lib/ffmpeg-client";
+import {
+  logPresentationFailure,
+  presentationErrorMessage,
+  resolveVideoDuration,
+  runPresentationStage,
+} from "@/lib/presentation-processing";
 import * as posenet from "@tensorflow-models/posenet";
 import nlp from "compromise";
 import React, { useEffect, useRef, useState } from "react";
@@ -14,6 +20,35 @@ import {
 } from "@/config/types";
 import { getLiveRecordingFeedback } from "@/lib/talkToBackend";
 import { useLearnerStore, useVideoRecorderStore } from "@/stores/learner";
+
+// The ffmpeg worker reports no error of its own when it cannot come up: a dead
+// worker leaves load() pending forever, which used to leave the question stuck
+// on "Processing video" with Submit disabled.
+const FFMPEG_LOAD_TIMEOUT_MS = 120_000;
+
+const loadFFmpegCore = async () => {
+  const ffmpeg = getFfmpeg();
+  if (ffmpeg.loaded) return ffmpeg;
+
+  await runPresentationStage(
+    "video-tools",
+    async () => {
+      await ffmpeg.load({
+        coreURL: await toBlobURL(
+          "/ffmpeg-core/ffmpeg-core.js",
+          "text/javascript",
+        ),
+        wasmURL: await toBlobURL(
+          "/ffmpeg-core/ffmpeg-core.wasm",
+          "application/wasm",
+        ),
+      });
+    },
+    { timeoutMs: FFMPEG_LOAD_TIMEOUT_MS },
+  );
+
+  return ffmpeg;
+};
 
 /** ------------------------------------------------------------------
  * HOOK #1: Manage camera stream, recording, and a manual timer
@@ -121,37 +156,43 @@ const useVideoProcessor = () => {
   const extractAudio = async (videoBlob: Blob) => {
     const ffmpeg = getFfmpeg();
     try {
-      await ffmpeg.writeFile("input.webm", await fetchFile(videoBlob));
+      return await runPresentationStage("audio-extraction", async () => {
+        await ffmpeg.writeFile("input.webm", await fetchFile(videoBlob));
 
-      await ffmpeg.exec([
-        "-i",
-        "input.webm",
-        "-vn",
-        "-acodec",
-        "pcm_s16le",
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-f",
-        "wav",
-        "output.wav",
-      ]);
+        await ffmpeg.exec([
+          "-i",
+          "input.webm",
+          "-vn",
+          "-acodec",
+          "pcm_s16le",
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-f",
+          "wav",
+          "output.wav",
+        ]);
 
-      const audioData = await ffmpeg.readFile("output.wav");
-      const bytes = audioData as Uint8Array;
-      const arrayBuffer = bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      ) as ArrayBuffer;
+        const audioData = await ffmpeg.readFile("output.wav");
+        const bytes = audioData as Uint8Array;
+        const arrayBuffer = bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ) as ArrayBuffer;
 
-      return new Blob([arrayBuffer], { type: "audio/wav" });
+        return new Blob([arrayBuffer], { type: "audio/wav" });
+      });
     } finally {
       try {
         await ffmpeg.deleteFile("input.webm");
         await ffmpeg.deleteFile("output.wav");
-      } catch {
-        console.error("Error deleting temporary files");
+      } catch (error) {
+        // Leftover scratch files are harmless on their own, but a failure here
+        // usually means the worker died, so keep the reason.
+        console.warn("presentation.temporary_files.cleanup_failed", {
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   };
@@ -163,22 +204,12 @@ const useVideoProcessor = () => {
     segments: TranscriptSegment[];
   }> => {
     setProcessing(true);
-    const ffmpeg = getFfmpeg();
     try {
-      if (!ffmpeg.loaded) {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(
-            "/ffmpeg-core/ffmpeg-core.js",
-            "text/javascript",
-          ),
-          wasmURL: await toBlobURL(
-            "/ffmpeg-core/ffmpeg-core.wasm",
-            "application/wasm",
-          ),
-        });
-      }
+      await loadFFmpegCore();
       const audioBlob = await extractAudio(videoBlob);
-      return await transcribeAudio(audioBlob);
+      return await runPresentationStage("transcription", () =>
+        transcribeAudio(audioBlob),
+      );
     } finally {
       setProcessing(false);
     }
@@ -202,17 +233,14 @@ const getFrameCountAdaptive = (duration: number): number => {
 
 const evaluateBodyLanguageMultipleFrames = async (
   videoElement: HTMLVideoElement,
+  fallbackSeconds: number,
   frameCount?: number,
 ): Promise<{ score: number; explanation: string }> => {
-  while (
-    !videoElement.duration ||
-    videoElement.duration === Infinity ||
-    isNaN(videoElement.duration)
-  ) {
-    await new Promise((r) => setTimeout(r, 100));
-  }
-
-  const duration = videoElement.duration;
+  // A MediaRecorder blob often reports Infinity until the browser has parsed
+  // it, and sometimes never reports anything usable at all.
+  const duration = await resolveVideoDuration(videoElement, {
+    fallbackSeconds,
+  });
   const framesToSample = frameCount ?? getFrameCountAdaptive(duration);
 
   const originalTime = videoElement.currentTime;
@@ -387,6 +415,7 @@ export default function PresentationGrader({
 }: PresentationGraderProps) {
   const [aiFeedback, setAiFeedback] = useState("");
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [recorderError, setRecorderError] = useState("");
 
   const [lastTranscript, setLastTranscript] = useState("");
   const [, setLastSpeechReport] = useState("");
@@ -450,8 +479,10 @@ export default function PresentationGrader({
     let bodyGrade = 0;
     let bodyExplanation = "";
     if (evaluateBodyLanguageEnabled) {
-      const { score, explanation } =
-        await evaluateBodyLanguageMultipleFrames(videoEl);
+      const { score, explanation } = await runPresentationStage(
+        "body-language",
+        () => evaluateBodyLanguageMultipleFrames(videoEl, maxDuration),
+      );
       bodyGrade = score;
       bodyExplanation = explanation;
     }
@@ -488,9 +519,8 @@ export default function PresentationGrader({
   const getFeedbackForRecording = async (
     evaluation: LiveRecordingData,
   ): Promise<string> => {
-    const feedbackResponse = await getLiveRecordingFeedback(
-      assignmentId,
-      evaluation,
+    const feedbackResponse = await runPresentationStage("coach-feedback", () =>
+      getLiveRecordingFeedback(assignmentId, evaluation),
     );
     return feedbackResponse && feedbackResponse.feedback
       ? feedbackResponse.feedback
@@ -510,7 +540,10 @@ export default function PresentationGrader({
         setAiFeedback("");
       }
     } catch (err) {
-      setAiFeedback("Error processing video. Please try again.");
+      // The whole pipeline runs in the browser and nothing about it reaches the
+      // server, so this is the only record of what actually broke.
+      logPresentationFailure(err, { assignmentId, questionId });
+      setAiFeedback(presentationErrorMessage(err));
     } finally {
       setFeedbackLoading(false);
     }
@@ -532,23 +565,16 @@ export default function PresentationGrader({
   const [currentRecordingTime, setCurrentRecordingTime] = useState(0);
 
   useEffect(() => {
-    const loadFFmpeg = async () => {
-      const ffmpeg = getFfmpeg();
-      if (!ffmpeg.loaded) {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(
-            "/ffmpeg-core/ffmpeg-core.js",
-            "text/javascript",
-          ),
-          wasmURL: await toBlobURL(
-            "/ffmpeg-core/ffmpeg-core.wasm",
-            "application/wasm",
-          ),
-        });
-      }
-    };
-    void loadFFmpeg();
-  }, []);
+    // Warm the core up so the learner is not waiting for a 32 MB download after
+    // recording — and say so up front if it cannot be loaded at all, instead of
+    // failing silently and only surfacing after they have recorded.
+    loadFFmpegCore()
+      .then(() => setRecorderError(""))
+      .catch((error: unknown) => {
+        logPresentationFailure(error, { assignmentId, questionId });
+        setRecorderError(presentationErrorMessage(error));
+      });
+  }, [assignmentId, questionId]);
 
   useEffect(() => {
     setCachedEvaluation(null);
@@ -627,6 +653,12 @@ export default function PresentationGrader({
       </div>
 
       <div className="p-6">
+        {recorderError && (
+          <div className="text-red-600 dark:text-red-400 text-center mb-4">
+            <span>{recorderError}</span>
+          </div>
+        )}
+
         {cameraError && (
           <div className="text-red-600 dark:text-red-400 text-center mb-4 flex flex-col items-center">
             <span>{cameraError}</span>

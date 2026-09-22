@@ -28,6 +28,88 @@ interface RequestOptions {
   quiet?: boolean;
 }
 
+/**
+ * How a request failed before it ever became an HTTP response.
+ *
+ * - `timeout`  — the browser gave up waiting; no response headers ever arrived.
+ * - `unreachable` — the connection could not be completed at all (reset socket,
+ *   offline device, a proxy dropping the request part-way).
+ */
+export type NetworkFailureKind = "timeout" | "unreachable";
+
+/**
+ * A request that produced no HTTP response.
+ *
+ * Deliberately carries no `status`: the server never answered, so labelling it
+ * with one of the server's statuses is untrue. A synthesised `408` used to be
+ * thrown here instead, which reached learners as "Status 408 — Something went
+ * wrong on our side" (ErrorPage has no 408 headline, so it fell through to the
+ * 500 one) and filed a server fault for what was a stalled connection.
+ */
+export class NetworkError extends Error {
+  constructor(
+    message: string,
+    public readonly kind: NetworkFailureKind,
+  ) {
+    super(message);
+    this.name = "NetworkError";
+  }
+}
+
+/**
+ * Recognises a NetworkError by shape rather than identity: across Next's
+ * server/client module boundary the class can be loaded twice, and
+ * `instanceof` then silently returns false (the same trap documented on
+ * `createAttempt`'s error handling).
+ */
+export function isNetworkError(error: unknown): error is NetworkError {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const { name, kind } = error as { name?: unknown; kind?: unknown };
+  return (
+    name === "NetworkError" && (kind === "timeout" || kind === "unreachable")
+  );
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
+}
+
+/**
+ * Turns a rejected `fetch` into something the UI can describe honestly.
+ * A caller that aborted on purpose gets its own error back untouched — that is
+ * a cancellation, not a failure anyone needs to be told about.
+ */
+function classifyRequestFailure(
+  error: unknown,
+  { callerAborted, timeoutMs }: { callerAborted: boolean; timeoutMs: number },
+): unknown {
+  if (isAbortError(error)) {
+    if (callerAborted) {
+      return error;
+    }
+    return new NetworkError(
+      `The request got no response within ${Math.round(timeoutMs / 1000)}s.`,
+      "timeout",
+    );
+  }
+
+  // fetch rejects with a TypeError for every connection-level failure.
+  if (error instanceof TypeError) {
+    return new NetworkError(
+      "The request could not be completed.",
+      "unreachable",
+    );
+  }
+
+  return error;
+}
+
 export function getDefaultApiBaseURL(
   isBrowser = typeof window !== "undefined",
 ): string {
@@ -146,75 +228,77 @@ export class APIClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    let response: Response;
     try {
-      const response = await fetch(fullURL, {
+      // Only the fetch itself is classified as a network failure. Decoding the
+      // body below can also throw a TypeError, and that is our bug, not the
+      // connection's — wrapping it would hide a real defect behind a "check
+      // your connection" screen.
+      response = await fetch(fullURL, {
         method,
         headers: requestHeaders,
         body: requestBody,
         signal: signal || controller.signal,
         cache: "no-store",
       });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        if (
-          response.status === 401 &&
-          typeof window !== "undefined" &&
-          window.location.pathname.startsWith("/author/")
-        ) {
-          window.dispatchEvent(new Event("mark-author-auth-required"));
-        }
-        let errorBody: unknown;
-        try {
-          errorBody = await response.json();
-        } catch {
-          errorBody = undefined;
-        }
-
-        // Toasts are client-only UI. `sonner`'s `toast.error` does not exist in
-        // a React Server Component bundle, so calling it during SSR throws a
-        // TypeError that masks the real APIError below — every SSR caller then
-        // sees an unrecognisable error instead of the HTTP status/body. Guard on
-        // the browser environment so server-side error paths surface the APIError.
-        if (!quiet && typeof window !== "undefined") {
-          if (response.status >= 500) {
-            toast.error(
-              `Server Error: ${response.status} ${response.statusText}`,
-            );
-          } else if (response.status === 403) {
-            toast.error(
-              `You don't have permission to access this. Possibly try logging into AWB again and relaunching the assignment.`,
-            );
-          } else {
-            toast.error(
-              `Client Error: ${response.status} ${response.statusText}`,
-            );
-          }
-        }
-
-        throw new APIError(
-          response.statusText,
-          response.status,
-          response.statusText,
-          errorBody,
-        );
-      }
-
-      const responseData = await response.json();
-
-      return transformResponse
-        ? DataTransformer.decodeFromAPI(responseData, finalTransformConfig)
-        : responseData;
     } catch (error) {
+      throw classifyRequestFailure(error, {
+        callerAborted: signal?.aborted === true,
+        timeoutMs: this.timeout,
+      });
+    } finally {
       clearTimeout(timeoutId);
+    }
 
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new APIError("Request timeout", 408, "Request Timeout");
+    if (!response.ok) {
+      if (
+        response.status === 401 &&
+        typeof window !== "undefined" &&
+        window.location.pathname.startsWith("/author/")
+      ) {
+        window.dispatchEvent(new Event("mark-author-auth-required"));
+      }
+      let errorBody: unknown;
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = undefined;
       }
 
-      throw error;
+      // Toasts are client-only UI. `sonner`'s `toast.error` does not exist in
+      // a React Server Component bundle, so calling it during SSR throws a
+      // TypeError that masks the real APIError below — every SSR caller then
+      // sees an unrecognisable error instead of the HTTP status/body. Guard on
+      // the browser environment so server-side error paths surface the APIError.
+      if (!quiet && typeof window !== "undefined") {
+        if (response.status >= 500) {
+          toast.error(
+            `Server Error: ${response.status} ${response.statusText}`,
+          );
+        } else if (response.status === 403) {
+          toast.error(
+            `You don't have permission to access this. Possibly try logging into AWB again and relaunching the assignment.`,
+          );
+        } else {
+          toast.error(
+            `Client Error: ${response.status} ${response.statusText}`,
+          );
+        }
+      }
+
+      throw new APIError(
+        response.statusText,
+        response.status,
+        response.statusText,
+        errorBody,
+      );
     }
+
+    const responseData = await response.json();
+
+    return transformResponse
+      ? DataTransformer.decodeFromAPI(responseData, finalTransformConfig)
+      : responseData;
   }
 
   /**

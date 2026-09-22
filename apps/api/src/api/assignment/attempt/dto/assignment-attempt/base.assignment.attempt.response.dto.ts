@@ -18,4 +18,12 @@ export class BaseAssignmentAttemptResponseDto {
 
   @ApiPropertyOptional({ description: "Optional error message.", type: String })
   error?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "The server's clock at the moment this response was produced (ISO-8601 UTC). Clients reconcile their own clock against it before counting down a timed attempt.",
+    type: String,
+    example: "2026-09-12T21:04:34.089Z",
+  })
+  serverNow?: string;
 }

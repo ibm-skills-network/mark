@@ -60,6 +60,14 @@ export class AssignmentAttemptResponseDto {
     required: true,
   })
   createdAt: Date;
+
+  @ApiPropertyOptional({
+    description:
+      "The server's clock at the moment this response was produced (ISO-8601 UTC). Paired with expiresAt so a client can show the remaining time without trusting its own clock.",
+    type: String,
+    example: "2026-09-12T21:04:34.089Z",
+  })
+  serverNow?: string;
 }
 
 export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDto {

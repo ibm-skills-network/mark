@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { getBaseApiPath } from "@/config/constants";
 import { getClientContext } from "@/lib/client-context";
+import { collectReportDiagnostics } from "@/lib/report-diagnostics";
 import type { User } from "@/config/types";
 
 export interface BugReportSubmission {
@@ -52,6 +53,16 @@ export async function submitBugReport(
       formData.append("browser", browser);
     }
 
+    // Browser state for triage, never shown to the reporter. It returns
+    // undefined rather than throwing, so a failed capture cannot block a report.
+    const diagnostics = collectReportDiagnostics({
+      role: userRole || user?.role,
+      assignmentId: assignmentId ? Number(assignmentId) : undefined,
+    });
+    if (diagnostics) {
+      formData.append("diagnostics", JSON.stringify(diagnostics));
+    }
+
     if (value.screenshot) {
       formData.append("screenshot", value.screenshot);
       toast.info("Submitting report with screenshot...");
@@ -81,13 +92,28 @@ export async function submitBugReport(
   }
 }
 
+/**
+ * Whose failure a report describes. `client-network` means the request never
+ * reached our servers (a stalled or dropped connection), so triage should not
+ * read it as an outage — these used to arrive indistinguishable from real
+ * server faults because the client synthesised an HTTP status for them.
+ */
+export type ErrorFault = "server" | "client-network";
+
 export interface ErrorReportContext {
   statusCode: number;
+  /** Shown instead of `statusCode` when no HTTP response ever arrived. */
+  statusLabel?: string;
+  fault?: ErrorFault;
   headline: string;
   message?: string;
   context?: string;
   stateTimeline?: { step: string; detail?: string; timestamp?: string }[];
 }
+
+/** Report category for a failure that never reached our servers. */
+export const CLIENT_NETWORK_REPORT_CATEGORY =
+  "Error Dialog Report (client network)";
 
 /**
  * Prefills for the report form's fields, built from the error the user is
@@ -101,7 +127,10 @@ export function buildErrorReportPrefills(
 ): Record<string, string> {
   const pagePath = environment?.pagePath;
   const detailLines = [
-    `Status: ${error.statusCode} — ${error.headline}`,
+    `Status: ${error.statusLabel ?? error.statusCode} — ${error.headline}`,
+    error.fault === "client-network"
+      ? "Fault: client network — the request never reached Mark's servers"
+      : null,
     error.message && error.message !== error.headline
       ? `Message: ${error.message}`
       : null,

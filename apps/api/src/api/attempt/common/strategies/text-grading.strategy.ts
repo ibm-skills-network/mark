@@ -11,12 +11,16 @@ import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/atte
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { AttemptHelper } from "src/api/assignment/attempt/helper/attempts.helper";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { GradingConsistencyService } from "src/api/assignment/v2/services/grading-consistency.service";
+import {
+  deriveLearnerKey,
+  GradingConsistencyService,
+} from "src/api/assignment/v2/services/grading-consistency.service";
 import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { GRADING_JUDGE_SERVICE } from "src/api/llm/llm.constants";
 import { TextBasedQuestionEvaluateModel } from "src/api/llm/model/text.based.question.evaluate.model";
+import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import {
   GRADING_AUDIT_SERVICE,
@@ -176,60 +180,122 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
   }
 
   /**
-   * Attempt to reuse a previous grading when the learner response hash matches.
+   * Attempt to reuse a previous grading for this answer.
+   *
+   * Runs for learner submissions only. There the question, its points and the
+   * attempt owner are all read from the database, so a crafted request cannot
+   * widen what it is allowed to match. An author preview grades a question
+   * carried in the request body, so it is graded fresh every time.
    */
   private async tryReuseFromConsistency(
     question: QuestionDto,
     learnerResponse: string,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto | null> {
-    void context;
     if (!this.consistencyService) {
       return null;
     }
 
+    if (context.userRole !== UserRole.LEARNER) {
+      this.logger.debug("Not a learner submission - grading it fresh", {
+        questionId: question.id,
+        attemptId: context.attemptId,
+        userRole: context.userRole,
+      });
+      return null;
+    }
+
     try {
+      // Scope reuse to the model that will actually grade this response, so a
+      // change of grading model does not serve the previous model's grades. If
+      // the model cannot be resolved, nothing is reusable.
+      const modelIdentity =
+        await this.llmFacadeService.getTextGradingModelIdentity();
+
+      if (!modelIdentity) {
+        this.logger.debug("Grading model unknown - grading this answer again", {
+          questionId: question.id,
+          attemptId: context.attemptId,
+        });
+        return null;
+      }
+
       const responseHash = this.consistencyService.generateResponseHash(
         learnerResponse,
         question.id,
         question.type,
       );
 
-      // Scope reuse to the model that will actually grade this response, so a
-      // change of grading model does not serve the previous model's grades.
-      const modelIdentity =
-        await this.llmFacadeService.getTextGradingModelIdentity();
-
       const check = await this.consistencyService.checkConsistency(
         question.id,
         responseHash,
         learnerResponse,
-        question.type,
-        modelIdentity,
+        {
+          questionType: question.type,
+          maxPoints: question.totalPoints,
+          modelIdentity,
+          learnerKey: context.userId
+            ? deriveLearnerKey(context.userId)
+            : undefined,
+          attemptId: context.attemptId,
+        },
       );
 
-      if (check.similar && check.previousGrade !== undefined) {
-        const responseDto = new CreateQuestionResponseAttemptResponseDto();
-        responseDto.totalPoints = this.sanitizePoints(check.previousGrade);
-
-        const feedbackText =
-          typeof check.previousFeedback === "string"
-            ? check.previousFeedback
-            : "Reused prior grading result for identical answer.";
-
-        responseDto.feedback = [
-          {
-            feedback: `${feedbackText}\n\n**Score Rationale:** Reused prior grade (${responseDto.totalPoints}/${question.totalPoints}).`,
-          },
-        ];
-        responseDto.metadata = {
-          ...responseDto.metadata,
-          reusedPriorGrade: true,
-          responseHash,
-          maxPossiblePoints: question.totalPoints,
-        };
-        return responseDto;
+      if (!check.similar || check.previousGrade === undefined) {
+        return null;
       }
+
+      // Second gate on the caller's side: whatever the lookup decided, a grade
+      // that did not award full marks is graded again rather than served. A
+      // learner who fixes their answer must never inherit the earlier score.
+      if (
+        !Number.isFinite(question.totalPoints) ||
+        question.totalPoints <= 0 ||
+        check.previousGrade < question.totalPoints
+      ) {
+        this.logger.debug("Prior grade below full marks - grading again", {
+          questionId: question.id,
+          attemptId: context.attemptId,
+          reason: "below_full_marks",
+        });
+        return null;
+      }
+
+      // Last line of defence on the points themselves: a reuse returns
+      // directly from gradeResponse, so nothing downstream caps them.
+      const responseDto = new CreateQuestionResponseAttemptResponseDto();
+      responseDto.totalPoints = Math.min(
+        this.sanitizePoints(check.previousGrade),
+        question.totalPoints,
+      );
+
+      const feedbackText =
+        typeof check.previousFeedback === "string"
+          ? check.previousFeedback
+          : "Reused prior grading result for identical answer.";
+
+      responseDto.feedback = [
+        {
+          feedback: `${feedbackText}\n\n**Score Rationale:** Reused prior grade (${responseDto.totalPoints}/${question.totalPoints}).`,
+        },
+      ];
+      responseDto.metadata = {
+        ...responseDto.metadata,
+        reusedPriorGrade: true,
+        reuseReason: check.reuseReason,
+        responseHash,
+        maxPossiblePoints: question.totalPoints,
+      };
+
+      this.logger.info("Served a prior grade for this answer", {
+        questionId: question.id,
+        attemptId: context.attemptId,
+        reason: check.reuseReason,
+        points: responseDto.totalPoints,
+        maxPoints: question.totalPoints,
+      });
+
+      return responseDto;
     } catch (error) {
       this.logger.warn("Consistency reuse failed - proceeding to grade", {
         error: error instanceof Error ? error.message : String(error),
