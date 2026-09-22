@@ -1,4 +1,5 @@
 import { Logger } from "@nestjs/common";
+import axios from "axios";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { RetryableUrlFetchError } from "src/api/llm/features/grading/errors/retryable-url-fetch.error";
 import { safeGet } from "./ssrf-safe-http";
@@ -297,6 +298,7 @@ describe("fetchReadmeForBranch", () => {
     expect(body).toBe("# Hello");
     expect(mockedSafeGet).toHaveBeenCalledWith(
       "https://raw.githubusercontent.com/octocat/hello-world/develop/README.md",
+      { responseType: "text" },
     );
   });
 
@@ -323,6 +325,7 @@ describe("fetchReadmeForBranch", () => {
     expect(body).toBe("# Release readme");
     expect(mockedSafeGet).toHaveBeenCalledWith(
       "https://raw.githubusercontent.com/octocat/hello-world/release/2.0/README.md",
+      { responseType: "text" },
     );
   });
 
@@ -372,6 +375,83 @@ describe("convertGitHubUrlToRaw", () => {
 });
 
 describe("fetchUrlContentForGrading", () => {
+  describe("HTTP response decoding", () => {
+    // Use Axios's real response transformer: returning a string directly from
+    // safeGet's mock hides its default JSON parsing, which caused prod jobs to
+    // fail on .ipynb and .json submissions after grading had already succeeded.
+    function respondWith(body: string): void {
+      mockedSafeGet.mockImplementationOnce((url, config) =>
+        axios.get(url, {
+          ...config,
+          adapter: async (requestConfig) => ({
+            data: body,
+            status: 200,
+            statusText: "OK",
+            headers: { "content-type": "text/plain" },
+            config: requestConfig,
+          }),
+        }),
+      );
+    }
+
+    it.each([
+      ["notebook.ipynb", '{\n  "cells": [], "nbformat": 4\n}'],
+      ["data.json", '{\n  "score": 10\n}'],
+      ["array.json", '[1, {"answer": true}]'],
+      ["string.json", '"a quoted answer"'],
+      ["number.json", "42"],
+      ["boolean.json", "false"],
+      ["null.json", "null"],
+      ["index.js", "console.log(1)"],
+    ])(
+      "preserves %s as text for feedback summaries",
+      async (filename, body) => {
+        respondWith(body);
+
+        const result = await fetchUrlContentForGrading(
+          `https://github.com/octocat/hello-world/blob/main/${filename}`,
+        );
+
+        expect(result).toEqual({ body, isFunctional: true });
+        expect(result.body.slice(0, 150).trim()).toBe(
+          body.slice(0, 150).trim(),
+        );
+        expect(result.body.length).toBe(body.length);
+      },
+    );
+
+    it("caps large JSON documents at the existing text limit", async () => {
+      const body = JSON.stringify({ content: "x".repeat(150_000) });
+      respondWith(body);
+
+      const result = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world/blob/main/large.json",
+      );
+
+      expect(result.isFunctional).toBe(true);
+      expect(typeof result.body).toBe("string");
+      expect(result.body).toHaveLength(100_000);
+      expect(result.body).toBe(body.slice(0, 100_000));
+    });
+
+    it("preserves JSON-formatted README content as text", async () => {
+      const body = '{"description":"Project documentation"}';
+      respondWith(body);
+
+      await expect(
+        fetchReadmeForBranch("octocat", "hello-world", "main"),
+      ).resolves.toBe(body);
+    });
+
+    it("still decodes GitHub API metadata as an object", async () => {
+      respondWith('{"default_branch":"develop"}');
+
+      await expect(
+        resolveGithubDefaultBranch("octocat", "hello-world"),
+      ).resolves.toBe("develop");
+    });
+  });
+
   describe("blob URLs", () => {
     it("fetches raw content for a blob URL", async () => {
       mockedSafeGet.mockResolvedValue({

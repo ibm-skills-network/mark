@@ -246,7 +246,9 @@ export async function fetchReadmeForBranch(
     .join("/");
   const readmeUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodedBranch}/README.md`;
   try {
-    const response = await safeGet<string>(readmeUrl);
+    const response = await safeGet<string>(readmeUrl, {
+      responseType: "text",
+    });
     return response.status === 200 ? truncate(response.data) : undefined;
   } catch (error) {
     throwIfRetryable(error, readmeUrl, "readme");
@@ -498,7 +500,11 @@ async function fetchGithubBlobContent(
   rawUrl: string,
 ): Promise<GithubFetchResult> {
   try {
-    const response = await safeGet<string>(rawUrl);
+    // Axios otherwise parses JSON (including notebooks) into objects despite
+    // the string generic, breaking truncation and feedback's content.slice().
+    const response = await safeGet<string>(rawUrl, {
+      responseType: "text",
+    });
     if (response.status === 200) {
       return { body: truncate(response.data), isFunctional: true };
     }
