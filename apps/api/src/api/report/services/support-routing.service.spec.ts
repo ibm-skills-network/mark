@@ -9,6 +9,7 @@ const ICE_PRODUCT_ID = "fcb9d787-481b-4b3a-95c5-511b8b2b987f";
 // Every product Mark can reach has its own key, because SN Support resolves a
 // ticket's product from the API key alone.
 const TOKENS: Record<string, string> = {
+  SUPPORT_TOKEN_MARK: "sk_mark",
   SUPPORT_TOKEN_PORTALS: "sk_portals",
   SUPPORT_TOKEN_COGNITIVE_CLASS: "sk_cc",
   SUPPORT_TOKEN_COURSERA: "sk_coursera",
@@ -124,7 +125,7 @@ describe("SupportRoutingService.resolve", () => {
     });
   });
 
-  it("falls back to Portals for a portal nobody knows", async () => {
+  it("falls back to Mark for a portal nobody knows", async () => {
     const { service } = make(undefined);
 
     const route = await service.resolve({
@@ -133,19 +134,19 @@ describe("SupportRoutingService.resolve", () => {
     });
 
     expect(route).toMatchObject({
-      token: "sk_portals",
-      productName: "Portals",
+      token: "sk_mark",
+      productName: "Mark",
       via: "default",
     });
   });
 
-  it("falls back to Portals for a session with no portal at all", async () => {
+  it("falls back to Mark for a session with no portal at all", async () => {
     const { service, portalLookup } = make(undefined);
 
     const route = await service.resolve({});
 
     expect(portalLookup.findByHost).toHaveBeenCalledWith(undefined);
-    expect(route).toMatchObject({ token: "sk_portals", via: "default" });
+    expect(route).toMatchObject({ token: "sk_mark", via: "default" });
   });
 
   it("falls back when the matched product has no token configured", async () => {
@@ -159,7 +160,7 @@ describe("SupportRoutingService.resolve", () => {
       portalName: "new.skillsnetwork.site",
     });
 
-    expect(route).toMatchObject({ token: "sk_portals", via: "default" });
+    expect(route).toMatchObject({ token: "sk_mark", via: "default" });
   });
 
   it("uses the legacy single token when no product tokens exist", async () => {
@@ -188,7 +189,7 @@ describe("SupportRoutingService.resolve", () => {
       await expect(
         service.resolve({ portalHost, portalName: "ICE" }),
       ).resolves.toMatchObject({
-        token: "sk_portals",
+        token: "sk_mark",
         via: "default",
       });
     },
@@ -202,7 +203,7 @@ describe("SupportRoutingService.resolve", () => {
     await expect(
       service.resolve({ portalHost: "courses.edx.org", portalName: "edX" }),
     ).resolves.toMatchObject({
-      token: "sk_portals",
+      token: "sk_mark",
       via: "default",
     });
   });
