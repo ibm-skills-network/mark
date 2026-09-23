@@ -1,3 +1,9 @@
+import {
+  mediaGradeSchema,
+  assertUsableMediaEvidence,
+  validateMediaGrade,
+  MEDIA_EVIDENCE_INSTRUCTIONS,
+} from "./media-grading-validation";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
@@ -60,9 +66,9 @@ export class VideoPresentationGradingService
       safetyIdentifier,
     } = videoPresentationQuestionEvaluateModel;
 
-    const moderationVerdict = await this.moderationService.assessContent(
-      learnerResponse.transcript,
-    );
+    const moderationVerdict = learnerResponse?.transcript?.trim()
+      ? await this.moderationService.assessContent(learnerResponse.transcript)
+      : { action: "allow", flaggedCategories: [], severeCategories: [] };
     if (moderationVerdict.action === "block_severe") {
       this.logger.warn("grading.moderation.blocked_severe", {
         assignmentId,
@@ -80,19 +86,41 @@ export class VideoPresentationGradingService
       });
     }
 
+    const evidenceSources = {
+      transcript: learnerResponse?.transcript ?? "",
+      slidesData: videoPresentationConfig?.evaluateSlidesQuality
+        ? JSON.stringify(
+            (learnerResponse?.slidesData ?? [])
+              .filter((slide) => slide.slideText?.trim())
+              .map((slide) => ({
+                slideNumber: slide.slideNumber,
+                slideText: slide.slideText,
+              })),
+          )
+        : "",
+    };
+    assertUsableMediaEvidence(evidenceSources);
+    const gradeSchema = mediaGradeSchema(
+      VideoGradeSchema,
+      totalPoints,
+      scoringCriteria,
+    );
     const prompt = new PromptTemplate({
-      template: this.loadVideoPresentationGradingTemplate(),
+      template:
+        this.loadVideoPresentationGradingTemplate() +
+        MEDIA_EVIDENCE_INSTRUCTIONS +
+        "\nEVIDENCE SOURCES:\n{evidence_sources}",
       inputVariables: [],
       partialVariables: {
+        evidence_sources: () => JSON.stringify(evidenceSources),
         question: () => question,
         assignment_instructions: () => assignmentInstrctions ?? "",
         previous_questions_and_answers: () =>
           JSON.stringify(previousQuestionsAnswersContext ?? []),
-        transcript: () => learnerResponse.transcript,
+        transcript: () => learnerResponse?.transcript ?? "",
         slidesData: () =>
           videoPresentationConfig?.evaluateSlidesQuality
-            ? JSON.stringify(learnerResponse?.slidesData) ||
-              "The learner did not provide any slides when it was required"
+            ? evidenceSources.slidesData
             : "Slides were not required, please ignore this field.",
         total_points: () => totalPoints.toString(),
         scoring_type: () => scoringCriteriaType,
@@ -109,10 +137,13 @@ export class VideoPresentationGradingService
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           "video_grading",
-          VideoGradeSchema,
+          gradeSchema,
           undefined,
           { safetyIdentifier },
         );
+      const validatedGrade = gradeSchema.parse(result);
+      validateMediaGrade(validatedGrade, scoringCriteria, evidenceSources);
+
       return result as unknown as VideoPresentationQuestionResponseModel;
     } catch (error) {
       // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that

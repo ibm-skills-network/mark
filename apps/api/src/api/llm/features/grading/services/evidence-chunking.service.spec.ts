@@ -321,3 +321,51 @@ describe("EvidenceChunkingService prose section merging", () => {
     expect(pinnedAllProse?.text).toContain("(complete)");
   });
 });
+
+describe("typed and pasted submission evidence", () => {
+  const service = new EvidenceChunkingService();
+
+  it.each([
+    '<p><span style="color: black">' +
+      "Introduction. ".repeat(45) +
+      "</span></p><p>REQUIRED_TAIL</p>",
+    "Long paragraph ".repeat(45) + "REQUIRED_TAIL",
+    "import requests\n" +
+      "# setup\n".repeat(70) +
+      "def required_tail():\n    return 42",
+  ])("preserves the complete answer beyond the old prose cap", (text) => {
+    const chunks = service.extractFromText(text);
+    expect(chunks.some((chunk) => chunk.text === text)).toBe(true);
+    expect(
+      chunks.every(
+        (chunk) => chunk.metadata?.section || chunk.metadata?.pinned,
+      ),
+    ).toBe(true);
+    for (const chunk of chunks) {
+      expect(chunk.text.length).toBeLessThanOrEqual(
+        DOC_WHOLE_SUBMISSION_BLOCK_MAX_CHARS,
+      );
+    }
+  });
+
+  it("retains all large-answer sections and marks only the bounded overview as truncated", () => {
+    const text = "x".repeat(35_000) + "REQUIRED_TAIL";
+    const chunks = service.extractFromText(text, "answer");
+    const sections = chunks.filter((chunk) => chunk.metadata?.section);
+    expect(sections.map((chunk) => chunk.text).join("")).toBe(text);
+    expect(
+      sections.every((chunk) => chunk.text.length <= PROSE_SECTION_MAX_CHARS),
+    ).toBe(true);
+    for (const chunk of sections) {
+      expect(text.slice(chunk.anchor.startOffset, chunk.anchor.endOffset)).toBe(
+        chunk.text,
+      );
+    }
+    const overview = chunks.find((chunk) => chunk.metadata?.pinned)!;
+    expect(overview.text).toContain("[Overview truncated;");
+    expect(overview.text.length).toBeLessThanOrEqual(
+      DOC_WHOLE_SUBMISSION_BLOCK_MAX_CHARS,
+    );
+    expect(sections.at(-1)?.text).toContain("REQUIRED_TAIL");
+  });
+});

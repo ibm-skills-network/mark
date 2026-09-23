@@ -231,10 +231,11 @@ export class JobQueueService implements OnModuleDestroy {
     const windowStart = Date.now() - THROUGHPUT_WINDOW_MS;
     const windowStartScore = String(windowStart);
 
-    // `queue.client` resolves to the shared ioredis client. In cluster mode the
+    // Use the original ioredis connection: BullMQ now exposes an adapter through
+    // `queue.client` that omits these sorted-set commands. In cluster mode the
     // BullMQ hash-tag prefix keeps a queue's keys colocated, so each single-key
     // command below stays on one node.
-    const client = await queue.client;
+    const client = this.getConnection();
 
     // Per-minute rates: count members scored at-or-after the window start. The
     // score is the finish timestamp, so this is "finished in the last minute".

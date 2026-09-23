@@ -18,7 +18,7 @@ import { renderCachePrefix } from "../../../core/utils/prompt-cache.util";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
 /** Rotate the version whenever JUDGE_HEAD changes. */
-export const JUDGE_CACHE_KEY = "mark:criterion-judge:v1";
+export const JUDGE_CACHE_KEY = "mark:criterion-judge:v2";
 
 /**
  * Invariant head of the judge prompt. Must stay at or above
@@ -34,6 +34,7 @@ CHECKS:
 - Evidence quality (anchored, relevant, not hallucinated).
 - Rationale consistency with evidence and rubric.
 - Score alignment with rubric points.
+- Check the full scoring-level descriptions, including every required condition. The rubric heading is a summary, not a substitute for those requirements. Never ask the grader to waive a condition stated in a scoring level.
 
 EVIDENCE QUALITY:
 - Every citation must point at a chunk that was actually supplied, and the quoted text must appear in that chunk. Flag any citation that does not.
@@ -123,9 +124,14 @@ EVIDENCE SUMMARY:
         question: () => request.question,
         rubric: () =>
           request.criteria
-            .map(
-              (criterion) =>
-                `${criterion.id}: ${criterion.rubricQuestion} (${criterion.maxPoints} pts)`,
+            .map((criterion) =>
+              JSON.stringify({
+                criterionId: criterion.id,
+                rubricQuestion: criterion.rubricQuestion,
+                description: criterion.description,
+                maxPoints: criterion.maxPoints,
+                scoringLevels: criterion.criteria,
+              }),
             )
             .join("\n"),
         outputs: () =>

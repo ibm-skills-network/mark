@@ -73,6 +73,14 @@ function buildWav(seconds = 0.5, sampleRate = 8000): Uint8Array {
 async function loadVendoredCore(): Promise<FfmpegCoreModule> {
   // createRequire bypasses the jest module registry: the glue is a vendored
   // build artefact and must be loaded exactly as the browser loads it.
+  // The updated browser-only core reads the worker location during startup.
+  // Supply that browser global while still executing the real WASM in Node.
+  Object.defineProperty(globalThis, "self", {
+    configurable: true,
+    value: {
+      location: { href: "http://localhost/ffmpeg-core/ffmpeg-core.js" },
+    },
+  });
   const requireFromHere = createRequire(__filename);
   const createFfmpegCore = requireFromHere(CORE_JS) as CreateFfmpegCore;
   return createFfmpegCore({

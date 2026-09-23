@@ -23,6 +23,7 @@ export class ContentSummarizationService {
     // Keep above "gpt-5": lookup is substring-based, so that key would
     // otherwise claim these at 128k. (0.8 * 1.05M stays under the 922k
     // max-input ceiling.)
+    "gpt-6-luna": 1_050_000,
     "gpt-5.6-luna": 1_050_000,
     "gpt-5.6-terra": 1_050_000,
     "gpt-5.6-sol": 1_050_000,
