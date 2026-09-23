@@ -359,6 +359,63 @@ describe("AttemptServiceV2", () => {
     });
   });
 
+  describe("processAuthorPreviewJob", () => {
+    const recordOrder = () => {
+      const order: string[] = [];
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => {
+          order.push("removeCallback");
+        },
+      );
+      mockJobStateService.updateJobStatus!.mockImplementation(
+        async (_jobId: string, update: any) => {
+          order.push(`status:${update.status}`);
+          return {} as any;
+        },
+      );
+      return order;
+    };
+
+    const runPreview = () =>
+      service.processAuthorPreviewJob(
+        "job-preview",
+        5,
+        updateDto as any,
+        "cookie",
+        request,
+      );
+
+    it("clears the progress callback before the job is marked Failed", async () => {
+      const order = recordOrder();
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(
+        new Error("expectedTextResponse"),
+      );
+
+      await expect(runPreview()).rejects.toThrow("expectedTextResponse");
+
+      expect(order).toEqual([
+        "status:Processing",
+        "removeCallback",
+        "status:Failed",
+      ]);
+    });
+
+    it("clears the progress callback before the job is marked Completed", async () => {
+      const order = recordOrder();
+      mockSubmissionService.updateAssignmentAttempt!.mockResolvedValue(
+        {} as any,
+      );
+
+      await runPreview();
+
+      expect(order).toEqual([
+        "status:Processing",
+        "removeCallback",
+        "status:Completed",
+      ]);
+    });
+  });
+
   // ─── Change 7: processGradingJob — markFailed on failure ─────────────────
 
   describe("processGradingJob", () => {

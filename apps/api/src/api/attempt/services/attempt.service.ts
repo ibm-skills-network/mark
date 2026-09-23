@@ -379,30 +379,32 @@ export class AttemptServiceV2 {
         );
       }
 
-      const result = await this.submissionService.updateAssignmentAttempt(
-        -1,
-        assignmentId,
-        updateDto,
-        authCookie,
-        false,
-        request,
-        async (
-          progress: string,
-          percentage?: number,
-          details?: GradingProgressDetails,
-        ) => {
-          await this.updateGradingJobStatus(gradingJobId, {
-            status: "Processing",
-            progress,
-            percentage: percentage || 0,
-            result: details ? { gradingState: details } : undefined,
-          });
-        },
-        cache,
-      );
-
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(-1);
+      let result: UpdateAssignmentAttemptResponseDto;
+      try {
+        result = await this.submissionService.updateAssignmentAttempt(
+          -1,
+          assignmentId,
+          updateDto,
+          authCookie,
+          false,
+          request,
+          async (
+            progress: string,
+            percentage?: number,
+            details?: GradingProgressDetails,
+          ) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status: "Processing",
+              progress,
+              percentage: percentage || 0,
+              result: details ? { gradingState: details } : undefined,
+            });
+          },
+          cache,
+        );
+      } finally {
+        // Must beat the terminal write: a late sibling reopens the job.
+        this.gradingProgressService?.removeProgressCallback(-1);
       }
 
       await this.updateGradingJobStatus(gradingJobId, {
