@@ -16,7 +16,7 @@ import type {
   TextContent,
   TextItem as PdfJsTextItem,
 } from "pdfjs-dist/types/src/display/api";
-import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils";
+import type { PageViewport } from "pdfjs-dist/types/src/display/page_viewport";
 import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../../llm/features/grading/constants";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import {

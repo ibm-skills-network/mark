@@ -1064,7 +1064,10 @@ FILE LINK WORKFLOW:
         name,
         tool({
           description: definition.description,
-          inputSchema: definition.inputSchema,
+          // These are Zod schemas, which the SDK accepts at runtime. Avoid
+          // recursively comparing Zod 3 against the SDK's Zod 3/4 union.
+          inputSchema:
+            definition.inputSchema as unknown as ToolSet[string]["inputSchema"],
           execute: definition.execute,
         }),
       ]),
