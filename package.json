@@ -87,7 +87,7 @@
     "axios": "^1.19.0",
     "cookie": "^0.7.0",
     "express": "^5.1.0",
-    "framer-motion": "^11.8.0",
+    "motion": "^11.8.0",
     "jsondiffpatch": "^0.7.6",
     "lottie-react": "^2.4.0",
     "mammoth": "^1.11.0",
