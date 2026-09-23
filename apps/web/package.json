@@ -67,7 +67,7 @@
     "next": "~16.3.5",
     "openai": "^4.91.1",
     "papaparse": "^5.7.0",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.2.108",
     "quill": "2.0.3",
     "quill-better-table": "^1.2.10",
     "quill-cursors": "^4.3.0",
