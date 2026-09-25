@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useVersionControl } from "@/hooks/useVersionControl";
 import { useRouter } from "next/navigation";
 import { useChatbot } from "@/hooks/useChatbot";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import { UnpublishedActivationModal } from "./UnpublishedActivationModal";
 import {
   GitBranch,
@@ -1195,12 +1195,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                             <span>Introduction</span>
                           </label>
-                          <MarkdownViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
+                          <RichTextViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
                             {
                               (selectedVersionDetails || selectedVersion)
                                 .introduction
                             }
-                          </MarkdownViewer>
+                          </RichTextViewer>
                         </div>
 
                         <div>
@@ -1208,12 +1208,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                             <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
                             <span>Instructions</span>
                           </label>
-                          <MarkdownViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
+                          <RichTextViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
                             {
                               (selectedVersionDetails || selectedVersion)
                                 .instructions
                             }
-                          </MarkdownViewer>
+                          </RichTextViewer>
                         </div>
 
                         {(selectedVersionDetails || selectedVersion)
@@ -1223,12 +1223,12 @@ export function VersionTreeView({ assignmentId }: Props) {
                               <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                               <span>Grading Criteria</span>
                             </label>
-                            <MarkdownViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
+                            <RichTextViewer className="bg-gray-50 dark:bg-gray-900 border rounded-lg p-4 max-h-40 overflow-y-auto text-gray-900 dark:text-gray-100">
                               {
                                 (selectedVersionDetails || selectedVersion)
                                   .gradingCriteriaOverview
                               }
-                            </MarkdownViewer>
+                            </RichTextViewer>
                           </div>
                         )}
                       </div>

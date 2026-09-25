@@ -22,7 +22,7 @@ jest.mock("../ShowHideRubric", () => ({
   default: () => null,
 }));
 
-jest.mock("@/components/MarkdownViewer", () => ({
+jest.mock("@/components/rich-text/RichTextViewer", () => ({
   __esModule: true,
   default: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>

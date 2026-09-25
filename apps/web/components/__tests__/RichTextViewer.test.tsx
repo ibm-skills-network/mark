@@ -5,7 +5,7 @@
 import React from "react";
 import { act, render, waitFor } from "@testing-library/react";
 
-import MarkdownViewer from "../MarkdownViewer";
+import RichTextViewer from "../rich-text/RichTextViewer";
 
 /**
  * Markup the previous editor produced, which is what the database still holds.
@@ -52,10 +52,10 @@ const flushEffects = async () => {
 const contentOf = (container: HTMLElement) =>
   container.querySelector(".rich-text-content");
 
-describe("MarkdownViewer", () => {
+describe("RichTextViewer", () => {
   it("renders the content as static markup, without an editor instance", async () => {
     const { container } = render(
-      <MarkdownViewer>{INSTRUCTIONS_HTML}</MarkdownViewer>,
+      <RichTextViewer>{INSTRUCTIONS_HTML}</RichTextViewer>,
     );
     await flushEffects();
 
@@ -72,7 +72,7 @@ describe("MarkdownViewer", () => {
 
   it("renders a stored bulleted list as a bulleted list, not a numbered one", async () => {
     const { container } = render(
-      <MarkdownViewer>{INSTRUCTIONS_HTML}</MarkdownViewer>,
+      <RichTextViewer>{INSTRUCTIONS_HTML}</RichTextViewer>,
     );
     await flushEffects();
 
@@ -85,7 +85,7 @@ describe("MarkdownViewer", () => {
 
   it("keeps the list text when the content changes after the first paint", async () => {
     const { container, rerender } = render(
-      <MarkdownViewer>{INSTRUCTIONS_HTML}</MarkdownViewer>,
+      <RichTextViewer>{INSTRUCTIONS_HTML}</RichTextViewer>,
     );
     await flushEffects();
 
@@ -94,7 +94,7 @@ describe("MarkdownViewer", () => {
       "Revisa tus notas.",
     ).replaceAll("Upload the workbook.", "Sube el libro de trabajo.");
 
-    rerender(<MarkdownViewer>{translated}</MarkdownViewer>);
+    rerender(<RichTextViewer>{translated}</RichTextViewer>);
     await flushEffects();
 
     const items = [...(contentOf(container)?.querySelectorAll("li") ?? [])];
@@ -106,9 +106,9 @@ describe("MarkdownViewer", () => {
 
   it("strips active content before writing untrusted HTML to the DOM", async () => {
     const { container } = render(
-      <MarkdownViewer>
+      <RichTextViewer>
         {'<p>safe</p><img src="x" onerror="alert(1)"><script>alert(2)</script>'}
-      </MarkdownViewer>,
+      </RichTextViewer>,
     );
     await flushEffects();
 
@@ -120,12 +120,12 @@ describe("MarkdownViewer", () => {
 
   it("rebuilds a stored code block and highlights it", async () => {
     const { container } = render(
-      <MarkdownViewer>
+      <RichTextViewer>
         {'<div class="ql-code-block-container">' +
           '<div class="ql-code-block" data-language="python">value = 1</div>' +
           '<div class="ql-code-block" data-language="python">print(value)</div>' +
           "</div>"}
-      </MarkdownViewer>,
+      </RichTextViewer>,
     );
 
     await waitFor(() => {
@@ -137,7 +137,7 @@ describe("MarkdownViewer", () => {
   });
 
   it("renders nothing for empty content instead of the string 'undefined'", async () => {
-    const { container } = render(<MarkdownViewer>{undefined}</MarkdownViewer>);
+    const { container } = render(<RichTextViewer>{undefined}</RichTextViewer>);
     await flushEffects();
 
     expect(contentOf(container)?.textContent).toBe("");
@@ -145,7 +145,7 @@ describe("MarkdownViewer", () => {
 
   it("keeps an attribute value that contains '>' from becoming live markup", async () => {
     const { container } = render(
-      <MarkdownViewer>{ATTRIBUTE_BREAKOUT_HTML}</MarkdownViewer>,
+      <RichTextViewer>{ATTRIBUTE_BREAKOUT_HTML}</RichTextViewer>,
     );
     await flushEffects();
 
@@ -158,7 +158,7 @@ describe("MarkdownViewer", () => {
   it.each(ACTIVE_ELEMENT_HTML)(
     "does not render a <%s> that arrives in the content",
     async (tag, html) => {
-      const { container } = render(<MarkdownViewer>{html}</MarkdownViewer>);
+      const { container } = render(<RichTextViewer>{html}</RichTextViewer>);
       await flushEffects();
 
       const content = contentOf(container);
@@ -169,11 +169,11 @@ describe("MarkdownViewer", () => {
 
   it("keeps a video embed from a known host and confines it", async () => {
     const { container } = render(
-      <MarkdownViewer>
+      <RichTextViewer>
         {
           '<iframe class="ql-video" src="https://www.youtube.com/embed/abc123"></iframe>'
         }
-      </MarkdownViewer>,
+      </RichTextViewer>,
     );
     await flushEffects();
 
@@ -184,7 +184,7 @@ describe("MarkdownViewer", () => {
 
   it("prevents selection when copying is disallowed", async () => {
     const { container } = render(
-      <MarkdownViewer allowCopy={false}>{INSTRUCTIONS_HTML}</MarkdownViewer>,
+      <RichTextViewer allowCopy={false}>{INSTRUCTIONS_HTML}</RichTextViewer>,
     );
     await flushEffects();
 

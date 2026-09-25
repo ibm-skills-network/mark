@@ -2,7 +2,7 @@ import {
   getLanguageCode,
   getLanguageName,
 } from "@/app/Helpers/getLanguageName";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { isInteractiveTarget } from "@/lib/utils";
@@ -357,14 +357,14 @@ function Component(props: Props) {
             </div>
           )}
           <div className="mb-2">
-            <MarkdownViewer
+            <RichTextViewer
               className="text-gray-800 dark:text-gray-200 px-2 border-gray-300 dark:border-gray-600 text-sm sm:text-base"
               id={`question-${question.id}-original`}
               allowCopy={!(questionControls?.disableCopy ?? false)}
             >
               {question.translations?.[userPreferedLanguage]?.translatedText ??
                 question.question}
-            </MarkdownViewer>
+            </RichTextViewer>
           </div>
 
           {effectiveTranslationOn && loadingTranslation && (
@@ -430,12 +430,12 @@ function Component(props: Props) {
           </p>
 
           <div className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded-md p-3">
-            <MarkdownViewer
+            <RichTextViewer
               className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap"
               id={`question-${question.id}-author-comment`}
             >
               {question.authorComment}
-            </MarkdownViewer>
+            </RichTextViewer>
           </div>
         </div>
       )}
@@ -461,12 +461,12 @@ function Component(props: Props) {
                         Translated
                       </span>
                     </div>
-                    <MarkdownViewer
+                    <RichTextViewer
                       className="text-gray-700 dark:text-gray-200 px-2 border-gray-300 dark:border-gray-600 bg-violet-50 dark:bg-violet-900/20 rounded-lg p-3"
                       id={`question-${question.id}-translated`}
                     >
                       {question.translatedQuestion}
-                    </MarkdownViewer>
+                    </RichTextViewer>
                   </div>
                 )}
 
@@ -584,9 +584,9 @@ function Component(props: Props) {
                   Translation
                 </span>
               </div>
-              <MarkdownViewer className="text-gray-800 dark:text-gray-200 px-2 border-gray-300 dark:border-gray-600 font-semibold">
+              <RichTextViewer className="text-gray-800 dark:text-gray-200 px-2 border-gray-300 dark:border-gray-600 font-semibold">
                 {question.translatedQuestion || question.question}
-              </MarkdownViewer>
+              </RichTextViewer>
 
               <RenderQuestion
                 questionType={question.type}

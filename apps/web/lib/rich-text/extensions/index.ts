@@ -13,13 +13,10 @@ import {
 import { Placeholder } from "@tiptap/extensions";
 import { StarterKit } from "@tiptap/starter-kit";
 
-import {
-  RichTextLimits,
-  type RichTextCounts,
-} from "./extensions/rich-text-limits";
-import { TextDirection } from "./extensions/text-direction";
-import { Video } from "./extensions/video";
-import { lowlight } from "./lowlight";
+import { RichTextLimits, type RichTextCounts } from "./rich-text-limits";
+import { TextDirection } from "./text-direction";
+import { Video } from "./video";
+import { lowlight } from "../lowlight";
 
 export type ToolbarMode = "full" | "learner";
 

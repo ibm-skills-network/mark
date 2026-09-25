@@ -1,6 +1,6 @@
 import { QuestionStore } from "@/config/types";
 import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
-import MarkdownEditor from "@components/MarkDownEditor";
+import RichTextEditorClient from "@/components/rich-text/RichTextEditorClient";
 
 interface Props {
   question: QuestionStore;
@@ -26,7 +26,7 @@ function TextQuestion(props: Props) {
   // });
 
   return (
-    <MarkdownEditor
+    <RichTextEditorClient
       value={question?.learnerTextResponse || ""}
       setValue={(value) => setTextResponse(value, question.id)}
       placeholder="Type your answer here"

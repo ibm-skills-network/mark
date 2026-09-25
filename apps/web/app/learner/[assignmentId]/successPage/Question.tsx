@@ -3,7 +3,7 @@ import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import CollapsibleFeedback, {
   StructuredFeedbackData,
 } from "@/components/CollapsibleFeedback";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import dynamic from "next/dynamic";
 
 const PdfFeedbackViewer = dynamic(
@@ -760,12 +760,12 @@ const Question: FC<Props> = ({
               : "bg-gray-50 border border-gray-300 rounded p-2"
           }`}
         >
-          <MarkdownViewer
+          <RichTextViewer
             className="text-gray-800"
             allowCopy={!(questionControls?.disableCopy ?? false)}
           >
             {learnerResponse.toString()}
-          </MarkdownViewer>
+          </RichTextViewer>
         </p>
       );
     } else if (
@@ -1050,12 +1050,12 @@ const Question: FC<Props> = ({
         )}
       </div>
 
-      <MarkdownViewer
+      <RichTextViewer
         className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700"
         allowCopy={!(questionControls?.disableCopy ?? false)}
       >
         {questionText}
-      </MarkdownViewer>
+      </RichTextViewer>
 
       {checkToShowRubric() && (
         <ShowHideRubric
@@ -1162,12 +1162,12 @@ const Question: FC<Props> = ({
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   {parsedFeedback.feedbackText && (
                     <div className="prose prose-sm max-w-none text-gray-800">
-                      <MarkdownViewer
+                      <RichTextViewer
                         className="text-gray-800"
                         allowCopy={!(questionControls?.disableCopy ?? false)}
                       >
                         {parsedFeedback.feedbackText}
-                      </MarkdownViewer>
+                      </RichTextViewer>
                     </div>
                   )}
                   {!parsedFeedback.feedbackText && (
