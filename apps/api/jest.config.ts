@@ -12,8 +12,12 @@ const config: Config = {
   rootDir: ".",
   testRegex: ".*\\.spec\\.ts$",
   transform: {
-    "^.+\\.(t|j)s$": "ts-jest",
+    "^.+\\.(?:ts|m?js)$": ["ts-jest", { tsconfig: { allowJs: true } }],
   },
+  // Transform the ESM dependencies loaded by jsdom through isomorphic-dompurify.
+  transformIgnorePatterns: [
+    "node_modules/(?!(?:@exodus/bytes|isomorphic-dompurify|@asamuzakjp|@csstools|parse5|entities)/)",
+  ],
   collectCoverageFrom: ["**/*.(t|j)s"],
   coverageDirectory: "../coverage",
   coverageThreshold: {

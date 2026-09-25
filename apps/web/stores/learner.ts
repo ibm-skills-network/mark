@@ -732,11 +732,9 @@ export const useLearnerStore = createWithEqualityFn<
           get().setQuestionStatus(questionId);
         },
         onFileChange: (files, questionId) => {
-          const formattedFiles = files.map((file: learnerFileResponse) => ({
-            filename: file.filename,
-            content: file.content,
-            githubUrl: file.githubUrl,
-          }));
+          // Preserve source metadata through selection, autosave, and grading.
+          // The API requires a GitHub URL or storage coordinates for each file.
+          const formattedFiles = files.map((file) => ({ ...file }));
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
               if (q.id === questionId) {
@@ -761,13 +759,7 @@ export const useLearnerStore = createWithEqualityFn<
         },
         onModeChange: (mode, data, questionId) => {
           if (mode === "file") {
-            const formattedData = (data as learnerFileResponse[]).map(
-              (file) => ({
-                filename: file.filename,
-                content: file.content,
-              }),
-            );
-            get().onFileChange(formattedData, questionId);
+            get().onFileChange(data as learnerFileResponse[], questionId);
           } else {
             get().onUrlChange(data as string, questionId);
           }

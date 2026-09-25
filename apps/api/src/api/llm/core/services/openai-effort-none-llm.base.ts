@@ -34,6 +34,9 @@ export abstract class EffortNoneOpenAiLlmService
    */
   readonly supportsExplicitPromptCache: boolean = false;
 
+  // The installed SDK recognizes only GPT-5/o-series as reasoning models.
+  protected readonly explicitCompletionTokenLimit: boolean = false;
+
   protected constructor(
     private readonly modelName: string,
     private readonly tokenCounter: ITokenCounter,
@@ -52,12 +55,17 @@ export abstract class EffortNoneOpenAiLlmService
       // Installed SDK types predate `none`, so go through modelKwargs.
       modelKwargs: {
         reasoning_effort: "none",
+        ...(this.explicitCompletionTokenLimit
+          ? { max_completion_tokens: options?.maxTokens ?? 4096 }
+          : {}),
         ...safetyIdentifierKwargs(options),
         ...(this.supportsExplicitPromptCache
           ? explicitPromptCacheKwargs(options)
           : {}),
       },
-      maxCompletionTokens: options?.maxTokens ?? 4096,
+      maxCompletionTokens: this.explicitCompletionTokenLimit
+        ? undefined
+        : (options?.maxTokens ?? 4096),
       timeout: options?.timeoutMs,
       maxRetries: options?.maxRetries,
     });

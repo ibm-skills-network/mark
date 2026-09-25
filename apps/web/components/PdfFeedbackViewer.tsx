@@ -1,5 +1,6 @@
 "use client";
 
+import type { JSX } from "react";
 import { HighlightLevel, ResponseHighlighting } from "@/config/types";
 import {
   CheckCircleIcon,

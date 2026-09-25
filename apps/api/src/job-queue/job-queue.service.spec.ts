@@ -28,8 +28,6 @@ jest.mock("bullmq", () => ({
     // Mirror BullMQ's key derivation closely enough for assertions: the
     // completed/failed sorted sets are "<prefix>:<name>:<type>".
     toKey: (type: string) => `bull:${name}:${type}`,
-    // BullMQ resolves `queue.client` to the shared ioredis client.
-    client: Promise.resolve(redisClient),
   })),
 }));
 
@@ -39,6 +37,7 @@ jest.mock("./redis.connection", () => ({
 
 describe("JobQueueService", () => {
   const mockConnection = {
+    ...redisClient,
     quit: jest.fn(),
   };
 

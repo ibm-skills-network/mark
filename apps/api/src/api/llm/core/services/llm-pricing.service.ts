@@ -32,20 +32,27 @@ const HELICONE_REGISTRY_URL =
   "https://api.helicone.ai/v1/public/model-registry/models";
 const PRICING_CACHE_KEY = "llm_pricing_registry";
 
-const GPT56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000;
+const TIERED_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000;
 
-function getGpt56TieredPricingMetadata(
+function getTieredPricingMetadata(
   modelKey: string,
   inputTokenPrice: number,
   outputTokenPrice: number,
 ): Record<string, number> {
-  if (!modelKey.startsWith("gpt-5.6-")) return {};
+  if (!modelKey.startsWith("gpt-5.6-") && modelKey !== "gpt-6-luna") return {};
 
   return {
     longContextInputTokenPrice: inputTokenPrice * 2,
     longContextOutputTokenPrice: outputTokenPrice * 1.5,
-    longContextInputThresholdTokens: GPT56_LONG_CONTEXT_THRESHOLD_TOKENS,
+    longContextInputThresholdTokens: TIERED_LONG_CONTEXT_THRESHOLD_TOKENS,
     cacheWriteTokenPrice: inputTokenPrice * 1.25,
+    ...(modelKey === "gpt-6-luna"
+      ? {
+          cachedInputTokenPrice: inputTokenPrice * 0.1,
+          longContextCachedInputTokenPrice: inputTokenPrice * 0.2,
+          longContextCacheWriteTokenPrice: inputTokenPrice * 2.5,
+        }
+      : {}),
   };
 }
 
@@ -975,7 +982,7 @@ export class LLMPricingService {
               pricingSource: "helicone_registry",
               registryProvider: resolvedModel.registryProvider,
               canonicalModelId: resolvedModel.canonicalModelId,
-              ...getGpt56TieredPricingMetadata(
+              ...getTieredPricingMetadata(
                 resolvedModel.modelKey,
                 resolvedModel.inputPerToken,
                 resolvedModel.outputPerToken,
@@ -1043,8 +1050,9 @@ export class LLMPricingService {
         input: 0.000_000_2,
         output: 0.000_001_25,
       },
-      // GPT-5.6 short-context tier. Long-context rates are added to metadata
+      // GPT-5.6 and Luna 6 short-context tiers. Long-context rates are added to metadata
       // below and selected for the whole request above the 272K threshold.
+      "gpt-6-luna": { input: 0.000_000_1, output: 0.000_000_5 },
       "gpt-5.6-luna": { input: 0.000_000_2, output: 0.000_001_2 },
       "gpt-5.6-terra": { input: 0.000_002, output: 0.000_012 },
       "gpt-5.6-sol": { input: 0.000_005, output: 0.000_03 },
@@ -1077,16 +1085,12 @@ export class LLMPricingService {
         source: "Fallback pricing",
         notes: modelKey.startsWith("gpt-5.4-")
           ? "Official OpenAI Standard-tier snapshot pricing"
-          : modelKey.startsWith("gpt-5.6-")
+          : modelKey.startsWith("gpt-5.6-") || modelKey === "gpt-6-luna"
             ? "Official OpenAI Standard-tier pricing, short-context (<=272K input) rate"
             : modelKey.startsWith("gpt-5")
               ? "Estimated pricing for model"
               : "Known pricing when registry lookup failed",
-        ...getGpt56TieredPricingMetadata(
-          modelKey,
-          pricing.input,
-          pricing.output,
-        ),
+        ...getTieredPricingMetadata(modelKey, pricing.input, pricing.output),
       },
     };
   }
@@ -1106,6 +1110,7 @@ export class LLMPricingService {
       "gpt-5-nano",
       "gpt-5.4-mini-2026-03-17",
       "gpt-5.4-nano-2026-03-17",
+      "gpt-6-luna",
       "gpt-5.6-luna",
       "gpt-5.6-terra",
       "gpt-5.6-sol",

@@ -1,3 +1,10 @@
+import {
+  mediaGradeSchema,
+  assertUsableMediaEvidence,
+  validateMediaGrade,
+  MEDIA_EVIDENCE_INSTRUCTIONS,
+  MEDIA_FEEDBACK_INSTRUCTIONS,
+} from "./media-grading-validation";
 /* eslint-disable unicorn/no-null */
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
@@ -137,10 +144,26 @@ export class PresentationGradingService implements IPresentationGradingService {
     const safeBodyLangExplanation =
       learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
 
+    const evidenceSources = {
+      transcript: learnerResponse?.transcript ?? "",
+      speechReport: learnerResponse?.speechReport ?? "",
+      contentReport: learnerResponse?.contentReport ?? "",
+      bodyLanguageExplanation: learnerResponse?.bodyLanguageExplanation ?? "",
+    };
+    assertUsableMediaEvidence(evidenceSources);
+    const gradeSchema = mediaGradeSchema(
+      PresentationGradeSchema,
+      totalPoints,
+      scoringCriteria,
+    );
     const prompt = new PromptTemplate({
-      template: this.loadPresentationGradingTemplate(),
+      template:
+        this.loadPresentationGradingTemplate() +
+        MEDIA_EVIDENCE_INSTRUCTIONS +
+        "\nEVIDENCE SOURCES:\n{evidence_sources}",
       inputVariables: [],
       partialVariables: {
+        evidence_sources: () => JSON.stringify(evidenceSources),
         question: () => question,
         assignment_instructions: () =>
           assignmentInstrctions ?? "No assignment instructions provided.",
@@ -167,10 +190,13 @@ export class PresentationGradingService implements IPresentationGradingService {
           assignmentId,
           AIUsageType.ASSIGNMENT_GRADING,
           "presentation_grading",
-          PresentationGradeSchema,
+          gradeSchema,
           undefined,
           { safetyIdentifier },
         );
+
+      const validatedGrade = gradeSchema.parse(parsedResponse);
+      validateMediaGrade(validatedGrade, scoringCriteria, evidenceSources);
 
       const aeegFeedback = `
 **Analysis:**
@@ -216,6 +242,12 @@ ${parsedResponse.guidance}
     liveRecordingData: LearnerLiveRecordingFeedback,
     assignmentId: number,
   ): Promise<string> {
+    assertUsableMediaEvidence({
+      transcript: liveRecordingData.transcript ?? "",
+      speechReport: liveRecordingData.speechReport ?? "",
+      contentReport: liveRecordingData.contentReport ?? "",
+      bodyLanguageExplanation: liveRecordingData.bodyLanguageExplanation ?? "",
+    });
     const safeSpeechReport =
       liveRecordingData.speechReport ?? "No speech analysis available.";
     const safeContentReport =
@@ -228,7 +260,8 @@ ${parsedResponse.guidance}
       liveRecordingData.bodyLanguageExplanation ?? "Not provided.";
 
     const prompt = new PromptTemplate({
-      template: this.loadLiveRecordingFeedbackTemplate(),
+      template:
+        this.loadLiveRecordingFeedbackTemplate() + MEDIA_FEEDBACK_INSTRUCTIONS,
       inputVariables: [],
       partialVariables: {
         question_text: () => liveRecordingData.question.question,

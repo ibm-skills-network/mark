@@ -344,7 +344,7 @@ jobs:
 
       - name: Run tests for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn turbo run test --filter=${{ matrix.service }} --only -- -- --watchAll=false
+        run: yarn workspace ${{ matrix.service }} run test --watchAll=false
         timeout-minutes: 10
 
   playwright:
