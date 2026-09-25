@@ -1,4 +1,26 @@
 import type { Editor } from "@tiptap/core";
+import {
+  ArrowLeftRight,
+  Baseline,
+  Bold,
+  Code2,
+  Highlighter,
+  Image as ImageIcon,
+  Indent,
+  Italic,
+  Link2,
+  List,
+  ListOrdered,
+  Outdent,
+  Quote,
+  RemoveFormatting,
+  Strikethrough,
+  Subscript,
+  Superscript,
+  Underline,
+  Video,
+  type LucideIcon,
+} from "lucide-react";
 
 import type { ToolbarMode } from "./extensions";
 
@@ -28,9 +50,9 @@ export type ToolbarItemId =
 /**
  * The previous editor's toolbars, control for control and group for group.
  *
- * Kept as data so the two are comparable at a glance and a test can assert the
- * set directly. Losing a control here is the kind of regression nobody notices
- * until an author goes looking for a button that used to exist.
+ * Kept as data so the two are comparable at a glance. Losing a control here is
+ * the kind of regression nobody notices until an author goes looking for a
+ * button that used to exist.
  *
  * Previously:
  *   full    = header, bold/italic/underline/strike, blockquote/code-block,
@@ -110,96 +132,144 @@ export const COLOR_SWATCHES = [
   "#3d1466",
 ];
 
-export interface ToolbarAction {
-  isActive: (editor: Editor) => boolean;
-  isDisabled: (editor: Editor) => boolean;
-  run: (editor: Editor) => void;
-}
+/**
+ * Every control, in one table.
+ *
+ * `kind` says how it is rendered, which is the only thing the toolbar component
+ * needs to know — it switches on four shapes rather than on twenty-one ids, so
+ * adding a control is one entry here and nothing else. Behaviour and
+ * presentation live together on purpose: they were split across three parallel
+ * maps keyed by the same ids, and keeping three lists in step by hand is how a
+ * button ends up with the wrong icon or the wrong command.
+ *
+ * Icons are component references, not elements, so this stays a plain `.ts`
+ * module with no JSX.
+ */
+export type ToolbarControl =
+  | {
+      kind: "button";
+      label: string;
+      icon: LucideIcon;
+      isActive: (editor: Editor) => boolean;
+      isDisabled: (editor: Editor) => boolean;
+      run: (editor: Editor) => void;
+    }
+  | {
+      kind: "select";
+      label: string;
+      /** `value` is what the select shows; `set` applies the chosen option. */
+      options: readonly { value: string; label: string }[];
+      value: (editor: Editor) => string;
+      set: (editor: Editor, value: string) => void;
+    }
+  | {
+      kind: "color";
+      label: string;
+      icon: LucideIcon;
+      isActive: (editor: Editor) => boolean;
+      apply: (editor: Editor, color: string) => void;
+      clear: (editor: Editor) => void;
+      clearLabel: string;
+    }
+  | {
+      kind: "url";
+      label: string;
+      icon: LucideIcon;
+      placeholder: string;
+      submitLabel: string;
+      isActive?: (editor: Editor) => boolean;
+      /** Prefills the field, so editing a link shows its current target. */
+      current?: (editor: Editor) => string;
+      submit: (editor: Editor, url: string) => void;
+      remove?: (editor: Editor) => void;
+      removeLabel?: string;
+    };
 
 const chain = (editor: Editor) => editor.chain().focus();
 
 /**
- * Indent and outdent apply only inside a list.
+ * The commands that are a plain on/off toggle over a mark or node.
  *
- * The previous editor also indented bare paragraphs, which this cannot
- * reproduce; the button is disabled outside a list rather than doing nothing
- * when pressed. No stored content relies on it — the 25 paragraphs that did are
- * handled by the shared normalizer, which drops the indent and reports it.
+ * Ten of the controls are this exact shape, so they are generated rather than
+ * written out. Spelling each one by hand is what lets `underline` quietly call
+ * `toggleItalic` — both "toggle something", so no test notices.
  */
-export const TOOLBAR_ACTIONS: Record<
-  Exclude<
-    ToolbarItemId,
-    | "heading"
-    | "color"
-    | "backgroundColor"
-    | "align"
-    | "link"
-    | "image"
-    | "video"
-  >,
-  ToolbarAction
-> = {
-  bold: {
-    isActive: (editor) => editor.isActive("bold"),
-    isDisabled: (editor) => !editor.can().toggleBold(),
-    run: (editor) => chain(editor).toggleBold().run(),
-  },
-  italic: {
-    isActive: (editor) => editor.isActive("italic"),
-    isDisabled: (editor) => !editor.can().toggleItalic(),
-    run: (editor) => chain(editor).toggleItalic().run(),
-  },
-  underline: {
-    isActive: (editor) => editor.isActive("underline"),
-    isDisabled: (editor) => !editor.can().toggleUnderline(),
-    run: (editor) => chain(editor).toggleUnderline().run(),
-  },
-  strike: {
-    isActive: (editor) => editor.isActive("strike"),
-    isDisabled: (editor) => !editor.can().toggleStrike(),
-    run: (editor) => chain(editor).toggleStrike().run(),
-  },
-  blockquote: {
-    isActive: (editor) => editor.isActive("blockquote"),
-    isDisabled: (editor) => !editor.can().toggleBlockquote(),
-    run: (editor) => chain(editor).toggleBlockquote().run(),
-  },
-  codeBlock: {
-    isActive: (editor) => editor.isActive("codeBlock"),
-    isDisabled: (editor) => !editor.can().toggleCodeBlock(),
-    run: (editor) => chain(editor).toggleCodeBlock().run(),
-  },
-  orderedList: {
-    isActive: (editor) => editor.isActive("orderedList"),
-    isDisabled: (editor) => !editor.can().toggleOrderedList(),
-    run: (editor) => chain(editor).toggleOrderedList().run(),
-  },
-  bulletList: {
-    isActive: (editor) => editor.isActive("bulletList"),
-    isDisabled: (editor) => !editor.can().toggleBulletList(),
-    run: (editor) => chain(editor).toggleBulletList().run(),
-  },
-  subscript: {
-    isActive: (editor) => editor.isActive("subscript"),
-    isDisabled: (editor) => !editor.can().toggleSubscript(),
-    run: (editor) => chain(editor).toggleSubscript().run(),
-  },
-  superscript: {
-    isActive: (editor) => editor.isActive("superscript"),
-    isDisabled: (editor) => !editor.can().toggleSuperscript(),
-    run: (editor) => chain(editor).toggleSuperscript().run(),
-  },
+type ToggleCommand =
+  | "toggleBold"
+  | "toggleItalic"
+  | "toggleUnderline"
+  | "toggleStrike"
+  | "toggleBlockquote"
+  | "toggleCodeBlock"
+  | "toggleOrderedList"
+  | "toggleBulletList"
+  | "toggleSubscript"
+  | "toggleSuperscript";
+
+const toggle = (
+  label: string,
+  icon: LucideIcon,
+  name: string,
+  command: ToggleCommand,
+): ToolbarControl => ({
+  kind: "button",
+  label,
+  icon,
+  isActive: (editor) => editor.isActive(name),
+  isDisabled: (editor) => !editor.can()[command](),
+  run: (editor) => chain(editor)[command]().run(),
+});
+
+export const TOOLBAR_CONTROLS: Record<ToolbarItemId, ToolbarControl> = {
+  bold: toggle("Bold", Bold, "bold", "toggleBold"),
+  italic: toggle("Italic", Italic, "italic", "toggleItalic"),
+  underline: toggle("Underline", Underline, "underline", "toggleUnderline"),
+  strike: toggle("Strikethrough", Strikethrough, "strike", "toggleStrike"),
+  blockquote: toggle("Blockquote", Quote, "blockquote", "toggleBlockquote"),
+  codeBlock: toggle("Code block", Code2, "codeBlock", "toggleCodeBlock"),
+  orderedList: toggle(
+    "Numbered list",
+    ListOrdered,
+    "orderedList",
+    "toggleOrderedList",
+  ),
+  bulletList: toggle("Bulleted list", List, "bulletList", "toggleBulletList"),
+  subscript: toggle("Subscript", Subscript, "subscript", "toggleSubscript"),
+  superscript: toggle(
+    "Superscript",
+    Superscript,
+    "superscript",
+    "toggleSuperscript",
+  ),
+
+  /**
+   * Indent and outdent apply only inside a list. The previous editor also
+   * indented bare paragraphs, which this cannot reproduce, so the button is
+   * disabled outside a list rather than doing nothing when pressed. No stored
+   * content relies on it — the 25 paragraphs that did are handled by the shared
+   * normalizer, which drops the indent and reports it.
+   */
   outdent: {
+    kind: "button",
+    label: "Decrease indent",
+    icon: Outdent,
     isActive: () => false,
     isDisabled: (editor) => !editor.can().liftListItem("listItem"),
     run: (editor) => chain(editor).liftListItem("listItem").run(),
   },
   indent: {
+    kind: "button",
+    label: "Increase indent",
+    icon: Indent,
     isActive: () => false,
     isDisabled: (editor) => !editor.can().sinkListItem("listItem"),
     run: (editor) => chain(editor).sinkListItem("listItem").run(),
   },
+
   rtl: {
+    kind: "button",
+    label: "Right to left",
+    icon: ArrowLeftRight,
     isActive: (editor) => editor.isActive({ dir: "rtl" }),
     isDisabled: () => false,
     run: (editor) => {
@@ -210,9 +280,104 @@ export const TOOLBAR_ACTIONS: Record<
       }
     },
   },
+
   clearFormatting: {
+    kind: "button",
+    label: "Clear formatting",
+    icon: RemoveFormatting,
     isActive: () => false,
     isDisabled: () => false,
     run: (editor) => chain(editor).unsetAllMarks().clearNodes().run(),
+  },
+
+  heading: {
+    kind: "select",
+    label: "Paragraph style",
+    options: [
+      { value: "p", label: "Normal" },
+      ...HEADING_LEVELS.map((level) => ({
+        value: String(level),
+        label: `Heading ${level}`,
+      })),
+    ],
+    value: (editor) => {
+      const level = HEADING_LEVELS.find((candidate) =>
+        editor.isActive("heading", { level: candidate }),
+      );
+      return level ? String(level) : "p";
+    },
+    set: (editor, value) => {
+      if (value === "p") {
+        chain(editor).setParagraph().run();
+        return;
+      }
+      chain(editor)
+        .setHeading({ level: Number(value) as (typeof HEADING_LEVELS)[number] })
+        .run();
+    },
+  },
+
+  align: {
+    kind: "select",
+    label: "Text alignment",
+    options: TEXT_ALIGNMENTS.map((alignment) => ({
+      value: alignment,
+      label: alignment[0].toUpperCase() + alignment.slice(1),
+    })),
+    value: (editor) =>
+      TEXT_ALIGNMENTS.find((alignment) =>
+        editor.isActive({ textAlign: alignment }),
+      ) ?? "left",
+    set: (editor, value) => chain(editor).setTextAlign(value).run(),
+  },
+
+  color: {
+    kind: "color",
+    label: "Text colour",
+    icon: Baseline,
+    isActive: (editor) => Boolean(editor.getAttributes("textStyle").color),
+    apply: (editor, color) => chain(editor).setColor(color).run(),
+    clear: (editor) => chain(editor).unsetColor().run(),
+    clearLabel: "Remove colour",
+  },
+  backgroundColor: {
+    kind: "color",
+    label: "Background colour",
+    icon: Highlighter,
+    isActive: (editor) =>
+      Boolean(editor.getAttributes("textStyle").backgroundColor),
+    apply: (editor, color) => chain(editor).setBackgroundColor(color).run(),
+    clear: (editor) => chain(editor).unsetBackgroundColor().run(),
+    clearLabel: "Remove background",
+  },
+
+  link: {
+    kind: "url",
+    label: "Link",
+    icon: Link2,
+    placeholder: "https://example.com",
+    submitLabel: "Apply",
+    isActive: (editor) => editor.isActive("link"),
+    current: (editor) => (editor.getAttributes("link").href as string) ?? "",
+    submit: (editor, url) =>
+      chain(editor).extendMarkRange("link").setLink({ href: url }).run(),
+    remove: (editor) => chain(editor).extendMarkRange("link").unsetLink().run(),
+    removeLabel: "Remove link",
+  },
+  image: {
+    kind: "url",
+    label: "Image",
+    icon: ImageIcon,
+    placeholder: "https://example.com/image.png",
+    submitLabel: "Insert",
+    submit: (editor, url) => chain(editor).setImage({ src: url }).run(),
+  },
+  video: {
+    kind: "url",
+    label: "Video",
+    icon: Video,
+    placeholder: "https://www.youtube.com/embed/...",
+    submitLabel: "Insert",
+    submit: (editor, url) => chain(editor).setVideo({ src: url }).run(),
   },
 };

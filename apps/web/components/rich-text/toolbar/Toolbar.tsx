@@ -2,97 +2,17 @@
 
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
-import {
-  ArrowLeftRight,
-  Bold,
-  Code2,
-  Indent,
-  Italic,
-  List,
-  ListOrdered,
-  Outdent,
-  Quote,
-  RemoveFormatting,
-  Strikethrough,
-  Subscript,
-  Superscript,
-  Underline,
-} from "lucide-react";
-import type { FC, ReactNode } from "react";
+import type { FC } from "react";
 
 import type { ToolbarMode } from "@/lib/rich-text/extensions";
 import {
-  HEADING_LEVELS,
-  TEXT_ALIGNMENTS,
-  TOOLBAR_ACTIONS,
+  TOOLBAR_CONTROLS,
   TOOLBAR_GROUPS_BY_MODE,
   type ToolbarItemId,
 } from "@/lib/rich-text/toolbar-config";
 
-import {
-  ColorPopover,
-  ImagePopover,
-  LinkPopover,
-  VideoPopover,
-} from "./popovers";
+import { ColorPopover, UrlPopover } from "./popovers";
 import ToolbarButton from "./ToolbarButton";
-
-/** Icon and accessible name for every control driven by `TOOLBAR_ACTIONS`. */
-const BUTTON_PRESENTATION: Record<
-  keyof typeof TOOLBAR_ACTIONS,
-  { label: string; icon: ReactNode }
-> = {
-  bold: { label: "Bold", icon: <Bold className="h-4 w-4" aria-hidden /> },
-  italic: { label: "Italic", icon: <Italic className="h-4 w-4" aria-hidden /> },
-  underline: {
-    label: "Underline",
-    icon: <Underline className="h-4 w-4" aria-hidden />,
-  },
-  strike: {
-    label: "Strikethrough",
-    icon: <Strikethrough className="h-4 w-4" aria-hidden />,
-  },
-  blockquote: {
-    label: "Blockquote",
-    icon: <Quote className="h-4 w-4" aria-hidden />,
-  },
-  codeBlock: {
-    label: "Code block",
-    icon: <Code2 className="h-4 w-4" aria-hidden />,
-  },
-  orderedList: {
-    label: "Numbered list",
-    icon: <ListOrdered className="h-4 w-4" aria-hidden />,
-  },
-  bulletList: {
-    label: "Bulleted list",
-    icon: <List className="h-4 w-4" aria-hidden />,
-  },
-  subscript: {
-    label: "Subscript",
-    icon: <Subscript className="h-4 w-4" aria-hidden />,
-  },
-  superscript: {
-    label: "Superscript",
-    icon: <Superscript className="h-4 w-4" aria-hidden />,
-  },
-  outdent: {
-    label: "Decrease indent",
-    icon: <Outdent className="h-4 w-4" aria-hidden />,
-  },
-  indent: {
-    label: "Increase indent",
-    icon: <Indent className="h-4 w-4" aria-hidden />,
-  },
-  rtl: {
-    label: "Right to left",
-    icon: <ArrowLeftRight className="h-4 w-4" aria-hidden />,
-  },
-  clearFormatting: {
-    label: "Clear formatting",
-    icon: <RemoveFormatting className="h-4 w-4" aria-hidden />,
-  },
-};
 
 /**
  * `shrink-0` and an explicit width because the toolbar is a wrapping flex row:
@@ -103,14 +23,14 @@ const BUTTON_PRESENTATION: Record<
  * crops the label's lower half — visible only at high resolution.
  */
 const SELECT_CLASS =
-  "h-7 shrink-0 rounded border border-gray-200 bg-transparent px-2 py-0 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300";
+  "h-7 w-[7.5rem] shrink-0 rounded border border-gray-200 bg-transparent px-2 py-0 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300";
 
 /**
  * The editor's toolbar.
  *
- * Which controls appear, and in which groups, is data in `toolbar-config.ts`
- * rather than markup here, so the set is comparable with the previous editor's
- * at a glance and a test can assert it. This file supplies only presentation.
+ * Which controls exist, what they do and how they look are all one table in
+ * `toolbar-config.ts`. This file only maps the four `kind`s onto components, so
+ * adding a control never means editing this file.
  *
  * Every control's pressed and disabled state comes from a single
  * `useEditorState` selector. Reading `editor.isActive(...)` inline instead
@@ -121,142 +41,102 @@ const Toolbar: FC<{ editor: Editor; mode: ToolbarMode }> = ({
   mode,
 }) => {
   const groups = TOOLBAR_GROUPS_BY_MODE[mode];
+  const visible = groups.flat();
 
-  const state = useEditorState({
+  /**
+   * Re-render the row only when something a control displays actually changes.
+   *
+   * The selector collapses every visible control's state into one string, which
+   * `useEditorState` compares; the controls then read from `editor` directly at
+   * render. Reading inline *without* this would re-render every button on every
+   * keystroke, and holding a typed snapshot object instead only added a cast.
+   */
+  useEditorState({
     editor,
-    selector: ({ editor: current }) => ({
-      actions: Object.fromEntries(
-        Object.entries(TOOLBAR_ACTIONS).map(([id, action]) => [
-          id,
-          {
-            isActive: action.isActive(current),
-            isDisabled: action.isDisabled(current),
-          },
-        ]),
-      ) as Record<
-        keyof typeof TOOLBAR_ACTIONS,
-        { isActive: boolean; isDisabled: boolean }
-      >,
-      headingLevel:
-        HEADING_LEVELS.find((level) =>
-          current.isActive("heading", { level }),
-        ) ?? null,
-      alignment:
-        TEXT_ALIGNMENTS.find((alignment) =>
-          current.isActive({ textAlign: alignment }),
-        ) ?? null,
-      isLinkActive: current.isActive("link"),
-      isColorActive: Boolean(current.getAttributes("textStyle").color),
-      isBackgroundActive: Boolean(
-        current.getAttributes("textStyle").backgroundColor,
-      ),
-    }),
+    selector: ({ editor: current }) =>
+      visible
+        .map((id) => {
+          const control = TOOLBAR_CONTROLS[id];
+          switch (control.kind) {
+            case "button":
+              return `${control.isActive(current)}:${control.isDisabled(current)}`;
+            case "select":
+              return control.value(current);
+            case "color":
+              return String(control.isActive(current));
+            case "url":
+              return `${control.isActive?.(current) ?? false}:${control.current?.(current) ?? ""}`;
+          }
+        })
+        .join("|"),
   });
 
-  const renderItem = (id: ToolbarItemId) => {
-    switch (id) {
-      case "heading": {
-        return (
-          <select
-            key={id}
-            aria-label="Paragraph style"
-            title="Paragraph style"
-            className={`${SELECT_CLASS} w-[7.5rem]`}
-            value={state.headingLevel ? String(state.headingLevel) : "p"}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next === "p") {
-                editor.chain().focus().setParagraph().run();
-                return;
-              }
-              editor
-                .chain()
-                .focus()
-                .setHeading({
-                  level: Number(next) as (typeof HEADING_LEVELS)[number],
-                })
-                .run();
-            }}
-          >
-            <option value="p">Normal</option>
-            {HEADING_LEVELS.map((level) => (
-              <option key={level} value={level}>
-                Heading {level}
-              </option>
-            ))}
-          </select>
-        );
-      }
+  const renderControl = (id: ToolbarItemId) => {
+    const control = TOOLBAR_CONTROLS[id];
 
-      case "align": {
+    switch (control.kind) {
+      case "button":
+        return (
+          <ToolbarButton
+            key={id}
+            label={control.label}
+            icon={control.icon}
+            isActive={control.isActive(editor)}
+            isDisabled={control.isDisabled(editor)}
+            onClick={() => control.run(editor)}
+          />
+        );
+
+      case "select":
         return (
           <select
             key={id}
-            aria-label="Text alignment"
-            title="Text alignment"
-            className={`${SELECT_CLASS} w-[6rem]`}
-            value={state.alignment ?? "left"}
-            onChange={(event) =>
-              editor.chain().focus().setTextAlign(event.target.value).run()
-            }
+            aria-label={control.label}
+            title={control.label}
+            className={SELECT_CLASS}
+            value={control.value(editor)}
+            onChange={(event) => control.set(editor, event.target.value)}
           >
-            {TEXT_ALIGNMENTS.map((alignment) => (
-              <option key={alignment} value={alignment}>
-                {alignment[0].toUpperCase() + alignment.slice(1)}
+            {control.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
         );
-      }
 
       case "color":
         return (
           <ColorPopover
             key={id}
-            editor={editor}
-            kind="color"
-            isActive={state.isColorActive}
+            label={control.label}
+            icon={control.icon}
+            isActive={control.isActive(editor)}
+            clearLabel={control.clearLabel}
+            onPick={(color) => control.apply(editor, color)}
+            onClear={() => control.clear(editor)}
           />
         );
 
-      case "backgroundColor":
+      case "url":
         return (
-          <ColorPopover
+          <UrlPopover
             key={id}
-            editor={editor}
-            kind="backgroundColor"
-            isActive={state.isBackgroundActive}
+            label={control.label}
+            icon={control.icon}
+            placeholder={control.placeholder}
+            submitLabel={control.submitLabel}
+            isActive={control.isActive?.(editor) ?? false}
+            initialValue={control.current?.(editor) ?? ""}
+            onSubmit={(url) => control.submit(editor, url)}
+            onRemove={
+              control.remove && control.isActive?.(editor)
+                ? () => control.remove?.(editor)
+                : undefined
+            }
+            removeLabel={control.removeLabel}
           />
         );
-
-      case "link":
-        return (
-          <LinkPopover key={id} editor={editor} isActive={state.isLinkActive} />
-        );
-
-      case "image":
-        return <ImagePopover key={id} editor={editor} />;
-
-      case "video":
-        return <VideoPopover key={id} editor={editor} />;
-
-      default: {
-        const action = TOOLBAR_ACTIONS[id];
-        const presentation = BUTTON_PRESENTATION[id];
-        const itemState = state.actions[id];
-
-        return (
-          <ToolbarButton
-            key={id}
-            label={presentation.label}
-            isActive={itemState.isActive}
-            isDisabled={itemState.isDisabled}
-            onClick={() => action.run(editor)}
-          >
-            {presentation.icon}
-          </ToolbarButton>
-        );
-      }
     }
   };
 
@@ -275,7 +155,7 @@ const Toolbar: FC<{ editor: Editor; mode: ToolbarMode }> = ({
               : ""
           }`}
         >
-          {group.map((id) => renderItem(id))}
+          {group.map((id) => renderControl(id))}
         </div>
       ))}
     </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { EditorContent, useEditor } from "@tiptap/react";
-import { normalizeQuillHtml } from "rich-text";
 import {
   useCallback,
   useEffect,
@@ -19,7 +18,7 @@ import {
   countRichText,
   type RichTextCounts,
 } from "@/lib/rich-text/extensions/rich-text-limits";
-import { sanitizeHtml } from "@/lib/sanitize-html";
+import { prepareStoredHtml } from "@/lib/rich-text/prepare-stored-html";
 import { cn } from "@/lib/strings";
 
 import Toolbar from "./toolbar/Toolbar";
@@ -36,19 +35,11 @@ export interface RichTextEditorProps
   toolbarMode?: ToolbarMode;
 }
 
-/** Marks the editable area for tests and for the click-to-focus shell below. */
-export const EDITOR_TESTID = "rich-text-editor";
-
 /**
  * The editable rich-text surface.
  *
- * Content is sanitized and then normalized once, at mount. Both steps are
- * needed and the order is not interchangeable: sanitizing decides what is
- * allowed to exist and has to see the untrusted string first, and normalizing
- * rewrites the previous editor's markup into shapes this one's schema
- * recognises. Skipping the second step does not fail loudly — stored bullets
- * come back as numbered items, because the previous editor expressed a bullet
- * as `<li data-list="bullet">` inside an `<ol>`.
+ * Content goes through `prepareStoredHtml` once, at mount; that function owns
+ * the sanitize-then-normalize order and why it matters.
  *
  * Mount this through a client-only dynamic import. It touches `DOMParser` on
  * the way in, and the editor itself has no server rendering to do.
@@ -82,9 +73,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   // Computed once. Recomputing on every `value` change would fight the sync
   // effect below and re-seed the document from a string the editor itself just
   // produced.
-  const [initialContent] = useState(
-    () => normalizeQuillHtml(sanitizeHtml(value)).html,
-  );
+  const [initialContent] = useState(() => prepareStoredHtml(value));
 
   const editor = useEditor({
     extensions: createRichTextExtensions({
@@ -114,7 +103,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         // `rich-text-content` is shared with the viewer, so what an author
         // types looks like what a learner is shown.
         class: "rich-text-content rich-text-editor-surface",
-        "data-testid": EDITOR_TESTID,
+        // Changing this breaks `tests/author/assignment-overview.spec.ts` and
+        // `components/__tests__/RichTextEditor.test.tsx`, which both locate the
+        // editable area by it. Not a shared constant: the Playwright suite is
+        // deliberately decoupled from app source and cannot import one.
+        "data-testid": "rich-text-editor",
       },
     },
   });
@@ -158,10 +151,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       return;
     }
 
-    editor.commands.setContent(
-      normalizeQuillHtml(sanitizeHtml(incoming)).html,
-      { emitUpdate: false },
-    );
+    editor.commands.setContent(prepareStoredHtml(incoming), {
+      emitUpdate: false,
+    });
     setCounts(countRichText(editor.state.doc));
   }, [editor, value]);
 

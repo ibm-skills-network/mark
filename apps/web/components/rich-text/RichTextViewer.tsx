@@ -1,7 +1,6 @@
 "use client";
 
 import hljs from "highlight.js";
-import { normalizeQuillHtml } from "rich-text";
 import {
   useEffect,
   useMemo,
@@ -11,7 +10,7 @@ import {
   type FC,
 } from "react";
 
-import { sanitizeHtml } from "@/lib/sanitize-html";
+import { prepareStoredHtml } from "@/lib/rich-text/prepare-stored-html";
 import { cn } from "@/lib/strings";
 
 export interface RichTextViewerProps extends ComponentPropsWithoutRef<"div"> {
@@ -27,10 +26,8 @@ export interface RichTextViewerProps extends ComponentPropsWithoutRef<"div"> {
  * anything it has no rule for, so a viewer built on one shows strictly less
  * than what was stored. Static markup shows exactly what survived sanitizing.
  *
- * Content passes through two steps, in this order: sanitize, which decides what
- * is allowed to exist at all, then normalize, which rewrites the previous
- * editor's markup into the shape the current one produces. Sanitizing has to
- * see the untrusted string first.
+ * Content goes through `prepareStoredHtml`, which owns the sanitize-then-
+ * normalize order.
  */
 const RichTextViewer: FC<RichTextViewerProps> = ({
   className,
@@ -41,11 +38,13 @@ const RichTextViewer: FC<RichTextViewerProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  const html = useMemo(() => {
-    const raw =
-      children === null || children === undefined ? "" : String(children);
-    return normalizeQuillHtml(sanitizeHtml(raw)).html;
-  }, [children]);
+  const html = useMemo(
+    () =>
+      prepareStoredHtml(
+        children === null || children === undefined ? "" : String(children),
+      ),
+    [children],
+  );
 
   // Sanitizing needs a DOM, so the first paint stays empty and the content is
   // committed on the client. Rendering the server-side fallback instead would

@@ -19,6 +19,10 @@ import RichTextEditor from "../rich-text/RichTextEditor";
  * Mounting a real editor is deliberate. The interesting failures are in how
  * stored markup meets the schema, and a mocked editor cannot show that. No
  * layout is needed for any of it, so jsdom having none does not matter.
+ *
+ * What the schema does to each stored shape is not retested here — that is
+ * `lib/rich-text/__tests__/schema-round-trip.test.ts`, which covers it per
+ * shape rather than once through a mounted component.
  */
 const editableHtml = () => screen.getByTestId("rich-text-editor").innerHTML;
 
@@ -40,29 +44,6 @@ describe("RichTextEditor", () => {
     expect(editableHtml()).toContain("safe");
     expect(editableHtml()).not.toMatch(/onerror/i);
     expect(editableHtml()).not.toMatch(/<script/i);
-  });
-
-  it("normalizes stored bullets instead of renumbering them", async () => {
-    // What the previous editor stored for a bulleted list: a bullet is an
-    // attribute on a list item inside an *ordered* list, with the marker drawn
-    // by its own stylesheet. Handed to this schema unconverted, every bullet
-    // silently becomes a number.
-    render(
-      <RichTextEditor
-        value={
-          '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Alpha</li></ol>'
-        }
-        setValue={jest.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(editableHtml()).toContain("Alpha");
-    });
-
-    expect(editableHtml()).toContain("<ul");
-    expect(editableHtml()).not.toContain("<ol");
-    expect(editableHtml()).not.toContain("ql-ui");
   });
 
   it("does not report a change for content it only loaded", async () => {
@@ -93,10 +74,11 @@ describe("RichTextEditor", () => {
   ])(
     "renders a control for every item configured in the %s toolbar",
     async (mode, groups) => {
-      // `toolbar-parity.test.ts` pins the configured set against the previous
-      // editor's. This pins that the toolbar actually renders it: a missing
-      // branch in the component would otherwise drop a control while parity
-      // still passed.
+      // `toolbar-config.ts` is the record of which controls the previous
+      // editor offered. This asserts the toolbar actually renders all of
+      // them: a missing branch in the component would otherwise drop a
+      // control silently, and losing one is invisible until an author goes
+      // looking for a button that used to be there.
       render(
         <RichTextEditor
           value="<p>x</p>"

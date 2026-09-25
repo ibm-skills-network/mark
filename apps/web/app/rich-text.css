@@ -205,70 +205,13 @@
   overflow-x: auto;
 }
 
-/* Syntax highlighting, scoped here rather than imported as a global theme.
-   Two different highlight.js themes used to be imported from two components,
-   so whichever loaded last decided the colours for the whole page. */
-.rich-text-content .hljs-comment,
-.rich-text-content .hljs-quote {
-  color: #6a737d;
-  font-style: italic;
-}
-
-.rich-text-content .hljs-keyword,
-.rich-text-content .hljs-selector-tag,
-.rich-text-content .hljs-literal,
-.rich-text-content .hljs-doctag {
-  color: #d73a49;
-}
-
-.rich-text-content .hljs-string,
-.rich-text-content .hljs-meta .hljs-string {
-  color: #032f62;
-}
-
-.rich-text-content .hljs-number,
-.rich-text-content .hljs-symbol,
-.rich-text-content .hljs-bullet {
-  color: #005cc5;
-}
-
-.rich-text-content .hljs-title,
-.rich-text-content .hljs-section,
-.rich-text-content .hljs-name {
-  color: #6f42c1;
-}
-
-.rich-text-content .hljs-attr,
-.rich-text-content .hljs-attribute,
-.rich-text-content .hljs-variable,
-.rich-text-content .hljs-template-variable {
-  color: #e36209;
-}
-
-.rich-text-content .hljs-type,
-.rich-text-content .hljs-built_in,
-.rich-text-content .hljs-builtin-name {
-  color: #22863a;
-}
-
-.rich-text-content .hljs-addition {
-  color: #22863a;
-  background-color: #f0fff4;
-}
-
-.rich-text-content .hljs-deletion {
-  color: #b31d28;
-  background-color: #ffeef0;
-}
-
-.rich-text-content .hljs-emphasis {
-  font-style: italic;
-}
-
-.rich-text-content .hljs-strong {
-  font-weight: 600;
-}
-
+/* Syntax-highlight colours come from highlight.js's own GitHub theme, imported
+   once in app/layout.tsx. This used to be a hand transcription of that file so it
+   could be scoped, from when two different themes were imported by two
+   components and whichever loaded last won the page. Only one theme is imported
+   now, so the copy was redundant — and a hand-written copy goes stale silently
+   when highlight.js adds token classes. The dark overrides below are still ours:
+   that theme is light-only. */
 /* Dark mode */
 
 .dark .rich-text-content {

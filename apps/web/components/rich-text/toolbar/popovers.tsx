@@ -1,14 +1,7 @@
 "use client";
 
-import type { Editor } from "@tiptap/core";
-import {
-  Baseline,
-  Highlighter,
-  Image as ImageIcon,
-  Link2,
-  Video,
-} from "lucide-react";
-import { useState, type FC, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import { useState, type FC } from "react";
 
 import {
   Popover,
@@ -18,77 +11,50 @@ import {
 import { COLOR_SWATCHES } from "@/lib/rich-text/toolbar-config";
 import { cn } from "@/lib/strings";
 
-import { TOOLBAR_BUTTON_CLASS } from "./ToolbarButton";
+import { ACTIVE_CLASS, TOOLBAR_BUTTON_CLASS } from "./ToolbarButton";
 
 /**
- * A toolbar control that opens a panel.
+ * The panels behind the colour, link, image and video controls.
  *
- * The trigger carries the same classes as a plain toolbar button so the row
- * reads as one set of controls, and `type="button"` because these live inside
- * the author form and would otherwise submit it.
+ * Both take plain callbacks rather than the editor: what a control does is
+ * declared once in `toolbar-config.ts`, so these stay presentation and cannot
+ * disagree with the table about which command runs.
  */
 const PanelTrigger: FC<{
   label: string;
-  isActive?: boolean;
-  children: ReactNode;
-}> = ({ label, isActive = false, children }) => (
+  icon: LucideIcon;
+  isActive: boolean;
+}> = ({ label, icon: Icon, isActive }) => (
   <PopoverTrigger
+    // Inside the author form, a plain button would submit it.
     type="button"
     aria-label={label}
     title={label}
-    className={cn(
-      TOOLBAR_BUTTON_CLASS,
-      isActive &&
-        "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200",
-    )}
+    className={cn(TOOLBAR_BUTTON_CLASS, isActive && ACTIVE_CLASS)}
   >
-    {children}
+    <Icon className="h-4 w-4" aria-hidden />
   </PopoverTrigger>
 );
 
 /**
- * Colour and background-colour pickers.
- *
  * The swatch grid is the previous editor's own palette, so an author opens this
  * and sees the colours they already know. "Remove" is kept distinct from
  * picking white — unsetting the mark and painting white text look identical on
  * a white page and behave differently everywhere else.
  */
 export const ColorPopover: FC<{
-  editor: Editor;
-  kind: "color" | "backgroundColor";
+  label: string;
+  icon: LucideIcon;
   isActive: boolean;
-}> = ({ editor, kind, isActive }) => {
+  clearLabel: string;
+  onPick: (color: string) => void;
+  onClear: () => void;
+}> = ({ label, icon, isActive, clearLabel, onPick, onClear }) => {
   const [open, setOpen] = useState(false);
-  const label = kind === "color" ? "Text colour" : "Background colour";
-
-  const apply = (color: string) => {
-    if (kind === "color") {
-      editor.chain().focus().setColor(color).run();
-    } else {
-      editor.chain().focus().setBackgroundColor(color).run();
-    }
-    setOpen(false);
-  };
-
-  const clear = () => {
-    if (kind === "color") {
-      editor.chain().focus().unsetColor().run();
-    } else {
-      editor.chain().focus().unsetBackgroundColor().run();
-    }
-    setOpen(false);
-  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PanelTrigger label={label} isActive={isActive}>
-        {kind === "color" ? (
-          <Baseline className="h-4 w-4" aria-hidden />
-        ) : (
-          <Highlighter className="h-4 w-4" aria-hidden />
-        )}
-      </PanelTrigger>
+      <PanelTrigger label={label} icon={icon} isActive={isActive} />
       <PopoverContent className="w-auto p-2" align="start">
         <div className="grid grid-cols-7 gap-1" role="group" aria-label={label}>
           {COLOR_SWATCHES.map((color) => (
@@ -97,7 +63,10 @@ export const ColorPopover: FC<{
               type="button"
               aria-label={color}
               title={color}
-              onClick={() => apply(color)}
+              onClick={() => {
+                onPick(color);
+                setOpen(false);
+              }}
               className="h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
               style={{ backgroundColor: color }}
             />
@@ -105,10 +74,13 @@ export const ColorPopover: FC<{
         </div>
         <button
           type="button"
-          onClick={clear}
+          onClick={() => {
+            onClear();
+            setOpen(false);
+          }}
           className="mt-2 w-full rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
         >
-          Remove {kind === "color" ? "colour" : "background"}
+          {clearLabel}
         </button>
       </PopoverContent>
     </Popover>
@@ -118,28 +90,27 @@ export const ColorPopover: FC<{
 /**
  * A panel that takes one URL and applies it.
  *
- * Shared by link, image and video because the interaction is identical and the
- * only real difference is which command runs. The URL is not validated here:
- * the sanitizer decides which protocols and embed hosts survive, and a second
- * opinion in the toolbar is how the two drift apart.
+ * Shared by link, image and video because the interaction is identical. The URL
+ * is not validated here: the sanitizer decides which protocols and embed hosts
+ * survive, and a second opinion in the toolbar is how the two drift apart.
  */
-const UrlPopover: FC<{
+export const UrlPopover: FC<{
   label: string;
+  icon: LucideIcon;
   placeholder: string;
   submitLabel: string;
-  icon: ReactNode;
-  isActive?: boolean;
-  initialValue?: string;
+  isActive: boolean;
+  initialValue: string;
   onSubmit: (url: string) => void;
   onRemove?: () => void;
   removeLabel?: string;
 }> = ({
   label,
+  icon,
   placeholder,
   submitLabel,
-  icon,
-  isActive = false,
-  initialValue = "",
+  isActive,
+  initialValue,
   onSubmit,
   onRemove,
   removeLabel,
@@ -167,9 +138,7 @@ const UrlPopover: FC<{
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PanelTrigger label={label} isActive={isActive}>
-        {icon}
-      </PanelTrigger>
+      <PanelTrigger label={label} icon={icon} isActive={isActive} />
       <PopoverContent className="w-72 p-2" align="start">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
           {label}
@@ -212,51 +181,3 @@ const UrlPopover: FC<{
     </Popover>
   );
 };
-
-export const LinkPopover: FC<{ editor: Editor; isActive: boolean }> = ({
-  editor,
-  isActive,
-}) => (
-  <UrlPopover
-    label="Link"
-    placeholder="https://example.com"
-    submitLabel="Apply"
-    icon={<Link2 className="h-4 w-4" aria-hidden />}
-    isActive={isActive}
-    initialValue={(editor.getAttributes("link").href as string) ?? ""}
-    onSubmit={(url) =>
-      editor
-        .chain()
-        .focus()
-        .extendMarkRange("link")
-        .setLink({ href: url })
-        .run()
-    }
-    onRemove={
-      isActive
-        ? () => editor.chain().focus().extendMarkRange("link").unsetLink().run()
-        : undefined
-    }
-    removeLabel="Remove link"
-  />
-);
-
-export const ImagePopover: FC<{ editor: Editor }> = ({ editor }) => (
-  <UrlPopover
-    label="Image"
-    placeholder="https://example.com/image.png"
-    submitLabel="Insert"
-    icon={<ImageIcon className="h-4 w-4" aria-hidden />}
-    onSubmit={(url) => editor.chain().focus().setImage({ src: url }).run()}
-  />
-);
-
-export const VideoPopover: FC<{ editor: Editor }> = ({ editor }) => (
-  <UrlPopover
-    label="Video"
-    placeholder="https://www.youtube.com/embed/..."
-    submitLabel="Insert"
-    icon={<Video className="h-4 w-4" aria-hidden />}
-    onSubmit={(url) => editor.chain().focus().setVideo({ src: url }).run()}
-  />
-);
