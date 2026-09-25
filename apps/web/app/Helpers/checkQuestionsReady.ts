@@ -9,6 +9,7 @@ import { useDebugLog } from "../../lib/utils";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 import { useCallback } from "react";
+import { isRichTextEmpty } from "rich-text";
 
 interface ValidationError {
   message: string;
@@ -286,7 +287,7 @@ export const useQuestionsAreReadyToBePublished = (
     }
 
     if (isValid) {
-      if (!introduction?.trim() || introduction.trim() === "<p><br></p>") {
+      if (isRichTextEmpty(introduction)) {
         message = `Introduction is empty.`;
         debugLog(message);
         step = 3;

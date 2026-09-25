@@ -8,7 +8,15 @@
       "dependsOn": ["^build", "^download-models"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
-    "lint": {},
+    "lint": {
+      // Only the shared package, named explicitly rather than `^build`.
+      // ESLint resolves `rich-text` through its `main`, which points at
+      // `dist/`, so it must be built or the type-aware rules see `any`.
+      // `^build` would instead build every dependency in the graph — for
+      // `jobs` that means compiling all of `apps/api` just to lint, which
+      // is both slow and able to fail for reasons lint does not care about.
+      "dependsOn": ["rich-text#build"]
+    },
     "seed": {},
     "seed:update": {},
     "lint:staged": {},

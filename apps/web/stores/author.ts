@@ -19,6 +19,7 @@ import { withUpdatedAt } from "./middlewares";
 import { applyQuestionOrder } from "./utils/question-order";
 import { DraftSummary, VersionSummary } from "@/lib/author";
 import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
+import { isRichTextEmpty } from "rich-text";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   "versions",
   "currentVersion",
@@ -1780,10 +1781,7 @@ export const useAuthorStore = createWithEqualityFn<
         validate: () => {
           const state = get();
           const errors: Record<string, string> = {};
-          if (
-            !state.introduction ||
-            state.introduction.trim() === "<p><br></p>"
-          ) {
+          if (isRichTextEmpty(state.introduction)) {
             errors.introduction = "Introduction is required.";
           }
           set({ errors });

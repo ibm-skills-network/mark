@@ -2,7 +2,7 @@
 
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import Dropdown from "@/components/Dropdown";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import Modal from "@/components/Modal";
 import {
   Assignment,
@@ -73,12 +73,12 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
             : "max-h-none opacity-100"
         }`}
       >
-        <MarkdownViewer
+        <RichTextViewer
           className="text-gray-600 dark:text-gray-300 text-sm sm:text-base"
           allowCopy={!(questionControls?.disableCopy ?? false)}
         >
           {content || `No ${title.toLowerCase()} provided.`}
-        </MarkdownViewer>
+        </RichTextViewer>
       </div>
     </div>
   );
@@ -469,9 +469,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
                 </div>
               </div>
               <div className="border-t border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
-                <MarkdownViewer className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
+                <RichTextViewer className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
                   {introduction}
-                </MarkdownViewer>
+                </RichTextViewer>
               </div>
             </div>
           </div>

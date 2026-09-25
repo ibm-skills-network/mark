@@ -1,4 +1,8 @@
 import "./globals.css";
+// The one syntax-highlight theme for the app. Imported here rather than from a
+// component so that whether code blocks are coloured does not depend on which
+// component happens to be mounted, and so only one theme can ever be loaded.
+import "highlight.js/styles/github.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";

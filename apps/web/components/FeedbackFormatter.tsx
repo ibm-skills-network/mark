@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import type { ComponentPropsWithoutRef, FC } from "react";
 import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/github.css";
 
 import { cn } from "@/lib/strings";
 import { useEffect } from "react";
