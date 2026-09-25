@@ -450,6 +450,14 @@ jobs:
           yarn --cwd apps/api prisma migrate deploy
           yarn --cwd apps/api prisma generate
 
+      - name: Build shared packages for E2E
+        # The builds below call each service's own `build` script directly
+        # rather than going through turbo, so nothing builds the shared
+        # `rich-text` package first and `nest build` cannot resolve it. Its
+        # `main` points at `dist/`, so it has to exist before api, api-gateway
+        # or web are compiled.
+        run: yarn --cwd packages/rich-text build
+
       - name: Build API for E2E
         run: yarn --cwd apps/api build
         env:
