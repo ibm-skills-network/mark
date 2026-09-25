@@ -38,10 +38,9 @@ const config: Config = {
     // SharedModule -> LlmModule) eagerly `require`s `file-type`, which is
     // ESM-only in v21+. Stub it for tests that only need DI resolution.
     "^file-type$": "<rootDir>/test/__mocks__/file-type.ts",
-    // `canvas` is a native module that nothing declares as a dependency, and
-    // api source imports it. api's own config stubs it; jobs compiles that same
-    // source, so it needs the same stub. Pre-existing gap — it only looked fine
-    // while a stale `node_modules/canvas` happened to be present.
+    // `canvas` is a native module api imports at runtime, and api's own jest
+    // config stubs it rather than loading the platform binary. jobs compiles
+    // that same api source, so it needs the same stub.
     "^canvas$": "<rootDir>/../api/test/__mocks__/canvas.ts",
   },
 };
