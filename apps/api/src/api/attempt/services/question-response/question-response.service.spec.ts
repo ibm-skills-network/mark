@@ -813,6 +813,8 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
 
   // A non-empty TEXT response so isEmptyResponse() returns false and execution
   // reaches the strategy path (LINK_FILE is excluded by question.type).
+  // The two blank-answer tests need the reverse, so they pass their own
+  // requestDto to callGradeQuestionNoSave and land in handleEmptyResponse().
   const question = {
     id: 7,
     question: "Explain entropy",
@@ -830,14 +832,16 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
     questionAnswerContext: [],
   };
 
-  const callGradeQuestionNoSave = () =>
+  const callGradeQuestionNoSave = (
+    overrides: { question?: any; requestDto?: any } = {},
+  ) =>
     (
       service as unknown as {
-        gradeQuestionNoSave: (...args: any[]) => Promise<unknown>;
+        gradeQuestionNoSave: (...args: any[]) => Promise<any>;
       }
     ).gradeQuestionNoSave(
-      question,
-      requestDto,
+      overrides.question ?? question,
+      overrides.requestDto ?? requestDto,
       assignmentContext,
       5, // assignmentId
       "en", // language
@@ -851,7 +855,12 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
         QuestionResponseService,
         { provide: PrismaService, useValue: {} },
         { provide: QuestionService, useValue: { findOne: jest.fn() } },
-        { provide: LocalizationService, useValue: {} },
+        // Echoes the key back: handleEmptyResponse() is the only caller, so
+        // the blank-response tests below can assert on "noResponse".
+        {
+          provide: LocalizationService,
+          useValue: { getLocalizedString: jest.fn((key: string) => key) },
+        },
         {
           provide: GradingFactoryService,
           useValue: mockGradingFactoryService,
@@ -942,5 +951,40 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
 
     expect(rejection).toBe(rateLimited);
     expect(rejection).toBeInstanceOf(GithubRateLimitedError);
+  });
+
+  it("scores a blank answer 0 when the optional answer fields are omitted", async () => {
+    // A caller that simply leaves the keys out rather than sending explicit
+    // nulls — what the autosave client posts once it strips empty values.
+    const { responseDto } = await callGradeQuestionNoSave({
+      requestDto: { id: question.id, language: "en", learnerTextResponse: "" },
+    });
+
+    expect(responseDto.totalPoints).toBe(0);
+    expect(responseDto.feedback[0].feedback).toBe("noResponse");
+    // Short-circuited before a strategy was even selected: an unanswered
+    // question must never reach a grader that would reject it.
+    expect(mockGradingFactoryService.getStrategy).not.toHaveBeenCalled();
+  });
+
+  it("still grades a false true/false answer instead of calling it blank", async () => {
+    // false is an answer, not an absence — guards against relaxing the null
+    // check into a falsy one.
+    mockStrategy.gradeResponse.mockResolvedValue({
+      totalPoints: 1,
+      feedback: [],
+    });
+
+    const { responseDto } = await callGradeQuestionNoSave({
+      question: { ...question, type: QuestionType.TRUE_FALSE },
+      requestDto: {
+        id: question.id,
+        language: "en",
+        learnerAnswerChoice: false,
+      },
+    });
+
+    expect(mockGradingFactoryService.getStrategy).toHaveBeenCalled();
+    expect(responseDto.totalPoints).toBe(1);
   });
 });
