@@ -379,30 +379,32 @@ export class AttemptServiceV2 {
         );
       }
 
-      const result = await this.submissionService.updateAssignmentAttempt(
-        -1,
-        assignmentId,
-        updateDto,
-        authCookie,
-        false,
-        request,
-        async (
-          progress: string,
-          percentage?: number,
-          details?: GradingProgressDetails,
-        ) => {
-          await this.updateGradingJobStatus(gradingJobId, {
-            status: "Processing",
-            progress,
-            percentage: percentage || 0,
-            result: details ? { gradingState: details } : undefined,
-          });
-        },
-        cache,
-      );
-
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(-1);
+      let result: UpdateAssignmentAttemptResponseDto;
+      try {
+        result = await this.submissionService.updateAssignmentAttempt(
+          -1,
+          assignmentId,
+          updateDto,
+          authCookie,
+          false,
+          request,
+          async (
+            progress: string,
+            percentage?: number,
+            details?: GradingProgressDetails,
+          ) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status: "Processing",
+              progress,
+              percentage: percentage || 0,
+              result: details ? { gradingState: details } : undefined,
+            });
+          },
+          cache,
+        );
+      } finally {
+        // Must beat the terminal write: a late sibling reopens the job.
+        this.gradingProgressService?.removeProgressCallback(-1);
       }
 
       await this.updateGradingJobStatus(gradingJobId, {
@@ -466,27 +468,33 @@ export class AttemptServiceV2 {
         percentage: 0,
       });
 
-      const result = await this.submissionService.updateAssignmentAttempt(
-        attemptId,
-        assignmentId,
-        updateDto,
-        authCookie,
-        request.userSession.gradingCallbackRequired,
-        request,
-        async (
-          progress: string,
-          percentage?: number,
-          details?: GradingProgressDetails,
-        ) => {
-          await this.updateGradingJobStatus(gradingJobId, {
-            status: "Processing",
-            progress,
-            percentage,
-            result: details ? { gradingState: details } : undefined,
-          });
-        },
-        cache,
-      );
+      let result: UpdateAssignmentAttemptResponseDto;
+      try {
+        result = await this.submissionService.updateAssignmentAttempt(
+          attemptId,
+          assignmentId,
+          updateDto,
+          authCookie,
+          request.userSession.gradingCallbackRequired,
+          request,
+          async (
+            progress: string,
+            percentage?: number,
+            details?: GradingProgressDetails,
+          ) => {
+            await this.updateGradingJobStatus(gradingJobId, {
+              status: "Processing",
+              progress,
+              percentage,
+              result: details ? { gradingState: details } : undefined,
+            });
+          },
+          cache,
+        );
+      } finally {
+        // Must beat the terminal write: a late sibling reopens the job.
+        this.gradingProgressService?.removeProgressCallback(attemptId);
+      }
 
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Completed",
@@ -494,10 +502,6 @@ export class AttemptServiceV2 {
         percentage: 100,
         result,
       });
-
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(attemptId);
-      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -505,23 +509,22 @@ export class AttemptServiceV2 {
         error instanceof LearnerFacingGradingError
           ? error.learnerMessage
           : `Grading failed: ${errorMessage}`;
+      // Idempotent; covers a throw before grading started.
+      this.gradingProgressService?.removeProgressCallback(attemptId);
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Failed",
         progress: learnerReason,
         percentage: 0,
       });
 
-      if (this.gradingProgressService) {
-        this.gradingProgressService.removeProgressCallback(attemptId);
-        // Guard against author preview jobs which use attemptId = -1
-        if (attemptId > 0) {
-          await this.gradingProgressService.markFailed(
-            attemptId,
-            error instanceof LearnerFacingGradingError
-              ? error.learnerMessage
-              : errorMessage,
-          );
-        }
+      // Guard against author preview jobs which use attemptId = -1
+      if (this.gradingProgressService && attemptId > 0) {
+        await this.gradingProgressService.markFailed(
+          attemptId,
+          error instanceof LearnerFacingGradingError
+            ? error.learnerMessage
+            : errorMessage,
+        );
       }
       throw error;
     }

@@ -1561,7 +1561,8 @@ export class QuestionResponseService {
         (typeof requestDto.learnerTextResponse === "string" &&
           requestDto.learnerTextResponse.trim() === "")) &&
       (!requestDto.learnerChoices || requestDto.learnerChoices.length === 0) &&
-      requestDto.learnerAnswerChoice === null &&
+      (requestDto.learnerAnswerChoice === null ||
+        requestDto.learnerAnswerChoice === undefined) &&
       (!requestDto.learnerPresentationResponse ||
         (Array.isArray(requestDto.learnerPresentationResponse) &&
           requestDto.learnerPresentationResponse.length === 0))
