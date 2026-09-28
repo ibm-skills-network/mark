@@ -12,13 +12,13 @@
   resolved "https://registry.yarnpkg.com/@adobe/css-tools/-/css-tools-4.4.4.tgz#2856c55443d3d461693f32d2b96fb6ea92e1ffa9"
   integrity sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==
 
-"@ai-sdk/gateway@2.0.154":
-  version "2.0.154"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.154.tgz#76ac3c69ee03ad3f55edf48f387cfc7ffb7bcc1b"
-  integrity sha512-3g7fFx5rcIaaFJaPh0IZY5SZEfmsjfTL8cpGnRRFV/Id7SslepMNBmH3jYZ6AW5suHuvvIDmro3ea/GM1ikxvg==
+"@ai-sdk/gateway@2.0.160":
+  version "2.0.160"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.160.tgz#2652d64f01db0168f889fdc793994fab70d79284"
+  integrity sha512-87i32Tq2At565MkNOVoIlXr+1r8+rieRKBfiKpACgcGqTXbwl9tQ1H7lLQ3xtIuO8u2n7T8sVpcpsdhKa85L7g==
   dependencies:
-    "@ai-sdk/provider" "2.0.4"
-    "@ai-sdk/provider-utils" "3.0.37"
+    "@ai-sdk/provider" "2.0.5"
+    "@ai-sdk/provider-utils" "3.0.40"
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
@@ -29,7 +29,7 @@
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.39"
 
-"@ai-sdk/provider-utils@3.0.37", "@ai-sdk/provider-utils@3.0.39", "@ai-sdk/provider-utils@^3.0.26":
+"@ai-sdk/provider-utils@3.0.39", "@ai-sdk/provider-utils@3.0.40", "@ai-sdk/provider-utils@^3.0.26":
   version "3.0.39"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.39.tgz#e2ab15681271788e080681d28bc8bdb9a27ca113"
   integrity sha512-Cb1GE1UKcZxouWhV7weIQoJTgyz4WMswQfapPClN4QQP1pO01ZNSbG9EVN5C0gCsikA8vM0wrJZIT7HiZmH3wA==
@@ -38,13 +38,6 @@
     "@standard-schema/spec" "^1.0.0"
     eventsource-parser "^3.0.6"
     undici "^5.29.0"
-
-"@ai-sdk/provider@2.0.4":
-  version "2.0.4"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/provider/-/provider-2.0.4.tgz#d450b7e6bf080e732108b0e79cb361590434669c"
-  integrity sha512-B0M50w0W43jTzZGyZrNwwaK1M79aKPw6PD/dQhkBR7vkR68yCINWBo2CbBLJrbrqYc46TaiSfsTiT+S9EmVl0w==
-  dependencies:
-    json-schema "^0.4.0"
 
 "@ai-sdk/provider@2.0.5":
   version "2.0.5"
@@ -5461,13 +5454,13 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^5.0.52:
-  version "5.0.262"
-  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.262.tgz#29f43efbcfa8a1eabe0f5cbdd96200a27bc24740"
-  integrity sha512-9z25r9a8kQBrbPQAk9EWsMVRdNrU66fI/7GKtxe6TrgGF3DxuOg90FVNvqDDMDQ69IFpDFdjUWYUMRIC/nCpWA==
+  version "5.0.269"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.269.tgz#40e19b806e3c31820b3f5a804c6ce54b9bf612bf"
+  integrity sha512-wQDqzDoykTcBC0dvdDwhix0opRFb0BLaEkvfqwuNa9RgVDkC+THR/2CnIuDjFLlRIYuTo1xIszgc/yG4Ck5bUQ==
   dependencies:
-    "@ai-sdk/gateway" "2.0.154"
-    "@ai-sdk/provider" "2.0.4"
-    "@ai-sdk/provider-utils" "3.0.37"
+    "@ai-sdk/gateway" "2.0.160"
+    "@ai-sdk/provider" "2.0.5"
+    "@ai-sdk/provider-utils" "3.0.40"
     "@opentelemetry/api" "1.9.0"
 
 ajv-formats@3.0.1:
