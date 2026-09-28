@@ -2603,14 +2603,14 @@
     tslib "2.8.1"
 
 "@nestjs/throttler@^6.7.0":
-  version "6.7.0"
-  resolved "https://registry.yarnpkg.com/@nestjs/throttler/-/throttler-6.7.0.tgz#ccfdb03c32ab30d3b59be4ed3c08f5103890a3bf"
-  integrity sha512-+trKbv/9w8e8kZNVHF8X+q2LdpbYwKa8+PcUsZ4kUIJo2TOeS7CsNPvkwd7tOFrog8sbGrBBxWyp1roZJYbF6w==
+  version "6.7.1"
+  resolved "https://registry.yarnpkg.com/@nestjs/throttler/-/throttler-6.7.1.tgz#89727fd22d91bd8a070938fe4cfc4bc204322a92"
+  integrity sha512-gAyY1AkU+cSK5DCjFOB43xax9oakameH4xZa9kAgqBqSBQZgmv3DZylLV8KyZNzOGhceL3kDVtby+CF8VAdmEA==
 
 "@nestjs/websockets@^11.2.5":
-  version "11.2.5"
-  resolved "https://registry.yarnpkg.com/@nestjs/websockets/-/websockets-11.2.5.tgz#7d137242a88b33bc4ce40f2b6645dfea046d84da"
-  integrity sha512-KSTpTWKFSrBYxxXyclDg3ir9EzPWUU8iuKK4VFaVno2L+kwZcZzsKmnXrcMnmx8Sl2glgqXQg26Esu8hbo6a0Q==
+  version "11.2.6"
+  resolved "https://registry.yarnpkg.com/@nestjs/websockets/-/websockets-11.2.6.tgz#7a346674a43cfceeed05422485e04bfe74a64fb2"
+  integrity sha512-u3CwdDDlfhYEbbcmNIdrf9pNOAcf5KTdDlxdJYM8K0LGGzK5y4vZwMyA6FuqmbxHln/+xgRAyUbDsjq8nntXjg==
   dependencies:
     iterare "1.2.1"
     object-hash "3.0.0"
