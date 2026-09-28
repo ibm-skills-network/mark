@@ -136,6 +136,27 @@ describe("RichTextViewer", () => {
     expect(container.querySelector(".ql-code-block")).toBeNull();
   });
 
+  it("highlights a language stored under the previous editor's alias", async () => {
+    // The old editor wrote C# as `cs`, while the grammar registers as `csharp`.
+    // The viewer builds its highlighter from `highlight.js/lib/core`, which
+    // ships no languages and no aliases of its own, so a missing alias shows up
+    // as a block that simply renders unhighlighted — visible to nobody running
+    // the tests unless it is asserted here.
+    const { container } = render(
+      <RichTextViewer>
+        {'<div class="ql-code-block-container">' +
+          '<div class="ql-code-block" data-language="cs">var value = 1;</div>' +
+          "</div>"}
+      </RichTextViewer>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector("pre code")?.innerHTML ?? "").toContain(
+        "hljs-",
+      );
+    });
+  });
+
   it("renders nothing for empty content instead of the string 'undefined'", async () => {
     const { container } = render(<RichTextViewer>{undefined}</RichTextViewer>);
     await flushEffects();

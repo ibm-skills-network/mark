@@ -16,7 +16,7 @@ import { StarterKit } from "@tiptap/starter-kit";
 import { RichTextLimits, type RichTextCounts } from "./rich-text-limits";
 import { TextDirection } from "./text-direction";
 import { Video } from "./video";
-import { lowlight } from "../lowlight";
+import { lowlight } from "../highlighting";
 
 export type ToolbarMode = "full" | "learner";
 

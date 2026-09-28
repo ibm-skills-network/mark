@@ -1,6 +1,5 @@
 "use client";
 
-import hljs from "highlight.js";
 import {
   useEffect,
   useMemo,
@@ -10,6 +9,7 @@ import {
   type FC,
 } from "react";
 
+import { highlighter } from "@/lib/rich-text/highlighting";
 import { prepareStoredHtml } from "@/lib/rich-text/prepare-stored-html";
 import { cn } from "@/lib/strings";
 
@@ -65,13 +65,13 @@ const RichTextViewer: FC<RichTextViewerProps> = ({
         ?.slice("language-".length);
 
       const source = block.textContent ?? "";
-      if (!source || !language || !hljs.getLanguage(language)) {
+      if (!source || !language || !highlighter.getLanguage(language)) {
         continue;
       }
 
       // highlight.js escapes the source it is given, so its output carries no
       // markup from the content itself.
-      block.innerHTML = hljs.highlight(source, {
+      block.innerHTML = highlighter.highlight(source, {
         language,
         ignoreIllegals: true,
       }).value;

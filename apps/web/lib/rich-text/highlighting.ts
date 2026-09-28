@@ -11,6 +11,7 @@ import python from "highlight.js/lib/languages/python";
 import ruby from "highlight.js/lib/languages/ruby";
 import sql from "highlight.js/lib/languages/sql";
 import xml from "highlight.js/lib/languages/xml";
+import hljs from "highlight.js/lib/core";
 import { createLowlight } from "lowlight";
 
 /**
@@ -61,11 +62,25 @@ const ALIASES: Record<string, keyof typeof LANGUAGES> = {
  */
 export const lowlight = createLowlight();
 
+/**
+ * The same grammars for the read-only viewer, which highlights finished markup
+ * rather than a live document and so needs highlight.js itself.
+ *
+ * `highlight.js/lib/core` carries no grammars of its own. Importing the package
+ * root instead would register every language it ships — roughly 190 of them —
+ * for content that can only ever name the thirteen below, and it would put the
+ * whole set in the client bundle. Both registries are fed from one list here so
+ * a language cannot exist in the editor and be missing in the viewer.
+ */
+export const highlighter = hljs;
+
 for (const [name, grammar] of Object.entries(LANGUAGES)) {
   lowlight.register(name, grammar);
+  hljs.registerLanguage(name, grammar);
 }
 for (const [alias, target] of Object.entries(ALIASES)) {
   lowlight.registerAlias(target, alias);
+  hljs.registerAliases(alias, { languageName: target });
 }
 
 /** Language names a code block may carry, for the toolbar's picker. */
