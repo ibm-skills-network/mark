@@ -33,6 +33,10 @@ const config: Config = {
   modulePathIgnorePatterns: ["<rootDir>/dist/"],
   testEnvironment: "node",
   moduleNameMapper: {
+    // Resolve the shared package to its TypeScript source so `yarn test` does
+    // not depend on it having been built first (turbo's `test` task has no
+    // `dependsOn`, unlike `build`).
+    "^rich-text$": "<rootDir>/../../packages/rich-text/src/index.ts",
     "^src/(.*)$": "<rootDir>/src/$1",
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
       "<rootDir>/test/__mocks__/pdfjs-dist.ts",

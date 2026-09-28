@@ -271,7 +271,14 @@ jobs:
 
       - name: Run linting for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn turbo run lint --filter=${{ matrix.service }} --only
+        # No `--only`: the shared `rich-text` package must be built before a
+        # consumer can be linted. Its `main` points at `dist/`, so without the
+        # build ESLint reports `import/no-unresolved`, and the type-aware rules
+        # then treat everything from it as `any` and fail on safe code. `--only`
+        # skips task dependencies, which is exactly the `^build` lint needs.
+        # `test` below keeps `--only`: the jest configs map the package to its
+        # source, so tests need no build.
+        run: yarn turbo run lint --filter=${{ matrix.service }}
 
   test:
     name: Test - ${{ matrix.service }}
@@ -442,6 +449,14 @@ jobs:
         run: |
           yarn --cwd apps/api prisma migrate deploy
           yarn --cwd apps/api prisma generate
+
+      - name: Build shared packages for E2E
+        # The builds below call each service's own `build` script directly
+        # rather than going through turbo, so nothing builds the shared
+        # `rich-text` package first and `nest build` cannot resolve it. Its
+        # `main` points at `dist/`, so it has to exist before api, api-gateway
+        # or web are compiled.
+        run: yarn --cwd packages/rich-text build
 
       - name: Build API for E2E
         run: yarn --cwd apps/api build

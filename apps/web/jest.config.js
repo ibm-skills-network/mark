@@ -18,6 +18,10 @@ const customJestConfig = {
   coverageDirectory: "../coverage/web",
   coverageReporters: ["text", "lcov", "html"],
   moduleNameMapper: {
+    // Resolve the shared package to its TypeScript source so `yarn test` does
+    // not depend on it having been built first (turbo's `test` task has no
+    // `dependsOn`, unlike `build`).
+    "^rich-text$": "<rootDir>/../../packages/rich-text/src/index.ts",
     "^@/hooks/(.*)$": "<rootDir>/hooks/$1",
     "^@/stores/(.*)$": "<rootDir>/stores/$1",
     "^@/components/(.*)$": "<rootDir>/components/$1",

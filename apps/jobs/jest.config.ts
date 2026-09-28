@@ -28,12 +28,20 @@ const config: Config = {
   // "Cannot find module 'src/...'". Map the same prefix to api's src/.
   moduleNameMapper: {
     "^src/(.*)$": "<rootDir>/../api/src/$1",
+    // Same reason, one level out: the api files pulled in above import the
+    // shared package, and resolving it here would need it built first. Point at
+    // its source, as api's own config does.
+    "^rich-text$": "<rootDir>/../../packages/rich-text/src/index.ts",
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
       "<rootDir>/../api/test/__mocks__/pdfjs-dist.ts",
     // ibm-cloud-sdk-core (transitive via @ibm-cloud/watsonx-ai used in
     // SharedModule -> LlmModule) eagerly `require`s `file-type`, which is
     // ESM-only in v21+. Stub it for tests that only need DI resolution.
     "^file-type$": "<rootDir>/test/__mocks__/file-type.ts",
+    // `canvas` is a native module api imports at runtime, and api's own jest
+    // config stubs it rather than loading the platform binary. jobs compiles
+    // that same api source, so it needs the same stub.
+    "^canvas$": "<rootDir>/../api/test/__mocks__/canvas.ts",
   },
 };
 
