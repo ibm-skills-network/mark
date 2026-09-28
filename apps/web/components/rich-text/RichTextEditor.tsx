@@ -18,6 +18,7 @@ import {
   countRichText,
   type RichTextCounts,
 } from "@/lib/rich-text/extensions/rich-text-limits";
+import { reportClientError } from "@/lib/report-client-error";
 import { prepareStoredHtml } from "@/lib/rich-text/prepare-stored-html";
 import { cn } from "@/lib/strings";
 
@@ -94,6 +95,10 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     emitContentError: true,
     onContentError: ({ error }) => {
       console.error("rich-text editor could not parse stored content", error);
+      // Reported as well as logged: a drop happens on a learner's or author's
+      // machine, where nothing is watching the console. This is the only signal
+      // that stored content has met a schema that cannot represent it.
+      reportClientError(error, { component: "RichTextEditor", toolbarMode });
     },
     onUpdate: ({ editor: updated }) => {
       setValueRef.current(updated.getHTML());
