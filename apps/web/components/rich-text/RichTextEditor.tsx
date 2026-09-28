@@ -39,7 +39,7 @@ export interface RichTextEditorProps
  * The editable rich-text surface.
  *
  * Content goes through `prepareStoredHtml` once, at mount; that function owns
- * the sanitize-then-normalize order and why it matters.
+ * the normalize-then-sanitize order and why it matters.
  *
  * Mount this through a client-only dynamic import. It touches `DOMParser` on
  * the way in, and the editor itself has no server rendering to do.

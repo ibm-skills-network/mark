@@ -832,9 +832,7 @@ function LearnerHeader() {
           assignmentId && currentAttemptId
             ? () => {
                 setShowGradingModal(false);
-                router.push(
-                  learnerSuccessPath(assignmentId, currentAttemptId),
-                );
+                router.push(learnerSuccessPath(assignmentId, currentAttemptId));
               }
             : undefined
         }

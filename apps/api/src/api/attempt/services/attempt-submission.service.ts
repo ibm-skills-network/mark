@@ -30,7 +30,10 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { countAnsweredResponses } from "src/api/assignment/attempt/helper/blank-submission.helper";
+import {
+  countAnsweredResponses,
+  hasTextContent,
+} from "src/api/assignment/attempt/helper/blank-submission.helper";
 import { readServerClock } from "src/api/assignment/attempt/helper/server-clock.helper";
 import {
   GetAssignmentResponseDto,
@@ -81,7 +84,6 @@ import {
   GradedItem,
   QuestionResponseService,
 } from "./question-response/question-response.service";
-import { hasRichTextContent } from "rich-text";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
 
@@ -1679,7 +1681,7 @@ export class AttemptSubmissionService {
     if (!response) {
       return false;
     }
-    const hasText = hasRichTextContent(response.learnerTextResponse);
+    const hasText = hasTextContent(response.learnerTextResponse);
     const hasUrl = Boolean(response.learnerUrlResponse?.trim());
     const hasChoices = (response.learnerChoices?.length ?? 0) > 0;
     const hasAnswerChoice =

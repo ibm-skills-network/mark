@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 
-import { generateHTML, generateJSON } from "@tiptap/core";
+import { Editor, generateHTML, generateJSON } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import { normalizeQuillHtml } from "rich-text";
 
@@ -141,6 +141,46 @@ describe("embeds, tables and scripts survive the schema", () => {
     );
 
     expect(video?.attrs?.src).toBe("https://www.youtube.com/embed/abc123");
+  });
+
+  // Pasted HTML reaches the schema without passing the sanitizer, so the node
+  // has to refuse frames the sanitizer would have removed.
+  it.each([
+    ["a script URL", "javascript:alert(1)"],
+    ["an unlisted host", "https://evil.example/phish"],
+    ["plain http", "http://www.youtube.com/embed/abc123"],
+  ])("does not parse a frame pointing at %s", (_label, src) => {
+    expect(
+      findNode(
+        generateJSON(`<iframe src="${src}"></iframe>`, extensions),
+        "video",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("renders a video frame sandboxed, as the sanitizer would", () => {
+    const html = serialize(
+      '<iframe src="https://www.youtube.com/embed/abc123"></iframe>',
+    );
+
+    expect(html).toContain('sandbox="allow-scripts');
+    expect(html).toContain('referrerpolicy="no-referrer"');
+  });
+
+  it("refuses to insert a video from an unlisted host", () => {
+    const editor = new Editor({ extensions });
+
+    expect(editor.commands.setVideo({ src: "javascript:alert(1)" })).toBe(
+      false,
+    );
+    expect(
+      editor.commands.setVideo({ src: "https://www.youtube.com/embed/abc" }),
+    ).toBe(true);
+    expect(nodeTypes(editor.getJSON()).filter((t) => t === "video")).toEqual([
+      "video",
+    ]);
+
+    editor.destroy();
   });
 
   it("keeps a table and its cell text", () => {

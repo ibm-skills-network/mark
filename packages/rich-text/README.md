@@ -3,35 +3,23 @@
 Conversion rules that turn the previous editor's HTML into the shapes the
 current editor's schema reads, plus the shared "is this value empty?" check.
 
-Used by `apps/web` (rendering and editing stored content), `apps/api` and
-`apps/jobs` (the empty check, on submission paths), and by
+Used by `apps/web` (rendering and editing stored content) and by
 `scripts/validate-rows.js`, which runs the rules against real stored rows.
 
-## Why `main` points at `dist/`, and why that costs something
+## Consumed as source
 
-`package.json` has `"main": "./dist/index.js"`, so **consumers need this package
-built before it resolves.** That is deliberate, and it is the reason for three
-workarounds elsewhere. Please read this before "simplifying" any of them.
+`main` and `types` point at `src/index.ts`, and there is no `build` task. The
+only runtime consumer is `apps/web`, which compiles the package itself through
+`transpilePackages` in `next.config.js`. That's why lint, test and the Docker
+build need no build step first.
 
-The obvious simplification is to point `main` at `src/index.ts` — it is a
-private workspace package, `apps/web` already lists it in `transpilePackages`,
-and that would delete every workaround below in one go.
+Don't add a dependency from `apps/api` (or anything that compiles api source,
+like `apps/jobs`) without first adding a real build. `nest build` can't
+compile TypeScript from outside its `rootDir`, and the api production image
+copies only `node_modules` and its own `dist`, so the workspace symlink would
+point at nothing at runtime.
 
-**It would also break the api build.** `apps/api` is a Nest app compiled by
-`tsc`. Importing TypeScript source from another workspace package puts files
-outside the app's `rootDir` into its program, and the emitted `dist` layout
-changes shape. `apps/jobs` compiles api source, so it breaks the same way. Only
-`apps/web` can consume the source directly, and it is not the only consumer.
-
-So the build stays, and these exist because of it:
-
-| Where                                                                            | What                                                    | Why                                                                                                                                                                                                                                            |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web/jest.config.js`, `apps/api/jest.config.ts`, `apps/jobs/jest.config.ts` | `moduleNameMapper` maps `^rich-text$` to `src/index.ts` | So `yarn test` never depends on a build having happened first. `jobs` needs its own copy because it compiles api source.                                                                                                                       |
-| `turbo.json`                                                                     | `lint` has `dependsOn: ["rich-text#build"]`             | ESLint resolves the package through `main`. Unbuilt, `import/no-unresolved` fires in web and the type-aware rules see `any` and fail in api. Named explicitly rather than `^build` — that would compile all of `apps/api` just to lint `jobs`. |
-| `.github/workflows/build-images.yml`                                             | the lint step does **not** pass `--only`                | `--only` runs a task without its dependencies, which skips the build above. The test step keeps `--only`, because the jest mappers make tests build-free.                                                                                      |
-
-If you do change `main`, expect to touch all four.
+The `compile` script emits `dist/` for `scripts/validate-rows.js` alone.
 
 ## The injected parser
 
@@ -56,7 +44,7 @@ against content nobody designed, which is a different question and the one that
 has actually caught bugs:
 
 ```
-yarn --cwd packages/rich-text build      # the script reads dist/
+yarn --cwd packages/rich-text compile    # the script reads dist/
 node packages/rich-text/scripts/validate-rows.js rows.json
 ```
 

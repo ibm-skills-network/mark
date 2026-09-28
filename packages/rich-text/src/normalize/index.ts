@@ -46,8 +46,10 @@ export interface NormalizeOptions {
  * that marker is absent, so running this on already-converted content is a
  * no-op and running it twice gives the same answer as running it once.
  *
- * Call it on already-sanitized HTML — sanitizing is what decides which tags and
- * hosts are permitted, and it has to see the untrusted string first.
+ * Safe on untrusted HTML: parsing happens in an inert document that runs no
+ * scripts and loads nothing. Its output is not sanitized, so sanitize it before
+ * it reaches the DOM — and do that last, since re-serializing sanitized markup
+ * is how mutation XSS gets back in.
  */
 export function normalizeQuillHtml(
   html: string | null | undefined,

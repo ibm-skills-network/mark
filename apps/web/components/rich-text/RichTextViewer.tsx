@@ -26,8 +26,8 @@ export interface RichTextViewerProps extends ComponentPropsWithoutRef<"div"> {
  * anything it has no rule for, so a viewer built on one shows strictly less
  * than what was stored. Static markup shows exactly what survived sanitizing.
  *
- * Content goes through `prepareStoredHtml`, which owns the sanitize-then-
- * normalize order.
+ * Content goes through `prepareStoredHtml`, which owns the normalize-then-
+ * sanitize order.
  */
 const RichTextViewer: FC<RichTextViewerProps> = ({
   className,

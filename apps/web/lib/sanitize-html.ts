@@ -39,10 +39,11 @@ const ALLOWED_EMBED_HOSTS = new Set([
  * forms, no downloads. Scripts and its own origin are allowed because the
  * players need them, and the host is one we chose.
  */
-const EMBED_SANDBOX = "allow-scripts allow-same-origin allow-presentation";
+export const EMBED_SANDBOX =
+  "allow-scripts allow-same-origin allow-presentation";
 
-function isAllowedEmbedSource(source: string | null): boolean {
-  if (!source) {
+export function isAllowedEmbedSource(source: string | null): boolean {
+  if (!source || typeof window === "undefined") {
     return false;
   }
 

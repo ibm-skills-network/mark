@@ -1,12 +1,13 @@
-import { hasRichTextContent } from "rich-text";
-
 import type { QuestionResponse } from "../dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 
-const hasRichText = (value: unknown): boolean =>
-  typeof value === "string" && hasRichTextContent(value);
+/** What an untouched rich-text editor serialises to. */
+const EMPTY_RICH_TEXT = /^(?:<p>(?:<br\s*\/?>)?<\/p>|<br\s*\/?>|&nbsp;|\s)*$/i;
 
-const hasPlainText = (value: unknown): boolean =>
-  typeof value === "string" && value.trim().length > 0;
+/** Whether a text or rich-text field holds more than an empty editor's markup. */
+export const hasTextContent = (value: unknown): boolean =>
+  typeof value === "string" &&
+  value.trim().length > 0 &&
+  !EMPTY_RICH_TEXT.test(value.trim());
 
 /**
  * Whether the learner actually put something in this response. Choice, file and
@@ -20,8 +21,8 @@ export const isAnsweredResponse = (
   }
 
   return (
-    hasRichText(response.learnerTextResponse) ||
-    hasPlainText(response.learnerUrlResponse) ||
+    hasTextContent(response.learnerTextResponse) ||
+    hasTextContent(response.learnerUrlResponse) ||
     (Array.isArray(response.learnerChoices) &&
       response.learnerChoices.length > 0) ||
     typeof response.learnerAnswerChoice === "boolean" ||

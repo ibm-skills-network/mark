@@ -63,15 +63,13 @@ jest.mock("@/components/promo/PromoBanner", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock("sonner", () => ({
+  toast: { success: jest.fn(), error: jest.fn() },
+}));
 
 jest.mock("@/components/ErrorModal", () => ({
   __esModule: true,
-  default: (props: {
-    statusCode: number;
-    headline: string;
-    error: string;
-  }) => (
+  default: (props: { statusCode: number; headline: string; error: string }) => (
     <div
       data-testid="error-modal"
       data-status={String(props.statusCode)}
@@ -148,9 +146,7 @@ describe("results page — a failed load is reported as what failed", () => {
     // The session belongs to a later launch AND the request failed on the
     // server: the outage is the thing to report.
     getUserMock.mockResolvedValue({ ...learner, assignmentId: 3528 });
-    getCompletedAttemptMock.mockRejectedValue(
-      new APIError("x", 503, "failed"),
-    );
+    getCompletedAttemptMock.mockRejectedValue(new APIError("x", 503, "failed"));
 
     await renderAndSettle();
 
