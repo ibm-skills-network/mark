@@ -6,6 +6,12 @@ import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/u
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { GradingProgressService } from "./grading-progress.service";
 import {
+  JobStateRecord,
+  JobStatusUpdate,
+} from "../../../job-queue/job-state.types";
+import { LearnerUpdateAssignmentAttemptRequestDto } from "../../assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import { UpdateAssignmentAttemptResponseDto } from "../../assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import {
   UserRole,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
@@ -359,28 +365,29 @@ describe("AttemptServiceV2", () => {
     });
   });
 
-  describe("processAuthorPreviewJob", () => {
-    const recordOrder = () => {
-      const order: string[] = [];
-      mockGradingProgressService.removeProgressCallback!.mockImplementation(
-        () => {
-          order.push("removeCallback");
-        },
-      );
-      mockJobStateService.updateJobStatus!.mockImplementation(
-        async (_jobId: string, update: any) => {
-          order.push(`status:${update.status}`);
-          return {} as any;
-        },
-      );
-      return order;
-    };
+  // Records the relative order of callback removal and job status writes.
+  const recordOrder = () => {
+    const order: string[] = [];
+    mockGradingProgressService.removeProgressCallback!.mockImplementation(
+      () => {
+        order.push("removeCallback");
+      },
+    );
+    mockJobStateService.updateJobStatus!.mockImplementation(
+      async (_jobId: string, update: JobStatusUpdate) => {
+        order.push(`status:${update.status}`);
+        return {} as JobStateRecord;
+      },
+    );
+    return order;
+  };
 
+  describe("processAuthorPreviewJob", () => {
     const runPreview = () =>
       service.processAuthorPreviewJob(
         "job-preview",
         5,
-        updateDto as any,
+        updateDto as LearnerUpdateAssignmentAttemptRequestDto,
         "cookie",
         request,
       );
@@ -419,6 +426,46 @@ describe("AttemptServiceV2", () => {
   // ─── Change 7: processGradingJob — markFailed on failure ─────────────────
 
   describe("processGradingJob", () => {
+    const runGrading = () =>
+      service.processGradingJob(
+        "job-learner",
+        42,
+        5,
+        updateDto as LearnerUpdateAssignmentAttemptRequestDto,
+        "cookie",
+        makeRequest(),
+      );
+
+    it("clears the progress callback before the job is marked Failed", async () => {
+      const order = recordOrder();
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(
+        new Error("LLM timeout"),
+      );
+
+      await expect(runGrading()).rejects.toThrow("LLM timeout");
+
+      expect(order.indexOf("removeCallback")).toBeGreaterThan(-1);
+      expect(order.indexOf("removeCallback")).toBeLessThan(
+        order.indexOf("status:Failed"),
+      );
+    });
+
+    it("clears the progress callback before the job is marked Completed", async () => {
+      const order = recordOrder();
+      mockSubmissionService.updateAssignmentAttempt!.mockResolvedValue(
+        {} as UpdateAssignmentAttemptResponseDto,
+      );
+
+      await runGrading();
+
+      expect(order).toEqual([
+        "status:Processing",
+        "removeCallback",
+        "status:Completed",
+      ]);
+    });
+
     it("marks GradingProgress as FAILED when grading throws for a real attempt", async () => {
       const error = new Error("LLM timeout");
       mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(error);

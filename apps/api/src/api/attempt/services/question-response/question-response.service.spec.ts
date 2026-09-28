@@ -17,6 +17,9 @@ import { UnsupportedImageFormatError } from "../../../llm/features/grading/error
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
+import { QuestionDto } from "../../../assignment/dto/update.questions.request.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GradedItem,
   QuestionResponseService,
@@ -833,11 +836,17 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
   };
 
   const callGradeQuestionNoSave = (
-    overrides: { question?: any; requestDto?: any } = {},
+    overrides: {
+      question?: Partial<QuestionDto>;
+      requestDto?: Partial<CreateQuestionResponseAttemptRequestDto>;
+    } = {},
   ) =>
     (
       service as unknown as {
-        gradeQuestionNoSave: (...args: any[]) => Promise<any>;
+        gradeQuestionNoSave: (...args: unknown[]) => Promise<{
+          learnerResponse: unknown;
+          responseDto: CreateQuestionResponseAttemptResponseDto;
+        }>;
       }
     ).gradeQuestionNoSave(
       overrides.question ?? question,
