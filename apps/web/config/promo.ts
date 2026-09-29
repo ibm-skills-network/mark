@@ -8,8 +8,8 @@
  *    passed and scored above PROMO_COMPLETION_MIN_SCORE.
  *
  * Whether banners render at all is controlled at runtime by the
- * PROMO_BANNERS_ENABLED environment variable (see app/learner/layout.tsx).
- * This file only controls *what* is shown when the switch is on.
+ * PROMO_BANNERS_ENABLED environment variable (see app/learner/layout.tsx),
+ * and only for launches from an LMS in PROMO_LMS_HOSTS.
  *
  * Each `href` is a full, ready-to-use URL (tracking parameters are already
  * baked into the link when it is generated upstream) — we render it as-is.
@@ -145,6 +145,16 @@ export const PROMO_COMPLETION: PromoItem[] = [
  * assignment — see the success page.
  */
 export const PROMO_COMPLETION_MIN_SCORE = 70;
+
+// Cognitive Class and cc-dev, matched exactly on the session's lmsHost.
+export const PROMO_LMS_HOSTS: readonly string[] = [
+  "courses.cognitiveclass.ai",
+  "courses.cc-dev.skillsnetwork.site",
+];
+
+export function isPromoLmsHost(host: string | undefined): boolean {
+  return host !== undefined && PROMO_LMS_HOSTS.includes(host);
+}
 
 /** Pick one item at random, or null when the list is empty. */
 export function pickPromo(items: PromoItem[]): PromoItem | null {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import {
+  isPromoLmsHost,
   pickPromo,
   PROMO_COMPLETION,
   PROMO_PRE_START,
@@ -19,26 +20,34 @@ const ITEMS: Record<Placement, PromoItem[]> = {
 
 /**
  * Subtle promotional banner. Renders nothing unless the feature is enabled
- * (runtime flag via PromoProvider) and the placement has content.
+ * (runtime flag via PromoProvider), the launch came from an allowed LMS, and
+ * the placement has content.
  *
  * The random item is chosen after mount rather than during render: these pages
  * are server-rendered client components, and picking during render would risk a
  * server/client hydration mismatch. A brief absence on first paint is fine for
  * an unobtrusive promo.
  */
-export default function PromoBanner({ placement }: { placement: Placement }) {
+export default function PromoBanner({
+  placement,
+  lmsHost,
+}: {
+  placement: Placement;
+  lmsHost: string | undefined;
+}) {
   const { enabled } = usePromo();
+  const show = enabled && isPromoLmsHost(lmsHost);
   const [item, setItem] = useState<PromoItem | null>(null);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!show) {
       setItem(null);
       return;
     }
     setItem(pickPromo(ITEMS[placement]));
-  }, [enabled, placement]);
+  }, [show, placement]);
 
-  if (!enabled || !item) return null;
+  if (!show || !item) return null;
 
   return (
     <aside

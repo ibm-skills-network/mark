@@ -27,6 +27,7 @@ async function Component(props: Props) {
         assignmentId={Math.trunc(Number(assignmentId))}
         role={role}
         cookie={cookieHeader}
+        lmsHost={user?.lmsHost}
       />
     );
   } catch (error) {

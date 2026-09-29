@@ -14,6 +14,7 @@ export interface UserSession {
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
   launch_presentation_locale?: string;
+  lisOutcomeServiceUrl?: string;
 }
 
 export interface UserSessionPayload {
@@ -24,6 +25,8 @@ export interface UserSessionPayload {
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
   launch_presentation_locale?: string;
+  grading?: { lis_outcome_service_url?: unknown };
+  lis_outcome_service_url?: unknown;
 }
 
 export interface UserSessionRequest extends Request {
