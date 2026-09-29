@@ -142,6 +142,37 @@ describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
     expect(childLogger.error).toHaveBeenCalled();
   });
 
+  it("denies an author targeting another quiz even when both share a group", async () => {
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { assignmentId: 42, groupId: "shared-group" },
+        { id: 42 },
+      ]);
+    await expect(
+      guard.canActivate(
+        createContext(
+          { role: UserRole.AUTHOR, assignmentId: 4535 },
+          { id: "42" },
+        ),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("allows a collaborator with an author launch for this quiz", async () => {
+    mockNoLink();
+    (mockPrisma.assignmentGroup.create as jest.Mock).mockResolvedValue({});
+    await expect(
+      guard.canActivate(
+        createContext(
+          { role: UserRole.AUTHOR, userId: "collaborator" },
+          { id: "4535" },
+        ),
+      ),
+    ).resolves.toBe(true);
+  });
+
   it("keeps allowing access through an existing group link without writing", async () => {
     mockPrisma.$transaction = jest.fn().mockResolvedValue([
       {

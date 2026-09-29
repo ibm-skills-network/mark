@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -16,6 +17,9 @@ import { UnsupportedImageFormatError } from "../../../llm/features/grading/error
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
+import { QuestionDto } from "../../../assignment/dto/update.questions.request.dto";
+import { CreateQuestionResponseAttemptRequestDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
+import { CreateQuestionResponseAttemptResponseDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GradedItem,
   QuestionResponseService,
@@ -596,6 +600,66 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     );
     expect(result).toEqual({ id: 50, submitted: true, grade: 85 });
   });
+
+  // Instrumentation wrapping the Prisma client (observed with Instana's
+  // prisma hook) can resolve a failed query with the Error object instead of
+  // rejecting. Each write in the commit path must reject that shape rather
+  // than carry on as if the write happened.
+
+  it("throws when questionResponse.create resolves without an id (swallowed failure)", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    mockTx.questionResponse.create.mockResolvedValue(
+      new Error("Invalid `prisma.questionResponse.create()` invocation"),
+    );
+
+    const gradedItems: GradedItem[] = [
+      {
+        questionId: 1,
+        learnerResponse: "foo",
+        responseDto: { questionId: 1, feedback: [] } as any,
+      },
+    ];
+
+    await expect(
+      service.commitAttemptWithResponses(50, gradedItems, 85, baseUpdateDto),
+    ).rejects.toThrow(InternalServerErrorException);
+    expect(mockTx.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("throws when updateMany resolves without a numeric count (swallowed failure)", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    jest
+      .spyOn(service as any, "saveResponseToDatabase")
+      .mockResolvedValue(undefined);
+    mockTx.assignmentAttempt.updateMany.mockResolvedValue(
+      new Error("Invalid `prisma.assignmentAttempt.updateMany()` invocation"),
+    );
+
+    await expect(
+      service.commitAttemptWithResponses(50, [], 85, baseUpdateDto),
+    ).rejects.toThrow(InternalServerErrorException);
+  });
+
+  it("throws when the post-commit read-back is not a submitted attempt", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    jest
+      .spyOn(service as any, "saveResponseToDatabase")
+      .mockResolvedValue(undefined);
+    mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.assignmentAttempt.findUnique.mockResolvedValue(
+      new Error("Invalid `prisma.assignmentAttempt.findUnique()` invocation"),
+    );
+
+    await expect(
+      service.commitAttemptWithResponses(50, [], 85, baseUpdateDto),
+    ).rejects.toThrow(InternalServerErrorException);
+  });
 });
 
 // ─── getAssignmentContext: in-memory context lookup (Change 2) ────────────────
@@ -752,6 +816,8 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
 
   // A non-empty TEXT response so isEmptyResponse() returns false and execution
   // reaches the strategy path (LINK_FILE is excluded by question.type).
+  // The two blank-answer tests need the reverse, so they pass their own
+  // requestDto to callGradeQuestionNoSave and land in handleEmptyResponse().
   const question = {
     id: 7,
     question: "Explain entropy",
@@ -769,14 +835,22 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
     questionAnswerContext: [],
   };
 
-  const callGradeQuestionNoSave = () =>
+  const callGradeQuestionNoSave = (
+    overrides: {
+      question?: Partial<QuestionDto>;
+      requestDto?: Partial<CreateQuestionResponseAttemptRequestDto>;
+    } = {},
+  ) =>
     (
       service as unknown as {
-        gradeQuestionNoSave: (...args: any[]) => Promise<unknown>;
+        gradeQuestionNoSave: (...args: unknown[]) => Promise<{
+          learnerResponse: unknown;
+          responseDto: CreateQuestionResponseAttemptResponseDto;
+        }>;
       }
     ).gradeQuestionNoSave(
-      question,
-      requestDto,
+      overrides.question ?? question,
+      overrides.requestDto ?? requestDto,
       assignmentContext,
       5, // assignmentId
       "en", // language
@@ -790,7 +864,12 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
         QuestionResponseService,
         { provide: PrismaService, useValue: {} },
         { provide: QuestionService, useValue: { findOne: jest.fn() } },
-        { provide: LocalizationService, useValue: {} },
+        // Echoes the key back: handleEmptyResponse() is the only caller, so
+        // the blank-response tests below can assert on "noResponse".
+        {
+          provide: LocalizationService,
+          useValue: { getLocalizedString: jest.fn((key: string) => key) },
+        },
         {
           provide: GradingFactoryService,
           useValue: mockGradingFactoryService,
@@ -881,5 +960,40 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
 
     expect(rejection).toBe(rateLimited);
     expect(rejection).toBeInstanceOf(GithubRateLimitedError);
+  });
+
+  it("scores a blank answer 0 when the optional answer fields are omitted", async () => {
+    // A caller that simply leaves the keys out rather than sending explicit
+    // nulls — what the autosave client posts once it strips empty values.
+    const { responseDto } = await callGradeQuestionNoSave({
+      requestDto: { id: question.id, language: "en", learnerTextResponse: "" },
+    });
+
+    expect(responseDto.totalPoints).toBe(0);
+    expect(responseDto.feedback[0].feedback).toBe("noResponse");
+    // Short-circuited before a strategy was even selected: an unanswered
+    // question must never reach a grader that would reject it.
+    expect(mockGradingFactoryService.getStrategy).not.toHaveBeenCalled();
+  });
+
+  it("still grades a false true/false answer instead of calling it blank", async () => {
+    // false is an answer, not an absence — guards against relaxing the null
+    // check into a falsy one.
+    mockStrategy.gradeResponse.mockResolvedValue({
+      totalPoints: 1,
+      feedback: [],
+    });
+
+    const { responseDto } = await callGradeQuestionNoSave({
+      question: { ...question, type: QuestionType.TRUE_FALSE },
+      requestDto: {
+        id: question.id,
+        language: "en",
+        learnerAnswerChoice: false,
+      },
+    });
+
+    expect(mockGradingFactoryService.getStrategy).toHaveBeenCalled();
+    expect(responseDto.totalPoints).toBe(1);
   });
 });

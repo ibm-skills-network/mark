@@ -6,6 +6,9 @@ import { PrismaService } from "../../../../database/prisma.service";
 import { LLM_RESOLVER_SERVICE } from "../../llm.constants";
 import { LLMResolverService } from "./llm-resolver.service";
 
+/** Memoized (model, day) pricing lookups for one request. */
+export type PricingLookupCache = Map<string, ModelPricing | null>;
+
 export interface ModelPricing {
   modelKey: string;
   inputTokenPrice: number;
@@ -35,20 +38,27 @@ const HELICONE_REGISTRY_URL =
   "https://api.helicone.ai/v1/public/model-registry/models";
 const PRICING_CACHE_KEY = "llm_pricing_registry";
 
-const GPT56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000;
+const TIERED_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000;
 
-function getGpt56TieredPricingMetadata(
+function getTieredPricingMetadata(
   modelKey: string,
   inputTokenPrice: number,
   outputTokenPrice: number,
 ): Record<string, number> {
-  if (!modelKey.startsWith("gpt-5.6-")) return {};
+  if (!modelKey.startsWith("gpt-5.6-") && modelKey !== "gpt-6-luna") return {};
 
   return {
     longContextInputTokenPrice: inputTokenPrice * 2,
     longContextOutputTokenPrice: outputTokenPrice * 1.5,
-    longContextInputThresholdTokens: GPT56_LONG_CONTEXT_THRESHOLD_TOKENS,
+    longContextInputThresholdTokens: TIERED_LONG_CONTEXT_THRESHOLD_TOKENS,
     cacheWriteTokenPrice: inputTokenPrice * 1.25,
+    ...(modelKey === "gpt-6-luna"
+      ? {
+          cachedInputTokenPrice: inputTokenPrice * 0.1,
+          longContextCachedInputTokenPrice: inputTokenPrice * 0.2,
+          longContextCacheWriteTokenPrice: inputTokenPrice * 2.5,
+        }
+      : {}),
   };
 }
 
@@ -96,7 +106,10 @@ function resolveCachedInputTokenPrice(
   inputTokens: number,
 ): number {
   const metadata = asMetadataObject(pricing.metadata);
-  const defaultPrice = pricing.inputTokenPrice;
+  // Fall back to the rate this request's uncached tokens are billed at, not the
+  // short-context rate — otherwise a long-context request with no cached rate
+  // configured bills its cached and uncached halves off different rate cards.
+  const defaultPrice = resolveTokenPrices(pricing, inputTokens).input;
 
   const threshold = positiveMetadataNumber(
     metadata,
@@ -114,6 +127,20 @@ function resolveCachedInputTokenPrice(
     positiveMetadataNumber(metadata, "cachedInputTokenPrice") ?? defaultPrice
   );
 }
+
+/**
+ * Pricing metadata keys that only a migration or a manual edit ever writes —
+ * upstream scrapers never emit them. These survive a pricing refresh; every
+ * other key is replaced by whatever the refresh supplies.
+ */
+const MIGRATION_SEEDED_PRICING_KEYS = [
+  "cachedInputTokenPrice",
+  "cacheWriteTokenPrice",
+  "longContextCachedInputTokenPrice",
+  "longContextInputThresholdTokens",
+  "longContextInputTokenPrice",
+  "longContextOutputTokenPrice",
+] as const;
 
 const REGISTRY_PROVIDER_PRIORITY: Record<string, number> = {
   openai: 0,
@@ -1001,7 +1028,7 @@ export class LLMPricingService {
               pricingSource: "helicone_registry",
               registryProvider: resolvedModel.registryProvider,
               canonicalModelId: resolvedModel.canonicalModelId,
-              ...getGpt56TieredPricingMetadata(
+              ...getTieredPricingMetadata(
                 resolvedModel.modelKey,
                 resolvedModel.inputPerToken,
                 resolvedModel.outputPerToken,
@@ -1069,8 +1096,9 @@ export class LLMPricingService {
         input: 0.000_000_2,
         output: 0.000_001_25,
       },
-      // GPT-5.6 short-context tier. Long-context rates are added to metadata
+      // GPT-5.6 and Luna 6 short-context tiers. Long-context rates are added to metadata
       // below and selected for the whole request above the 272K threshold.
+      "gpt-6-luna": { input: 0.000_000_1, output: 0.000_000_5 },
       "gpt-5.6-luna": { input: 0.000_000_2, output: 0.000_001_2 },
       "gpt-5.6-terra": { input: 0.000_002, output: 0.000_012 },
       "gpt-5.6-sol": { input: 0.000_005, output: 0.000_03 },
@@ -1103,16 +1131,12 @@ export class LLMPricingService {
         source: "Fallback pricing",
         notes: modelKey.startsWith("gpt-5.4-")
           ? "Official OpenAI Standard-tier snapshot pricing"
-          : modelKey.startsWith("gpt-5.6-")
+          : modelKey.startsWith("gpt-5.6-") || modelKey === "gpt-6-luna"
             ? "Official OpenAI Standard-tier pricing, short-context (<=272K input) rate"
             : modelKey.startsWith("gpt-5")
               ? "Estimated pricing for model"
               : "Known pricing when registry lookup failed",
-        ...getGpt56TieredPricingMetadata(
-          modelKey,
-          pricing.input,
-          pricing.output,
-        ),
+        ...getTieredPricingMetadata(modelKey, pricing.input, pricing.output),
       },
     };
   }
@@ -1132,6 +1156,7 @@ export class LLMPricingService {
       "gpt-5-nano",
       "gpt-5.4-mini-2026-03-17",
       "gpt-5.4-nano-2026-03-17",
+      "gpt-6-luna",
       "gpt-5.6-luna",
       "gpt-5.6-terra",
       "gpt-5.6-sol",
@@ -1192,8 +1217,18 @@ export class LLMPricingService {
           where: { modelId: model.id, isActive: true },
           orderBy: { effectiveDate: "desc" },
         });
+        // Carry forward only the keys a scrape can never supply. Spreading the
+        // whole previous object instead would make every key ever written
+        // permanent — a refresh could then never clear a stale one.
+        const previousMetadata = asMetadataObject(activePricing?.metadata);
+        const carriedMetadata: Record<string, unknown> = {};
+        for (const key of MIGRATION_SEEDED_PRICING_KEYS) {
+          if (previousMetadata[key] !== undefined) {
+            carriedMetadata[key] = previousMetadata[key];
+          }
+        }
         const metadata = {
-          ...asMetadataObject(activePricing?.metadata),
+          ...carriedMetadata,
           ...asMetadataObject(pricing.metadata),
         } as Prisma.InputJsonObject;
 
@@ -1682,12 +1717,20 @@ export class LLMPricingService {
       usageType?: string;
       cachedInputTokens?: number;
     }>,
+    /**
+     * Optional cache shared across several calculateCostBatch calls. Pricing
+     * lookups hit the database twice each and are uncached, so a caller pricing
+     * many assignments in one request would otherwise re-resolve the same
+     * (model, day) once per assignment. Pass a cache from
+     * {@link createPricingCache} to resolve each one once for the whole request.
+     */
+    sharedPricingCache?: PricingLookupCache,
   ): Promise<Array<CostBreakdown | null>> {
     if (records.length === 0) return [];
 
     const upscaling = await this.getCurrentPriceUpscaling();
 
-    const pricingCache = new Map<string, ModelPricing | null>();
+    const pricingCache = sharedPricingCache ?? this.createPricingCache();
     const dayKey = (date: Date) => date.toISOString().slice(0, 10);
     const cacheKeyFor = (modelKey: string, date: Date) =>
       `${modelKey}|${dayKey(date)}`;
@@ -1717,6 +1760,15 @@ export class LLMPricingService {
     }
 
     return results;
+  }
+
+  /**
+   * A pricing cache for one request. Scope it to a single request and discard
+   * it — it is deliberately not held on the service, so a mid-request pricing
+   * refresh cannot be served stale prices on the next request.
+   */
+  createPricingCache(): PricingLookupCache {
+    return new Map<string, ModelPricing | null>();
   }
 
   /**

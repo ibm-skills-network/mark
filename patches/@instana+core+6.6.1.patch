@@ -1,0 +1,13 @@
+diff --git a/node_modules/@instana/core/src/tracing/instrumentation/databases/prisma.js b/node_modules/@instana/core/src/tracing/instrumentation/databases/prisma.js
+index 45e6417..6726a12 100644
+--- a/node_modules/@instana/core/src/tracing/instrumentation/databases/prisma.js
++++ b/node_modules/@instana/core/src/tracing/instrumentation/databases/prisma.js
+@@ -242,7 +242,7 @@ function instrumentedRequest(ctx, originalRequest, argsForOriginalRequest) {
+         })
+         .catch(error => {
+           finishSpan(error, span);
+-          return error;
++          throw error;
+         });
+     }
+   });

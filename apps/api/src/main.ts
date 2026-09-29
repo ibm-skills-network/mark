@@ -84,7 +84,12 @@ async function bootstrap() {
      * Health endpoints remain at root for container orchestration compatibility
      */
     app.setGlobalPrefix("api", {
-      exclude: ["health", "health/liveness", "health/readiness"],
+      exclude: [
+        "health",
+        "health/liveness",
+        "health/readiness",
+        "health/integrations",
+      ],
     });
 
     /**

@@ -1,4 +1,4 @@
-const DEFAULT_GRADING_CACHE_REVISION = "2026-08-05-gpt56";
+const DEFAULT_GRADING_CACHE_REVISION = "2026-09-22-complete-text-and-rubric";
 
 /**
  * Return the model identity used by persistent grading caches.
@@ -10,6 +10,10 @@ const DEFAULT_GRADING_CACHE_REVISION = "2026-08-05-gpt56";
  */
 export function getGradingModelCacheIdentity(modelKey: string): string {
   const configuredRevision = process.env.GRADING_CACHE_REVISION?.trim();
-  const revision = configuredRevision || DEFAULT_GRADING_CACHE_REVISION;
+  // A deployment override must never mask an application semantics change.
+  const revision =
+    configuredRevision && configuredRevision !== DEFAULT_GRADING_CACHE_REVISION
+      ? `${DEFAULT_GRADING_CACHE_REVISION}:${configuredRevision}`
+      : DEFAULT_GRADING_CACHE_REVISION;
   return `${modelKey}@${revision}`;
 }

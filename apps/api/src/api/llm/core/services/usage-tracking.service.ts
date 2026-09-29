@@ -33,15 +33,19 @@ export class UsageTrackerService implements IUsageTracker {
       const assignmentIdToDatabase = Number(assignmentId);
       const tokensInToStore = toAiUsageCounterBigInt(tokensIn, "tokensIn");
       const tokensOutToStore = toAiUsageCounterBigInt(tokensOut, "tokensOut");
-      const cachedTokensInToStore = toAiUsageCounterBigInt(
+      // Clamp rather than reject: providers sometimes report a cache-read count
+      // alongside a locally estimated input count, and an estimate below the
+      // reported cache read would otherwise discard the call's entire
+      // accounting — tokensIn, tokensOut and modelKey included.
+      let cachedTokensInToStore = toAiUsageCounterBigInt(
         cachedTokensIn,
         "cachedTokensIn",
       );
-      if (cachedTokensIn > tokensIn) {
-        throw new HttpException(
-          "Cached input tokens cannot exceed total input tokens",
-          HttpStatus.BAD_REQUEST,
+      if (cachedTokensInToStore > tokensInToStore) {
+        this.logger.warn(
+          `Cached input tokens (${cachedTokensIn}) exceed total input tokens (${tokensIn}) for assignment ${assignmentIdToDatabase}; clamping to the total`,
         );
+        cachedTokensInToStore = tokensInToStore;
       }
       const assignmentExists = await this.prisma.assignment.findUnique({
         where: { id: assignmentIdToDatabase },

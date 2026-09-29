@@ -1,7 +1,13 @@
 import { QuestionStore } from "@/config/types";
 import { cn } from "@/lib/strings";
+import {
+  describeLearnerUrlProblem,
+  expectedHostsForResponseType,
+  normalizeLearnerUrl,
+  validateLearnerUrl,
+} from "@/lib/url-response";
 import { useLearnerStore } from "@/stores/learner";
-import { useState, type ComponentPropsWithoutRef } from "react";
+import { type ComponentPropsWithoutRef } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   question: QuestionStore;
@@ -15,34 +21,35 @@ function URLQuestion(props: Props) {
     state.activeAttemptId,
   ]);
   const { id, learnerUrlResponse: url } = question;
-  const [validURL, setValidURL] = useState<boolean>(true);
 
-  // useAutoSaveResponse(assignmentId, activeAttemptId, id, {
-  //   enabled: true,
-  //   debounceMs: 2000,
-  // });
+  // Derived, not state: a separate `validURL` flag drifted out of sync with
+  // the stored answer whenever the value changed from anywhere but this input.
+  const validation = validateLearnerUrl(url, {
+    expectedHosts: expectedHostsForResponseType(question.responseType),
+  });
+  const message = url?.trim()
+    ? describeLearnerUrlProblem(validation)
+    : undefined;
+  const isBlocking = Boolean(url?.trim()) && !validation.isValid;
 
   const handleURLChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUrl = e.target.value;
     setURLResponse(newUrl, id);
-    setValidURL(newUrl ? validateURL(newUrl) : true);
     onUrlChange(newUrl, id);
   };
 
-  const validateURL = (str: string) => {
-    const pattern = new RegExp(
-      "^(https?:\\/\\/)?" +
-        "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" +
-        "((\\d{1,3}\\.){3}\\d{1,3}))" +
-        "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" +
-        "(\\?[;&a-z\\d%_.~+=-]*)?" +
-        "(\\#[-a-z\\d_]*)?$",
-      "i",
-    );
-    return pattern.test(str);
+  /**
+   * Tidy the value once the learner is done typing rather than on every
+   * keystroke — normalizing mid-word would fight them by inserting a scheme
+   * in front of a half-typed host.
+   */
+  const handleBlur = () => {
+    const normalized = normalizeLearnerUrl(url);
+    if (normalized && normalized !== url) {
+      setURLResponse(normalized, id);
+      onUrlChange(normalized, id);
+    }
   };
-
-  const showError = url && !validURL;
 
   return (
     <div className="relative">
@@ -50,25 +57,44 @@ function URLQuestion(props: Props) {
         type="text"
         className={cn(
           "w-full p-2 border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100",
-          !validURL ? "border-red-500" : "border-gray-300 dark:border-gray-600",
+          isBlocking
+            ? "border-red-500"
+            : "border-gray-300 dark:border-gray-600",
           className,
         )}
         value={url}
         placeholder="Enter website URL"
         onChange={handleURLChange}
+        onBlur={handleBlur}
+        aria-invalid={isBlocking}
+        aria-describedby={message ? `url-question-${id}-message` : undefined}
       />
 
-      {showError && (
-        <div className="absolute top-full left-0 mt-1 z-10 bg-red-50 border border-red-200 rounded-md shadow-lg p-3 min-w-max">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs">!</span>
-            </div>
-            <span className="text-red-700 text-sm">
-              The link you sent doesn't seem right, please double check
-            </span>
-          </div>
-          <div className="absolute -top-1 left-4 w-2 h-2 bg-red-50 border-l border-t border-red-200 transform rotate-45"></div>
+      {message && (
+        // In-flow and always visible: this used to be an absolutely
+        // positioned overlay that could sit off-screen on a narrow viewport,
+        // and the matching submit-button reason only appeared on hover — so a
+        // learner on a phone saw a dead Submit button and no explanation.
+        <div
+          id={`url-question-${id}-message`}
+          role={isBlocking ? "alert" : "status"}
+          className={cn(
+            "mt-2 flex items-start gap-2 rounded-md border p-3 text-sm",
+            isBlocking
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-amber-200 bg-amber-50 text-amber-800",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-xs text-white",
+              isBlocking ? "bg-red-500" : "bg-amber-500",
+            )}
+          >
+            !
+          </span>
+          <span>{message}</span>
         </div>
       )}
     </div>

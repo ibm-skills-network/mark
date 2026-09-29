@@ -30,13 +30,27 @@ export function readAuthorPreviewPayload(
   const questions = getStoredData<QuestionStore[]>("questions", []);
 
   if (
+    !assignmentDetails ||
     !isMatchingAssignment(assignmentDetails, assignmentId) ||
     !Array.isArray(questions)
   ) {
     return null;
   }
 
-  return { assignmentDetails, questions };
+  // Older/incomplete settings must not discard unsaved overview text or questions.
+  return {
+    assignmentDetails: {
+      ...assignmentDetails,
+      displayOrder:
+        assignmentDetails.displayOrder === "RANDOM" ? "RANDOM" : "DEFINED",
+      strictTimeLimit:
+        assignmentDetails.strictTimeLimit ??
+        (assignmentDetails.allotedTimeMinutes ?? 0) > 0,
+      introduction: assignmentDetails.introduction ?? "",
+      instructions: assignmentDetails.instructions ?? "",
+    },
+    questions,
+  };
 }
 
 export function buildAuthorPreviewPayload(
@@ -50,8 +64,8 @@ export function buildAuthorPreviewPayload(
     assignmentDetails: {
       id: assignment.id,
       name: assignment.name,
-      introduction: assignment.introduction,
-      instructions: assignment.instructions,
+      introduction: assignment.introduction ?? "",
+      instructions: assignment.instructions ?? "",
       gradingCriteriaOverview: assignment.gradingCriteriaOverview,
       graded: assignment.graded,
       numAttempts: assignment.numAttempts,
@@ -60,7 +74,9 @@ export function buildAuthorPreviewPayload(
       allotedTimeMinutes: assignment.allotedTimeMinutes,
       timeEstimateMinutes: assignment.timeEstimateMinutes,
       passingGrade: assignment.passingGrade,
-      displayOrder: assignment.displayOrder,
+      displayOrder: assignment.displayOrder ?? "DEFINED",
+      // Persisted assignments represent the time limit through allotted minutes.
+      strictTimeLimit: (assignment.allotedTimeMinutes ?? 0) > 0,
       questionDisplay: assignment.questionDisplay,
       numberOfQuestionsPerAttempt: assignment.numberOfQuestionsPerAttempt,
       requireAllQuestions: assignment.requireAllQuestions,

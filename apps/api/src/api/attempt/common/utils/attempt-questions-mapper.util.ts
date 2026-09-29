@@ -1,10 +1,10 @@
 /* eslint-disable unicorn/no-null */
+import { Logger } from "@nestjs/common";
 import {
   AssignmentAttempt,
   QuestionResponse,
   QuestionType,
   ResponseType,
-  Translation,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { AssignmentAttemptQuestions } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
@@ -16,6 +16,13 @@ import {
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { PrismaService } from "../../../../database/prisma.service";
+
+import {
+  findQuestionTranslation,
+  pickTranslation,
+} from "./translation-language.util";
+
+const logger = new Logger("AttemptQuestionsMapper");
 
 /**
  * Extended Choice type to include optional id property
@@ -227,22 +234,43 @@ export class AttemptQuestionsMapper {
         const variantKey = `variant-${variant?.id}`;
         const questionKey = `question-${qv.questionId}`;
 
-        const variantTranslations =
+        const variantTranslations = this.withoutAuthoredLanguage(
           variant && translations.has(variantKey)
             ? translations.get(variantKey) || {}
-            : {};
+            : {},
+        );
 
-        const questionTranslations = translations.has(questionKey)
-          ? translations.get(questionKey) || {}
-          : {};
+        const questionTranslations = this.withoutAuthoredLanguage(
+          translations.has(questionKey)
+            ? translations.get(questionKey) || {}
+            : {},
+        );
 
-        const variantTranslation = variantTranslations[language];
-        const questionTranslation = questionTranslations[language];
-        const primaryTranslation = variantTranslation || questionTranslation;
+        const variantTranslation = pickTranslation(
+          variantTranslations,
+          language,
+        );
+        const questionTranslation = pickTranslation(
+          questionTranslations,
+          language,
+        );
 
         const baseChoices = this.parseChoices(
           variant ? variant.choices || originalQ.choices : originalQ.choices,
         );
+
+        // Translations are generated lazily per language, so a learner can ask
+        // for one that has no row yet. Serve the authored content in that case
+        // instead of dereferencing an absent translation.
+        const storedTranslation = variantTranslation || questionTranslation;
+        const primaryTranslation =
+          storedTranslation ||
+          this.buildUntranslatedContent(
+            variant,
+            originalQ,
+            baseChoices,
+            language,
+          );
 
         let finalChoices = baseChoices || [];
 
@@ -285,7 +313,14 @@ export class AttemptQuestionsMapper {
           ? { ...questionTranslations, ...variantTranslations }
           : questionTranslations;
 
-        if (qv.randomizedChoices && finalChoices.length > 0) {
+        // A stored translation was already put in the attempt's order above.
+        // Only the authored stand-in still needs it; overwriting a real
+        // translation here would serve choices the grader cannot match.
+        if (
+          !storedTranslation &&
+          qv.randomizedChoices &&
+          finalChoices.length > 0
+        ) {
           primaryTranslation.translatedChoices = finalChoices;
         }
 
@@ -329,11 +364,16 @@ export class AttemptQuestionsMapper {
       )
       .map((originalQ) => {
         const questionKey = `question-${originalQ.id}`;
-        const questionTranslations = translations.has(questionKey)
-          ? translations.get(questionKey) || {}
-          : {};
+        const questionTranslations = this.withoutAuthoredLanguage(
+          translations.has(questionKey)
+            ? translations.get(questionKey) || {}
+            : {},
+        );
 
-        const translationForLanguage = questionTranslations[language];
+        const translationForLanguage = pickTranslation(
+          questionTranslations,
+          language,
+        );
 
         const sanitizedChoices = this.sanitizeChoicesForDisplay(
           translationForLanguage?.translatedChoices
@@ -377,6 +417,65 @@ export class AttemptQuestionsMapper {
         : allQuestions;
 
     return finalQuestions;
+  }
+
+  /**
+   * English is the authored language: the grader compares a submitted choice
+   * against the authored text and never applies a stored translation to it.
+   * The catalogue nevertheless holds `en` rows — machine paraphrases of the
+   * authored text — and serving one makes every English learner submit
+   * choices the grader cannot match. Whatever is read here must agree with
+   * the grader, so those rows are dropped before anything picks from them.
+   *
+   * @param translations - Stored translations keyed by language code
+   * @returns The same map without any English entry
+   */
+  private static withoutAuthoredLanguage(
+    translations: Record<string, TranslatedContent>,
+  ): Record<string, TranslatedContent> {
+    return Object.fromEntries(
+      Object.entries(translations).filter(
+        ([code]) => !this.isAuthoredLanguage(code),
+      ),
+    );
+  }
+
+  private static isAuthoredLanguage(language: string): boolean {
+    return language.trim().toLowerCase().split("-")[0] === "en";
+  }
+
+  /**
+   * Build the stand-in used when the requested language has no translation for
+   * a question or its variant: the authored text and choices, exactly as the
+   * v1 attempt path does. Without it the caller dereferences `undefined` and
+   * the whole attempt read fails with a 500 for every learner on that language.
+   *
+   * @param variant - The variant selected for this attempt, when there is one
+   * @param originalQ - The authored question
+   * @param baseChoices - The authored choices, already parsed
+   * @param language - The language the learner asked for
+   * @returns Untranslated content shaped like a translation
+   */
+  private static buildUntranslatedContent(
+    variant: PrismaNestedVariant["questionVariant"],
+    originalQ: Pick<AttemptQuestionDto, "id" | "question" | "assignmentId">,
+    baseChoices: ExtendedChoice[],
+    language: string,
+  ): TranslatedContent {
+    // The authored language never has anything to translate; only another
+    // language arriving here means a translation is missing.
+    if (!this.isAuthoredLanguage(language)) {
+      logger.warn(
+        `No translation for language=${language} questionId=${originalQ.id} ` +
+          `variantId=${variant?.id ?? "none"} assignmentId=${originalQ.assignmentId}; ` +
+          `serving authored content`,
+      );
+    }
+
+    return {
+      translatedText: variant?.variantContent || originalQ.question,
+      translatedChoices: baseChoices,
+    };
   }
 
   /**
@@ -481,21 +580,12 @@ export class AttemptQuestionsMapper {
     language: string,
   ): Promise<void> {
     for (const question of questions) {
-      const translation: Translation | null = await (question.variantId
-        ? prisma.translation.findFirst({
-            where: {
-              questionId: question.id,
-              variantId: question.variantId,
-              languageCode: language,
-            },
-          })
-        : prisma.translation.findFirst({
-            where: {
-              questionId: question.id,
-              variantId: null,
-              languageCode: language,
-            },
-          }));
+      const translation = await findQuestionTranslation(
+        prisma,
+        question.id,
+        question.variantId,
+        language,
+      );
 
       if (translation) {
         question.question = translation.translatedText;

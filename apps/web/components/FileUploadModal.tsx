@@ -24,6 +24,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Lottie from "lottie-react";
 import { useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { AUTHORING_DOCUMENT_ACCEPT } from "@/lib/upload-accept";
 import { toast } from "sonner";
 import Modal from "./Modal";
 import Tooltip from "./Tooltip";
@@ -132,18 +133,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
     useState<AssignmentTypeEnum>(AssignmentTypeEnum.PRACTICE);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      "text/plain": [".txt"],
-      "application/pdf": [".pdf"],
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        [".docx"],
-      "application/vnd.ms-excel": [".xls", ".xlsx"],
-      "text/csv": [".csv"],
-      "text/markdown": [".md"],
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-        [".pptx"],
-      "application/x-ipynb+json": [".ipynb"],
-    },
+    accept: AUTHORING_DOCUMENT_ACCEPT,
     multiple: true,
   });
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState({
@@ -378,8 +368,8 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                     Drag & drop some files here, or click to select files.
                   </p>
                   <p className="text-gray-500 dark:text-gray-400">
-                    Allowed file types: .txt .pdf .docx .xls .xlsx .csv .md
-                    .ipynb
+                    Allowed file types: .txt .pdf .docx .xls .xlsx .pptx .csv
+                    .md .ipynb
                   </p>
                 </>
               )}

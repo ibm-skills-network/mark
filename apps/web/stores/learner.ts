@@ -282,8 +282,17 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
         setCurrentPath: (path) => set({ currentPath: path }),
         setSelectedFiles: (files) => set({ selectedFiles: files }),
         clearGithubStore: () => {
+          // The live fields are what persistStateForQuestion writes back into
+          // questionGitHubState, so emptying only the map leaves the previous
+          // selection to be re-persisted the next time a question is opened.
           set({
             questionGitHubState: {},
+            activeQuestionId: null,
+            selectedRepo: null,
+            repoContents: [],
+            currentPath: [],
+            selectedFiles: [],
+            isGithubModalOpen: false,
           });
         },
         persistStateForQuestion: () => {
@@ -335,13 +344,23 @@ export type LearnerState = {
   activeAttemptId: number | null;
   activeQuestionNumber: number | null | undefined;
   expiresAt: number | undefined;
+  /**
+   * `serverNow - deviceNow`, measured when the attempt payload arrived. Every
+   * countdown runs against `Date.now() + serverTimeOffsetMs` so a device clock
+   * that is minutes fast cannot shorten — or instantly end — a timed attempt.
+   * Undefined when the payload carried no server clock, which is also the
+   * signal that nothing derived from the device clock can be trusted.
+   */
+  serverTimeOffsetMs: number | undefined;
+  /** When the server says the attempt was created (ms, server clock). */
+  attemptStartedAt: number | undefined;
   questions: QuestionStore[];
   role?: "learner" | "author";
   totalPointsEarned: number;
   totalPointsPossible: number;
   translationOn: boolean;
   globalLanguage: string;
-  userPreferedLanguage: string;
+  userPreferedLanguage: string | null;
   isUploadingFiles: boolean;
 };
 
@@ -388,7 +407,7 @@ export type LearnerActions = {
     presentationResponse: PresentationQuestionResponse,
   ) => void;
   setSlidesData: (questionId: number, slidesData: slideMetaData[]) => void;
-  setActiveAttemptId: (id: number) => void;
+  beginAttempt: (id: number) => void;
   setActiveQuestionNumber: (id: number | null) => void;
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: Partial<QuestionStore>) => void;
@@ -436,7 +455,7 @@ export type LearnerActions = {
     translatedChoices: string[],
   ) => void;
   setGlobalLanguage: (language: string) => void;
-  setUserPreferedLanguage: (language: string) => void;
+  setUserPreferedLanguage: (language: string | null) => void;
   getUserPreferedLanguageFromLTI: () => Promise<string>;
   clearLearnerAnswers: () => void;
   setIsUploadingFiles: (isUploading: boolean) => void;
@@ -526,6 +545,28 @@ export const useLearnerOverviewStore = createWithEqualityFn<
   ),
   shallow,
 );
+
+/**
+ * Only learner-authored state may be persisted. Server content (question
+ * HTML, translations, choices) can carry embedded images and once multiplied
+ * across languages has overflowed the localStorage quota, which trapped
+ * learners in a clear-and-reload loop. Content is re-fetched on every load
+ * and merged over these drafts by setQuestions.
+ */
+const persistQuestionDraft = (question: QuestionStore) => ({
+  id: question.id,
+  status: question.status,
+  learnerResponse: question.learnerResponse,
+  learnerTextResponse: question.learnerTextResponse,
+  learnerUrlResponse: question.learnerUrlResponse,
+  learnerChoices: question.learnerChoices,
+  learnerAnswerChoice: question.learnerAnswerChoice,
+  learnerFileResponse: question.learnerFileResponse,
+  learnerPresentationResponse: question.learnerPresentationResponse,
+  presentationResponse: question.presentationResponse,
+  translationOn: question.translationOn,
+  selectedLanguage: question.selectedLanguage,
+});
 
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions
@@ -692,11 +733,9 @@ export const useLearnerStore = createWithEqualityFn<
           get().setQuestionStatus(questionId);
         },
         onFileChange: (files, questionId) => {
-          const formattedFiles = files.map((file: learnerFileResponse) => ({
-            filename: file.filename,
-            content: file.content,
-            githubUrl: file.githubUrl,
-          }));
+          // Preserve source metadata through selection, autosave, and grading.
+          // The API requires a GitHub URL or storage coordinates for each file.
+          const formattedFiles = files.map((file) => ({ ...file }));
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
               if (q.id === questionId) {
@@ -721,13 +760,7 @@ export const useLearnerStore = createWithEqualityFn<
         },
         onModeChange: (mode, data, questionId) => {
           if (mode === "file") {
-            const formattedData = (data as learnerFileResponse[]).map(
-              (file) => ({
-                filename: file.filename,
-                content: file.content,
-              }),
-            );
-            get().onFileChange(formattedData, questionId);
+            get().onFileChange(data as learnerFileResponse[], questionId);
           } else {
             get().onUrlChange(data as string, questionId);
           }
@@ -743,6 +776,13 @@ export const useLearnerStore = createWithEqualityFn<
         },
         setGlobalLanguage: (language) => set({ globalLanguage: language }),
         setUserPreferedLanguage: (languageCode) => {
+          // A null reset (post-submit) must stay null. Intl.Locale(null)
+          // throws, and the catch below used to turn that into "en" — which
+          // the Header's uiLang URL sync then treated as a language change.
+          if (languageCode === null || languageCode === undefined) {
+            set({ userPreferedLanguage: null });
+            return;
+          }
           try {
             const parsedLocale = new Intl.Locale(languageCode);
             const baseLang = parsedLocale.language;
@@ -815,13 +855,27 @@ export const useLearnerStore = createWithEqualityFn<
         activeAttemptId: null,
         totalPointsEarned: 0,
         totalPointsPossible: 0,
-        setActiveAttemptId: (id) => {
-          set({ activeAttemptId: id });
+        // Drafts belong to one attempt. Selections are positions in that
+        // attempt's shuffled choices, so anything left from another attempt
+        // (a submit the client saw fail, an expiry, an abandoned tab) must go
+        // before the new attempt's questions are merged over it.
+        beginAttempt: (id) => {
+          if (get().activeAttemptId === id) {
+            return;
+          }
+          // GitHub file picks live in their own store and are only cleared on
+          // a submit the client saw succeed — the same condition that cannot
+          // be relied on here — so they have to be dropped with the drafts or
+          // the new attempt opens with the last attempt's repo files attached.
+          useGitHubStore.getState().clearGithubStore();
+          set({ activeAttemptId: id, questions: [] });
         },
         activeQuestionNumber: 1,
         setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
         assignmentDetails: null,
         expiresAt: undefined,
+        serverTimeOffsetMs: undefined,
+        attemptStartedAt: undefined,
         questions: [],
         isUploadingFiles: false,
         setIsUploadingFiles: (isUploading) =>
@@ -1005,7 +1059,7 @@ export const useLearnerStore = createWithEqualityFn<
       name: `learner-${ASSIGNMENT_ID}`,
       storage: createJSONStorage(() => createSafeStorage()),
       partialize: (state) => ({
-        questions: state.questions,
+        questions: state.questions.map(persistQuestionDraft),
         activeAttemptId: state.activeAttemptId,
         userPreferedLanguage: state.userPreferedLanguage,
       }),

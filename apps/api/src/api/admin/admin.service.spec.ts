@@ -119,6 +119,7 @@ describe("AdminService", () => {
       calculateCost: jest.fn().mockReturnValue(0.01),
       getTokenCount: jest.fn().mockReturnValue(100),
       calculateCostBatch: jest.fn().mockResolvedValue([]),
+      createPricingCache: jest.fn(() => new Map()),
       calculateCostWithBreakdown: jest.fn().mockResolvedValue({
         totalCost: 0.01,
         inputCost: 0.005,
@@ -235,9 +236,11 @@ describe("AdminService", () => {
         },
       ]);
 
-      expect(mockLlmPricingService.calculateCostBatch).toHaveBeenCalledWith([
-        expect.objectContaining({ cachedInputTokens: 40 }),
-      ]);
+      // Second argument is the optional shared pricing cache, unset here.
+      expect(mockLlmPricingService.calculateCostBatch).toHaveBeenCalledWith(
+        [expect.objectContaining({ cachedInputTokens: 40 })],
+        undefined,
+      );
       expect(result.totalCost).toBe(0.000084);
       expect(result.exactCost).toBe(0);
       expect(result.estimatedCost).toBe(0.000084);
@@ -370,15 +373,21 @@ describe("AdminService", () => {
               })),
         ),
       );
-      // Every assignment has AI usage, so each cost chain calls pricing.
-      mockPrisma.aIUsageEvent.findMany = jest.fn().mockResolvedValue(
+      // Every assignment has AI usage, so each cost chain calls pricing. Usage
+      // reaches the cost chains through the SQL rollup, not a findMany — seed
+      // $queryRaw or every chain prices an empty list and this test stops
+      // exercising the limiter at all.
+      mockPrisma.$queryRaw.mockResolvedValue(
         ids.map((assignmentId) => ({
           assignmentId,
-          tokensIn: 10,
-          tokensOut: 5,
-          createdAt: new Date(),
+          tokensIn: BigInt(10),
+          cachedTokensIn: BigInt(0),
+          tokensOut: BigInt(5),
+          day: new Date(),
           usageType: "grading",
           modelKey: "gpt-4o",
+          isEstimated: false,
+          recordCount: 1,
         })),
       );
 
@@ -412,9 +421,61 @@ describe("AdminService", () => {
 
       await service.getAssignmentAnalytics(adminSession, 1, 1000);
 
-      // Pricing was exercised, but never more than the cost-calc cap at once.
+      // Pricing was exercised on real usage — not on empty lists, which would
+      // let the limiter regress unnoticed — and never more than the cap at once.
+      expect(
+        mockLlmPricingService.calculateCostBatch.mock.calls.some(
+          ([records]: [Array<unknown>]) => records.length > 0,
+        ),
+      ).toBe(true);
       expect(maxActive).toBeGreaterThan(0);
       expect(maxActive).toBeLessThanOrEqual(4);
+    });
+
+    it("prices every assignment off one shared pricing cache", async () => {
+      const ids = [1, 2, 3, 4, 5, 6];
+      mockPrisma.assignment.findMany = jest.fn((args: any) =>
+        Promise.resolve(
+          args?.take === undefined
+            ? []
+            : ids.map((id) => ({
+                id,
+                name: `A${id}`,
+                published: true,
+                updatedAt: new Date(),
+              })),
+        ),
+      );
+      mockPrisma.$queryRaw.mockResolvedValue(
+        ids.map((assignmentId) => ({
+          assignmentId,
+          tokensIn: BigInt(10),
+          cachedTokensIn: BigInt(0),
+          tokensOut: BigInt(5),
+          day: new Date(),
+          usageType: "grading",
+          modelKey: "gpt-4o",
+          isEstimated: false,
+          recordCount: 1,
+        })),
+      );
+
+      await service.getAssignmentAnalytics(adminSession, 1, 1000);
+
+      // Pricing lookups are uncached DB reads, so a per-assignment cache would
+      // re-resolve the same (model, day) once per assignment.
+      expect(mockLlmPricingService.createPricingCache).toHaveBeenCalledTimes(1);
+      const cachesPassed = new Set(
+        mockLlmPricingService.calculateCostBatch.mock.calls
+          .map(([, cache]: [unknown, unknown]) => cache)
+          .filter(Boolean),
+      );
+      expect(cachesPassed.size).toBe(1);
+      expect(
+        mockLlmPricingService.calculateCostBatch.mock.calls.filter(
+          ([, cache]: [unknown, unknown]) => cache,
+        ).length,
+      ).toBeGreaterThan(1);
     });
   });
 

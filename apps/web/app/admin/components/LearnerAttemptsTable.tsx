@@ -160,6 +160,10 @@ export function LearnerAttemptsTable({
         <Table>
           <TableHeader>
             <TableRow>
+              {/* The search matches user IDs by substring, so one result set can
+                  span several learners — show whose attempt each row is before
+                  an admin reaches the pass or delete buttons. */}
+              <TableHead>Learner</TableHead>
               <TableHead>Assignment</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-center">Grade</TableHead>
@@ -170,6 +174,9 @@ export function LearnerAttemptsTable({
           <TableBody>
             {attempts.map((attempt) => (
               <TableRow key={attempt.id}>
+                <TableCell className="font-mono text-xs break-all max-w-[220px]">
+                  {attempt.userId}
+                </TableCell>
                 <TableCell>
                   <a
                     href={`/admin/insights/${attempt.assignmentId}`}

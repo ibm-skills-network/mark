@@ -1,4 +1,6 @@
 import { IsInt, IsOptional, IsString } from "class-validator";
+import { PortalContext } from "src/common/portal/portal-context";
+import type { ReportDiagnostics } from "../helpers/report-diagnostics";
 
 export class ReportIssueDto {
   issueType: string;
@@ -10,7 +12,11 @@ export class ReportIssueDto {
   category?: string;
   portalName?: string;
   userEmail?: string;
+  /** Derived from the signed session by the controller, never client-supplied. */
+  portal?: PortalContext;
   additionalDetails?: Record<string, any>;
+  /** Already rebuilt by sanitizeReportDiagnostics; never the raw client field. */
+  diagnostics?: ReportDiagnostics;
 }
 
 export class RegradeRequestDto {

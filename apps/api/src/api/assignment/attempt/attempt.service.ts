@@ -97,6 +97,8 @@ import {
 } from "./dto/question-response/create.question.response.attempt.response.dto";
 import type { GetQuestionResponseAttemptResponseDto } from "./dto/question-response/get.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
+import { countAnsweredResponses } from "./helper/blank-submission.helper";
+import { readServerClock } from "./helper/server-clock.helper";
 import { isLanguageInFlight } from "./translation-state-redis";
 
 type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
@@ -526,6 +528,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     return {
       id: assignmentAttempt.id,
       success: true,
+      serverNow: readServerClock(),
     };
   }
 
@@ -617,6 +620,23 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         assignmentAttempt.expiresAt &&
         tenSecondsBeforeNow > assignmentAttempt.expiresAt
       ) {
+        // A submission that arrives past the deadline carrying nothing the
+        // learner typed is the signature of a client-side timer firing on a
+        // clock it should not have trusted. Record it so the pattern is
+        // visible without changing what happens to the attempt.
+        if (
+          countAnsweredResponses(
+            updateAssignmentAttemptDto.responsesForQuestions,
+          ) === 0
+        ) {
+          this.logger.warn("Expired attempt submitted without any answers", {
+            assignmentAttemptId,
+            assignmentId,
+            userId: attemptOwnerUserId ?? userId,
+            responseCount:
+              updateAssignmentAttemptDto.responsesForQuestions?.length ?? 0,
+          });
+        }
         const savedResponses = await this.prisma.questionResponse.findMany({
           where: { assignmentAttemptId },
         });
@@ -1156,6 +1176,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       questions: finalQuestions.map((question) => ({
         ...question,
         choices:
@@ -1190,7 +1211,8 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    * @param language - The language code requested (if none provided, defaults to "en")
    * @returns Structured attempt data with:
    * - Questions in their attempt-specific order
-   * - Merged question/variant data including translations for all available languages
+   * - Merged question/variant data including translations for the requested
+   *   language family only (the client refetches on language switch)
    * - Responses with score/feedback visibility rules applied
    * - Assignment configuration metadata
    *
@@ -1292,8 +1314,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((qv) => qv.questionVariant?.id)
       .filter((id) => id != undefined);
 
+    // Only the requested language family is fetched (startsWith covers
+    // regional rows like zh-CN/zh-TW for a zh request). Returning every
+    // language made the response size scale with the translation count — an
+    // assignment with images embedded in its question HTML shipped each image
+    // once per language (assignment 2532 reached ~4MB, overflowing
+    // localStorage on the client and trapping learners in a clear-and-reload
+    // loop). The client refetches the attempt when the learner switches
+    // language mid-attempt.
     const translations = await this.prisma.translation.findMany({
       where: {
+        languageCode: { startsWith: normalizedLanguage },
         OR: [
           { questionId: { in: questionIds } },
           ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
@@ -1543,6 +1574,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     // attempt; pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       // The spread carries the persisted grade, which must not reach a learner
       // whose assignment hides the score.
       grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,

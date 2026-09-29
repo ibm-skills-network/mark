@@ -1,16 +1,9 @@
-export interface ChatIssueTemplateInput {
+export interface SnTicketTitleInput {
   issueType: string;
-  role: string;
-  severity: string;
-  userEmail?: string | null;
   assignmentId?: number | null;
   attemptId?: number | null;
-  reportedAt: Date;
-  isProduction: boolean;
   description: string;
 }
-
-export const CHAT_ISSUE_FOOTER = `\n---\n*This issue was automatically reported through the Mark Chat feature.*`;
 
 const TITLE_SUMMARY_MAX_CHARS = 50;
 
@@ -18,7 +11,7 @@ const TITLE_SUMMARY_MAX_CHARS = 50;
 // description already templated into "**Label:**\ncontent" sections.
 const SECTION_LABEL_PATTERN = /\*\*([^\n*]+):\*\*/g;
 const ACTUAL_RESULT_PATTERN =
-  /\*\*Actual result:\*\*\s*([\s\S]*?)(?=\n\s*\*\*[^\n*]+:\*\*|$)/i;
+  /\*\*actual result:\*\*\s*([\S\s]*?)(?=\n\s*\*\*[^\n*]+:\*\*|$)/i;
 
 /**
  * One-line summary of a report description for use in a title. For templated
@@ -75,24 +68,9 @@ export function defaultSeverityForIssueType(
   }
 }
 
-export function buildChatIssueTitle(input: ChatIssueTemplateInput): string {
-  const environment = input.isProduction ? "PROD" : "DEV";
-  const normalizedDescription = summarizeDescription(input.description);
-  const summary = normalizedDescription.slice(0, TITLE_SUMMARY_MAX_CHARS);
-  const ellipsis =
-    normalizedDescription.length > TITLE_SUMMARY_MAX_CHARS ? "..." : "";
-  const attemptSegment = input.attemptId ? ` - Attempt ${input.attemptId}` : "";
-
-  return `[MARK CHAT] [${environment}] [${input.role}] ${input.severity.toUpperCase()} ${capitalizeIssueType(
-    input.issueType,
-  )} Assignment ${input.assignmentId || "N/A"}${attemptSegment}: ${summary}${ellipsis}`;
-}
-
 // SN Support tickets carry environment, role, and severity as structured
-// fields, so the title stays human-readable without the bracket prefixes.
-export function buildSnSupportTicketTitle(
-  input: ChatIssueTemplateInput,
-): string {
+// fields, so the title stays human-readable without any bracket prefixes.
+export function buildSnSupportTicketTitle(input: SnTicketTitleInput): string {
   const normalizedDescription = summarizeDescription(input.description);
   const summary = normalizedDescription.slice(0, TITLE_SUMMARY_MAX_CHARS);
   const ellipsis =
@@ -102,22 +80,4 @@ export function buildSnSupportTicketTitle(
   return `${capitalizeIssueType(input.issueType)}: Assignment ${
     input.assignmentId || "N/A"
   }${attemptSegment}: ${summary}${ellipsis}`;
-}
-
-export function buildChatIssueBody(input: ChatIssueTemplateInput): string {
-  return `
-## Issue Report from Mark Chat
-
-**Issue Type:** ${input.issueType}
-**Reported By:** ${input.role || "Unknown"}
-**User Email:** ${input.userEmail || "Unknown"}
-**Assignment ID:** ${input.assignmentId || "N/A"}
-**Attempt ID:** ${input.attemptId || "N/A"}
-**Time Reported:** ${input.reportedAt.toISOString()}
-**Severity:** ${input.severity}
-**Environment:** ${input.isProduction ? "Production" : "Development"}
-
-### Description
-${input.description}
-`;
 }

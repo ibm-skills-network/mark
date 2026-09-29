@@ -13,6 +13,10 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
 import { PrismaService } from "../../../../database/prisma.service";
+import {
+  applyQuestionTranslation,
+  findQuestionTranslation,
+} from "../../common/utils/translation-language.util";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
 import {
   buildTranslationCacheKey,
@@ -23,6 +27,18 @@ export type VariantMapping = {
   questionId: number;
   questionVariant: QuestionVariant | null;
 };
+
+/**
+ * Reduces a locale to the family used to select stored translations, so a
+ * request for zh-CN still matches the zh-CN and zh-TW rows the client chooses
+ * between. Defaults to English, which is the baseline every attempt carries.
+ */
+function toLanguageFamily(language?: string): string {
+  if (!language) {
+    return "en";
+  }
+  return language.toLowerCase().split("-")[0] || "en";
+}
 @Injectable()
 export class TranslationService {
   constructor(
@@ -78,9 +94,10 @@ export class TranslationService {
   }
 
   /**
-   * Get all translations for an assignment attempt
+   * Get the translations an assignment attempt needs for one language
    * @param assignmentAttempt The assignment attempt
    * @param assignmentQuestions Questions in the assignment
+   * @param language The language code the learner asked for
    * @returns Map of translations
    */
   async getTranslationsForAttempt(
@@ -88,7 +105,9 @@ export class TranslationService {
       questionVariants: VariantMapping[];
     },
     assignmentQuestions: QuestionDto[],
+    language?: string,
   ): Promise<Map<string, Record<string, TranslatedContent>>> {
+    const languageFamily = toLanguageFamily(language);
     const questionIds = assignmentQuestions.map((q) => q.id);
     const variantIds = assignmentAttempt.questionVariants
       .map((qv) => qv.questionVariant?.id)
@@ -106,8 +125,16 @@ export class TranslationService {
       return new Map();
     }
 
+    // Only the requested language family is read (the prefix keeps regional
+    // rows such as zh-CN/zh-TW for a zh request). Reading every language made
+    // the attempt response scale with the number of languages an assignment
+    // has been translated into: question HTML with inline images shipped each
+    // image once per language, so an eight-question assignment translated into
+    // 23 languages served a 4.6 MB attempt whatever language was asked for.
+    // The client refetches the attempt when the learner switches language.
     const translations = await this.prisma.translation.findMany({
       where: {
+        languageCode: { startsWith: languageFamily, mode: "insensitive" },
         OR: [
           { questionId: { in: questionIds } },
           ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
@@ -195,56 +222,17 @@ export class TranslationService {
     if (cache?.translations.has(cacheKey)) {
       translation = cache.translations.get(cacheKey) ?? null;
     } else {
-      if (variantMapping && variantMapping.questionVariant !== null) {
-        translation = await this.prisma.translation.findFirst({
-          where: {
-            questionId: variantMapping.questionId,
-            variantId: variantMapping.questionVariant.id,
-            languageCode: language,
-          },
-        });
-
-        if (!translation) {
-          translation = await this.prisma.translation.findFirst({
-            where: {
-              questionId: question.id,
-              variantId: null,
-              languageCode: language,
-            },
-          });
-        }
-      } else {
-        translation = await this.prisma.translation.findFirst({
-          where: {
-            questionId: question.id,
-            variantId: null,
-            languageCode: language,
-          },
-        });
-      }
+      translation =
+        (await findQuestionTranslation(
+          this.prisma,
+          question.id,
+          variantId,
+          language,
+        )) ?? null;
       if (cache) cache.translations.set(cacheKey, translation);
     }
 
-    if (translation) {
-      question.question = translation.translatedText;
-
-      if (translation.translatedChoices) {
-        if (typeof translation.translatedChoices === "string") {
-          try {
-            question.choices = JSON.parse(
-              translation.translatedChoices,
-            ) as Choice[];
-          } catch {
-            question.choices = [];
-          }
-        } else if (Array.isArray(translation.translatedChoices)) {
-          question.choices =
-            translation.translatedChoices as unknown as Choice[];
-        }
-      }
-    }
-
-    return question;
+    return applyQuestionTranslation(question, translation);
   }
 
   /**

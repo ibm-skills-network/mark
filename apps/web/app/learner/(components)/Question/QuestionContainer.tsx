@@ -29,6 +29,9 @@ import { ComponentPropsWithoutRef, useEffect, useState } from "react";
 import RenderQuestion from "./RenderQuestion";
 import ShowHideRubric from "./ShowHideRubric";
 
+// Same wording the header's Submit tooltip uses for this state.
+const UPLOAD_IN_PROGRESS_TOOLTIP = "File upload in progress...";
+
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
 
@@ -65,6 +68,11 @@ function Component(props: Props) {
   // author comment visiblity
   const role = useLearnerStore((state) => state.role);
   const isAuthorView = role === "author";
+
+  // The header owns the full submit gate; this button only needs the one
+  // condition a learner can plausibly race, and subscribing to a boolean keeps
+  // every question on the page from re-rendering as answers are typed.
+  const isUploadingFiles = useLearnerStore((state) => state.isUploadingFiles);
 
   const setQuestionStatus = useLearnerStore((state) => state.setQuestionStatus);
   const getQuestionStatusById = useLearnerStore(
@@ -362,7 +370,11 @@ function Component(props: Props) {
           {effectiveTranslationOn && loadingTranslation && (
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400">
+                {/* Opted out so the 1.2s cycle does not re-scan the whole route. */}
+                <span
+                  data-no-ui-translate="true"
+                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400"
+                >
                   {currentWord}...
                 </span>
               </div>
@@ -515,7 +527,10 @@ function Component(props: Props) {
                   {loadingTranslation ? (
                     <div className="flex items-center justify-center py-8 min-h-[120px] sm:min-h-[200px]">
                       <div className="text-center">
-                        <div className="animate-pulse text-violet-600 mb-2 text-sm">
+                        <div
+                          data-no-ui-translate="true"
+                          className="animate-pulse text-violet-600 mb-2 text-sm"
+                        >
                           {currentWord}...
                         </div>
                         <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -605,20 +620,33 @@ function Component(props: Props) {
         />
       )}
 
-      {questionDisplay === "ONE_PER_PAGE" && (
-        <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveQuestionNumber(questionNumber - 1)}
-            disabled={questionNumber === 1}
-            className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 dark:text-gray-400 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 dark:hover:text-violet-400 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
-          >
-            <ArrowLongLeftIcon
-              strokeWidth={2}
-              className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
-            />
+      {/* Every layout needs a submit control the learner can reach by
+          scrolling: the header button sits outside the scroll container and
+          is easy to miss, and on a long single page there was nothing else. */}
+      {(questionDisplay === "ONE_PER_PAGE" ||
+        questionNumber === lastQuestionNumber) && (
+        <div
+          className={cn(
+            "flex flex-col sm:flex-row gap-3 sm:gap-0 pt-4 border-t border-gray-200 dark:border-gray-700",
+            questionDisplay === "ONE_PER_PAGE"
+              ? "justify-between"
+              : "sm:justify-end",
+          )}
+        >
+          {questionDisplay === "ONE_PER_PAGE" && (
+            <button
+              onClick={() => setActiveQuestionNumber(questionNumber - 1)}
+              disabled={questionNumber === 1}
+              className="disabled:opacity-50 disabled:pointer-events-none text-gray-600 dark:text-gray-400 font-medium flex items-center justify-center sm:justify-start group gap-x-2 hover:text-violet-600 dark:hover:text-violet-400 transition px-4 py-2 sm:px-0 sm:py-0 border sm:border-0 rounded-md sm:rounded-none"
+            >
+              <ArrowLongLeftIcon
+                strokeWidth={2}
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
+              />
 
-            <span className="text-sm sm:text-base">Previous Question</span>
-          </button>
+              <span className="text-sm sm:text-base">Previous Question</span>
+            </button>
+          )}
           {questionNumber === lastQuestionNumber ? (
             <button
               onClick={() => {
@@ -627,7 +655,9 @@ function Component(props: Props) {
                 );
                 window.dispatchEvent(submitEvent);
               }}
-              className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md"
+              disabled={isUploadingFiles}
+              title={isUploadingFiles ? UPLOAD_IN_PROGRESS_TOOLTIP : undefined}
+              className="text-white bg-violet-600 hover:bg-violet-700 font-medium flex items-center justify-center sm:justify-start group gap-x-2 transition px-4 py-2 border rounded-md disabled:opacity-50 disabled:pointer-events-none"
             >
               <span className="text-sm sm:text-base">Submit Assignment</span>
               <PaperAirplaneIcon

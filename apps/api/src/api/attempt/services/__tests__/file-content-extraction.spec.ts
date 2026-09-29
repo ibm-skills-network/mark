@@ -212,8 +212,8 @@ describe("FileContentExtractionService - binary file handling", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result.text).toContain("Java Bytecode");
-    expect(result.text).toContain("binary bytecode");
+    expect(result.text).toContain("BINARY ARTIFACT");
+    expect(result.text).toContain("not inspected as source code");
     // Raw bytecode characters should NOT appear in extracted text
     expect(result.extractedText).toBe("");
   });
@@ -1691,4 +1691,175 @@ describe("FileContentExtractionService.extractJupyterNotebook output handling", 
     expect(text).toContain("[image/webp]: <image data present>");
     expect(text).not.toContain("UklGRh4");
   });
+});
+
+describe("compiled artifacts remain submissions, not source text", () => {
+  it.each([
+    ["program.exe", "4d5a00000000"],
+    ["program.obj", "6486020000000000"],
+    ["program", "7f454c460000"],
+    ["renamed.js", "cffaedfe0000"],
+    ["module.txt", "0061736d01000000"],
+    ["Renamed.java", "cafebabe0000"],
+    ["module.PYC", "01020304"],
+  ])(
+    "keeps metadata but excludes the bytes of %s",
+    async (filename, header) => {
+      const service = createService() as any;
+      const bytes = Buffer.concat([
+        Buffer.from(header, "hex"),
+        Buffer.alloc(64),
+        Buffer.from("DO_NOT_GRADE_BINARY_STRINGS"),
+      ]);
+      const result = await service.extractTextFromBuffer(
+        bytes,
+        filename,
+        "text/plain",
+      );
+      expect(result.encoding).toBe("binary");
+      expect(result.text).toContain(filename);
+      expect(result.text).toContain(String(bytes.length));
+      expect(result.text).not.toContain("DO_NOT_GRADE_BINARY_STRINGS");
+      expect(result.text).not.toContain("\u0000");
+      expect(result.text).toContain("not inspected");
+    },
+  );
+
+  it("does not trust inline content on a compiled-artifact filename", async () => {
+    const [result] = await createService().extractContentFromFiles([
+      {
+        filename: "program.exe",
+        content: "DO_NOT_GRADE_BINARY_STRINGS",
+        fileType: "application/octet-stream",
+      },
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.content).toContain("program.exe");
+    expect(result.content).not.toContain("DO_NOT_GRADE_BINARY_STRINGS");
+  });
+
+  it("preserves UTF-16 source files", async () => {
+    const source = "const greeting = 'hello';";
+    const bytes = Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from(source, "utf16le"),
+    ]);
+    const result = await (createService() as any).extractTextFromBuffer(
+      bytes,
+      "source.js",
+      "text/plain",
+    );
+    expect(result.text).toContain(source);
+    expect(result.encoding).not.toBe("binary");
+  });
+});
+
+describe("binary archive entries", () => {
+  it("retains filenames while excluding executables and binaries disguised as source", async () => {
+    const executable = Buffer.concat([
+      Buffer.from("4d5a", "hex"),
+      Buffer.alloc(64),
+      Buffer.from("SECRET_BINARY_STRINGS"),
+    ]);
+    const exeBuffer = jest.fn().mockResolvedValue(executable);
+    const spy = jest
+      .spyOn(require("unzipper").Open, "buffer")
+      .mockResolvedValue({
+        files: [
+          {
+            path: "build/program.exe",
+            uncompressedSize: executable.length,
+            buffer: exeBuffer,
+          },
+          {
+            path: "renamed.js",
+            uncompressedSize: executable.length,
+            buffer: async () => executable,
+          },
+          {
+            path: "source.js",
+            uncompressedSize: 20,
+            buffer: async () => Buffer.from("console.log('hello')"),
+          },
+        ],
+      } as any);
+    try {
+      const result = await (createService() as any).extractArchiveContent(
+        Buffer.from("fixture"),
+        "submission.zip",
+        "zip",
+      );
+      expect(result.archiveListing).toContain("build/program.exe");
+      expect(result.archiveListing).toContain("renamed.js");
+      expect(
+        result.archiveEntries.map((entry: { path: string }) => entry.path),
+      ).toEqual(["source.js"]);
+      expect(result.text).not.toContain("SECRET_BINARY_STRINGS");
+      expect(exeBuffer).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not salvage strings from an unknown binary format", async () => {
+    const bytes = Buffer.concat([
+      Buffer.alloc(32),
+      Buffer.from("SECRET_BINARY_STRINGS"),
+    ]);
+    const result = await (createService() as any).extractTextFromBuffer(
+      bytes,
+      "artifact.unknown",
+      "application/octet-stream",
+    );
+    expect(result.encoding).toBe("binary");
+    expect(result.text).toContain("artifact.unknown");
+    expect(result.text).not.toContain("SECRET_BINARY_STRINGS");
+  });
+});
+
+it("accepts a requested binary using storage metadata without downloading its contents", async () => {
+  const storage = {
+    getObjectMetadata: jest.fn().mockResolvedValue({ ContentLength: 4096 }),
+    getObject: jest.fn(),
+  };
+  const service = new FileContentExtractionService(
+    storage as any,
+    mockPdfExtractor,
+  );
+  const [result] = await service.extractContentFromFiles([
+    {
+      filename: "program.exe",
+      content: "InCos",
+      bucket: "test",
+      key: "program.exe",
+      fileType: "application/octet-stream",
+    },
+  ]);
+  expect(storage.getObjectMetadata).toHaveBeenCalledWith("test", "program.exe");
+  expect(storage.getObject).not.toHaveBeenCalled();
+  expect(result.error).toBeUndefined();
+  expect(result.metadata?.size).toBe(4096);
+  expect(result.content).toContain("artifact is present");
+});
+
+it("preserves a text Wavefront OBJ model rather than treating its extension as machine code", async () => {
+  const source = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+  const result = await (createService() as any).extractTextFromBuffer(
+    Buffer.from(source),
+    "triangle.obj",
+    "application/octet-stream",
+  );
+  expect(result.text).toBe(source);
+  expect(result.encoding).not.toBe("binary");
+});
+
+it("does not claim a binary is present from its filename alone", async () => {
+  const [result] = await createService().extractContentFromFiles([
+    {
+      filename: "program.exe",
+      content: "InCos",
+      fileType: "application/octet-stream",
+    },
+  ]);
+  expect(result.error).toContain("no uploaded content or storage reference");
 });

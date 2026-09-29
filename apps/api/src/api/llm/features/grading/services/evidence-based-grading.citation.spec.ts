@@ -66,3 +66,31 @@ describe("chunkToEvidenceCitation", () => {
     expect(citation.blockId).toBe("p3b1");
   });
 });
+
+describe("gradeOneCriterion provider errors", () => {
+  it.each([
+    Object.assign(new Error("AI disabled"), { status: 409 }),
+    Object.assign(new Error("Context too long"), {
+      code: "context_length_exceeded",
+    }),
+  ])("preserves the original error: %s", async (error) => {
+    const service = Object.create(EvidenceBasedGradingService.prototype);
+    service.logger = { debug: jest.fn(), error: jest.fn() };
+    service.buildSubmissionContext = jest.fn().mockReturnValue("submission");
+    service.extractValidatorReport = jest.fn();
+    service.applyValidatorOverride = jest.fn();
+    service.promptProcessor = {
+      processStructuredPromptForFeature: jest.fn().mockRejectedValue(error),
+    };
+
+    await expect(
+      service.gradeOneCriterion(
+        {},
+        { id: "c1", rubricQuestion: "Explain" },
+        "Question",
+        42,
+        "en",
+      ),
+    ).rejects.toBe(error);
+  });
+});

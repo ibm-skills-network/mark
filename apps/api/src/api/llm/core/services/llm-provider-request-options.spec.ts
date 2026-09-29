@@ -6,6 +6,7 @@ import {
   Gpt56SolLlmService,
   Gpt56TerraLlmService,
 } from "./gpt56-llm.service";
+import { Gpt6LunaLlmService } from "./gpt6-luna-llm.service";
 import { Gpt5LlmService } from "./gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./gpt5-nano-llm.service";
@@ -29,6 +30,7 @@ const PROVIDERS = [
   ["Gpt4VisionPreviewLlmService", Gpt4VisionPreviewLlmService],
   ["OpenAiLlmMiniService", OpenAiLlmMiniService],
   ["Gpt54MiniLlmService", Gpt54MiniLlmService],
+  ["Gpt6LunaLlmService", Gpt6LunaLlmService],
   ["Gpt56LunaLlmService", Gpt56LunaLlmService],
   ["Gpt56TerraLlmService", Gpt56TerraLlmService],
   ["Gpt56SolLlmService", Gpt56SolLlmService],
@@ -99,6 +101,7 @@ describe.each(PROVIDERS)("%s request options", (_name, Provider) => {
 // GPT-5.6 reasons at `medium` unless told otherwise, and a slug copy-paste
 // slip between the three would grade at the wrong price tier.
 const GPT56_PROVIDERS = [
+  ["Gpt6LunaLlmService", Gpt6LunaLlmService, "gpt-6-luna"],
   ["Gpt56LunaLlmService", Gpt56LunaLlmService, "gpt-5.6-luna"],
   ["Gpt56TerraLlmService", Gpt56TerraLlmService, "gpt-5.6-terra"],
   ["Gpt56SolLlmService", Gpt56SolLlmService, "gpt-5.6-sol"],
@@ -134,9 +137,9 @@ describe.each(GPT56_PROVIDERS)("%s", (_name, Provider, expectedSlug) => {
   });
 });
 
-it("gives the three GPT-5.6 variants distinct provider keys", () => {
+it("gives the Luna 6 and GPT-5.6 variants distinct provider keys", () => {
   const keys = GPT56_PROVIDERS.map(([, , slug]) => slug);
-  expect(new Set(keys).size).toBe(3);
+  expect(new Set(keys).size).toBe(4);
 });
 
 describe("GPT-5.6 token usage", () => {

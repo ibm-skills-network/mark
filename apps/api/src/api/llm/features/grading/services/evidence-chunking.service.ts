@@ -292,30 +292,50 @@ export class EvidenceChunkingService {
     const normalized = text || "";
     if (!normalized.trim()) return [];
 
-    const paragraphs = this.splitIntoParagraphs(normalized);
+    // Typed answers (including rich-text HTML and pasted code) are complete
+    // submissions, not 220-character prose fragments. Keep bounded sections
+    // covering the whole input, with offsets into the original text.
     const chunks: ExtractedChunk[] = [];
     let cursor = 0;
-
-    for (const paragraph of paragraphs) {
-      const trimmed = paragraph.trim();
-      if (!trimmed) continue;
-
-      const startOffset = this.findOffset(normalized, trimmed, cursor);
-      const endOffset = startOffset + trimmed.length;
+    for (const section of this.splitOversizedText(normalized)
+      .map((piece) => piece.trim())
+      .filter(Boolean)) {
+      const startOffset = this.findOffset(normalized, section, cursor);
+      const endOffset = startOffset + section.length;
       cursor = endOffset;
-
-      const anchor: EvidenceAnchor = {
-        type: "text",
-        startOffset,
-        endOffset,
-      };
-
       chunks.push(
         this.createChunk({
-          text: trimmed,
+          text: section,
           sourceType: "text",
           sourceId,
-          anchor,
+          anchor: { type: "text", startOffset, endOffset },
+          metadata: { section: true },
+        }),
+      );
+    }
+
+    // Preserve cross-section reasoning/code context, as for uploaded files.
+    // Large submissions still retain ALL sections; only this additional
+    // overview is bounded, and its truncation is explicitly marked.
+    if (chunks.length > 1) {
+      const cap = DOC_WHOLE_SUBMISSION_BLOCK_MAX_CHARS;
+      const marker =
+        "\n[Overview truncated; remaining content is in separate sections.]";
+      const truncated = normalized.length > cap;
+      const overview = truncated
+        ? normalized.slice(0, cap - marker.length) + marker
+        : normalized;
+      chunks.push(
+        this.createChunk({
+          text: overview,
+          sourceType: "text",
+          sourceId,
+          anchor: {
+            type: "text",
+            startOffset: 0,
+            endOffset: truncated ? cap - marker.length : normalized.length,
+          },
+          metadata: { pinned: true, wholeText: true, truncated },
         }),
       );
     }

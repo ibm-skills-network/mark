@@ -144,4 +144,47 @@ describe("LearnerLayout attempt resolution", () => {
     expect(element.type).toBe(ErrorModal);
     expect(element.props.headline).not.toBe("No more attempts available");
   });
+
+  // The server accepts attempt creation from authors, and AttemptLoader
+  // renders learner-only content — so an author who fell through to the
+  // learner flow got a silently blank page and a stray attempt. The role
+  // must be rejected up front instead.
+  it("shows the author modal before touching attempts when an author lacks authorMode", async () => {
+    getUserMock.mockResolvedValue({ role: "author" });
+
+    const element = await LearnerLayout(props);
+
+    expect(element.type).toBe(ErrorModal);
+    expect(element.props.statusCode).toBe(403);
+    expect(element.props.error).toMatch(
+      /can't take the assignment as an author/,
+    );
+    expect(getAttemptsMock).not.toHaveBeenCalled();
+    expect(createAttemptMock).not.toHaveBeenCalled();
+  });
+});
+
+it("carries learner context through a server-rendered refresh and resumes the attempt", async () => {
+  getUserMock.mockResolvedValue({ role: "learner" });
+  getAttemptsMock.mockResolvedValue([inProgressAttempt(456)]);
+  const element = await LearnerLayout(props);
+  expect(getUserMock).toHaveBeenLastCalledWith("", {
+    assignmentId: 123,
+    role: "learner",
+  });
+  expect(getAttemptsMock).toHaveBeenLastCalledWith(123, "", {
+    throwOnAuthError: true,
+    learnerContext: true,
+  });
+  expect(element.props.children.props.attemptId).toBe(456);
+  expect(element.props.children.props.isNewAttempt).toBe(false);
+});
+
+it("explicit author previews request author context during server rendering", async () => {
+  getUserMock.mockResolvedValue({ role: "author" });
+  await LearnerLayout({ ...props, searchParams: { authorMode: "true" } });
+  expect(getUserMock).toHaveBeenLastCalledWith("", {
+    assignmentId: 123,
+    role: "author",
+  });
 });

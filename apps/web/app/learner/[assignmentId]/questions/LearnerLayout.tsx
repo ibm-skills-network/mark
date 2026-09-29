@@ -131,7 +131,10 @@ async function LearnerLayout(props: Props) {
 
   let user = null;
   try {
-    user = await getUser(cookieHeader);
+    user = await getUser(cookieHeader, {
+      assignmentId,
+      role: authorMode === "true" ? "author" : "learner",
+    });
     log("User fetched", `Role: ${user?.role ?? "unknown"}`);
   } catch (error) {
     const status = statusFromError(error);
@@ -139,7 +142,7 @@ async function LearnerLayout(props: Props) {
       "User fetch failed",
       status === 401 ? "Unauthorized" : `Status ${status}`,
     );
-    return <ErrorScreen status={status} />;
+    return <ErrorScreen status={status} error={error} />;
   }
 
   const role = user?.role;
@@ -148,17 +151,34 @@ async function LearnerLayout(props: Props) {
     return <ClientLearnerLayout assignmentId={assignmentId} role={role} />;
   }
 
+  // Authors must not fall through to the learner flow: the server accepts
+  // their attempt creation, but AttemptLoader renders learner-only content,
+  // which left authors on a silently blank page (and created stray attempts).
+  if (role === "author") {
+    log("Author attempt disallowed");
+    return (
+      <ErrorModal
+        error={
+          "You can't take the assignment as an author, please switch to learner mode or check learner side in the review page to try the assignment"
+        }
+        statusCode={403}
+        stateTimeline={stateTimeline}
+      />
+    );
+  }
+
   let listOfAttempts;
   try {
     listOfAttempts = await getAttempts(assignmentId, cookieHeader, {
       throwOnAuthError: true,
+      learnerContext: true,
     });
   } catch (error) {
     // An expired session or revoked access is the learner's situation, not a
     // server fault — route it to the matching screen instead of a 500 modal.
     const status = statusFromError(error);
     log("Attempts fetch unauthorized", `Status ${status}`);
-    return <ErrorScreen status={status} />;
+    return <ErrorScreen status={status} error={error} />;
   }
   if (!listOfAttempts) {
     log("Attempts fetch failed");
@@ -187,7 +207,9 @@ async function LearnerLayout(props: Props) {
       // The server just vouched an attempt is active, so when the client-clock
       // in-progress filter disagrees (clock skew), fall back to the latest
       // unsubmitted attempt rather than dead-ending.
-      const refreshedAttempts = await getAttempts(assignmentId, cookieHeader);
+      const refreshedAttempts = await getAttempts(assignmentId, cookieHeader, {
+        learnerContext: true,
+      });
       const resumableAttempt = refreshedAttempts
         ? (getLatestAttempt(refreshedAttempts.filter(isAttemptInProgress)) ??
           getLatestAttempt(
@@ -271,7 +293,7 @@ async function LearnerLayout(props: Props) {
     log(rejection.logStep);
     return (
       <ErrorModal
-        className="h-[calc(100vh-100px)]"
+        className="h-full"
         statusCode={rejection.statusCode}
         error={rejection.error}
         headline={rejection.headline}
@@ -320,7 +342,7 @@ async function AttemptLoader({
       { throwOnAuthError: true },
     );
   } catch (error) {
-    return <ErrorScreen status={statusFromError(error)} />;
+    return <ErrorScreen status={statusFromError(error)} error={error} />;
   }
   if (!attempt) {
     // Transient failures were already retried inside getAttempt and auth
@@ -334,10 +356,10 @@ async function AttemptLoader({
 
   return (
     role === "learner" && (
-      <main
-        id="exam-root"
-        className="flex flex-col h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] overflow-hidden"
-      >
+      // h-full, not viewport minus a hard-coded header height: the header is
+      // as tall as its content needs at the current width, and the pane it
+      // sits above is the one the route root sizes for it.
+      <main id="exam-root" className="flex flex-col h-full overflow-hidden">
         <QuestionPage
           attempt={attempt}
           assignmentId={assignmentId}

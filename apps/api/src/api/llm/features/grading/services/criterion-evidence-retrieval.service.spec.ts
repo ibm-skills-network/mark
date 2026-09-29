@@ -721,3 +721,46 @@ describe("CriterionEvidenceRetrievalService", () => {
     );
   });
 });
+
+it("preserves typed rich-text tail evidence through validation AND grader quotes", async () => {
+  const { EvidenceChunkingService } = await import(
+    "./evidence-chunking.service"
+  );
+  const text =
+    "<p>" + "Introduction ".repeat(50) + "</p><p>REQUIRED_TAIL_EVIDENCE</p>";
+  const chunks = new EvidenceChunkingService().extractFromText(text);
+  let rendered = "";
+  const service = new CriterionEvidenceRetrievalService(
+    {
+      processStructuredPrompt: async (prompt: any) => {
+        rendered = await prompt.format({});
+        return {
+          evidence: chunks.map((chunk) => ({
+            chunkId: chunk.chunkId,
+            relevance: "supports",
+          })),
+        };
+      },
+    } as any,
+    { getModelKeyWithFallback: async () => "gpt-6-luna" } as any,
+  );
+  const result = await service.retrieveEvidence(
+    {
+      criterion: {
+        id: "tail",
+        rubricQuestion: "Required tail evidence",
+        description: "Required tail evidence",
+        criteria: [
+          { points: 1, description: "Required tail evidence present" },
+        ],
+        maxPoints: 1,
+      },
+      question: "Show the evidence",
+      chunks,
+      assignmentId: 1,
+    },
+    new ChunkIndex(chunks),
+  );
+  expect(rendered).toContain("REQUIRED_TAIL_EVIDENCE");
+  expect(result.evidence.some((e) => e.quote === text)).toBe(true);
+});

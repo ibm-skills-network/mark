@@ -98,13 +98,13 @@ describe("GradingProgressService.markComplete", () => {
     );
   });
 
-  it("warns when it is reached before the attempt has been committed", async () => {
-    const warn = jest
+  it("logs an error when it is reached before the attempt has been committed", async () => {
+    const error = jest
       .spyOn(
         Reflect.get(service, "logger") as {
-          warn: (message: string) => void;
+          error: (message: string) => void;
         },
-        "warn",
+        "error",
       )
       .mockImplementation(() => undefined);
 
@@ -117,7 +117,7 @@ describe("GradingProgressService.markComplete", () => {
 
     await service.markComplete(77);
 
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       expect.stringContaining("grading.progress.completed.before.commit"),
     );
   });
@@ -127,5 +127,51 @@ describe("GradingProgressService.markComplete", () => {
 
     expect(mockPrisma.gradingProgress.update).not.toHaveBeenCalled();
     expect(mockPrisma.gradingProgress.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("GradingProgressService.markFailed", () => {
+  let service: GradingProgressService;
+
+  const mockPrisma = {
+    gradingProgress: {
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+    },
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        GradingProgressService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: AdminEmailService,
+          useValue: { sendGradingCompletionEmail: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    service = module.get<GradingProgressService>(GradingProgressService);
+    jest.clearAllMocks();
+    mockPrisma.gradingProgress.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("never downgrades a COMPLETED row to FAILED", async () => {
+    // A duplicate submit throws ConflictException after the first submit has
+    // already graded the attempt; the catch path calls markFailed and used to
+    // overwrite the COMPLETED row, showing "Grading Failed" on a graded attempt.
+    await service.markFailed(77, "Attempt 77 has already been submitted.");
+
+    expect(mockPrisma.gradingProgress.update).not.toHaveBeenCalled();
+    expect(mockPrisma.gradingProgress.updateMany).toHaveBeenCalledWith({
+      where: { attemptId: 77, status: { not: GradingStatus.COMPLETED } },
+      data: expect.objectContaining({
+        status: GradingStatus.FAILED,
+        error: "Attempt 77 has already been submitted.",
+      }),
+    });
   });
 });

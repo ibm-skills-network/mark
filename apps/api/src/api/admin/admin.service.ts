@@ -26,13 +26,22 @@ import {
   InitiateAssignmentFilesResponseDto,
 } from "../assignment/v2/dtos/assignment-file-upload.dto";
 import {
+  ASSIGNMENT_META_SELECT,
+  ASSIGNMENT_NAME_SELECT,
+  resolveAssignmentMeta,
+  resolveAssignmentName,
+} from "../assignment/v2/repositories/assignment.repository";
+import {
   AssignmentFileResponse,
   AssignmentFileService,
 } from "../assignment/v2/services/assignment-file.service";
 import { AssignmentServiceV2 } from "../assignment/v2/services/assignment.service";
 import { JobStatusServiceV2 } from "../assignment/v2/services/job-status.service";
 import { QuestionService } from "../assignment/v2/services/question.service";
-import { LLMPricingService } from "../llm/core/services/llm-pricing.service";
+import {
+  LLMPricingService,
+  type PricingLookupCache,
+} from "../llm/core/services/llm-pricing.service";
 import { toAiUsageCounterNumber } from "../llm/core/utils/ai-usage-counter.util";
 import { LLM_PRICING_SERVICE } from "../llm/llm.constants";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
@@ -424,7 +433,17 @@ export class AdminService {
     }
   }
 
-  /** Sums usage per model, usage type, pricing status, and day. Pricing already resolves per (model, day), so this matches summing each call. Raw SQL because Prisma cannot group on a truncated date. */
+  /**
+   * Sums usage per model, usage type, pricing status, and day. Raw SQL because
+   * Prisma cannot group on a truncated date.
+   *
+   * Approximation: a model with threshold ("long context") rates is priced off
+   * the summed input tokens for the day, not per call, so a day of many small
+   * calls that together cross the threshold is priced as if one large call had.
+   * Pricing per call would mean reading one row per provider invocation, which
+   * is what this rollup exists to avoid. Callers that need exact per-call cost
+   * should read AIUsageEvent directly.
+   */
   private async rollUpUsageForCost(
     filters: {
       assignmentIds?: number[];
@@ -519,6 +538,8 @@ export class AdminService {
    */
   private async calculateHistoricalCosts(
     aiUsageRecords: HistoricalAIUsageRecord[],
+    /** Share one cache across every cost chain in a request — see createPricingCache. */
+    pricingCache?: PricingLookupCache,
   ): Promise<{
     totalCost: number;
     exactCost: number;
@@ -606,6 +627,7 @@ export class AdminService {
           usageDate: n.usage.createdAt,
           usageType: n.usage.usageType,
         })),
+      pricingCache,
     );
 
     let pricedIndex = 0;
@@ -1148,17 +1170,32 @@ export class AdminService {
   async getAssignment(id: number): Promise<AdminGetAssignmentResponseDto> {
     const result = await this.prisma.assignment.findUnique({
       where: { id },
+      include: {
+        currentVersion: {
+          select: ASSIGNMENT_NAME_SELECT.currentVersion.select,
+        },
+        versions: ASSIGNMENT_NAME_SELECT.versions,
+      },
     });
 
     if (!result) {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
+
+    // The version rows are here only to resolve the live name; keep them out of
+    // `metadata`, which callers read as the assignment row.
+    const {
+      currentVersion: _currentVersion,
+      versions: _versions,
+      ...metadata
+    } = result;
+
     return {
       id: result.id,
       success: true,
-      name: result.name,
+      name: resolveAssignmentName(result) ?? "",
       type: result.type,
-      metadata: result,
+      metadata,
     };
   }
 
@@ -1367,7 +1404,7 @@ export class AdminService {
         take: limit,
         select: {
           id: true,
-          name: true,
+          ...ASSIGNMENT_NAME_SELECT,
           published: true,
           updatedAt: true,
         },
@@ -1500,6 +1537,12 @@ export class AdminService {
     const aiUsageByAssignment =
       await this.rollUpUsageByAssignment(assignmentIds);
 
+    // One cache for every assignment's cost chain below. Pricing lookups are
+    // uncached database reads, and these assignments overwhelmingly share the
+    // same (model, day) pairs, so per-chain caches would re-resolve each pair
+    // once per assignment.
+    const pricingCache = this.llmPricingService.createPricingCache();
+
     // Cost calculation does per-row pricing lookups, so running every
     // assignment's cost chain at once would hold one pool connection per
     // assignment and could starve the pool. Bound how many run concurrently —
@@ -1518,7 +1561,10 @@ export class AdminService {
 
         const aiUsageDetails = aiUsageByAssignment.get(assignment.id) || [];
 
-        const costData = await this.calculateHistoricalCosts(aiUsageDetails);
+        const costData = await this.calculateHistoricalCosts(
+          aiUsageDetails,
+          pricingCache,
+        );
         const totalCost = costData.totalCost;
 
         const performanceInsights: string[] = [];
@@ -1555,7 +1601,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalCost,
           uniqueLearners,
           totalAttempts,
@@ -1656,10 +1702,17 @@ export class AdminService {
       assignmentWhere.id = filters.assignmentId;
     }
     if (filters?.assignmentName) {
-      assignmentWhere.name = {
+      // Match either side of the split: the listings below render the active
+      // version's name, so filtering on the base row alone finds nothing for
+      // any assignment renamed after versioning came in.
+      const nameMatch = {
         contains: filters.assignmentName,
-        mode: "insensitive",
+        mode: "insensitive" as const,
       };
+      assignmentWhere.OR = [
+        { name: nameMatch },
+        { versions: { some: { isActive: true, name: nameMatch } } },
+      ];
     }
 
     const dateFilter: any = {};
@@ -1917,10 +1970,10 @@ export class AdminService {
       ];
       const assignments = await this.prisma.assignment.findMany({
         where: { id: { in: uniqueAssignmentIds } },
-        select: { id: true, name: true },
+        select: { id: true, ...ASSIGNMENT_NAME_SELECT },
       });
       for (const assignment of assignments) {
-        assignmentNames.set(assignment.id, assignment.name);
+        assignmentNames.set(assignment.id, resolveAssignmentName(assignment));
       }
     }
 
@@ -1987,6 +2040,10 @@ export class AdminService {
               }),
         },
         include: {
+          currentVersion: {
+            select: ASSIGNMENT_META_SELECT.currentVersion.select,
+          },
+          versions: ASSIGNMENT_META_SELECT.versions,
           questions: {
             where: { isDeleted: false },
             include: {
@@ -2266,14 +2323,18 @@ export class AdminService {
         }
       }
 
+      // The live text, not the base row's: publishing writes these to the
+      // active version only.
+      const assignmentText = resolveAssignmentMeta(assignment);
+
       const insights = {
         assignment: {
           id: assignment.id,
-          name: assignment.name,
+          name: assignmentText.name,
           type: assignment.type,
           published: assignment.published,
-          introduction: assignment.introduction,
-          instructions: assignment.instructions,
+          introduction: assignmentText.introduction,
+          instructions: assignmentText.instructions,
           timeEstimateMinutes: assignment.timeEstimateMinutes,
           allotedTimeMinutes: assignment.allotedTimeMinutes,
           passingGrade: assignment.passingGrade,
@@ -2505,7 +2566,7 @@ export class AdminService {
 
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id },
-      select: { id: true, name: true, type: true },
+      select: { id: true, ...ASSIGNMENT_NAME_SELECT, type: true },
     });
 
     if (!assignmentExists) {
@@ -2524,7 +2585,7 @@ export class AdminService {
     return {
       id: id,
       success: true,
-      name: assignmentExists.name || "",
+      name: resolveAssignmentName(assignmentExists) || "",
       type: assignmentExists.type || "AI_GRADED",
     };
   }
@@ -2695,6 +2756,17 @@ export class AdminService {
       return;
     }
 
+    // The base row is the live text here: addContentToAssignment has just
+    // written the imported name/introduction/instructions/grading criteria to
+    // it, and no version carries them yet. Resolving through the active version
+    // would republish the pre-import text and throw the import away.
+    const assignmentText = {
+      name: assignment.name,
+      introduction: assignment.introduction,
+      instructions: assignment.instructions,
+      gradingCriteriaOverview: assignment.gradingCriteriaOverview,
+    };
+
     const questions = assignment.questions.map((question) =>
       this.mapQuestionToDto(question),
     );
@@ -2704,11 +2776,11 @@ export class AdminService {
         : questions.map((q) => q.id);
 
     const publishPayload: UpdateAssignmentQuestionsDto = {
-      name: assignment.name,
+      name: assignmentText.name,
       questions,
-      introduction: assignment.introduction ?? null,
-      instructions: assignment.instructions ?? null,
-      gradingCriteriaOverview: assignment.gradingCriteriaOverview ?? null,
+      introduction: assignmentText.introduction ?? null,
+      instructions: assignmentText.instructions ?? null,
+      gradingCriteriaOverview: assignmentText.gradingCriteriaOverview ?? null,
       timeEstimateMinutes: assignment.timeEstimateMinutes ?? null,
       graded: assignment.graded ?? false,
       numAttempts: assignment.numAttempts ?? null,
@@ -2868,7 +2940,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: {
@@ -2881,11 +2953,13 @@ export class AdminService {
     const usageByAssignment = await this.rollUpUsageByAssignment(
       assignments.map((a) => a.id),
     );
+    const pricingCache = this.llmPricingService.createPricingCache();
 
     const assignmentsWithCost = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
           usageByAssignment.get(assignment.id) ?? [],
+          pricingCache,
         );
 
         const attemptCount = await this.prisma.assignmentAttempt.count({
@@ -2894,7 +2968,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalCost: costData.totalCost,
           costBreakdown: costData.costBreakdown,
           attempts: attemptCount,
@@ -2921,7 +2995,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -2949,7 +3023,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalAttempts: attempts.length,
           submittedAttempts,
           uniqueUsers: new Set(attempts.map((a) => a.userId)).size,
@@ -2977,7 +3051,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -3002,7 +3076,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           uniqueLearners,
           completedLearners,
           totalAttempts: attempts.length,
@@ -3038,7 +3112,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         Report: {
@@ -3070,7 +3144,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalReports: assignment.Report.length,
           openReports,
           recentReports,
@@ -3098,7 +3172,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: {
@@ -3139,7 +3213,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           averageRating,
           averageAiRating,
           totalRatings: ratings.length,
@@ -3197,7 +3271,7 @@ export class AdminService {
       },
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -3232,7 +3306,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           recentAttempts: recentAttempts.length,
           uniqueRecentUsers,
           recentCompletions,
@@ -3257,7 +3331,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
       },
@@ -3267,11 +3341,13 @@ export class AdminService {
     const usageByAssignment = await this.rollUpUsageByAssignment(
       assignments.map((a) => a.id),
     );
+    const pricingCache = this.llmPricingService.createPricingCache();
 
     const assignmentsWithCostPerLearner = await Promise.all(
       assignments.map(async (assignment) => {
         const costData = await this.calculateHistoricalCosts(
           usageByAssignment.get(assignment.id) ?? [],
+          pricingCache,
         );
 
         const attempts = await this.prisma.assignmentAttempt.findMany({
@@ -3288,7 +3364,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           totalCost: costData.totalCost,
           uniqueLearners,
           costPerLearner,
@@ -3313,7 +3389,7 @@ export class AdminService {
       where: assignmentWhere,
       select: {
         id: true,
-        name: true,
+        ...ASSIGNMENT_NAME_SELECT,
         published: true,
         updatedAt: true,
         AssignmentFeedback: { select: { id: true } },
@@ -3340,7 +3416,7 @@ export class AdminService {
 
         return {
           id: assignment.id,
-          name: assignment.name,
+          name: resolveAssignmentName(assignment),
           uniqueUsers,
           completedUsers,
           totalAttempts: attempts.length,

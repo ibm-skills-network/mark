@@ -30,6 +30,8 @@ import {
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { countAnsweredResponses } from "src/api/assignment/attempt/helper/blank-submission.helper";
+import { readServerClock } from "src/api/assignment/attempt/helper/server-clock.helper";
 import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
@@ -52,7 +54,7 @@ import {
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
-import { GithubRateLimitedError } from "../../llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
 import {
   AssignmentAttemptWithRelations,
@@ -133,10 +135,10 @@ export class AttemptSubmissionService {
       if (error instanceof LearnerFacingGradingError) {
         throw new BadRequestException(error.learnerMessage);
       }
-      // A rate-limited GitHub fetch is a temporary system fault, not a
-      // problem with the learner's submission — surface it as a retryable
-      // 503 instead of letting it fall through to a generic 500.
-      if (error instanceof GithubRateLimitedError) {
+      // A rate-limited or timed-out URL fetch is a temporary system fault,
+      // not a problem with the learner's submission — surface it as a
+      // retryable 503 instead of letting it fall through to a generic 500.
+      if (error instanceof RetryableUrlFetchError) {
         throw new ServiceUnavailableException(
           "Temporarily unable to fetch the submitted URL's content. Please try again shortly.",
         );
@@ -188,6 +190,7 @@ export class AttemptSubmissionService {
       return {
         id: existingAttempt.id,
         success: true,
+        serverNow: readServerClock(),
       };
     }
 
@@ -249,6 +252,7 @@ export class AttemptSubmissionService {
           return {
             id: concurrentAttempt.id,
             success: true,
+            serverNow: readServerClock(),
           };
         }
 
@@ -473,6 +477,7 @@ export class AttemptSubmissionService {
     return {
       id: assignmentAttempt.id,
       success: true,
+      serverNow: readServerClock(),
     };
   }
 
@@ -869,6 +874,7 @@ export class AttemptSubmissionService {
 
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       grade: displayGrade,
       questions: finalQuestions,
       totalPossiblePoints,
@@ -1004,6 +1010,7 @@ export class AttemptSubmissionService {
       await this.translationService.getTranslationsForAttempt(
         assignmentAttempt,
         questionsForTranslation,
+        normalizedLanguage,
       );
 
     const formattedAttempt: AssignmentAttemptWithRelations = {
@@ -1077,6 +1084,7 @@ export class AttemptSubmissionService {
     // success page. Pass/fail belongs to the completed and submit responses.
     return {
       ...assignmentAttempt,
+      serverNow: readServerClock(),
       // The spread carries the persisted grade, which must not reach a learner
       // whose assignment hides the score.
       grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
@@ -1099,9 +1107,9 @@ export class AttemptSubmissionService {
    * Uses a 3-phase grading flow:
    *   Phase 1+2 — gradeQuestionsForLearner: load question DTOs (short tx) + LLM grading (no tx)
    *   Grade computation + validation (in-memory)
-   *   LTI callback (external, before DB commit)
    *   Phase 3 — commitAttemptWithResponses: write QuestionResponse records and
    *              AssignmentAttempt.grade atomically in a single short transaction
+   *   LTI callback (external, strictly after the DB commit)
    */
   private async updateLearnerAttempt(
     attemptId: number,
@@ -1167,6 +1175,18 @@ export class AttemptSubmissionService {
       if (
         this.validationService.isAttemptExpired(assignmentAttempt.expiresAt)
       ) {
+        // A submission that arrives past the deadline carrying nothing the
+        // learner typed is the signature of a client-side timer firing on a
+        // clock it should not have trusted. Record it so the pattern is
+        // visible without changing what happens to the attempt.
+        if (countAnsweredResponses(updateDto.responsesForQuestions) === 0) {
+          this.logger.warn(
+            `updateLearnerAttempt: expired attempt submitted without any answers ` +
+              `attempt=${attemptId} assignment=${assignmentId} ` +
+              `user=${request.userSession.userId} ` +
+              `responses=${updateDto.responsesForQuestions?.length ?? 0}`,
+          );
+        }
         const expiredResult = await this.handleExpiredAttempt(attemptId);
         return expiredResult;
       }
@@ -1344,21 +1364,8 @@ export class AttemptSubmissionService {
         );
       }
 
-      if (gradingCallbackRequired) {
-        if (progressCallback) {
-          await progressCallback("Sending grade to LTI...", 95);
-        }
-        await this.handleLtiGradeCallback(
-          attemptId,
-          grade,
-          authCookie,
-          assignmentId,
-          request.userSession.userId,
-        );
-      }
-
       if (progressCallback) {
-        await progressCallback("Finalizing results...", 98);
+        await progressCallback("Finalizing results...", 95);
       }
 
       // ── Phase 3: Atomic write (QuestionResponse records + AssignmentAttempt.grade) ──
@@ -1370,11 +1377,30 @@ export class AttemptSubmissionService {
           updateDto,
         );
 
+      // LTI delivery strictly AFTER the commit: a grade must never reach the
+      // LMS for a submission that did not durably persist — a failed commit
+      // throws above and the callback never sees the grade. The reverse risk
+      // does not exist: sendGradeToLtiGateway never throws (sync failures go
+      // to its own retry queue), so a delivery hiccup cannot fail an
+      // already-committed attempt.
+      if (gradingCallbackRequired) {
+        if (progressCallback) {
+          await progressCallback("Sending grade to LTI...", 98);
+        }
+        await this.handleLtiGradeCallback(
+          attemptId,
+          grade,
+          authCookie,
+          assignmentId,
+          request.userSession.userId,
+        );
+      }
+
       // Only now is the grade readable, so only now may the progress row say
-      // COMPLETED. Everything above — grade computation, the external LTI
-      // callback, the commit transaction itself — used to run after the row
-      // had already been flipped, which let a client see "done" and then read
-      // an unsubmitted, ungraded attempt.
+      // COMPLETED. Everything above — grade computation, the commit
+      // transaction itself — used to run after the row had already been
+      // flipped, which let a client see "done" and then read an unsubmitted,
+      // ungraded attempt.
       await this.questionResponseService.markGradingComplete(attemptId);
 
       await this.pruneAutoSavedResponses(
@@ -2205,13 +2231,18 @@ export class AttemptSubmissionService {
     return value as T;
   }
   /**
-   * Get normalized language code
+   * Normalize the language code a client asked for.
+   *
+   * The region is kept. Stored translations are keyed by the code the
+   * translation catalogue uses, and three of those codes carry a region
+   * (`uk-UA`, `zh-CN`, `zh-TW`); cutting at the hyphen made every one of them
+   * unmatchable, so Ukrainian and both Chinese variants were served the
+   * authored English even when their translation existed. Widening the code to
+   * its family is the job of whatever selects rows to read, not of the code
+   * used to pick one.
    */
   private getNormalizedLanguage(language?: string): string {
-    if (!language) {
-      return "en";
-    }
-    return language.toLowerCase().split("-")[0];
+    return language?.trim().toLowerCase() || "en";
   }
 
   /**

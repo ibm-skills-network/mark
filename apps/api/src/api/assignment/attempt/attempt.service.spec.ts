@@ -775,6 +775,58 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       expect(question.choices[0].feedback).toBeUndefined();
       expect(question.answer).toBeUndefined();
     });
+
+    // The response used to embed every language's translation of every
+    // question. With images inlined in question HTML that multiplied each
+    // image by the language count (assignment 2532 shipped ~4MB attempts,
+    // overflowing the client's localStorage quota). Only the requested
+    // language family may be fetched.
+    it("fetches translations only for the requested language family", async () => {
+      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue({
+        ...baseAttempt,
+        questionOrder: [7],
+        questionVariants: [
+          { questionId: 7, questionVariant: null, randomizedChoices: null },
+        ],
+      });
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        questions: [
+          {
+            id: 7,
+            assignmentId: 42,
+            question: "Pick one",
+            type: "SINGLE_CORRECT",
+            totalPoints: 1,
+            choices: [{ choice: "A", isCorrect: true, points: 1 }],
+          },
+        ],
+      });
+      mockPrismaService.translation.findMany.mockResolvedValue([
+        {
+          questionId: 7,
+          variantId: null,
+          languageCode: "zh-CN",
+          translatedText: "选一个",
+          translatedChoices: [{ choice: "甲" }],
+        },
+      ]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignmentAttempt(555, "zh-CN");
+
+      expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            languageCode: { startsWith: "zh" },
+          }),
+        }),
+      );
+      const [question] = result.questions;
+      expect(question.translations["zh-CN"]).toEqual(
+        expect.objectContaining({ translatedText: "选一个" }),
+      );
+    });
   });
 
   describe("getLearnerAssignmentAttempt - correct answer visibility", () => {
@@ -973,5 +1025,149 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
 
       fetchSpy.mockRestore();
     });
+  });
+});
+
+describe("AttemptServiceV1 - server clock and blank expired submissions", () => {
+  let service: AttemptServiceV1;
+
+  const warn = jest.fn();
+  const childLogger = {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn,
+    debug: jest.fn(),
+  };
+
+  const mockPrismaService = {
+    assignmentAttempt: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
+    },
+    assignmentAttemptQuestionVariant: {
+      createMany: jest.fn(),
+    },
+    assignment: { findUnique: jest.fn() },
+    question: { findMany: jest.fn(), findUnique: jest.fn() },
+    questionResponse: { findMany: jest.fn(), create: jest.fn() },
+    translation: { findMany: jest.fn() },
+    ltiGradeSync: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+  };
+
+  const mockAssignmentService = { findOne: jest.fn() };
+  const mockGradingKillSwitch = {
+    assertGradingAllowed: jest.fn(),
+    assignmentUsesAiGrading: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AttemptServiceV1,
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: HttpService, useValue: { put: jest.fn() } },
+        { provide: LlmFacadeService, useValue: {} },
+        { provide: QuestionService, useValue: {} },
+        { provide: AssignmentServiceV1, useValue: mockAssignmentService },
+        {
+          provide: LtiGradeSyncService,
+          useValue: { createAndSync: jest.fn() },
+        },
+        { provide: GradingKillSwitchService, useValue: mockGradingKillSwitch },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: { child: jest.fn().mockReturnValue(childLogger) },
+        },
+      ],
+    }).compile();
+
+    service = module.get<AttemptServiceV1>(AttemptServiceV1);
+    jest.clearAllMocks();
+  });
+
+  it("returns the server clock with a newly created attempt", async () => {
+    mockAssignmentService.findOne.mockResolvedValue({
+      id: 3663,
+      numAttempts: -1,
+      allotedTimeMinutes: 20,
+      questionOrder: [],
+      displayOrder: "DEFINED",
+      numberOfQuestionsPerAttempt: null,
+    });
+    mockGradingKillSwitch.assertGradingAllowed.mockResolvedValue(undefined);
+    mockPrismaService.assignmentAttempt.findMany.mockResolvedValue([]);
+    mockPrismaService.assignmentAttempt.create.mockResolvedValue({ id: 2493 });
+    mockPrismaService.assignmentAttempt.update.mockResolvedValue({});
+    mockPrismaService.question.findMany.mockResolvedValue([]);
+    mockPrismaService.assignmentAttemptQuestionVariant.createMany.mockResolvedValue(
+      { count: 0 },
+    );
+
+    const before = Date.now();
+    const result = await service.createAssignmentAttempt(3663, {
+      userId: "learner@example.com",
+      role: UserRole.LEARNER,
+    } as any);
+    const after = Date.now();
+
+    expect(result.id).toBe(2493);
+    expect(typeof result.serverNow).toBe("string");
+    const parsed = Date.parse(result.serverNow as string);
+    expect(parsed).toBeGreaterThanOrEqual(before);
+    expect(parsed).toBeLessThanOrEqual(after);
+  });
+
+  it("warns with the attempt, learner and assignment when an expired attempt is submitted with nothing answered", async () => {
+    mockGradingKillSwitch.assertGradingAllowed.mockResolvedValue(undefined);
+    mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 777,
+      userId: "learner@example.com",
+      assignmentId: 3663,
+      submitted: false,
+      expiresAt: new Date(Date.now() - 60_000),
+      questionVariants: [],
+    });
+    mockPrismaService.questionResponse.findMany.mockResolvedValue([]);
+    mockPrismaService.question.findMany.mockResolvedValue([]);
+    mockPrismaService.assignmentAttempt.update.mockResolvedValue({});
+
+    const result = await service.updateAssignmentAttempt(
+      777,
+      3663,
+      {
+        submitted: true,
+        responsesForQuestions: [
+          {
+            id: 1,
+            learnerTextResponse: "",
+            learnerChoices: [],
+            learnerFileResponse: [],
+          },
+          { id: 2, learnerTextResponse: "<p><br></p>" },
+        ],
+      } as any,
+      "cookie",
+      false,
+      {
+        userSession: { userId: "learner@example.com", role: UserRole.LEARNER },
+      } as any,
+    );
+
+    const warning = warn.mock.calls
+      .map((call) => JSON.stringify(call))
+      .join(" ");
+    expect(warning).toContain("777");
+    expect(warning).toContain("learner@example.com");
+    expect(warning).toContain("3663");
+
+    // Submission semantics unchanged: the expired attempt is still closed out.
+    expect(result).toMatchObject({ id: 777, submitted: true, success: true });
   });
 });

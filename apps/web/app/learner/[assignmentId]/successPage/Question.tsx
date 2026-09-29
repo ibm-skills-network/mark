@@ -18,8 +18,14 @@ import {
   HighlightLevel,
 } from "@/config/types";
 import {
+  consumeGithubAuthorizationCode,
+  describeGithubAuthFailure,
+  exchangeGithubAuthorizationCode,
+  isGithubExchangeInFlight,
+  wasGithubAuthorizationConsumed,
+} from "@/lib/github-oauth";
+import {
   AuthorizeGithubBackend,
-  exchangeGithubCodeForToken,
   getStoredGithubToken,
 } from "@/lib/talkToBackend";
 import { parseLearnerResponse } from "@/lib/utils";
@@ -29,7 +35,7 @@ import {
 } from "@/stores/learner";
 import { CheckIcon, SparklesIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Octokit } from "@octokit/rest";
-import { FC, useEffect, useMemo, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import ShowHideRubric from "../../(components)/Question/ShowHideRubric";
 import FilePreview from "@/components/FileExplorer/FilePreview";
@@ -157,6 +163,9 @@ const Question: FC<Props> = ({
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [token, setToken] = useState<string | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  // Latched for the life of the mount, not reset on re-render: the GitHub
+  // bootstrap below must run at most once per question.
+  const githubBootstrapStarted = useRef(false);
 
   const scoring: Scoring | undefined =
     typeof question.scoring === "string"
@@ -172,8 +181,6 @@ const Question: FC<Props> = ({
       return true;
     else return false;
   };
-
-  const urlParams = new URLSearchParams(window.location.search);
 
   const convertToEnhancedFileObjects = (
     files: LearnerFileResponse[],
@@ -396,28 +403,41 @@ const Question: FC<Props> = ({
 
   useEffect(() => {
     const initialize = async () => {
-      if (token) return;
+      // One bootstrap per mount. This page renders a component per question,
+      // so without the latch a page with several GitHub answers runs several
+      // handoffs at once and they cancel each other.
+      if (token || githubBootstrapStarted.current) return;
+      githubBootstrapStarted.current = true;
 
-      const code = urlParams.get("code");
+      // Reads what GitHub sent back once and clears it from the address bar
+      // whatever the outcome, so a failed exchange cannot be replayed on the
+      // next render and a refusal is not carried into the next redirect.
+      const pending = consumeGithubAuthorizationCode();
 
-      if (code) {
-        const returnedToken = await exchangeGithubCodeForToken(code);
-        if (returnedToken && (await validateToken(returnedToken))) {
-          setToken(returnedToken);
-          setOctokit(new Octokit({ auth: returnedToken }));
+      if (pending?.denial) {
+        toast.warning(describeGithubAuthFailure(pending.denial).message);
+        return;
+      }
 
-          const newUrl = window.location.href.replace(
-            window.location.search,
-            "",
+      if (pending?.code) {
+        const result = await exchangeGithubAuthorizationCode(
+          pending.code,
+          pending.state,
+        );
+        if (result.failure || !result.token) {
+          toast.warning(
+            describeGithubAuthFailure(result.failure ?? "unknown").message,
           );
-          window.history.replaceState({}, document.title, newUrl);
+          return;
+        }
+        if (await validateToken(result.token)) {
+          setToken(result.token);
+          setOctokit(new Octokit({ auth: result.token }));
           toast.success(
             "Github token has been authenticated successfully. You can now view files.",
           );
         } else {
-          toast.warning(
-            "Looks like there was an issue with the authentication. Please try to check your github file again.",
-          );
+          toast.warning(describeGithubAuthFailure("token_rejected").message);
         }
         return;
       }
@@ -426,9 +446,18 @@ const Question: FC<Props> = ({
       if (backendToken && (await validateToken(backendToken))) {
         setToken(backendToken);
         setOctokit(new Octokit({ auth: backendToken }));
-      } else {
-        void authenticateUser();
+        return;
       }
+
+      // Another question on this page already owns the trip to github.com, or
+      // is still exchanging its code. Redirecting now would navigate the whole
+      // page away and cancel that exchange, which is how one stray redirect
+      // became a loop.
+      if (wasGithubAuthorizationConsumed() || isGithubExchangeInFlight()) {
+        return;
+      }
+
+      void authenticateUser();
     };
 
     if (questionResponses) {
@@ -448,7 +477,7 @@ const Question: FC<Props> = ({
         }
       }
     }
-  }, [token, urlParams, questionResponses]);
+  }, [token, questionResponses]);
 
   const validateToken = async (testToken: string): Promise<boolean> => {
     const testOctokit = new Octokit({ auth: testToken });
@@ -485,10 +514,7 @@ const Question: FC<Props> = ({
       setToken(backendToken);
       setOctokit(new Octokit({ auth: backendToken }));
     } else {
-      if (urlParams.get("code")) {
-        const newUrl = window.location.href.replace(window.location.search, "");
-        window.history.replaceState({}, document.title, newUrl);
-      }
+      consumeGithubAuthorizationCode();
       void authenticateUser();
     }
   };

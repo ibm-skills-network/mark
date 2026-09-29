@@ -1,7 +1,9 @@
+import { authorSessionHeaders } from "./author-session";
 /* eslint-disable */
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import { apiClient, APIError } from "./api-client";
+import { withTransientRetry } from "./api-retry";
 import {
   DIRECT_UPLOAD_FALLBACK_MAX_BYTES,
   failureKindOf,
@@ -1603,6 +1605,57 @@ export async function getAdminReports(
   return (await apiClient.get(url, { headers })) as ReportsResponse;
 }
 
+export interface AdminReportDiagnostics {
+  reportId: number;
+  capturedAt: string;
+  diagnostics: {
+    session?: Record<string, string | number | undefined>;
+    page?: Record<string, string | number | boolean | undefined>;
+    draft?: {
+      activeAttemptId?: number | null;
+      questions: {
+        id: number;
+        status?: string;
+        selected?: string[];
+        textLength?: number;
+      }[];
+    };
+    rendered?: {
+      questionId: number;
+      type?: string;
+      choices: { text: string; selected: boolean }[];
+    }[];
+    requests?: {
+      method: string;
+      path: string;
+      status: number | null;
+      ms?: number;
+      requestId?: string;
+      at?: string;
+    }[];
+  };
+}
+
+/**
+ * What the reporter's browser held when a report was filed. Admin only: the
+ * API rejects the call without a valid admin token. Resolves null when the
+ * report has no capture (older reports, or collection failed in the browser).
+ */
+export async function getAdminReportDiagnostics(
+  reportId: number,
+  adminToken: string,
+): Promise<AdminReportDiagnostics | null> {
+  try {
+    return (await apiClient.get(
+      `${getBaseApiPath("v1")}/reports/${reportId}/diagnostics`,
+      { headers: { "x-admin-token": adminToken }, quiet: true },
+    )) as AdminReportDiagnostics;
+  } catch (error) {
+    if (error instanceof APIError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 /**
  * Get assignment analytics data with detailed insights
  */
@@ -2007,15 +2060,25 @@ export async function removePriceUpscaling(
 
 const V1_USER_ROUTE = absoluteUrl("/api/v1/user-session");
 
-export async function getUser(cookies?: string): Promise<User | undefined> {
+export async function getUser(
+  cookies?: string,
+  context?: { assignmentId: number; role: "author" | "learner" },
+): Promise<User | undefined> {
   const res = await fetch(V1_USER_ROUTE, {
+    cache: "no-store",
     headers: {
+      ...authorSessionHeaders(false),
+      ...(context
+        ? {
+            [`x-mark-${context.role}-assignment`]: String(context.assignmentId),
+          }
+        : {}),
       ...(cookies ? { Cookie: cookies } : {}),
     },
   });
 
   if (res.status === 401) {
-    throw new Error("Unauthorized");
+    throw new APIError("Sign in to continue", 401, "Unauthorized");
   }
 
   if (!res.ok) {
@@ -2038,17 +2101,31 @@ export async function getAssignment(
   id: number,
   userPreferedLanguage?: string,
   cookies?: string,
+  options?: {
+    /**
+     * Suppresses the default error toast. Only for callers that render the
+     * failure themselves — without it a hard failure is silent.
+     */
+    quiet?: boolean;
+  },
 ): Promise<Assignment> {
   const url = userPreferedLanguage
     ? `${getApiRoutes().assignments}/${id}?lang=${userPreferedLanguage}`
     : `${getApiRoutes().assignments}/${id}`;
 
-  const responseBody = (await apiClient.get(url, {
-    headers: {
-      "Cache-Control": "no-cache",
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  })) as GetAssignmentResponse & BaseBackendResponse;
+  // The assignment is the one fetch the learner's About page cannot render
+  // without, so a single dropped socket used to go straight to an error
+  // dialog. Retried once like every other learner fetch (getAttempt,
+  // getAttempts).
+  const responseBody = (await withTransientRetry(() =>
+    apiClient.get(url, {
+      quiet: options?.quiet ?? false,
+      headers: {
+        "Cache-Control": "no-cache",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    }),
+  )) as GetAssignmentResponse & BaseBackendResponse;
 
   const { success: _success, ...remainingData } = responseBody;
 

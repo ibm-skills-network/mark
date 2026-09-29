@@ -398,6 +398,18 @@ export function AssignmentInsightsContent({
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(amount ?? 0);
+  };
+
+  // Per-call costs run to fractions of a cent, so the audit rows need more
+  // precision than headline totals — which would read as $12.34567891 at this
+  // width.
+  const formatPreciseCurrency = (amount: number | undefined | null) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
       maximumFractionDigits: 8,
     }).format(amount ?? 0);
   };
@@ -1854,7 +1866,7 @@ export function AssignmentInsightsContent({
                           <TableCell className="text-center font-mono font-semibold text-green-600 dark:text-green-400">
                             {usage.pricingStatus === "unpriced"
                               ? "Unpriced"
-                              : formatCurrency(usage.totalCost)}
+                              : formatPreciseCurrency(usage.totalCost)}
                           </TableCell>
                           {showDetailedUsage && (
                             <>
@@ -1868,13 +1880,13 @@ export function AssignmentInsightsContent({
                                 {usage.tokensOut.toLocaleString()}
                               </TableCell>
                               <TableCell className="text-center font-mono text-blue-600 dark:text-blue-400">
-                                {formatCurrency(usage.inputCost)}
+                                {formatPreciseCurrency(usage.inputCost)}
                               </TableCell>
                               <TableCell className="text-center font-mono text-cyan-600 dark:text-cyan-400">
-                                {formatCurrency(usage.cachedInputCost)}
+                                {formatPreciseCurrency(usage.cachedInputCost)}
                               </TableCell>
                               <TableCell className="text-center font-mono text-purple-600 dark:text-purple-400">
-                                {formatCurrency(usage.outputCost)}
+                                {formatPreciseCurrency(usage.outputCost)}
                               </TableCell>
                               <TableCell>
                                 <div className="space-y-1">
@@ -1910,7 +1922,7 @@ export function AssignmentInsightsContent({
                               </Badge>
                             </div>
                             <span className="font-semibold text-green-600 dark:text-green-400">
-                              {formatCurrency(usage.totalCost)}
+                              {formatPreciseCurrency(usage.totalCost)}
                             </span>
                           </div>
                           <div className="font-mono text-sm space-y-1 text-slate-700 dark:text-slate-300">

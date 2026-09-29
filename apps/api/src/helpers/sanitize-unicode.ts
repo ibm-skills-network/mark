@@ -1,14 +1,23 @@
 /**
- * Replace unpaired UTF-16 surrogates with U+FFFD.
+ * Replace unpaired UTF-16 surrogates with U+FFFD and delete NUL characters.
  *
  * Postgres' JSON parser rejects lone surrogates ("lone leading surrogate in
  * hex escape"), but `JSON.stringify` happily preserves them. LLM output that
- * truncates mid-codepoint is a common source. Walk the value and scrub strings
- * before handing them to a `Json` column.
+ * truncates mid-codepoint is a common source. NUL (U+0000) is rejected by
+ * both TEXT and jsonb ("unsupported Unicode escape sequence", SqlState 22P05);
+ * file extraction of binary-ish uploads is a common source. Walk the value and
+ * scrub strings before handing them to a `Json` column.
+ *
+ * Scrub the RAW value, not its `JSON.stringify` output: stringify escapes NUL
+ * to the six-character sequence `\u0000`, which this scrubber would no longer
+ * see but jsonb still rejects.
  */
 
 const LONE_SURROGATE_RE =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+// eslint-disable-next-line no-control-regex -- NUL is exactly the character being scrubbed
+const NUL_RE = /\u0000/g;
 
 export interface SanitizeResult<T> {
   value: T;
@@ -20,12 +29,21 @@ export function sanitizeUnicodeForJson<T>(input: T): SanitizeResult<T> {
 
   const walk = (value: unknown): unknown => {
     if (typeof value === "string") {
-      if (!LONE_SURROGATE_RE.test(value)) return value;
-      LONE_SURROGATE_RE.lastIndex = 0;
-      const cleaned = value.replaceAll(LONE_SURROGATE_RE, () => {
-        replaced += 1;
-        return "�";
-      });
+      let cleaned = value;
+      if (LONE_SURROGATE_RE.test(cleaned)) {
+        LONE_SURROGATE_RE.lastIndex = 0;
+        cleaned = cleaned.replaceAll(LONE_SURROGATE_RE, () => {
+          replaced += 1;
+          return "�";
+        });
+      }
+      if (NUL_RE.test(cleaned)) {
+        NUL_RE.lastIndex = 0;
+        cleaned = cleaned.replaceAll(NUL_RE, () => {
+          replaced += 1;
+          return "";
+        });
+      }
       return cleaned;
     }
     if (Array.isArray(value)) {

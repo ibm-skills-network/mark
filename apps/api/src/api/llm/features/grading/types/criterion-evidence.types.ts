@@ -71,6 +71,10 @@ export interface ExtractedChunk {
      * Learner-facing citations strip its marker header lines.
      */
     wholeDocument?: boolean;
+    /** Bounded overview of a typed/pasted submission. */
+    wholeText?: boolean;
+    /** Only the overview is incomplete; separate sections retain the rest. */
+    truncated?: boolean;
     /**
      * How many leading chars of the chunk's text belong to the ANCHORED
      * block. Learner-facing citation quotes and highlight searches must stay
@@ -215,7 +219,7 @@ export function getDeterministicGradingOptions(modelKey: string) {
   // Original GPT-5-family reasoning models reject sampling controls. Keep
   // admin-selected GPT-5 providers usable without pretending they are seeded
   // or temperature-controlled.
-  if (modelKey.startsWith("gpt-5")) {
+  if (modelKey.startsWith("gpt-5") || modelKey === "gpt-6-luna") {
     return { maxRetries: 1 };
   }
 

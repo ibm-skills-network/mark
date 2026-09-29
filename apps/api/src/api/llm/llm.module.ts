@@ -1,5 +1,6 @@
 import { Global, Module } from "@nestjs/common";
 import { S3Service } from "../files/services/s3.service";
+import { Gpt6LunaLlmService } from "./core/services/gpt6-luna-llm.service";
 import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
 import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
 import { Gpt5NanoLlmService } from "./core/services/gpt5-nano-llm.service";
@@ -100,6 +101,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     Gpt56LunaLlmService,
     Gpt56TerraLlmService,
     Gpt56SolLlmService,
+    Gpt6LunaLlmService,
     GptOss120bLlmService,
     Granite4HSmallLlmService,
     GraniteVision322bLlmService,
@@ -128,6 +130,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
         p15: Gpt56LunaLlmService,
         p16: Gpt56TerraLlmService,
         p17: Gpt56SolLlmService,
+        p18: Gpt6LunaLlmService,
       ) => {
         return [
           p1,
@@ -147,6 +150,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
           p15,
           p16,
           p17,
+          p18,
         ];
       },
       inject: [
@@ -167,6 +171,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
         Gpt56LunaLlmService,
         Gpt56TerraLlmService,
         Gpt56SolLlmService,
+        Gpt6LunaLlmService,
       ],
     },
     S3Service,

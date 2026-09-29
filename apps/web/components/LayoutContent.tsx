@@ -14,6 +14,7 @@ import {
   type ApiServerErrorDetail,
 } from "@/lib/api-events";
 import { getAiStatus } from "@/lib/ai-status";
+import { installRequestLog } from "@/lib/request-log";
 
 export default function LayoutContent({ children }: { children: ReactNode }) {
   const { isOpen } = useChatbot();
@@ -26,6 +27,10 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
   const hideMarkChat =
     (pathname?.startsWith("/admin") ?? false) || chatDisabled;
   const [apiError, setApiError] = useState<ApiServerErrorDetail | null>(null);
+
+  // Bug reports carry how this tab's recent API calls ended; the recorder
+  // keeps no bodies and lives only in memory.
+  useEffect(() => installRequestLog(), []);
 
   useEffect(() => {
     let cancelled = false;
