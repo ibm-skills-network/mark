@@ -38,17 +38,20 @@ const RichTextViewer: FC<RichTextViewerProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
 
+  // Preparing needs a DOM, so nothing is prepared until mount: the server pass
+  // and the first client paint render empty, and the content is committed on
+  // the client. Rendering the server-side fallback instead would leave a
+  // hydration mismatch React cannot repair for raw HTML.
   const html = useMemo(
     () =>
-      prepareStoredHtml(
-        children === null || children === undefined ? "" : String(children),
-      ),
-    [children],
+      isMounted
+        ? prepareStoredHtml(
+            children === null || children === undefined ? "" : String(children),
+          )
+        : "",
+    [children, isMounted],
   );
 
-  // Sanitizing needs a DOM, so the first paint stays empty and the content is
-  // committed on the client. Rendering the server-side fallback instead would
-  // leave a hydration mismatch React cannot repair for raw HTML.
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -84,7 +87,7 @@ const RichTextViewer: FC<RichTextViewerProps> = ({
         ref={contentRef}
         className={cn("rich-text-content", !allowCopy && "select-none")}
         suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: isMounted ? html : "" }}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
   );

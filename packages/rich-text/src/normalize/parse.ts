@@ -1,24 +1,18 @@
 import type { ParseFragment } from "./types";
 
-const CONTAINER_ID = "rich-text-normalize-root";
-
 /**
  * Fragment parser backed by the browser's own `DOMParser`.
  *
- * The fragment is wrapped in an identifiable container because parsing a bare
- * fragment as a document moves stray content around (a `<td>` with no table,
- * for instance), and because the container gives every rule one root to walk.
+ * The input is parsed as a fragment inside a container `<div>`, which gives
+ * every rule one root to walk. It is assigned through `innerHTML` rather than
+ * spliced into a document string, so a stray `</div>` in the content cannot
+ * close the container and drop everything after it. The owning document comes
+ * from `DOMParser`, so it is inert: nothing parsed into it runs or loads.
  */
 export const browserParseFragment: ParseFragment = (html) => {
-  const document_ = new DOMParser().parseFromString(
-    `<div id="${CONTAINER_ID}">${html}</div>`,
-    "text/html",
-  );
-
-  const root = document_.getElementById(CONTAINER_ID);
-  if (!root) {
-    throw new Error("rich-text: fragment container missing after parse");
-  }
+  const document_ = new DOMParser().parseFromString("", "text/html");
+  const root = document_.createElement("div");
+  root.innerHTML = html;
   return root;
 };
 

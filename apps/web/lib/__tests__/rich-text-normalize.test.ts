@@ -24,6 +24,15 @@ describe("normalizeQuillHtml in a browser", () => {
     );
   });
 
+  // A stray closing tag must not end the parse root early and drop the rest.
+  it("keeps content after a stray closing div", () => {
+    const { html } = normalizeQuillHtml(
+      '<ol><li data-list="bullet">Alpha</li></ol></div><p>tail</p>',
+    );
+
+    expect(html).toBe("<ul><li>Alpha</li></ul><p>tail</p>");
+  });
+
   it("leaves content the current editor already produces untouched", () => {
     const source = "<p>Hello</p><ul><li>Alpha</li></ul>";
     const result = normalizeQuillHtml(source);

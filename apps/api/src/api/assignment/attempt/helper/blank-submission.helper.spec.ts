@@ -33,6 +33,16 @@ describe("isAnsweredResponse", () => {
     );
   });
 
+  it("treats an emptied paragraph that kept its attributes as unanswered", () => {
+    for (const learnerTextResponse of [
+      '<p dir="rtl"></p>',
+      '<p style="text-align: center"></p>',
+      '<p class="ql-align-center"><br></p>',
+    ]) {
+      expect(isAnsweredResponse(response({ learnerTextResponse }))).toBe(false);
+    }
+  });
+
   it("counts typed text", () => {
     expect(
       isAnsweredResponse(response({ learnerTextResponse: "<p>hello</p>" })),

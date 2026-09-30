@@ -193,6 +193,17 @@ describe("idempotency", () => {
   });
 });
 
+describe("parsing", () => {
+  // A stray closing tag must not end the parse root early and drop the rest.
+  it("keeps content after a stray closing div", () => {
+    const { html } = run(
+      '<ol><li data-list="bullet">Alpha</li></ol></div><p>tail</p>',
+    );
+
+    expect(html).toBe("<ul><li>Alpha</li></ul><p>tail</p>");
+  });
+});
+
 describe("empty input", () => {
   it.each([null, undefined, "", "   "])("handles %p", (value) => {
     const result = run(value as string);
