@@ -3,9 +3,21 @@
  *
  * Mark is launched over LTI from a host site — a Skills Network portal
  * (cognitiveclass.ai, blitzacademy.skillsnetwork.site, ...) or a content
- * platform (Coursera, edX). The launch JWT does not carry the portal, so the
- * only identity available is the `returnUrl` claim (LTI
- * `launch_presentation_return_url`, the "Return to Course" link).
+ * platform (Coursera, edX). The launch JWT carries no portal claim, so the
+ * host is inferred from two claims, in order:
+ *
+ * 1. `returnUrl` (LTI `launch_presentation_return_url`, the "Return to
+ *    Course" link) — a real page on the portal, so it also gives portalUrl.
+ * 2. `outcomeServiceUrl` (LTI `lis_outcome_service_url`) — where grades post
+ *    back. Only its host is used: it is a callback endpoint, not a page, and
+ *    for Coursera it is an API host (api.coursera.org) that no learner would
+ *    recognize as a link.
+ *
+ * The second exists because the first is absent for most real traffic: Open
+ * edX portals send `launch_presentation_return_url` empty and Coursera omits
+ * it, which together are the large majority of launches. Without the fallback
+ * those sessions have no portal at all and their support tickets cannot be
+ * routed.
  *
  * This module is the single place Mark decides what "the portal" is. If the
  * lti-gateway later adds a portal claim, this is the only file that changes.
@@ -55,29 +67,41 @@ export function platformLabelForHost(host: string): string | undefined {
  * where a bad claim must not fail the request.
  */
 export function derivePortalContext(
-  session?: { returnUrl?: string } | null,
+  session?: { returnUrl?: string; outcomeServiceUrl?: string } | null,
 ): PortalContext {
-  const returnUrl = session?.returnUrl?.trim();
-  if (!returnUrl) return {};
-
-  let url: URL;
-  try {
-    url = new URL(returnUrl);
-  } catch {
-    return {};
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return {};
+  const fromReturnUrl = parseHttpUrl(session?.returnUrl);
+  // Only the host is taken from the callback endpoint; portalUrl stays unset
+  // rather than pointing a human at a grade-posting API.
+  const url = fromReturnUrl ?? parseHttpUrl(session?.outcomeServiceUrl);
+  if (!url) return {};
 
   const portalHost = url.hostname.toLowerCase().replace(/^www\./, "");
   if (!portalHost) return {};
 
   const portalName = platformLabelForHost(portalHost) ?? portalHost;
-  const portalUrl = url.origin;
+  const portalUrl = fromReturnUrl ? url.origin : undefined;
 
   return {
     portalHost,
     portalName:
       portalName.length <= PORTAL_NAME_MAX_CHARS ? portalName : undefined,
-    portalUrl: portalUrl.length <= PORTAL_URL_MAX_CHARS ? portalUrl : undefined,
+    portalUrl:
+      portalUrl && portalUrl.length <= PORTAL_URL_MAX_CHARS
+        ? portalUrl
+        : undefined,
   };
+}
+
+function parseHttpUrl(value?: string): URL | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return;
+  }
+  return url.protocol === "http:" || url.protocol === "https:"
+    ? url
+    : undefined;
 }
