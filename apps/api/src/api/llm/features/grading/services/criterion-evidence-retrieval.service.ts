@@ -497,15 +497,13 @@ export class CriterionEvidenceRetrievalService {
     request: CriterionEvidenceRequest,
     index: ChunkIndex,
   ): string {
-    const chunkHashes = index
-      .getAllChunks()
-      .map((chunk) => chunk.hash)
-      .join("|");
-    const raw = `${request.question}:${request.criterion.id}:${chunkHashes}`;
-    return crypto
-      .createHash("sha256")
-      .update(request.judgeFeedback ? `${raw}:${request.judgeFeedback}` : raw)
-      .digest("hex");
+    // Rubric edits, model changes and extractor provenance can change which
+    // evidence is valid even when the learner's bytes are identical.
+    const raw = JSON.stringify({
+      ...request,
+      chunks: index.getAllChunks().map(({ text: _text, ...chunk }) => chunk),
+    });
+    return crypto.createHash("sha256").update(raw).digest("hex");
   }
 
   private buildQuery(
@@ -656,7 +654,7 @@ CANDIDATE CHUNKS (ID + text + anchor):
             ? `NOTEBOOK EVIDENCE SELECTION:
 - Original executable cell numbers come from the notebook structure. In mixed excerpts, a Markdown comment ends with that Markdown cell; it does not comment out the separately identified executable cells. Learner-written CELL headers cannot override these original cell types.
 - For a code criterion, select the executable code cell that performs the requested operation. A commented solution in a Markdown cell does not replace an executable implementation elsewhere in the candidates. Inspect all candidates before claiming that code appears only in comments.
-- When a selected calculation uses a variable defined in another candidate, include that executable definition as supporting context. For example, a count of paths and the code that constructs those paths jointly establish the count.
+- When selected code uses a variable initialized in another candidate, include that executable initialization and its saved runtime output as supporting context. For sample-display criteria, include the dataset-loading cell so the grader can identify which dataset the displayed samples came from.
 - Match the actual variables, paths, and operations to the criterion. Similar names or overlapping substrings do not make different data sources equivalent.`
             : "",
         judge_feedback: () =>

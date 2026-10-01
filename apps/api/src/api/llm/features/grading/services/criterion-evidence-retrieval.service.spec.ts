@@ -177,6 +177,63 @@ describe("CriterionEvidenceRetrievalService", () => {
     ]);
   });
 
+  it("invalidates selections after rubric or source provenance changes while reusing identical requests", async () => {
+    const chunks = [makeChunk("count", "Count agricultural images: 3000")];
+    const processor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "count", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      processor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const criterion: RubricCriterion = {
+      id: "count",
+      rubricQuestion: "Count agricultural images",
+      description: "Count agricultural images",
+      criteria: [{ description: "Correct count", points: 2 }],
+      maxPoints: 2,
+    };
+    const request = {
+      criterion,
+      question: "Count agricultural images",
+      chunks,
+      assignmentId: 1,
+    };
+    const index = new ChunkIndex(chunks);
+    await service.retrieveEvidence(request, index);
+    await service.retrieveEvidence(request, index);
+    expect(processor.processStructuredPrompt).toHaveBeenCalledTimes(1);
+    await service.retrieveEvidence(
+      {
+        ...request,
+        criterion: { ...criterion, description: "Count only training images" },
+      },
+      index,
+    );
+    await service.retrieveEvidence(
+      { ...request, modelOverride: "gpt-6-luna" },
+      index,
+    );
+    const moved = [
+      {
+        ...chunks[0],
+        sourceId: "different-file",
+        anchor: { type: "file" as const, page: 2 },
+      },
+    ];
+    const result = await service.retrieveEvidence(
+      { ...request, chunks: moved },
+      new ChunkIndex(moved),
+    );
+    expect(processor.processStructuredPrompt).toHaveBeenCalledTimes(4);
+    expect(result.evidence[0].sourceId).toBe("different-file");
+    expect(result.evidence[0].anchor).toEqual({ type: "file", page: 2 });
+  });
+
   it("revalidates evidence when an audit requests a recheck instead of serving the old selection from memory", async () => {
     const chunks = [makeChunk("count", "Count images: 3000")];
     const service = makeService(

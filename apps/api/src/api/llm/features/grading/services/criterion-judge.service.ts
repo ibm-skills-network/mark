@@ -1,4 +1,4 @@
-import { NOTEBOOK_OUTPUT_SCORING_RULES } from "./notebook-evidence.rules";
+import { notebookOutputScoringRules } from "./notebook-evidence.rules";
 import { Injectable, Inject } from "@nestjs/common";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -141,7 +141,10 @@ EVIDENCE SUMMARY:
           request.evidence.some((item) =>
             item.evidence.some((entry) => entry.notebookRenderedOutput),
           )
-            ? NOTEBOOK_OUTPUT_SCORING_RULES
+            ? notebookOutputScoringRules(
+                request.evidence.flatMap((item) => item.evidence),
+                request.criteria,
+              )
             : "",
         outputs: () =>
           request.grades

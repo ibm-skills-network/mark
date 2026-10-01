@@ -15,7 +15,7 @@ import {
   getDeterministicGradingOptions,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
-import { NOTEBOOK_OUTPUT_SCORING_RULES } from "./notebook-evidence.rules";
+import { notebookOutputScoringRules } from "./notebook-evidence.rules";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
 /**
@@ -163,7 +163,7 @@ JUDGE FEEDBACK (if any):
         question: () => request.question,
         notebook_output_rules: () =>
           request.evidence.some((item) => item.notebookRenderedOutput)
-            ? NOTEBOOK_OUTPUT_SCORING_RULES
+            ? notebookOutputScoringRules(request.evidence, [request.criterion])
             : "",
         criterion: () => this.formatCriterion(request.criterion),
         allowed_points: () => allowedPoints.join(", "),
