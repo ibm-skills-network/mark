@@ -321,7 +321,7 @@ describe("TextGradingService grading cache identity", () => {
         "rubric-hash",
         "answer-hash",
         42,
-        "gpt-5.6-luna@rollout-42",
+        "gpt-5.6-luna@2026-09-22-complete-text-and-rubric:rollout-42",
       );
       expect(
         service.promptProcessor.processStructuredPromptForFeature,
@@ -593,4 +593,10 @@ describe("TextGradingService.gradeTextBasedQuestion moderation verdicts", () => 
       }),
     );
   });
+});
+
+it("does not silently discard typed evidence beyond 10,000 characters", () => {
+  const { service } = buildService();
+  const text = "Introduction. ".repeat(1000) + "REQUIRED_EVIDENCE_AT_END";
+  expect(service.sanitizeInput(text)).toBe(text);
 });

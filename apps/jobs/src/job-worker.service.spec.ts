@@ -6,6 +6,11 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { OversizedSubmissionError } from "../../api/src/api/llm/features/grading/errors/oversized-submission.error";
+import { RetryableUrlFetchError } from "../../api/src/api/llm/features/grading/errors/retryable-url-fetch.error";
+import {
+  ATTEMPT_RETRY_BACKOFF_TYPE,
+  RETRYABLE_FETCH_BASE_DELAY_MS,
+} from "../../api/src/job-queue/attempt-retry-backoff";
 import { UnsupportedImageFormatError } from "../../api/src/api/llm/features/grading/errors/unsupported-image-format.error";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
@@ -324,6 +329,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 2,
+        settings: { backoffStrategy: expect.any(Function) },
         lockDuration: 1_890_000,
         maxStalledCount: 0,
       },
@@ -335,6 +341,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 2,
+        settings: { backoffStrategy: expect.any(Function) },
         lockDuration: 1_890_000,
         maxStalledCount: 0,
       },
@@ -346,6 +353,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 8,
+        settings: { backoffStrategy: expect.any(Function) },
         lockDuration: 120_000,
         maxStalledCount: 0,
       },
@@ -357,6 +365,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 4,
+        settings: { backoffStrategy: expect.any(Function) },
         lockDuration: 600_000,
         maxStalledCount: 0,
       },
@@ -368,6 +377,7 @@ describe("JobWorkerService", () => {
       {
         connection: mockConnection,
         concurrency: 1,
+        settings: { backoffStrategy: expect.any(Function) },
         lockDuration: 600_000,
         maxStalledCount: 0,
       },
@@ -376,7 +386,11 @@ describe("JobWorkerService", () => {
       6,
       JOB_QUEUE_NAMES.ADMIN_TRANSLATION,
       expect.any(Function),
-      { connection: mockConnection, concurrency: 1 },
+      {
+        connection: mockConnection,
+        concurrency: 1,
+        settings: { backoffStrategy: expect.any(Function) },
+      },
     );
     expect(workerInstances).toHaveLength(6);
     // Most workers wire two listeners (completed + failed) via createWorker.
@@ -1805,6 +1819,87 @@ describe("JobWorkerService", () => {
       expect(Object.keys(heartbeatPayload.concurrencyByQueue)).toEqual([
         JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
       ]);
+    });
+  });
+
+  describe("retry pacing for transient URL fetch failures", () => {
+    // The strategy BullMQ consults is captured off the worker options rather
+    // than re-implemented here, so a rename or a dropped registration fails
+    // the suite instead of passing against a local copy.
+    type CapturedBackoffStrategy = (
+      attemptsMade: number,
+      backoffType?: string,
+      error?: Error,
+      job?: { id?: string },
+    ) => number;
+
+    const attemptBackoffStrategy = (): CapturedBackoffStrategy => {
+      const worker = workerInstances.find(
+        (instance) => instance.queueName === JOB_QUEUE_NAMES.ATTEMPT,
+      );
+      const options = worker?.options as
+        | { settings?: { backoffStrategy?: CapturedBackoffStrategy } }
+        | undefined;
+      const strategy = options?.settings?.backoffStrategy;
+      if (!strategy) {
+        throw new Error("attempt worker started without a backoff strategy");
+      }
+      return strategy;
+    };
+
+    it("registers a backoff strategy on every worker it starts", async () => {
+      await service.onModuleInit();
+
+      expect(workerInstances.length).toBeGreaterThan(0);
+      for (const worker of workerInstances) {
+        const options = worker.options as {
+          settings?: { backoffStrategy?: unknown };
+        };
+        expect(typeof options.settings?.backoffStrategy).toBe("function");
+      }
+    });
+
+    it("keeps every other failure on the immediate retry it had", async () => {
+      await service.onModuleInit();
+      const strategy = attemptBackoffStrategy();
+
+      expect(
+        strategy(1, ATTEMPT_RETRY_BACKOFF_TYPE, new Error("grading exploded"), {
+          id: "job-1",
+        }),
+      ).toBe(0);
+      expect(mockStructuredLogger.warn).not.toHaveBeenCalledWith(
+        "attempt.grade.retry.delayed",
+        expect.anything(),
+      );
+    });
+
+    it("spaces out retries after a transient URL fetch failure", async () => {
+      await service.onModuleInit();
+      const strategy = attemptBackoffStrategy();
+
+      const delay = strategy(
+        1,
+        ATTEMPT_RETRY_BACKOFF_TYPE,
+        new RetryableUrlFetchError({
+          requestUrl: "https://example.com/answer",
+          reason: "timeout",
+        }),
+        { id: "job-9" },
+      );
+
+      expect(delay).toBeGreaterThanOrEqual(RETRYABLE_FETCH_BASE_DELAY_MS / 2);
+      expect(delay).toBeLessThanOrEqual(RETRYABLE_FETCH_BASE_DELAY_MS);
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "attempt.grade.retry.delayed",
+        expect.objectContaining({
+          attemptsMade: 1,
+          delayMs: delay,
+          errorClass: "RetryableUrlFetchError",
+          jobId: "job-9",
+          queueName: JOB_QUEUE_NAMES.ATTEMPT,
+        }),
+      );
     });
   });
 });

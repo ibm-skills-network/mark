@@ -8,7 +8,10 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSessionRequest,
+} from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeForLog } from "../../../../logger/sanitize";
@@ -55,6 +58,21 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
         url: sanitizeForLog(originalUrl),
       });
       throw new ForbiddenException("Invalid assignment ID");
+    }
+
+    if (
+      userSession.role === UserRole.AUTHOR &&
+      userSession.assignmentId !== assignmentId
+    ) {
+      this.logger.warn(
+        "question_access_denied: author launch targets another assignment",
+        {
+          assignment_id: assignmentId,
+          session_assignment_id: userSession.assignmentId,
+          user_id: sanitizeForLog(userSession.userId),
+        },
+      );
+      throw new ForbiddenException("Access denied to this assignment");
     }
 
     let questionId: number | undefined;

@@ -1048,7 +1048,6 @@ export class TextGradingService implements ITextGradingService {
         /(?:^|\n)\s*(?:ignore|disregard|forget).*?(?:instruction|prompt|rule)/gi,
         "",
       )
-      .slice(0, 10_000)
       .trim();
   }
 

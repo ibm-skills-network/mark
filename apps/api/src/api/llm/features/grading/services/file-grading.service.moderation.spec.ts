@@ -17,8 +17,15 @@ function buildService(assessContent: jest.Mock) {
   service.logger = mockLogger();
   service.moderationService = { assessContent };
   service.promptProcessor = {
-    processPrompt: jest.fn(),
-    processPromptForFeature: jest.fn(),
+    processStructuredPrompt: jest.fn(),
+    processStructuredPromptForFeature: jest.fn().mockResolvedValue({
+      points: 5,
+      feedback: "ok",
+      analysis: "a",
+      evaluation: "e",
+      explanation: "x",
+      guidance: "g",
+    }),
   };
   return { service, mockLogger: service.logger };
 }
@@ -74,9 +81,11 @@ describe("FileGradingService moderation verdicts", () => {
 
     expect(result.points).toBe(0);
     expect(result.feedback).toContain("flagged by automated content review");
-    expect(service.promptProcessor.processPrompt).not.toHaveBeenCalled();
     expect(
-      service.promptProcessor.processPromptForFeature,
+      service.promptProcessor.processStructuredPrompt,
+    ).not.toHaveBeenCalled();
+    expect(
+      service.promptProcessor.processStructuredPromptForFeature,
     ).not.toHaveBeenCalled();
   });
 });

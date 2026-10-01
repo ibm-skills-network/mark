@@ -704,6 +704,12 @@ export type AssignmentAttempt = {
   expiresAt?: string | Date | null | Record<string, unknown>;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
+  /**
+   * The server's clock when it built this payload (ISO-8601). The learner UI
+   * subtracts its own clock from it once, then counts down a timed attempt
+   * against the corrected clock instead of the device's.
+   */
+  serverNow?: string;
   message?: string;
 };
 

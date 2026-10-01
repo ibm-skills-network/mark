@@ -1,5 +1,7 @@
 import { toast } from "sonner";
 import { getBaseApiPath } from "@/config/constants";
+import { getClientContext } from "@/lib/client-context";
+import { collectReportDiagnostics } from "@/lib/report-diagnostics";
 import type { User } from "@/config/types";
 
 export interface BugReportSubmission {
@@ -19,9 +21,9 @@ export interface BugReportSubmission {
  */
 export async function submitBugReport(
   value: BugReportSubmission,
-  options: { category: string; user?: User | null },
+  options: { category: string; user?: User | null; userRole?: string },
 ): Promise<boolean> {
-  const { category, user } = options;
+  const { category, user, userRole } = options;
 
   try {
     const formData = new FormData();
@@ -29,7 +31,7 @@ export async function submitBugReport(
     formData.append("description", value.description || "");
     formData.append("severity", value.severity || "info");
     formData.append("category", category);
-    formData.append("userRole", user?.role || "learner");
+    formData.append("userRole", userRole || user?.role || "learner");
 
     const resolvedEmail = value.userEmail || user?.userId;
     if (resolvedEmail) {
@@ -39,6 +41,26 @@ export async function submitBugReport(
     const assignmentId = value.assignmentId ?? user?.assignmentId;
     if (assignmentId) {
       formData.append("assignmentId", String(assignmentId));
+    }
+
+    // Support agents need the screen the reporter was on and what they were
+    // using; the portal itself is added server-side from the launch session.
+    const { pageUrl, browser } = getClientContext();
+    if (pageUrl) {
+      formData.append("pageUrl", pageUrl);
+    }
+    if (browser) {
+      formData.append("browser", browser);
+    }
+
+    // Browser state for triage, never shown to the reporter. It returns
+    // undefined rather than throwing, so a failed capture cannot block a report.
+    const diagnostics = collectReportDiagnostics({
+      role: userRole || user?.role,
+      assignmentId: assignmentId ? Number(assignmentId) : undefined,
+    });
+    if (diagnostics) {
+      formData.append("diagnostics", JSON.stringify(diagnostics));
     }
 
     if (value.screenshot) {
@@ -70,13 +92,28 @@ export async function submitBugReport(
   }
 }
 
+/**
+ * Whose failure a report describes. `client-network` means the request never
+ * reached our servers (a stalled or dropped connection), so triage should not
+ * read it as an outage — these used to arrive indistinguishable from real
+ * server faults because the client synthesised an HTTP status for them.
+ */
+export type ErrorFault = "server" | "client-network";
+
 export interface ErrorReportContext {
   statusCode: number;
+  /** Shown instead of `statusCode` when no HTTP response ever arrived. */
+  statusLabel?: string;
+  fault?: ErrorFault;
   headline: string;
   message?: string;
   context?: string;
   stateTimeline?: { step: string; detail?: string; timestamp?: string }[];
 }
+
+/** Report category for a failure that never reached our servers. */
+export const CLIENT_NETWORK_REPORT_CATEGORY =
+  "Error Dialog Report (client network)";
 
 /**
  * Prefills for the report form's fields, built from the error the user is
@@ -90,7 +127,10 @@ export function buildErrorReportPrefills(
 ): Record<string, string> {
   const pagePath = environment?.pagePath;
   const detailLines = [
-    `Status: ${error.statusCode} — ${error.headline}`,
+    `Status: ${error.statusLabel ?? error.statusCode} — ${error.headline}`,
+    error.fault === "client-network"
+      ? "Fault: client network — the request never reached Mark's servers"
+      : null,
     error.message && error.message !== error.headline
       ? `Message: ${error.message}`
       : null,

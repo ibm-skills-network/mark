@@ -1,10 +1,9 @@
-diff --git a/node_modules/@radix-ui/react-slot/dist/index.js b/node_modules/@radix-ui/react-slot/dist/index.js
-index 39b5893..bae7ab3 100644
---- a/node_modules/@radix-ui/react-slot/dist/index.js
-+++ b/node_modules/@radix-ui/react-slot/dist/index.js
-@@ -123,16 +123,10 @@ function mergeProps(slotProps, childProps) {
-   return { ...slotProps, ...overrideProps };
+diff --git a/node_modules/@radix-ui/react-presence/dist/index.js b/node_modules/@radix-ui/react-presence/dist/index.js
+--- a/node_modules/@radix-ui/react-presence/dist/index.js
++++ b/node_modules/@radix-ui/react-presence/dist/index.js
+@@ -205,17 +205,11 @@
  }
+ __name(getAnimationName, "getAnimationName");
  function getElementRef(element) {
 -  let getter = Object.getOwnPropertyDescriptor(element.props, "ref")?.get;
 -  let mayWarn = getter && "isReactWarning" in getter && getter.isReactWarning;
@@ -21,14 +20,14 @@ index 39b5893..bae7ab3 100644
 +  const elementRefDescriptor = Object.getOwnPropertyDescriptor(element, "ref");
 +  return elementRefDescriptor && "value" in elementRefDescriptor ? elementRefDescriptor.value : void 0;
  }
- //# sourceMappingURL=index.js.map
-diff --git a/node_modules/@radix-ui/react-slot/dist/index.mjs b/node_modules/@radix-ui/react-slot/dist/index.mjs
-index 510e77f..3bdb11f 100644
---- a/node_modules/@radix-ui/react-slot/dist/index.mjs
-+++ b/node_modules/@radix-ui/react-slot/dist/index.mjs
-@@ -83,17 +83,11 @@ function mergeProps(slotProps, childProps) {
-   return { ...slotProps, ...overrideProps };
+ __name(getElementRef, "getElementRef");
+ var Root = Presence;
+diff --git a/node_modules/@radix-ui/react-presence/dist/index.mjs b/node_modules/@radix-ui/react-presence/dist/index.mjs
+--- a/node_modules/@radix-ui/react-presence/dist/index.mjs
++++ b/node_modules/@radix-ui/react-presence/dist/index.mjs
+@@ -170,17 +170,11 @@
  }
+ __name(getAnimationName, "getAnimationName");
  function getElementRef(element) {
 -  let getter = Object.getOwnPropertyDescriptor(element.props, "ref")?.get;
 -  let mayWarn = getter && "isReactWarning" in getter && getter.isReactWarning;
@@ -45,5 +44,5 @@ index 510e77f..3bdb11f 100644
 +  const elementRefDescriptor = Object.getOwnPropertyDescriptor(element, "ref");
 +  return elementRefDescriptor && "value" in elementRefDescriptor ? elementRefDescriptor.value : void 0;
  }
- export {
-   Slot as Root,
+ __name(getElementRef, "getElementRef");
+ var Root = Presence;

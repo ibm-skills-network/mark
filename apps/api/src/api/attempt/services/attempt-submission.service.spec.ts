@@ -368,7 +368,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         userSession,
       );
 
-      expect(result).toEqual({ id: 55, success: true });
+      expect(result).toEqual({
+        id: 55,
+        success: true,
+        serverNow: expect.any(String),
+      });
       expect(mockPrisma.question.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
       expect(mockValidationService.validateNewAttempt).toHaveBeenCalledWith(
@@ -467,7 +471,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         userSession,
       );
 
-      expect(result).toEqual({ id: 55, success: true });
+      expect(result).toEqual({
+        id: 55,
+        success: true,
+        serverNow: expect.any(String),
+      });
       const [, orderedQuestions] = mockQuestionVariantService
         .createAttemptQuestionVariants.mock.calls[0] as [
         number,
@@ -595,7 +603,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         userSession,
       );
 
-      expect(result).toEqual({ id: 77, success: true });
+      expect(result).toEqual({
+        id: 77,
+        success: true,
+        serverNow: expect.any(String),
+      });
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
       expect(mockTx.assignmentAttempt.create).not.toHaveBeenCalled();
@@ -613,7 +625,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         userSession,
       );
 
-      expect(result).toEqual({ id: 77, success: true });
+      expect(result).toEqual({
+        id: 77,
+        success: true,
+        serverNow: expect.any(String),
+      });
       expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
       expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
       expect(mockTx.assignmentAttempt.create).not.toHaveBeenCalled();
@@ -630,7 +646,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         userSession,
       );
 
-      expect(result).toEqual({ id: 55, success: true });
+      expect(result).toEqual({
+        id: 55,
+        success: true,
+        serverNow: expect.any(String),
+      });
 
       const [lockSql, lockKey] = mockTx.$executeRaw.mock.calls[0] as [
         readonly string[],
@@ -1248,6 +1268,41 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       buildSpy.mockRestore();
     });
 
+    it("serves a region-coded language its own translation instead of the authored English", async () => {
+      const removeSensitiveSpy = jest
+        .spyOn(service as never, "removeSensitiveData")
+        .mockImplementation(() => undefined);
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map([
+          [
+            "question-101",
+            {
+              en: { translatedText: "Question 101", translatedChoices: [] },
+              "zh-CN": { translatedText: "问题一零一", translatedChoices: [] },
+              "zh-TW": { translatedText: "問題一零一", translatedChoices: [] },
+            },
+          ],
+          [
+            "question-202",
+            {
+              en: { translatedText: "Question 202", translatedChoices: [] },
+              "zh-CN": { translatedText: "问题二零二", translatedChoices: [] },
+              "zh-TW": { translatedText: "問題二零二", translatedChoices: [] },
+            },
+          ],
+        ]),
+      );
+
+      const result = await service.getAssignmentAttempt(71, "zh-CN");
+
+      expect(result.questions?.map((question) => question.question)).toEqual([
+        "问题一零一",
+        "问题二零二",
+      ]);
+
+      removeSensitiveSpy.mockRestore();
+    });
+
     it("uses cached questions for translation-aware attempt reads", async () => {
       const translationMap = new Map();
       mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
@@ -1270,6 +1325,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         assignmentVersionId: 12,
         questionVersions: [],
       });
+      // The requested language has to reach the translation read: without it
+      // the attempt response carries every language of every question.
       expect(
         mockTranslationService.getTranslationsForAttempt,
       ).toHaveBeenCalledWith(
@@ -1278,6 +1335,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           expect.objectContaining({ id: 101, answer: true }),
           expect.objectContaining({ id: 202, answer: false }),
         ]),
+        "fr",
       );
       expect(translationBuildSpy).toHaveBeenCalled();
       expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
@@ -2127,6 +2185,143 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           mockQuestionResponseService.markGradingComplete,
         ).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe("server clock and blank expired submissions", () => {
+    type LearnerAttemptSubmitter = {
+      updateLearnerAttempt: (
+        attemptId: number,
+        assignmentId: number,
+        updateDto: unknown,
+        authCookie: string,
+        gradingCallbackRequired: boolean,
+        request: unknown,
+      ) => Promise<unknown>;
+    };
+
+    const blankResponse = (id: number) => ({
+      id,
+      learnerTextResponse: "",
+      learnerUrlResponse: "",
+      learnerChoices: [],
+      learnerAnswerChoice: null,
+      learnerFileResponse: [],
+      learnerPresentationResponse: null,
+    });
+
+    const learnerRequest = {
+      userSession: { userId: "learner@example.com", role: "Learner" },
+    } as never;
+
+    const spyOnWarn = () =>
+      jest
+        .spyOn(
+          (service as unknown as { logger: { warn: (m: string) => void } })
+            .logger,
+          "warn",
+        )
+        .mockImplementation(() => undefined);
+
+    it("returns the server clock alongside a resumed attempt so the client can correct for device skew", async () => {
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({ id: 4242 });
+
+      const before = Date.now();
+      const result = await service.createAssignmentAttempt(3663, {
+        userId: "learner@example.com",
+        role: UserRole.LEARNER,
+      } as UserSession);
+      const after = Date.now();
+
+      expect(result.id).toBe(4242);
+      expect(typeof result.serverNow).toBe("string");
+      const parsed = Date.parse(result.serverNow as string);
+      expect(parsed).toBeGreaterThanOrEqual(before);
+      expect(parsed).toBeLessThanOrEqual(after);
+    });
+
+    it("warns with the attempt, learner and assignment when an expired attempt is submitted with nothing answered", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 777,
+        submitted: false,
+        expiresAt: new Date(Date.now() - 60_000),
+        questionVariants: [],
+      });
+      mockValidationService.isAttemptExpired.mockReturnValue(true);
+      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+      const warnSpy = spyOnWarn();
+
+      const updateDto = {
+        // The second entry is what an untouched Quill editor serialises to.
+        responsesForQuestions: [
+          blankResponse(1),
+          { ...blankResponse(2), learnerTextResponse: "<p><br></p>" },
+        ],
+        language: "en",
+      } as never;
+
+      const result = await (
+        service as unknown as LearnerAttemptSubmitter
+      ).updateLearnerAttempt(
+        777,
+        3663,
+        updateDto,
+        "cookie",
+        false,
+        learnerRequest,
+      );
+
+      const warning = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join(" ");
+      expect(warning).toContain("777");
+      expect(warning).toContain("learner@example.com");
+      expect(warning).toContain("3663");
+
+      // Submission semantics are untouched: the expired attempt is still
+      // closed out exactly as before.
+      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 777 },
+          data: expect.objectContaining({ submitted: true, grade: 0 }),
+        }),
+      );
+      expect(result).toMatchObject({ id: 777, submitted: true, success: true });
+    });
+
+    it("does not warn when an expired attempt actually carries answers", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 778,
+        submitted: false,
+        expiresAt: new Date(Date.now() - 60_000),
+        questionVariants: [],
+      });
+      mockValidationService.isAttemptExpired.mockReturnValue(true);
+      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+      const warnSpy = spyOnWarn();
+
+      const updateDto = {
+        responsesForQuestions: [
+          { ...blankResponse(1), learnerTextResponse: "my answer" },
+        ],
+        language: "en",
+      } as never;
+
+      await (
+        service as unknown as LearnerAttemptSubmitter
+      ).updateLearnerAttempt(
+        778,
+        3663,
+        updateDto,
+        "cookie",
+        false,
+        learnerRequest,
+      );
+
+      const warning = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join(" ");
+      expect(warning).not.toContain("without any answers");
     });
   });
 });

@@ -721,6 +721,7 @@ export function ReportsTable({ sessionToken }: ReportsTableProps) {
         report={selectedReport}
         isOpen={isReportModalOpen}
         onClose={closeReportModal}
+        adminSessionToken={sessionToken}
       />
     </div>
   );

@@ -67,3 +67,65 @@ describe("useLearnerStore persistence", () => {
     expect(question.choices).toBeUndefined();
   });
 });
+
+describe("useLearnerStore attempt-scoped drafts", () => {
+  const served = (): QuestionStore =>
+    ({
+      id: 7,
+      type: "SINGLE_CORRECT",
+      totalPoints: 1,
+      question: "<p>Pick one</p>",
+      choices: [
+        { choice: "A", isCorrect: true, points: 1 },
+        { choice: "B", isCorrect: false, points: 0 },
+      ],
+    }) as unknown as QuestionStore;
+
+  beforeEach(() => {
+    localStorage.clear();
+    useLearnerStore.setState({ questions: [], activeAttemptId: null });
+  });
+
+  // Selections are stored as positions in the choice list, and every attempt
+  // shuffles that list (and may draw a different variant). A draft carried
+  // into another attempt selects options the learner never picked.
+  it("drops the previous attempt's selections when a different attempt loads", () => {
+    const store = useLearnerStore.getState();
+    store.beginAttempt(100);
+    store.setQuestions([served()]);
+    store.setChoices(["1"], 7);
+
+    useLearnerStore.getState().beginAttempt(101);
+    useLearnerStore.getState().setQuestions([served()]);
+
+    const [question] = useLearnerStore.getState().questions;
+    expect(question.learnerChoices ?? []).toEqual([]);
+    expect(useLearnerStore.getState().activeAttemptId).toBe(101);
+  });
+
+  it("drops drafts left behind when no attempt was recorded for them", () => {
+    useLearnerStore.getState().setQuestions([served()]);
+    useLearnerStore.getState().setChoices(["1"], 7);
+
+    useLearnerStore.getState().beginAttempt(101);
+    useLearnerStore.getState().setQuestions([served()]);
+
+    expect(useLearnerStore.getState().questions[0].learnerChoices ?? []).toEqual(
+      [],
+    );
+  });
+
+  it("keeps the draft when the same attempt is loaded again", () => {
+    const store = useLearnerStore.getState();
+    store.beginAttempt(100);
+    store.setQuestions([served()]);
+    store.setChoices(["1"], 7);
+
+    useLearnerStore.getState().beginAttempt(100);
+    useLearnerStore.getState().setQuestions([served()]);
+
+    expect(useLearnerStore.getState().questions[0].learnerChoices).toEqual([
+      "1",
+    ]);
+  });
+});

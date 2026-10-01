@@ -276,6 +276,27 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toBe("https://example.com");
     });
+
+    it("adds the scheme a learner left off so the URL can be fetched", async () => {
+      const requestDto = {
+        learnerUrlResponse:
+          " github.com/owner/repo/blob/main/final_project/router/general.js ",
+      } as CreateQuestionResponseAttemptRequestDto;
+
+      const result = await strategy.extractLearnerResponse(requestDto);
+      expect(result).toBe(
+        "https://github.com/owner/repo/blob/main/final_project/router/general.js",
+      );
+    });
+
+    it("leaves a value that cannot be normalized alone for grading to report", async () => {
+      const requestDto = {
+        learnerUrlResponse: "  dgtj  ",
+      } as CreateQuestionResponseAttemptRequestDto;
+
+      const result = await strategy.extractLearnerResponse(requestDto);
+      expect(result).toBe("dgtj");
+    });
   });
 
   describe("UrlGradingStrategy - GitHub fetch behavior", () => {
@@ -329,6 +350,63 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       expect(result.totalPoints).toBe(0);
       expect(JSON.stringify(result)).toMatch(/unable to fetch/i);
       expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
+    });
+
+    it("fetches a schemeless github link instead of scoring it zero", async () => {
+      mockedFetch.mockResolvedValue({
+        body: "const express = require('express');",
+        isFunctional: true,
+      });
+      llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+        points: 8,
+        feedback: "Good work",
+        gradingRationale: "Looks complete",
+      } as any);
+
+      const result = await strategy.gradeResponse(
+        mockQuestion,
+        "github.com/owner/repo/blob/main/router/general.js",
+        context,
+      );
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        "https://github.com/owner/repo/blob/main/router/general.js",
+        expect.objectContaining({ assignmentId: 42, questionId: 1 }),
+      );
+      expect(result.totalPoints).toBe(8);
+      expect(JSON.stringify(result)).not.toMatch(/invalid url/i);
+    });
+
+    it("fetches a link pasted with surrounding whitespace", async () => {
+      mockedFetch.mockResolvedValue({ body: "# Readme", isFunctional: true });
+      llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+        points: 5,
+        feedback: "ok",
+        gradingRationale: "ok",
+      } as any);
+
+      await strategy.gradeResponse(
+        mockQuestion,
+        " https://github.com/octocat/hello-world\n",
+        context,
+      );
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        "https://github.com/octocat/hello-world",
+        expect.anything(),
+      );
+    });
+
+    it("still grades an unusable value zero without calling the fetch", async () => {
+      const result = await strategy.gradeResponse(
+        mockQuestion,
+        "dgtj",
+        context,
+      );
+
+      expect(result.totalPoints).toBe(0);
+      expect(JSON.stringify(result)).toMatch(/invalid url/i);
+      expect(mockedFetch).not.toHaveBeenCalled();
     });
 
     it("propagates GithubRateLimitedError instead of grading a silent 0", async () => {

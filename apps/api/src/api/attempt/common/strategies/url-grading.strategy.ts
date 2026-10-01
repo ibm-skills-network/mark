@@ -17,7 +17,7 @@ import {
   fetchUrlContentForGrading,
   GithubFetchResult,
 } from "src/api/attempt/common/utils/github-content-fetch.util";
-import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
+import { RetryableUrlFetchError } from "src/api/llm/features/grading/errors/retryable-url-fetch.error";
 import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
@@ -26,6 +26,11 @@ import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
+import {
+  expectedHostsForResponseType,
+  normalizeLearnerUrl,
+  validateLearnerUrl,
+} from "../utils/learner-url.util";
 import { LocalizationService } from "../utils/localization.service";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
@@ -96,7 +101,12 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     if (typeof requestDto.learnerUrlResponse !== "string") {
       throw new BadRequestException("URL response must be a string");
     }
-    return requestDto.learnerUrlResponse.trim();
+    // Normalize here rather than at the browser: a pasted trailing space or a
+    // missing scheme must not change the outcome, and the request body is not
+    // trusted. A value that cannot be normalized is passed through unchanged
+    // so gradeResponse can quote it back to the learner.
+    const raw = requestDto.learnerUrlResponse.trim();
+    return normalizeLearnerUrl(raw) || raw;
   }
 
   /**
@@ -112,7 +122,10 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     // (mirrors the unfetchable-URL branch below). validateResponse lets
     // invalid formats through on purpose so they are graded here rather than
     // failing the job.
-    if (!this.isParseableUrl(learnerResponse)) {
+    const urlValidation = validateLearnerUrl(learnerResponse, {
+      expectedHosts: expectedHostsForResponseType(question.responseType),
+    });
+    if (!urlValidation.isValid) {
       const responseDto = this.createResponseDto(0, [
         {
           feedback:
@@ -144,22 +157,35 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       return responseDto;
     }
 
+    if (urlValidation.isUnexpectedHost) {
+      // Advisory only — never changes the score. Surfaces authoring drift
+      // (a repository question collecting links somewhere else) without
+      // inventing a rejection the learner cannot argue with.
+      this.logger?.info("Learner URL is not on the question's expected hosts", {
+        assignmentId: context.assignmentId,
+        questionId: question.id,
+        responseType: question.responseType,
+      });
+    }
+
+    const targetUrl = urlValidation.normalizedUrl;
     let urlFetchResponse: GithubFetchResult;
 
     try {
-      urlFetchResponse = await fetchUrlContentForGrading(learnerResponse, {
+      urlFetchResponse = await fetchUrlContentForGrading(targetUrl, {
         assignmentId: context.assignmentId,
         questionId: question.id,
       });
     } catch (error) {
-      if (error instanceof GithubRateLimitedError) {
+      if (error instanceof RetryableUrlFetchError) {
         this.logger?.warn(
-          "GitHub rate limit hit while fetching a learner URL for grading; propagating as retryable",
+          "Transient failure fetching a learner URL for grading; propagating as retryable",
           {
-            url: learnerResponse,
+            url: targetUrl,
             assignmentId: context.assignmentId,
             questionId: question.id,
-            resetAt: error.resetAt,
+            reason: error.reason,
+            status: error.status,
           },
         );
         throw error;
@@ -208,7 +234,9 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       question.question,
       context.questionAnswerContext,
       context.assignmentInstructions,
-      learnerResponse,
+      // The URL that was actually fetched, so the model never reasons about a
+      // scheme the learner happened to leave off.
+      targetUrl,
       urlFetchResponse.isFunctional,
       JSON.stringify(urlFetchResponse.body),
       question.totalPoints,
@@ -244,7 +272,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       url: learnerResponse,
       contentSummary: this.summarizeContent(urlFetchResponse.body),
       contentLength: urlFetchResponse.body.length,
-      isGithubRepo: learnerResponse.includes("github.com"),
+      isGithubRepo: targetUrl.includes("github.com"),
       gradingRationale:
         gradingModel.gradingRationale || "URL content evaluated",
       maxPossiblePoints: question.totalPoints,
@@ -309,18 +337,5 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     const preview = content.slice(0, 150).trim();
 
     return content.length > 150 ? `${preview}...` : preview;
-  }
-
-  /**
-   * Whether a learner response parses as an absolute URL. Used to short-
-   * circuit invalid submissions to a graded-0 response instead of throwing.
-   */
-  private isParseableUrl(value: string): boolean {
-    try {
-      new URL(value);
-      return true;
-    } catch {
-      return false;
-    }
   }
 }

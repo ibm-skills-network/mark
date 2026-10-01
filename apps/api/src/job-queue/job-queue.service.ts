@@ -2,6 +2,10 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { Job, JobsOptions, JobState, Queue } from "bullmq";
 import IORedis from "ioredis";
 import {
+  ATTEMPT_RETRY_BACKOFF,
+  queueUsesAttemptRetryBackoff,
+} from "./attempt-retry-backoff";
+import {
   JOB_PRIORITIES,
   JOB_QUEUE_NAMES,
   JobName,
@@ -81,6 +85,16 @@ export class JobQueueService implements OnModuleDestroy {
       connection: this.getConnection(),
       defaultJobOptions: {
         attempts: 3,
+        // Attempt grading reads learner-submitted links, so a share of its
+        // failures are "the upstream was momentarily unavailable" rather than
+        // "this job is broken". Retrying those three times inside a second
+        // just burns the attempts against the same outage. The custom
+        // strategy the worker registers decides the wait per failure and
+        // returns 0 — an immediate retry, as before — for every other class,
+        // so only the transient-fetch case is paced.
+        ...(queueUsesAttemptRetryBackoff(queueName) && {
+          backoff: ATTEMPT_RETRY_BACKOFF,
+        }),
         // Cap retained job history by count. BullMQ keeps completed and failed
         // jobs — each carrying a full encrypted payload — until evicted; at 1000
         // per state across every queue this history dominated Redis memory. A
@@ -217,10 +231,11 @@ export class JobQueueService implements OnModuleDestroy {
     const windowStart = Date.now() - THROUGHPUT_WINDOW_MS;
     const windowStartScore = String(windowStart);
 
-    // `queue.client` resolves to the shared ioredis client. In cluster mode the
+    // Use the original ioredis connection: BullMQ now exposes an adapter through
+    // `queue.client` that omits these sorted-set commands. In cluster mode the
     // BullMQ hash-tag prefix keeps a queue's keys colocated, so each single-key
     // command below stays on one node.
-    const client = await queue.client;
+    const client = this.getConnection();
 
     // Per-minute rates: count members scored at-or-after the window start. The
     // score is the finish timestamp, so this is "finished in the last minute".

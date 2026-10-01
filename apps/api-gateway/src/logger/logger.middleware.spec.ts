@@ -31,11 +31,50 @@ describe("LoggerMiddleware", () => {
     mockResponse = new EventEmitter() as any;
     mockResponse.statusCode = 200;
     mockResponse.get = jest.fn();
+    mockResponse.setHeader = jest.fn();
 
     mockNext = jest.fn();
   });
 
   describe("use", () => {
+    it("echoes the request id so a client bug report can name the request", () => {
+      (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
+        header === "akamai-grn" ? "0.9d3b3017.1758100000.1a2b3c" : undefined,
+      );
+      mockResponse.setHeader = jest.fn();
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        "x-request-id",
+        "0.9d3b3017.1758100000.1a2b3c",
+      );
+    });
+
+    it.each([
+      ["a header-splitting value", "abc\r\nSet-Cookie: authentication=evil"],
+      ["an oversized value", "a".repeat(500)],
+      ["nothing", undefined],
+    ])("does not echo %s", (_label, value) => {
+      (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
+        header === "x-request-id" ? value : undefined,
+      );
+      mockResponse.setHeader = jest.fn();
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(mockResponse.setHeader).not.toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalledTimes(1);
+    });
+
     it("should call next function immediately", () => {
       middleware.use(
         mockRequest as Request,
@@ -525,5 +564,86 @@ describe("LoggerMiddleware", () => {
         done();
       }, 10);
     });
+  });
+});
+
+function setWritableEnded(target: object, value: boolean): void {
+  Object.defineProperty(target, "writableEnded", { value, configurable: true });
+}
+
+describe("LoggerMiddleware URL redaction", () => {
+  let middleware: LoggerMiddleware;
+  let mockLogger: Logger;
+  let mockRequest: Partial<Request>;
+  let mockResponse: Partial<Response> & EventEmitter;
+  let mockNext: NextFunction;
+
+  beforeEach(() => {
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    middleware = new LoggerMiddleware(mockLogger);
+
+    mockRequest = {
+      method: "GET",
+      originalUrl: "/api/test",
+      get: jest.fn().mockReturnValue(null),
+    };
+
+    mockResponse = new EventEmitter() as any;
+    mockResponse.statusCode = 200;
+    mockResponse.get = jest.fn().mockReturnValue(null);
+    setWritableEnded(mockResponse, true);
+
+    mockNext = jest.fn();
+  });
+
+  it("replaces the value of a deny-listed query parameter", (done) => {
+    mockRequest.originalUrl = "/api/v2/github/oauth-callback?code=abc&lang=en";
+
+    middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+    mockResponse.emit("finish");
+
+    setTimeout(() => {
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "/api/v2/github/oauth-callback?code=[redacted]&lang=en",
+        ),
+        expect.objectContaining({
+          url: "/api/v2/github/oauth-callback?code=[redacted]&lang=en",
+        }),
+      );
+
+      const logged = JSON.stringify([
+        (mockLogger.debug as jest.Mock).mock.calls,
+        (mockLogger.info as jest.Mock).mock.calls,
+      ]);
+      expect(logged).not.toContain("code=abc");
+      done();
+    }, 10);
+  });
+
+  it("keeps the URL redacted when the client disconnects", (done) => {
+    mockRequest.originalUrl = "/api/v2/github/oauth-callback?code=abc";
+    setWritableEnded(mockResponse, false);
+
+    middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+    mockResponse.emit("close");
+
+    setTimeout(() => {
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("client_disconnected"),
+        expect.objectContaining({
+          url: "/api/v2/github/oauth-callback?code=[redacted]",
+        }),
+      );
+      done();
+    }, 10);
   });
 });

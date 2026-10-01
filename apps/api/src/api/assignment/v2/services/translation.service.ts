@@ -33,7 +33,9 @@ import {
   QuestionDto,
   VariantDto,
 } from "../../dto/update.questions.request.dto";
+import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
+import type { TranslateMetaTextPayload } from "src/job-queue/job-queue.types";
 import type { PerJobTranslationEntry } from "./publish-job-result.types";
 
 // Per-publish translation status hash key. The publish job HGETALLs this on
@@ -220,6 +222,7 @@ export class TranslationService implements OnModuleDestroy {
     @Inject(LLM_RESOLVER_SERVICE)
     private readonly llmResolver: LLMResolverService,
     private readonly aiFlags: AiFeatureFlagsService,
+    private readonly assignmentRepository: AssignmentRepository,
   ) {
     this._languageTranslation =
       process.env.ENABLE_TRANSLATION?.toString().toLowerCase() === "true";
@@ -1179,16 +1182,13 @@ export class TranslationService implements OnModuleDestroy {
 
     this.checkLimiterHealth();
 
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      select: {
-        id: true,
-        name: true,
-        introduction: true,
-        instructions: true,
-        gradingCriteriaOverview: true,
-      },
-    });
+    // Read through the repository, not the base row: publishing writes the
+    // title to the active version only, so `Assignment.name` is the title as it
+    // was before versioning. Translating that produced a translation of a title
+    // no learner is shown — and, because the stale value never changed, the
+    // "has the name changed?" check below skipped the title on every rerun.
+    const assignment =
+      await this.assignmentRepository.findMetaById(assignmentId);
 
     if (!assignment) {
       throw new NotFoundException(
@@ -1236,6 +1236,7 @@ export class TranslationService implements OnModuleDestroy {
     jobId?: string,
     progressRange?: { start: number; end: number },
     markTerminalFailure = false,
+    publishedText?: TranslateMetaTextPayload,
   ): Promise<TranslationOutcome> {
     if (!this._languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
@@ -1264,16 +1265,27 @@ export class TranslationService implements OnModuleDestroy {
     try {
       this.checkLimiterHealth();
 
-      assignment = (await this.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-        select: {
-          id: true,
-          name: true,
-          introduction: true,
-          instructions: true,
-          gradingCriteriaOverview: true,
-        },
-      })) as unknown as
+      // Same reason as translateAssignmentForLanguages: the live text lives on
+      // the active version, not the base row. Still read it even when the
+      // caller supplied text — it is the existence check, and it fills any
+      // field the caller left out.
+      const liveText =
+        await this.assignmentRepository.findMetaById(assignmentId);
+
+      // Publish hands us the text it just published. Prefer it: the publish job
+      // enqueues this work before it writes the new version, so re-reading here
+      // would resolve the previous version and translate last publish's text.
+      assignment = (liveText
+        ? {
+            ...liveText,
+            name: publishedText?.name ?? liveText.name,
+            introduction: publishedText?.introduction ?? liveText.introduction,
+            instructions: publishedText?.instructions ?? liveText.instructions,
+            gradingCriteriaOverview:
+              publishedText?.gradingCriteriaOverview ??
+              liveText.gradingCriteriaOverview,
+          }
+        : liveText) as unknown as
         | GetAssignmentResponseDto
         | LearnerGetAssignmentResponseDto;
 

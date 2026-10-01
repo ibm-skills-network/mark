@@ -649,6 +649,18 @@ model Report {
   renewalRenewTokenHash String? // Hash of renewal (still happening) token
   renewalCloseTokenHash String? // Hash of close (resolved) token
   renewalTokenExpiresAt DateTime? // Expiration time for renewal tokens
+  diagnostics           ReportDiagnostics?
+}
+
+/// What the reporter's browser held when a report was filed. Kept apart from
+/// Report so that no query returning a report to a learner or author can carry
+/// it; only the admin diagnostics route reads this table.
+model ReportDiagnostics {
+  id        Int      @id @default(autoincrement())
+  reportId  Int      @unique
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  data      Json /// Rebuilt server-side from known keys; never the raw client payload
+  createdAt DateTime @default(now())
 }
 
 model UserNotification {

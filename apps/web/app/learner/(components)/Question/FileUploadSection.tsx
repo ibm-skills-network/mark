@@ -1,6 +1,7 @@
 import { readFile } from "@/app/Helpers/fileReader";
-import { QuestionStore, QuestionType, ResponseType } from "@/config/types";
+import { QuestionStore, ResponseType } from "@/config/types";
 import { getStoredGithubToken } from "@/lib/talkToBackend";
+import { getUploadAcceptMap } from "@/lib/upload-accept";
 import {
   learnerFileResponse,
   useGitHubStore,
@@ -137,64 +138,9 @@ const FileUploadSection = ({
       }
     });
   }, []);
-  const getAcceptedFileTypes = (
-    questionType: QuestionType,
-    responseType?: ResponseType,
-  ): { [key: string]: string[] } => {
-    const fileType =
-      responseType && responseType !== undefined ? responseType : questionType;
-    switch (fileType) {
-      case "CODE":
-        return {
-          "text/x-python": [".py"],
-          "application/javascript": [".js"],
-          "application/x-typescript": [".ts"],
-          "application/x-tsx": [".tsx"],
-          "application/x-shellscript": [".sh"],
-          "text/html": [".html"],
-          "text/css": [".css"],
-          "application/sql": [".sql"],
-          "text/markdown": [".md"],
-          "application/x-ipynb+json": [".ipynb"],
-        };
-      case "IMAGES":
-        return {
-          "image/png": [".png"],
-          "image/jpeg": [".jpg", ".jpeg"],
-          "image/gif": [".gif"],
-          "image/webp": [".webp"],
-        };
-      case "UPLOAD":
-      case "REPORT":
-      case "SPREADSHEET":
-        return {
-          // ponytail: image types included here so image-upload questions still
-          // accept PNG/JPEG when responseType arrives missing/not "IMAGES" and
-          // falls back to questionType "UPLOAD". Server doesn't enforce learner
-          // MIME types anyway; grading keys off responseType.
-          "image/png": [".png"],
-          "image/jpeg": [".jpg", ".jpeg"],
-          "image/gif": [".gif"],
-          "image/webp": [".webp"],
-          "text/plain": [".txt"],
-          "application/pdf": [".pdf"],
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            [".docx"],
-          "application/vnd.ms-excel": [".xls", ".xlsx"],
-          "text/csv": [".csv"],
-          "text/markdown": [".md"],
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-            [".pptx"],
-          "application/x-ipynb+json": [".ipynb"],
-        };
-      default:
-        return {};
-    }
-  };
-
   useDropzone({
     onDrop,
-    accept: getAcceptedFileTypes(questionType, responseType),
+    accept: getUploadAcceptMap(questionType, responseType),
     multiple: true,
   });
 
@@ -260,7 +206,7 @@ const FileUploadSection = ({
                 }}
                 showUploadedFiles={true}
                 uploadedFiles={learnerFileResponse}
-                acceptedFileTypes={getAcceptedFileTypes(
+                acceptedFileTypes={getUploadAcceptMap(
                   questionType,
                   responseType,
                 )}

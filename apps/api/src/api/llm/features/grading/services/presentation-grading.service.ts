@@ -1,8 +1,14 @@
+import {
+  mediaGradeSchema,
+  assertUsableMediaEvidence,
+  validateMediaGrade,
+  MEDIA_EVIDENCE_INSTRUCTIONS,
+  MEDIA_FEEDBACK_INSTRUCTIONS,
+} from "./media-grading-validation";
 /* eslint-disable unicorn/no-null */
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { StructuredOutputParser } from "@langchain/classic/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { PresentationQuestionResponseModel } from "src/api/llm/model/presentation.question.response.model";
@@ -14,6 +20,54 @@ import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.inte
 import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { MODERATION_BLOCK_FEEDBACK } from "../constants";
 import { IPresentationGradingService } from "../interfaces/presentation-grading.interface";
+
+const PresentationGradeSchema = z.object({
+  points: z.number().describe("Points awarded based on the criteria"),
+  feedback: z
+    .string()
+    .describe(
+      "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
+    ),
+  analysis: z
+    .string()
+    .describe("Detailed analysis of what is observed in the presentation data"),
+  evaluation: z
+    .string()
+    .describe(
+      "Evaluation of how well the presentation meets each assessment aspect",
+    ),
+  explanation: z
+    .string()
+    .describe("Clear reasons for the grade based on specific observations"),
+  guidance: z
+    .string()
+    .describe("Concrete suggestions for improvement in future presentations"),
+  rubricScores: z
+    .array(
+      z.object({
+        rubricQuestion: z.string(),
+        pointsAwarded: z.number(),
+        maxPoints: z.number(),
+        justification: z.string(),
+      }),
+    )
+    .describe("Individual scores for each rubric criterion")
+    .optional(),
+});
+type PresentationGrade = z.infer<typeof PresentationGradeSchema>;
+
+const LiveRecordingFeedbackSchema = z.object({
+  feedback: z.string().nonempty("Feedback cannot be empty"),
+  analysis: z
+    .string()
+    .describe("Detailed analysis of the presentation elements"),
+  evaluation: z.string().describe("Evaluation of presentation effectiveness"),
+  explanation: z
+    .string()
+    .describe("Clear explanation of strengths and areas for improvement"),
+  guidance: z.string().describe("Specific recommendations for improvement"),
+});
+type LiveRecordingFeedbackResult = z.infer<typeof LiveRecordingFeedbackSchema>;
 
 @Injectable()
 export class PresentationGradingService implements IPresentationGradingService {
@@ -90,54 +144,26 @@ export class PresentationGradingService implements IPresentationGradingService {
     const safeBodyLangExplanation =
       learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
 
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        points: z.number().describe("Points awarded based on the criteria"),
-        feedback: z
-          .string()
-          .describe(
-            "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
-          ),
-        analysis: z
-          .string()
-          .describe(
-            "Detailed analysis of what is observed in the presentation data",
-          ),
-        evaluation: z
-          .string()
-          .describe(
-            "Evaluation of how well the presentation meets each assessment aspect",
-          ),
-        explanation: z
-          .string()
-          .describe(
-            "Clear reasons for the grade based on specific observations",
-          ),
-        guidance: z
-          .string()
-          .describe(
-            "Concrete suggestions for improvement in future presentations",
-          ),
-        rubricScores: z
-          .array(
-            z.object({
-              rubricQuestion: z.string(),
-              pointsAwarded: z.number(),
-              maxPoints: z.number(),
-              justification: z.string(),
-            }),
-          )
-          .describe("Individual scores for each rubric criterion")
-          .optional(),
-      }),
+    const evidenceSources = {
+      transcript: learnerResponse?.transcript ?? "",
+      speechReport: learnerResponse?.speechReport ?? "",
+      contentReport: learnerResponse?.contentReport ?? "",
+      bodyLanguageExplanation: learnerResponse?.bodyLanguageExplanation ?? "",
+    };
+    assertUsableMediaEvidence(evidenceSources);
+    const gradeSchema = mediaGradeSchema(
+      PresentationGradeSchema,
+      totalPoints,
+      scoringCriteria,
     );
-
-    const formatInstructions = parser.getFormatInstructions();
-
     const prompt = new PromptTemplate({
-      template: this.loadPresentationGradingTemplate(),
+      template:
+        this.loadPresentationGradingTemplate() +
+        MEDIA_EVIDENCE_INSTRUCTIONS +
+        "\nEVIDENCE SOURCES:\n{evidence_sources}",
       inputVariables: [],
       partialVariables: {
+        evidence_sources: () => JSON.stringify(evidenceSources),
         question: () => question,
         assignment_instructions: () =>
           assignmentInstrctions ?? "No assignment instructions provided.",
@@ -153,22 +179,24 @@ export class PresentationGradingService implements IPresentationGradingService {
           totalPoints == null ? "0" : totalPoints.toString(),
         scoring_type: () => scoringCriteriaType ?? "N/A",
         scoring_criteria: () => JSON.stringify(scoringCriteria ?? {}),
-        format_instructions: () => formatInstructions,
         grading_type: () => responseType ?? "N/A",
       },
     });
 
-    const response = await this.promptProcessor.processPromptForFeature(
-      prompt,
-      assignmentId,
-      AIUsageType.ASSIGNMENT_GRADING,
-      "presentation_grading",
-      undefined,
-      { safetyIdentifier },
-    );
-
     try {
-      const parsedResponse = await parser.parse(response);
+      const parsedResponse =
+        await this.promptProcessor.processStructuredPromptForFeature<PresentationGrade>(
+          prompt,
+          assignmentId,
+          AIUsageType.ASSIGNMENT_GRADING,
+          "presentation_grading",
+          gradeSchema,
+          undefined,
+          { safetyIdentifier },
+        );
+
+      const validatedGrade = gradeSchema.parse(parsedResponse);
+      validateMediaGrade(validatedGrade, scoringCriteria, evidenceSources);
 
       const aeegFeedback = `
 **Analysis:**
@@ -189,6 +217,12 @@ ${parsedResponse.guidance}
         feedback: aeegFeedback,
       } as PresentationQuestionResponseModel;
     } catch (error) {
+      // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that
+      // the structured call can throw — only genuine parse/format failures
+      // should surface as a generic 500.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         `Error parsing presentation grading response: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -208,26 +242,12 @@ ${parsedResponse.guidance}
     liveRecordingData: LearnerLiveRecordingFeedback,
     assignmentId: number,
   ): Promise<string> {
-    const parser = StructuredOutputParser.fromZodSchema(
-      z.object({
-        feedback: z.string().nonempty("Feedback cannot be empty"),
-        analysis: z
-          .string()
-          .describe("Detailed analysis of the presentation elements"),
-        evaluation: z
-          .string()
-          .describe("Evaluation of presentation effectiveness"),
-        explanation: z
-          .string()
-          .describe("Clear explanation of strengths and areas for improvement"),
-        guidance: z
-          .string()
-          .describe("Specific recommendations for improvement"),
-      }),
-    );
-
-    const formatInstructions = parser.getFormatInstructions();
-
+    assertUsableMediaEvidence({
+      transcript: liveRecordingData.transcript ?? "",
+      speechReport: liveRecordingData.speechReport ?? "",
+      contentReport: liveRecordingData.contentReport ?? "",
+      bodyLanguageExplanation: liveRecordingData.bodyLanguageExplanation ?? "",
+    });
     const safeSpeechReport =
       liveRecordingData.speechReport ?? "No speech analysis available.";
     const safeContentReport =
@@ -240,7 +260,8 @@ ${parsedResponse.guidance}
       liveRecordingData.bodyLanguageExplanation ?? "Not provided.";
 
     const prompt = new PromptTemplate({
-      template: this.loadLiveRecordingFeedbackTemplate(),
+      template:
+        this.loadLiveRecordingFeedbackTemplate() + MEDIA_FEEDBACK_INSTRUCTIONS,
       inputVariables: [],
       partialVariables: {
         question_text: () => liveRecordingData.question.question,
@@ -261,20 +282,18 @@ ${parsedResponse.guidance}
         live_recording_bodyLanguageScore: () => String(safeBodyLangScore),
 
         live_recording_bodyLanguageExplanation: () => safeBodyLangExplanation,
-
-        format_instructions: () => formatInstructions,
       },
     });
 
     try {
-      const response = await this.promptProcessor.processPromptForFeature(
-        prompt,
-        assignmentId,
-        AIUsageType.LIVE_RECORDING_FEEDBACK,
-        "live_recording_feedback",
-      );
-
-      const parsedResponse = await parser.parse(response);
+      const parsedResponse =
+        await this.promptProcessor.processStructuredPromptForFeature<LiveRecordingFeedbackResult>(
+          prompt,
+          assignmentId,
+          AIUsageType.LIVE_RECORDING_FEEDBACK,
+          "live_recording_feedback",
+          LiveRecordingFeedbackSchema,
+        );
 
       const aeegFeedback = `
 **Analysis:**
@@ -292,6 +311,12 @@ ${parsedResponse.guidance}
 
       return parsedResponse.feedback || aeegFeedback;
     } catch (error) {
+      // Preserve typed HTTP errors (kill-switch 409, rate limit, etc.) that
+      // the structured call can throw — only genuine parse/format failures
+      // should surface as a generic 500.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         `Error generating live recording feedback: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -389,9 +414,6 @@ ${parsedResponse.guidance}
     - Comprehensive feedback incorporating all four AEEG components
     - Separate fields for each AEEG component
     - If scoring type is CRITERIA_BASED, include rubricScores array with score for each rubric
-    
-    Format your response according to:
-    {format_instructions}
     `;
   }
 
@@ -455,9 +477,6 @@ ${parsedResponse.guidance}
     Respond with a JSON object containing:
     - Comprehensive feedback incorporating all AEEG components
     - Separate fields for each AEEG component (analysis, evaluation, explanation, guidance)
-    
-    Format your response according to:
-    {format_instructions}
     `;
   }
 }

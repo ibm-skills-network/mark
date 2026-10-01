@@ -25,6 +25,8 @@ export const getFileAccess = apiShared.getFileAccess;
 // Admin functions
 export const getAdminFeedback = apiShared.getAdminFeedback;
 export const getAdminReports = apiShared.getAdminReports;
+export const getAdminReportDiagnostics = apiShared.getAdminReportDiagnostics;
+export type AdminReportDiagnostics = apiShared.AdminReportDiagnostics;
 export const getDashboardAssignments = apiShared.getDashboardAssignments;
 export const getDashboardReports = apiShared.getDashboardReports;
 export const getDashboardFeedback = apiShared.getDashboardFeedback;
@@ -87,7 +89,6 @@ export const submitReportLearner = apiLearner.submitReportLearner;
 
 export const AuthorizeGithubBackend = apiGithub.authorizeGithubBackend;
 export const getStoredGithubToken = apiGithub.getStoredGithubToken;
-export const exchangeGithubCodeForToken = apiGithub.exchangeGithubCodeForToken;
 
 export const setApiVersion = (
   version: (typeof API_VERSIONS)[keyof typeof API_VERSIONS],

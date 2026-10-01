@@ -46,7 +46,7 @@ describe("ContentSummarizationService.getSafeContextLimit", () => {
   });
 
   // Every "gpt-5.6-*" key also contains "gpt-5"; the specific entry must win.
-  it.each(["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"])(
+  it.each(["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"])(
     "gives %s its 1.05M window, not the gpt-5 128k window",
     (modelKey) => {
       const { service } = buildMocks();

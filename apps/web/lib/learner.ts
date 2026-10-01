@@ -20,8 +20,12 @@ import type {
 } from "@config/types";
 import { toast } from "sonner";
 import { submitReportAuthor } from "@/lib/talkToBackend";
-import { apiClient, APIError } from "./api-client";
-import { isAuthApiError, withTransientRetry } from "./api-retry";
+import { apiClient, APIError, isNetworkError } from "./api-client";
+import {
+  isAuthApiError,
+  isNotFoundApiError,
+  withTransientRetry,
+} from "./api-retry";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 import {
   GradingWatchdog,
@@ -63,7 +67,12 @@ export async function createAttempt(
       {
         headers: {
           "Content-Type": "application/json",
-          ...(cookies ? { Cookie: cookies } : {}),
+          ...(cookies
+            ? {
+                Cookie: cookies,
+                "x-mark-learner-assignment": String(assignmentId),
+              }
+            : {}),
         },
       },
     );
@@ -113,15 +122,36 @@ function getErrorCode(err: unknown): string | undefined {
 }
 
 /**
- * Recognises the AI kill-switch response. Matches on the body `code` first (the
- * stable signal) and falls back to HTTP 409 — the status the backend now uses
- * because gateways/meshes mangle 503s into generic 500s. Accepts `unknown` and
- * duck-types so it survives the Next server-module-identity `instanceof` gotcha.
+ * Recognises the AI kill-switch response by its body `code`. Accepts `unknown`
+ * and duck-types so it survives the Next server-module-identity `instanceof`
+ * gotcha.
  */
 export function isAiTemporarilyDisabled(err: unknown): boolean {
+  // Body code only. The backend uses 409 for the kill-switch, but 409 is also
+  // what a duplicate submit gets ("already been submitted"); matching on the
+  // status alone told graded learners that grading was down.
+  return getErrorCode(err) === "AI_TEMPORARILY_DISABLED";
+}
+
+/**
+ * The API rejected a submit because the attempt is already submitted (a
+ * retried PATCH after a proxy timeout or a lost grading stream). The attempt
+ * is graded; the caller should show its results rather than an error.
+ */
+export class AttemptAlreadySubmittedError extends Error {
+  constructor(public readonly attemptId: number) {
+    super(`Attempt ${attemptId} has already been submitted.`);
+    this.name = "AttemptAlreadySubmittedError";
+  }
+}
+
+/** Duck-typed on `name` so it survives the Next server-module-identity gotcha. */
+export function isAttemptAlreadySubmittedError(
+  err: unknown,
+): err is AttemptAlreadySubmittedError {
   return (
-    getErrorCode(err) === "AI_TEMPORARILY_DISABLED" ||
-    getErrorStatus(err) === 409
+    (err as { name?: string } | undefined)?.name ===
+    "AttemptAlreadySubmittedError"
   );
 }
 
@@ -214,7 +244,12 @@ export async function getAttempt(
       apiClient.get<AssignmentAttemptWithQuestions>(endpointURL, {
         quiet: true,
         headers: {
-          ...(cookies ? { Cookie: cookies } : {}),
+          ...(cookies
+            ? {
+                Cookie: cookies,
+                "x-mark-learner-assignment": String(assignmentId),
+              }
+            : {}),
         },
       }),
     );
@@ -245,13 +280,18 @@ export async function getAttempt(
  * gets the questions for a given completed attempt and assignment
  * @param assignmentId The id of the assignment to get the questions for.
  * @param attemptId The id of the attempt to get the questions for.
- * @returns An array of questions.
- * @throws An error if the request fails.
+ * @param cookies Optional cookies for authentication.
+ * @param options `throwOnAuthError` rethrows 401/403; `throwOnError` rethrows
+ * every failure except a genuine 404, so `undefined` keeps its single meaning:
+ * the server looked and there is no such attempt.
+ * @returns The attempt, or undefined when it does not exist.
+ * @throws The underlying failure when the caller opted in.
  */
 export async function getCompletedAttempt(
   assignmentId: number,
   attemptId: number,
   cookies?: string,
+  options?: { throwOnAuthError?: boolean; throwOnError?: boolean },
 ): Promise<AssignmentAttemptWithQuestions | undefined> {
   // Author-preview attempts use the sentinel id -1 and are never persisted
   // server-side, so requesting one is a guaranteed 403 — which the api-client
@@ -284,6 +324,29 @@ export async function getCompletedAttempt(
 
     return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
   } catch (err) {
+    // A request that never got a response is not a missing attempt: returning
+    // undefined here is what made a dropped connection reach the learner as
+    // "this submission does not belong to your account". The callers decide
+    // how to show it — they are the only ones who know whether a stale copy
+    // of the attempt is available to fall back on.
+    if (isNetworkError(err)) {
+      throw err;
+    }
+    // Reporting a failure as "no such attempt" is what made every replaced
+    // session, every expired one, every server fault and every dropped
+    // connection look like "this submission does not belong to your account".
+    // Only a 404 is an answer about the attempt; everything else is handed to
+    // the caller so the screen can state what actually happened.
+    if (options?.throwOnError && !isNotFoundApiError(err)) {
+      throw err;
+    }
+    if (options?.throwOnAuthError && isAuthApiError(err)) {
+      throw err;
+    }
+    console.error(
+      `getCompletedAttempt failed for assignment ${assignmentId}, attempt ${attemptId}:`,
+      err,
+    );
     return undefined;
   }
 }
@@ -434,6 +497,13 @@ export async function getLiveRecordingFeedback(
     );
     return data;
   } catch (err) {
+    // Coaching feedback is optional, so the recording still counts as answered
+    // without it — but a silent empty string hid a broken endpoint for months.
+    console.error("liveRecordingFeedback.request_failed", {
+      assignmentId,
+      errorName: err instanceof Error ? err.name : typeof err,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return { feedback: "" };
   }
 }
@@ -534,9 +604,17 @@ export async function submitAssignment(
     } catch (apiError) {
       let errorMessage = "Submission failed";
 
-      // Check the kill-switch first and duck-typed (not gated on
-      // `instanceof APIError`, which is unreliable across Next's module
-      // boundary) so the out-of-service message always wins for a 409.
+      // A 409 that is not the kill-switch is the API's "already submitted"
+      // conflict: the attempt is graded. Hand it to the caller to navigate.
+      if (
+        getErrorStatus(apiError) === 409 &&
+        !isAiTemporarilyDisabled(apiError)
+      ) {
+        throw new AttemptAlreadySubmittedError(attemptId);
+      }
+
+      // Duck-typed (not gated on `instanceof APIError`, which is unreliable
+      // across Next's module boundary).
       if (isAiTemporarilyDisabled(apiError)) {
         // AI grading kill-switch engaged: the attempt was not submitted and
         // no grading was performed, so the learner's progress is preserved.

@@ -77,6 +77,129 @@ function prefer<T>(...vals: Array<T | null | undefined>): T | null {
   return null;
 }
 
+export interface AssignmentMeta {
+  id: number;
+  name: string | null;
+  introduction: string | null;
+  instructions: string | null;
+  gradingCriteriaOverview: string | null;
+}
+
+/**
+ * Which version is live: the one the assignment points at while it is still
+ * active, otherwise the newest active version.
+ *
+ * Assignments published before versioning — and any whose 2025 backfill failed,
+ * since that migration swallowed per-row errors — have neither, and fall back to
+ * the base row. Shared by every read so "what the learner sees" has one answer.
+ */
+function pickActiveVersion<T extends { isActive: boolean }>(
+  currentVersion: T | null | undefined,
+  activeVersions: readonly T[] | null | undefined,
+): T | null {
+  return (
+    (currentVersion?.isActive ? currentVersion : null) ??
+    (activeVersions?.length ? activeVersions[0] : null)
+  );
+}
+
+/**
+ * Prisma `select` fragment carrying everything needed to resolve the live title
+ * inside a bulk query, so a listing does not need a follow-up read per row.
+ * Spread it into a `select` and pass each row to `resolveAssignmentName`.
+ *
+ * `versions` is the fallback arm of `pickActiveVersion` and is filtered to the
+ * single newest active row; `@@unique([assignmentId, versionNumber])` makes the
+ * per-assignment lookup an index seek.
+ */
+export const ASSIGNMENT_NAME_SELECT = {
+  name: true,
+  currentVersion: { select: { isActive: true, name: true } },
+  versions: {
+    where: { isActive: true },
+    orderBy: { id: "desc" },
+    take: 1,
+    select: { isActive: true, name: true },
+  },
+} as const;
+
+/**
+ * Like {@link ASSIGNMENT_NAME_SELECT} but carrying all four text fields, for
+ * callers that render more than the title. Kept separate because introductions
+ * are long, and a listing that only prints names should not drag them across.
+ */
+export const ASSIGNMENT_META_SELECT = {
+  name: true,
+  introduction: true,
+  instructions: true,
+  gradingCriteriaOverview: true,
+  currentVersion: {
+    select: {
+      isActive: true,
+      name: true,
+      introduction: true,
+      instructions: true,
+      gradingCriteriaOverview: true,
+    },
+  },
+  versions: {
+    where: { isActive: true },
+    orderBy: { id: "desc" },
+    take: 1,
+    select: {
+      isActive: true,
+      name: true,
+      introduction: true,
+      instructions: true,
+      gradingCriteriaOverview: true,
+    },
+  },
+} as const;
+
+interface VersionTextRow {
+  isActive: boolean;
+  name?: string | null;
+  introduction?: string | null;
+  instructions?: string | null;
+  gradingCriteriaOverview?: string | null;
+}
+
+/** A row selected with {@link ASSIGNMENT_NAME_SELECT} or {@link ASSIGNMENT_META_SELECT}. */
+export interface AssignmentTextRow {
+  name?: string | null;
+  introduction?: string | null;
+  instructions?: string | null;
+  gradingCriteriaOverview?: string | null;
+  currentVersion?: VersionTextRow | null;
+  versions?: readonly VersionTextRow[] | null;
+}
+
+/**
+ * The assignment's live title: the active version's, falling back to the base
+ * row. Same rule as {@link AssignmentRepository.findMetaById}, for callers that
+ * read in bulk and only need the name.
+ */
+export function resolveAssignmentName(row: AssignmentTextRow): string | null {
+  const activeVersion = pickActiveVersion(row.currentVersion, row.versions);
+  return prefer(activeVersion?.name, row.name);
+}
+
+/** As {@link resolveAssignmentName}, for all four author-written fields. */
+export function resolveAssignmentMeta(
+  row: AssignmentTextRow,
+): Omit<AssignmentMeta, "id"> {
+  const activeVersion = pickActiveVersion(row.currentVersion, row.versions);
+  return {
+    name: prefer(activeVersion?.name, row.name),
+    introduction: prefer(activeVersion?.introduction, row.introduction),
+    instructions: prefer(activeVersion?.instructions, row.instructions),
+    gradingCriteriaOverview: prefer(
+      activeVersion?.gradingCriteriaOverview,
+      row.gradingCriteriaOverview,
+    ),
+  };
+}
+
 /** Merge whitelisted fields from primary → secondary → defaults */
 function mergeFields(
   keys: readonly FieldKey[],
@@ -124,9 +247,10 @@ export class AssignmentRepository {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    const activeVersion =
-      (result.currentVersion?.isActive ? result.currentVersion : null) ??
-      (result.versions?.length ? result.versions[0] : null);
+    const activeVersion = pickActiveVersion(
+      result.currentVersion,
+      result.versions,
+    );
 
     let processedAssignment: Assignment & { questions: QuestionDto[] };
 
@@ -203,6 +327,35 @@ export class AssignmentRepository {
           alreadyInBackend: true,
         })) ?? [],
     } as unknown as GetAssignmentResponseDto;
+  }
+
+  /**
+   * The assignment's author-written text as a learner actually sees it: the
+   * active version's values, falling back to the base row.
+   *
+   * Exists because the base `Assignment` row is not that text. Publishing writes
+   * the name into the version only, so a caller reading `assignment.name`
+   * directly gets whatever the title was before versioning was introduced —
+   * which is how the translator ended up translating a title nobody is shown.
+   *
+   * Narrow on purpose: `findById` loads every version, question and variant,
+   * which is far more than a name lookup needs. Both resolve the live version
+   * the same way, so what gets translated is what gets served.
+   *
+   * @param id - Assignment ID
+   * @returns The merged text fields, or null if the assignment does not exist
+   */
+  async findMetaById(id: number): Promise<AssignmentMeta | null> {
+    const result = await this.prisma.assignment.findUnique({
+      where: { id },
+      select: { id: true, ...ASSIGNMENT_META_SELECT },
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    return { id: result.id, ...resolveAssignmentMeta(result) };
   }
 
   /**

@@ -74,30 +74,3 @@ export async function getStoredGithubToken(
     return null;
   }
 }
-
-/**
- * Exchanges GitHub code for token
- */
-export async function exchangeGithubCodeForToken(
-  code: string,
-  cookies?: string,
-): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `${getBaseApiPath(API_VERSIONS.V1)}/github/oauth-callback`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-        body: JSON.stringify({ code }),
-      },
-    );
-
-    const data = ((await res.json()) as { token: string }) || null;
-    return data?.token || null;
-  } catch (error) {
-    return null;
-  }
-}

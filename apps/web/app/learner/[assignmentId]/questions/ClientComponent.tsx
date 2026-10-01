@@ -61,6 +61,9 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     (state) => state.setAssignmentDetails,
   );
   const setRole = useLearnerStore((state) => state.setRole);
+  const userPreferedLanguage = useLearnerStore(
+    (state) => state.userPreferedLanguage,
+  );
   const [previewPayload, setPreviewPayload] =
     useState<AuthorPreviewPayload | null>(() =>
       readAuthorPreviewPayload(assignmentId),
@@ -107,7 +110,12 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
       setPreviewPayload(null);
 
       try {
-        const assignment = await getAssignment(assignmentId);
+        // Same reason as the learner hydrate path: omitting the language makes
+        // the backend skip translation and return the source-language text.
+        const assignment = await getAssignment(
+          assignmentId,
+          userPreferedLanguage ?? undefined,
+        );
         if (cancelled) return;
 
         if (assignment) {
@@ -127,7 +135,7 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId]);
+  }, [assignmentId, userPreferedLanguage]);
 
   const assignmentDetails = previewPayload?.assignmentDetails;
   const allQuestions = previewPayload?.questions ?? [];
@@ -217,7 +225,7 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
   }
 
   return (
-    <main className="flex flex-col h-[calc(100vh-100px)]">
+    <main className="flex flex-col h-full">
       <QuestionPage
         attempt={{
           id: generateTempQuestionId(),

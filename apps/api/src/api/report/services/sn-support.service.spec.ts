@@ -30,7 +30,20 @@ describe("SnSupportService", () => {
     });
   });
 
-  it("reports configured only when both URL and token are set", () => {
+  const mockTicketResponse = () => {
+    httpService.post.mockReturnValue(
+      of({
+        data: {
+          ticketKey: "SUPPORT-104",
+          reportKey: "SUPPORT-104-1",
+          status: "open" as const,
+          createdAt: "2026-08-12T18:00:00.000Z",
+        },
+      }),
+    );
+  };
+
+  it("reports configured when the endpoint is set", () => {
     expect(service.isConfigured()).toBe(true);
     configService.get.mockReturnValue(undefined);
     expect(service.isConfigured()).toBe(false);
@@ -174,6 +187,134 @@ describe("SnSupportService", () => {
       { metadata: Record<string, string> },
     ];
     expect(sentBody.metadata.imageUrl).toBeUndefined();
+  });
+
+  // The v2 create contract has no portalUrl field and rejects unknown
+  // top-level keys, so the portal URL has to travel as custom metadata.
+  it("sends the portal URL as custom metadata", async () => {
+    mockTicketResponse();
+
+    await service.createTicket({
+      title: "Mark report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      portalName: "Cognitive Class",
+      portalUrl: "https://cognitiveclass.ai",
+    });
+
+    const [, sentBody] = httpService.post.mock.calls[0] as [
+      string,
+      { reporterOrigin?: string; metadata: Record<string, string> },
+    ];
+    expect(sentBody.reporterOrigin).toBe("Cognitive Class");
+    expect(sentBody.metadata).toMatchObject({
+      portalName: "Cognitive Class",
+      portalUrl: "https://cognitiveclass.ai",
+    });
+  });
+
+  // SN Support's base mapper (used for the unregistered source "Mark") drops
+  // pageUrl and browser before they reach the Issue row; the metadata copies
+  // are what actually survive.
+  it("duplicates the page URL and browser into metadata", async () => {
+    mockTicketResponse();
+
+    await service.createTicket({
+      title: "Mark report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      pageUrl: "https://mark.skills.network/learner/1/questions",
+      browser: "Chrome 141 on macOS",
+    });
+
+    const [, sentBody] = httpService.post.mock.calls[0] as [
+      string,
+      { pageUrl?: string; browser?: string; metadata: Record<string, string> },
+    ];
+    expect(sentBody.pageUrl).toBe(
+      "https://mark.skills.network/learner/1/questions",
+    );
+    expect(sentBody.metadata).toMatchObject({
+      "mark.pageUrl": "https://mark.skills.network/learner/1/questions",
+      "mark.browser": "Chrome 141 on macOS",
+    });
+  });
+
+  // A ticket is worth more than any one of its context URLs, so a malformed
+  // one is dropped instead of failing the report.
+  it.each(["portalUrl", "pageUrl", "chatHistoryUrl"] as const)(
+    "drops a malformed %s instead of rejecting the ticket",
+    async (field) => {
+      mockTicketResponse();
+
+      await expect(
+        service.createTicket({
+          title: "Mark report",
+          description: "Details",
+          reporterEmail: "learner@example.com",
+          [field]: "not-a-url",
+        }),
+      ).resolves.toMatchObject({ ticketKey: "SUPPORT-104" });
+
+      const [, sentBody] = httpService.post.mock.calls[0] as [
+        string,
+        Record<string, unknown> & { metadata: Record<string, string> },
+      ];
+      expect(sentBody[field]).toBeUndefined();
+      expect(sentBody.metadata.portalUrl).toBeUndefined();
+    },
+  );
+
+  it("keeps a valid long page URL without rejecting its metadata copy", async () => {
+    mockTicketResponse();
+    const pageUrl =
+      "https://mark.skills.network/learner?context=" + "x".repeat(600);
+    await expect(
+      service.createTicket({
+        title: "Report",
+        description: "Details",
+        reporterEmail: "learner@example.com",
+        pageUrl,
+      }),
+    ).resolves.toMatchObject({ ticketKey: "SUPPORT-104" });
+    const body = httpService.post.mock.calls[0][1];
+    expect(body.pageUrl).toBe(pageUrl);
+    expect(body.metadata["mark.pageUrl"]).toBeUndefined();
+  });
+
+  it("drops oversized optional URLs and bounds browser and portal names", async () => {
+    mockTicketResponse();
+    await service.createTicket({
+      title: "Report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      pageUrl: "https://mark.skills.network/" + "x".repeat(2000),
+      browser: "x".repeat(501),
+      portalName: "p".repeat(201),
+    });
+    const body = httpService.post.mock.calls[0][1];
+    expect(body.pageUrl).toBeUndefined();
+    expect(body.browser).toHaveLength(500);
+    expect(body.reporterOrigin).toHaveLength(200);
+  });
+
+  it("uses a product key without requiring the legacy token", async () => {
+    mockTicketResponse();
+    configService.get.mockImplementation((key: string) =>
+      key === "SN_SUPPORT_URL" ? "https://support.skills.network" : undefined,
+    );
+    expect(service.isConfigured()).toBe(true);
+    await service.createTicket(
+      {
+        title: "Report",
+        description: "Details",
+        reporterEmail: "learner@example.com",
+      },
+      "product-key",
+    );
+    expect(httpService.post.mock.calls[0][2].headers.Authorization).toBe(
+      "Bearer product-key",
+    );
   });
 
   it("rejects a ticket without the reporter email required by v2", async () => {

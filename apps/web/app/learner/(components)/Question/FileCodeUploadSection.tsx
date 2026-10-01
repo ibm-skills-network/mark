@@ -42,7 +42,9 @@ const FileCodeUploadSection = ({
     (state) => state.persistStateForQuestion,
   );
   const learnerFileResponse = useLearnerStore(
-    (state) => state.questions[questionId].learnerFileResponse,
+    (state) =>
+      state.questions.find((question) => question.id === questionId)
+        ?.learnerFileResponse,
   );
   const [octokit, setOctokit] = useState<Octokit | null>(null);
   const getTokenFromBackend = async () => {

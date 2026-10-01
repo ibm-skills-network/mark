@@ -79,7 +79,9 @@ export default function GradeSyncStatus({
           color: "text-green-600",
           bgColor: "bg-green-50",
           borderColor: "border-green-200",
-          message: "Your completion has been synced to your course platform",
+          message: "Your completion was sent to your course platform",
+          detail:
+            "It may take a couple of hours for your course platform to display it. There's nothing you need to do. You can close this window.",
         };
 
       case "IN_PROGRESS":
@@ -90,6 +92,8 @@ export default function GradeSyncStatus({
           bgColor: "bg-blue-50",
           borderColor: "border-blue-200",
           message: "Syncing your completion to your course platform...",
+          detail:
+            "Your completion is recorded with us. It may take a couple of hours to appear in your course. You can close this window.",
         };
 
       case "SCHEDULED":

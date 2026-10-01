@@ -350,6 +350,7 @@ export class JobExecutorService {
               jobPayload.parentJobId,
               undefined,
               isFinalAttempt,
+              jobPayload.text,
             );
           this.throwIfRetryableLanguageFailures(failed, isFinalAttempt, {
             assignmentId: jobPayload.assignmentId,

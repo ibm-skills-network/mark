@@ -117,6 +117,8 @@ export class FloService {
     options: {
       severity?: "info" | "warning" | "error" | "critical";
       tags?: string[];
+      portalName?: string;
+      portalUrl?: string;
       [key: string]: any;
     } = {},
   ): Promise<boolean> {
@@ -127,6 +129,7 @@ export class FloService {
       return false;
     }
 
+    const { portalName, portalUrl, ...extraOptions } = options;
     const messageData = {
       title,
       description,
@@ -135,7 +138,11 @@ export class FloService {
       tool_name: "Mark AI Assistant",
       type: "service",
       tags: options.tags || ["mark", "chat"],
-      ...options,
+      // Flo reads the reporting portal from these two snake_case fields; the
+      // camelCase inputs are unwrapped above so they are not published twice.
+      portal_name: portalName,
+      portal_url: portalUrl,
+      ...extraOptions,
     };
 
     const sent = await this.publishWithTimeout("sendError", () =>
@@ -169,6 +176,10 @@ export class FloService {
       return false;
     }
 
+    // Unwrapped so the camelCase inputs are not published alongside the
+    // snake_case fields Flo actually reads.
+    const { portalName, portalUrl, userEmail, rating, ...extraOptions } =
+      options;
     const messageData = {
       organization: this.natsConfig.organization,
       program: this.natsConfig.program,
@@ -180,11 +191,11 @@ export class FloService {
       title,
       description,
       category: "feedback",
-      portal_name: options.portalName || "Mark AI Assistant",
-      portal_url: options.portalUrl,
-      user_email: options.userEmail,
-      rating: options.rating || "3",
-      ...options,
+      portal_name: portalName || "Mark AI Assistant",
+      portal_url: portalUrl,
+      user_email: userEmail,
+      rating: rating || "3",
+      ...extraOptions,
     };
 
     const sent = await this.publishWithTimeout("sendFeedback", () =>

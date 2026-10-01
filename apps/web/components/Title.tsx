@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { cn } from "@/lib/strings";
 import type { ComponentPropsWithoutRef } from "react";
 

@@ -1,162 +1,97 @@
-/* eslint-disable */
 import { getBaseApiPath } from "@/config/constants";
+import { authorizeChatRequest, VerifiedChatSession } from "@/lib/chat-session";
 
 const BACKEND_SOURCE_HEADER = "x-mark-chat-backend";
-const USER_SESSION_CACHE_TTL_MS = 30_000;
-const userSessionCache = new Map<
-  string,
-  {
-    value: { userId: string; assignmentId?: number; cookie?: string };
-    expiresAt: number;
-  }
->();
+const LOG_EVENT = "markChat.stream.request";
 
-function getUserSessionHeader(req: Request): string | null {
-  const directHeader = req.headers.get("user-session");
-  if (directHeader) return directHeader;
-
-  const cookieHeader = req.headers.get("cookie");
-  if (!cookieHeader) return null;
-
-  const sessionCookie = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("userSession="));
-
-  if (!sessionCookie) return null;
-
-  const value = sessionCookie.split("=").slice(1).join("=");
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
+interface ChatPayload {
+  userRole: "author" | "learner";
+  userText: string;
+  conversation: unknown[];
 }
 
-function parseUserId(userSessionHeader: string | null): string | null {
-  if (!userSessionHeader) return null;
-  try {
-    const parsed = JSON.parse(userSessionHeader) as { userId?: string };
-    return parsed.userId || null;
-  } catch {
-    return null;
-  }
+/** The browser decides what to ask, never who is asking or what shape it sends. */
+function parsePayload(body: unknown): ChatPayload | null {
+  if (typeof body !== "object" || body === null) return null;
+
+  const { userRole, userText, conversation } = body as Record<string, unknown>;
+
+  if (userRole !== "author" && userRole !== "learner") return null;
+  if (typeof userText !== "string" || userText.length === 0) return null;
+  if (!Array.isArray(conversation)) return null;
+
+  return { userRole, userText, conversation };
 }
 
-function parseAssignmentId(userSessionHeader: string | null): number | null {
-  if (!userSessionHeader) return null;
-  try {
-    const parsed = JSON.parse(userSessionHeader) as { assignmentId?: number };
-    return typeof parsed.assignmentId === "number" ? parsed.assignmentId : null;
-  } catch {
-    return null;
-  }
-}
-
-async function resolveUserSession(req: Request): Promise<{
-  userId: string;
-  assignmentId?: number;
-  header?: string;
-  cookie?: string;
-} | null> {
-  const userSessionHeader = getUserSessionHeader(req);
-  const cookieHeader = req.headers.get("cookie") || "";
-
-  if (userSessionHeader) {
-    const userId = parseUserId(userSessionHeader);
-    if (!userId) return null;
-    return {
-      userId,
-      assignmentId: parseAssignmentId(userSessionHeader) || undefined,
-      header: userSessionHeader,
-    };
-  }
-
-  const cacheKey = cookieHeader;
-  const cached = cacheKey ? userSessionCache.get(cacheKey) : undefined;
-  if (cached && cached.expiresAt > Date.now()) {
-    return {
-      userId: cached.value.userId,
-      assignmentId: cached.value.assignmentId,
-      cookie: cached.value.cookie,
-    };
-  }
-
-  try {
-    const res = await fetch(`${getBaseApiPath("v1")}/user-session`, {
-      headers: cookieHeader ? { Cookie: cookieHeader } : {},
-    });
-
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      userId?: string;
-      assignmentId?: number;
-    };
-    if (!data.userId) return null;
-    const resolved = {
-      userId: data.userId,
-      assignmentId: data.assignmentId,
-      cookie: cookieHeader || undefined,
-    };
-    if (cacheKey) {
-      userSessionCache.set(cacheKey, {
-        value: resolved,
-        expiresAt: Date.now() + USER_SESSION_CACHE_TTL_MS,
-      });
-    }
-    return resolved;
-  } catch {
-    return null;
-  }
+function textResponse(message: string, status: number): Response {
+  return new Response(message, {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 
 async function callBackendChatStream(
-  req: Request,
-  payload: { userRole: string; userText: string; conversation: any[] },
+  session: VerifiedChatSession,
+  caller: string,
+  payload: ChatPayload,
 ): Promise<Response | null> {
-  const session = await resolveUserSession(req);
-  if (!session?.userId) return null;
-
-  const assignmentId = session.assignmentId;
   const baseApiPath = getBaseApiPath("v1");
-  const authHeaders = session.header
-    ? { "user-session": session.header }
-    : session.cookie
-      ? { Cookie: session.cookie }
-      : {};
+  // The caller's cookie is the credential; the identity is re-derived
+  // downstream from it rather than asserted by this service.
+  const authHeaders = {
+    "Content-Type": "application/json",
+    Cookie: session.cookie,
+  };
 
   try {
     const chatRes = await fetch(`${baseApiPath}/chats/today`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify({ userId: session.userId, assignmentId }),
+      headers: authHeaders,
+      body: JSON.stringify({
+        userId: session.userId,
+        assignmentId: session.assignmentId,
+      }),
     });
 
     if (!chatRes.ok) {
+      console.warn(`${LOG_EVENT}.backend_rejected`, {
+        caller,
+        stage: "open_chat",
+        status: chatRes.status,
+      });
       return null;
     }
 
     const chatData = (await chatRes.json()) as { id?: string };
-    if (!chatData.id) return null;
+    if (!chatData.id) {
+      console.warn(`${LOG_EVENT}.backend_rejected`, {
+        caller,
+        stage: "open_chat",
+        reason: "missing_chat_id",
+      });
+      return null;
+    }
 
     const respondRes = await fetch(
       `${baseApiPath}/chats/${chatData.id}/respond-stream`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
+        headers: authHeaders,
         body: JSON.stringify(payload),
       },
     );
 
     if (!respondRes.ok || !respondRes.body) {
+      console.warn(`${LOG_EVENT}.backend_rejected`, {
+        caller,
+        stage: "respond",
+        status: respondRes.status,
+        hasBody: Boolean(respondRes.body),
+      });
       return null;
     }
+
+    console.info(`${LOG_EVENT}.streaming`, { caller, chatId: chatData.id });
 
     return new Response(respondRes.body, {
       headers: {
@@ -167,44 +102,59 @@ async function callBackendChatStream(
         [BACKEND_SOURCE_HEADER]: "true",
       },
     });
-  } catch {
+  } catch (error) {
+    console.error(`${LOG_EVENT}.failed`, {
+      caller,
+      reason: "chat_backend_unreachable",
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return null;
   }
 }
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { userRole, userText, conversation } = body;
-
-    if (!userRole || !userText || !conversation) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const backendStream = await callBackendChatStream(req, {
-      userRole,
-      userText,
-      conversation,
-    });
-
-    if (!backendStream) {
-      return new Response("Backend chat service unavailable", {
-        status: 502,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
-    }
-
-    return backendStream;
-  } catch {
-    return new Response("Server error", {
-      status: 500,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
+  const authorization = await authorizeChatRequest(req, LOG_EVENT);
+  if (authorization.outcome === "denied") {
+    return textResponse(authorization.message, authorization.status);
   }
+
+  const { session, caller } = authorization;
+
+  let payload: ChatPayload | null;
+  try {
+    payload = parsePayload(await req.json());
+  } catch (error) {
+    console.warn(`${LOG_EVENT}.rejected`, {
+      caller,
+      reason: "unreadable_payload",
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    return textResponse("Invalid request", 400);
+  }
+
+  if (!payload) {
+    console.warn(`${LOG_EVENT}.rejected`, {
+      caller,
+      reason: "invalid_payload",
+    });
+    return textResponse("Missing required fields", 400);
+  }
+
+  console.info(`${LOG_EVENT}.received`, {
+    caller,
+    userRole: payload.userRole,
+    // Lengths only: the message is learner content.
+    characters: payload.userText.length,
+    turns: payload.conversation.length,
+  });
+
+  const backendStream = await callBackendChatStream(session, caller, payload);
+
+  if (!backendStream) {
+    return textResponse("Backend chat service unavailable", 502);
+  }
+
+  return backendStream;
 }

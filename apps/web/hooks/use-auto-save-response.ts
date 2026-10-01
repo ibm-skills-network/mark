@@ -63,8 +63,8 @@ export function useAutoSaveResponse(
 ) {
   const { enabled = true, debounceMs = 3000, showToast = false } = config;
 
-  const saveTimeoutRef = useRef<NodeJS.Timeout>();
-  const retryTimeoutRef = useRef<NodeJS.Timeout>();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const isSavingRef = useRef(false);
   const lastSavedDataRef = useRef<string>("");
   // Set the moment a fresh save arrives while a previous attempt is still

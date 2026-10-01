@@ -15,14 +15,18 @@ import { ReportsController } from "./controllers/report.controller";
 import { AdminReportsController } from "./controllers/admin-report.controller";
 import { GithubWebhookController } from "./controllers/github-webhook.controller";
 import { FloService } from "./services/flo.service";
+import { PortalLookupService } from "./services/portal-lookup.service";
 import { ReportsService } from "./services/report.service";
 import { SnSupportService } from "./services/sn-support.service";
+import { SupportRoutingService } from "./services/support-routing.service";
 
 @Module({
   providers: [
     ReportsService,
     FloService,
     SnSupportService,
+    PortalLookupService,
+    SupportRoutingService,
     FilesService,
     S3Service,
   ],

@@ -323,14 +323,22 @@ export class GradingProgressService {
   async markFailed(attemptId: number, error: string): Promise<void> {
     try {
       if (attemptId > 0) {
-        await this.prisma.gradingProgress.update({
-          where: { attemptId },
+        // Never downgrade a finished grade: a duplicate submit (409) reaches
+        // this path after the first submit already completed, and overwriting
+        // the row showed "Grading Failed" on a graded attempt.
+        const { count } = await this.prisma.gradingProgress.updateMany({
+          where: { attemptId, status: { not: GradingStatus.COMPLETED } },
           data: {
             status: GradingStatus.FAILED,
             error,
             completedAt: new Date(),
           },
         });
+        if (count === 0) {
+          this.logger.warn(
+            `markFailed: attempt ${attemptId} has no non-completed progress row; left as-is (reason: ${error})`,
+          );
+        }
       }
     } catch (error_) {
       this.logger.error(

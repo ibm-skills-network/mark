@@ -46,7 +46,13 @@ export interface GradingContext {
 
   /**
    * Attempt owner's userId (an email in this system). Used only to derive
-   * the hashed OpenAI safety identifier — never sent raw to providers.
+   * hashed identifiers — never sent raw to providers or stored beside grades.
    */
   userId?: string;
+
+  /**
+   * The attempt being graded, resolved server-side from the route, so a grade
+   * reuse decision can be traced back to a submission in the logs.
+   */
+  attemptId?: number;
 }

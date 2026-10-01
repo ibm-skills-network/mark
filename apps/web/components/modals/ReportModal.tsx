@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ReportDiagnosticsPanel } from "@/app/admin/components/ReportDiagnosticsPanel";
 
 interface Report {
   id: number;
@@ -23,6 +24,11 @@ interface ReportModalProps {
   report: Report | null;
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Only the admin dashboard passes this. With it the modal also shows what
+   * the reporter's browser held; the API enforces the admin check either way.
+   */
+  adminSessionToken?: string | null;
 }
 
 const getStatusVariant = (
@@ -59,7 +65,12 @@ const getIssueTypeColor = (issueType: string): string => {
   }
 };
 
-export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
+export function ReportModal({
+  report,
+  isOpen,
+  onClose,
+  adminSessionToken,
+}: ReportModalProps) {
   if (!report) return null;
 
   const formatDate = (dateString: string) => {
@@ -68,7 +79,7 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" />
@@ -125,6 +136,21 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
                 <span className="text-sm text-red-700 font-medium">
                   This issue requires attention
                 </span>
+              </div>
+            </>
+          )}
+
+          {adminSessionToken && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-medium mb-2">
+                  Diagnostics (admin only)
+                </h3>
+                <ReportDiagnosticsPanel
+                  reportId={report.id}
+                  sessionToken={adminSessionToken}
+                />
               </div>
             </>
           )}

@@ -5,7 +5,7 @@ import AuthFetchToAbout from "./AuthFetchToAbout";
 
 interface Props {
   params: Promise<{ assignmentId: string }>;
-  searchParams: Promise<{ submissionTime?: string }>;
+  searchParams: Promise<{ submissionTime?: string; authorMode?: string }>;
 }
 
 async function Component(props: Props) {
@@ -15,7 +15,11 @@ async function Component(props: Props) {
   const headerList = await headers();
   const cookieHeader = headerList.get("cookie") || "";
   try {
-    const user = await getUser(cookieHeader);
+    const searchParams = await props.searchParams;
+    const user = await getUser(cookieHeader, {
+      assignmentId: Number(assignmentId),
+      role: searchParams.authorMode === "true" ? "author" : "learner",
+    });
     const role = user?.role;
 
     return (
@@ -30,7 +34,7 @@ async function Component(props: Props) {
     // getUser throws Error("Unauthorized") for 401; statusFromError maps that to
     // 401 -> SessionExpired and anything else to a generic ErrorPage rather than
     // telling every failure to "reload to sign back in".
-    return <ErrorScreen status={statusFromError(error)} />;
+    return <ErrorScreen status={statusFromError(error)} error={error} />;
   }
 }
 

@@ -88,7 +88,10 @@ const extractAudio = async (ffmpeg: FFmpeg, videoBlob: Blob): Promise<Blob> => {
       "output.wav",
     ]);
     const audioData = await ffmpeg.readFile("output.wav");
-    return new Blob([audioData], { type: "audio/wav" });
+    return new Blob(
+      [typeof audioData === "string" ? audioData : new Uint8Array(audioData)],
+      { type: "audio/wav" },
+    );
   } finally {
     await ffmpeg.deleteFile("input.mp4");
     await ffmpeg.deleteFile("output.wav");
@@ -333,7 +336,10 @@ const VideoPresentationEditor = ({
         "output.mp4",
       ]);
       const data = await ffmpeg.readFile("output.mp4");
-      const trimmedBlob = new Blob([data], { type: "video/mp4" });
+      const trimmedBlob = new Blob(
+        [typeof data === "string" ? data : new Uint8Array(data)],
+        { type: "video/mp4" },
+      );
       setTrimmedVideoURL(URL.createObjectURL(trimmedBlob));
     } catch (err) {
       console.error("Error trimming video:", err);
@@ -463,7 +469,7 @@ const VideoPresentationEditor = ({
                       .file(actualPath)
                       ?.async("uint8array");
                     if (imageBinary) {
-                      const blob = new Blob([imageBinary]);
+                      const blob = new Blob([new Uint8Array(imageBinary)]);
                       const base64 = await fileToBase64(
                         new File([blob], "slideImage", { type: "image/*" }),
                       );

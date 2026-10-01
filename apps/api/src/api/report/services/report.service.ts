@@ -14,7 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
-import * as natural from "natural";
+import { WordTokenizer } from "natural/lib/natural/tokenizers";
 import { FilesService } from "src/api/files/services/files.service";
 import {
   UserRole,
@@ -27,9 +27,14 @@ import {
   defaultSeverityForIssueType,
   stripSectionLabelMarkdown,
 } from "../helpers/issue-template";
+import {
+  ReportDiagnostics,
+  summarizeReportDiagnostics,
+} from "../helpers/report-diagnostics";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
+import { SupportRoutingService } from "./support-routing.service";
 
 interface FeedbackFilterParameters {
   page: number;
@@ -64,6 +69,7 @@ export class ReportsService {
     private readonly filesService: FilesService,
     private readonly adminEmailService: AdminEmailService,
     private readonly snSupportService: SnSupportService,
+    private readonly supportRouting: SupportRoutingService,
   ) {}
 
   private async getGithubConfig(
@@ -632,7 +638,7 @@ export class ReportsService {
 
   private calculateTextSimilarity(text1: string, text2: string): number {
     try {
-      const tokenizer = new natural.WordTokenizer();
+      const tokenizer = new WordTokenizer();
       const tokens1 = tokenizer.tokenize(text1.toLowerCase()) || [];
       const tokens2 = tokenizer.tokenize(text2.toLowerCase()) || [];
 
@@ -840,9 +846,22 @@ export class ReportsService {
     }>;
     isDuplicate?: boolean;
   }> {
-    const { issueType, description, attemptId, severity, additionalDetails } =
-      dto;
+    const {
+      issueType,
+      description,
+      attemptId,
+      severity,
+      additionalDetails,
+      portal = {},
+      diagnostics,
+    } = dto;
     const assignmentId = userSession?.assignmentId;
+    // additionalDetails is a free-form bag filled by three different clients,
+    // so every read of it is guarded.
+    const detailString = (key: string): string | undefined =>
+      typeof additionalDetails?.[key] === "string"
+        ? additionalDetails[key]
+        : undefined;
 
     if (!issueType) {
       this.logger.error("submitReport: missing issueType in DTO", {
@@ -940,8 +959,28 @@ export class ReportsService {
 
     // SN Support is the support queue for new reports. The v2 API requires a
     // reporter email, so anonymous reports exist only as DB rows below.
+    //
+    // The token decides which SN Support product the ticket lands in, so it is
+    // resolved once here and reused: resolving twice could file duplicates in
+    // two products, since SN Support's idempotency is per product.
+    const portalContext = {
+      portalHost: portal.portalHost,
+      portalName: portal.portalName,
+      portalUrl: portal.portalUrl,
+    };
+    const canForward =
+      this.snSupportService.isConfigured() && safeUserEmail !== "Unknown";
+    // Only when a ticket is actually going out: routing calls portal-manager,
+    // and an anonymous report or a disabled integration has nowhere to send.
+    const route = canForward
+      ? await this.supportRouting.resolve(portalContext)
+      : undefined;
+    // portal-manager knows a portal's real display name; the host is only a
+    // stand-in until it answers.
+    const portalName = route?.portalName ?? portalContext.portalName;
+
     let snTicketKey: string | undefined;
-    if (this.snSupportService.isConfigured() && safeUserEmail !== "Unknown") {
+    if (canForward && route?.token) {
       const supportDescription = [
         stripSectionLabelMarkdown(description),
         "",
@@ -950,47 +989,45 @@ export class ReportsService {
         `Severity: ${issueSeverity}`,
         `Assignment ID: ${assignmentId ?? "N/A"}`,
         `Attempt ID: ${attemptId ?? "N/A"}`,
+        ...(diagnostics ? [summarizeReportDiagnostics(diagnostics)] : []),
       ].join("\n");
 
       try {
-        const snTicket = await this.snSupportService.createTicket({
-          title: ticketTitle,
-          description: supportDescription,
-          reporterEmail: safeUserEmail,
-          severity: issueSeverity,
-          issueType:
-            typeof additionalDetails?.category === "string"
-              ? additionalDetails.category
-              : issueType,
-          pageUrl:
-            typeof additionalDetails?.pageUrl === "string"
-              ? additionalDetails.pageUrl
-              : undefined,
-          portalName:
-            typeof additionalDetails?.portalName === "string"
-              ? additionalDetails.portalName
-              : undefined,
-          courseTitle:
-            typeof additionalDetails?.courseTitle === "string"
-              ? additionalDetails.courseTitle
-              : undefined,
-          toolName: "Mark",
-          browser:
-            typeof additionalDetails?.browser === "string"
-              ? additionalDetails.browser
-              : undefined,
-          chatHistoryUrl:
-            typeof additionalDetails?.chatHistoryUrl === "string"
-              ? additionalDetails.chatHistoryUrl
-              : undefined,
-          screenshotUrl: fullScreenshotUrl,
-        });
+        const snTicket = await this.snSupportService.createTicket(
+          {
+            title: ticketTitle,
+            description: supportDescription,
+            reporterEmail: safeUserEmail,
+            severity: issueSeverity,
+            issueType: detailString("category") ?? issueType,
+            pageUrl: detailString("pageUrl"),
+            portalName,
+            portalUrl: portalContext.portalUrl,
+            courseTitle: detailString("courseTitle"),
+            toolName: "Mark",
+            browser: detailString("browser"),
+            chatHistoryUrl: detailString("chatHistoryUrl"),
+            screenshotUrl: fullScreenshotUrl,
+          },
+          route.token,
+        );
         snTicketKey = snTicket.ticketKey;
+        // A ticket in the wrong product looks exactly like one in the right
+        // product, so how the product was chosen is logged on every report.
         this.logger.log("Created SN Support ticket for report", {
           ticket_key: snTicket.ticketKey,
           assignment_id: assignmentId,
           attempt_id: attemptId,
+          portal_host: portalContext.portalHost,
+          portal_name: portalName,
+          product: route.productName,
+          token_source: route.via,
         });
+        if (route.via === "default" || route.via === "legacy") {
+          this.logger.warn(
+            `SN ticket ${snTicket.ticketKey} filed under ${route.productName ?? "the legacy token"} — no product matched portal ${portalContext.portalHost ?? "(unknown)"}`,
+          );
+        }
       } catch (error) {
         // The report survives as a DB row (and in the admin dashboard), so
         // the submission itself is not failed — but nobody is watching that
@@ -1004,9 +1041,14 @@ export class ReportsService {
       }
     } else {
       // Without a ticket the report reaches no support queue — DB row only.
+      // portal_host is logged even here: while the integration is off it is
+      // the only way to sample what LTI actually sends as a return URL, which
+      // is what routing will key off once it is on.
       this.logger.warn("Report not forwarded to SN Support", {
         configured: this.snSupportService.isConfigured(),
+        has_token: Boolean(route?.token),
         has_reporter_email: safeUserEmail !== "Unknown",
+        portal_host: portalContext.portalHost,
         assignment_id: assignmentId,
         attempt_id: attemptId,
       });
@@ -1082,6 +1124,10 @@ export class ReportsService {
     try {
       const report = await this.prisma.report.create({ data: reportData });
 
+      if (diagnostics) {
+        await this.storeReportDiagnostics(report.id, diagnostics);
+      }
+
       // Fire-and-forget: Flo is best-effort telemetry. Never block the
       // request on its NATS publish — the underlying ts-nats client opens a
       // fresh connection per call and has no built-in deadline.
@@ -1094,6 +1140,8 @@ export class ReportsService {
           sn_ticket: snTicketKey,
           report_id: report.id,
           is_duplicate: isDuplicate,
+          portalName,
+          portalUrl: portalContext.portalUrl,
         })
         .catch((error) => {
           this.logger.warn(
@@ -1158,6 +1206,53 @@ export class ReportsService {
           "We encountered an issue while submitting your report. Your feedback is still important to us - please try again later.",
       };
     }
+  }
+
+  /**
+   * The capture is context for whoever triages the report. Losing it must not
+   * lose the report, so a failure here is logged and the submission carries on.
+   */
+  private async storeReportDiagnostics(
+    reportId: number,
+    diagnostics: ReportDiagnostics,
+  ): Promise<void> {
+    try {
+      await this.prisma.reportDiagnostics.create({
+        data: {
+          reportId,
+          data: diagnostics as unknown as Prisma.InputJsonValue,
+        },
+      });
+      this.logger.log("Stored report diagnostics", {
+        report_id: reportId,
+        attempt_id: diagnostics.session?.attemptId,
+        recent_requests: diagnostics.requests?.length ?? 0,
+      });
+    } catch (error) {
+      this.logger.error("Failed to store report diagnostics", {
+        report_id: reportId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  }
+
+  /**
+   * Admin-only read (the route carries the guard). Diagnostics live in their
+   * own table so no report query that serves a learner or author returns them.
+   */
+  async getReportDiagnostics(reportId: number) {
+    const row = await this.prisma.reportDiagnostics.findUnique({
+      where: { reportId },
+    });
+    if (!row) {
+      throw new NotFoundException("No diagnostics for this report");
+    }
+    return {
+      reportId: row.reportId,
+      capturedAt: row.createdAt,
+      diagnostics: row.data,
+    };
   }
 
   async getReportsForAssignment(assignmentId: number) {
@@ -2353,21 +2448,34 @@ export class ReportsService {
     }
   }
 
-  async sendUserFeedback(
-    title: string,
-    description: string,
-    rating: string,
-    userEmail?: string,
-    portalName?: string,
-    userId?: string,
-    assignmentId?: number,
-  ): Promise<{ message: string; reportId?: number }> {
+  async sendUserFeedback(input: {
+    title: string;
+    description: string;
+    rating: string;
+    userEmail?: string;
+    portalName?: string;
+    portalUrl?: string;
+    userId?: string;
+    assignmentId?: number;
+  }): Promise<{ message: string; reportId?: number }> {
+    const {
+      title,
+      description,
+      rating,
+      userEmail,
+      portalName,
+      portalUrl,
+      userId,
+      assignmentId,
+    } = input;
+
     // Fire-and-forget: see floService.sendError comment in reportIssue.
     void this.floService
       .sendFeedback(title, description, {
         rating,
         userEmail,
         portalName: portalName || "Mark AI Assistant",
+        portalUrl,
       })
       .catch((error) => {
         this.logger.warn(
