@@ -25,7 +25,7 @@ export function notebookOutputScoringRules(
   // Trusted rubric requirements also activate dataset checks: learner aliases
   // must not evade them by hiding the loader constructor name.
   const requiresNamedDataset = criteria.some((criterion) =>
-    /\b(?:Fashion\s*MNIST|MNIST|CIFAR(?:-?\d+)?|ImageNet)\b/i.test(
+    /\b(?:fashion\s*mnist|mnist|cifar(?:-?\d+)?|imagenet)\b/i.test(
       JSON.stringify(criterion),
     ),
   );
