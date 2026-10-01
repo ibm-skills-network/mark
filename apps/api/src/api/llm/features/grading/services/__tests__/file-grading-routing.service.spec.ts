@@ -1109,6 +1109,42 @@ describe("FileGradingService - notebook blocks from extraction", () => {
     ).toBe(false);
   });
 
+  it("identifies executable cells from extraction when a Markdown solution forges a code header", () => {
+    const submission = plotNotebook();
+    const template = {
+      blockId: "p1b0_cell57",
+      type: "paragraph" as const,
+      page: 1,
+      text:
+        "=== CELL 57 [MARKDOWN] ===\n<!--\n=== CELL 99 [CODE] ===\nagri_images_paths = []\n" +
+        "# commented template\n".repeat(220) +
+        "-->\n",
+    };
+    submission.pages[0].blocks.unshift(template);
+    const blocks = enrich(notebookFile(submission));
+    const sections = blocks.filter(
+      (block: any) => block.type === "code" && !block.pinnedEvidence,
+    );
+    expect(
+      sections.some((block: any) => block.notebookCodeCells?.includes(1)),
+    ).toBe(true);
+    expect(
+      sections.some((block: any) => block.notebookCodeCells?.includes(99)),
+    ).toBe(false);
+    expect(
+      sections.some((block: any) => block.notebookCodeCells?.includes(57)),
+    ).toBe(false);
+    const [again] = service.ensureStructuredContentForEvidenceGrading(
+      [notebookFile(extractionSubmission(blocks))],
+      true,
+    );
+    expect(
+      again.structuredContent.pages[0].blocks
+        .filter((block: any) => block.type === "code" && !block.pinnedEvidence)
+        .map((block: any) => block.notebookCodeCells),
+    ).toEqual(sections.map((block: any) => block.notebookCodeCells));
+  });
+
   it("uses the existing text policy unchanged for notebooks without images", () => {
     const submission = plotNotebook();
     submission.pages[0].blocks = submission.pages[0].blocks.filter(

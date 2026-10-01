@@ -133,3 +133,18 @@ it("gives the judge every scoring level instead of only the rubric heading", asy
   expect(rendered).toContain('"points":1');
   expect(rendered).toContain('"points":2');
 });
+
+it("audits notebook scores using the same blank-output rules and executable-cell provenance as the grader", async () => {
+  const notebook = criterion("chart", [
+    "Plotting code followed by blank saved axes",
+  ]);
+  notebook.evidence[0].notebookRenderedOutput = true;
+  notebook.evidence[0].notebookCodeCells = [58];
+  const prompt = await renderEvidence([notebook]);
+  expect(prompt).toContain("Original executable cell numbers: [58]");
+  expect(prompt).toContain("A blank output cannot qualify");
+  const document = await renderEvidence([
+    criterion("chart", ["Plotting code"]),
+  ]);
+  expect(document).not.toContain("NOTEBOOK OUTPUT SCORING");
+});

@@ -78,6 +78,9 @@ export interface ContentBlock {
    */
   renderedOutputNote?: string;
 
+  /** Executable cell numbers from extractor provenance, never parsed from learner text. */
+  notebookCodeCells?: number[];
+
   imageData?: string;
   imageDescription?: string;
   /**

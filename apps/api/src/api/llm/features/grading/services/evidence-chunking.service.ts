@@ -194,6 +194,9 @@ export class EvidenceChunkingService {
         // evidence budget; the chunk *text* cannot serve as the key, since
         // each carries its own "[Image output of cell N]" label.
         ...(block.imageHash ? { imageHash: block.imageHash } : {}),
+        ...(block.notebookCodeCells === undefined
+          ? {}
+          : { notebookCodeCells: block.notebookCodeCells }),
         // The grading-time note appended below is not learner content, so the
         // learner-facing quote must stop before it (see chunkToEvidenceCitation).
         ...(block.renderedOutputNote

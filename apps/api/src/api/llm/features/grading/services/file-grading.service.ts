@@ -169,7 +169,7 @@ export class FileGradingService implements IFileGradingService {
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
     "structured-file-evidence-v6-complete-judge-rubric";
   private static readonly NOTEBOOK_IMAGE_GRADER_VERSION =
-    "structured-file-evidence-v7-notebook-images";
+    "structured-file-evidence-v8-notebook-images";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -1530,7 +1530,12 @@ export class FileGradingService implements IFileGradingService {
     const source = this.normalizeNotebookTextForLinking(
       file.extractedText || file.content || "",
     );
-    const cellRanges: { cell: string; start: number; end: number }[] = [];
+    const cellRanges: {
+      cell: string;
+      start: number;
+      end: number;
+      codeCells: number[];
+    }[] = [];
     let cellCursor = 0;
     for (const page of extracted.pages) {
       for (const block of page.blocks) {
@@ -1541,7 +1546,14 @@ export class FileGradingService implements IFileGradingService {
         const start = source.indexOf(text, cellCursor);
         if (start < 0) continue;
         const end = start + text.length;
-        cellRanges.push({ cell, start, end });
+        cellRanges.push({
+          cell,
+          start,
+          end,
+          codeCells:
+            block.notebookCodeCells ??
+            (block.type === "code" ? [Number(cell)] : []),
+        });
         cellCursor = end;
       }
     }
@@ -1563,13 +1575,16 @@ export class FileGradingService implements IFileGradingService {
         rangeCursor++;
       }
       const cells: string[] = [];
+      block.notebookCodeCells = [];
       for (
         let index = rangeCursor;
         index < cellRanges.length && cellRanges[index].start < end;
         index++
       ) {
         cells.push(cellRanges[index].cell);
+        block.notebookCodeCells.push(...cellRanges[index].codeCells);
       }
+      block.notebookCodeCells = [...new Set(block.notebookCodeCells)];
       const firstCell = cells[0];
       if (firstCell) block.blockId += `_cell${firstCell}`;
       for (const cell of cells) {

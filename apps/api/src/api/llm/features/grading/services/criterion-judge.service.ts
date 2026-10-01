@@ -1,3 +1,4 @@
+import { NOTEBOOK_OUTPUT_SCORING_RULES } from "./notebook-evidence.rules";
 import { Injectable, Inject } from "@nestjs/common";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/classic/output_parsers";
@@ -114,6 +115,8 @@ QUESTION:
 RUBRIC:
 {rubric}
 
+{notebook_output_rules}
+
 CRITERION OUTPUTS:
 {outputs}
 
@@ -134,6 +137,12 @@ EVIDENCE SUMMARY:
               }),
             )
             .join("\n"),
+        notebook_output_rules: () =>
+          request.evidence.some((item) =>
+            item.evidence.some((entry) => entry.notebookRenderedOutput),
+          )
+            ? NOTEBOOK_OUTPUT_SCORING_RULES
+            : "",
         outputs: () =>
           request.grades
             .map(
@@ -149,7 +158,10 @@ EVIDENCE SUMMARY:
           const membership = request.evidence.map((item) => {
             for (const entry of item.evidence) {
               const key = JSON.stringify([entry.chunkId, entry.quote]);
-              chunks.set(key, `${entry.chunkId}:\n${entry.quote}`);
+              chunks.set(
+                key,
+                `${entry.chunkId}:\n${entry.quote}${entry.notebookCodeCells === undefined ? "" : `\nOriginal executable cell numbers: ${JSON.stringify(entry.notebookCodeCells)}`}`,
+              );
             }
             return `${item.criterionId}: ${
               item.evidence.map((entry) => entry.chunkId).join(", ") ||

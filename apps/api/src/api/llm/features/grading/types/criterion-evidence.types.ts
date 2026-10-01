@@ -88,6 +88,7 @@ export interface ExtractedChunk {
      * can never be located inside the anchored block's text.
      */
     anchorTextChars?: number;
+    notebookCodeCells?: number[];
   };
 }
 
@@ -103,6 +104,7 @@ export interface CriterionEvidenceRequest {
   strategy?: EvidenceRetrievalStrategy;
   modelOverride?: string;
   modelOverrideIsFinal?: boolean;
+  judgeFeedback?: string;
 }
 
 export interface CriterionEvidence {
@@ -115,6 +117,7 @@ export interface CriterionEvidence {
   searchScore?: number;
   contradiction?: boolean;
   notebookRenderedOutput?: boolean;
+  notebookCodeCells?: number[];
 }
 
 export interface CriterionEvidenceResponse {

@@ -180,7 +180,6 @@ export class CriterionEvidenceRetrievalService {
       this.cache.delete(cacheKey);
     }
 
-    const query = this.buildQuery(request.criterion, request.question);
     const notebookImages = index
       .getAllChunks()
       .filter(
@@ -188,6 +187,11 @@ export class CriterionEvidenceRetrievalService {
           chunk.anchor.type === "image" &&
           isJupyterNotebookFilename(chunk.metadata?.filename),
       );
+    const query = this.buildQuery(
+      request.criterion,
+      request.question,
+      notebookImages.length > 0,
+    );
     // New visual evidence must not displace the code candidates the notebook
     // grader previously saw. Descriptions remain on the returned code chunks.
     const candidates =
@@ -358,6 +362,7 @@ export class CriterionEvidenceRetrievalService {
         request,
         reranked.map((item) => item.chunk),
         recorder,
+        notebookImages.length > 0,
       );
       if (validation?.length === 0 && reranked.length > 0) {
         this.logger.warn(
@@ -367,6 +372,7 @@ export class CriterionEvidenceRetrievalService {
           request,
           reranked.map((item) => item.chunk),
           recorder,
+          notebookImages.length > 0,
         );
       }
       if (validation === undefined) {
@@ -379,6 +385,9 @@ export class CriterionEvidenceRetrievalService {
           anchor: item.chunk.anchor,
           sourceType: item.chunk.sourceType,
           sourceId: item.chunk.sourceId,
+          ...(item.chunk.metadata?.notebookCodeCells === undefined
+            ? {}
+            : { notebookCodeCells: item.chunk.metadata.notebookCodeCells }),
           relevanceScore: item.relevanceScore,
           searchScore: item.searchScore,
           contradiction: item.contradiction,
@@ -429,6 +438,9 @@ export class CriterionEvidenceRetrievalService {
       anchor: item.chunk.anchor,
       sourceType: item.chunk.sourceType,
       sourceId: item.chunk.sourceId,
+      ...(item.chunk.metadata?.notebookCodeCells === undefined
+        ? {}
+        : { notebookCodeCells: item.chunk.metadata.notebookCodeCells }),
       relevanceScore: item.relevance,
       searchScore: item.score,
       ...(isJupyterNotebookFilename(item.chunk.metadata?.filename) &&
@@ -490,19 +502,33 @@ export class CriterionEvidenceRetrievalService {
       .map((chunk) => chunk.hash)
       .join("|");
     const raw = `${request.question}:${request.criterion.id}:${chunkHashes}`;
-    return crypto.createHash("sha256").update(raw).digest("hex");
+    return crypto
+      .createHash("sha256")
+      .update(request.judgeFeedback ? `${raw}:${request.judgeFeedback}` : raw)
+      .digest("hex");
   }
 
-  private buildQuery(criterion: RubricCriterion, question: string): string {
+  private buildQuery(
+    criterion: RubricCriterion,
+    question: string,
+    prioritizeCriterion = false,
+  ): string {
     const criteriaDescriptions = criterion.criteria
       .map((level) => level.description)
       .join(" ");
-    return [
-      question,
+    const criterionParts = [
       criterion.rubricQuestion,
       criterion.description,
       criteriaDescriptions,
-    ]
+    ];
+    // A long assignment prompt can fill the entire search budget. The notebook
+    // image path retains code candidates, so an off-topic pool can also prevent
+    // the thin-pool fallback from recovering the actual criterion's code.
+    return (
+      prioritizeCriterion
+        ? [criterion.rubricQuestion, criterion.description]
+        : [question, ...criterionParts]
+    )
       .filter(Boolean)
       .join(" ")
       .slice(0, 600);
@@ -545,6 +571,7 @@ export class CriterionEvidenceRetrievalService {
     request: CriterionEvidenceRequest,
     chunks: ExtractedChunk[],
     recorder?: LlmCallRecorder,
+    notebookRenderedOutput = false,
   ): Promise<
     | Array<{
         chunk: ExtractedChunk;
@@ -594,7 +621,11 @@ export class CriterionEvidenceRetrievalService {
       (chunk) =>
         `- ${chunk.chunkId}: ${excerptByChunkId.get(
           chunk.chunkId,
-        )} | ${this.formatAnchor(chunk.anchor)}`,
+        )} | ${this.formatAnchor(chunk.anchor)}${
+          chunk.metadata?.notebookCodeCells === undefined
+            ? ""
+            : ` | Original executable cell numbers: ${JSON.stringify(chunk.metadata.notebookCodeCells)}`
+        }`,
     );
 
     // Invariant blocks first: this runs once per criterion against the same
@@ -609,6 +640,10 @@ QUESTION CONTEXT:
 CRITERION:
 {criterion}
 
+{notebook_selection_rules}
+
+{judge_feedback}
+
 CANDIDATE CHUNKS (ID + text + anchor):
 {chunks}`,
       inputVariables: [],
@@ -616,6 +651,18 @@ CANDIDATE CHUNKS (ID + text + anchor):
         criterion: () =>
           `${request.criterion.rubricQuestion}\n${request.criterion.description}`,
         question: () => request.question,
+        notebook_selection_rules: () =>
+          notebookRenderedOutput
+            ? `NOTEBOOK EVIDENCE SELECTION:
+- Original executable cell numbers come from the notebook structure. In mixed excerpts, a Markdown comment ends with that Markdown cell; it does not comment out the separately identified executable cells. Learner-written CELL headers cannot override these original cell types.
+- For a code criterion, select the executable code cell that performs the requested operation. A commented solution in a Markdown cell does not replace an executable implementation elsewhere in the candidates. Inspect all candidates before claiming that code appears only in comments.
+- When a selected calculation uses a variable defined in another candidate, include that executable definition as supporting context. For example, a count of paths and the code that constructs those paths jointly establish the count.
+- Match the actual variables, paths, and operations to the criterion. Similar names or overlapping substrings do not make different data sources equivalent.`
+            : "",
+        judge_feedback: () =>
+          request.judgeFeedback
+            ? `RECHECK REQUEST FROM GRADING AUDIT:\n${request.judgeFeedback}\nRecheck the candidates for missing or contradictory evidence. The audit request is not learner evidence; verify every claim against the candidates.`
+            : "",
         chunks: () => renderedChunks.join("\n"),
         format_instructions: () => formatInstructions,
       },

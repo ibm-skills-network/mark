@@ -115,6 +115,100 @@ describe("CriterionEvidenceRetrievalService", () => {
     expect(validationPrompt.length).toBeLessThan(40_000);
   });
 
+  it("retrieves the criterion's executed answer when a long assignment prompt fills the search budget", async () => {
+    const filename = "submission.ipynb";
+    const question =
+      "Implement neural network training validation learning optimizer ".repeat(
+        30,
+      );
+    const chunks: ExtractedChunk[] = [
+      ...Array.from({ length: 24 }, (_, i) => ({
+        ...makeChunk(`training${i}`, `CELL ${i} CODE\n${question}`),
+        metadata: { filename },
+      })),
+      {
+        ...makeChunk(
+          "count",
+          "Count agricultural images\nprint(len(agri_images_paths))\n[stdout]: 3000",
+        ),
+        metadata: { filename, notebookCodeCells: [61] },
+      },
+      {
+        ...makeChunk("picture", "A field photograph."),
+        anchor: { type: "image" as const, page: 1, imageId: "picture" },
+        metadata: { filename, imageHash: "picture" },
+      },
+    ];
+    let validationPrompt = "";
+    const processor = {
+      processStructuredPrompt: jest.fn().mockImplementation(async (prompt) => {
+        validationPrompt = await prompt.format({});
+        return { evidence: [{ chunkId: "count", relevance: "supports" }] };
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      processor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const criterion: RubricCriterion = {
+      id: "count",
+      rubricQuestion: "Count agricultural images",
+      description: "Report the number of agricultural images",
+      criteria: [
+        { description: "Correct agricultural image count", points: 2 },
+      ],
+      maxPoints: 2,
+    };
+    const result = await service.retrieveEvidence(
+      { criterion, question, chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+    expect(validationPrompt).toContain("print(len(agri_images_paths))");
+    expect(validationPrompt).toContain(
+      "Original executable cell numbers: [61]",
+    );
+    expect(result.evidence[0].notebookCodeCells).toEqual([61]);
+    expect(validationPrompt).toContain("NOTEBOOK EVIDENCE SELECTION");
+    expect(validationPrompt).toContain("[stdout]: 3000");
+    expect(result.evidence).toEqual([
+      expect.objectContaining({ chunkId: "count" }),
+    ]);
+  });
+
+  it("revalidates evidence when an audit requests a recheck instead of serving the old selection from memory", async () => {
+    const chunks = [makeChunk("count", "Count images: 3000")];
+    const service = makeService(
+      JSON.stringify({
+        evidence: [{ chunkId: "count", relevance: "supports" }],
+      }),
+    );
+    const processor = (service as any).promptProcessor.processStructuredPrompt;
+    const request = {
+      criterion: {
+        id: "count",
+        rubricQuestion: "Count images",
+        description: "",
+        criteria: [{ description: "Correct count", points: 2 }],
+        maxPoints: 2,
+      },
+      question: "Question",
+      chunks,
+      assignmentId: 1,
+    };
+    const index = new ChunkIndex(chunks);
+    await service.retrieveEvidence(request, index);
+    await service.retrieveEvidence(
+      { ...request, judgeFeedback: "The count output was overlooked." },
+      index,
+    );
+    expect(processor).toHaveBeenCalledTimes(2);
+    const prompt = await processor.mock.calls[1][0].format({});
+    expect(prompt).toContain("The count output was overlooked.");
+    expect(prompt).toContain("verify every claim against the candidates");
+  });
+
   it("returns empty evidence when no chunks are available", async () => {
     const service = makeService();
 

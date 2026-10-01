@@ -71,6 +71,7 @@ describe("CriterionGradingService", () => {
         evidence: baseEvidence.map((item) => ({
           ...item,
           notebookRenderedOutput,
+          ...(notebookRenderedOutput ? { notebookCodeCells: [58] } : {}),
         })),
         question: "Question",
         assignmentId: 1,
@@ -80,6 +81,8 @@ describe("CriterionGradingService", () => {
     const document = await processStructuredPrompt.mock.calls[0][0].format({});
     const notebook = await processStructuredPrompt.mock.calls[1][0].format({});
     expect(document).not.toContain("NOTEBOOK OUTPUT SCORING");
+    expect(document).not.toContain("Original executable cell numbers");
+    expect(notebook).toContain("Original executable cell numbers: [58]");
     expect(notebook).toContain("A blank output cannot qualify");
     expect(notebook).toContain("code, calculations, and textual answers");
   });
