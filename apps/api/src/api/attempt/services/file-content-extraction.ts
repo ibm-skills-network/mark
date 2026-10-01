@@ -48,9 +48,10 @@ const MATPLOTLIB_FIGURE_REPR = /^<Figure size [\d.x]+ with \d+ Axes?>$/;
 interface NotebookImage {
   mime: string;
   /** Data URL — matches what the PDF extractor emits. */
-  imageData: string;
+  imageData?: string;
   hash: string;
   byteLength: number;
+  skipReason?: string;
 }
 
 import {
@@ -1508,6 +1509,7 @@ export class FileContentExtractionService {
         text: string;
         images: NotebookImage[];
       }[] = [];
+      const capturedImages = new Map<string, string>();
 
       for (const [index, cell] of (notebook.cells || []).entries()) {
         cellCount++;
@@ -1567,7 +1569,10 @@ export class FileContentExtractionService {
                 cellText += `]:\n`;
 
                 if (output.data) {
-                  const extracted = this.extractJupyterOutputData(output.data);
+                  const extracted = this.extractJupyterOutputData(
+                    output.data,
+                    capturedImages,
+                  );
                   cellText += extracted.text;
                   cellImages.push(...extracted.images);
                 }
@@ -1589,7 +1594,10 @@ export class FileContentExtractionService {
               case "display_data": {
                 cellText += "[Display Data]:\n";
                 if (output.data) {
-                  const extracted = this.extractJupyterOutputData(output.data);
+                  const extracted = this.extractJupyterOutputData(
+                    output.data,
+                    capturedImages,
+                  );
                   cellText += extracted.text;
                   cellImages.push(...extracted.images);
                 }
@@ -1636,6 +1644,7 @@ export class FileContentExtractionService {
         },
       };
     } catch (error) {
+      if (error instanceof OversizedSubmissionError) throw error;
       this.logger.error(`Failed to parse Jupyter notebook: ${filename}`, error);
 
       try {
@@ -1703,19 +1712,20 @@ export class FileContentExtractionService {
     const blocks: ContentBlock[] = [];
     let blockIndex = 1;
     let describedImages = 0;
+    const describedHashes = new Set<string>();
     let cappedImages = 0;
-    let truncatedAtCell: number | null = null;
 
     for (const cell of cells) {
-      // A pathological notebook must not flood the evidence pipeline. Stop
-      // adding blocks and record where we stopped rather than throwing — a
-      // huge notebook should still grade, just on a bounded view of itself.
+      // Never grade a truncated notebook as if it were the complete work.
       if (
         blocks.length + 1 + cell.images.length >
         MAX_EVIDENCE_BLOCKS_PER_SUBMISSION
       ) {
-        truncatedAtCell = cell.index;
-        break;
+        throw new OversizedSubmissionError({
+          blockCount: blocks.length + 1 + cell.images.length,
+          cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+          filename,
+        });
       }
 
       const text = cell.text.trim();
@@ -1733,9 +1743,15 @@ export class FileContentExtractionService {
       }
 
       for (const [imageIndex, image] of cell.images.entries()) {
-        const withinCap = describedImages < MAX_DESCRIBED_NOTEBOOK_IMAGES;
+        const withinCap =
+          Boolean(image.imageData) &&
+          (describedHashes.has(image.hash) ||
+            describedImages < MAX_DESCRIBED_NOTEBOOK_IMAGES);
         if (withinCap) {
-          describedImages += 1;
+          if (!describedHashes.has(image.hash)) {
+            describedHashes.add(image.hash);
+            describedImages += 1;
+          }
         } else {
           cappedImages += 1;
         }
@@ -1747,27 +1763,25 @@ export class FileContentExtractionService {
           // `imageDescription`, and remains the whole story for capped images.
           text: withinCap
             ? `[Image output of cell ${cell.index}]`
-            : `[Image output of cell ${cell.index} — not described, image cap reached]`,
+            : `[Image output of cell ${cell.index} — not described, ${image.skipReason ?? "image cap reached"}]`,
           page: 1,
+          imageHash: image.hash,
+          ...(!withinCap
+            ? {
+                imageDescription: `[Image content was not inspected: ${image.skipReason ?? "image cap reached"}. Its chart type, plotted data, and correctness are unknown.]`,
+              }
+            : {}),
           // The cell that drew this plot, stated rather than inferred from
           // adjacency — grading attaches the description back onto it.
           ...(cellBlockId ? { producedByBlockId: cellBlockId } : {}),
           ...(withinCap
             ? {
                 imageData: image.imageData,
-                imageHash: image.hash,
               }
             : {}),
         });
         blockIndex += 1;
       }
-    }
-
-    if (truncatedAtCell !== null) {
-      this.logger.warn(
-        `Notebook block budget exhausted for ${filename}: stopped at cell ` +
-          `${truncatedAtCell} of ${cells.length} (cap ${MAX_EVIDENCE_BLOCKS_PER_SUBMISSION})`,
-      );
     }
 
     if (cappedImages > 0) {
@@ -1809,7 +1823,10 @@ export class FileContentExtractionService {
    * back-compat view. The captured bytes ride along on the structured blocks
    * instead, where the grading-time vision pass can turn them into prose.
    */
-  private extractJupyterOutputData(data: Record<string, unknown>): {
+  private extractJupyterOutputData(
+    data: Record<string, unknown>,
+    capturedImages = new Map<string, string>(),
+  ): {
     text: string;
     images: NotebookImage[];
   } {
@@ -1875,7 +1892,7 @@ export class FileContentExtractionService {
         result += `[${mime}]: <image data present>\n`;
         // The placeholder is all the TEXT ever carries; the bytes ride out on
         // `images` so the grading-time vision pass can describe the plot.
-        const image = this.captureNotebookImage(mime, content);
+        const image = this.captureNotebookImage(mime, content, capturedImages);
         if (image) images.push(image);
         continue;
       }
@@ -1894,26 +1911,46 @@ export class FileContentExtractionService {
   private captureNotebookImage(
     mime: string,
     content: unknown,
+    capturedImages: Map<string, string>,
   ): NotebookImage | null {
-    if (!DESCRIBABLE_IMAGE_MIMES.has(mime)) return null;
-
-    const raw = Array.isArray(content) ? content.join("") : String(content);
+    const validContent =
+      typeof content === "string" ||
+      (Array.isArray(content) &&
+        content.every((part) => typeof part === "string"));
+    if (!validContent) return null;
+    const raw = Array.isArray(content) ? content.join("") : (content as string);
     // Notebook JSON wraps base64 across lines; strip whitespace before use.
     const base64 = raw.replaceAll(/\s/g, "");
     if (!base64) return null;
 
-    const byteLength = Math.floor((base64.length * 3) / 4);
+    const hash = crypto.createHash("sha256").update(base64).digest("hex");
+    const byteLength = Buffer.byteLength(base64, "base64");
+    if (!DESCRIBABLE_IMAGE_MIMES.has(mime)) {
+      return { mime, hash, byteLength, skipReason: "unsupported image format" };
+    }
     if (byteLength > MAX_NOTEBOOK_IMAGE_BYTES) {
       this.logger.debug(
         `Skipping oversized notebook image: ${mime}, ~${byteLength} bytes`,
       );
-      return null;
+      return {
+        mime,
+        hash,
+        byteLength,
+        skipReason: "image exceeds the size limit",
+      };
     }
-
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+      return { mime, hash, byteLength, skipReason: "invalid image encoding" };
+    }
+    let imageData = capturedImages.get(hash);
+    if (!imageData && capturedImages.size < MAX_DESCRIBED_NOTEBOOK_IMAGES) {
+      imageData = `data:${mime};base64,${base64}`;
+      capturedImages.set(hash, imageData);
+    }
     return {
       mime,
-      imageData: `data:${mime};base64,${base64}`,
-      hash: crypto.createHash("sha256").update(base64).digest("hex"),
+      imageData,
+      hash,
       byteLength,
     };
   }

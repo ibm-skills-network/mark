@@ -23,6 +23,7 @@ import {
   CODE_EVIDENCE_QUOTE_MAX_CHARS,
   CODE_VALIDATION_RENDER_BUDGET_CHARS,
   isCodeLikeFilename,
+  isJupyterNotebookFilename,
 } from "./source-code.utils";
 import { renderCachePrefix } from "../../../core/utils/prompt-cache.util";
 
@@ -180,7 +181,29 @@ export class CriterionEvidenceRetrievalService {
     }
 
     const query = this.buildQuery(request.criterion, request.question);
-    const candidates = index.search(query, this.config.maxCandidates);
+    const notebookImages = index
+      .getAllChunks()
+      .filter(
+        (chunk) =>
+          chunk.anchor.type === "image" &&
+          isJupyterNotebookFilename(chunk.metadata?.filename),
+      );
+    // New visual evidence must not displace the code candidates the notebook
+    // grader previously saw. Descriptions remain on the returned code chunks.
+    const candidates =
+      notebookImages.length > 0
+        ? [
+            ...index.searchNotebookCode(query, this.config.maxCandidates),
+            ...this.dropDuplicateImages(
+              index
+                .search(
+                  query,
+                  this.config.maxCandidates + notebookImages.length,
+                )
+                .filter((item) => item.chunk.anchor.type === "image"),
+            ).slice(0, this.config.maxEvidence),
+          ]
+        : index.search(query, this.config.maxCandidates);
     const maxEvidence = request.maxEvidence ?? this.config.maxEvidence;
 
     let reranked: Array<{
@@ -221,7 +244,10 @@ export class CriterionEvidenceRetrievalService {
       // otherwise spend both its attention and the prompt render budget.
       reranked = this.dropDuplicateImages(
         scored.filter(
-          (candidate) => candidate.relevance >= this.config.minRelevance,
+          (candidate) =>
+            candidate.relevance >= this.config.minRelevance ||
+            (notebookImages.length > 0 &&
+              candidate.chunk.anchor.type !== "image"),
         ),
       );
     }
@@ -356,6 +382,9 @@ export class CriterionEvidenceRetrievalService {
           relevanceScore: item.relevanceScore,
           searchScore: item.searchScore,
           contradiction: item.contradiction,
+          ...(notebookImages.length > 0
+            ? { notebookRenderedOutput: true }
+            : {}),
         }));
       }
     } else {
@@ -402,6 +431,11 @@ export class CriterionEvidenceRetrievalService {
       sourceId: item.chunk.sourceId,
       relevanceScore: item.relevance,
       searchScore: item.score,
+      ...(isJupyterNotebookFilename(item.chunk.metadata?.filename) &&
+      (item.chunk.anchor.type === "image" ||
+        typeof item.chunk.metadata?.anchorTextChars === "number")
+        ? { notebookRenderedOutput: true }
+        : {}),
     }));
   }
 
@@ -418,6 +452,15 @@ export class CriterionEvidenceRetrievalService {
       chunk.metadata?.section ||
       chunk.metadata?.pinned;
     const cap = fullLength ? CODE_EVIDENCE_QUOTE_MAX_CHARS : proseCap;
+    if (
+      isJupyterNotebookFilename(chunk.metadata?.filename) &&
+      typeof chunk.metadata?.anchorTextChars === "number"
+    ) {
+      const anchorChars = chunk.metadata.anchorTextChars;
+      const learnerText = chunk.text.slice(0, Math.min(anchorChars, cap));
+      const visualNotes = chunk.text.slice(anchorChars).trim().slice(0, 12_000);
+      return [learnerText, visualNotes].filter(Boolean).join("\n\n");
+    }
     return chunk.text.slice(0, cap);
   }
 
@@ -524,11 +567,23 @@ export class CriterionEvidenceRetrievalService {
     // fallback path, where up to maxCandidates code chunks land here at once.
     const excerptByChunkId = new Map<string, string>();
     let renderBudget = CODE_VALIDATION_RENDER_BUDGET_CHARS;
-    const budgetOrder = [...chunks].sort(
-      (a, b) =>
-        Number(Boolean(b.metadata?.pinned)) -
-        Number(Boolean(a.metadata?.pinned)),
+    const notebook = chunks.some((chunk) =>
+      isJupyterNotebookFilename(chunk.metadata?.filename),
     );
+    const budgetOrder = [...chunks].sort((a, b) => {
+      const pinned =
+        Number(Boolean(b.metadata?.pinned)) -
+        Number(Boolean(a.metadata?.pinned));
+      if (pinned || !notebook) return pinned;
+      // Give short executed answers room before long plot descriptions use
+      // the excerpt budget. This prevents false zeros for count/score cells.
+      const imagesLast =
+        Number(a.anchor.type === "image") - Number(b.anchor.type === "image");
+      return (
+        imagesLast ||
+        this.buildExcerpt(a, 240).length - this.buildExcerpt(b, 240).length
+      );
+    });
     for (const chunk of budgetOrder) {
       const full = this.buildExcerpt(chunk, 240);
       const excerpt = full.length <= renderBudget ? full : full.slice(0, 240);

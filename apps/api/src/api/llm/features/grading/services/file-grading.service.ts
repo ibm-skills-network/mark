@@ -168,6 +168,8 @@ export class FileGradingService implements IFileGradingService {
   // selected by the old judge, even when the extracted submission is identical.
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
     "structured-file-evidence-v6-complete-judge-rubric";
+  private static readonly NOTEBOOK_IMAGE_GRADER_VERSION =
+    "structured-file-evidence-v7-notebook-images";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -865,6 +867,15 @@ export class FileGradingService implements IFileGradingService {
     const modelCacheIdentity = getGradingModelCacheIdentity(
       parameters.modelSnapshot,
     );
+    const graderVersion = parameters.learnerResponse.some(
+      (file) =>
+        isJupyterNotebookFilename(file.filename) &&
+        file.structuredContent?.pages?.some((page) =>
+          page.blocks.some((block) => block.type === "image"),
+        ),
+    )
+      ? FileGradingService.NOTEBOOK_IMAGE_GRADER_VERSION
+      : FileGradingService.EVIDENCE_FILE_GRADER_VERSION;
     const answerHash = this.hashCanonical(
       [...parameters.learnerResponse]
         .sort((left, right) =>
@@ -878,7 +889,7 @@ export class FileGradingService implements IFileGradingService {
         })),
     );
     const rubricHash = this.hashCanonical({
-      graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+      graderVersion,
       modelSnapshot: modelCacheIdentity,
       reasoningEffort: "none",
       question: parameters.question,
@@ -930,7 +941,7 @@ export class FileGradingService implements IFileGradingService {
         cachedAt: new Date(),
         hitCount: 0,
         metadata: {
-          graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+          graderVersion,
           modelSnapshot: modelCacheIdentity,
           fileResponse: this.fileResponseForCache(result),
         },
@@ -1006,6 +1017,11 @@ export class FileGradingService implements IFileGradingService {
     content: NonNullable<LearnerFileUpload["structuredContent"]>,
   ): Record<string, unknown> {
     const { metadata, pages, ...rest } = content;
+    if (metadata?.sourceType !== "ipynb") {
+      if (!metadata) return { ...rest, pages };
+      const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
+      return { ...rest, pages, metadata: stableMetadata };
+    }
     const stablePages = pages?.map((page) => ({
       ...page,
       blocks: page.blocks?.map((block) =>
@@ -1263,6 +1279,7 @@ export class FileGradingService implements IFileGradingService {
       (page) => page.blocks ?? [],
     );
     if (!blocks?.length) return false;
+    if (!blocks.some((block) => block.type === "image")) return false;
 
     return !blocks.some((block) => block.pinnedEvidence);
   }
@@ -1389,7 +1406,16 @@ export class FileGradingService implements IFileGradingService {
     // notebook whose JSON failed to parse and fell back to raw text — rebuilds
     // from text here.
     if (isJupyterNotebookFilename(file.filename)) {
-      return !file.structuredContent && this.hasExtractedSubmissionText(file);
+      const blocks = file.structuredContent?.pages?.flatMap(
+        (page) => page.blocks ?? [],
+      );
+      // Notebooks without raster outputs keep the established text policy,
+      // including tiny-section merging and the notebook header's evidence.
+      return (
+        !blocks?.some(
+          (block) => block.type === "image" || block.pinnedEvidence,
+        ) && this.hasExtractedSubmissionText(file)
+      );
     }
 
     return !file.structuredContent && this.hasExtractedSubmissionText(file);
@@ -1488,202 +1514,130 @@ export class FileGradingService implements IFileGradingService {
     };
   }
 
-  /**
-   * Apply this service's code-evidence policy to blocks an extractor already
-   * built, rather than re-deriving structure from flattened text.
-   *
-   * Notebook extraction knows the real cell boundaries (they are explicit in
-   * the .ipynb JSON) and carries each cell's plots as image blocks. This keeps
-   * that structure and layers on the policy the text path applies: the file
-   * metadata and validator blocks, the pinned whole-file view, tiny-segment
-   * merging and the per-segment size cap. Image blocks pass through untouched
-   * and stay adjacent to the cell that produced them, so a criterion about
-   * "the code AND its output" can cite both.
-   */
+  /** Preserve the established notebook text policy, adding linked images. */
   private buildCanonicalSubmissionFromBlocks(
     extracted: CanonicalSubmission,
     file: LearnerFileUpload,
   ): CanonicalSubmission {
-    const rawText = file.extractedText || file.content || "";
-    const normalized = this.normalizeCodeSubmissionText(rawText);
-    const filename = sanitizeFilenameForMarker(file.filename) || "submission";
-    const metadataBlock = this.buildFileMetadataBlock(file, normalized);
-    const validatorBlock = this.buildValidatorReportBlock(rawText, file);
-
-    const blocks: ContentBlock[] = [];
-    let index = 1;
-    const push = (block: ContentBlock): void => {
-      blocks.push(block);
-      index += 1;
-    };
-
-    if (metadataBlock) {
-      push({ ...metadataBlock, blockId: `p1b${index}`, page: 1 });
-    }
-    if (validatorBlock) {
-      push({ ...validatorBlock, blockId: `p1b${index}`, page: 1 });
-    }
-
-    push(this.buildWholeFileCodeBlock(normalized, filename, `p1b${index}`));
-
-    for (const section of this.groupBlocksIntoTaskSections(extracted)) {
-      // One oversized section becomes several blocks; its images follow the
-      // last of them so they still sit beside the code they came from.
-      const pieces = this.capCodeSegments([
-        this.normalizeCodeSubmissionText(section.text),
-      ]).filter((piece) => piece.trim());
-
-      // Blocks are renumbered for this submission, so the extractor's
-      // producedByBlockId would dangle. Re-point each image at the piece it
-      // now follows; a section that yields no piece at all leaves its images
-      // unlinked rather than pointing at a block that does not exist.
-      let producedByBlockId: string | undefined;
-
-      for (const [pieceIndex, piece] of pieces.entries()) {
-        producedByBlockId = this.notebookBlockId(
-          index,
-          section.blockId,
-          pieceIndex,
-        );
-        push({
-          blockId: producedByBlockId,
-          // Emitted as code, matching what the text path produces via
-          // buildCodeEvidenceBlocks, so evidence chunking keeps a section as
-          // its own chunk instead of merging it into a prose section.
-          type: "code",
-          text: piece,
-          page: 1,
-          ...(section.language ? { language: section.language } : {}),
-        });
+    const canonical = this.buildCanonicalSubmissionFromText(
+      file.extractedText || file.content || "",
+      file,
+    );
+    const codeBlocks = canonical.pages[0].blocks;
+    const producersByCell = new Map<string, ContentBlock[]>();
+    // Match ranges using extractor-owned block identities. Learner source can
+    // forge a CELL header, so parsing headers here cannot establish provenance.
+    const source = this.normalizeNotebookTextForLinking(
+      file.extractedText || file.content || "",
+    );
+    const cellRanges: { cell: string; start: number; end: number }[] = [];
+    let cellCursor = 0;
+    for (const page of extracted.pages) {
+      for (const block of page.blocks) {
+        if (block.type === "image") continue;
+        const cell = /_cell(\d+)(?:_|$)/.exec(block.blockId)?.[1];
+        const text = this.normalizeNotebookTextForLinking(block.text);
+        if (!cell || !text) continue;
+        const start = source.indexOf(text, cellCursor);
+        if (start < 0) continue;
+        const end = start + text.length;
+        cellRanges.push({ cell, start, end });
+        cellCursor = end;
       }
+    }
+    let sectionCursor = 0;
+    let rangeCursor = 0;
 
-      for (const image of section.images) {
-        push({
+    for (const block of codeBlocks) {
+      if (block.type !== "code" || block.pinnedEvidence) continue;
+      const text = this.normalizeNotebookTextForLinking(block.text);
+      if (!text) continue;
+      const start = source.indexOf(text, sectionCursor);
+      if (start < 0) continue;
+      const end = start + text.length;
+      sectionCursor = end;
+      while (
+        rangeCursor < cellRanges.length &&
+        cellRanges[rangeCursor].end <= start
+      ) {
+        rangeCursor++;
+      }
+      const cells: string[] = [];
+      for (
+        let index = rangeCursor;
+        index < cellRanges.length && cellRanges[index].start < end;
+        index++
+      ) {
+        cells.push(cellRanges[index].cell);
+      }
+      const firstCell = cells[0];
+      if (firstCell) block.blockId += `_cell${firstCell}`;
+      for (const cell of cells) {
+        const producers = producersByCell.get(cell) ?? [];
+        producers.push(block);
+        producersByCell.set(cell, producers);
+      }
+    }
+
+    const imagesAfter = new Map<string, ContentBlock[]>();
+    const unlinkedImages: ContentBlock[] = [];
+    let imageIndex = codeBlocks.length + 1;
+    for (const page of extracted.pages) {
+      for (const image of page.blocks) {
+        if (image.type !== "image") continue;
+        const sourceId = image.producedByBlockId ?? image.blockId;
+        const cell = /_cell(\d+)(?:_|$)/.exec(sourceId)?.[1];
+        const producers = cell ? (producersByCell.get(cell) ?? []) : [];
+        const lastProducer = producers.at(-1);
+        const suffix = image.blockId.indexOf("_");
+        const linked: ContentBlock = {
           ...image,
-          blockId: this.notebookBlockId(index, image.blockId),
+          blockId: `p1b${imageIndex++}${suffix >= 0 ? image.blockId.slice(suffix) : ""}`,
           page: 1,
-          // Always overwrite, never spread-conditionally: an undefined value
-          // must clear the extractor's now-stale link rather than let it show
-          // through from `...image`.
-          producedByBlockId,
-        });
+          producedByBlockId: lastProducer?.blockId,
+          producedByBlockIds:
+            producers.length > 1
+              ? producers.map((block) => block.blockId)
+              : undefined,
+        };
+        if (lastProducer) {
+          const images = imagesAfter.get(lastProducer.blockId) ?? [];
+          images.push(linked);
+          imagesAfter.set(lastProducer.blockId, images);
+        } else {
+          unlinkedImages.push(linked);
+        }
       }
     }
 
-    return {
-      submissionId: file.filename,
-      metadata: {
-        wordCount: normalized.split(/\s+/).filter(Boolean).length,
-        pageCount: 1,
+    const blocks = codeBlocks.flatMap((block) => [
+      block,
+      ...(imagesAfter.get(block.blockId) ?? []),
+    ]);
+    blocks.push(...unlinkedImages);
+    if (blocks.length > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      throw new OversizedSubmissionError({
         blockCount: blocks.length,
-        sourceType: extracted.metadata?.sourceType ?? "txt",
-        // Keep the extractor's checksum: it identifies the submitted artifact
-        // itself, so it stays stable across grading-time enrichment.
-        checksum: extracted.metadata?.checksum ?? "",
-        extractedAt: new Date().toISOString(),
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: file.filename,
+      });
+    }
+    return {
+      ...canonical,
+      metadata: {
+        ...canonical.metadata,
+        sourceType: extracted.metadata.sourceType,
+        checksum: extracted.metadata.checksum,
+        blockCount: blocks.length,
       },
       pages: [{ pageNumber: 1, blocks }],
     };
   }
 
-  /**
-   * Preserve the cell identity the extractor encoded in its blockIds
-   * (`p1b7_cell3`, `p1b7_cell3_img1`) while renumbering for this submission.
-   * Renumbering alone would lose the cell reference; keeping the original id
-   * alone could collide once a cell is split across blocks.
-   */
-  private notebookBlockId(
-    index: number,
-    sourceBlockId: string,
-    pieceIndex = 0,
-  ): string {
-    const separator = sourceBlockId.indexOf("_");
-    const suffix = separator === -1 ? "" : sourceBlockId.slice(separator);
-    const part = pieceIndex > 0 ? `_part${pieceIndex + 1}` : "";
-    return `p1b${index}${suffix}${part}`;
+  private normalizeNotebookTextForLinking(text: string): string {
+    return this.normalizeCodeSubmissionText(text).replaceAll(/\s/g, "");
   }
 
-  /**
-   * Group notebook cell blocks into task sections.
-   *
-   * A rubric criterion's wording matches the markdown task cell, but the work
-   * satisfying it lives in the code cells that follow. Evidence retrieval
-   * selects whole chunks, so the two must share one — a lone markdown cell
-   * parroting the rubric otherwise outranks the learner's code everywhere and
-   * the grader never sees the code (observed in production as "submission
-   * shows only the solution template" false zeros).
-   *
-   * Mirrors the rule splitNotebookIntoCellSegments applies on the text path,
-   * but reads cell kind from block.type instead of re-parsing "=== CELL N
-   * [MARKDOWN] ===" headers out of flattened text. A section starts at each
-   * prose run (a non-code block whose predecessor is not prose) and carries
-   * every following block until the next run; a block that would push the
-   * section past CODE_SEGMENT_MAX_CHARS starts its own section rather than
-   * shearing one mid-cell.
-   *
-   * Images belong to the section holding the cell that produced them, and are
-   * carried on the section rather than becoming section boundaries.
-   */
-  private groupBlocksIntoTaskSections(extracted: CanonicalSubmission): {
-    blockId: string;
-    text: string;
-    language?: string;
-    images: ContentBlock[];
-  }[] {
-    const sections: {
-      blockId: string;
-      text: string;
-      language?: string;
-      images: ContentBlock[];
-    }[] = [];
-    let current: (typeof sections)[0] | undefined;
-    let previousWasProse = false;
-
-    for (const page of extracted.pages ?? []) {
-      for (const block of page.blocks ?? []) {
-        if (block.type === "image") {
-          // An image with no section open (a notebook that opens on a plot)
-          // is kept as its own section so it is never dropped.
-          if (!current) {
-            current = { blockId: block.blockId, text: "", images: [] };
-            sections.push(current);
-          }
-          current.images.push(block);
-          continue;
-        }
-
-        const text = block.text?.trim() ?? "";
-        if (!text) continue;
-
-        // Both markdown and raw cells arrive as "paragraph"; raw cells are
-        // rare and prose-like, so treating them as section starters is fine.
-        const prose = block.type !== "code";
-        const startsSection = prose && !previousWasProse;
-        const overflows =
-          current !== undefined &&
-          current.text.length + text.length + 1 > CODE_SEGMENT_MAX_CHARS;
-
-        if (!current || startsSection || overflows) {
-          current = {
-            blockId: block.blockId,
-            text,
-            ...(block.language ? { language: block.language } : {}),
-            images: [],
-          };
-          sections.push(current);
-        } else {
-          current.text = current.text ? `${current.text}\n${text}` : text;
-          current.language ??= block.language;
-        }
-
-        previousWasProse = prose;
-      }
-    }
-
-    return sections.filter(
-      (section) => section.text.trim() || section.images.length > 0,
-    );
-  }
   private splitTextIntoEvidenceBlocks(
     text: string,
     startIndex = 1,
@@ -1839,45 +1793,6 @@ export class FileGradingService implements IFileGradingService {
       .trimEnd();
   }
 
-  /**
-   * Pinned whole-file block: holistic criteria (correctness, style, structure)
-   * concern the entire program, so the evidence validator must always get to
-   * judge the file as one unit — per-function chunks alone would make such
-   * criteria look unsupported.
-   *
-   * The block's ENTIRE text (header + code + marker) is bounded to
-   * CODE_WHOLE_FILE_BLOCK_MAX_CHARS so it survives quoting intact (see the
-   * invariant on CODE_EVIDENCE_QUOTE_MAX_CHARS): if it were only the *code*
-   * that was bounded, the header/marker would push the total past the quote cap
-   * and the marker would be sliced off.
-   */
-  private buildWholeFileCodeBlock(
-    code: string,
-    filename: string,
-    blockId: string,
-  ): ContentBlock {
-    const marker = "\n... [file truncated]";
-    const truncatedHeader = `=== FILE: ${filename} (truncated) ===\n`;
-    const codeBudget =
-      CODE_WHOLE_FILE_BLOCK_MAX_CHARS - truncatedHeader.length - marker.length;
-    // A file only counts as truncated when the COMPLETE block would not fit;
-    // comparing against the (smaller) truncated-block budget would clip files
-    // that fit whole and mislabel them.
-    const completeText = `=== FILE: ${filename} (complete) ===\n${code}`;
-    const text =
-      completeText.length <= CODE_WHOLE_FILE_BLOCK_MAX_CHARS
-        ? completeText
-        : `${truncatedHeader}${code.slice(0, codeBudget)}${marker}`;
-
-    return {
-      blockId,
-      type: "code",
-      text,
-      page: 1,
-      pinnedEvidence: true,
-    };
-  }
-
   private buildCodeEvidenceBlocks(
     code: string,
     startIndex: number,
@@ -1924,7 +1839,35 @@ export class FileGradingService implements IFileGradingService {
       });
     }
 
-    blocks.push(this.buildWholeFileCodeBlock(code, filename, `p1b${index}`));
+    // Pinned whole-file block: holistic criteria (correctness, style,
+    // structure) concern the entire program, so the evidence validator must
+    // always get to judge the file as one unit — per-function chunks alone
+    // would make such criteria look unsupported.
+    //
+    // The block's ENTIRE text (header + code + marker) is bounded to
+    // CODE_WHOLE_FILE_BLOCK_MAX_CHARS so it survives quoting intact (see the
+    // invariant on CODE_EVIDENCE_QUOTE_MAX_CHARS): if it were only the *code*
+    // that was bounded, the header/marker would push the total past the quote
+    // cap and the marker would be sliced off.
+    const marker = "\n... [file truncated]";
+    const truncatedHeader = `=== FILE: ${filename} (truncated) ===\n`;
+    const codeBudget =
+      CODE_WHOLE_FILE_BLOCK_MAX_CHARS - truncatedHeader.length - marker.length;
+    // A file only counts as truncated when the COMPLETE block would not fit;
+    // comparing against the (smaller) truncated-block budget would clip files
+    // that fit whole and mislabel them.
+    const completeText = `=== FILE: ${filename} (complete) ===\n${code}`;
+    const wholeFileText =
+      completeText.length <= CODE_WHOLE_FILE_BLOCK_MAX_CHARS
+        ? completeText
+        : `${truncatedHeader}${code.slice(0, codeBudget)}${marker}`;
+    blocks.push({
+      blockId: `p1b${index}`,
+      type: "code",
+      text: wholeFileText,
+      page: 1,
+      pinnedEvidence: true,
+    });
     index += 1;
 
     for (const segment of segments) {

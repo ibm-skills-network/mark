@@ -114,6 +114,7 @@ export interface CriterionEvidence {
   relevanceScore: number;
   searchScore?: number;
   contradiction?: boolean;
+  notebookRenderedOutput?: boolean;
 }
 
 export interface CriterionEvidenceResponse {

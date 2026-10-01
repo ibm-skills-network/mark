@@ -578,6 +578,7 @@ LANGUAGE: {language}`,
 
     if (imageBlocks.length === 0) {
       this.logger.debug("No images found in submission");
+      this.attachDescriptionsToProducingBlocks(submission);
       return;
     }
 
@@ -618,6 +619,9 @@ LANGUAGE: {language}`,
         criteriaContext,
         questionText,
         assignmentId,
+        submission.metadata.sourceType === "ipynb"
+          ? { observeOnly: true }
+          : undefined,
       );
 
     // Fan each description out to the blocks that share its image.
@@ -684,27 +688,78 @@ LANGUAGE: {language}`,
       }
     }
 
+    const notesByProducer = new Map<string, string[]>();
+    const imagesByProducer = new Map<string, Set<string>>();
     for (const page of submission.pages) {
       for (const block of page.blocks) {
         if (block.type !== "image") continue;
-        if (!block.imageDescription || !block.producedByBlockId) continue;
+        if (!block.imageDescription) continue;
+        const producerIds =
+          block.producedByBlockIds ??
+          (block.producedByBlockId ? [block.producedByBlockId] : []);
+        for (const producerId of new Set(producerIds)) {
+          const producer = blocksById.get(producerId);
+          // An image producing an image would double-report the description the
+          // image block already carries.
+          if (!producer || producer.type === "image") continue;
 
-        const producer = blocksById.get(block.producedByBlockId);
-        // An image producing an image would double-report the description the
-        // image block already carries.
-        if (!producer || producer.type === "image") continue;
+          const seen = imagesByProducer.get(producerId) ?? new Set<string>();
+          const key = block.imageHash ?? block.blockId;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          imagesByProducer.set(producerId, seen);
 
-        // Wording matters here. An earlier version framed this as "Rendered
-        // output of this cell", and the grader echoed it straight back —
-        // "the notebook output shows that chart was rendered" — treating the
-        // frame as proof a chart exists and awarding full marks for an empty
-        // figure. The note must assert nothing beyond what was seen, and must
-        // read as the authority on the image rather than a label for it.
-        // Assignment (not append) keeps repeat passes idempotent.
-        producer.renderedOutputNote =
-          `[Visual check of this cell's image output (${block.blockId}) — ` +
-          `what the image itself shows, which overrides any claim the code ` +
-          `makes about it: ${block.imageDescription}]`;
+          // Wording matters here. An earlier version framed this as "Rendered
+          // output of this cell", and the grader echoed it straight back —
+          // "the notebook output shows that chart was rendered" — treating the
+          // frame as proof a chart exists and awarding full marks for an empty
+          // figure. The note must assert nothing beyond what was seen, and must
+          // read as the authority on the image rather than a label for it.
+          // Assignment (not append) keeps repeat passes idempotent.
+          const notes = notesByProducer.get(producer.blockId) ?? [];
+          if (notes.length >= 12) continue;
+          notes.push(
+            `[Visual check of this cell's image output (${block.blockId}) — ` +
+              `what the image itself shows, which overrides any claim the code ` +
+              `makes about it: ${block.imageDescription}]`,
+          );
+          notesByProducer.set(producer.blockId, notes);
+        }
+      }
+    }
+    for (const [blockId, notes] of notesByProducer) {
+      const summary = notes.join("\n");
+      const omitted =
+        imagesByProducer.get(blockId).size > notes.length ||
+        summary.length > 12_000;
+      blocksById.get(blockId).renderedOutputNote =
+        summary.slice(0, 12_000) +
+        (omitted
+          ? "\n[Additional image observations were omitted from this summary; their contents are unknown.]"
+          : "");
+    }
+    if (submission.metadata.sourceType === "ipynb") {
+      const seen = new Set<string>();
+      const notes: string[] = [];
+      for (const block of blocksById.values()) {
+        if (block.type !== "image" || !block.imageDescription) continue;
+        const key = block.imageHash ?? block.blockId;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (notes.length < 12) {
+          notes.push(
+            `[Visual check of notebook image ${block.blockId}: ${block.imageDescription}]`,
+          );
+        }
+      }
+      if (seen.size > notes.length)
+        notes.push(
+          "[Additional notebook images were not included in this visual summary; their contents are unknown.]",
+        );
+      for (const block of blocksById.values()) {
+        if (block.pinnedEvidence && block.type === "code") {
+          block.renderedOutputNote = notes.join("\n").slice(0, 12_000);
+        }
       }
     }
   }

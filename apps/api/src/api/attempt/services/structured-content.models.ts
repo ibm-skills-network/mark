@@ -87,6 +87,8 @@ export interface ContentBlock {
    * position implies nothing about which text produced which figure.
    */
   producedByBlockId?: string;
+  /** Explicit producers when one notebook section spans multiple chunks. */
+  producedByBlockIds?: string[];
   /**
    * Content digest of the image bytes. Two blocks carrying the same picture
    * share a hash, so the vision step can describe it once and reuse the result

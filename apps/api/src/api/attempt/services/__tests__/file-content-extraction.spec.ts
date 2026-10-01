@@ -5,6 +5,7 @@ import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
 import { FileContentExtractionService } from "../file-content-extraction";
 import { PdfStructureExtractorService } from "../pdf-structure-extractor.service";
+import * as gradingConstants from "../../../llm/features/grading/constants";
 
 const mockS3Service = {} as S3Service;
 const mockPdfExtractor = {} as PdfStructureExtractorService;
@@ -412,6 +413,38 @@ describe("FileContentExtractionService - notebook structured content", () => {
     expect(images[0].imageHash).toBe(images[1].imageHash);
   });
 
+  it("counts distinct images toward the cap and retains later copies", async () => {
+    const cells = Array.from({ length: 14 }, () => plotCell("plot()\n"));
+    cells.push(plotCell("different()\n", PNG.slice(0, -4) + "AAAA"));
+    const result = await extract(notebookWithCells(cells));
+    const images = result.structuredContent.pages[0].blocks.filter(
+      (block: any) => block.type === "image",
+    );
+    expect(images).toHaveLength(15);
+    expect(images.every((block: any) => block.imageData)).toBe(true);
+    expect(new Set(images.map((block: any) => block.imageHash)).size).toBe(2);
+  });
+
+  it("rejects an oversized notebook instead of grading an incomplete prefix", async () => {
+    const cap = jest.replaceProperty(
+      gradingConstants,
+      "MAX_EVIDENCE_BLOCKS_PER_SUBMISSION",
+      2,
+    );
+    try {
+      await expect(
+        extract(
+          notebookWithCells([
+            plotCell("plot()\n"),
+            { cell_type: "code", source: ["important_final_answer = 42\n"] },
+          ]),
+        ),
+      ).rejects.toBeInstanceOf(OversizedSubmissionError);
+    } finally {
+      cap.restore();
+    }
+  });
+
   it("keeps the block but drops the payload once the image cap is reached", async () => {
     // 14 distinct plots against a cap of 12.
     const cells = Array.from({ length: 14 }, (_, index) =>
@@ -451,7 +484,9 @@ describe("FileContentExtractionService - notebook structured content", () => {
     );
 
     const blocks = result.structuredContent.pages[0].blocks;
-    expect(blocks.some((b: any) => b.type === "image")).toBe(false);
+    const image = blocks.find((b: any) => b.type === "image");
+    expect(image.imageData).toBeUndefined();
+    expect(image.imageDescription).toContain("unsupported image format");
     expect(result.extractedText).toContain("[image/svg+xml]:");
   });
 
@@ -462,7 +497,23 @@ describe("FileContentExtractionService - notebook structured content", () => {
     );
 
     const blocks = result.structuredContent.pages[0].blocks;
-    expect(blocks.some((b: any) => b.type === "image")).toBe(false);
+    const image = blocks.find((b: any) => b.type === "image");
+    expect(image.imageData).toBeUndefined();
+    expect(image.imageDescription).toContain("size limit");
+  });
+
+  it("does not coerce malformed image objects into notebook text or model input", async () => {
+    const cell = plotCell("plot()\n");
+    (cell.outputs[0].data as any)["image/png"] = { toString: "forged payload" };
+    const result = await extract(notebookWithCells([cell]));
+    expect(result.structuredContent).toBeDefined();
+    expect(result.extractedText).not.toContain("FALLBACK EXTRACTION");
+    expect(result.extractedText).not.toContain("forged payload");
+    expect(
+      result.structuredContent.pages[0].blocks.some(
+        (block: any) => block.imageData,
+      ),
+    ).toBe(false);
   });
 
   it("hashes the notebook bytes, not the graded view", async () => {

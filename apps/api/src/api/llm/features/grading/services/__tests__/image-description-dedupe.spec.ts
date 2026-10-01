@@ -74,6 +74,105 @@ async function run(service: any, submission: CanonicalSubmission) {
 }
 
 describe("describeImagesInSubmission - duplicate images", () => {
+  it("bounds repeated and excessive image notes on their producing code", async () => {
+    const { service } = buildService();
+    const submission = submissionWith([
+      { blockId: "code", type: "code", text: "plot()", page: 1 },
+      ...Array.from({ length: 100 }, (_, i) => ({
+        ...image(`duplicate${i}`, "same"),
+        producedByBlockId: "code",
+      })),
+      ...Array.from({ length: 20 }, (_, i) => ({
+        ...image(`distinct${i}`, `hash${i}`),
+        imageData: undefined,
+        imageDescription: "Uninspected image; contents unknown.",
+        producedByBlockId: "code",
+      })),
+    ]);
+    const blocks = await run(service, submission);
+    const note = blocks[0].renderedOutputNote;
+    expect(note.match(/description of duplicate0/g)).toHaveLength(1);
+    expect(note).toContain("Additional image observations were omitted");
+    expect(note.length).toBeLessThan(12_200);
+  });
+  it("keeps visual checks on the whole notebook so plotting code alone cannot prove a chart", async () => {
+    const { service } = buildService();
+    const blocks = await run(
+      service,
+      submissionWith([
+        {
+          blockId: "whole",
+          type: "code",
+          text: "plot(kind='pie')",
+          page: 1,
+          pinnedEvidence: true,
+        },
+        { blockId: "cell", type: "code", text: "plot(kind='pie')", page: 1 },
+        {
+          ...image("blank", "hash"),
+          imageData: undefined,
+          imageDescription: "Empty axes. No data is plotted.",
+          producedByBlockId: "cell",
+        },
+      ]),
+    );
+    expect(blocks[0].renderedOutputNote).toContain("No data is plotted");
+    expect(blocks[0].text).toBe("plot(kind='pie')");
+  });
+
+  it("marks uninspected output on its producer even when no images can be sent", async () => {
+    const { service, describeImagesForGrading } = buildService();
+    const blocks = await run(
+      service,
+      submissionWith([
+        { blockId: "code", type: "code", text: "plot()", page: 1 },
+        {
+          ...image("capped", "hash"),
+          imageData: undefined,
+          imageDescription: "Image was not inspected; plotted data is unknown.",
+          producedByBlockId: "code",
+        },
+      ]),
+    );
+    expect(describeImagesForGrading).not.toHaveBeenCalled();
+    expect(blocks[0].renderedOutputNote).toContain("not inspected");
+    expect(blocks[0].text).toBe("plot()");
+  });
+
+  it("attaches the visual check to every declared part of a split section", async () => {
+    const { service } = buildService();
+    const blocks = await run(
+      service,
+      submissionWith([
+        { blockId: "c1", type: "code", text: "plot()", page: 1 },
+        { blockId: "c2", type: "code", text: "continued code", page: 1 },
+        {
+          ...image("b1", "hash-a"),
+          producedByBlockId: "c2",
+          producedByBlockIds: ["c1", "c2"],
+        },
+      ]),
+    );
+    expect(blocks[0].renderedOutputNote).toContain("description of b1");
+    expect(blocks[1].renderedOutputNote).toContain("description of b1");
+  });
+
+  it("retains every image description on the producing code without duplicating notes", async () => {
+    const { service } = buildService();
+    const submission = submissionWith([
+      { blockId: "c1", type: "code", text: "plot(); plot()", page: 1 },
+      { ...image("b1", "hash-a"), producedByBlockId: "c1" },
+      { ...image("b2", "hash-b"), producedByBlockId: "c1" },
+    ]);
+    const blocks = await run(service, submission);
+    expect(blocks[0].renderedOutputNote).toContain("description of b1");
+    expect(blocks[0].renderedOutputNote).toContain("description of b2");
+    const note = blocks[0].renderedOutputNote;
+    service.attachDescriptionsToProducingBlocks(submission);
+    expect(blocks[0].renderedOutputNote).toBe(note);
+    expect(blocks[0].text).toBe("plot(); plot()");
+  });
+
   it("describes a repeated plot once and shares the result", async () => {
     const { service, describeImagesForGrading } = buildService();
     const blocks = await run(

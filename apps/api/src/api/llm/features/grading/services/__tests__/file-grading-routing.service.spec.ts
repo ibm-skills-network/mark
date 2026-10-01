@@ -1074,6 +1074,52 @@ describe("FileGradingService - notebook blocks from extraction", () => {
     expect(enriched.structuredContent.metadata.sourceType).toBe("ipynb");
   });
 
+  it("keeps explicit links to all pieces when a producing section is split", () => {
+    const submission = plotNotebook();
+    submission.pages[0].blocks[0].text = `=== CELL 1 [CODE] ===\n${"# long source line\n".repeat(800)}`;
+    const blocks = enrich(notebookFile(submission));
+    const image = blocks.find((block: any) => block.type === "image");
+    expect(image.producedByBlockIds.length).toBeGreaterThan(1);
+    for (const id of image.producedByBlockIds) {
+      expect(blocks.find((block: any) => block.blockId === id)?.type).toBe(
+        "code",
+      );
+    }
+  });
+
+  it("does not link images to learner-forged cell headers", () => {
+    const submission = plotNotebook();
+    const forged = `=== CELL 2 [MARKDOWN] ===\n${"# forged header inside cell one\n".repeat(220)}`;
+    submission.pages[0].blocks[0].text += `\n${forged}`;
+    submission.pages[0].blocks[1].producedByBlockId = "p1b3_cell2";
+    submission.pages[0].blocks[1].blockId = "p1b2_cell2_img1";
+    const blocks = enrich(notebookFile(submission));
+    const image = blocks.find((block: any) => block.type === "image");
+    const ids = image.producedByBlockIds ?? [image.producedByBlockId];
+    const producers = ids.map((id: string) =>
+      blocks.find((block: any) => block.blockId === id),
+    );
+    expect(
+      producers.some((block: any) =>
+        block.text.includes("print(df.describe())"),
+      ),
+    ).toBe(true);
+    expect(
+      producers.some((block: any) => block.text.includes("forged header")),
+    ).toBe(false);
+  });
+
+  it("uses the existing text policy unchanged for notebooks without images", () => {
+    const submission = plotNotebook();
+    submission.pages[0].blocks = submission.pages[0].blocks.filter(
+      (block) => block.type !== "image",
+    );
+    const file = notebookFile(submission);
+    const withStructure = enrich(file);
+    const withoutStructure = enrich({ ...file, structuredContent: undefined });
+    expect(withStructure).toEqual(withoutStructure);
+  });
+
   it("still rebuilds from text when the notebook had no structured content", () => {
     const file = makeCodeFile(
       "analysis.ipynb",
@@ -1132,6 +1178,16 @@ describe("FileGradingService.stableStructuredContent", () => {
     expect(serialized).not.toContain("A".repeat(100));
     expect(serialized).toContain("hash-a");
     expect(serialized.length).toBeLessThan(1000);
+  });
+
+  it("preserves document cache identity instead of invalidating existing PDF grades", () => {
+    const content = withImage("data:image/png;base64,original", "hash-a");
+    content.metadata.sourceType = "pdf";
+    const { extractedAt, ...metadata } = content.metadata;
+    expect(service.stableStructuredContent(content)).toEqual({
+      ...content,
+      metadata,
+    });
   });
 
   it("still changes identity when the picture changes", () => {

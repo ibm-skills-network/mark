@@ -35,6 +35,86 @@ function makeService(
 }
 
 describe("CriterionEvidenceRetrievalService", () => {
+  it("preserves visual contradictions after a full-length pinned notebook excerpt", () => {
+    const learnerText = "x".repeat(12_000);
+    const chunk = {
+      ...makeChunk(
+        "whole",
+        `${learnerText}\n\nNo data is plotted in the saved image.`,
+      ),
+      metadata: {
+        filename: "submission.ipynb",
+        pinned: true,
+        anchorTextChars: learnerText.length,
+      },
+    };
+    const excerpt = (makeService() as any).buildExcerpt(chunk, 240);
+    expect(excerpt).toContain("No data is plotted");
+    expect(excerpt.startsWith(learnerText)).toBe(true);
+  });
+
+  it("keeps short executed notebook answers visible when pictures saturate retrieval and excerpts", async () => {
+    const filename = "submission.ipynb";
+    const text = "count agricultural images ";
+    const chunks: ExtractedChunk[] = [
+      {
+        ...makeChunk("whole", text + "p".repeat(11_000)),
+        metadata: { filename, pinned: true },
+      },
+      ...Array.from({ length: 10 }, (_, i) => ({
+        ...makeChunk(`long${i}`, text.repeat(200)),
+        metadata: { filename },
+      })),
+      ...Array.from({ length: 20 }, (_, i) => ({
+        ...makeChunk(`image${i}`, text.repeat(50)),
+        anchor: { type: "image" as const, page: 1, imageId: `image${i}` },
+        metadata: { filename, imageHash: `hash${i}` },
+      })),
+      {
+        ...makeChunk(
+          "count",
+          text +
+            "# context\n".repeat(40) +
+            "print(len(agri_images_paths))\n[stdout]: 3000",
+        ),
+        metadata: { filename },
+      },
+    ];
+    let validationPrompt = "";
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockImplementation(async (prompt) => {
+            validationPrompt = await prompt.format({});
+            return { evidence: [{ chunkId: "count", relevance: "supports" }] };
+          }),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const criterion: RubricCriterion = {
+      id: "count",
+      rubricQuestion: text,
+      description: text,
+      criteria: [{ description: text, points: 2 }],
+      maxPoints: 2,
+    };
+    jest
+      .spyOn(service as any, "computeRelevanceScore")
+      .mockImplementation((_criterion, text: string) =>
+        text.includes("print(len") ? 0 : 1,
+      );
+    await service.retrieveEvidence(
+      { criterion, question: text, chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+    expect(validationPrompt).toContain("print(len(agri_images_paths))");
+    expect(validationPrompt).toContain("[stdout]: 3000");
+    expect(validationPrompt.length).toBeLessThan(40_000);
+  });
+
   it("returns empty evidence when no chunks are available", async () => {
     const service = makeService();
 
