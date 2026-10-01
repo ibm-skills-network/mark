@@ -151,6 +151,9 @@ it("audits notebook scores using the same blank-output rules and executable-cell
     "Check the executable loading code and its saved runtime output",
   );
   expect(prompt).toContain("only one required curve");
+  expect(prompt).toContain(
+    "An extra incorrect curve does not erase the correct required curve",
+  );
   const document = await renderEvidence([
     criterion("chart", ["Plotting code"]),
   ]);
@@ -180,6 +183,10 @@ it("checks named dataset requirements even when a learner aliases the loader", a
     ],
   );
   expect(prompt).toContain("Dataset names in filenames");
+  expect(prompt).toContain("Award partial credit for that demonstrated work");
+  expect(prompt).not.toContain(
+    "does not automatically allow an entirely different dataset",
+  );
   expect(prompt).toContain(
     "do not penalize naming that instance net instead of model",
   );

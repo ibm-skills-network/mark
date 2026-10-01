@@ -169,7 +169,7 @@ export class FileGradingService implements IFileGradingService {
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
     "structured-file-evidence-v6-complete-judge-rubric";
   private static readonly NOTEBOOK_IMAGE_GRADER_VERSION =
-    "structured-file-evidence-v9-notebook-images";
+    "structured-file-evidence-v10-notebook-images";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
