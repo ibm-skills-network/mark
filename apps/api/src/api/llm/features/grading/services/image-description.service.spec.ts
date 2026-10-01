@@ -38,6 +38,8 @@ describe("ImageDescriptionService notebook observations", () => {
     expect(text).not.toContain("required growing revenue");
     expect(text).not.toContain("required pie chart");
     expect(text).toContain("no data is plotted");
+    expect(text).toContain("numeric axis ticks");
+    expect(text).toContain("when panel/sample labels are absent");
     expect(options.imageDetail).toBe("high");
   });
 

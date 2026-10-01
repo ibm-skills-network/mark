@@ -147,6 +147,8 @@ it("audits notebook scores using the same blank-output rules and executable-cell
   const prompt = await renderEvidence([notebook]);
   expect(prompt).toContain("Original executable cell numbers: [58]");
   expect(prompt).toContain("A blank output cannot qualify");
+  expect(prompt).toContain("not merely an unfulfilled intention");
+  expect(prompt).toContain("Full credit requires positive evidence");
   expect(prompt).toContain(
     "Check the executable loading code and its saved runtime output",
   );
