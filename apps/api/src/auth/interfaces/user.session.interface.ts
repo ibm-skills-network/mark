@@ -13,11 +13,13 @@ export interface ClientUserSession {
   returnUrl?: string;
   launch_presentation_locale?: string;
   sessionToken?: string;
+  lmsHost?: string;
 }
 
 export interface UserSession extends ClientUserSession {
   groupId: string;
   gradingCallbackRequired?: boolean;
+  lisOutcomeServiceUrl?: string;
 }
 
 export interface UserSessionRequest extends Request {

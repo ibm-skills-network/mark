@@ -159,6 +159,14 @@ export class JwtCookieStrategy extends PassportStrategy(
       gradingCallbackRequired: payload.gradingCallbackRequired,
       returnUrl: payload.returnUrl,
       launch_presentation_locale: payload.launch_presentation_locale,
+      // Printable ASCII only: the session is forwarded as a raw header.
+      lisOutcomeServiceUrl: [
+        payload.grading?.lis_outcome_service_url,
+        payload.lis_outcome_service_url,
+      ].find(
+        (value): value is string =>
+          typeof value === "string" && /^[!-~]+$/.test(value),
+      ),
     };
   }
 }

@@ -6,6 +6,7 @@ export type User = {
   assignmentId: number;
   returnUrl: string;
   launch_presentation_locale?: string;
+  lmsHost?: string;
 };
 export type Cookies = { [key: string]: string };
 export interface LearnerFileResponse {

@@ -1,4 +1,4 @@
-import { derivePortalContext } from "./portal-context";
+import { deriveLmsHost, derivePortalContext } from "./portal-context";
 
 describe("derivePortalContext", () => {
   it.each([
@@ -90,5 +90,26 @@ describe("derivePortalContext", () => {
     expect(() =>
       derivePortalContext({ returnUrl: "http://[::1" }),
     ).not.toThrow();
+  });
+});
+
+describe("deriveLmsHost", () => {
+  it("returns the normalized host of the outcome service URL", () => {
+    expect(
+      deriveLmsHost({
+        lisOutcomeServiceUrl:
+          "https://Courses.CognitiveClass.ai/courses/course-v1:IBM+CC0301EN+v1/xblock/outcome",
+      }),
+    ).toBe("courses.cognitiveclass.ai");
+  });
+
+  it.each([
+    ["no session", undefined],
+    ["no outcome URL", {}],
+    ["a malformed URL", { lisOutcomeServiceUrl: "http://[::1" }],
+    ["an array claim", { lisOutcomeServiceUrl: ["https://a.example"] }],
+    ["a number claim", { lisOutcomeServiceUrl: 42 }],
+  ])("returns undefined for %s", (_label, session) => {
+    expect(deriveLmsHost(session)).toBeUndefined();
   });
 });

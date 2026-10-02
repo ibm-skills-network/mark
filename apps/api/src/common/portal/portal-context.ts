@@ -4,8 +4,10 @@
  * Mark is launched over LTI from a host site — a Skills Network portal
  * (cognitiveclass.ai, blitzacademy.skillsnetwork.site, ...) or a content
  * platform (Coursera, edX). The launch JWT does not carry the portal, so the
- * only identity available is the `returnUrl` claim (LTI
- * `launch_presentation_return_url`, the "Return to Course" link).
+ * identities available are the `returnUrl` claim (LTI
+ * `launch_presentation_return_url`, the "Return to Course" link) and, on
+ * graded launches, the LMS host of the outcome service URL. Open edX portals
+ * send an empty return URL, so only the LMS host identifies them.
  *
  * This module is the single place Mark decides what "the portal" is. If the
  * lti-gateway later adds a portal claim, this is the only file that changes.
@@ -80,4 +82,14 @@ export function derivePortalContext(
       portalName.length <= PORTAL_NAME_MAX_CHARS ? portalName : undefined,
     portalUrl: portalUrl.length <= PORTAL_URL_MAX_CHARS ? portalUrl : undefined,
   };
+}
+
+/** LMS host of the session's outcome service URL. Never throws. */
+export function deriveLmsHost(
+  session?: { lisOutcomeServiceUrl?: unknown } | null,
+): string | undefined {
+  const url = session?.lisOutcomeServiceUrl;
+  return typeof url === "string"
+    ? derivePortalContext({ returnUrl: url }).portalHost
+    : undefined;
 }
