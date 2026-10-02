@@ -35,6 +35,237 @@ function makeService(
 }
 
 describe("CriterionEvidenceRetrievalService", () => {
+  it("preserves visual contradictions after a full-length pinned notebook excerpt", () => {
+    const learnerText = "x".repeat(12_000);
+    const chunk = {
+      ...makeChunk(
+        "whole",
+        `${learnerText}\n\nNo data is plotted in the saved image.`,
+      ),
+      metadata: {
+        filename: "submission.ipynb",
+        pinned: true,
+        anchorTextChars: learnerText.length,
+      },
+    };
+    const excerpt = (makeService() as any).buildExcerpt(chunk, 240);
+    expect(excerpt).toContain("No data is plotted");
+    expect(excerpt.startsWith(learnerText)).toBe(true);
+  });
+
+  it("keeps short executed notebook answers visible when pictures saturate retrieval and excerpts", async () => {
+    const filename = "submission.ipynb";
+    const text = "count agricultural images ";
+    const chunks: ExtractedChunk[] = [
+      {
+        ...makeChunk("whole", text + "p".repeat(11_000)),
+        metadata: { filename, pinned: true },
+      },
+      ...Array.from({ length: 10 }, (_, i) => ({
+        ...makeChunk(`long${i}`, text.repeat(200)),
+        metadata: { filename },
+      })),
+      ...Array.from({ length: 20 }, (_, i) => ({
+        ...makeChunk(`image${i}`, text.repeat(50)),
+        anchor: { type: "image" as const, page: 1, imageId: `image${i}` },
+        metadata: { filename, imageHash: `hash${i}` },
+      })),
+      {
+        ...makeChunk(
+          "count",
+          text +
+            "# context\n".repeat(40) +
+            "print(len(agri_images_paths))\n[stdout]: 3000",
+        ),
+        metadata: { filename },
+      },
+    ];
+    let validationPrompt = "";
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: jest
+          .fn()
+          .mockImplementation(async (prompt) => {
+            validationPrompt = await prompt.format({});
+            return { evidence: [{ chunkId: "count", relevance: "supports" }] };
+          }),
+      } as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const criterion: RubricCriterion = {
+      id: "count",
+      rubricQuestion: text,
+      description: text,
+      criteria: [{ description: text, points: 2 }],
+      maxPoints: 2,
+    };
+    jest
+      .spyOn(service as any, "computeRelevanceScore")
+      .mockImplementation((_criterion, text: string) =>
+        text.includes("print(len") ? 0 : 1,
+      );
+    await service.retrieveEvidence(
+      { criterion, question: text, chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+    expect(validationPrompt).toContain("print(len(agri_images_paths))");
+    expect(validationPrompt).toContain("[stdout]: 3000");
+    expect(validationPrompt.length).toBeLessThan(40_000);
+  });
+
+  it("retrieves the criterion's executed answer when a long assignment prompt fills the search budget", async () => {
+    const filename = "submission.ipynb";
+    const question =
+      "Implement neural network training validation learning optimizer ".repeat(
+        30,
+      );
+    const chunks: ExtractedChunk[] = [
+      ...Array.from({ length: 24 }, (_, i) => ({
+        ...makeChunk(`training${i}`, `CELL ${i} CODE\n${question}`),
+        metadata: { filename },
+      })),
+      {
+        ...makeChunk(
+          "count",
+          "Count agricultural images\nprint(len(agri_images_paths))\n[stdout]: 3000",
+        ),
+        metadata: { filename, notebookCodeCells: [61] },
+      },
+      {
+        ...makeChunk("picture", "A field photograph."),
+        anchor: { type: "image" as const, page: 1, imageId: "picture" },
+        metadata: { filename, imageHash: "picture" },
+      },
+    ];
+    let validationPrompt = "";
+    const processor = {
+      processStructuredPrompt: jest.fn().mockImplementation(async (prompt) => {
+        validationPrompt = await prompt.format({});
+        return { evidence: [{ chunkId: "count", relevance: "supports" }] };
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      processor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const criterion: RubricCriterion = {
+      id: "count",
+      rubricQuestion: "Count agricultural images",
+      description: "Report the number of agricultural images",
+      criteria: [
+        { description: "Correct agricultural image count", points: 2 },
+      ],
+      maxPoints: 2,
+    };
+    const result = await service.retrieveEvidence(
+      { criterion, question, chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+    expect(validationPrompt).toContain("print(len(agri_images_paths))");
+    expect(validationPrompt).toContain(
+      "Original executable cell numbers: [61]",
+    );
+    expect(result.evidence[0].notebookCodeCells).toEqual([61]);
+    expect(validationPrompt).toContain("NOTEBOOK EVIDENCE SELECTION");
+    expect(validationPrompt).toContain("[stdout]: 3000");
+    expect(result.evidence).toEqual([
+      expect.objectContaining({ chunkId: "count" }),
+    ]);
+  });
+
+  it("invalidates selections after rubric or source provenance changes while reusing identical requests", async () => {
+    const chunks = [makeChunk("count", "Count agricultural images: 3000")];
+    const processor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "count", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      processor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    const criterion: RubricCriterion = {
+      id: "count",
+      rubricQuestion: "Count agricultural images",
+      description: "Count agricultural images",
+      criteria: [{ description: "Correct count", points: 2 }],
+      maxPoints: 2,
+    };
+    const request = {
+      criterion,
+      question: "Count agricultural images",
+      chunks,
+      assignmentId: 1,
+    };
+    const index = new ChunkIndex(chunks);
+    await service.retrieveEvidence(request, index);
+    await service.retrieveEvidence(request, index);
+    expect(processor.processStructuredPrompt).toHaveBeenCalledTimes(1);
+    await service.retrieveEvidence(
+      {
+        ...request,
+        criterion: { ...criterion, description: "Count only training images" },
+      },
+      index,
+    );
+    await service.retrieveEvidence(
+      { ...request, modelOverride: "gpt-6-luna" },
+      index,
+    );
+    const moved = [
+      {
+        ...chunks[0],
+        sourceId: "different-file",
+        anchor: { type: "file" as const, page: 2 },
+      },
+    ];
+    const result = await service.retrieveEvidence(
+      { ...request, chunks: moved },
+      new ChunkIndex(moved),
+    );
+    expect(processor.processStructuredPrompt).toHaveBeenCalledTimes(4);
+    expect(result.evidence[0].sourceId).toBe("different-file");
+    expect(result.evidence[0].anchor).toEqual({ type: "file", page: 2 });
+  });
+
+  it("revalidates evidence when an audit requests a recheck instead of serving the old selection from memory", async () => {
+    const chunks = [makeChunk("count", "Count images: 3000")];
+    const service = makeService(
+      JSON.stringify({
+        evidence: [{ chunkId: "count", relevance: "supports" }],
+      }),
+    );
+    const processor = (service as any).promptProcessor.processStructuredPrompt;
+    const request = {
+      criterion: {
+        id: "count",
+        rubricQuestion: "Count images",
+        description: "",
+        criteria: [{ description: "Correct count", points: 2 }],
+        maxPoints: 2,
+      },
+      question: "Question",
+      chunks,
+      assignmentId: 1,
+    };
+    const index = new ChunkIndex(chunks);
+    await service.retrieveEvidence(request, index);
+    await service.retrieveEvidence(
+      { ...request, judgeFeedback: "The count output was overlooked." },
+      index,
+    );
+    expect(processor).toHaveBeenCalledTimes(2);
+    const prompt = await processor.mock.calls[1][0].format({});
+    expect(prompt).toContain("The count output was overlooked.");
+    expect(prompt).toContain("verify every claim against the candidates");
+  });
+
   it("returns empty evidence when no chunks are available", async () => {
     const service = makeService();
 
@@ -534,6 +765,162 @@ describe("CriterionEvidenceRetrievalService", () => {
     const proseEvidence = response.evidence.find((e) => e.chunkId === "prose");
     expect(cellEvidence?.quote).toBe(cellText);
     expect(proseEvidence?.quote?.length).toBe(220);
+  });
+
+  /**
+   * One picture repeated through a submission (a notebook cell re-run emits a
+   * byte-identical plot, and the vision pass gives every copy the same
+   * description) must not spend the whole evidence budget on one sentence.
+   */
+  describe("duplicate image chunks", () => {
+    /**
+     * imageHash is what identifies the picture. The chunk TEXT cannot be used:
+     * each image chunk carries its own "[Image output of cell N]" label, so
+     * copies of one plot never have identical text.
+     */
+    function makeImageChunk(
+      id: string,
+      text: string,
+      imageHash = "hash-of-the-plot",
+    ): ExtractedChunk {
+      return {
+        chunkId: id,
+        hash: id,
+        text,
+        sourceType: "file",
+        sourceId: "analysis.ipynb",
+        anchor: { type: "image", page: 1, imageId: `block-${id}` },
+        metadata: { filename: "analysis.ipynb", imageHash },
+      } as ExtractedChunk;
+    }
+
+    const description =
+      "[Image output] The image shows a bar chart of monthly revenue with " +
+      "twelve bars rising from left to right across the year.";
+
+    const criterion: RubricCriterion = {
+      id: "c-plot",
+      rubricQuestion: "Does the notebook show a bar chart of monthly revenue?",
+      description: "Bar chart of monthly revenue.",
+      criteria: [{ description: "A bar chart is displayed", points: 5 }],
+      maxPoints: 5,
+    };
+
+    it("keeps one of several identical image chunks so code still fits the budget", async () => {
+      const chunks = [
+        // Same picture, five times — each labelled with its own cell, exactly
+        // as chunking builds them, so only the hash reveals the duplication.
+        ...Array.from({ length: 5 }, (_, index) =>
+          makeImageChunk(
+            `img${index}`,
+            `[Image output of cell ${index + 1}] ${description}`,
+          ),
+        ),
+        makeChunk(
+          "code",
+          "monthly = sales.groupby('month')['revenue'].sum()\n" +
+            "ax = monthly.plot(kind='bar', title='Monthly revenue')",
+        ),
+      ];
+
+      let validationPrompt = "";
+      const service = new CriterionEvidenceRetrievalService(
+        {
+          processStructuredPrompt: jest
+            .fn()
+            .mockImplementation(async (prompt: any) => {
+              validationPrompt = await prompt.format({});
+              return { evidence: [] };
+            }),
+        } as any,
+        {
+          getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+        } as any,
+      );
+
+      await service.retrieveEvidence(
+        { criterion, question: "Grade the notebook", chunks, assignmentId: 1 },
+        new ChunkIndex(chunks),
+      );
+
+      const listed = ["img0", "img1", "img2", "img3", "img4"].filter((id) =>
+        validationPrompt.includes(id),
+      );
+      expect(listed).toHaveLength(1);
+      // The point of the collapse: the code chunk keeps its slot.
+      expect(validationPrompt).toContain("groupby('month')");
+    });
+
+    it("keeps image chunks that are different pictures", async () => {
+      const chunks = [
+        makeImageChunk("img0", description, "hash-bar-chart"),
+        makeImageChunk(
+          "img1",
+          "[Image output of cell 7] The image shows a pie chart of revenue share by region with four segments.",
+          "hash-pie-chart",
+        ),
+      ];
+
+      let validationPrompt = "";
+      const service = new CriterionEvidenceRetrievalService(
+        {
+          processStructuredPrompt: jest
+            .fn()
+            .mockImplementation(async (prompt: any) => {
+              validationPrompt = await prompt.format({});
+              return { evidence: [] };
+            }),
+        } as any,
+        {
+          getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+        } as any,
+      );
+
+      await service.retrieveEvidence(
+        { criterion, question: "Grade the notebook", chunks, assignmentId: 1 },
+        new ChunkIndex(chunks),
+      );
+
+      expect(validationPrompt).toContain("img0");
+      expect(validationPrompt).toContain("img1");
+    });
+
+    it("leaves duplicate NON-image chunks alone", async () => {
+      const repeated = "def helper():\n    return compute_totals(rows)";
+      const chunks = [makeChunk("seg0", repeated), makeChunk("seg1", repeated)];
+
+      let validationPrompt = "";
+      const service = new CriterionEvidenceRetrievalService(
+        {
+          processStructuredPrompt: jest
+            .fn()
+            .mockImplementation(async (prompt: any) => {
+              validationPrompt = await prompt.format({});
+              return { evidence: [] };
+            }),
+        } as any,
+        {
+          getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+        } as any,
+      );
+
+      await service.retrieveEvidence(
+        {
+          criterion: {
+            ...criterion,
+            rubricQuestion: "Is there a helper that computes totals?",
+          },
+          question: "Grade the code",
+          chunks,
+          assignmentId: 1,
+        },
+        new ChunkIndex(chunks),
+      );
+
+      // Identical text in two places is two findings, each with its own anchor.
+      expect(validationPrompt).toContain("seg0");
+      expect(validationPrompt).toContain("seg1");
+    });
   });
 
   /**

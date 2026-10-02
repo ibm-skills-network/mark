@@ -15,6 +15,7 @@ import {
   getDeterministicGradingOptions,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { notebookOutputScoringRules } from "./notebook-evidence.rules";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
 
 /**
@@ -144,6 +145,8 @@ export class CriterionGradingService {
 QUESTION:
 {question}
 
+{notebook_output_rules}
+
 CRITERION:
 {criterion}
 
@@ -158,13 +161,21 @@ JUDGE FEEDBACK (if any):
       inputVariables: [],
       partialVariables: {
         question: () => request.question,
+        notebook_output_rules: () =>
+          request.evidence.some((item) => item.notebookRenderedOutput)
+            ? notebookOutputScoringRules(request.evidence, [request.criterion])
+            : "",
         criterion: () => this.formatCriterion(request.criterion),
         allowed_points: () => allowedPoints.join(", "),
         evidence: () =>
           request.evidence
             .map(
               (item) =>
-                `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}`,
+                `- ${item.chunkId}: ${item.quote} | ${this.formatAnchor(item)}${
+                  item.notebookCodeCells === undefined
+                    ? ""
+                    : ` | Original executable cell numbers: ${JSON.stringify(item.notebookCodeCells)}`
+                }`,
             )
             .join("\n"),
         judge_feedback: () => request.judgeFeedback || "None",

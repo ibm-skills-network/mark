@@ -480,12 +480,24 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-chromium-${{ steps.pw.outputs.version }}
 
+      - name: Configure Ubuntu package downloads
+        timeout-minutes: 2
+        run: |
+          # The runner's Azure mirror stalled before tests could start. Use the
+          # direct Ubuntu mirror and bound network waits for both cache paths.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          printf '%s\n' 'Acquire::Retries "2";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/80-mark-e2e-timeouts >/dev/null
+
       - name: Install Playwright browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
         run: yarn playwright:install
 
       - name: Install Playwright OS dependencies (cache hit)
         if: steps.pw-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 10
         run: yarn playwright install-deps chromium
 
       - name: Run Playwright tests
