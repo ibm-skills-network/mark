@@ -605,12 +605,14 @@ describe("AssignmentAttemptAccessControlGuard — ownership is proven, not infer
   });
 
   it("still allows the learner's own attempt", async () => {
-    mockPrisma.$transaction = jest.fn().mockResolvedValue([
-      { id: ROUTE_ASSIGNMENT },
-      null,
-      { id: ATTEMPT, assignmentId: ROUTE_ASSIGNMENT, userId: "learner-1" },
-      undefined,
-    ]);
+    mockPrisma.$transaction = jest
+      .fn()
+      .mockResolvedValue([
+        { id: ROUTE_ASSIGNMENT },
+        null,
+        { id: ATTEMPT, assignmentId: ROUTE_ASSIGNMENT, userId: "learner-1" },
+        undefined,
+      ]);
 
     await expect(
       guard.canActivate(contextFor({ userId: "learner-1" })),

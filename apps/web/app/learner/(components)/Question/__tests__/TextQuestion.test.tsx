@@ -7,13 +7,13 @@ import type { QuestionStore } from "@/config/types";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import TextQuestion from "../TextQuestion";
 
-const mockMarkdownEditor = jest.fn();
+const mockRichTextEditor = jest.fn();
 const mockSetTextResponse = jest.fn();
 
-jest.mock("@components/MarkDownEditor", () => ({
+jest.mock("@/components/rich-text/RichTextEditorClient", () => ({
   __esModule: true,
   default: (props: unknown) => {
-    mockMarkdownEditor(props);
+    mockRichTextEditor(props);
     return null;
   },
 }));
@@ -56,7 +56,7 @@ describe("TextQuestion", () => {
   it("uses the simplified learner toolbar for text answers", () => {
     render(<TextQuestion question={question} />);
 
-    expect(mockMarkdownEditor).toHaveBeenCalledWith(
+    expect(mockRichTextEditor).toHaveBeenCalledWith(
       expect.objectContaining({
         allowCopy: false,
         maxCharacters: 500,
@@ -67,7 +67,7 @@ describe("TextQuestion", () => {
       }),
     );
 
-    const editorProps = mockMarkdownEditor.mock.calls[0][0] as {
+    const editorProps = mockRichTextEditor.mock.calls[0][0] as {
       setValue: (value: string) => void;
     };
     editorProps.setValue("<p>Updated answer</p>");

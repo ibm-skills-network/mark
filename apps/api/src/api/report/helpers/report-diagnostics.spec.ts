@@ -24,7 +24,9 @@ const valid = () => ({
   },
   draft: {
     activeAttemptId: 1630573,
-    questions: [{ id: 29377, status: "edited", selected: ["1"], textLength: 0 }],
+    questions: [
+      { id: 29377, status: "edited", selected: ["1"], textLength: 0 },
+    ],
   },
   rendered: [
     {

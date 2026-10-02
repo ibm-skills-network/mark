@@ -46,7 +46,9 @@ export function ReportDiagnosticsPanel({
   }, [reportId, sessionToken]);
 
   if (state.kind === "loading") {
-    return <p className="text-sm text-muted-foreground">Loading diagnostics…</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Loading diagnostics…</p>
+    );
   }
   if (state.kind === "none") {
     return (
@@ -72,7 +74,10 @@ export function ReportDiagnosticsPanel({
     ["Attempt language", session?.attemptLanguage],
     ["UI language", session?.uiLanguage],
     ["Build", session?.buildVersion],
-    ["In iframe", page?.inIframe === undefined ? undefined : String(page.inIframe)],
+    [
+      "In iframe",
+      page?.inIframe === undefined ? undefined : String(page.inIframe),
+    ],
     ["Viewport", page?.viewport],
     ["Clock skew (ms)", page?.clockSkewMs],
     ["Draft belongs to attempt", draft?.activeAttemptId],
@@ -102,8 +107,8 @@ export function ReportDiagnosticsPanel({
                 key={`${request.at ?? ""}-${index}`}
                 className={failed(request.status) ? "text-red-700" : ""}
               >
-                <span>{request.status ?? "no response"}</span>{" "}
-                {request.method} {request.path}
+                <span>{request.status ?? "no response"}</span> {request.method}{" "}
+                {request.path}
                 {request.ms === undefined ? "" : ` · ${request.ms}ms`}
                 {request.requestId ? ` · id ${request.requestId}` : ""}
               </li>
