@@ -90,6 +90,7 @@ interface AboutTheAssignmentProps {
   role: "learner" | "author";
   assignmentId: number;
   fetchData: () => void;
+  lmsHost: string | undefined;
 }
 
 const getAssignmentState = (
@@ -109,6 +110,7 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   role,
   assignmentId,
   fetchData,
+  lmsHost,
 }) => {
   const {
     introduction = "No introduction provided.",
@@ -353,7 +355,9 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     <>
       <main className="flex-1 py-6 sm:py-12 px-4 sm:px-6 bg-gray-50 dark:bg-gray-900 overflow-auto">
         <div className="max-w-4xl mx-auto space-y-6">
-          {role === "learner" && <PromoBanner placement="preStart" />}
+          {role === "learner" && (
+            <PromoBanner placement="preStart" lmsHost={lmsHost} />
+          )}
           <div className="flex flex-col gap-4">
             <div className="flex flex-col">
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100 leading-tight">

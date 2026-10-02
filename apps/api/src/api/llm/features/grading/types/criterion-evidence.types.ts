@@ -61,6 +61,12 @@ export interface ExtractedChunk {
     /** Mirrors ContentBlock.pinnedEvidence: always reaches the LLM validator. */
     pinned?: boolean;
     /**
+     * Mirrors ContentBlock.imageHash — identity of the picture this chunk
+     * describes. Retrieval collapses chunks sharing one so several copies of
+     * the same plot cannot spend the whole evidence budget.
+     */
+    imageHash?: string;
+    /**
      * Chunk is a merged prose section (a page/slide worth of consecutive
      * blocks). Section quotes carry their full text — the short prose
      * excerpt cap would undo the merge.
@@ -82,6 +88,7 @@ export interface ExtractedChunk {
      * can never be located inside the anchored block's text.
      */
     anchorTextChars?: number;
+    notebookCodeCells?: number[];
   };
 }
 
@@ -97,6 +104,7 @@ export interface CriterionEvidenceRequest {
   strategy?: EvidenceRetrievalStrategy;
   modelOverride?: string;
   modelOverrideIsFinal?: boolean;
+  judgeFeedback?: string;
 }
 
 export interface CriterionEvidence {
@@ -108,6 +116,8 @@ export interface CriterionEvidence {
   relevanceScore: number;
   searchScore?: number;
   contradiction?: boolean;
+  notebookRenderedOutput?: boolean;
+  notebookCodeCells?: number[];
 }
 
 export interface CriterionEvidenceResponse {

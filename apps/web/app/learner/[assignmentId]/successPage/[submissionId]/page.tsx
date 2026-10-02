@@ -124,6 +124,7 @@ function SuccessPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [BackendComments, setBackendComments] = useState("");
   const [userId, setUserId] = useState<string>(null);
+  const [lmsHost, setLmsHost] = useState<string>();
   const [errorConfig, setErrorConfig] = useState<AttemptViewError | null>(null);
   // Set only when the request produced no HTTP response at all, which is a
   // different screen from any status the server could return.
@@ -164,6 +165,7 @@ function SuccessPage() {
       if (cancelled) return;
       setRole(user.role);
       setUserId(user.userId);
+      setLmsHost(user.lmsHost);
       logState("User loaded", `Role: ${user.role}`);
       if (user.role === "learner") {
         try {
@@ -869,7 +871,7 @@ function SuccessPage() {
           grade >= passingGrade &&
           grade > PROMO_COMPLETION_MIN_SCORE && (
             <div className="w-full mt-4">
-              <PromoBanner placement="completion" />
+              <PromoBanner placement="completion" lmsHost={lmsHost} />
             </div>
           )}
 

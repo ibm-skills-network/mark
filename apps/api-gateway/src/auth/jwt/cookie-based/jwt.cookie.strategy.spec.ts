@@ -162,6 +162,36 @@ describe("JwtCookieStrategy", () => {
         expect(result.returnUrl).toBe(url);
       }
     });
+
+    it("forwards the first usable outcome service URL", () => {
+      const graded = "https://courses.cognitiveclass.ai/outcome";
+      const topLevel = "https://courses.cognitiveclass.ai/top-level";
+      const cases: [unknown, unknown, string | undefined][] = [
+        [graded, topLevel, graded],
+        ["", topLevel, topLevel],
+        [["https://a.example"], topLevel, topLevel],
+        [42, undefined, undefined],
+        ["https://courses.cognitiveclass.ai/ş", undefined, undefined],
+        ["https://has space.example", undefined, undefined],
+        [undefined, undefined, undefined],
+      ];
+
+      for (const [inGrading, atTopLevel, expected] of cases) {
+        const payload = {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "test-group",
+          assignmentID: 123,
+          grading: { lis_outcome_service_url: inGrading },
+          lis_outcome_service_url: atTopLevel,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        };
+
+        const result = strategy.validate({ headers: {} } as any, payload);
+        expect(result.lisOutcomeServiceUrl).toBe(expected);
+      }
+    });
   });
 
   describe("JWT extraction", () => {

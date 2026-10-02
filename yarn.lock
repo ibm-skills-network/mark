@@ -22,14 +22,14 @@
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
-  version "2.0.130"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.130.tgz#17dcd84b6270b88892c3e7d9783cd6170a08d297"
-  integrity sha512-Amwroc0eHCr03Kcc6BEHz1z7SDEDloj9+9ORFT/Hf8FKpKZZauEhohglt3TPFBuD3lqUTQbVrzKyF5fvG8s16Q==
+  version "2.0.133"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.133.tgz#03a9c28815ce920d261d18c75ba6d808f969f4ef"
+  integrity sha512-UfrnVucrMcYxAKBh8yEW5J7asBvSFqHA9VnIFzuMQuVdmX3KCwIBhe6F4WsZ0oWB1GSsoBJJTXr/K1G7nFKL0w==
   dependencies:
     "@ai-sdk/provider" "2.0.5"
-    "@ai-sdk/provider-utils" "3.0.39"
+    "@ai-sdk/provider-utils" "3.0.41"
 
-"@ai-sdk/provider-utils@3.0.39", "@ai-sdk/provider-utils@3.0.40", "@ai-sdk/provider-utils@^3.0.26":
+"@ai-sdk/provider-utils@3.0.40", "@ai-sdk/provider-utils@3.0.41", "@ai-sdk/provider-utils@^3.0.26":
   version "3.0.41"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.41.tgz#3dacee4809ef6334bfe2c71befd2c37e5b0d11da"
   integrity sha512-xpURVGQud+AEOZ/uRZTBU0eVy2+dt/y/dUEp9ewjW3eTM6yu0vThzTvduhOSabpn6AExewg8WJW04P4D6USVXw==
@@ -13726,9 +13726,9 @@ run-parallel@^1.1.9:
     queue-microtask "^1.2.2"
 
 rxjs@7.8.1, rxjs@7.8.2, rxjs@^7.8.2:
-  version "7.8.1"
-  resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-7.8.1.tgz#6f6f3d99ea8044291efd92e7c7fcf562c4057543"
-  integrity sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==
+  version "7.8.2"
+  resolved "https://registry.yarnpkg.com/rxjs/-/rxjs-7.8.2.tgz#955bc473ed8af11a002a2be52071bf475638607b"
+  integrity sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==
   dependencies:
     tslib "^2.1.0"
 

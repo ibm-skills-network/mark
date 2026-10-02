@@ -23,12 +23,14 @@ interface AuthFetchToAboutProps {
   assignmentId: number;
   role: "learner" | "author";
   cookie: string;
+  lmsHost: string | undefined;
 }
 
 const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   assignmentId,
   role,
   cookie,
+  lmsHost,
 }) => {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -179,6 +181,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
         role={role}
         assignmentId={assignmentId}
         fetchData={fetchData}
+        lmsHost={lmsHost}
       />
     </>
   );

@@ -61,6 +61,7 @@ import {
   CODE_SEGMENT_MAX_CHARS,
   CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
   isCodeLikeFilename,
+  isJupyterNotebookFilename,
   isSourceCodeFilename,
   sanitizeFilenameForMarker,
 } from "./source-code.utils";
@@ -167,6 +168,8 @@ export class FileGradingService implements IFileGradingService {
   // selected by the old judge, even when the extracted submission is identical.
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
     "structured-file-evidence-v6-complete-judge-rubric";
+  private static readonly NOTEBOOK_IMAGE_GRADER_VERSION =
+    "structured-file-evidence-v11-notebook-images";
 
   constructor(
     @Inject(PROMPT_PROCESSOR)
@@ -864,6 +867,15 @@ export class FileGradingService implements IFileGradingService {
     const modelCacheIdentity = getGradingModelCacheIdentity(
       parameters.modelSnapshot,
     );
+    const graderVersion = parameters.learnerResponse.some(
+      (file) =>
+        isJupyterNotebookFilename(file.filename) &&
+        file.structuredContent?.pages?.some((page) =>
+          page.blocks.some((block) => block.type === "image"),
+        ),
+    )
+      ? FileGradingService.NOTEBOOK_IMAGE_GRADER_VERSION
+      : FileGradingService.EVIDENCE_FILE_GRADER_VERSION;
     const answerHash = this.hashCanonical(
       [...parameters.learnerResponse]
         .sort((left, right) =>
@@ -877,7 +889,7 @@ export class FileGradingService implements IFileGradingService {
         })),
     );
     const rubricHash = this.hashCanonical({
-      graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+      graderVersion,
       modelSnapshot: modelCacheIdentity,
       reasoningEffort: "none",
       question: parameters.question,
@@ -929,7 +941,7 @@ export class FileGradingService implements IFileGradingService {
         cachedAt: new Date(),
         hitCount: 0,
         metadata: {
-          graderVersion: FileGradingService.EVIDENCE_FILE_GRADER_VERSION,
+          graderVersion,
           modelSnapshot: modelCacheIdentity,
           fileResponse: this.fileResponseForCache(result),
         },
@@ -994,14 +1006,37 @@ export class FileGradingService implements IFileGradingService {
    * Cache identity must depend only on submission content. `extractedAt` is
    * re-stamped on every extraction pass, so hashing it gives every attempt a
    * fresh cache key and the canonical-score cache never hits.
+   *
+   * Image payloads are replaced by their content hash rather than dropped:
+   * identity still tracks a changed picture, but the key stops canonicalizing
+   * megabytes of base64 on every grading request. The extractor's `imageHash`
+   * is preferred so the substitution costs nothing; blocks without one (the PDF
+   * path) get hashed here.
    */
   private stableStructuredContent(
     content: NonNullable<LearnerFileUpload["structuredContent"]>,
   ): Record<string, unknown> {
-    const { metadata, ...rest } = content;
-    if (!metadata) return { ...rest };
+    const { metadata, pages, ...rest } = content;
+    if (metadata?.sourceType !== "ipynb") {
+      if (!metadata) return { ...rest, pages };
+      const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
+      return { ...rest, pages, metadata: stableMetadata };
+    }
+    const stablePages = pages?.map((page) => ({
+      ...page,
+      blocks: page.blocks?.map((block) =>
+        block.imageData
+          ? {
+              ...block,
+              imageData: block.imageHash ?? this.hashCanonical(block.imageData),
+            }
+          : block,
+      ),
+    }));
+
+    if (!metadata) return { ...rest, pages: stablePages };
     const { extractedAt: _extractedAt, ...stableMetadata } = metadata;
-    return { ...rest, metadata: stableMetadata };
+    return { ...rest, pages: stablePages, metadata: stableMetadata };
   }
 
   private hashCanonical(value: unknown): string {
@@ -1173,6 +1208,7 @@ export class FileGradingService implements IFileGradingService {
       (file) =>
         this.shouldRebuildStructuredContent(file) ||
         this.isArchiveUploadNeedingStructure(file) ||
+        this.needsNotebookEvidencePolicy(file) ||
         (includeCodeUploads &&
           !file.structuredContent &&
           this.hasExtractedSubmissionText(file)),
@@ -1190,6 +1226,16 @@ export class FileGradingService implements IFileGradingService {
         return {
           ...file,
           structuredContent: this.buildCanonicalSubmissionForArchive(file),
+        };
+      }
+
+      if (this.needsNotebookEvidencePolicy(file)) {
+        return {
+          ...file,
+          structuredContent: this.buildCanonicalSubmissionFromBlocks(
+            file.structuredContent,
+            file,
+          ),
         };
       }
 
@@ -1218,6 +1264,24 @@ export class FileGradingService implements IFileGradingService {
 
   private isArchiveUploadNeedingStructure(file: LearnerFileUpload): boolean {
     return Boolean(file.archiveEntries?.length) && !file.structuredContent;
+  }
+
+  /**
+   * A notebook whose structuredContent came straight from extraction still
+   * needs this service's evidence policy applied to it. The pinned whole-file
+   * block is the marker that the policy has already run, which keeps a second
+   * pass from stacking duplicate metadata/validator/whole-file blocks.
+   */
+  private needsNotebookEvidencePolicy(file: LearnerFileUpload): boolean {
+    if (!isJupyterNotebookFilename(file.filename)) return false;
+
+    const blocks = file.structuredContent?.pages?.flatMap(
+      (page) => page.blocks ?? [],
+    );
+    if (!blocks?.length) return false;
+    if (!blocks.some((block) => block.type === "image")) return false;
+
+    return !blocks.some((block) => block.pinnedEvidence);
   }
 
   /**
@@ -1336,6 +1400,24 @@ export class FileGradingService implements IFileGradingService {
       return false;
     }
 
+    // A notebook that arrives with extractor-built blocks goes through
+    // buildCanonicalSubmissionFromBlocks instead (see
+    // needsNotebookEvidencePolicy); only one with no structure at all — a
+    // notebook whose JSON failed to parse and fell back to raw text — rebuilds
+    // from text here.
+    if (isJupyterNotebookFilename(file.filename)) {
+      const blocks = file.structuredContent?.pages?.flatMap(
+        (page) => page.blocks ?? [],
+      );
+      // Notebooks without raster outputs keep the established text policy,
+      // including tiny-section merging and the notebook header's evidence.
+      return (
+        !blocks?.some(
+          (block) => block.type === "image" || block.pinnedEvidence,
+        ) && this.hasExtractedSubmissionText(file)
+      );
+    }
+
     return !file.structuredContent && this.hasExtractedSubmissionText(file);
   }
 
@@ -1430,6 +1512,145 @@ export class FileGradingService implements IFileGradingService {
         },
       ],
     };
+  }
+
+  /** Preserve the established notebook text policy, adding linked images. */
+  private buildCanonicalSubmissionFromBlocks(
+    extracted: CanonicalSubmission,
+    file: LearnerFileUpload,
+  ): CanonicalSubmission {
+    const canonical = this.buildCanonicalSubmissionFromText(
+      file.extractedText || file.content || "",
+      file,
+    );
+    const codeBlocks = canonical.pages[0].blocks;
+    const producersByCell = new Map<string, ContentBlock[]>();
+    // Match ranges using extractor-owned block identities. Learner source can
+    // forge a CELL header, so parsing headers here cannot establish provenance.
+    const source = this.normalizeNotebookTextForLinking(
+      file.extractedText || file.content || "",
+    );
+    const cellRanges: {
+      cell: string;
+      start: number;
+      end: number;
+      codeCells: number[];
+    }[] = [];
+    let cellCursor = 0;
+    for (const page of extracted.pages) {
+      for (const block of page.blocks) {
+        if (block.type === "image") continue;
+        const cell = /_cell(\d+)(?:_|$)/.exec(block.blockId)?.[1];
+        const text = this.normalizeNotebookTextForLinking(block.text);
+        if (!cell || !text) continue;
+        const start = source.indexOf(text, cellCursor);
+        if (start < 0) continue;
+        const end = start + text.length;
+        cellRanges.push({
+          cell,
+          start,
+          end,
+          codeCells:
+            block.notebookCodeCells ??
+            (block.type === "code" ? [Number(cell)] : []),
+        });
+        cellCursor = end;
+      }
+    }
+    let sectionCursor = 0;
+    let rangeCursor = 0;
+
+    for (const block of codeBlocks) {
+      if (block.type !== "code" || block.pinnedEvidence) continue;
+      const text = this.normalizeNotebookTextForLinking(block.text);
+      if (!text) continue;
+      const start = source.indexOf(text, sectionCursor);
+      if (start < 0) continue;
+      const end = start + text.length;
+      sectionCursor = end;
+      while (
+        rangeCursor < cellRanges.length &&
+        cellRanges[rangeCursor].end <= start
+      ) {
+        rangeCursor++;
+      }
+      const cells: string[] = [];
+      block.notebookCodeCells = [];
+      for (
+        let index = rangeCursor;
+        index < cellRanges.length && cellRanges[index].start < end;
+        index++
+      ) {
+        cells.push(cellRanges[index].cell);
+        block.notebookCodeCells.push(...cellRanges[index].codeCells);
+      }
+      block.notebookCodeCells = [...new Set(block.notebookCodeCells)];
+      const firstCell = cells[0];
+      if (firstCell) block.blockId += `_cell${firstCell}`;
+      for (const cell of cells) {
+        const producers = producersByCell.get(cell) ?? [];
+        producers.push(block);
+        producersByCell.set(cell, producers);
+      }
+    }
+
+    const imagesAfter = new Map<string, ContentBlock[]>();
+    const unlinkedImages: ContentBlock[] = [];
+    let imageIndex = codeBlocks.length + 1;
+    for (const page of extracted.pages) {
+      for (const image of page.blocks) {
+        if (image.type !== "image") continue;
+        const sourceId = image.producedByBlockId ?? image.blockId;
+        const cell = /_cell(\d+)(?:_|$)/.exec(sourceId)?.[1];
+        const producers = cell ? (producersByCell.get(cell) ?? []) : [];
+        const lastProducer = producers.at(-1);
+        const suffix = image.blockId.indexOf("_");
+        const linked: ContentBlock = {
+          ...image,
+          blockId: `p1b${imageIndex++}${suffix >= 0 ? image.blockId.slice(suffix) : ""}`,
+          page: 1,
+          producedByBlockId: lastProducer?.blockId,
+          producedByBlockIds:
+            producers.length > 1
+              ? producers.map((block) => block.blockId)
+              : undefined,
+        };
+        if (lastProducer) {
+          const images = imagesAfter.get(lastProducer.blockId) ?? [];
+          images.push(linked);
+          imagesAfter.set(lastProducer.blockId, images);
+        } else {
+          unlinkedImages.push(linked);
+        }
+      }
+    }
+
+    const blocks = codeBlocks.flatMap((block) => [
+      block,
+      ...(imagesAfter.get(block.blockId) ?? []),
+    ]);
+    blocks.push(...unlinkedImages);
+    if (blocks.length > MAX_EVIDENCE_BLOCKS_PER_SUBMISSION) {
+      throw new OversizedSubmissionError({
+        blockCount: blocks.length,
+        cap: MAX_EVIDENCE_BLOCKS_PER_SUBMISSION,
+        filename: file.filename,
+      });
+    }
+    return {
+      ...canonical,
+      metadata: {
+        ...canonical.metadata,
+        sourceType: extracted.metadata.sourceType,
+        checksum: extracted.metadata.checksum,
+        blockCount: blocks.length,
+      },
+      pages: [{ pageNumber: 1, blocks }],
+    };
+  }
+
+  private normalizeNotebookTextForLinking(text: string): string {
+    return this.normalizeCodeSubmissionText(text).replaceAll(/\s/g, "");
   }
 
   private splitTextIntoEvidenceBlocks(

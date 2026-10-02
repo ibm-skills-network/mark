@@ -61,7 +61,13 @@ jest.mock("@/components/GradeSyncStatus", () => ({
 }));
 jest.mock("@/components/promo/PromoBanner", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { placement: string; lmsHost?: string }) => (
+    <div
+      data-testid="promo"
+      data-placement={props.placement}
+      data-lms-host={props.lmsHost}
+    />
+  ),
 }));
 jest.mock("sonner", () => ({
   toast: { success: jest.fn(), error: jest.fn() },
@@ -91,23 +97,23 @@ const learner = {
   returnUrl: "",
 };
 
+// jest.setup.js replaces MessageChannel, which React's scheduler uses to
+// flush work, so async state has to be settled inside act() here.
+const renderAndSettle = async () => {
+  await act(async () => {
+    render(<SuccessPage />);
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
+
 describe("results page — a failed load is reported as what failed", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getUserMock.mockResolvedValue(learner);
     getAttemptsMock.mockResolvedValue([]);
   });
-
-  // jest.setup.js replaces MessageChannel, which React's scheduler uses to
-  // flush work, so async state has to be settled inside act() here.
-  const renderAndSettle = async () => {
-    await act(async () => {
-      render(<SuccessPage />);
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
 
   it("asks the fetcher to surface failures rather than report them as a missing attempt", async () => {
     getCompletedAttemptMock.mockResolvedValue(undefined);
@@ -178,6 +184,40 @@ describe("results page — a failed load is reported as what failed", () => {
     expect(screen.getByTestId("error-modal")).toHaveAttribute(
       "data-status",
       "404",
+    );
+  });
+});
+
+describe("results page — completion promo", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getAttemptsMock.mockResolvedValue([]);
+  });
+
+  it("passes the session's LMS host to the completion banner", async () => {
+    getUserMock.mockResolvedValue({
+      ...learner,
+      lmsHost: "courses.cognitiveclass.ai",
+    });
+    getCompletedAttemptMock.mockResolvedValue({
+      id: 2486,
+      name: "Quiz",
+      questions: [],
+      showQuestions: false,
+      grade: 0.9,
+      passingGrade: 50,
+      passed: true,
+      totalPossiblePoints: 10,
+      totalPointsEarned: 9,
+    });
+
+    await renderAndSettle();
+
+    const banner = screen.getByTestId("promo");
+    expect(banner).toHaveAttribute("data-placement", "completion");
+    expect(banner).toHaveAttribute(
+      "data-lms-host",
+      "courses.cognitiveclass.ai",
     );
   });
 });

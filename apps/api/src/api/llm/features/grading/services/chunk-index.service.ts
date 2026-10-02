@@ -14,6 +14,7 @@ interface SearchResult {
 export class ChunkIndex {
   private readonly index: MiniSearch<SearchDocument>;
   private readonly chunkMap: Map<string, ExtractedChunk>;
+  private notebookCodeIndex?: ChunkIndex;
 
   constructor(chunks: ExtractedChunk[]) {
     this.chunkMap = new Map(chunks.map((chunk) => [chunk.chunkId, chunk]));
@@ -62,6 +63,28 @@ export class ChunkIndex {
 
   getChunk(chunkId: string): ExtractedChunk | undefined {
     return this.chunkMap.get(chunkId);
+  }
+
+  /** Rank notebook code using learner text, while returning its visual notes. */
+  searchNotebookCode(
+    query: string,
+    limit: number,
+  ): ReturnType<ChunkIndex["search"]> {
+    this.notebookCodeIndex ??= new ChunkIndex(
+      this.getAllChunks()
+        .filter((chunk) => chunk.anchor.type !== "image")
+        .map((chunk) => ({
+          ...chunk,
+          text:
+            typeof chunk.metadata?.anchorTextChars === "number"
+              ? chunk.text.slice(0, chunk.metadata.anchorTextChars)
+              : chunk.text,
+        })),
+    );
+    return this.notebookCodeIndex.search(query, limit).map((result) => ({
+      ...result,
+      chunk: this.chunkMap.get(result.chunk.chunkId),
+    }));
   }
 
   getAllChunks(): ExtractedChunk[] {

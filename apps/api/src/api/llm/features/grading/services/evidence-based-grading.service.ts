@@ -578,22 +578,60 @@ LANGUAGE: {language}`,
 
     if (imageBlocks.length === 0) {
       this.logger.debug("No images found in submission");
+      this.attachDescriptionsToProducingBlocks(submission);
       return;
     }
 
+    // One picture, one description. Extractors hash image bytes into
+    // `imageHash`, so repeats of the same image (a notebook cell re-run emits
+    // the identical plot every time) are described once and the result is
+    // shared. Blocks with no hash keep their own identity and are never
+    // collapsed together.
+    const describeTargets: ContentBlock[] = [];
+    const sharedBy = new Map<string, ContentBlock[]>();
+    for (const block of imageBlocks) {
+      const existing = block.imageHash
+        ? sharedBy.get(block.imageHash)
+        : undefined;
+      if (existing) {
+        existing.push(block);
+        continue;
+      }
+      describeTargets.push(block);
+      if (block.imageHash) sharedBy.set(block.imageHash, []);
+    }
+
+    const duplicates = imageBlocks.length - describeTargets.length;
     this.logger.debug(
-      `Found ${imageBlocks.length} images in submission, generating criterion-aware descriptions`,
+      `Found ${imageBlocks.length} images in submission, describing ` +
+        `${describeTargets.length}${
+          duplicates > 0
+            ? ` (${duplicates} duplicates reuse a description)`
+            : ""
+        }`,
     );
 
     const criteriaContext = criteria.map((c) => c.rubricQuestion).join(", ");
 
     const descriptionsMap =
       await this.imageDescriptionService.describeImagesForGrading(
-        imageBlocks,
+        describeTargets,
         criteriaContext,
         questionText,
         assignmentId,
+        submission.metadata.sourceType === "ipynb"
+          ? { observeOnly: true }
+          : undefined,
       );
+
+    // Fan each description out to the blocks that share its image.
+    for (const block of describeTargets) {
+      const description = descriptionsMap.get(block.blockId);
+      if (description === undefined || !block.imageHash) continue;
+      for (const twin of sharedBy.get(block.imageHash) ?? []) {
+        descriptionsMap.set(twin.blockId, description);
+      }
+    }
 
     let updatedCount = 0;
     for (const page of submission.pages) {
@@ -602,12 +640,128 @@ LANGUAGE: {language}`,
           block.imageDescription = descriptionsMap.get(block.blockId);
           updatedCount++;
         }
+        // The description is what the rest of the pipeline reads (chunking
+        // uses it, the LLM context prints it). Holding megabytes of base64
+        // through retrieval and grading buys nothing, so release it here.
+        if (block.type === "image" && block.imageDescription) {
+          delete block.imageData;
+        }
       }
     }
+
+    this.attachDescriptionsToProducingBlocks(submission);
 
     this.logger.debug(
       `Updated ${updatedCount} image blocks with criterion-aware descriptions`,
     );
+  }
+
+  /**
+   * Record each image's description on the block that produced it.
+   *
+   * An image block sitting *next to* its code is not enough: retrieval scores
+   * chunks independently, so a grader can cite the code chunk — "plot(kind='pie')"
+   * — and infer a rendered chart that the description, one chunk away, flatly
+   * contradicts. Observed doing exactly that: full marks for a pie chart
+   * "with several distinct segments" whose figure was empty. Chunking folds
+   * this note into the producing block's chunk text, so the rendered result and
+   * the code claiming it cannot be cited apart. The image block itself is
+   * untouched, so a criterion about the visual can still cite it directly.
+   *
+   * The producer must be DECLARED, never inferred from position. An earlier
+   * version treated "the most recent non-image block" as the producer: true for
+   * notebooks, wrong for PDFs, where PdfStructureExtractorService lays out a
+   * page as every text block followed by every image — so that rule glued every
+   * figure on the page onto its last paragraph.
+   *
+   * The note lands on `renderedOutputNote`, not `text`: `text` is
+   * learner-submitted content and the unit of citation, and evidence quotes cut
+   * from it are shown back to the learner as highlights.
+   */
+  private attachDescriptionsToProducingBlocks(
+    submission: CanonicalSubmission,
+  ): void {
+    const blocksById = new Map<string, ContentBlock>();
+    for (const page of submission.pages) {
+      for (const block of page.blocks) {
+        blocksById.set(block.blockId, block);
+      }
+    }
+
+    const notesByProducer = new Map<string, string[]>();
+    const imagesByProducer = new Map<string, Set<string>>();
+    for (const page of submission.pages) {
+      for (const block of page.blocks) {
+        if (block.type !== "image") continue;
+        if (!block.imageDescription) continue;
+        const producerIds =
+          block.producedByBlockIds ??
+          (block.producedByBlockId ? [block.producedByBlockId] : []);
+        for (const producerId of new Set(producerIds)) {
+          const producer = blocksById.get(producerId);
+          // An image producing an image would double-report the description the
+          // image block already carries.
+          if (!producer || producer.type === "image") continue;
+
+          const seen = imagesByProducer.get(producerId) ?? new Set<string>();
+          const key = block.imageHash ?? block.blockId;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          imagesByProducer.set(producerId, seen);
+
+          // Wording matters here. An earlier version framed this as "Rendered
+          // output of this cell", and the grader echoed it straight back —
+          // "the notebook output shows that chart was rendered" — treating the
+          // frame as proof a chart exists and awarding full marks for an empty
+          // figure. The note must assert nothing beyond what was seen, and must
+          // read as the authority on the image rather than a label for it.
+          // Assignment (not append) keeps repeat passes idempotent.
+          const notes = notesByProducer.get(producer.blockId) ?? [];
+          if (notes.length >= 12) continue;
+          notes.push(
+            `[Visual check of this cell's image output (${block.blockId}) — ` +
+              `what the image itself shows, which overrides any claim the code ` +
+              `makes about it: ${block.imageDescription}]`,
+          );
+          notesByProducer.set(producer.blockId, notes);
+        }
+      }
+    }
+    for (const [blockId, notes] of notesByProducer) {
+      const summary = notes.join("\n");
+      const omitted =
+        imagesByProducer.get(blockId).size > notes.length ||
+        summary.length > 12_000;
+      blocksById.get(blockId).renderedOutputNote =
+        summary.slice(0, 12_000) +
+        (omitted
+          ? "\n[Additional image observations were omitted from this summary; their contents are unknown.]"
+          : "");
+    }
+    if (submission.metadata.sourceType === "ipynb") {
+      const seen = new Set<string>();
+      const notes: string[] = [];
+      for (const block of blocksById.values()) {
+        if (block.type !== "image" || !block.imageDescription) continue;
+        const key = block.imageHash ?? block.blockId;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (notes.length < 12) {
+          notes.push(
+            `[Visual check of notebook image ${block.blockId}: ${block.imageDescription}]`,
+          );
+        }
+      }
+      if (seen.size > notes.length)
+        notes.push(
+          "[Additional notebook images were not included in this visual summary; their contents are unknown.]",
+        );
+      for (const block of blocksById.values()) {
+        if (block.pinnedEvidence && block.type === "code") {
+          block.renderedOutputNote = notes.join("\n").slice(0, 12_000);
+        }
+      }
+    }
   }
 
   /**

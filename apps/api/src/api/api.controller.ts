@@ -6,6 +6,7 @@ import {
   ClientUserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
+import { deriveLmsHost } from "src/common/portal/portal-context";
 import { ApiService } from "./api.service";
 
 @Controller({
@@ -58,6 +59,7 @@ export class ApiController {
       assignmentId: userSession.assignmentId,
       returnUrl: userSession.returnUrl,
       launch_presentation_locale: userSession.launch_presentation_locale,
+      lmsHost: deriveLmsHost(userSession),
     };
   }
 }
