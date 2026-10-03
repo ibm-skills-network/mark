@@ -19,6 +19,7 @@ export interface ClientUserSession {
 export interface UserSession extends ClientUserSession {
   groupId: string;
   gradingCallbackRequired?: boolean;
+  /** Grade callback endpoint; only its host is exposed to the browser. */
   lisOutcomeServiceUrl?: string;
 }
 

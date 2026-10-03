@@ -19,6 +19,55 @@ describe("JwtCookieStrategy", () => {
   });
 
   describe("validate", () => {
+    // Most launches send returnUrl empty, so the grade-callback host is the
+    // only portal identity mark-api gets. It is copied out by name: this
+    // allowlist defines what the API is willing to believe about a session.
+    it("passes the grade-callback URL through as lisOutcomeServiceUrl", () => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          returnUrl: "",
+          grading: {
+            oauth_consumer_key: "key",
+            lis_outcome_service_url:
+              "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+            lis_result_sourcedid: "sourcedid",
+          },
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
+
+      expect(result).toMatchObject({
+        returnUrl: "",
+        lisOutcomeServiceUrl:
+          "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+      });
+      // The rest of the grading block is not session data.
+      expect(result).not.toHaveProperty("grading");
+      expect(JSON.stringify(result)).not.toContain("sourcedid");
+    });
+
+    it("leaves lisOutcomeServiceUrl undefined when the launch has no grading block", () => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
+
+      expect(result.lisOutcomeServiceUrl).toBeUndefined();
+    });
+
     it("should transform JWT payload to UserSession", () => {
       const payload = {
         userID: "user123",
