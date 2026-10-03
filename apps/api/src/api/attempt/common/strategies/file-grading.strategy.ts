@@ -714,12 +714,21 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
         "Skipping outer judge loop — evidence pipeline already judged internally",
         { questionId: question.id },
       );
+      const audit = initialResponseDto.metadata.gradingAudit as {
+        judgeCritiques?: Array<{ approved: boolean; summary: string }>;
+      };
+      const critiques = Array.isArray(audit.judgeCritiques)
+        ? audit.judgeCritiques
+        : [];
+      const finalCritique = critiques.at(-1);
       currentResponseDto.metadata = {
         ...currentResponseDto.metadata,
-        judgeValidated: true,
-        judgeApproved: true,
-        validationAttempts: 0,
-        judgeFeedback: "Validated internally by criterion-evidence pipeline",
+        judgeValidated: typeof finalCritique?.approved === "boolean",
+        judgeApproved: finalCritique?.approved === true,
+        validationAttempts: critiques.length,
+        judgeFeedback:
+          finalCritique?.summary ??
+          "Internal criterion audit result is unavailable",
       };
       return currentResponseDto;
     }

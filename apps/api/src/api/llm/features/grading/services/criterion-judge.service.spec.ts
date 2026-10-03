@@ -2,9 +2,13 @@ import { CriterionJudgeService } from "./criterion-judge.service";
 import {
   CriterionEvidenceResponse,
   CriterionGrade,
+  RubricCriterion,
 } from "../types/criterion-evidence.types";
 
-async function renderEvidence(evidence: CriterionEvidenceResponse[]) {
+async function renderEvidence(
+  evidence: CriterionEvidenceResponse[],
+  criteria: RubricCriterion[] = [],
+) {
   let rendered = "";
   const service = new CriterionJudgeService(
     {
@@ -19,7 +23,7 @@ async function renderEvidence(evidence: CriterionEvidenceResponse[]) {
   );
   await service.judge({
     question: "Demonstrate programming fluency",
-    criteria: [],
+    criteria,
     grades: evidence.map((item) => ({
       criterionId: item.criterionId,
       pointsAwarded: 2,
@@ -132,4 +136,60 @@ it("gives the judge every scoring level instead of only the rubric heading", asy
   expect(rendered).toContain('"points":0');
   expect(rendered).toContain('"points":1');
   expect(rendered).toContain('"points":2');
+});
+
+it("audits notebook scores using the same blank-output rules and executable-cell provenance as the grader", async () => {
+  const notebook = criterion("chart", [
+    "FakeData(size=10) loading code followed by blank saved axes",
+  ]);
+  notebook.evidence[0].notebookRenderedOutput = true;
+  notebook.evidence[0].notebookCodeCells = [58];
+  const prompt = await renderEvidence([notebook]);
+  expect(prompt).toContain("Original executable cell numbers: [58]");
+  expect(prompt).toContain("A blank output cannot qualify");
+  expect(prompt).toContain("not merely an unfulfilled intention");
+  expect(prompt).toContain("Full credit requires positive evidence");
+  expect(prompt).toContain(
+    "Check the executable loading code and its saved runtime output",
+  );
+  expect(prompt).toContain("only one required curve");
+  expect(prompt).toContain(
+    "An extra incorrect curve does not erase the correct required curve",
+  );
+  const document = await renderEvidence([
+    criterion("chart", ["Plotting code"]),
+  ]);
+  expect(document).not.toContain("NOTEBOOK OUTPUT SCORING");
+  const charts = criterion("chart", [
+    "Plotting dataset code followed by blank axes",
+  ]);
+  charts.evidence[0].notebookRenderedOutput = true;
+  const chartPrompt = await renderEvidence([charts]);
+  expect(chartPrompt).toContain("A blank output cannot qualify");
+  expect(chartPrompt).not.toContain("Dataset names in filenames");
+});
+
+it("checks named dataset requirements even when a learner aliases the loader", async () => {
+  const notebook = criterion("mnist", ["ds = FD(size=10); image = ds[0]"]);
+  notebook.evidence[0].notebookRenderedOutput = true;
+  const prompt = await renderEvidence(
+    [notebook],
+    [
+      {
+        id: "mnist",
+        rubricQuestion: "Display an MNIST sample",
+        description: "Resize and label the sample",
+        criteria: [{ description: "Correct MNIST image", points: 2 }],
+        maxPoints: 2,
+      },
+    ],
+  );
+  expect(prompt).toContain("Dataset names in filenames");
+  expect(prompt).toContain("Award partial credit for that demonstrated work");
+  expect(prompt).not.toContain(
+    "does not automatically allow an entirely different dataset",
+  );
+  expect(prompt).toContain(
+    "do not penalize naming that instance net instead of model",
+  );
 });

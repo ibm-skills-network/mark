@@ -22,43 +22,50 @@ describe("JwtCookieStrategy", () => {
     // Most launches send returnUrl empty, so the grade-callback host is the
     // only portal identity mark-api gets. It is copied out by name: this
     // allowlist defines what the API is willing to believe about a session.
-    it("passes the grade-callback URL through as outcomeServiceUrl", () => {
-      const result = strategy.validate({ headers: {} } as any, {
-        userID: "user123",
-        role: UserRole.LEARNER,
-        groupID: "group456",
-        assignmentID: 789,
-        returnUrl: "",
-        grading: {
-          oauth_consumer_key: "key",
-          lis_outcome_service_url:
-            "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
-          lis_result_sourcedid: "sourcedid",
-        },
-        iat: 1_234_567_890,
-        exp: 1_234_567_890 + 3600,
-      } as any);
+    it("passes the grade-callback URL through as lisOutcomeServiceUrl", () => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          returnUrl: "",
+          grading: {
+            oauth_consumer_key: "key",
+            lis_outcome_service_url:
+              "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+            lis_result_sourcedid: "sourcedid",
+          },
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
 
       expect(result).toMatchObject({
         returnUrl: "",
-        outcomeServiceUrl: "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+        lisOutcomeServiceUrl:
+          "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
       });
       // The rest of the grading block is not session data.
       expect(result).not.toHaveProperty("grading");
       expect(JSON.stringify(result)).not.toContain("sourcedid");
     });
 
-    it("leaves outcomeServiceUrl undefined when the launch has no grading block", () => {
-      const result = strategy.validate({ headers: {} } as any, {
-        userID: "user123",
-        role: UserRole.LEARNER,
-        groupID: "group456",
-        assignmentID: 789,
-        iat: 1_234_567_890,
-        exp: 1_234_567_890 + 3600,
-      } as any);
+    it("leaves lisOutcomeServiceUrl undefined when the launch has no grading block", () => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
 
-      expect(result.outcomeServiceUrl).toBeUndefined();
+      expect(result.lisOutcomeServiceUrl).toBeUndefined();
     });
 
     it("should transform JWT payload to UserSession", () => {
@@ -202,6 +209,36 @@ describe("JwtCookieStrategy", () => {
 
         const result = strategy.validate({ headers: {} } as any, payload);
         expect(result.returnUrl).toBe(url);
+      }
+    });
+
+    it("forwards the first usable outcome service URL", () => {
+      const graded = "https://courses.cognitiveclass.ai/outcome";
+      const topLevel = "https://courses.cognitiveclass.ai/top-level";
+      const cases: [unknown, unknown, string | undefined][] = [
+        [graded, topLevel, graded],
+        ["", topLevel, topLevel],
+        [["https://a.example"], topLevel, topLevel],
+        [42, undefined, undefined],
+        ["https://courses.cognitiveclass.ai/ş", undefined, undefined],
+        ["https://has space.example", undefined, undefined],
+        [undefined, undefined, undefined],
+      ];
+
+      for (const [inGrading, atTopLevel, expected] of cases) {
+        const payload = {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "test-group",
+          assignmentID: 123,
+          grading: { lis_outcome_service_url: inGrading },
+          lis_outcome_service_url: atTopLevel,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        };
+
+        const result = strategy.validate({ headers: {} } as any, payload);
+        expect(result.lisOutcomeServiceUrl).toBe(expected);
       }
     });
   });

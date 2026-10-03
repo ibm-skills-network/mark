@@ -11,6 +11,7 @@ import {
   JudgeCritique,
   RubricCriterion,
 } from "../types/criterion-evidence.types";
+import { isJupyterNotebookFilename } from "./source-code.utils";
 import { ChunkIndex } from "./chunk-index.service";
 import { ConcurrencyLimiter } from "./concurrency-limiter";
 import {
@@ -97,6 +98,11 @@ export class CriterionEvidencePipelineService {
     const index = new ChunkIndex(request.chunks);
     const limiter = new ConcurrencyLimiter(request.maxConcurrency ?? 6);
     const maxRetries = request.maxRetries ?? 3;
+    const notebookImages = request.chunks.some(
+      (chunk) =>
+        chunk.anchor.type === "image" &&
+        isJupyterNotebookFilename(chunk.metadata?.filename),
+    );
 
     const evidenceResponses = await limiter.run(
       request.criteria.map(
@@ -215,6 +221,30 @@ export class CriterionEvidencePipelineService {
             .map((issue) => `- ${issue.severity}: ${issue.issue}`)
             .join("\n");
 
+          if (notebookImages) {
+            // Regrading the same incomplete selection cannot recover code the
+            // validator missed. Recheck it against the audit before retrying.
+            const revised = await this.evidenceRetrieval.retrieveEvidence(
+              {
+                criterion,
+                question: request.question,
+                chunks: request.chunks,
+                assignmentId: request.assignmentId,
+                language: request.language,
+                modelOverride: request.modelOverrides?.retrievalModel,
+                modelOverrideIsFinal: request.modelOverridesAreFinal,
+                judgeFeedback: issues,
+              },
+              index,
+              auditCollector,
+            );
+            evidenceMap.set(criterion.id, revised);
+            const position = evidenceResponses.findIndex(
+              (item) => item.criterionId === criterion.id,
+            );
+            evidenceResponses[position] = revised;
+          }
+
           return this.gradingService.gradeCriterion(
             {
               criterion,
@@ -277,6 +307,17 @@ export class CriterionEvidencePipelineService {
       finalSelectionReason = "highest_support_score";
     }
 
+    // A supported earlier attempt can win after retrieval changed on retries.
+    // Return its evidence, rather than the latest rejected attempt's selection.
+    const finalEvidenceResponses = notebookImages
+      ? evidenceResponses.map((response) => ({
+          ...response,
+          evidence:
+            currentGrades.find(
+              (grade) => grade.criterionId === response.criterionId,
+            )?.evidence ?? response.evidence,
+        }))
+      : evidenceResponses;
     const summary = this.compiler.compile(currentGrades);
 
     const finalSelection = currentGrades.map((grade) => {
@@ -300,7 +341,7 @@ export class CriterionEvidencePipelineService {
 
     const audit = this.buildAuditLog(
       request,
-      evidenceResponses,
+      finalEvidenceResponses,
       attemptHistoryMap,
       judgeCritiques,
       auditCollector.getCalls(),
@@ -309,7 +350,7 @@ export class CriterionEvidencePipelineService {
 
     return {
       grades: currentGrades,
-      evidence: evidenceResponses,
+      evidence: finalEvidenceResponses,
       judgeCritiques,
       summary,
       audit,

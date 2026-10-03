@@ -3,21 +3,10 @@
  *
  * Mark is launched over LTI from a host site — a Skills Network portal
  * (cognitiveclass.ai, blitzacademy.skillsnetwork.site, ...) or a content
- * platform (Coursera, edX). The launch JWT carries no portal claim, so the
- * host is inferred from two claims, in order:
- *
- * 1. `returnUrl` (LTI `launch_presentation_return_url`, the "Return to
- *    Course" link) — a real page on the portal, so it also gives portalUrl.
- * 2. `outcomeServiceUrl` (LTI `lis_outcome_service_url`) — where grades post
- *    back. Only its host is used: it is a callback endpoint, not a page, and
- *    for Coursera it is an API host (api.coursera.org) that no learner would
- *    recognize as a link.
- *
- * The second exists because the first is absent for most real traffic: Open
- * edX portals send `launch_presentation_return_url` empty and Coursera omits
- * it, which together are the large majority of launches. Without the fallback
- * those sessions have no portal at all and their support tickets cannot be
- * routed.
+ * platform (Coursera, edX). Prefer the return URL when it is usable. Otherwise,
+ * use the outcome service URL carried on graded launches, since some LMSs
+ * omit the return URL. A callback endpoint contributes only its host, never
+ * a link displayed to a learner.
  *
  * This module is the single place Mark decides what "the portal" is. If the
  * lti-gateway later adds a portal claim, this is the only file that changes.
@@ -61,18 +50,17 @@ export function platformLabelForHost(host: string): string | undefined {
 }
 
 /**
- * Portal identity derived from the session's LTI return URL. Returns an empty
- * context for sessions that have none (admin and bearer-token sessions) or a
- * value that is not an http(s) URL. Never throws — this runs on request paths
- * where a bad claim must not fail the request.
+ * Portal identity derived from the LTI return URL or outcome service URL.
+ * Returns an empty context when neither is a usable HTTP(S) URL. Never throws:
+ * malformed claims must not prevent a report from being submitted.
  */
 export function derivePortalContext(
-  session?: { returnUrl?: string; outcomeServiceUrl?: string } | null,
+  session?: { returnUrl?: unknown; lisOutcomeServiceUrl?: unknown } | null,
 ): PortalContext {
   const fromReturnUrl = parseHttpUrl(session?.returnUrl);
   // Only the host is taken from the callback endpoint; portalUrl stays unset
   // rather than pointing a human at a grade-posting API.
-  const url = fromReturnUrl ?? parseHttpUrl(session?.outcomeServiceUrl);
+  const url = fromReturnUrl ?? parseHttpUrl(session?.lisOutcomeServiceUrl);
   if (!url) return {};
 
   const portalHost = url.hostname.toLowerCase().replace(/^www\./, "");
@@ -92,16 +80,24 @@ export function derivePortalContext(
   };
 }
 
-function parseHttpUrl(value?: string): URL | undefined {
-  const trimmed = value?.trim();
+/** LMS host of the session's outcome service URL. Never throws. */
+export function deriveLmsHost(
+  session?: { lisOutcomeServiceUrl?: unknown } | null,
+): string | undefined {
+  const url = parseHttpUrl(session?.lisOutcomeServiceUrl);
+  return url?.hostname.toLowerCase().replace(/^www\./, "");
+}
+
+function parseHttpUrl(value?: unknown): URL | undefined {
+  if (typeof value !== "string") return;
+  const trimmed = value.trim();
   if (!trimmed) return;
-  let url: URL;
   try {
-    url = new URL(trimmed);
+    const url = new URL(trimmed);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url
+      : undefined;
   } catch {
     return;
   }
-  return url.protocol === "http:" || url.protocol === "https:"
-    ? url
-    : undefined;
 }

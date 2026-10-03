@@ -158,11 +158,15 @@ export class JwtCookieStrategy extends PassportStrategy(
       assignmentId: payload.assignmentID,
       gradingCallbackRequired: payload.gradingCallbackRequired,
       returnUrl: payload.returnUrl,
-      // The portal identity for most launches. This allowlist is what mark-api
-      // is willing to believe about a session, so the claim is copied out by
-      // name rather than by spreading `payload.grading`.
-      outcomeServiceUrl: payload.grading?.lis_outcome_service_url,
       launch_presentation_locale: payload.launch_presentation_locale,
+      // Printable ASCII only: the session is forwarded as a raw header.
+      lisOutcomeServiceUrl: [
+        payload.grading?.lis_outcome_service_url,
+        payload.lis_outcome_service_url,
+      ].find(
+        (value): value is string =>
+          typeof value === "string" && /^[!-~]+$/.test(value),
+      ),
     };
   }
 }

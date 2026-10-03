@@ -11,6 +11,7 @@ import { formatFileSize } from "./FileExplorer/utils/fileUtils";
 import { learnerFileResponse } from "@/stores/learner";
 import { deleteFile, uploadFileToStorage } from "@/lib/shared";
 import { UploadType, UploadContext, UploadRequest } from "@/config/types";
+import { shouldOmitAcceptFilter } from "@/lib/upload-accept";
 import { toast } from "sonner";
 interface FileData {
   file: File;
@@ -70,6 +71,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [existingFiles, setExistingFiles] =
     useState<learnerFileResponse[]>(uploadedFiles);
   const [deleteStatus, setDeleteStatus] = useState<Record<string, string>>({});
+  const [userAgent, setUserAgent] = useState("");
+
+  useEffect(() => {
+    setUserAgent(navigator.userAgent);
+  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles: FileData[] = acceptedFiles.map((orig) => {
@@ -132,7 +138,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     acceptedFileTypes &&
     typeof acceptedFileTypes === "object" &&
     !Array.isArray(acceptedFileTypes) &&
-    Object.keys(acceptedFileTypes).length > 0
+    Object.keys(acceptedFileTypes).length > 0 &&
+    !shouldOmitAcceptFilter(acceptedFileTypes, userAgent)
   ) {
     dropzoneConfig.accept = acceptedFileTypes;
   } else {

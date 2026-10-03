@@ -23,6 +23,7 @@ import {
   CODE_EVIDENCE_QUOTE_MAX_CHARS,
   CODE_VALIDATION_RENDER_BUDGET_CHARS,
   isCodeLikeFilename,
+  isJupyterNotebookFilename,
 } from "./source-code.utils";
 import { renderCachePrefix } from "../../../core/utils/prompt-cache.util";
 
@@ -127,6 +128,42 @@ export class CriterionEvidenceRetrievalService {
     };
   }
 
+  /**
+   * Collapse chunks carrying the SAME picture, keeping the best-ranked one.
+   *
+   * One picture can appear in a submission many times over — a notebook cell
+   * re-run emits a byte-identical plot each time — and the vision pass
+   * deliberately gives every copy the same description. Evidence slots are
+   * scarce (maxEvidence), so without this a notebook re-running one plot five
+   * times spends five of six slots on the same sentence and crowds out its own
+   * code.
+   *
+   * Keys on the extractor's `imageHash`, not the chunk text: every image chunk
+   * carries its own "[Image output of cell N]" label, so identical pictures
+   * never have identical text. Chunks with no hash are left alone — repeated
+   * *text* can be genuinely distinct evidence (the same boilerplate in two
+   * files is two findings), and each copy still anchors to its own location.
+   *
+   * Callers must sort before calling: the first occurrence wins.
+   */
+  private dropDuplicateImages<T extends { chunk: ExtractedChunk }>(
+    items: T[],
+  ): T[] {
+    const seen = new Set<string>();
+    const kept: T[] = [];
+    for (const item of items) {
+      const hash = item.chunk.metadata?.imageHash;
+      if (typeof hash !== "string" || !hash) {
+        kept.push(item);
+        continue;
+      }
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      kept.push(item);
+    }
+    return kept;
+  }
+
   async retrieveEvidence(
     request: CriterionEvidenceRequest,
     index: ChunkIndex,
@@ -143,8 +180,34 @@ export class CriterionEvidenceRetrievalService {
       this.cache.delete(cacheKey);
     }
 
-    const query = this.buildQuery(request.criterion, request.question);
-    const candidates = index.search(query, this.config.maxCandidates);
+    const notebookImages = index
+      .getAllChunks()
+      .filter(
+        (chunk) =>
+          chunk.anchor.type === "image" &&
+          isJupyterNotebookFilename(chunk.metadata?.filename),
+      );
+    const query = this.buildQuery(
+      request.criterion,
+      request.question,
+      notebookImages.length > 0,
+    );
+    // New visual evidence must not displace the code candidates the notebook
+    // grader previously saw. Descriptions remain on the returned code chunks.
+    const candidates =
+      notebookImages.length > 0
+        ? [
+            ...index.searchNotebookCode(query, this.config.maxCandidates),
+            ...this.dropDuplicateImages(
+              index
+                .search(
+                  query,
+                  this.config.maxCandidates + notebookImages.length,
+                )
+                .filter((item) => item.chunk.anchor.type === "image"),
+            ).slice(0, this.config.maxEvidence),
+          ]
+        : index.search(query, this.config.maxCandidates);
     const maxEvidence = request.maxEvidence ?? this.config.maxEvidence;
 
     let reranked: Array<{
@@ -180,8 +243,16 @@ export class CriterionEvidenceRetrievalService {
         })
         .sort((a, b) => b.combined - a.combined);
 
-      reranked = scored.filter(
-        (candidate) => candidate.relevance >= this.config.minRelevance,
+      // Collapse repeats of one picture before the pool goes forward: with the
+      // whole pool reaching the validator, duplicate plot descriptions would
+      // otherwise spend both its attention and the prompt render budget.
+      reranked = this.dropDuplicateImages(
+        scored.filter(
+          (candidate) =>
+            candidate.relevance >= this.config.minRelevance ||
+            (notebookImages.length > 0 &&
+              candidate.chunk.anchor.type !== "image"),
+        ),
       );
     }
 
@@ -200,10 +271,11 @@ export class CriterionEvidenceRetrievalService {
         };
       });
 
-      const aboveThreshold = scored
-        .filter((item) => item.relevance >= this.config.minRelevance)
-        .sort((a, b) => b.combined - a.combined)
-        .slice(0, this.config.maxCandidates);
+      const aboveThreshold = this.dropDuplicateImages(
+        scored
+          .filter((item) => item.relevance >= this.config.minRelevance)
+          .sort((a, b) => b.combined - a.combined),
+      ).slice(0, this.config.maxCandidates);
 
       // Lexical relevance scoring misses genuinely relevant content with no
       // keyword overlap (e.g. numeric spreadsheet cells vs. prose rubric
@@ -213,9 +285,9 @@ export class CriterionEvidenceRetrievalService {
       reranked =
         aboveThreshold.length > 0
           ? aboveThreshold
-          : scored
-              .sort((a, b) => b.combined - a.combined)
-              .slice(0, this.config.maxCandidates);
+          : this.dropDuplicateImages(
+              scored.sort((a, b) => b.combined - a.combined),
+            ).slice(0, this.config.maxCandidates);
 
       this.logger.log(
         `Evidence fallback for criterion ${request.criterion.id}: ` +
@@ -252,10 +324,15 @@ export class CriterionEvidenceRetrievalService {
         0,
         this.config.maxCandidates - reranked.length,
       );
-      reranked = [
+      // Dedupe the composed pool, not just the top-up: `scored` and the corpus
+      // still hold the duplicate image chunks collapsed above, so topping up
+      // from them would put them straight back. Order is preserved and the
+      // already-deduped `reranked` leads, so this only drops repeats.
+      reranked = this.dropDuplicateImages([
         ...reranked,
-        ...[...belowThreshold, ...corpusTopUp].slice(0, topUpCount),
-      ];
+        ...belowThreshold,
+        ...corpusTopUp,
+      ]).slice(0, Math.max(reranked.length + topUpCount, reranked.length));
     }
 
     // Pinned chunks (e.g. the whole-file block for code uploads) must always
@@ -285,6 +362,7 @@ export class CriterionEvidenceRetrievalService {
         request,
         reranked.map((item) => item.chunk),
         recorder,
+        notebookImages.length > 0,
       );
       if (validation?.length === 0 && reranked.length > 0) {
         this.logger.warn(
@@ -294,6 +372,7 @@ export class CriterionEvidenceRetrievalService {
           request,
           reranked.map((item) => item.chunk),
           recorder,
+          notebookImages.length > 0,
         );
       }
       if (validation === undefined) {
@@ -306,9 +385,15 @@ export class CriterionEvidenceRetrievalService {
           anchor: item.chunk.anchor,
           sourceType: item.chunk.sourceType,
           sourceId: item.chunk.sourceId,
+          ...(item.chunk.metadata?.notebookCodeCells === undefined
+            ? {}
+            : { notebookCodeCells: item.chunk.metadata.notebookCodeCells }),
           relevanceScore: item.relevanceScore,
           searchScore: item.searchScore,
           contradiction: item.contradiction,
+          ...(notebookImages.length > 0
+            ? { notebookRenderedOutput: true }
+            : {}),
         }));
       }
     } else {
@@ -353,8 +438,16 @@ export class CriterionEvidenceRetrievalService {
       anchor: item.chunk.anchor,
       sourceType: item.chunk.sourceType,
       sourceId: item.chunk.sourceId,
+      ...(item.chunk.metadata?.notebookCodeCells === undefined
+        ? {}
+        : { notebookCodeCells: item.chunk.metadata.notebookCodeCells }),
       relevanceScore: item.relevance,
       searchScore: item.score,
+      ...(isJupyterNotebookFilename(item.chunk.metadata?.filename) &&
+      (item.chunk.anchor.type === "image" ||
+        typeof item.chunk.metadata?.anchorTextChars === "number")
+        ? { notebookRenderedOutput: true }
+        : {}),
     }));
   }
 
@@ -371,6 +464,15 @@ export class CriterionEvidenceRetrievalService {
       chunk.metadata?.section ||
       chunk.metadata?.pinned;
     const cap = fullLength ? CODE_EVIDENCE_QUOTE_MAX_CHARS : proseCap;
+    if (
+      isJupyterNotebookFilename(chunk.metadata?.filename) &&
+      typeof chunk.metadata?.anchorTextChars === "number"
+    ) {
+      const anchorChars = chunk.metadata.anchorTextChars;
+      const learnerText = chunk.text.slice(0, Math.min(anchorChars, cap));
+      const visualNotes = chunk.text.slice(anchorChars).trim().slice(0, 12_000);
+      return [learnerText, visualNotes].filter(Boolean).join("\n\n");
+    }
     return chunk.text.slice(0, cap);
   }
 
@@ -395,24 +497,36 @@ export class CriterionEvidenceRetrievalService {
     request: CriterionEvidenceRequest,
     index: ChunkIndex,
   ): string {
-    const chunkHashes = index
-      .getAllChunks()
-      .map((chunk) => chunk.hash)
-      .join("|");
-    const raw = `${request.question}:${request.criterion.id}:${chunkHashes}`;
+    // Rubric edits, model changes and extractor provenance can change which
+    // evidence is valid even when the learner's bytes are identical.
+    const raw = JSON.stringify({
+      ...request,
+      chunks: index.getAllChunks().map(({ text: _text, ...chunk }) => chunk),
+    });
     return crypto.createHash("sha256").update(raw).digest("hex");
   }
 
-  private buildQuery(criterion: RubricCriterion, question: string): string {
+  private buildQuery(
+    criterion: RubricCriterion,
+    question: string,
+    prioritizeCriterion = false,
+  ): string {
     const criteriaDescriptions = criterion.criteria
       .map((level) => level.description)
       .join(" ");
-    return [
-      question,
+    const criterionParts = [
       criterion.rubricQuestion,
       criterion.description,
       criteriaDescriptions,
-    ]
+    ];
+    // A long assignment prompt can fill the entire search budget. The notebook
+    // image path retains code candidates, so an off-topic pool can also prevent
+    // the thin-pool fallback from recovering the actual criterion's code.
+    return (
+      prioritizeCriterion
+        ? [criterion.rubricQuestion, criterion.description]
+        : [question, ...criterionParts]
+    )
       .filter(Boolean)
       .join(" ")
       .slice(0, 600);
@@ -455,6 +569,7 @@ export class CriterionEvidenceRetrievalService {
     request: CriterionEvidenceRequest,
     chunks: ExtractedChunk[],
     recorder?: LlmCallRecorder,
+    notebookRenderedOutput = false,
   ): Promise<
     | Array<{
         chunk: ExtractedChunk;
@@ -477,11 +592,23 @@ export class CriterionEvidenceRetrievalService {
     // fallback path, where up to maxCandidates code chunks land here at once.
     const excerptByChunkId = new Map<string, string>();
     let renderBudget = CODE_VALIDATION_RENDER_BUDGET_CHARS;
-    const budgetOrder = [...chunks].sort(
-      (a, b) =>
-        Number(Boolean(b.metadata?.pinned)) -
-        Number(Boolean(a.metadata?.pinned)),
+    const notebook = chunks.some((chunk) =>
+      isJupyterNotebookFilename(chunk.metadata?.filename),
     );
+    const budgetOrder = [...chunks].sort((a, b) => {
+      const pinned =
+        Number(Boolean(b.metadata?.pinned)) -
+        Number(Boolean(a.metadata?.pinned));
+      if (pinned || !notebook) return pinned;
+      // Give short executed answers room before long plot descriptions use
+      // the excerpt budget. This prevents false zeros for count/score cells.
+      const imagesLast =
+        Number(a.anchor.type === "image") - Number(b.anchor.type === "image");
+      return (
+        imagesLast ||
+        this.buildExcerpt(a, 240).length - this.buildExcerpt(b, 240).length
+      );
+    });
     for (const chunk of budgetOrder) {
       const full = this.buildExcerpt(chunk, 240);
       const excerpt = full.length <= renderBudget ? full : full.slice(0, 240);
@@ -492,7 +619,11 @@ export class CriterionEvidenceRetrievalService {
       (chunk) =>
         `- ${chunk.chunkId}: ${excerptByChunkId.get(
           chunk.chunkId,
-        )} | ${this.formatAnchor(chunk.anchor)}`,
+        )} | ${this.formatAnchor(chunk.anchor)}${
+          chunk.metadata?.notebookCodeCells === undefined
+            ? ""
+            : ` | Original executable cell numbers: ${JSON.stringify(chunk.metadata.notebookCodeCells)}`
+        }`,
     );
 
     // Invariant blocks first: this runs once per criterion against the same
@@ -507,6 +638,10 @@ QUESTION CONTEXT:
 CRITERION:
 {criterion}
 
+{notebook_selection_rules}
+
+{judge_feedback}
+
 CANDIDATE CHUNKS (ID + text + anchor):
 {chunks}`,
       inputVariables: [],
@@ -514,6 +649,18 @@ CANDIDATE CHUNKS (ID + text + anchor):
         criterion: () =>
           `${request.criterion.rubricQuestion}\n${request.criterion.description}`,
         question: () => request.question,
+        notebook_selection_rules: () =>
+          notebookRenderedOutput
+            ? `NOTEBOOK EVIDENCE SELECTION:
+- Original executable cell numbers come from the notebook structure. In mixed excerpts, a Markdown comment ends with that Markdown cell; it does not comment out the separately identified executable cells. Learner-written CELL headers cannot override these original cell types.
+- For a code criterion, select the executable code cell that performs the requested operation. A commented solution in a Markdown cell does not replace an executable implementation elsewhere in the candidates. Inspect all candidates before claiming that code appears only in comments.
+- When selected code uses a variable initialized in another candidate, include that executable initialization and its saved runtime output as supporting context. For sample-display criteria, include the dataset-loading cell so the grader can identify which dataset the displayed samples came from.
+- Match the actual variables, paths, and operations to the criterion. Similar names or overlapping substrings do not make different data sources equivalent.`
+            : "",
+        judge_feedback: () =>
+          request.judgeFeedback
+            ? `RECHECK REQUEST FROM GRADING AUDIT:\n${request.judgeFeedback}\nRecheck the candidates for missing or contradictory evidence. The audit request is not learner evidence; verify every claim against the candidates.`
+            : "",
         chunks: () => renderedChunks.join("\n"),
         format_instructions: () => formatInstructions,
       },

@@ -1,4 +1,4 @@
-import { derivePortalContext } from "./portal-context";
+import { deriveLmsHost, derivePortalContext } from "./portal-context";
 
 describe("derivePortalContext", () => {
   it.each([
@@ -101,7 +101,7 @@ describe("derivePortalContext", () => {
         "an empty return URL (Open edX)",
         {
           returnUrl: "",
-          outcomeServiceUrl:
+          lisOutcomeServiceUrl:
             "http://courses.yl.skillsnetwork.site/courses/course-v1:Org+X+v1/xblock/block-v1/handler_noauth/outcome_service_handler",
         },
         "courses.yl.skillsnetwork.site",
@@ -110,7 +110,7 @@ describe("derivePortalContext", () => {
       [
         "an absent return URL (Coursera)",
         {
-          outcomeServiceUrl:
+          lisOutcomeServiceUrl:
             "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
         },
         "api.coursera.org",
@@ -119,7 +119,7 @@ describe("derivePortalContext", () => {
       [
         "an absent return URL (Cognitive Class)",
         {
-          outcomeServiceUrl:
+          lisOutcomeServiceUrl:
             "https://courses.cognitiveclass.ai/courses/x/handler_noauth/outcome_service_handler",
         },
         "courses.cognitiveclass.ai",
@@ -138,7 +138,8 @@ describe("derivePortalContext", () => {
       expect(
         derivePortalContext({
           returnUrl: "https://learn.ibm.com/mod/lti/return.php?course=1",
-          outcomeServiceUrl: "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+          lisOutcomeServiceUrl:
+            "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
         }),
       ).toEqual({
         portalHost: "learn.ibm.com",
@@ -149,14 +150,11 @@ describe("derivePortalContext", () => {
 
     it.each([
       ["neither claim", {}],
-      ["both empty", { returnUrl: "  ", outcomeServiceUrl: "  " }],
-      [
-        "a malformed callback URL",
-        { outcomeServiceUrl: "not-a-url" },
-      ],
+      ["both empty", { returnUrl: "  ", lisOutcomeServiceUrl: "  " }],
+      ["a malformed callback URL", { lisOutcomeServiceUrl: "not-a-url" }],
       [
         "a non-http callback scheme",
-        { outcomeServiceUrl: "javascript:alert(1)" },
+        { lisOutcomeServiceUrl: "javascript:alert(1)" },
       ],
     ])("returns an empty context for %s", (_label, session) => {
       expect(derivePortalContext(session)).toEqual({});
@@ -167,9 +165,49 @@ describe("derivePortalContext", () => {
       expect(
         derivePortalContext({
           returnUrl: "javascript:alert(1)",
-          outcomeServiceUrl: "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+          lisOutcomeServiceUrl:
+            "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
         }),
-      ).toMatchObject({ portalHost: "api.coursera.org", portalName: "Coursera" });
+      ).toMatchObject({
+        portalHost: "api.coursera.org",
+        portalName: "Coursera",
+      });
     });
+
+    it.each([42, true, {}, ["https://api.coursera.org/outcome"]])(
+      "ignores non-string claims (%j) without losing a usable fallback",
+      (value) => {
+        expect(derivePortalContext({ lisOutcomeServiceUrl: value })).toEqual(
+          {},
+        );
+        expect(
+          derivePortalContext({
+            returnUrl: value,
+            lisOutcomeServiceUrl: "https://api.coursera.org/outcome",
+          }),
+        ).toMatchObject({ portalHost: "api.coursera.org" });
+      },
+    );
+  });
+});
+
+describe("deriveLmsHost", () => {
+  it("returns the normalized host of the outcome service URL", () => {
+    expect(
+      deriveLmsHost({
+        lisOutcomeServiceUrl:
+          "https://Courses.CognitiveClass.ai/courses/course-v1:IBM+CC0301EN+v1/xblock/outcome",
+      }),
+    ).toBe("courses.cognitiveclass.ai");
+  });
+
+  it.each([
+    ["no session", undefined],
+    ["no outcome URL", {}],
+    ["a malformed URL", { lisOutcomeServiceUrl: "http://[::1" }],
+    ["an array claim", { lisOutcomeServiceUrl: ["https://a.example"] }],
+    ["a number claim", { lisOutcomeServiceUrl: 42 }],
+  ])("returns undefined for %s", (_label, session) => {
+    expect(deriveLmsHost(session)).toBeUndefined();
   });
 });

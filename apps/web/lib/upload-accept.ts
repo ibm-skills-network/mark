@@ -9,7 +9,7 @@
  * reads to the learner as "I can only upload images".
  *
  * The accept list is a convenience for the picker, never a security boundary —
- * the server validates uploads independently.
+ * FileUploader's extension check is what rejects disallowed learner files.
  */
 
 export type UploadAcceptMap = Record<string, string[]>;
@@ -90,4 +90,20 @@ export function getUploadAcceptMap(
       return {};
     }
   }
+}
+
+/** Android WebView user agents carry a `; wv)` token that Chrome lacks. */
+export function isAndroidWebView(userAgent: string): boolean {
+  return /Android/i.test(userAgent) && /;\s*wv\)/.test(userAgent);
+}
+
+/** WebView types the picker intent from the first entry, so mixed lists open image pickers. */
+export function shouldOmitAcceptFilter(
+  acceptMap: UploadAcceptMap,
+  userAgent: string,
+): boolean {
+  return (
+    isAndroidWebView(userAgent) &&
+    Object.keys(acceptMap).some((mimeType) => !mimeType.startsWith("image/"))
+  );
 }

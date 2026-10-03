@@ -52,6 +52,41 @@ describe("CriterionGradingService", () => {
     expect(result.citations).toHaveLength(0);
   });
 
+  it("requires visible data for chart levels only when notebook output is supplied", async () => {
+    const processStructuredPrompt = jest.fn().mockResolvedValue({
+      score: 0,
+      rationale: "The saved figure contains no plotted data.",
+      citations: ["ch1"],
+      confidence: "high",
+    });
+    const service = new CriterionGradingService(
+      { processStructuredPrompt } as unknown as IPromptProcessor,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as unknown as LLMResolverService,
+    );
+    for (const notebookRenderedOutput of [false, true]) {
+      await service.gradeCriterion({
+        criterion: baseCriterion,
+        evidence: baseEvidence.map((item) => ({
+          ...item,
+          notebookRenderedOutput,
+          ...(notebookRenderedOutput ? { notebookCodeCells: [58] } : {}),
+        })),
+        question: "Question",
+        assignmentId: 1,
+        attempt: 1,
+      });
+    }
+    const document = await processStructuredPrompt.mock.calls[0][0].format({});
+    const notebook = await processStructuredPrompt.mock.calls[1][0].format({});
+    expect(document).not.toContain("NOTEBOOK OUTPUT SCORING");
+    expect(document).not.toContain("Original executable cell numbers");
+    expect(notebook).toContain("Original executable cell numbers: [58]");
+    expect(notebook).toContain("A blank output cannot qualify");
+    expect(notebook).toContain("code, calculations, and textual answers");
+  });
+
   it("uses deterministic native structured output", async () => {
     const promptProcessor = {
       processStructuredPrompt: jest.fn().mockResolvedValue({

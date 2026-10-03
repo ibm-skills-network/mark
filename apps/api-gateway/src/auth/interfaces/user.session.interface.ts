@@ -13,9 +13,8 @@ export interface UserSession {
   groupId: string;
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
-  /** See `grading.lis_outcome_service_url` on UserSessionPayload. */
-  outcomeServiceUrl?: string;
   launch_presentation_locale?: string;
+  lisOutcomeServiceUrl?: string;
 }
 
 export interface UserSessionPayload {
@@ -25,16 +24,9 @@ export interface UserSessionPayload {
   groupID: string;
   gradingCallbackRequired?: boolean;
   returnUrl?: string;
-  /**
-   * Grade-callback details the lti-gateway mints into the launch JWT. Only
-   * `lis_outcome_service_url` is read here, and only for its host: it names
-   * the site Mark was launched from, which `returnUrl` does not, because Open
-   * edX and Coursera send that claim empty.
-   */
-  grading?: {
-    lis_outcome_service_url?: string;
-  };
   launch_presentation_locale?: string;
+  grading?: { lis_outcome_service_url?: unknown };
+  lis_outcome_service_url?: unknown;
 }
 
 export interface UserSessionRequest extends Request {
