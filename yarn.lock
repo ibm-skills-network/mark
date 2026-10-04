@@ -2184,11 +2184,11 @@
     "@solid-primitives/utils" "^6.2.1"
 
 "@langchain/classic@^1.0.31", "@langchain/classic@~1.0.31":
-  version "1.0.51"
-  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.51.tgz#e61f4ae2935e4714bbbf49fb7cedb420ae353b1b"
-  integrity sha512-JUITClvLlFtyO889Qza/Up7a8oWbBFpuAT2FX9LpSVePAnNGNtQFE+TBtThiYUZdW7omUX79mon3iTHDiGzr6g==
+  version "1.0.52"
+  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.52.tgz#96651394fe0b24d05dff7076fe8e4fa2498914cb"
+  integrity sha512-PLB9zTBVv/W0xrJR4XBr5C67u39LeGWqMK5l5x4H7p7tzQBeGcp/d5Rn0oz5llFCUWCoLdk1OaGaam4viP50qg==
   dependencies:
-    "@langchain/openai" "1.6.1"
+    "@langchain/openai" "1.6.2"
     "@langchain/textsplitters" "1.0.2"
     handlebars "^4.7.9"
     js-yaml "^5.4.1"
@@ -2237,7 +2237,7 @@
     "@langchain/protocol" "^0.0.19"
     "@standard-schema/spec" "1.1.0"
 
-"@langchain/openai@1.6.1", "@langchain/openai@^1.6.0", "@langchain/openai@~1.4.4":
+"@langchain/openai@1.6.2", "@langchain/openai@^1.6.0", "@langchain/openai@~1.4.4":
   version "1.4.7"
   resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.4.7.tgz#8af279497ead6f5ac3a97dd0f4f5faccf2b31614"
   integrity sha512-i1YLV4pWbGC6W8m0ZNpLObJuf1nyU4o8aWyX4AF9fHn7eM67HfIJWQ5n5XzcCpuSa41otrxA9jvH5XRKwI1qDA==
