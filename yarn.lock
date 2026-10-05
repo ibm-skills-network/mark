@@ -12,13 +12,13 @@
   resolved "https://registry.yarnpkg.com/@adobe/css-tools/-/css-tools-4.4.4.tgz#2856c55443d3d461693f32d2b96fb6ea92e1ffa9"
   integrity sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==
 
-"@ai-sdk/gateway@2.0.160":
-  version "2.0.160"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.160.tgz#2652d64f01db0168f889fdc793994fab70d79284"
-  integrity sha512-87i32Tq2At565MkNOVoIlXr+1r8+rieRKBfiKpACgcGqTXbwl9tQ1H7lLQ3xtIuO8u2n7T8sVpcpsdhKa85L7g==
+"@ai-sdk/gateway@2.0.162":
+  version "2.0.162"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.162.tgz#33282f02a678dfc5e0d9c2c65bd873a5bbd721f4"
+  integrity sha512-hC8/jPgPUr4Vly8Ths7t7qru2w6leH0cO2D9gr57CYRUYje6BUNz0hoGYVAjH2kzovXFAz5rK3QOX/mOMDcnOA==
   dependencies:
     "@ai-sdk/provider" "2.0.5"
-    "@ai-sdk/provider-utils" "3.0.40"
+    "@ai-sdk/provider-utils" "3.0.41"
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
@@ -29,7 +29,7 @@
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.41"
 
-"@ai-sdk/provider-utils@3.0.40", "@ai-sdk/provider-utils@3.0.41", "@ai-sdk/provider-utils@^3.0.26":
+"@ai-sdk/provider-utils@3.0.41", "@ai-sdk/provider-utils@^3.0.26":
   version "3.0.41"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.41.tgz#3dacee4809ef6334bfe2c71befd2c37e5b0d11da"
   integrity sha512-xpURVGQud+AEOZ/uRZTBU0eVy2+dt/y/dUEp9ewjW3eTM6yu0vThzTvduhOSabpn6AExewg8WJW04P4D6USVXw==
@@ -2184,11 +2184,11 @@
     "@solid-primitives/utils" "^6.2.1"
 
 "@langchain/classic@^1.0.31", "@langchain/classic@~1.0.31":
-  version "1.0.51"
-  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.51.tgz#e61f4ae2935e4714bbbf49fb7cedb420ae353b1b"
-  integrity sha512-JUITClvLlFtyO889Qza/Up7a8oWbBFpuAT2FX9LpSVePAnNGNtQFE+TBtThiYUZdW7omUX79mon3iTHDiGzr6g==
+  version "1.0.52"
+  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.52.tgz#96651394fe0b24d05dff7076fe8e4fa2498914cb"
+  integrity sha512-PLB9zTBVv/W0xrJR4XBr5C67u39LeGWqMK5l5x4H7p7tzQBeGcp/d5Rn0oz5llFCUWCoLdk1OaGaam4viP50qg==
   dependencies:
-    "@langchain/openai" "1.6.1"
+    "@langchain/openai" "1.6.2"
     "@langchain/textsplitters" "1.0.2"
     handlebars "^4.7.9"
     js-yaml "^5.4.1"
@@ -2237,7 +2237,7 @@
     "@langchain/protocol" "^0.0.19"
     "@standard-schema/spec" "1.1.0"
 
-"@langchain/openai@1.6.1", "@langchain/openai@^1.6.0", "@langchain/openai@~1.4.4":
+"@langchain/openai@1.6.2", "@langchain/openai@^1.6.0", "@langchain/openai@~1.4.4":
   version "1.4.7"
   resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.4.7.tgz#8af279497ead6f5ac3a97dd0f4f5faccf2b31614"
   integrity sha512-i1YLV4pWbGC6W8m0ZNpLObJuf1nyU4o8aWyX4AF9fHn7eM67HfIJWQ5n5XzcCpuSa41otrxA9jvH5XRKwI1qDA==
@@ -5503,13 +5503,13 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^5.0.52:
-  version "5.0.269"
-  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.269.tgz#40e19b806e3c31820b3f5a804c6ce54b9bf612bf"
-  integrity sha512-wQDqzDoykTcBC0dvdDwhix0opRFb0BLaEkvfqwuNa9RgVDkC+THR/2CnIuDjFLlRIYuTo1xIszgc/yG4Ck5bUQ==
+  version "5.0.271"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.271.tgz#3a1fbbf4568a7fbdbfec61f397364d081873fcce"
+  integrity sha512-VOBVhbcLcpyV28QcWHEN6Brz4DXiP4eBv8YM6xVrOHism6JP53YlQPIPEJ9B+fLTtpncU7nxo617vV+9k15lEA==
   dependencies:
-    "@ai-sdk/gateway" "2.0.160"
+    "@ai-sdk/gateway" "2.0.162"
     "@ai-sdk/provider" "2.0.5"
-    "@ai-sdk/provider-utils" "3.0.40"
+    "@ai-sdk/provider-utils" "3.0.41"
     "@opentelemetry/api" "1.9.0"
 
 ajv-formats@3.0.1:
