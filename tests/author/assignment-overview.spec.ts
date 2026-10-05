@@ -13,9 +13,9 @@ test.describe("Author - Assignment Overview", () => {
         name: /what is this assignment about/i,
       }),
     });
-    await introSection.locator(".ql-editor").click();
+    await introSection.getByTestId("rich-text-editor").click();
     await introSection
-      .locator(".ql-editor")
+      .getByTestId("rich-text-editor")
       .fill(
         "This assignment is about testing with playwright, and ensuring assignment overview saves.",
       );
@@ -26,9 +26,9 @@ test.describe("Author - Assignment Overview", () => {
         name: /what are the instructions to successfully completing this assignment/i,
       }),
     });
-    await instructionsSection.locator(".ql-editor").click();
+    await instructionsSection.getByTestId("rich-text-editor").click();
     await instructionsSection
-      .locator(".ql-editor")
+      .getByTestId("rich-text-editor")
       .fill(
         "The instructions to complete this assignment include answering all questions correctly, and to not cheat.",
       );
@@ -39,9 +39,9 @@ test.describe("Author - Assignment Overview", () => {
         name: /how will learners be graded on this assignment/i,
       }),
     });
-    await gradingSection.locator(".ql-editor").click();
+    await gradingSection.getByTestId("rich-text-editor").click();
     await gradingSection
-      .locator(".ql-editor")
+      .getByTestId("rich-text-editor")
       .fill(
         "Learners will be graded on this assignment using accurate rubrics to answer questions.",
       );

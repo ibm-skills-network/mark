@@ -1,9 +1,8 @@
 "use client";
 
-import type { JSX } from "react";
+import type { JSX, ComponentPropsWithoutRef, ElementType } from "react";
 import Title from "@/components/Title";
 import { cn } from "@/lib/strings";
-import type { ComponentPropsWithoutRef, ElementType } from "react";
 
 export function SectionWithTitle<T extends ElementType = "section">(
   props: Omit<ComponentPropsWithoutRef<T>, "as" | "className"> & {

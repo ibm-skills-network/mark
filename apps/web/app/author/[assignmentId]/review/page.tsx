@@ -1,6 +1,6 @@
 /*eslint-disable*/
 "use client";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import Title from "@/components/Title";
 import { extractAssignmentId } from "@/lib/strings";
 import {
@@ -16,6 +16,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { hasRichTextContent, isRichTextEmpty } from "rich-text";
 import { useAssignmentConfig } from "../../../../stores/assignmentConfig";
 import { useAssignmentFeedbackConfig } from "../../../../stores/assignmentFeedbackConfig";
 import { useAuthorStore } from "../../../../stores/author";
@@ -176,9 +177,9 @@ const IssuesModal = ({
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-medium text-red-900 dark:text-red-200">
                       Question {questionIndex}:{" "}
-                      <MarkdownViewer>
+                      <RichTextViewer>
                         {question?.question || "Untitled Question"}
-                      </MarkdownViewer>
+                      </RichTextViewer>
                     </h3>
                     <button
                       onClick={() => onNavigateToFix(parseInt(questionId))}
@@ -313,7 +314,7 @@ const ChangeComparison = ({
               : "bg-green-50 dark:bg-green-900/20",
           )}
         >
-          <MarkdownViewer
+          <RichTextViewer
             className={cn(
               "text-sm",
               isOld
@@ -322,7 +323,7 @@ const ChangeComparison = ({
             )}
           >
             {value}
-          </MarkdownViewer>
+          </RichTextViewer>
         </div>
       );
     }
@@ -495,13 +496,13 @@ const Section = ({
           {errorMessage}
         </div>
       )}
-      <MarkdownViewer className="text-gray-600 dark:text-gray-300">
+      <RichTextViewer className="text-gray-600 dark:text-gray-300">
         {content
           ? content.replace(/<\/?[^>]+(>|$)/g, "").trim() === ""
             ? "Not set"
             : content
           : "Not set"}
-      </MarkdownViewer>
+      </RichTextViewer>
     </div>
   );
 };
@@ -1651,17 +1652,9 @@ function Component() {
             content={introduction}
             link={`/author/${activeAssignmentId}`}
             hasChanges={changes.introduction}
-            isValid={
-              !!introduction &&
-              introduction.trim() !== "" &&
-              introduction.trim() !== "<p><br></p>"
-            }
+            isValid={hasRichTextContent(introduction)}
             errorMessage={
-              !introduction ||
-              introduction.trim() === "" ||
-              introduction.trim() === "<p><br></p>"
-                ? "Introduction is required"
-                : ""
+              isRichTextEmpty(introduction) ? "Introduction is required" : ""
             }
           />
 

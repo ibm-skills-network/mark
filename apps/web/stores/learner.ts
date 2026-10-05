@@ -10,6 +10,7 @@ import type {
   slideMetaData,
 } from "@/config/types";
 import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
+import { hasRichTextContent } from "rich-text";
 import { getUser } from "@/lib/talkToBackend";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
@@ -483,9 +484,7 @@ const isQuestionEdited = (question: QuestionStore) => {
     learnerPresentationResponse,
   } = question;
   return (
-    (learnerTextResponse &&
-      learnerTextResponse.trim().length > 0 &&
-      learnerTextResponse !== "<p><br></p>") ||
+    hasRichTextContent(learnerTextResponse) ||
     (learnerUrlResponse && learnerUrlResponse.trim().length > 0) ||
     (learnerChoices && learnerChoices.length > 0) ||
     learnerAnswerChoice !== undefined ||

@@ -58,3 +58,46 @@ if (typeof window !== "undefined") {
     })),
   });
 }
+
+// ProseMirror measures the document to place the caret and to position the
+// gap/drop cursors. jsdom implements no layout, so these return nothing and
+// coordsAtPos throws part-way through mounting an editor. Stubbing them is
+// enough for the editor to mount; anything that genuinely depends on geometry
+// belongs in a browser test rather than here.
+if (typeof Range !== "undefined") {
+  Range.prototype.getBoundingClientRect = () => ({
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
+    width: 0,
+    height: 0,
+    x: 0,
+    y: 0,
+    toJSON() {
+      return {};
+    },
+  });
+
+  Range.prototype.getClientRects = () => ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: function* () {},
+  });
+}
+
+if (typeof document !== "undefined" && !document.elementFromPoint) {
+  document.elementFromPoint = () => null;
+}
+
+if (typeof global.DataTransfer === "undefined") {
+  global.DataTransfer = class DataTransfer {
+    items = [];
+    files = [];
+    types = [];
+    setData() {}
+    getData() {
+      return "";
+    }
+  };
+}
