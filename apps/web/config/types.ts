@@ -61,6 +61,7 @@ export interface ExtendedFileContent {
   fileImageUrl?: string;
   finalUrl?: string;
   questionId?: string;
+  size?: number;
 }
 
 export type UploadType = "author" | "learner" | "debug" | "chatbot";
