@@ -106,6 +106,14 @@ interface WorkbookPackage {
 /** Series references reported per chart, enough to show what it plots. */
 const MAX_CHART_SERIES_RANGES = 8;
 
+/**
+ * A namespace prefix on an element name: the `c:` of `<c:barChart>` or the
+ * `/a:` of `</a:t>`. Excel binds the chart namespace to `c:`, but openpyxl and
+ * other writers declare it as the default namespace or under another prefix,
+ * so chart parts are matched on local names only.
+ */
+const XML_ELEMENT_PREFIX = /<(\/?)[A-Za-z_][\w.-]*:/g;
+
 /** OOXML c:legendPos codes, spelled out for the grading prompt. */
 const LEGEND_POSITION_LABELS: Record<string, string> = {
   b: "bottom",
@@ -4268,20 +4276,21 @@ export class FileContentExtractionService {
     legendPosition?: string;
     seriesRanges: string[];
   } {
-    const type = this.detectChartTypeFromXml(xmlString);
-    const title = this.extractChartTitleFromXml(xmlString);
+    const xml = this.stripXmlElementPrefixes(xmlString);
+    const type = this.detectChartTypeFromXml(xml);
+    const title = this.extractChartTitleFromXml(xml);
 
     let legendPosition: string | undefined;
-    if (xmlString.includes("<c:legend")) {
-      const positionCode = /<c:legendPos\b[^<>]*\bval="([^"<>]*)"/.exec(
-        xmlString,
+    if (this.indexOfOpeningTag(xml, "legend") !== -1) {
+      const positionCode = /<legendPos\b[^<>]*\bval="([^"<>]*)"/.exec(
+        xml,
       )?.[1];
       legendPosition =
         LEGEND_POSITION_LABELS[positionCode ?? ""] ?? "position unspecified";
     }
 
     const seriesRanges: string[] = [];
-    for (const match of xmlString.matchAll(/<c:f>([^<]+)<\/c:f>/g)) {
+    for (const match of xml.matchAll(/<f>([^<]+)<\/f>/g)) {
       const reference = match[1].trim();
       if (reference && !seriesRanges.includes(reference)) {
         seriesRanges.push(reference);
@@ -4405,36 +4414,47 @@ export class FileContentExtractionService {
   }
 
   /**
-   * Detect the chart type by scanning the chart XML for OOXML chart type tags.
+   * Chart XML with namespace prefixes dropped from every element name, so
+   * `<c:barChart>`, `<barChart>` and `<chart:barChart>` all read as
+   * `<barChart>`. Attributes are left alone. Idempotent.
+   */
+  private stripXmlElementPrefixes(xml: string): string {
+    return xml.replaceAll(XML_ELEMENT_PREFIX, "<$1");
+  }
+
+  /**
+   * Detect the chart type by scanning the chart XML for OOXML chart type tags,
+   * whatever namespace prefix the writer used.
    */
   private detectChartTypeFromXml(xmlString: string): string {
+    const xml = this.stripXmlElementPrefixes(xmlString);
     const chartTypes: Array<[string, string]> = [
-      ["c:barChart", "Bar Chart"],
-      ["c:bar3DChart", "3D Bar Chart"],
-      ["c:lineChart", "Line Chart"],
-      ["c:line3DChart", "3D Line Chart"],
-      ["c:pieChart", "Pie Chart"],
-      ["c:pie3DChart", "3D Pie Chart"],
-      ["c:areaChart", "Area Chart"],
-      ["c:area3DChart", "3D Area Chart"],
-      ["c:scatterChart", "Scatter Chart"],
-      ["c:radarChart", "Radar/Spider Chart"],
-      ["c:doughnutChart", "Doughnut Chart"],
-      ["c:bubbleChart", "Bubble Chart"],
-      ["c:ofPieChart", "Pie of Pie/Bar of Pie Chart"],
-      ["c:stockChart", "Stock Chart"],
-      ["c:surfaceChart", "Surface Chart"],
-      ["c:surface3DChart", "3D Surface Chart"],
+      ["barChart", "Bar Chart"],
+      ["bar3DChart", "3D Bar Chart"],
+      ["lineChart", "Line Chart"],
+      ["line3DChart", "3D Line Chart"],
+      ["pieChart", "Pie Chart"],
+      ["pie3DChart", "3D Pie Chart"],
+      ["areaChart", "Area Chart"],
+      ["area3DChart", "3D Area Chart"],
+      ["scatterChart", "Scatter Chart"],
+      ["radarChart", "Radar/Spider Chart"],
+      ["doughnutChart", "Doughnut Chart"],
+      ["bubbleChart", "Bubble Chart"],
+      ["ofPieChart", "Pie of Pie/Bar of Pie Chart"],
+      ["stockChart", "Stock Chart"],
+      ["surfaceChart", "Surface Chart"],
+      ["surface3DChart", "3D Surface Chart"],
     ];
 
     for (const [tag, label] of chartTypes) {
-      if (xmlString.includes(`<${tag}`) || xmlString.includes(`<${tag}>`)) {
-        // A column chart is a c:barChart with barDir="col"; only barDir="bar"
+      if (this.indexOfOpeningTag(xml, tag) !== -1) {
+        // A column chart is a barChart with barDir="col"; only barDir="bar"
         // is a bar chart. Reporting both as "Bar Chart" fails workbooks that
         // built exactly the chart the rubric asked for.
-        if (tag === "c:barChart" || tag === "c:bar3DChart") {
-          const direction = /<c:barDir\b[^<>]*\bval="([^"<>]*)"/.exec(
-            xmlString,
+        if (tag === "barChart" || tag === "bar3DChart") {
+          const direction = /<barDir\b[^<>]*\bval="([^"<>]*)"/.exec(
+            xml,
           )?.[1];
           if (direction === "col") return label.replace("Bar", "Column");
         }
@@ -4446,27 +4466,29 @@ export class FileContentExtractionService {
 
   /**
    * Extract the chart title from chart XML by scanning for text content
-   * in the title element. Handles both rich text and formula references.
+   * in the title element. Handles both rich text and formula references, with
+   * or without namespace prefixes.
    */
   private extractChartTitleFromXml(xmlString: string): string {
-    // Try to find title text within <c:title> ... <a:t>Title</a:t> ...
-    const titleSection = this.xmlBlockContent(xmlString, "c:title");
+    // Title text sits in <title> ... <t>Title</t> ... (c:title / a:t in Excel)
+    const xml = this.stripXmlElementPrefixes(xmlString);
+    const titleSection = this.xmlBlockContent(xml, "title");
     if (!titleSection) return "";
 
-    // Look for <a:t> text nodes within the title section
-    const textMatches = titleSection.match(/<a:t[^<>]*>([^<]+)<\/a:t>/g);
+    // Rich-text runs within the title section
+    const textMatches = titleSection.match(/<t\b[^<>]*>([^<]+)<\/t>/g);
     if (textMatches && textMatches.length > 0) {
       const texts = textMatches
         .map((m) => {
-          const inner = m.match(/<a:t[^<>]*>([^<]+)<\/a:t>/);
+          const inner = m.match(/<t\b[^<>]*>([^<]+)<\/t>/);
           return inner ? inner[1].trim() : "";
         })
         .filter(Boolean);
       if (texts.length > 0) return texts.join(" ");
     }
 
-    // Fallback: look for a formula reference <c:f>Sheet1!$B$1</c:f> in title
-    const formulaMatch = titleSection.match(/<c:f>([^<]+)<\/c:f>/);
+    // Fallback: a formula reference <f>Sheet1!$B$1</f> in the title
+    const formulaMatch = titleSection.match(/<f>([^<]+)<\/f>/);
     if (formulaMatch) return formulaMatch[1].trim();
 
     return "";

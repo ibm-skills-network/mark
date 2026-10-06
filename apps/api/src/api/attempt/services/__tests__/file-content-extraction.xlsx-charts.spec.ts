@@ -215,3 +215,107 @@ describe("workbook chart extraction guard rails", () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 });
+
+/**
+ * openpyxl (and other non-Excel writers) put the chart namespace in the
+ * default xmlns, so the chart part reads <chartSpace><chart><title>...
+ * <barChart><barDir val="bar"/>... with no c: prefix at all.
+ *
+ * Fixture: xlsx-charts-openpyxl-default-ns.xlsx, written by openpyxl 3.1.5
+ *   Sales   raw table
+ *   Sheet1  bar chart (barDir="bar") "Quantity Sold by Dealer ID", no legend
+ *   Sheet3  column chart (barDir="col") "Profit by Year and Dealer ID",
+ *           legend on the right
+ *   Sheet4  line chart "Profit of Hudson Models by Dealer ID", legend at the
+ *           bottom
+ */
+describe("workbook chart metadata for default-namespace chart XML", () => {
+  const OPENPYXL_FIXTURE = path.join(
+    __dirname,
+    "fixtures",
+    "xlsx-charts-openpyxl-default-ns.xlsx",
+  );
+  let section: string;
+  let legendCount: number;
+
+  beforeAll(async () => {
+    const service = createService();
+    const buffer = fs.readFileSync(OPENPYXL_FIXTURE);
+    const result = await (service as any).extractExcelChartsAndImages(buffer);
+    section = result.section;
+    legendCount = result.legendCount;
+  });
+
+  it("reports type and title of each chart", () => {
+    expect(section).toContain(
+      'Chart 1 on sheet "Sheet1": Bar Chart - "Quantity Sold by Dealer ID"',
+    );
+    expect(section).toContain(
+      'Chart 2 on sheet "Sheet3": Column Chart - "Profit by Year and Dealer ID"',
+    );
+    expect(section).toContain(
+      'Chart 3 on sheet "Sheet4": Line Chart - "Profit of Hudson Models by Dealer ID"',
+    );
+  });
+
+  it("reports legend presence and position", () => {
+    expect(section).toContain("Legend: present (right)");
+    expect(section).toContain("Legend: present (bottom)");
+    expect(section).toContain("Legend: not present");
+    expect(legendCount).toBe(2);
+  });
+
+  it("reports the series ranges", () => {
+    expect(section).toContain("'Sales'!$B$2:$B$5");
+    expect(section).toContain("'Sales'!$C$2:$C$5");
+  });
+});
+
+describe("chart XML parsing is independent of the namespace prefix", () => {
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  const variants: Array<[string, (name: string) => string, string]> = [
+    ["c: prefix", (name) => `c:${name}`, "a:"],
+    ["no prefix", (name) => name, "a:"],
+    ["custom prefix", (name) => `chart:${name}`, "dml:"],
+    ["no prefix on text runs either", (name) => name, ""],
+  ];
+
+  it.each(variants)("parses a chart written with %s", (_label, tag, a) => {
+    const xml =
+      `<${tag("chartSpace")}><${tag("chart")}><${tag("title")}><${tag("tx")}><${tag("rich")}>` +
+      `<${a}p><${a}r><${a}t xml:space="preserve">Revenue by Year</${a}t></${a}r></${a}p>` +
+      `</${tag("rich")}></${tag("tx")}></${tag("title")}><${tag("plotArea")}>` +
+      `<${tag("barChart")}><${tag("barDir")} val="col"/><${tag("ser")}><${tag("val")}><${tag("numRef")}>` +
+      `<${tag("f")}>Data!$B$2:$B$9</${tag("f")}></${tag("numRef")}></${tag("val")}></${tag("ser")}>` +
+      `</${tag("barChart")}></${tag("plotArea")}>` +
+      `<${tag("legend")}><${tag("legendPos")} val="t"/></${tag("legend")}>` +
+      `</${tag("chart")}></${tag("chartSpace")}>`;
+
+    const chart = (service as any).describeChartXml(xml);
+
+    expect(chart).toEqual({
+      type: "Column Chart",
+      title: "Revenue by Year",
+      legendPosition: "top",
+      seriesRanges: ["Data!$B$2:$B$9"],
+    });
+  });
+
+  it("reads a formula-reference title without a prefix", () => {
+    const xml = `<chart><title><tx><strRef><f>Data!$B$1</f></strRef></tx></title><plotArea><lineChart/></plotArea></chart>`;
+    expect((service as any).extractChartTitleFromXml(xml)).toBe("Data!$B$1");
+    expect((service as any).detectChartTypeFromXml(xml)).toBe("Line Chart");
+  });
+
+  it("does not take a longer element name for the one it is looking for", () => {
+    const xml = `<chart><plotArea><barChartExt/><lineChart/></plotArea><legendEntry/></chart>`;
+    const chart = (service as any).describeChartXml(xml);
+    expect(chart.type).toBe("Line Chart");
+    expect(chart.legendPosition).toBeUndefined();
+  });
+});
