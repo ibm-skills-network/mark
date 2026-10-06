@@ -119,6 +119,18 @@ export const CODE_VALIDATION_RENDER_BUDGET_CHARS = 30_000;
 export const PROSE_SECTION_MAX_CHARS = 4000;
 
 /**
+ * Cap for a standalone image chunk from a document, slide deck or image
+ * upload: OCR text plus the vision description of one picture. That is a
+ * page's worth of content, so it gets the same cap as a prose section rather
+ * than the short fragment cap. Validation prompts stay inside
+ * CODE_VALIDATION_RENDER_BUDGET_CHARS, and grader prompts carry at most
+ * maxEvidence quotes.
+ *
+ * INVARIANT: must be <= CODE_EVIDENCE_QUOTE_MAX_CHARS.
+ */
+export const IMAGE_EVIDENCE_QUOTE_MAX_CHARS = PROSE_SECTION_MAX_CHARS;
+
+/**
  * Upper bound for the ENTIRE text of the synthetic pinned whole-document
  * block (header + page-labelled text + truncation marker, all counted) that
  * evidence chunking adds for document uploads. Same role and same sizing

@@ -1224,3 +1224,66 @@ describe("CriterionEvidenceRetrievalService — validator rejects every candidat
     expect(response.debug?.unvalidatedFallback).toBeUndefined();
   });
 });
+
+describe("CriterionEvidenceRetrievalService — image evidence from document and image uploads", () => {
+  const criterion: RubricCriterion = {
+    id: "c-persona",
+    rubricQuestion: "Does each persona list goals and frustrations?",
+    description: "Persona fields.",
+    criteria: [{ description: "Level", points: 1 }],
+    maxPoints: 1,
+  };
+
+  function imageChunk(
+    id: string,
+    filename: string,
+    text: string,
+  ): ExtractedChunk {
+    return {
+      ...makeChunk(id, text),
+      anchor: { type: "image", page: 2, imageId: id },
+      metadata: { filename },
+    };
+  }
+
+  const personaText =
+    "Persona: Maria, 34, product manager. " +
+    "Goals: ship features faster, reduce context switching. ".repeat(10) +
+    "Frustrations: unclear requirements, slow approvals.";
+
+  it.each([
+    ["a PDF page image", "Personas.pdf"],
+    ["a slide image", "deck.pptx"],
+    ["an uploaded image", "persona.png"],
+  ])("does not cut %s to the 220-char prose cap", async (_label, filename) => {
+    const chunks = [imageChunk("img", filename, personaText)];
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "img", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Upload personas", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    expect(personaText.length).toBeGreaterThan(240);
+    expect(response.evidence[0].quote).toBe(personaText);
+    const validationPrompt =
+      await promptProcessor.processStructuredPrompt.mock.calls[0][0].format({});
+    expect(validationPrompt).toContain("Frustrations: unclear requirements");
+  });
+
+  it("still bounds a very long image chunk to the page-sized cap", () => {
+    const huge = imageChunk("img", "scan.pdf", "x".repeat(20_000));
+    const excerpt = (makeService() as any).buildExcerpt(huge, 220);
+    expect(excerpt.length).toBe(4000);
+  });
+});

@@ -22,6 +22,7 @@ import { ChunkIndex } from "./chunk-index.service";
 import {
   CODE_EVIDENCE_QUOTE_MAX_CHARS,
   CODE_VALIDATION_RENDER_BUDGET_CHARS,
+  IMAGE_EVIDENCE_QUOTE_MAX_CHARS,
   isCodeLikeFilename,
   isJupyterNotebookFilename,
 } from "./source-code.utils";
@@ -505,13 +506,20 @@ export class CriterionEvidenceRetrievalService {
   // document), and pinned whole-submission views — carry their full text:
   // truncating them back to a fragment would undo the merge that made them
   // usable evidence. Their builders bound them at or below this cap.
+  // Image chunks from documents, slides and image uploads carry one
+  // picture's OCR text and description — often the only copy of a page's
+  // content — so they get a page-sized cap rather than the fragment cap.
   // proseCap is 220 for stored evidence quotes and 240 for validation excerpts.
   private buildExcerpt(chunk: ExtractedChunk, proseCap: number): string {
     const fullLength =
       isCodeLikeFilename(chunk.metadata?.filename) ||
       chunk.metadata?.section ||
       chunk.metadata?.pinned;
-    const cap = fullLength ? CODE_EVIDENCE_QUOTE_MAX_CHARS : proseCap;
+    const cap = fullLength
+      ? CODE_EVIDENCE_QUOTE_MAX_CHARS
+      : chunk.anchor?.type === "image"
+        ? Math.max(proseCap, IMAGE_EVIDENCE_QUOTE_MAX_CHARS)
+        : proseCap;
     if (
       isJupyterNotebookFilename(chunk.metadata?.filename) &&
       typeof chunk.metadata?.anchorTextChars === "number"
