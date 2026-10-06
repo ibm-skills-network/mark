@@ -167,10 +167,11 @@ export class FileGradingService implements IFileGradingService {
     string,
     Promise<FileBasedQuestionResponseModel>
   >();
-  // v6: judge now receives the full scoring levels. Do not reuse grades
-  // selected by the old judge, even when the extracted submission is identical.
+  // v7: image evidence from document uploads is no longer cut to 220 chars.
+  // Do not reuse grades made from the truncated evidence, even when the
+  // extracted submission is identical.
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
-    "structured-file-evidence-v6-complete-judge-rubric";
+    "structured-file-evidence-v7-full-image-evidence";
   private static readonly NOTEBOOK_IMAGE_GRADER_VERSION =
     "structured-file-evidence-v11-notebook-images";
 
