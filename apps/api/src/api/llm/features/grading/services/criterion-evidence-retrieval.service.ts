@@ -45,6 +45,14 @@ interface RetrievalConfig {
   defaultStrategy: EvidenceRetrievalStrategy;
 }
 
+/**
+ * Below this much extracted text (pinned whole-file views aside) a submission
+ * is near-empty, and a validator rejecting all of it is trusted. Above it, a
+ * blanket rejection is far more likely a validator miss than an empty
+ * submission, and the grader sees the top-ranked candidates instead.
+ */
+const MIN_CONTENT_FOR_UNVALIDATED_FALLBACK_CHARS = 500;
+
 /** Rotate the version whenever EVIDENCE_VALIDATION_HEAD changes. */
 export const EVIDENCE_VALIDATION_CACHE_KEY = "mark:evidence-validation:v1";
 
@@ -352,12 +360,13 @@ export class CriterionEvidenceRetrievalService {
 
     let evidence: CriterionEvidence[];
     let validatedCount = 0;
+    let unvalidatedFallback = false;
 
     if (strategy === "llm" || this.config.enableLlmValidation) {
       // The LLM validator is the actual relevance judge for these candidates
       // (which may include chunks below the lexical relevance threshold).
-      // Its verdict is trusted as final — including an empty one, which
-      // means none of the candidates actually address this criterion.
+      // An empty verdict is re-checked once; if it holds, it is final only
+      // for a near-empty submission (see hasSubstantialContent).
       let validation = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
@@ -377,6 +386,28 @@ export class CriterionEvidenceRetrievalService {
       }
       if (validation === undefined) {
         evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
+      } else if (
+        validation.length === 0 &&
+        reranked.length > 0 &&
+        this.hasSubstantialContent(index)
+      ) {
+        // Two empty verdicts on a submission with real content are far more
+        // often a validator miss (it is told to under-claim) than a submission
+        // with nothing on this criterion. An empty evidence set skips the
+        // grading model entirely and awards the minimum, so hand it the
+        // top-ranked candidates and let it decide.
+        unvalidatedFallback = true;
+        evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
+        this.logger.warn({
+          message:
+            "Evidence validator rejected every candidate; grading on top-ranked candidates",
+          criterionId: request.criterion.id,
+          assignmentId: request.assignmentId,
+          candidateCount: candidates.length,
+          rerankedCount: reranked.length,
+          fallbackEvidenceCount: evidence.length,
+          chunkCount: index.getAllChunks().length,
+        });
       } else {
         validatedCount = validation.length;
         evidence = validation.map((item) => ({
@@ -408,6 +439,7 @@ export class CriterionEvidenceRetrievalService {
       debug: {
         candidateCount: candidates.length,
         validatedCount,
+        ...(unvalidatedFallback ? { unvalidatedFallback } : {}),
       },
     };
 
@@ -417,6 +449,22 @@ export class CriterionEvidenceRetrievalService {
       expiresAt: Date.now() + CriterionEvidenceRetrievalService.CACHE_TTL_MS,
     });
     return response;
+  }
+
+  private hasSubstantialContent(index: ChunkIndex): boolean {
+    let unpinnedChars = 0;
+    let pinnedChars = 0;
+    for (const chunk of index.getAllChunks()) {
+      const length = chunk.text.trim().length;
+      // The pinned whole-file view repeats the other chunks; count it only
+      // when it is all there is.
+      if (chunk.metadata?.pinned) pinnedChars = Math.max(pinnedChars, length);
+      else unpinnedChars += length;
+    }
+    return (
+      Math.max(unpinnedChars, pinnedChars) >=
+      MIN_CONTENT_FOR_UNVALIDATED_FALLBACK_CHARS
+    );
   }
 
   private mapRerankedCandidatesToEvidence(

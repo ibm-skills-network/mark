@@ -1151,3 +1151,76 @@ it("preserves typed rich-text tail evidence through validation AND grader quotes
   expect(rendered).toContain("REQUIRED_TAIL_EVIDENCE");
   expect(result.evidence.some((e) => e.quote === text)).toBe(true);
 });
+
+describe("CriterionEvidenceRetrievalService — validator rejects every candidate", () => {
+  const criterion: RubricCriterion = {
+    id: "c-slides",
+    rubricQuestion: "Does the presentation include an executive summary?",
+    description: "Checks the executive summary slide.",
+    criteria: [
+      { description: "Summary present and complete", points: 2 },
+      { description: "Summary missing", points: 0 },
+    ],
+    maxPoints: 2,
+  };
+
+  function rejectingService() {
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({ evidence: [] }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    return { service, promptProcessor };
+  }
+
+  it("hands the top-ranked candidates to the grader when a substantial submission has every candidate rejected", async () => {
+    const chunks = Array.from({ length: 12 }, (_, index) =>
+      makeChunk(
+        `slide${index}`,
+        `Slide ${index + 1}: executive summary of the job postings analysis. ` +
+          "Python and SQL lead demand across the surveyed roles. ".repeat(3),
+      ),
+    );
+    const { service, promptProcessor } = rejectingService();
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Upload your capstone deck",
+        chunks,
+        assignmentId: 1,
+      },
+      new ChunkIndex(chunks),
+    );
+
+    // The validator is still asked twice before the fallback applies.
+    expect(promptProcessor.processStructuredPrompt).toHaveBeenCalledTimes(2);
+    expect(response.evidence.length).toBeGreaterThan(0);
+    expect(response.evidence.length).toBeLessThanOrEqual(6);
+    expect(response.debug).toEqual(
+      expect.objectContaining({ validatedCount: 0, unvalidatedFallback: true }),
+    );
+  });
+
+  it("keeps the empty verdict for a near-empty submission", async () => {
+    const chunks = [makeChunk("only", "My name")];
+    const { service } = rejectingService();
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Upload your capstone deck",
+        chunks,
+        assignmentId: 1,
+      },
+      new ChunkIndex(chunks),
+    );
+
+    expect(response.evidence).toHaveLength(0);
+    expect(response.debug?.unvalidatedFallback).toBeUndefined();
+  });
+});
