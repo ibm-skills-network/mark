@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import LearnerLayout from "../LearnerLayout";
 import ErrorModal from "@/components/ErrorModal";
+import { ErrorScreen } from "@/lib/error-screen";
 import { createAttempt, getAttempts, getUser } from "@/lib/talkToBackend";
 
 jest.mock("next/headers", () => ({
@@ -145,6 +146,23 @@ describe("LearnerLayout attempt resolution", () => {
     expect(element.props.headline).not.toBe("No more attempts available");
   });
 
+  // A failed attempts list used to be rendered as a hard-coded 500 whatever
+  // actually happened — a database blip answered with 503, or the learner's
+  // own connection dropping, both read "Attempts could not be fetched / 500".
+  it("shows the real failure when the attempts list cannot be loaded", async () => {
+    const failure = Object.assign(new Error("Service Unavailable"), {
+      status: 503,
+    });
+    getAttemptsMock.mockRejectedValue(failure);
+
+    const element = await LearnerLayout(props);
+
+    expect(element.type).toBe(ErrorScreen);
+    expect(element.props.error).toBe(failure);
+    expect(element.type).not.toBe(ErrorModal);
+    expect(createAttemptMock).not.toHaveBeenCalled();
+  });
+
   // The server accepts attempt creation from authors, and AttemptLoader
   // renders learner-only content — so an author who fell through to the
   // learner flow got a silently blank page and a stray attempt. The role
@@ -173,7 +191,7 @@ it("carries learner context through a server-rendered refresh and resumes the at
     role: "learner",
   });
   expect(getAttemptsMock).toHaveBeenLastCalledWith(123, "", {
-    throwOnAuthError: true,
+    throwOnError: true,
     learnerContext: true,
   });
   expect(element.props.children.props.attemptId).toBe(456);
