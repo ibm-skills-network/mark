@@ -24,6 +24,12 @@ interface Props extends ComponentPropsWithoutRef<"section"> {
   maxCharacters?: number | null;
   allowCopy?: boolean;
   toolbarMode?: "full" | "learner";
+  /**
+   * Turn off Quill's built-in shortcut that converts a line typed as `* `,
+   * `- ` or `1. ` into a list item and deletes the marker. Learners type
+   * literal markdown and code (e.g. `* item`, `* {`) that must be kept.
+   */
+  disableListAutofill?: boolean;
 }
 
 const fullToolbarOptions = [
@@ -61,6 +67,7 @@ const MarkdownEditor: React.FC<Props> = ({
   maxCharacters,
   placeholder = "Write your question here...",
   toolbarMode = "full",
+  disableListAutofill = false,
 }) => {
   const quillRef = useRef<HTMLDivElement>(null);
   const setValueRef = useRef(setValue);
@@ -96,6 +103,9 @@ const MarkdownEditor: React.FC<Props> = ({
           placeholder,
           modules: {
             toolbar: toolbarOptionsByMode[toolbarMode],
+            ...(disableListAutofill
+              ? { keyboard: { bindings: { "list autofill": null } } }
+              : {}),
             syntax: {
               highlight: (text: string) => hljs.highlightAuto(text).value,
             },
@@ -146,7 +156,7 @@ const MarkdownEditor: React.FC<Props> = ({
         setQuillInstance(null);
       }
     };
-  }, [placeholder, quillInstance, toolbarMode]);
+  }, [placeholder, quillInstance, toolbarMode, disableListAutofill]);
 
   const focusEditorFromShell = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -220,10 +230,11 @@ const MarkdownEditor: React.FC<Props> = ({
     <div className={cn("quill-editor-shell flex flex-col", className)}>
       <div
         className={cn(
-          "quill-editor overflow-auto p-2 border border-gray-200 dark:border-gray-600 rounded min-h-[100px] focus-within:border-violet-600 focus-within:ring-2 focus-within:ring-violet-100 dark:focus-within:ring-violet-900/40",
+          "quill-editor notranslate overflow-auto p-2 border border-gray-200 dark:border-gray-600 rounded min-h-[100px] focus-within:border-violet-600 focus-within:ring-2 focus-within:ring-violet-100 dark:focus-within:ring-violet-900/40",
           textareaClassName,
         )}
         ref={quillRef}
+        translate="no"
         onMouseDown={focusEditorFromShell}
       />
 

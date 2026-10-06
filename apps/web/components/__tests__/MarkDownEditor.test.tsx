@@ -51,4 +51,49 @@ describe("MarkDownEditor", () => {
     expect(html).not.toMatch(/onerror/i);
     expect(html).not.toMatch(/<script/i);
   });
+
+  const quillOptions = () =>
+    mockQuillConstructor.mock.calls[0]?.[1] as {
+      modules: { keyboard?: { bindings?: Record<string, unknown> } };
+    };
+
+  it("disables markdown list autofill when requested, so typed `* ` and `1. ` stay literal", async () => {
+    render(
+      <MarkDownEditor value="" setValue={jest.fn()} disableListAutofill />,
+    );
+
+    await waitFor(() => {
+      expect(mockQuillConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    const bindings = quillOptions().modules.keyboard?.bindings ?? {};
+    expect(bindings).toHaveProperty("list autofill", null);
+  });
+
+  it("keeps Quill's default list autofill when not requested", async () => {
+    render(<MarkDownEditor value="" setValue={jest.fn()} />);
+
+    await waitFor(() => {
+      expect(mockQuillConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      quillOptions().modules.keyboard?.bindings?.["list autofill"],
+    ).toBeUndefined();
+  });
+
+  it("opts the editor out of browser auto-translation", async () => {
+    const { container } = render(
+      <MarkDownEditor value="" setValue={jest.fn()} />,
+    );
+
+    await waitFor(() => {
+      expect(mockQuillConstructor).toHaveBeenCalledTimes(1);
+    });
+
+    const editorRoot = mockQuillConstructor.mock.calls[0]?.[0] as HTMLElement;
+    expect(container.contains(editorRoot)).toBe(true);
+    expect(editorRoot.getAttribute("translate")).toBe("no");
+    expect(editorRoot.classList.contains("notranslate")).toBe(true);
+  });
 });
