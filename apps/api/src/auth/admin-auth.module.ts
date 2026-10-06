@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { AdminAuthController } from "./controllers/admin-auth.controller";
 import { AdminGuard } from "./guards/admin.guard";
+import { AdminAssumeRoleService } from "./services/admin-assume-role.service";
 import { AdminEmailService } from "./services/admin-email.service";
 import { AdminVerificationService } from "./services/admin-verification.service";
 
@@ -18,7 +19,12 @@ import { AdminVerificationService } from "./services/admin-verification.service"
     ]),
   ],
   controllers: [AdminAuthController],
-  providers: [AdminVerificationService, AdminEmailService, AdminGuard],
+  providers: [
+    AdminVerificationService,
+    AdminEmailService,
+    AdminAssumeRoleService,
+    AdminGuard,
+  ],
   exports: [AdminVerificationService, AdminEmailService, AdminGuard],
 })
 export class AdminAuthModule {}

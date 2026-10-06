@@ -3,6 +3,9 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 
+import { AdminGuard } from "../guards/admin.guard";
+import type { UserSessionRequest } from "../interfaces/user.session.interface";
+import { AdminAssumeRoleService } from "../services/admin-assume-role.service";
 import { AdminEmailService } from "../services/admin-email.service";
 import { AdminVerificationService } from "../services/admin-verification.service";
 import { AdminAuthController } from "./admin-auth.controller";
@@ -25,6 +28,7 @@ describe("AdminAuthController — enumeration guards", () => {
     generateAdminSession: jest.Mock;
   };
   let emailService: { sendVerificationCode: jest.Mock };
+  let assumeRole: { assumeRole: jest.Mock };
 
   beforeEach(async () => {
     verification = {
@@ -36,6 +40,14 @@ describe("AdminAuthController — enumeration guards", () => {
         .mockResolvedValue("session-token-deadbeef"),
     };
     emailService = { sendVerificationCode: jest.fn().mockResolvedValue(true) };
+    assumeRole = {
+      assumeRole: jest.fn().mockResolvedValue({
+        userId: "admin@example.com",
+        role: "learner",
+        assignmentId: 7,
+        groupId: "g1",
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       // ThrottlerModule provides the dependencies ThrottlerGuard needs;
@@ -51,6 +63,7 @@ describe("AdminAuthController — enumeration guards", () => {
       providers: [
         { provide: AdminVerificationService, useValue: verification },
         { provide: AdminEmailService, useValue: emailService },
+        { provide: AdminAssumeRoleService, useValue: assumeRole },
         { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
       ],
     }).compile();
@@ -163,6 +176,46 @@ describe("AdminAuthController — enumeration guards", () => {
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(verification.verifyCode).not.toHaveBeenCalled();
       expect(verification.isAuthorizedEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("assume-role", () => {
+    const request = {
+      userSession: { userId: "admin@example.com" },
+    } as unknown as UserSessionRequest;
+
+    it("resolves claims for the admin from the guard, not the body", async () => {
+      await controller.assumeRole(request, {
+        assignmentId: 7,
+        role: "author",
+      });
+      expect(assumeRole.assumeRole).toHaveBeenCalledWith(
+        "admin@example.com",
+        7,
+        "author",
+      );
+    });
+
+    it.each([
+      [{ assignmentId: "7", role: "learner" }],
+      [{ assignmentId: 0, role: "learner" }],
+      [{ assignmentId: 1.5, role: "learner" }],
+      [{ assignmentId: 7, role: "admin" }],
+      [{ assignmentId: 7 }],
+      [undefined],
+    ])("rejects malformed body %j", async (body) => {
+      await expect(
+        controller.assumeRole(request, body as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(assumeRole.assumeRole).not.toHaveBeenCalled();
+    });
+
+    it("only admits requests through AdminGuard", () => {
+      const guards = Reflect.getMetadata(
+        "__guards__",
+        AdminAuthController.prototype.assumeRole,
+      ) as unknown[];
+      expect(guards).toContain(AdminGuard);
     });
   });
 });
