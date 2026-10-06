@@ -39,7 +39,7 @@ const URL = "/api/v1/auth/admin/assume-role";
 
 describe("AdminAssumeRoleController", () => {
   let app: INestApplication;
-  const secret = new JwtConfigService().jwtConstants.secret;
+  const secret = new JwtConfigService().jwtConstants.secret; // pragma: allowlist secret
 
   beforeAll(async () => {
     process.env.MARK_API_ENDPOINT = "http://mark-api";

@@ -52,7 +52,7 @@ export default function AdminAssumeRoleButton() {
         `${getBaseApiPath("v1")}/auth/admin/assume-role`,
         {
           method: "POST",
-          credentials: "include",
+          credentials: "include", // pragma: allowlist secret
           headers: {
             "Content-Type": "application/json",
             "x-admin-token": adminToken,
