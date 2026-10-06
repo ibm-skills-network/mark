@@ -1,5 +1,6 @@
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { PrismaService } from "src/database/prisma.service";
+import { ChoiceRendering } from "../utils/choice-renderings.util";
 
 type PrismaTransactionalClient = Omit<
   PrismaService,
@@ -55,4 +56,12 @@ export interface GradingContext {
    * reuse decision can be traced back to a submission in the logs.
    */
   attemptId?: number;
+
+  /**
+   * Loads every stored rendering of the question's choices (authored and
+   * translated) for a learner attempt. Choice grading calls it only when a
+   * submitted choice is not in the grading language's set, so the common
+   * path costs no extra reads.
+   */
+  loadChoiceRenderings?: () => Promise<ChoiceRendering[]>;
 }
