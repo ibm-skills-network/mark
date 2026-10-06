@@ -92,9 +92,15 @@ export function getUploadAcceptMap(
   }
 }
 
-/** Android WebView user agents carry a `; wv)` token that Chrome lacks. */
+/**
+ * Android WebView user agents carry a `; wv)` token that Chrome lacks. Some
+ * host apps (e.g. Coursera) replace the UA and mark it with a `WebView` token.
+ */
 export function isAndroidWebView(userAgent: string): boolean {
-  return /Android/i.test(userAgent) && /;\s*wv\)/.test(userAgent);
+  return (
+    /Android/i.test(userAgent) &&
+    (/;\s*wv\)/.test(userAgent) || /\bWebView\b/.test(userAgent))
+  );
 }
 
 /** WebView types the picker intent from the first entry, so mixed lists open image pickers. */
