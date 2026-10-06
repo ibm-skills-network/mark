@@ -263,7 +263,19 @@ export async function getAttempt(
       attempt.assignment?.allotedTimeMinutes ??
       null;
 
-    return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
+    const normalized = normalizeAttemptTimestamps(
+      attempt,
+      fallbackAllotedMinutes,
+    );
+    // The server builds each question's choices in the requested language;
+    // remember which, so a submit can name the language of the text it sends.
+    return {
+      ...normalized,
+      questions: normalized.questions?.map((question) => ({
+        ...question,
+        contentLanguage: language,
+      })),
+    };
   } catch (err) {
     if (options?.throwOnAuthError && isAuthApiError(err)) {
       throw err;

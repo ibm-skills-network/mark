@@ -1,3 +1,4 @@
+import { selectedChoiceTexts } from "@/lib/learner-choice-submission";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { submitQuestion, type SubmitQuestionResult } from "@/lib/talkToBackend";
@@ -233,26 +234,8 @@ export function useAutoSaveResponse(
       const responsePayload: QuestionAttemptRequest = {
         learnerTextResponse: question.learnerTextResponse || "",
         learnerUrlResponse: question.learnerUrlResponse || "",
-        learnerChoices: question.translations?.[userPreferedLanguage]
-          ?.translatedChoices
-          ? question.translations[userPreferedLanguage].translatedChoices
-              ?.map((choice, index) =>
-                question.learnerChoices?.find(
-                  (c) => String(c) === String(index),
-                )
-                  ? choice.choice
-                  : undefined,
-              )
-              .filter((choice) => choice !== undefined) || []
-          : question.choices
-              ?.map((choice, index) =>
-                question.learnerChoices?.find(
-                  (c) => String(c) === String(index),
-                )
-                  ? choice.choice
-                  : undefined,
-              )
-              .filter((choice) => choice !== undefined) || [],
+        learnerChoices: selectedChoiceTexts(question, userPreferedLanguage)
+          .texts,
         learnerAnswerChoice: question.learnerAnswerChoice ?? null,
         learnerFileResponse: question.learnerFileResponse || [],
         learnerPresentationResponse: question.presentationResponse ?? null,
