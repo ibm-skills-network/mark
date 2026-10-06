@@ -571,10 +571,17 @@ const Question: FC<Props> = ({
         let jsonString = feedbackText.trim();
         let bracketCount = 0;
         let jsonEndIndex = -1;
+        // Brackets inside JSON strings (e.g. quoted code) are not structure.
+        let inString = false;
 
         for (let index = 0; index < jsonString.length; index++) {
-          if (jsonString[index] === "[") bracketCount++;
-          else if (jsonString[index] === "]") {
+          const char = jsonString[index];
+          if (inString) {
+            if (char === "\\") index++;
+            else if (char === '"') inString = false;
+          } else if (char === '"') inString = true;
+          else if (char === "[") bracketCount++;
+          else if (char === "]") {
             bracketCount--;
             if (bracketCount === 0) {
               jsonEndIndex = index + 1;
