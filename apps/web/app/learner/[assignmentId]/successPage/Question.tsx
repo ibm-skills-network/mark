@@ -807,16 +807,21 @@ const Question: FC<Props> = ({
       }
 
       const isSingleChoice = type === "SINGLE_CORRECT";
+      // Answers reach this page as the chosen choice text, which is also what
+      // the grader matched, so selection is by text alone. Matching positions
+      // too made a digit answer like "2" also select whichever choice sat at
+      // index 2. String() undoes JSON parsing a bare digit answer to a number.
+      const selectedTexts = new Set(
+        (Array.isArray(learnerResponse)
+          ? (learnerResponse as unknown[])
+          : [learnerResponse]
+        ).map((ans) => String(ans)),
+      );
 
       return (
         <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
           {choices.map((choiceObj, idx) => {
-            const isSelected = Array.isArray(learnerResponse)
-              ? (learnerResponse as string[]).some(
-                  (ans) => ans === choiceObj.choice || ans === String(idx),
-                )
-              : learnerResponse === choiceObj.choice ||
-                learnerResponse === String(idx);
+            const isSelected = selectedTexts.has(choiceObj.choice);
 
             const isCorrect = choiceObj.isCorrect;
             return (
