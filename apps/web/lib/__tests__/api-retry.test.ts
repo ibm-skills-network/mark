@@ -72,7 +72,7 @@ describe("withTransientRetry", () => {
     );
     await jest.runAllTimersAsync();
     const outcome = await settled;
-    if (!outcome.ok) throw outcome.error;
+    if ("error" in outcome) throw outcome.error;
     return outcome.value;
   }
 
