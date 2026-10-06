@@ -128,8 +128,21 @@ export interface CriterionEvidenceResponse {
   debug?: {
     candidateCount: number;
     validatedCount: number;
+    /**
+     * Set when the validator rejected every candidate of a submission with
+     * real content, so the top-ranked candidates went to the grader
+     * unvalidated.
+     */
+    unvalidatedFallback?: boolean;
   };
 }
+
+/**
+ * Rationale on a criterion scored at its minimum because no evidence reached
+ * the grader. No grading model call stands behind such a score.
+ */
+export const NO_EVIDENCE_RATIONALE =
+  "No supporting evidence found in the submission.";
 
 export type ConfidenceLevel = "high" | "medium" | "low";
 

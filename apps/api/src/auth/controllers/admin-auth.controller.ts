@@ -5,7 +5,9 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  NotFoundException,
   Post,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -13,6 +15,13 @@ import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { sanitizeForLog } from "../../logger/sanitize";
+import { AdminGuard } from "../guards/admin.guard";
+import { UserSessionRequest } from "../interfaces/user.session.interface";
+import {
+  AdminAssumeRoleService,
+  AssumableRole,
+  AssumedSessionClaims,
+} from "../services/admin-assume-role.service";
 import { AdminEmailService } from "../services/admin-email.service";
 import { AdminVerificationService } from "../services/admin-verification.service";
 
@@ -24,6 +33,16 @@ interface VerifyCodeRequest {
   email: string;
   code: string;
 }
+
+interface AssumeRoleRequest {
+  assignmentId: unknown;
+  role: unknown;
+}
+
+const ASSUMABLE_ROLES: ReadonlySet<string> = new Set<AssumableRole>([
+  "learner",
+  "author",
+]);
 
 interface SendCodeResponse {
   message: string;
@@ -50,6 +69,7 @@ export class AdminAuthController {
   constructor(
     private readonly adminVerificationService: AdminVerificationService,
     private readonly adminEmailService: AdminEmailService,
+    private readonly adminAssumeRoleService: AdminAssumeRoleService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: AdminAuthController.name });
@@ -241,6 +261,67 @@ export class AdminAuthController {
         error: error instanceof Error ? error.message : "unknown",
       });
       throw genericInvalid;
+    }
+  }
+
+  // Called by the gateway, which signs the returned claims into the session
+  // cookie. AdminGuard (x-admin-token) is the only authority here: the cookie
+  // session the browser happens to hold says nothing about who is asking.
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
+  @UseGuards(AdminGuard)
+  @Post("assume-role")
+  @ApiOperation({
+    summary: "Resolve a learner or author session for an admin",
+    description:
+      "Returns the session claims an admin needs to open an assignment in the requested role. Author requests add the admin to the assignment's author list.",
+  })
+  @ApiResponse({ status: 201, description: "Session claims resolved" })
+  @ApiResponse({ status: 400, description: "Invalid request" })
+  @ApiResponse({ status: 404, description: "Assignment not found" })
+  async assumeRole(
+    @Req() request: UserSessionRequest,
+    @Body() body: AssumeRoleRequest,
+  ): Promise<AssumedSessionClaims> {
+    const adminEmail = request.userSession.userId;
+    const assignmentId = body?.assignmentId;
+    const role = body?.role;
+
+    if (
+      typeof assignmentId !== "number" ||
+      !Number.isSafeInteger(assignmentId) ||
+      assignmentId <= 0 ||
+      typeof role !== "string" ||
+      !ASSUMABLE_ROLES.has(role)
+    ) {
+      this.logger.warn("admin_assume_role_invalid_request", {
+        admin_email: adminEmail,
+      });
+      throw new BadRequestException("Invalid request");
+    }
+
+    this.logger.info("admin_assume_role_requested", {
+      admin_email: adminEmail,
+      assignment_id: assignmentId,
+      role,
+    });
+
+    try {
+      return await this.adminAssumeRoleService.assumeRole(
+        adminEmail,
+        assignmentId,
+        role as AssumableRole,
+      );
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        this.logger.error("admin_assume_role_failed", {
+          admin_email: adminEmail,
+          assignment_id: assignmentId,
+          role,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+      throw error;
     }
   }
 

@@ -43,6 +43,11 @@ import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
 import {
+  buildChoiceRenderings,
+  ChoiceRendering,
+  parseStoredChoices,
+} from "../../common/utils/choice-renderings.util";
+import {
   applyQuestionTranslation,
   findQuestionTranslation,
 } from "../../common/utils/translation-language.util";
@@ -910,6 +915,15 @@ export class QuestionResponseService {
       },
     };
 
+    if (
+      role === UserRole.LEARNER &&
+      (question.type === QuestionType.SINGLE_CORRECT ||
+        question.type === QuestionType.MULTIPLE_CORRECT)
+    ) {
+      gradingContext.loadChoiceRenderings = () =>
+        this.loadChoiceRenderings(questionId, assignmentAttemptId);
+    }
+
     let responseDto: CreateQuestionResponseAttemptResponseDto;
     let learnerResponse: unknown;
 
@@ -1046,6 +1060,67 @@ export class QuestionResponseService {
     }
 
     return { learnerResponse, responseDto };
+  }
+
+  /**
+   * Every stored set of choices the learner can have been shown for this
+   * question in this attempt: the authored choices of the question or its
+   * drawn variant, and their stored translations. Read from the database by
+   * attempt and question, never from the request.
+   */
+  private async loadChoiceRenderings(
+    questionId: number,
+    assignmentAttemptId: number,
+  ): Promise<ChoiceRendering[]> {
+    const [question, mapping] = await Promise.all([
+      this.prisma.question.findUnique({
+        where: { id: questionId },
+        select: { choices: true },
+      }),
+      this.prisma.assignmentAttemptQuestionVariant.findUnique({
+        where: {
+          assignmentAttemptId_questionId: { assignmentAttemptId, questionId },
+        },
+        select: { questionVariant: { select: { id: true, choices: true } } },
+      }),
+    ]);
+
+    const variant = mapping?.questionVariant ?? null;
+    const variantId = variant?.id ?? null;
+    const baseChoices = parseStoredChoices(question?.choices);
+    const ownChoices =
+      (variant ? parseStoredChoices(variant.choices) : undefined) ??
+      baseChoices;
+
+    const rows = await this.prisma.translation.findMany({
+      where: {
+        questionId,
+        OR: [{ variantId: null }, ...(variantId ? [{ variantId }] : [])],
+      },
+      select: {
+        languageCode: true,
+        variantId: true,
+        translatedChoices: true,
+        untranslatedChoices: true,
+      },
+    });
+
+    const renderings = buildChoiceRenderings({
+      ownChoices,
+      baseChoices,
+      variantId,
+      rows,
+    });
+
+    this.logger.debug("Loaded stored choice renderings", {
+      questionId,
+      assignmentAttemptId,
+      variantId,
+      translationRows: rows.length,
+      renderings: renderings.map((rendering) => rendering.source),
+    });
+
+    return renderings;
   }
 
   /**

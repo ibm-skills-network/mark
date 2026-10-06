@@ -48,6 +48,34 @@ const mount = () =>
 describe("ReportDiagnosticsPanel", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("shows what the browser threw behind the failure the reporter saw", async () => {
+    (getAdminReportDiagnostics as jest.Mock).mockResolvedValue({
+      ...capture,
+      diagnostics: {
+        ...capture.diagnostics,
+        errors: [
+          {
+            name: "NetworkError",
+            kind: "interrupted",
+            detail: "SyntaxError: Unexpected end of JSON input",
+            where: "api-response",
+            path: "/api/v2/assignments/3049",
+          },
+        ],
+      },
+    });
+
+    await mount();
+
+    expect(await screen.findByText(/Errors shown/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/SyntaxError: Unexpected end of JSON input/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/NetworkError \(interrupted\)/),
+    ).toBeInTheDocument();
+  });
+
   it("shows an admin what the reporter saw and which requests failed", async () => {
     (getAdminReportDiagnostics as jest.Mock).mockResolvedValue(capture);
 

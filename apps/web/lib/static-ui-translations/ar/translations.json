@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "تقليمك يتجاوز",
   "ترجمة": "ترجمة",
   "번역 중": "هذا هو",
-  "翻訳中": "هذا هو الحال"
+  "翻訳中": "هذا هو الحال",
+  "The page didn't finish loading": "لم يكتمل تحميل الصفحة",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "تلقى جهازك جزءًا فقط من الاستجابة. يحدث ذلك عادةً بسبب اتصال غير مستقر، أو وضع توفير البيانات في المتصفح أو خادم وكيل يغيّر الصفحة، وليس بسبب مشكلة في الواجب.",
+  "Turn off data saving": "أوقف توفير البيانات",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "قد تؤدي أوضاع توفير البيانات وبعض المتصفحات، مثل Opera Mini، إلى تعطّل الصفحة. أوقف هذا الوضع أو افتح الواجب في متصفح آخر."
 }

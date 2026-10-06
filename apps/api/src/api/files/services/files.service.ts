@@ -28,6 +28,7 @@ import {
 import { FileProcessingBudgetService } from "./file-processing-budget.service";
 import { sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
+import { generateStorageKeyId } from "./storage-key";
 
 const CHATBOT_ALLOWED_FILE_TYPES: Record<string, string[]> = {
   "text/plain": [
@@ -140,11 +141,6 @@ export class FilesService {
   private getCurrentMonth(): string {
     const now = new Date();
     return now.toLocaleString("default", { month: "long" }).toLowerCase();
-  }
-
-  private generateUniqueId(): string {
-    // could be replaced with a more robust solution like UUID
-    return Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
 
   private getPresignedUploadTtlSeconds(): number {
@@ -271,7 +267,7 @@ export class FilesService {
       }
     }
 
-    const uniqueId = this.generateUniqueId();
+    const uniqueId = generateStorageKeyId();
     const key = `${prefix}${uniqueId}-${fileName}`;
 
     return {

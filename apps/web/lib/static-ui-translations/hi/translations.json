@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "आपकी ट्रिम इससे अधिक है",
   "ترجمة": "धन्यवाद",
   "번역 중": "ठीक है",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "पेज पूरी तरह लोड नहीं हुआ",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "आपके डिवाइस को प्रतिक्रिया का केवल एक हिस्सा मिला। ऐसा आमतौर पर अस्थिर कनेक्शन, या ब्राउज़र के डेटा-सेविंग मोड या पेज बदलने वाले प्रॉक्सी के कारण होता है, असाइनमेंट में किसी समस्या के कारण नहीं।",
+  "Turn off data saving": "डेटा सेविंग बंद करें",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "डेटा-सेविंग मोड और कुछ ब्राउज़र, जैसे Opera Mini, पेज को खराब कर सकते हैं। इस मोड को बंद करें या असाइनमेंट को किसी दूसरे ब्राउज़र में खोलें।"
 }

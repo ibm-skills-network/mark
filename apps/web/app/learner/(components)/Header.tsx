@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  selectedChoiceTexts,
+  submissionLanguage,
+} from "@/lib/learner-choice-submission";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { MarkChatToggleButton } from "@/components/MarkChatToggleButton";
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
@@ -334,21 +338,7 @@ function LearnerHeader() {
                     : undefined,
                 )
                 .filter((choice) => choice !== undefined) || []
-            : q.translations?.[userPreferedLanguage]?.translatedChoices
-              ? q.translations?.[userPreferedLanguage]?.translatedChoices
-                  ?.map((choice, index) =>
-                    q.learnerChoices?.find((c) => String(c) === String(index))
-                      ? choice.choice
-                      : undefined,
-                  )
-                  .filter((choice) => choice !== undefined) || []
-              : q.choices
-                  ?.map((choice, index) =>
-                    q.learnerChoices?.find((c) => String(c) === String(index))
-                      ? choice.choice
-                      : undefined,
-                  )
-                  .filter((choice) => choice !== undefined) || [],
+            : selectedChoiceTexts(q, userPreferedLanguage).texts,
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
         learnerFileResponse: q.learnerFileResponse || [],
         learnerPresentationResponse: q.presentationResponse ?? null,
@@ -402,7 +392,9 @@ function LearnerHeader() {
         assignmentId,
         activeAttemptId,
         responsesForQuestions,
-        userPreferedLanguage,
+        role === "author"
+          ? userPreferedLanguage
+          : submissionLanguage(questions, userPreferedLanguage),
         role === "author" ? authorQuestions : undefined,
         role === "author" ? authorAssignmentDetails : undefined,
         undefined,

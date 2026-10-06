@@ -44,8 +44,9 @@ export default function GradeSyncStatus({
       );
 
       if (response.ok) {
-        const data = await response.json();
-        setSyncStatus(data);
+        // An attempt with no sync row answers 200 with an empty body.
+        const body = await response.text();
+        setSyncStatus(body ? (JSON.parse(body) as SyncStatus | null) : null);
       } else if (response.status === 404 || response.status === 401) {
         setSyncStatus(null);
       } else {

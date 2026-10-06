@@ -77,4 +77,12 @@ describe("TextQuestion", () => {
       42,
     );
   });
+
+  it("keeps typed markdown list markers literal in learner answers", () => {
+    render(<TextQuestion question={question} />);
+
+    expect(mockMarkdownEditor).toHaveBeenCalledWith(
+      expect.objectContaining({ disableListAutofill: true }),
+    );
+  });
 });

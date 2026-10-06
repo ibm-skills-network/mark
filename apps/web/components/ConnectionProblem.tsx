@@ -5,8 +5,9 @@ import type { NetworkFailureKind } from "@/lib/api-client";
 import { reloadPage } from "@/lib/utils";
 
 /**
- * Shown when a request produced no HTTP response at all — the browser gave up
- * waiting, or the connection could not be completed.
+ * Shown when a request produced no usable HTTP response — the browser gave up
+ * waiting, the connection could not be completed, or a success response's
+ * body did not arrive intact.
  *
  * These were previously rendered as server faults: the client synthesised
  * `408` for its own timeout and anything else without a status was floored to
@@ -60,6 +61,26 @@ const COPY: Record<
       {
         title: "Try again",
         description: "A dropped connection normally recovers straight away.",
+      },
+      {
+        title: "Nothing you submitted is lost",
+        description: "Your answers stay saved until you submit them.",
+      },
+    ],
+  },
+  interrupted: {
+    headline: "The page didn't finish loading",
+    message:
+      "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.",
+    steps: [
+      {
+        title: "Try again",
+        description: "A dropped connection normally recovers straight away.",
+      },
+      {
+        title: "Turn off data saving",
+        description:
+          "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.",
       },
       {
         title: "Nothing you submitted is lost",

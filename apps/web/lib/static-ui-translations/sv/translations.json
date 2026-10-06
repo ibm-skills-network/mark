@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "Din trim överstiger",
   "ترجمة": "ترجمة",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "Sidan laddades inte klart",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Din enhet tog bara emot en del av svaret. Det beror oftast på en instabil anslutning, eller på ett datasparläge i webbläsaren eller en proxy som ändrar sidan, inte på ett problem med uppgiften.",
+  "Turn off data saving": "Stäng av datasparläget",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datasparlägen och vissa webbläsare, som Opera Mini, kan förstöra sidan. Stäng av läget eller öppna uppgiften i en annan webbläsare."
 }

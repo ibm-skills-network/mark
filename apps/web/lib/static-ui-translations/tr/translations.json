@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "Kesiminiz şunları aşıyor",
   "ترجمة": "ترجمة",
   "번역 중": "evet",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "Sayfanın yüklenmesi tamamlanmadı",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Cihazınız yanıtın yalnızca bir kısmını aldı. Bu genellikle kararsız bir bağlantıdan ya da tarayıcının veri tasarrufu modundan veya sayfayı değiştiren bir proxy'den kaynaklanır, ödevle ilgili bir sorundan değil.",
+  "Turn off data saving": "Veri tasarrufunu kapatın",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Veri tasarrufu modları ve Opera Mini gibi bazı tarayıcılar sayfayı bozabilir. Bu modu kapatın veya ödevi başka bir tarayıcıda açın."
 }

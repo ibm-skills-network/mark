@@ -22,6 +22,7 @@ import { ChunkIndex } from "./chunk-index.service";
 import {
   CODE_EVIDENCE_QUOTE_MAX_CHARS,
   CODE_VALIDATION_RENDER_BUDGET_CHARS,
+  IMAGE_EVIDENCE_QUOTE_MAX_CHARS,
   isCodeLikeFilename,
   isJupyterNotebookFilename,
 } from "./source-code.utils";
@@ -44,6 +45,14 @@ interface RetrievalConfig {
   enableLlmValidation: boolean;
   defaultStrategy: EvidenceRetrievalStrategy;
 }
+
+/**
+ * Below this much extracted text (pinned whole-file views aside) a submission
+ * is near-empty, and a validator rejecting all of it is trusted. Above it, a
+ * blanket rejection is far more likely a validator miss than an empty
+ * submission, and the grader sees the top-ranked candidates instead.
+ */
+const MIN_CONTENT_FOR_UNVALIDATED_FALLBACK_CHARS = 500;
 
 /** Rotate the version whenever EVIDENCE_VALIDATION_HEAD changes. */
 export const EVIDENCE_VALIDATION_CACHE_KEY = "mark:evidence-validation:v1";
@@ -352,12 +361,13 @@ export class CriterionEvidenceRetrievalService {
 
     let evidence: CriterionEvidence[];
     let validatedCount = 0;
+    let unvalidatedFallback = false;
 
     if (strategy === "llm" || this.config.enableLlmValidation) {
       // The LLM validator is the actual relevance judge for these candidates
       // (which may include chunks below the lexical relevance threshold).
-      // Its verdict is trusted as final — including an empty one, which
-      // means none of the candidates actually address this criterion.
+      // An empty verdict is re-checked once; if it holds, it is final only
+      // for a near-empty submission (see hasSubstantialContent).
       let validation = await this.validateWithLlm(
         request,
         reranked.map((item) => item.chunk),
@@ -377,6 +387,28 @@ export class CriterionEvidenceRetrievalService {
       }
       if (validation === undefined) {
         evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
+      } else if (
+        validation.length === 0 &&
+        reranked.length > 0 &&
+        this.hasSubstantialContent(index)
+      ) {
+        // Two empty verdicts on a submission with real content are far more
+        // often a validator miss (it is told to under-claim) than a submission
+        // with nothing on this criterion. An empty evidence set skips the
+        // grading model entirely and awards the minimum, so hand it the
+        // top-ranked candidates and let it decide.
+        unvalidatedFallback = true;
+        evidence = this.mapRerankedCandidatesToEvidence(reranked, maxEvidence);
+        this.logger.warn({
+          message:
+            "Evidence validator rejected every candidate; grading on top-ranked candidates",
+          criterionId: request.criterion.id,
+          assignmentId: request.assignmentId,
+          candidateCount: candidates.length,
+          rerankedCount: reranked.length,
+          fallbackEvidenceCount: evidence.length,
+          chunkCount: index.getAllChunks().length,
+        });
       } else {
         validatedCount = validation.length;
         evidence = validation.map((item) => ({
@@ -408,6 +440,7 @@ export class CriterionEvidenceRetrievalService {
       debug: {
         candidateCount: candidates.length,
         validatedCount,
+        ...(unvalidatedFallback ? { unvalidatedFallback } : {}),
       },
     };
 
@@ -417,6 +450,22 @@ export class CriterionEvidenceRetrievalService {
       expiresAt: Date.now() + CriterionEvidenceRetrievalService.CACHE_TTL_MS,
     });
     return response;
+  }
+
+  private hasSubstantialContent(index: ChunkIndex): boolean {
+    let unpinnedChars = 0;
+    let pinnedChars = 0;
+    for (const chunk of index.getAllChunks()) {
+      const length = chunk.text.trim().length;
+      // The pinned whole-file view repeats the other chunks; count it only
+      // when it is all there is.
+      if (chunk.metadata?.pinned) pinnedChars = Math.max(pinnedChars, length);
+      else unpinnedChars += length;
+    }
+    return (
+      Math.max(unpinnedChars, pinnedChars) >=
+      MIN_CONTENT_FOR_UNVALIDATED_FALLBACK_CHARS
+    );
   }
 
   private mapRerankedCandidatesToEvidence(
@@ -457,13 +506,20 @@ export class CriterionEvidenceRetrievalService {
   // document), and pinned whole-submission views — carry their full text:
   // truncating them back to a fragment would undo the merge that made them
   // usable evidence. Their builders bound them at or below this cap.
+  // Image chunks from documents, slides and image uploads carry one
+  // picture's OCR text and description — often the only copy of a page's
+  // content — so they get a page-sized cap rather than the fragment cap.
   // proseCap is 220 for stored evidence quotes and 240 for validation excerpts.
   private buildExcerpt(chunk: ExtractedChunk, proseCap: number): string {
     const fullLength =
       isCodeLikeFilename(chunk.metadata?.filename) ||
       chunk.metadata?.section ||
       chunk.metadata?.pinned;
-    const cap = fullLength ? CODE_EVIDENCE_QUOTE_MAX_CHARS : proseCap;
+    const cap = fullLength
+      ? CODE_EVIDENCE_QUOTE_MAX_CHARS
+      : chunk.anchor?.type === "image"
+        ? Math.max(proseCap, IMAGE_EVIDENCE_QUOTE_MAX_CHARS)
+        : proseCap;
     if (
       isJupyterNotebookFilename(chunk.metadata?.filename) &&
       typeof chunk.metadata?.anchorTextChars === "number"

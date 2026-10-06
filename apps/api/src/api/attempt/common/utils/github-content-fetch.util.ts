@@ -7,7 +7,7 @@ import {
   isGithubRateLimitResponse,
   parseGithubRateLimitInfo,
 } from "./github-rate-limit-detection.util";
-import { safeGet } from "./ssrf-safe-http";
+import { isMeshConnectRefused, safeGet } from "./ssrf-safe-http";
 
 /**
  * Single, deduplicated implementation of the "learner submitted a GitHub (or
@@ -363,7 +363,8 @@ async function scrapeGithubPage(
  *
  * DNS and connection-refused failures are treated as confirmed: a host that
  * does not resolve will not resolve on a retry either, and retrying would turn
- * a graded zero into a failed attempt.
+ * a graded zero into a failed attempt. That includes a mesh-generated 504 for
+ * a refused connect, which looks like a 5xx but is not the origin's answer.
  */
 function classifyFetchFailure(error: unknown): {
   retryable: boolean;
@@ -399,6 +400,17 @@ function classifyFetchFailure(error: unknown): {
       status,
       rateLimited: true,
       headers: response?.headers,
+    };
+  }
+  // A 504 synthesised by the service mesh because the connect itself was
+  // refused (e.g. cluster egress does not allow port 80) is the same failure
+  // as ECONNREFUSED: it will not change on a retry.
+  if (isMeshConnectRefused(error)) {
+    return {
+      retryable: false,
+      reason: "connect_refused",
+      status,
+      rateLimited: false,
     };
   }
   if (status !== undefined && status >= 500) {

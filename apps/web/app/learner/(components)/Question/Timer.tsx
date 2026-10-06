@@ -1,3 +1,7 @@
+import {
+  selectedChoiceTexts,
+  submissionLanguage,
+} from "@/lib/learner-choice-submission";
 import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import type {
   QuestionAttemptRequestWithId,
@@ -140,21 +144,7 @@ function Timer(props: Props) {
                     : undefined,
                 )
                 .filter((choice) => choice !== undefined) || []
-            : q.translations?.[userPreferedLanguage]?.translatedChoices
-              ? q.translations?.[userPreferedLanguage]?.translatedChoices
-                  ?.map((choice, index) =>
-                    q.learnerChoices?.find((c) => String(c) === String(index))
-                      ? choice.choice
-                      : undefined,
-                  )
-                  .filter((choice) => choice !== undefined) || []
-              : q.choices
-                  ?.map((choice, index) =>
-                    q.learnerChoices?.find((c) => String(c) === String(index))
-                      ? choice.choice
-                      : undefined,
-                  )
-                  .filter((choice) => choice !== undefined) || [],
+            : selectedChoiceTexts(q, userPreferedLanguage).texts,
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
         learnerFileResponse: (q.learnerFileResponse || []).map((file) => {
           const extension = file.filename.split(".").pop()?.toLowerCase() || "";
@@ -190,7 +180,9 @@ function Timer(props: Props) {
         assignmentId,
         activeAttemptId,
         responsesForQuestions,
-        userPreferedLanguage,
+        roleRef.current === "author"
+          ? userPreferedLanguage
+          : submissionLanguage(questions, userPreferedLanguage),
         roleRef.current === "author" ? authorQuestions : undefined,
         roleRef.current === "author" ? authorAssignmentDetails : undefined,
       );
