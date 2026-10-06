@@ -124,6 +124,21 @@ describe("TextGradingStrategy grading record", () => {
     expect(consistencyRecordGrading).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the graded feedback entries as entries in the in-session history", async () => {
+    // A string here comes back out of a reuse as one blob of JSON text with
+    // the structured rubric feedback lost.
+    const { strategy, consistencyRecordGrading } = buildStrategy();
+
+    await record(
+      strategy as unknown as Record<string, unknown>,
+      LEARNER_CONTEXT,
+    );
+
+    expect(consistencyRecordGrading.mock.calls[0][4]).toEqual([
+      { feedback: "graded" },
+    ]);
+  });
+
   it("keeps an author preview out of the in-session history", async () => {
     // The preview grades a question body taken from the request, so its score
     // must never be served to a learner answering the real question.

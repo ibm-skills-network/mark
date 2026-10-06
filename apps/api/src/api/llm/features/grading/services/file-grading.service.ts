@@ -47,7 +47,10 @@ import {
   ICachedGradingResult,
   IGradingCacheService,
 } from "../interfaces/grading-cache.interface";
-import { RubricCriterion } from "../types/criterion-evidence.types";
+import {
+  NO_EVIDENCE_RATIONALE,
+  RubricCriterion,
+} from "../types/criterion-evidence.types";
 import { ContentSummarizationService } from "./content-summarization.service";
 import { EvidenceBasedGradingService } from "./evidence-based-grading.service";
 import {
@@ -164,10 +167,11 @@ export class FileGradingService implements IFileGradingService {
     string,
     Promise<FileBasedQuestionResponseModel>
   >();
-  // v6: judge now receives the full scoring levels. Do not reuse grades
-  // selected by the old judge, even when the extracted submission is identical.
+  // v7: image evidence from document uploads is no longer cut to 220 chars.
+  // Do not reuse grades made from the truncated evidence, even when the
+  // extracted submission is identical.
   private static readonly EVIDENCE_FILE_GRADER_VERSION =
-    "structured-file-evidence-v6-complete-judge-rubric";
+    "structured-file-evidence-v7-full-image-evidence";
   private static readonly NOTEBOOK_IMAGE_GRADER_VERSION =
     "structured-file-evidence-v11-notebook-images";
 
@@ -752,7 +756,7 @@ export class FileGradingService implements IFileGradingService {
           rubricQuestion: rubric.rubricQuestion || "Unnamed rubric",
           pointsAwarded: minPoints,
           maxPoints,
-          justification: "No supporting evidence found in the submission.",
+          justification: NO_EVIDENCE_RATIONALE,
           evidence: [],
           status: "none",
           manualReviewRequired: false,
@@ -905,7 +909,22 @@ export class FileGradingService implements IFileGradingService {
     });
 
     const cached = await this.cacheService?.getCachedGrading(cacheKey);
-    const cachedResponse = this.fileResponseFromCache(cached);
+    const storedResponse = this.fileResponseFromCache(cached);
+    // Entries written before evidence-free minimums stopped being cached
+    // still hold them; grade those again rather than replay the zero.
+    const cachedResponse = this.hasEvidenceFreeMinimum(storedResponse)
+      ? null
+      : storedResponse;
+    if (storedResponse && !cachedResponse) {
+      this.logger.info(
+        "Skipping cached file grade with an evidence-free minimum",
+        {
+          questionId: parameters.questionId,
+          cacheKey,
+          cachedPoints: storedResponse.points,
+        },
+      );
+    }
     if (cachedResponse) {
       this.logger.info("Using deterministic structured-file grading cache", {
         questionId: parameters.questionId,
@@ -920,6 +939,20 @@ export class FileGradingService implements IFileGradingService {
 
     const gradingPromise = (async () => {
       const result = await parameters.grade();
+      // A criterion zeroed for lack of evidence was never seen by the grading
+      // model; caching it would replay the zero onto every identical re-upload.
+      if (this.hasEvidenceFreeMinimum(result)) {
+        this.logger.info(
+          "Not caching file grade with an evidence-free minimum",
+          {
+            questionId: parameters.questionId,
+            cacheKey,
+            points: result.points,
+            maxPoints: parameters.questionMaxPoints,
+          },
+        );
+        return result;
+      }
       const candidate: ICachedGradingResult = {
         cacheKey,
         questionId: parameters.questionId,
@@ -956,6 +989,16 @@ export class FileGradingService implements IFileGradingService {
     } finally {
       this.evidenceFileGradingInFlight.delete(cacheKey);
     }
+  }
+
+  private hasEvidenceFreeMinimum(
+    response: FileBasedQuestionResponseModel | null,
+  ): boolean {
+    return (response?.rubricScores ?? []).some(
+      (score) =>
+        score?.justification === NO_EVIDENCE_RATIONALE &&
+        (score.evidence?.length ?? 0) === 0,
+    );
   }
 
   private fileResponseForCache(

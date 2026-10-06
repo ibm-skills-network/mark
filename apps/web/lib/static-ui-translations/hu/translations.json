@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "A berendezés meghaladja a",
   "ترجمة": "ترجمة",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "Az oldal betöltése nem fejeződött be",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Az eszközöd a válasznak csak egy részét kapta meg. Ezt általában instabil kapcsolat, vagy a böngésző adattakarékos módja, illetve az oldalt módosító proxy okozza, nem a feladattal van gond.",
+  "Turn off data saving": "Kapcsold ki az adattakarékos módot",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Az adattakarékos módok és egyes böngészők, például az Opera Mini, elronthatják az oldalt. Kapcsold ki ezt a módot, vagy nyisd meg a feladatot egy másik böngészőben."
 }

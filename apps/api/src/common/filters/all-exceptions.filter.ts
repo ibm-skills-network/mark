@@ -27,6 +27,18 @@ import { UserSessionRequest } from "../../auth/interfaces/user.session.interface
 
 const PRISMA_POOL_CODES = new Set(["P1001", "P1008", "P1017", "P2024"]);
 
+/**
+ * The same lost-connection event can surface without a Prisma code: when the
+ * database (or the pooler in front of it) drops its server connections, the
+ * query that was in flight fails with the pooler's or Postgres's own words.
+ * Those are as momentary as a coded P1017 and must be answered the same way.
+ */
+const LOST_CONNECTION_MESSAGE =
+  /server conn crashed|server has closed the connection|terminating connection due to administrator command|connection terminated unexpectedly|server closed the connection unexpectedly/i;
+
+/** Seconds a client should wait before retrying a 503 from a connection blip. */
+const DB_UNAVAILABLE_RETRY_AFTER_SECONDS = "1";
+
 interface ErrorContext {
   method: string;
   url: string;
@@ -95,9 +107,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         context.prisma_meta = (exception as { meta?: unknown }).meta;
       }
       context.circuit_breaker = this.circuitBreaker.getStats();
-      if (context.prisma_code && PRISMA_POOL_CODES.has(context.prisma_code)) {
+      if (this.isLostConnection(exception)) {
         this.logger.error(
-          `DB pool/connection error ${context.prisma_code}: ${context.method} ${context.url}`,
+          `DB pool/connection error ${context.prisma_code ?? "lost-connection"}: ${context.method} ${context.url}`,
           context,
         );
       } else {
@@ -118,18 +130,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    const lostConnection = this.isLostConnection(exception);
     const responseBody =
       exception instanceof HttpException
         ? exception.getResponse()
         : {
             statusCode: status,
-            message:
-              status >= HttpStatus.INTERNAL_SERVER_ERROR
+            message: lostConnection
+              ? "Service temporarily unavailable"
+              : status >= HttpStatus.INTERNAL_SERVER_ERROR
                 ? "Internal server error"
                 : message,
           };
 
     if (!response.headersSent) {
+      if (lostConnection) {
+        response.setHeader("Retry-After", DB_UNAVAILABLE_RETRY_AFTER_SECONDS);
+      }
       response.status(status).json(responseBody);
     }
   }
@@ -146,10 +163,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (code === "P2025") return HttpStatus.NOT_FOUND;
       if (code === "P2002") return HttpStatus.CONFLICT;
       if (code === "P2003") return HttpStatus.BAD_REQUEST;
-      if (code && PRISMA_POOL_CODES.has(code))
+      if (this.isLostConnection(exception))
         return HttpStatus.SERVICE_UNAVAILABLE;
     }
     return HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+
+  /**
+   * True when the database could not be reached or dropped the connection
+   * mid-query: a pool/connection Prisma code, or an uncoded request error whose
+   * message is the pooler's or Postgres's lost-connection report.
+   */
+  private isLostConnection(exception: unknown): boolean {
+    if (!this.isPrismaError(exception)) return false;
+    const code =
+      "code" in exception && typeof exception.code === "string"
+        ? exception.code
+        : undefined;
+    if (code && PRISMA_POOL_CODES.has(code)) return true;
+    return (
+      exception instanceof Prisma.PrismaClientUnknownRequestError &&
+      LOST_CONNECTION_MESSAGE.test(exception.message)
+    );
   }
 
   private isPrismaError(

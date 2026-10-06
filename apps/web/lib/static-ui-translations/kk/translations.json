@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "Сіздің кесу мәніңізден асады",
   "ترجمة": "ترجمة",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "Бет толық жүктелмеді",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Құрылғыңыз жауаптың тек бір бөлігін алды. Әдетте бұл тұрақсыз байланыстан немесе браузердің деректерді үнемдеу режимінен не бетті өзгертетін проксиден болады, тапсырмадағы ақаудан емес.",
+  "Turn off data saving": "Деректерді үнемдеуді өшіріңіз",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Деректерді үнемдеу режимдері және Opera Mini сияқты кейбір браузерлер бетті бұзуы мүмкін. Бұл режимді өшіріңіз немесе тапсырманы басқа браузерде ашыңыз."
 }

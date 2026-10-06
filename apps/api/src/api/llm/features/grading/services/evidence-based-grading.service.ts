@@ -30,6 +30,7 @@ import {
   DEFAULT_MODEL_SELECTION,
   ExtractedChunk,
   RubricCriterion,
+  NO_EVIDENCE_RATIONALE,
 } from "../types/criterion-evidence.types";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
@@ -455,7 +456,7 @@ LANGUAGE: {language}`,
         pointsAwarded: minPoints,
         maxPoints: criterion.maxPoints,
         evidence: [],
-        rationale: "No supporting evidence found in the submission.",
+        rationale: NO_EVIDENCE_RATIONALE,
         nextStep: `Add or clearly demonstrate: ${
           criterion.criteria.find(
             (level) => level.points === criterion.maxPoints,

@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "트림이 다음을 초과합니다.",
   "ترجمة": "연구",
   "번역 중": "예문 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "페이지 로드가 완료되지 않았습니다",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "기기가 응답의 일부만 받았습니다. 이는 보통 불안정한 연결이나 페이지를 변경하는 브라우저의 데이터 절약 모드 또는 프록시 때문이며, 과제 자체의 문제는 아닙니다.",
+  "Turn off data saving": "데이터 절약 끄기",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "데이터 절약 모드와 Opera Mini 같은 일부 브라우저는 페이지를 손상시킬 수 있습니다. 해당 모드를 끄거나 다른 브라우저에서 과제를 여세요."
 }

@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "Il tuo assetto supera il",
   "ترجمة": "Grazie",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "La pagina non ha finito di caricarsi",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Il tuo dispositivo ha ricevuto solo una parte della risposta. Di solito dipende da una connessione instabile, o da una modalità di risparmio dati del browser o da un proxy che modifica la pagina, non da un problema con il compito.",
+  "Turn off data saving": "Disattiva il risparmio dati",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Le modalità di risparmio dati e alcuni browser, come Opera Mini, possono danneggiare la pagina. Disattiva la modalità o apri il compito in un altro browser."
 }

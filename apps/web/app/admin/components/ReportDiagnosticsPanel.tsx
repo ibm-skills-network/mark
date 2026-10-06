@@ -46,7 +46,9 @@ export function ReportDiagnosticsPanel({
   }, [reportId, sessionToken]);
 
   if (state.kind === "loading") {
-    return <p className="text-sm text-muted-foreground">Loading diagnostics…</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Loading diagnostics…</p>
+    );
   }
   if (state.kind === "none") {
     return (
@@ -63,7 +65,7 @@ export function ReportDiagnosticsPanel({
     );
   }
 
-  const { session, page, rendered, requests, draft } =
+  const { session, page, rendered, requests, draft, errors } =
     state.capture.diagnostics;
   const facts: [string, unknown][] = [
     ["Attempt", session?.attemptId],
@@ -72,7 +74,10 @@ export function ReportDiagnosticsPanel({
     ["Attempt language", session?.attemptLanguage],
     ["UI language", session?.uiLanguage],
     ["Build", session?.buildVersion],
-    ["In iframe", page?.inIframe === undefined ? undefined : String(page.inIframe)],
+    [
+      "In iframe",
+      page?.inIframe === undefined ? undefined : String(page.inIframe),
+    ],
     ["Viewport", page?.viewport],
     ["Clock skew (ms)", page?.clockSkewMs],
     ["Draft belongs to attempt", draft?.activeAttemptId],
@@ -102,10 +107,28 @@ export function ReportDiagnosticsPanel({
                 key={`${request.at ?? ""}-${index}`}
                 className={failed(request.status) ? "text-red-700" : ""}
               >
-                <span>{request.status ?? "no response"}</span>{" "}
-                {request.method} {request.path}
+                <span>{request.status ?? "no response"}</span> {request.method}{" "}
+                {request.path}
                 {request.ms === undefined ? "" : ` · ${request.ms}ms`}
                 {request.requestId ? ` · id ${request.requestId}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {errors && errors.length > 0 && (
+        <div>
+          <h4 className="font-medium mb-1">Errors shown</h4>
+          <ul className="space-y-1 font-mono text-xs">
+            {errors.map((entry, index) => (
+              <li key={`${entry.at ?? ""}-${index}`} className="text-red-700">
+                {entry.name}
+                {entry.kind ? ` (${entry.kind})` : ""}
+                {entry.message ? `: ${entry.message}` : ""}
+                {entry.detail ? ` · cause ${entry.detail}` : ""}
+                {entry.where ? ` · in ${entry.where}` : ""}
+                {entry.path ? ` · ${entry.path}` : ""}
               </li>
             ))}
           </ul>

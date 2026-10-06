@@ -5,6 +5,7 @@ import LoadingPage from "@/app/loading";
 import ErrorPage from "@/components/ErrorPage";
 import { ErrorScreen, statusFromError } from "@/lib/error-screen";
 import type { Assignment } from "@/config/types";
+import { recordClientError } from "@/lib/request-log";
 import { getAssignment, getAttempts } from "@/lib/talkToBackend";
 import { normalizeAttemptTimestamps } from "@/app/learner/utils/attempts";
 import {
@@ -52,6 +53,10 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   } | null>(null);
   const fetchData = async (signal?: { cancelled: boolean }) => {
     setIsLoading(true);
+    // A new load starts clean: an error left by an earlier one is checked
+    // before the assignment when rendering, so it would hide this load's
+    // success.
+    setError(null);
     try {
       if (role === "learner") {
         try {
@@ -88,6 +93,14 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
           // a `.status`; statusFromError falls back to 500 for anything opaque.
           // The thrown value is kept as well, because a request that never got
           // a response has no status and must not be shown as a server fault.
+          //
+          // A load superseded by a newer one (the language in the URL changed
+          // mid-flight) must not report its failure: the newer load owns the
+          // screen, and its success would otherwise be hidden behind this.
+          if (signal?.cancelled) {
+            return;
+          }
+          recordClientError(error, { where: "learner-about-load" });
           const status = statusFromError(error);
           setError({
             code: status,
@@ -97,9 +110,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
                 : "We couldn't load this assignment.",
             cause: error,
           });
-          if (!signal?.cancelled) {
-            setAssignment(null);
-          }
+          setAssignment(null);
         }
       } else if (role === "author") {
         const previewPayload = readAuthorPreviewPayload(assignmentId);

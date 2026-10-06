@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "Η περικοπή σας υπερβαίνει το",
   "ترجمة": "ترجمة",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "Η σελίδα δεν ολοκλήρωσε τη φόρτωση",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Η συσκευή σας έλαβε μόνο μέρος της απόκρισης. Αυτό συνήθως οφείλεται σε ασταθή σύνδεση ή σε λειτουργία εξοικονόμησης δεδομένων του προγράμματος περιήγησης ή διακομιστή μεσολάβησης που αλλάζει τη σελίδα, όχι σε πρόβλημα με την εργασία.",
+  "Turn off data saving": "Απενεργοποιήστε την εξοικονόμηση δεδομένων",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Οι λειτουργίες εξοικονόμησης δεδομένων και ορισμένα προγράμματα περιήγησης, όπως το Opera Mini, μπορεί να χαλάσουν τη σελίδα. Απενεργοποιήστε τη λειτουργία ή ανοίξτε την εργασία σε άλλο πρόγραμμα περιήγησης."
 }

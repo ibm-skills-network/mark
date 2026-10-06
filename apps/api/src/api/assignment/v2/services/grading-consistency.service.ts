@@ -7,18 +7,100 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { RubricScore } from "src/api/llm/model/file.based.question.response.model";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
+import type { StructuredFeedback } from "../../attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { PrismaService } from "../../../../database/prisma.service";
 import {
   CriteriaDto,
   ScoringDto,
 } from "../../dto/update.questions.request.dto";
 
+/**
+ * One feedback entry of a prior grade, in the shape a fresh text grade stores:
+ * the readable text plus, when the grader produced it, the structured rubric
+ * breakdown the results page renders.
+ */
+export interface ReusableFeedbackEntry {
+  feedback: string;
+  structuredFeedback?: StructuredFeedback;
+}
+
+/** Marker a reused grade appends to its feedback text. */
+const REUSE_RATIONALE_MARKER = "\n\n**Score Rationale:** Reused prior grade";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStructuredFeedback(value: unknown): value is StructuredFeedback {
+  return (
+    isRecord(value) &&
+    typeof value.summary === "string" &&
+    Array.isArray(value.criteria)
+  );
+}
+
+function parseJsonArray(text: string): unknown[] | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    // Not JSON - the caller decides what plain text means.
+    return undefined;
+  }
+}
+
+/**
+ * Bring a prior grade's feedback into entry form, or undefined when it has no
+ * usable shape.
+ *
+ * Feedback normally arrives as the entries a fresh grade stored. Earlier
+ * releases recorded it as a JSON string, sometimes with a reuse note already
+ * appended, so a string that holds such an array is unwrapped once. Any other
+ * non-empty string is kept as plain feedback text.
+ */
+export function toReusableFeedback(
+  raw: unknown,
+): ReusableFeedbackEntry[] | undefined {
+  let value = raw;
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text.length === 0) return undefined;
+    if (!text.startsWith("[")) return [{ feedback: text }];
+
+    const markerAt = text.lastIndexOf(REUSE_RATIONALE_MARKER);
+    value =
+      parseJsonArray(text) ??
+      (markerAt > 0 ? parseJsonArray(text.slice(0, markerAt)) : undefined);
+    if (value === undefined) return [{ feedback: text }];
+  }
+
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+
+  const entries: ReusableFeedbackEntry[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.feedback !== "string") {
+      return undefined;
+    }
+    entries.push(
+      isStructuredFeedback(item.structuredFeedback)
+        ? {
+            feedback: item.feedback,
+            structuredFeedback: item.structuredFeedback,
+          }
+        : { feedback: item.feedback },
+    );
+  }
+  return entries;
+}
+
 interface GradingRecord {
   questionId: number;
   responseHash: string;
   points: number;
   maxPoints: number;
-  feedback: string;
+  /** Undefined when the grade's feedback had no usable shape. */
+  feedback?: ReusableFeedbackEntry[];
   rubricScores?: RubricScore[];
   timestamp: Date;
   /** Grading model identity that produced this grade, when known. */
@@ -28,7 +110,11 @@ interface GradingRecord {
 interface ConsistencyCheck {
   similar: boolean;
   previousGrade?: number;
-  previousFeedback?: string;
+  /**
+   * The prior grade's feedback entries. Undefined when they had no usable
+   * shape; the grade itself is still reusable.
+   */
+  previousFeedback?: ReusableFeedbackEntry[];
   deviationPercentage?: number;
   shouldAdjust: boolean;
   /** Why the grade was reused, for the caller's own logging and metadata. */
@@ -371,7 +457,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
             attemptId,
             exactMatch ? "exact_match" : "same_learner_near_match",
             responseData.totalPoints ?? 0,
-            JSON.stringify(responseData.feedback || ""),
+            responseData.feedback,
             grading.id,
           );
         } catch (error) {
@@ -452,7 +538,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
     attemptId: number | undefined,
     reason: GradeReuseReason,
     points: number,
-    feedback: string,
+    feedback: unknown,
     auditId?: number,
   ): ConsistencyCheck {
     this.logger.info("Reusing a prior grade instead of grading again", {
@@ -463,10 +549,21 @@ export class GradingConsistencyService implements OnModuleDestroy {
       auditId,
     });
 
+    const previousFeedback = toReusableFeedback(feedback);
+    if (!previousFeedback) {
+      this.logger.debug("Prior grade has no usable feedback entries", {
+        questionId,
+        attemptId,
+        reason,
+        auditId,
+        feedbackType: Array.isArray(feedback) ? "array" : typeof feedback,
+      });
+    }
+
     return {
       similar: true,
       previousGrade: points,
-      previousFeedback: feedback,
+      previousFeedback,
       deviationPercentage: 0,
       shouldAdjust: false,
       reuseReason: reason,
@@ -506,7 +603,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
     responseHash: string,
     points: number,
     maxPoints: number,
-    feedback: string,
+    feedback: unknown,
     rubricScores?: RubricScore[],
     modelIdentity?: string,
   ): Promise<void> {
@@ -516,7 +613,7 @@ export class GradingConsistencyService implements OnModuleDestroy {
         responseHash,
         points,
         maxPoints,
-        feedback,
+        feedback: toReusableFeedback(feedback),
         rubricScores,
         timestamp: new Date(),
         modelIdentity,

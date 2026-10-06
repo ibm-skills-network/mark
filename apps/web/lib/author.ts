@@ -623,7 +623,16 @@ export async function deleteQuestion(
 export async function getAttempts(
   assignmentId: number,
   cookies?: string,
-  options?: { throwOnAuthError?: boolean; learnerContext?: boolean },
+  options?: {
+    throwOnAuthError?: boolean;
+    /**
+     * Rethrow every failure, after retries, instead of resolving undefined.
+     * For callers that render the failure themselves and need its real
+     * status — undefined erases it, and was shown as a hard-coded 500.
+     */
+    throwOnError?: boolean;
+    learnerContext?: boolean;
+  },
 ): Promise<AssignmentAttempt[] | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
 
@@ -643,6 +652,9 @@ export async function getAttempts(
     )) as AssignmentAttempt[];
     return attempts.map((attempt) => normalizeAttemptTimestamps(attempt));
   } catch (err) {
+    if (options?.throwOnError) {
+      throw err;
+    }
     if (options?.throwOnAuthError && isAuthApiError(err)) {
       throw err;
     }

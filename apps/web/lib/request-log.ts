@@ -18,6 +18,10 @@ export interface RecordedRequest {
 const MAX_ENTRIES = 20;
 const entries: RecordedRequest[] = [];
 
+const MAX_ERROR_ENTRIES = 10;
+const MAX_ERROR_TEXT = 200;
+const errorEntries: RecordedClientError[] = [];
+
 let original: typeof fetch | undefined;
 let installs = 0;
 
@@ -27,6 +31,84 @@ export function recentRequests(): RecordedRequest[] {
 
 export function clearRequestLog(): void {
   entries.length = 0;
+  errorEntries.length = 0;
+}
+
+/**
+ * A failure the learner was shown, as the browser saw it. The request log only
+ * knows when headers arrived, so a 200 whose body then failed to arrive or
+ * parse used to look exactly like a success; this keeps what was thrown.
+ * Only the error's type and its own wording are kept, with any quoted fragment
+ * removed (parsers quote the start of the body they choked on).
+ */
+export interface RecordedClientError {
+  name: string;
+  message?: string;
+  /** NetworkError kind (timeout, unreachable, interrupted), when it has one. */
+  kind?: string;
+  /** The underlying error a NetworkError was classified from. */
+  detail?: string;
+  /** Which screen or layer surfaced it. */
+  where: string;
+  /** API path involved, without its query string. */
+  path?: string;
+  at: string;
+}
+
+/** Error wording with quoted fragments elided and its length bounded. */
+export function redactErrorText(value: string): string {
+  return value
+    .replace(/"[^"]*"/g, '"…"')
+    .replace(/'[^']*'/g, "'…'")
+    .slice(0, MAX_ERROR_TEXT);
+}
+
+function stripQuery(path: string): string {
+  return path.split("?")[0];
+}
+
+export function recordClientError(
+  error: unknown,
+  context: { where: string; path?: string },
+): void {
+  // Kept for the browser's bug reports only; on the server this module is
+  // shared by every request, so nothing is collected there.
+  if (typeof window === "undefined") return;
+  const bag =
+    typeof error === "object" && error !== null
+      ? (error as {
+          name?: unknown;
+          message?: unknown;
+          kind?: unknown;
+          detail?: unknown;
+        })
+      : undefined;
+  const name = bag && typeof bag.name === "string" ? bag.name : typeof error;
+  const message =
+    bag && typeof bag.message === "string"
+      ? redactErrorText(bag.message)
+      : undefined;
+
+  errorEntries.push({
+    name: name.slice(0, 60),
+    message,
+    kind:
+      bag && typeof bag.kind === "string" ? bag.kind.slice(0, 20) : undefined,
+    detail:
+      bag && typeof bag.detail === "string"
+        ? redactErrorText(bag.detail)
+        : undefined,
+    where: context.where.slice(0, 60),
+    path: context.path ? stripQuery(context.path).slice(0, 300) : undefined,
+    at: new Date().toISOString(),
+  });
+  if (errorEntries.length > MAX_ERROR_ENTRIES) {
+    errorEntries.splice(0, errorEntries.length - MAX_ERROR_ENTRIES);
+  }
+}
+
+export function recentClientErrors(): RecordedClientError[] {
+  return errorEntries.map((entry) => ({ ...entry }));
 }
 
 function record(entry: RecordedRequest): void {

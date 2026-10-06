@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "Ваша обробка перевищує",
   "ترجمة": "ترجمة",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "Сторінка не завантажилася до кінця",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Ваш пристрій отримав лише частину відповіді. Зазвичай причина в нестабільному з'єднанні або в режимі економії трафіку браузера чи проксі, що змінює сторінку, а не в проблемі із завданням.",
+  "Turn off data saving": "Вимкніть економію трафіку",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Режими економії трафіку та деякі браузери, як-от Opera Mini, можуть порушувати роботу сторінки. Вимкніть цей режим або відкрийте завдання в іншому браузері."
 }

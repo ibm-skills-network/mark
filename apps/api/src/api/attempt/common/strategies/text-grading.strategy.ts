@@ -14,6 +14,7 @@ import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto
 import {
   deriveLearnerKey,
   GradingConsistencyService,
+  toReusableFeedback,
 } from "src/api/assignment/v2/services/grading-consistency.service";
 import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { IGradingJudgeService } from "src/api/llm/features/grading/interfaces/grading-judge.interface";
@@ -269,16 +270,32 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
         question.totalPoints,
       );
 
-      const feedbackText =
-        typeof check.previousFeedback === "string"
-          ? check.previousFeedback
-          : "Reused prior grading result for identical answer.";
-
-      responseDto.feedback = [
-        {
-          feedback: `${feedbackText}\n\n**Score Rationale:** Reused prior grade (${responseDto.totalPoints}/${question.totalPoints}).`,
-        },
-      ];
+      // Serve the prior grade's own feedback entries, structured rubric
+      // breakdown included, with the reuse noted on the first entry. Copies,
+      // so the cached entries are never modified.
+      const reuseNote = `\n\n**Score Rationale:** Reused prior grade (${responseDto.totalPoints}/${question.totalPoints}).`;
+      const priorEntries = toReusableFeedback(check.previousFeedback) ?? [];
+      if (priorEntries.length > 0) {
+        responseDto.feedback = priorEntries.map((entry, index) => ({
+          ...entry,
+          feedback:
+            index === 0 ? `${entry.feedback}${reuseNote}` : entry.feedback,
+        }));
+      } else {
+        this.logger.warn(
+          "Prior grade has no usable feedback - serving a plain reuse note",
+          {
+            questionId: question.id,
+            attemptId: context.attemptId,
+            reason: check.reuseReason,
+          },
+        );
+        responseDto.feedback = [
+          {
+            feedback: `Reused prior grading result for identical answer.${reuseNote}`,
+          },
+        ];
+      }
       responseDto.metadata = {
         ...responseDto.metadata,
         reusedPriorGrade: true,

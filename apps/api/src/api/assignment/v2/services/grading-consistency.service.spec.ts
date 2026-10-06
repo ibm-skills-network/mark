@@ -44,6 +44,8 @@ interface AuditRowOptions {
   withoutRecordedMaxPoints?: boolean;
   /** Maximum carried in the audit metadata instead of the payload. */
   metadataMaxPoints?: number;
+  /** Feedback recorded with the prior grade. */
+  feedback?: unknown;
 }
 
 function auditRow(options: AuditRowOptions = {}) {
@@ -58,7 +60,7 @@ function auditRow(options: AuditRowOptions = {}) {
 
   const responsePayload: Record<string, unknown> = {
     totalPoints: options.totalPoints ?? MAX_POINTS,
-    feedback: "prior feedback",
+    feedback: options.feedback ?? "prior feedback",
   };
   if (!options.withoutRecordedMaxPoints) {
     responsePayload.maxPoints = options.maxPoints ?? MAX_POINTS;
@@ -583,5 +585,119 @@ describe("GradingConsistencyService reuse safety", () => {
       expect(stats.averageScore).toBe(50);
       expect(stats.distribution).toMatchObject({ "0-9%": 1, "100-109%": 1 });
     });
+  });
+});
+
+describe("GradingConsistencyService reused feedback shape", () => {
+  let service: GradingConsistencyService;
+
+  const PRIOR_FEEDBACK = [
+    {
+      feedback: "Score: 12/12 points (100%). All criteria met.",
+      structuredFeedback: {
+        summary: "You earned 12/12. All criteria were fully met.",
+        criteria: [
+          {
+            name: "Uses aggregate([...])",
+            pointsAwarded: 12,
+            maxPoints: 12,
+            status: "full",
+            evidence: "db.movies.aggregate([",
+            feedback: "Correct pipeline.",
+          },
+        ],
+        guidance: "Nothing to add.",
+      },
+    },
+  ];
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        GradingConsistencyService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
+      ],
+    }).compile();
+
+    service = module.get(GradingConsistencyService);
+  });
+
+  afterEach(() => {
+    service.onModuleDestroy?.();
+  });
+
+  function hashOf(answer: string) {
+    return service.generateResponseHash(answer, QUESTION_ID, QuestionType.TEXT);
+  }
+
+  async function check() {
+    return service.checkConsistency(QUESTION_ID, hashOf(ANSWER), ANSWER, {
+      questionType: QuestionType.TEXT,
+      modelIdentity: MODEL,
+      maxPoints: MAX_POINTS,
+      learnerKey: LEARNER_A,
+      attemptId: 987,
+    });
+  }
+
+  it("returns a stored grade's feedback as entries, not as a JSON string", async () => {
+    findMany.mockResolvedValue([
+      auditRow({ modelSnapshot: MODEL, feedback: PRIOR_FEEDBACK }),
+    ]);
+
+    const result = await check();
+
+    expect(result.similar).toBe(true);
+    expect(result.previousFeedback).toEqual(PRIOR_FEEDBACK);
+  });
+
+  it("returns an in-memory grade's feedback as entries, not as a JSON string", async () => {
+    findMany.mockResolvedValue([]);
+    await service.recordGrading(
+      QUESTION_ID,
+      hashOf(ANSWER),
+      MAX_POINTS,
+      MAX_POINTS,
+      PRIOR_FEEDBACK,
+      undefined,
+      MODEL,
+    );
+
+    const result = await check();
+
+    expect(result.similar).toBe(true);
+    expect(result.previousFeedback).toEqual(PRIOR_FEEDBACK);
+  });
+
+  it("unwraps feedback that an earlier release recorded as a JSON string", async () => {
+    findMany.mockResolvedValue([]);
+    await service.recordGrading(
+      QUESTION_ID,
+      hashOf(ANSWER),
+      MAX_POINTS,
+      MAX_POINTS,
+      JSON.stringify(PRIOR_FEEDBACK),
+      undefined,
+      MODEL,
+    );
+
+    const result = await check();
+
+    expect(result.previousFeedback).toEqual(PRIOR_FEEDBACK);
+  });
+
+  it("returns no prior feedback when the stored shape is not usable", async () => {
+    findMany.mockResolvedValue([
+      auditRow({ modelSnapshot: MODEL, feedback: [{ score: 3 }] }),
+    ]);
+
+    const result = await check();
+
+    expect(result.similar).toBe(true);
+    expect(result.previousGrade).toBe(MAX_POINTS);
+    expect(result.previousFeedback).toBeUndefined();
   });
 });

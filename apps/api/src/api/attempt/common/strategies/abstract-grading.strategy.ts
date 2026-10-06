@@ -387,7 +387,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
    */
   private adjustFeedbackForConsistency(
     currentFeedback: any,
-    previousFeedback?: string,
+    previousFeedback?: unknown,
   ): string {
     try {
       const currentText = this.extractTextFromFeedback(currentFeedback);
@@ -686,7 +686,7 @@ export abstract class AbstractGradingStrategy<T> implements IGradingStrategy {
         responseHash,
         responseDto.totalPoints,
         question.totalPoints,
-        JSON.stringify(responseDto.feedback),
+        responseDto.feedback,
         // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         responseDto.metadata?.rubricScores,
         modelIdentity,

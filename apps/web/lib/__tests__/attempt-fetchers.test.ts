@@ -87,6 +87,15 @@ describe("getAttempts", () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
+  it("rethrows every failure, with its status, when the caller renders it", async () => {
+    apiClient.get.mockRejectedValue(new APIError("x", 503, "x"));
+
+    await expect(
+      getAttempts(1, undefined, { throwOnError: true }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+  });
+
   it("swallows auth failures by default (legacy callers)", async () => {
     apiClient.get.mockRejectedValue(new APIError("x", 401, "Unauthorized"));
 

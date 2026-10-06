@@ -1409,5 +1409,9 @@
   "Your trim exceeds the": "トリムは次の基準を超えています",
   "ترجمة": "いいえ",
   "번역 중": "번역 중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "ページの読み込みが完了しませんでした",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "お使いのデバイスは応答の一部しか受信できませんでした。通常、これは不安定な接続、またはブラウザのデータ節約モードやページを書き換えるプロキシが原因であり、課題の問題ではありません。",
+  "Turn off data saving": "データ節約をオフにする",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "データ節約モードや Opera Mini などの一部のブラウザでは、ページが正しく表示されないことがあります。このモードをオフにするか、別のブラウザで課題を開いてください。"
 }

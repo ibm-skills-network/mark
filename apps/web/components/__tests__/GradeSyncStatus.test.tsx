@@ -1,15 +1,17 @@
 import { act, render, screen } from "@testing-library/react";
 import GradeSyncStatus from "../GradeSyncStatus";
 
-const renderStatus = async (status: string) => {
+const renderBody = async (body: string) => {
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ status }),
+    text: async () => body,
   });
   await act(async () => {
     render(<GradeSyncStatus assignmentId={123} attemptId={456} />);
   });
 };
+
+const renderStatus = (status: string) => renderBody(JSON.stringify({ status }));
 
 describe("GradeSyncStatus", () => {
   it("explains the LMS display delay after a successful delivery", async () => {
@@ -46,5 +48,18 @@ describe("GradeSyncStatus", () => {
     expect(
       screen.getByText(/still syncing your completion/),
     ).toBeInTheDocument();
+  });
+
+  it("renders nothing and logs no error when the attempt has no sync row", async () => {
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    await renderBody("");
+
+    expect(
+      screen.queryByText("Checking grade sync status..."),
+    ).not.toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });

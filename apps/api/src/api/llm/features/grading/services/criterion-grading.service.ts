@@ -14,6 +14,7 @@ import {
   DEFAULT_MODEL_SELECTION,
   getDeterministicGradingOptions,
   RubricCriterion,
+  NO_EVIDENCE_RATIONALE,
 } from "../types/criterion-evidence.types";
 import { notebookOutputScoringRules } from "./notebook-evidence.rules";
 import type { LlmCallRecorder } from "./criterion-evidence-retrieval.service";
@@ -122,7 +123,7 @@ export class CriterionGradingService {
         rubricQuestion: request.criterion.rubricQuestion,
         pointsAwarded: minPoints,
         maxPoints,
-        rationale: "No supporting evidence found in the submission.",
+        rationale: NO_EVIDENCE_RATIONALE,
         nextStep: `Add or clearly demonstrate the required work: ${
           request.criterion.criteria.find((level) => level.points === maxPoints)
             ?.description ?? request.criterion.rubricQuestion
