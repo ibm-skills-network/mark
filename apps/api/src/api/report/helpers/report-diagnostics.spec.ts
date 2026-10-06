@@ -24,7 +24,9 @@ const valid = () => ({
   },
   draft: {
     activeAttemptId: 1630573,
-    questions: [{ id: 29377, status: "edited", selected: ["1"], textLength: 0 }],
+    questions: [
+      { id: 29377, status: "edited", selected: ["1"], textLength: 0 },
+    ],
   },
   rendered: [
     {
@@ -44,6 +46,17 @@ const valid = () => ({
       ms: 30011,
       requestId: "bcbd8b715d12",
       at: "2026-09-17T14:59:58.000Z",
+    },
+  ],
+  errors: [
+    {
+      name: "NetworkError",
+      message: "The response did not arrive complete.",
+      kind: "interrupted",
+      detail: "SyntaxError: Unexpected end of JSON input",
+      where: "api-response",
+      path: "/api/v2/assignments/3723",
+      at: "2026-09-17T14:59:59.000Z",
     },
   ],
 });
@@ -130,6 +143,33 @@ describe("sanitizeReportDiagnostics", () => {
     const result = sanitizeReportDiagnostics(JSON.stringify(input));
 
     expect(result?.requests?.[0].path).toBe("/api/v1/github/callback");
+  });
+});
+
+describe("sanitizeReportDiagnostics client errors", () => {
+  it("keeps only known error fields, bounded, with no query string", () => {
+    const input = valid() as Record<string, any>;
+    input.errors = [
+      {
+        ...valid().errors[0],
+        path: "/api/v2/assignments/3723?lang=en&token=secret",
+        message: "m".repeat(5000),
+        stack: "at secretFunction (app.js:1:1)",
+      },
+      { where: "no-name" },
+      "not an object",
+      ...Array.from({ length: 30 }, () => valid().errors[0]),
+    ];
+
+    const result = sanitizeReportDiagnostics(JSON.stringify(input));
+
+    expect(result?.errors?.length).toBeLessThanOrEqual(10);
+    expect(result?.errors?.[0].path).toBe("/api/v2/assignments/3723");
+    expect(result?.errors?.[0].message?.length).toBeLessThanOrEqual(200);
+    expect(result?.errors?.[0]).not.toHaveProperty("stack");
+    expect(
+      result?.errors?.every((entry) => typeof entry.name === "string"),
+    ).toBe(true);
   });
 });
 
