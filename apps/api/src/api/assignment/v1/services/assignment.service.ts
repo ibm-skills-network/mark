@@ -80,7 +80,11 @@ export class AssignmentServiceV1 {
 
     // English is the authored content; stored "en" rows are machine
     // paraphrases and are never served.
-    if (typeof lang === "string" && lang && lang.trim().toLowerCase().split("-")[0] !== "en") {
+    if (
+      typeof lang === "string" &&
+      lang &&
+      lang.trim().toLowerCase().split("-")[0] !== "en"
+    ) {
       const assignmentTranslation =
         await this.prisma.assignmentTranslation.findUnique({
           where: {
