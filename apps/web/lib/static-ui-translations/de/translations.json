@@ -1413,5 +1413,6 @@
   "The page didn't finish loading": "Die Seite wurde nicht vollständig geladen",
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Dein Gerät hat nur einen Teil der Antwort erhalten. Das liegt meist an einer instabilen Verbindung oder an einem Datensparmodus bzw. Proxy, der die Seite verändert, nicht an der Aufgabe.",
   "Turn off data saving": "Datensparmodus ausschalten",
-  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datensparmodi und einige Browser wie Opera Mini können die Seite beschädigen. Schalte den Modus aus oder öffne die Aufgabe in einem anderen Browser."
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datensparmodi und einige Browser wie Opera Mini können die Seite beschädigen. Schalte den Modus aus oder öffne die Aufgabe in einem anderen Browser.",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Bilder können in einer Textantwort nicht bewertet werden. Füge stattdessen die Textausgabe ein oder beschreibe sie in Worten."
 }

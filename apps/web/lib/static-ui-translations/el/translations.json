@@ -1413,5 +1413,6 @@
   "The page didn't finish loading": "Η σελίδα δεν ολοκλήρωσε τη φόρτωση",
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Η συσκευή σας έλαβε μόνο μέρος της απόκρισης. Αυτό συνήθως οφείλεται σε ασταθή σύνδεση ή σε λειτουργία εξοικονόμησης δεδομένων του προγράμματος περιήγησης ή διακομιστή μεσολάβησης που αλλάζει τη σελίδα, όχι σε πρόβλημα με την εργασία.",
   "Turn off data saving": "Απενεργοποιήστε την εξοικονόμηση δεδομένων",
-  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Οι λειτουργίες εξοικονόμησης δεδομένων και ορισμένα προγράμματα περιήγησης, όπως το Opera Mini, μπορεί να χαλάσουν τη σελίδα. Απενεργοποιήστε τη λειτουργία ή ανοίξτε την εργασία σε άλλο πρόγραμμα περιήγησης."
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Οι λειτουργίες εξοικονόμησης δεδομένων και ορισμένα προγράμματα περιήγησης, όπως το Opera Mini, μπορεί να χαλάσουν τη σελίδα. Απενεργοποιήστε τη λειτουργία ή ανοίξτε την εργασία σε άλλο πρόγραμμα περιήγησης.",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Οι εικόνες δεν μπορούν να βαθμολογηθούν σε απάντηση κειμένου. Επικολλήστε αντί γι' αυτό την έξοδο ως κείμενο ή περιγράψτε την με λόγια."
 }

@@ -1413,5 +1413,6 @@
   "The page didn't finish loading": "Halaman tidak selesai dimuat",
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Perangkat Anda hanya menerima sebagian respons. Biasanya ini disebabkan oleh koneksi yang tidak stabil, atau mode hemat data browser atau proxy yang mengubah halaman, bukan masalah pada tugas.",
   "Turn off data saving": "Matikan mode hemat data",
-  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Mode hemat data dan beberapa browser, seperti Opera Mini, dapat merusak halaman. Matikan mode tersebut atau buka tugas di browser lain."
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Mode hemat data dan beberapa browser, seperti Opera Mini, dapat merusak halaman. Matikan mode tersebut atau buka tugas di browser lain.",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Gambar tidak dapat dinilai dalam jawaban teks. Tempelkan output teksnya saja, atau jelaskan dengan kata-kata."
 }
