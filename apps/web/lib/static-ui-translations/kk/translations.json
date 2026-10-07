@@ -1413,5 +1413,6 @@
   "The page didn't finish loading": "Бет толық жүктелмеді",
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Құрылғыңыз жауаптың тек бір бөлігін алды. Әдетте бұл тұрақсыз байланыстан немесе браузердің деректерді үнемдеу режимінен не бетті өзгертетін проксиден болады, тапсырмадағы ақаудан емес.",
   "Turn off data saving": "Деректерді үнемдеуді өшіріңіз",
-  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Деректерді үнемдеу режимдері және Opera Mini сияқты кейбір браузерлер бетті бұзуы мүмкін. Бұл режимді өшіріңіз немесе тапсырманы басқа браузерде ашыңыз."
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Деректерді үнемдеу режимдері және Opera Mini сияқты кейбір браузерлер бетті бұзуы мүмкін. Бұл режимді өшіріңіз немесе тапсырманы басқа браузерде ашыңыз.",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Мәтіндік жауаптағы суреттер бағаланбайды. Оның орнына шығысты мәтін ретінде қойыңыз немесе оны сөзбен сипаттаңыз."
 }

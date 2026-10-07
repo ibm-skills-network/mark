@@ -897,22 +897,12 @@ export class TranslationService implements OnModuleDestroy {
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
     languageCode: string,
   ): Promise<void> {
-    if (!assignment) return;
+    // `lang` is a raw query value; a repeated parameter arrives as an array.
+    if (!assignment || typeof languageCode !== "string") return;
 
-    try {
-      const originalLanguage = await this.llmFacadeService.getLanguageCode(
-        assignment.introduction || "en",
-        assignment.id,
-      );
-
-      if (languageCode === originalLanguage) return;
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Error detecting language: ${errorMessage}. Continuing with translation anyway.`,
-      );
-    }
+    // English is the authored content, the same rule the question side uses.
+    // Stored "en" rows are machine paraphrases and are never served.
+    if (languageCode.trim().toLowerCase().split("-")[0] === "en") return;
 
     const assignmentTranslation =
       await this.prisma.assignmentTranslation.findUnique({

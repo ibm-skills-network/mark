@@ -92,6 +92,8 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
     this.translationStateRedis = this.tryCreateTranslationStateRedis();
   }
 
+  // Publish-state hash lives on the queue-style connection (commands wait
+  // out a Sentinel failover rather than failing the publish job).
   // Wrap createRedisConnection() so missing REDIS_URL (or boot-time Redis
   // failure) degrades gracefully instead of bringing down DI. Status sites
   // become no-ops; the publish poll loop falls back to the hard timeout.
