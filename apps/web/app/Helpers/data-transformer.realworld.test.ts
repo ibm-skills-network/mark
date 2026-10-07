@@ -94,8 +94,9 @@ describe("DataTransformer Web - Real-World Scenarios", () => {
       });
 
       expect(decoded.questionVersions[0].question).toContain("2+2");
-      expect(decoded.questionVersions[0].choices[0].choice).toEqual(3);
-      expect(decoded.questionVersions[0].choices[1].choice).toEqual(4);
+      // Choice text stays text: the grader matches the exact string.
+      expect(decoded.questionVersions[0].choices[0].choice).toEqual("3");
+      expect(decoded.questionVersions[0].choices[1].choice).toEqual("4");
       expect(
         decoded.questionVersions[0].scoring.rubrics[0].rubricQuestion,
       ).toContain("answer correctly");
