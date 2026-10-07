@@ -78,11 +78,9 @@ export class AssignmentServiceV1 {
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const backendData = await this.findOne(Number(assignmentId), userSession);
 
-    const originalLanguage = await this.llmFacadeService.getLanguageCode(
-      backendData.introduction || "en",
-    );
-
-    if (lang && lang !== originalLanguage) {
+    // English is the authored content; stored "en" rows are machine
+    // paraphrases and are never served.
+    if (typeof lang === "string" && lang && lang.trim().toLowerCase().split("-")[0] !== "en") {
       const assignmentTranslation =
         await this.prisma.assignmentTranslation.findUnique({
           where: {
