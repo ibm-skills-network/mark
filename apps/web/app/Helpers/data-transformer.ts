@@ -269,7 +269,7 @@ function transformData(
           if (typeof item === "string") {
             return operation === "encode"
               ? encodeValue(item)
-              : decodeValue(item);
+              : decodeValue(item, false);
           }
           if (item && typeof item === "object") {
             return transformData(item, config, operation, visited, childPath);
@@ -399,9 +399,31 @@ function encodeValue(value: any): string {
 }
 
 /**
- * Decode a single value handling both compressed and standard encoding
+ * Text that decoded to structured JSON came from an object or array the
+ * server stringified. A primitive did not: "1.620", "4.0", "true" or "null"
+ * is the text itself. Reading it as JSON changes it (1.62, 4, true, null),
+ * and choice answers are graded by matching the text the learner submits.
  */
-function decodeValue(value: any): any {
+function parseStructuredOrKeepText(
+  text: string,
+  allowStructured: boolean,
+): unknown {
+  if (!allowStructured) return text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === "object" ? parsed : text;
+  } catch {
+    // Not JSON: the decoded value is plain text.
+    return text;
+  }
+}
+
+/**
+ * Decode a single value handling both compressed and standard encoding.
+ * Array items are only ever encoded from strings, so callers pass
+ * `allowStructured = false` for them.
+ */
+function decodeValue(value: any, allowStructured = true): any {
   if (typeof value !== "string") {
     return value;
   }
@@ -409,12 +431,10 @@ function decodeValue(value: any): any {
   if (value.startsWith("comp:")) {
     try {
       const decoded = decompressAndDecode(value);
-      const fullyDecoded = decodeBase64Layers(decoded);
-      try {
-        return JSON.parse(fullyDecoded);
-      } catch {
-        return fullyDecoded;
-      }
+      return parseStructuredOrKeepText(
+        decodeBase64Layers(decoded),
+        allowStructured,
+      );
     } catch (error) {
       return value;
     }
@@ -425,11 +445,7 @@ function decodeValue(value: any): any {
     return value;
   }
 
-  try {
-    return JSON.parse(fullyDecoded);
-  } catch {
-    return fullyDecoded;
-  }
+  return parseStructuredOrKeepText(fullyDecoded, allowStructured);
 }
 
 /**

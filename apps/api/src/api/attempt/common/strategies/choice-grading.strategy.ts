@@ -26,6 +26,7 @@ import {
   resolveChoiceAcrossRenderings,
 } from "../utils/choice-renderings.util";
 import { LocalizationService } from "../utils/localization.service";
+import { resolveNumberRewrittenChoice } from "../utils/numeric-choice-text.util";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
 @Injectable()
@@ -205,7 +206,13 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
         learnerChoice,
         context,
         { alignedOnly: false },
-      ));
+      )) ??
+      this.resolveNumberRewrittenChoice(
+        question,
+        choices,
+        learnerChoice,
+        context,
+      );
 
     const data = {
       learnerChoice,
@@ -582,8 +589,16 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
           { alignedOnly: true },
           renderings,
         );
-        if (resolved) {
-          text = this.coerceToString(resolved.choice);
+        const rewritten =
+          resolved ??
+          this.resolveNumberRewrittenChoice(
+            question,
+            gradingChoices,
+            learnerChoice,
+            context,
+          );
+        if (rewritten) {
+          text = this.coerceToString(rewritten.choice);
         }
       }
 
@@ -594,6 +609,51 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     }
 
     return mapped;
+  }
+
+  /**
+   * Find the grading choice a numeric-looking submission was rewritten from
+   * ("1.620" submitted as "1.62"). Only the exact JSON-number rewrite counts,
+   * and only when it points at a single choice; anything else stays an
+   * invalid selection.
+   */
+  private resolveNumberRewrittenChoice(
+    question: QuestionDto,
+    gradingChoices: Choice[],
+    learnerChoice: unknown,
+    context: GradingContext,
+  ): Choice | undefined {
+    const resolution = resolveNumberRewrittenChoice(
+      learnerChoice,
+      gradingChoices,
+    );
+    if (resolution.kind === "none") return undefined;
+
+    const logContext = {
+      questionId: question.id,
+      attemptId: context.attemptId,
+      assignmentId: context.assignmentId,
+      language: context.language,
+      questionType: question.type,
+    };
+
+    if (resolution.kind === "ambiguous") {
+      this.logger?.warn(
+        "Numerically rewritten choice matches more than one choice; grading it as an invalid selection",
+        { ...logContext, choiceIndexes: resolution.indexes },
+      );
+      return undefined;
+    }
+
+    this.logger?.info(
+      "Matched a numerically rewritten choice to the authored text",
+      {
+        ...logContext,
+        gradingIndex: resolution.index,
+        isCorrect: resolution.choice.isCorrect === true,
+      },
+    );
+    return resolution.choice;
   }
 
   /**
