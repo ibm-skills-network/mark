@@ -34,6 +34,7 @@ import {
   fetchUrlContentForGrading,
 } from "src/api/attempt/common/utils/github-content-fetch.util";
 import { normalizeLearnerUrl } from "src/api/attempt/common/utils/learner-url.util";
+import { stripImagesFromLearnerHtml } from "src/api/attempt/common/utils/learner-text-images.util";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { RetryableUrlFetchError } from "../../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
@@ -892,6 +893,16 @@ export class QuestionResponseService {
   }> {
     const questionId = question.id;
 
+    if (question.type === QuestionType.TEXT) {
+      this.removeImagesFromTextResponse(
+        requestDto,
+        questionId,
+        assignmentId,
+        assignmentAttemptId,
+        role,
+      );
+    }
+
     if (this.isEmptyResponse(requestDto)) {
       const { responseDto, learnerResponse } =
         this.handleEmptyResponse(language);
@@ -1618,6 +1629,39 @@ export class QuestionResponseService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Text questions are graded on text alone, so an image pasted into the
+   * answer is invisible to the grader and only bloats the stored response.
+   * The learner editor blocks images; this covers any client that does not.
+   * The submission is still accepted, with whatever text remains.
+   */
+  private removeImagesFromTextResponse(
+    requestDto: CreateQuestionResponseAttemptRequestDto,
+    questionId: number,
+    assignmentId: number,
+    assignmentAttemptId: number,
+    role: UserRole,
+  ): void {
+    if (typeof requestDto.learnerTextResponse !== "string") return;
+
+    const { html, removedCount } = stripImagesFromLearnerHtml(
+      requestDto.learnerTextResponse,
+    );
+    if (removedCount === 0) return;
+
+    this.logger.warn("Removed images from a text answer before grading", {
+      assignmentId,
+      assignmentAttemptId,
+      questionId,
+      userRole: role,
+      removedImageCount: removedCount,
+      originalLength: requestDto.learnerTextResponse.length,
+      remainingLength: html.length,
+      imageOnly: html.length === 0,
+    });
+    requestDto.learnerTextResponse = html;
   }
 
   /**
