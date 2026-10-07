@@ -163,7 +163,7 @@ describe("SupportRoutingService.resolve", () => {
     expect(route).toMatchObject({ token: "sk_mark", via: "default" });
   });
 
-  it("uses the legacy single token when no product tokens exist", async () => {
+  it("ignores the legacy single token when no product tokens exist", async () => {
     const { service } = make(undefined, { SN_SUPPORT_TOKEN: "sk_legacy" });
 
     const route = await service.resolve({
@@ -171,7 +171,7 @@ describe("SupportRoutingService.resolve", () => {
       portalName: "cognitiveclass.ai",
     });
 
-    expect(route).toMatchObject({ token: "sk_legacy", via: "legacy" });
+    expect(route).toEqual({ portalName: undefined, via: "none" });
   });
 
   it("reports no route when nothing is configured", async () => {

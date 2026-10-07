@@ -98,7 +98,7 @@ export class SnSupportService {
 
   /**
    * @param apiKeyOverride the product-scoped key this ticket should be filed
-   * with; falls back to SN_SUPPORT_TOKEN for local dev and pre-routing deploys.
+   * with; falls back to the Mark product key in SUPPORT_TOKEN_MARK.
    */
   async createTicket(
     ticket: SnSupportTicket,
@@ -110,7 +110,7 @@ export class SnSupportService {
       .replace(/\/+$/, "");
     const apiKey =
       apiKeyOverride?.trim() ||
-      this.configService.get<string>("SN_SUPPORT_TOKEN")?.trim();
+      this.configService.get<string>("SUPPORT_TOKEN_MARK")?.trim();
 
     if (!baseUrl || !apiKey) {
       throw new InternalServerErrorException(
