@@ -57,8 +57,6 @@ describe("AssignmentControllerV1", () => {
     controller = new AssignmentControllerV1(
       logger as any,
       assignmentService as any,
-      {} as any,
-      {} as any,
     );
   });
 
@@ -127,5 +125,9 @@ describe("AssignmentControllerV1", () => {
 
     expect(assignmentService.createJob).not.toHaveBeenCalled();
     expect(assignmentService.handleFileContents).not.toHaveBeenCalled();
+  });
+
+  it("does not expose a public language-detection endpoint", () => {
+    expect("testLanguageDetection" in controller).toBe(false);
   });
 });
