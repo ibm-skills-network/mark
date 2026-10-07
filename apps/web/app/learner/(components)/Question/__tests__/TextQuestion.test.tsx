@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 
-import { render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { QuestionStore } from "@/config/types";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import TextQuestion from "../TextQuestion";
@@ -16,6 +16,10 @@ jest.mock("@components/MarkDownEditor", () => ({
     mockMarkdownEditor(props);
     return null;
   },
+}));
+
+jest.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock("@/stores/learner", () => ({
@@ -83,6 +87,33 @@ describe("TextQuestion", () => {
 
     expect(mockMarkdownEditor).toHaveBeenCalledWith(
       expect.objectContaining({ disableListAutofill: true }),
+    );
+  });
+
+  it("blocks images in learner text answers", () => {
+    render(<TextQuestion question={question} />);
+
+    expect(mockMarkdownEditor).toHaveBeenCalledWith(
+      expect.objectContaining({ blockImages: true }),
+    );
+  });
+
+  it("tells the learner why a pasted image did not appear", () => {
+    render(<TextQuestion question={question} />);
+
+    expect(
+      screen.queryByText(/Images can't be graded in a text answer/),
+    ).not.toBeInTheDocument();
+
+    const editorProps = mockMarkdownEditor.mock.calls.at(-1)?.[0] as {
+      onImageBlocked: () => void;
+    };
+    act(() => {
+      editorProps.onImageBlocked();
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.",
     );
   });
 });

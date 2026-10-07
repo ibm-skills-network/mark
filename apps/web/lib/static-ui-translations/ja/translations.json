@@ -1413,5 +1413,6 @@
   "The page didn't finish loading": "ページの読み込みが完了しませんでした",
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "お使いのデバイスは応答の一部しか受信できませんでした。通常、これは不安定な接続、またはブラウザのデータ節約モードやページを書き換えるプロキシが原因であり、課題の問題ではありません。",
   "Turn off data saving": "データ節約をオフにする",
-  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "データ節約モードや Opera Mini などの一部のブラウザでは、ページが正しく表示されないことがあります。このモードをオフにするか、別のブラウザで課題を開いてください。"
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "データ節約モードや Opera Mini などの一部のブラウザでは、ページが正しく表示されないことがあります。このモードをオフにするか、別のブラウザで課題を開いてください。",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "テキスト回答に含まれる画像は採点できません。代わりに出力をテキストとして貼り付けるか、言葉で説明してください。"
 }
