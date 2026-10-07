@@ -40,6 +40,47 @@ export function normalizeChoiceText(value: unknown): string {
     .replaceAll(/\s+/g, " ");
 }
 
+/** Straight and curly double quotation marks an author may wrap a choice in. */
+const WRAPPING_QUOTES = /^["\u201C-\u201F]+|["\u201C-\u201F]+$/g;
+
+/**
+ * The choice text with any quotation marks around the whole of it removed,
+ * then normalized. Older learner clients dropped the outer pair of quotes
+ * when decoding a choice, so the submitted text can lack them. Quotes inside
+ * the text are kept.
+ */
+export function normalizeUnquotedChoiceText(value: unknown): string {
+  const normalized = normalizeChoiceText(value);
+  if (!normalized) return "";
+  return normalized.replaceAll(WRAPPING_QUOTES, "").trim();
+}
+
+export type UnquotedChoiceMatch =
+  | { kind: "matched"; index: number }
+  | { kind: "ambiguous"; indexes: number[] }
+  | { kind: "none" };
+
+/**
+ * Find the one choice `text` names once quotation marks around either side
+ * are set aside. Two or more choices that read the same without their quotes
+ * are ambiguous: the caller must not pick one of them.
+ */
+export function matchChoiceIgnoringWrappingQuotes(
+  text: unknown,
+  choices: Choice[],
+): UnquotedChoiceMatch {
+  const wanted = normalizeUnquotedChoiceText(text);
+  if (!wanted) return { kind: "none" };
+  const indexes = choices
+    .map((choice, index) =>
+      normalizeUnquotedChoiceText(choice.choice) === wanted ? index : -1,
+    )
+    .filter((index) => index !== -1);
+  if (indexes.length === 0) return { kind: "none" };
+  if (indexes.length > 1) return { kind: "ambiguous", indexes };
+  return { kind: "matched", index: indexes[0] };
+}
+
 /** Parse stored choices: an array, a JSON string of one, or `{ choices: [...] }`. */
 export function parseStoredChoices(value: unknown): Choice[] | undefined {
   let parsed: unknown = value;
@@ -103,23 +144,33 @@ export function resolveChoiceAcrossRenderings(
 
   const matches: { choice: Choice; gradingIndex?: number; source: string }[] =
     [];
-  for (const rendering of renderings) {
-    const mapsByIndex =
-      rendering.aligned !== false &&
-      sharesAnswerKey(rendering.choices, gradingChoices);
-    if (!mapsByIndex && options.alignedOnly) continue;
-    for (const [index, choice] of rendering.choices.entries()) {
-      if (normalizeChoiceText(choice.choice) !== wanted) continue;
-      matches.push(
-        mapsByIndex
-          ? {
-              choice: gradingChoices[index],
-              gradingIndex: index,
-              source: rendering.source,
-            }
-          : { choice, source: rendering.source },
-      );
+  // Exact text first; only when no rendering has it, set aside quotation
+  // marks around the whole choice, and only where that names one choice.
+  for (const ignoreWrappingQuotes of [false, true]) {
+    for (const rendering of renderings) {
+      const mapsByIndex =
+        rendering.aligned !== false &&
+        sharesAnswerKey(rendering.choices, gradingChoices);
+      if (!mapsByIndex && options.alignedOnly) continue;
+      const indexes = ignoreWrappingQuotes
+        ? matchedIndexIgnoringWrappingQuotes(text, rendering.choices)
+        : [...rendering.choices.keys()].filter(
+            (index) =>
+              normalizeChoiceText(rendering.choices[index].choice) === wanted,
+          );
+      for (const index of indexes) {
+        matches.push(
+          mapsByIndex
+            ? {
+                choice: gradingChoices[index],
+                gradingIndex: index,
+                source: rendering.source,
+              }
+            : { choice: rendering.choices[index], source: rendering.source },
+        );
+      }
     }
+    if (matches.length > 0) break;
   }
 
   if (matches.length === 0) return { kind: "none" };
@@ -146,6 +197,14 @@ export function resolveChoiceAcrossRenderings(
     gradingIndex: best.gradingIndex,
     sources,
   };
+}
+
+function matchedIndexIgnoringWrappingQuotes(
+  text: unknown,
+  choices: Choice[],
+): number[] {
+  const match = matchChoiceIgnoringWrappingQuotes(text, choices);
+  return match.kind === "matched" ? [match.index] : [];
 }
 
 /** The fields of a stored Translation row the renderings are built from. */
