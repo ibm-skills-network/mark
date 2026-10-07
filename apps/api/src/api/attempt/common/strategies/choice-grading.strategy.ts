@@ -23,6 +23,7 @@ import { GradingAuditService } from "../../services/question-response/grading-au
 import { GradingContext } from "../interfaces/grading-context.interface";
 import {
   ChoiceRendering,
+  matchChoiceIgnoringWrappingQuotes,
   resolveChoiceAcrossRenderings,
 } from "../utils/choice-renderings.util";
 import { LocalizationService } from "../utils/localization.service";
@@ -199,6 +200,12 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       choices.find(
         (choice) =>
           this.normalizeText(choice.choice) === normalizedLearnerChoice,
+      ) ??
+      this.matchIgnoringWrappingQuotes(
+        question,
+        choices,
+        learnerChoice,
+        context,
       ) ??
       (await this.resolveOutsideGradingLanguage(
         question,
@@ -577,7 +584,17 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
 
     for (const learnerChoice of learnerResponse) {
       let text = learnerChoice;
-      if (!known.has(this.normalizeText(learnerChoice))) {
+      const unquoted = known.has(this.normalizeText(learnerChoice))
+        ? undefined
+        : this.matchIgnoringWrappingQuotes(
+            question,
+            gradingChoices,
+            learnerChoice,
+            context,
+          );
+      if (unquoted) {
+        text = this.coerceToString(unquoted.choice);
+      } else if (!known.has(this.normalizeText(learnerChoice))) {
         if (context.loadChoiceRenderings && renderings === undefined) {
           renderings = await this.loadChoiceRenderings(question, context);
         }
@@ -654,6 +671,53 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       },
     );
     return resolution.choice;
+  }
+
+  /**
+   * Find the grading choice a learner meant when the only difference is
+   * quotation marks around the whole choice: older learner clients dropped
+   * them when decoding the choice. Returns undefined when nothing matches, or
+   * when several choices read the same without their quotes.
+   */
+  private matchIgnoringWrappingQuotes(
+    question: QuestionDto,
+    gradingChoices: Choice[],
+    learnerChoice: unknown,
+    context: GradingContext,
+  ): Choice | undefined {
+    const match = matchChoiceIgnoringWrappingQuotes(
+      learnerChoice,
+      gradingChoices,
+    );
+    const logContext = {
+      questionId: question.id,
+      attemptId: context.attemptId,
+      assignmentId: context.assignmentId,
+      language: context.language,
+      questionType: question.type,
+    };
+
+    if (match.kind === "matched") {
+      const choice = gradingChoices[match.index];
+      this.logger?.info(
+        "Matched a submitted choice by ignoring the quotation marks around it",
+        {
+          ...logContext,
+          gradingIndex: match.index,
+          isCorrect: choice.isCorrect === true,
+        },
+      );
+      return choice;
+    }
+
+    if (match.kind === "ambiguous") {
+      this.logger?.warn(
+        "Submitted choice matches several choices once quotation marks are ignored; not picking one",
+        { ...logContext, gradingIndexes: match.indexes },
+      );
+    }
+
+    return undefined;
   }
 
   /**

@@ -1,6 +1,7 @@
 import type { Choice } from "src/api/assignment/dto/update.questions.request.dto";
 import {
   buildChoiceRenderings,
+  matchChoiceIgnoringWrappingQuotes,
   parseStoredChoices,
   resolveChoiceAcrossRenderings,
   StoredChoiceTranslation,
@@ -178,5 +179,97 @@ describe("resolveChoiceAcrossRenderings", () => {
     ]);
 
     expect(result.kind).toBe("ambiguous");
+  });
+});
+
+describe("matchChoiceIgnoringWrappingQuotes", () => {
+  const quoted: Choice[] = [
+    { choice: '"Alpha"', points: 1, isCorrect: true },
+    { choice: "\u201CBeta\u201D", points: 0, isCorrect: false },
+    { choice: 'Say "Gamma"', points: 0, isCorrect: false },
+  ];
+
+  it("matches text that lost straight or curly quotes around the choice", () => {
+    expect(matchChoiceIgnoringWrappingQuotes("alpha", quoted)).toEqual({
+      kind: "matched",
+      index: 0,
+    });
+    expect(matchChoiceIgnoringWrappingQuotes(" Beta ", quoted)).toEqual({
+      kind: "matched",
+      index: 1,
+    });
+  });
+
+  it("keeps quotation marks inside the text significant", () => {
+    expect(matchChoiceIgnoringWrappingQuotes("Say Gamma", quoted).kind).toBe(
+      "none",
+    );
+  });
+
+  it("is ambiguous when two choices read the same without quotes", () => {
+    expect(
+      matchChoiceIgnoringWrappingQuotes("yes", [
+        { choice: '"yes"', points: 1, isCorrect: true },
+        { choice: "yes", points: 0, isCorrect: false },
+      ]),
+    ).toEqual({ kind: "ambiguous", indexes: [0, 1] });
+  });
+
+  it("matches nothing for empty or quote-only text", () => {
+    expect(matchChoiceIgnoringWrappingQuotes('""', quoted).kind).toBe("none");
+    expect(matchChoiceIgnoringWrappingQuotes("", quoted).kind).toBe("none");
+  });
+});
+
+describe("resolveChoiceAcrossRenderings with quoted choices", () => {
+  const quotedZh: Choice[] = [
+    { choice: "\u201C正常交易\u201D", points: 0, isCorrect: false },
+    { choice: "\u201C潜在的异常\u201D", points: 1, isCorrect: true },
+  ];
+
+  it("maps a translated pick that lost its quotes onto the grading set", () => {
+    const result = resolveChoiceAcrossRenderings("潜在的异常", authored, [
+      { source: "translation:zh-CN", choices: quotedZh },
+    ]);
+
+    expect(result).toMatchObject({ kind: "matched", gradingIndex: 1 });
+  });
+
+  it("prefers an exact match in any rendering over a quote-insensitive one", () => {
+    const result = resolveChoiceAcrossRenderings("Hello", authored, [
+      {
+        source: "translation:fr",
+        choices: [
+          { choice: '"Hello"', points: 0, isCorrect: false },
+          { choice: "Autre", points: 1, isCorrect: true },
+        ],
+      },
+      {
+        source: "translation:de",
+        choices: [
+          { choice: "Andere", points: 0, isCorrect: false },
+          { choice: "Hello", points: 1, isCorrect: true },
+        ],
+      },
+    ]);
+
+    expect(result).toMatchObject({ kind: "matched", gradingIndex: 1 });
+    expect(result.kind === "matched" && result.sources).toEqual([
+      "translation:de",
+    ]);
+  });
+
+  it("skips a rendering where the text names two choices without quotes", () => {
+    const result = resolveChoiceAcrossRenderings("yes", authored, [
+      {
+        source: "translation:xx",
+        choices: [
+          { choice: '"yes"', points: 0, isCorrect: false },
+          { choice: "\u201Cyes\u201D", points: 1, isCorrect: true },
+        ],
+      },
+    ]);
+
+    expect(result.kind).toBe("none");
   });
 });
