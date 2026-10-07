@@ -409,12 +409,7 @@ function decodeValue(value: any): any {
   if (value.startsWith("comp:")) {
     try {
       const decoded = decompressAndDecode(value);
-      const fullyDecoded = decodeBase64Layers(decoded);
-      try {
-        return JSON.parse(fullyDecoded);
-      } catch {
-        return fullyDecoded;
-      }
+      return parseDecodedText(decodeBase64Layers(decoded));
     } catch (error) {
       return value;
     }
@@ -425,10 +420,21 @@ function decodeValue(value: any): any {
     return value;
   }
 
+  return parseDecodedText(fullyDecoded);
+}
+
+/**
+ * Read decoded text back into the value the server encoded. Text that parses
+ * as a JSON string literal is text the author wrapped in quotation marks, not
+ * an encoded string: parsing it would drop the quotes, and choice answers are
+ * graded by matching the text the learner submits.
+ */
+function parseDecodedText(text: string): any {
   try {
-    return JSON.parse(fullyDecoded);
+    const parsed = JSON.parse(text);
+    return typeof parsed === "string" ? text : parsed;
   } catch {
-    return fullyDecoded;
+    return text;
   }
 }
 
