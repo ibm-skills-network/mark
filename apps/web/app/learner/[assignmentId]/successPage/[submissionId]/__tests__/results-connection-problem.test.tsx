@@ -109,8 +109,6 @@ describe("results page when the request never reached the server", () => {
       render(<SuccessPage />);
     });
 
-    expect(
-      screen.getByText(/belongs to another account/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/belongs to another account/i)).toBeInTheDocument();
   });
 });

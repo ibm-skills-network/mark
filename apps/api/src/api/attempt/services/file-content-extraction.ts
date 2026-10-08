@@ -4282,9 +4282,7 @@ export class FileContentExtractionService {
 
     let legendPosition: string | undefined;
     if (this.indexOfOpeningTag(xml, "legend") !== -1) {
-      const positionCode = /<legendPos\b[^<>]*\bval="([^"<>]*)"/.exec(
-        xml,
-      )?.[1];
+      const positionCode = /<legendPos\b[^<>]*\bval="([^"<>]*)"/.exec(xml)?.[1];
       legendPosition =
         LEGEND_POSITION_LABELS[positionCode ?? ""] ?? "position unspecified";
     }
@@ -4453,9 +4451,7 @@ export class FileContentExtractionService {
         // is a bar chart. Reporting both as "Bar Chart" fails workbooks that
         // built exactly the chart the rubric asked for.
         if (tag === "barChart" || tag === "bar3DChart") {
-          const direction = /<barDir\b[^<>]*\bval="([^"<>]*)"/.exec(
-            xml,
-          )?.[1];
+          const direction = /<barDir\b[^<>]*\bval="([^"<>]*)"/.exec(xml)?.[1];
           if (direction === "col") return label.replace("Bar", "Column");
         }
         return label;

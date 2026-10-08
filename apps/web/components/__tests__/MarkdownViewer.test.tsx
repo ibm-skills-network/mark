@@ -28,10 +28,7 @@ const ATTRIBUTE_BREAKOUT_HTML =
   '<li data-list="a><img src=q onerror=alert(document.domain)>b">c</li>';
 
 const ACTIVE_ELEMENT_HTML: [string, string][] = [
-  [
-    "form",
-    '<p>hi</p><form action="//evil.example"><span>go</span></form>',
-  ],
+  ["form", '<p>hi</p><form action="//evil.example"><span>go</span></form>'],
   ["input", '<p>hi</p><input name="u" value="steal">'],
   ["button", "<p>hi</p><button>go</button>"],
   ["textarea", "<p>hi</p><textarea>go</textarea>"],
@@ -182,7 +179,9 @@ describe("MarkdownViewer", () => {
   it("keeps a video embed from a known host and confines it", async () => {
     const { container } = render(
       <MarkdownViewer>
-        {'<iframe class="ql-video" src="https://www.youtube.com/embed/abc123"></iframe>'}
+        {
+          '<iframe class="ql-video" src="https://www.youtube.com/embed/abc123"></iframe>'
+        }
       </MarkdownViewer>,
     );
     await flushEffects();
