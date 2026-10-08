@@ -141,6 +141,19 @@ function decodeBase64Layers(value: string): string {
   return current;
 }
 
+/** Undo the API's single base64 layer as text; the API leaves short digit strings unencoded. */
+export function decodeBase64Text(value: string): string {
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed) && trimmed.length <= 10) return value;
+
+  try {
+    const bytes = Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+    return new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+  } catch {
+    return value;
+  }
+}
+
 /**
  * Smart encoding that automatically detects content type and applies appropriate transformation
  */

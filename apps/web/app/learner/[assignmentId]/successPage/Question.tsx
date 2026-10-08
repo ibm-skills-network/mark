@@ -247,6 +247,7 @@ const Question: FC<Props> = ({
         questionId: question.id.toString(),
         error: result.error,
         type: result.type,
+        size: result.size,
       };
     } catch (err: unknown) {
       const errorMessage =
@@ -1218,16 +1219,8 @@ const Question: FC<Props> = ({
           }
           hasNext={fileViewer.currentIndex < fileViewer.allFiles.length - 1}
           hasPrevious={fileViewer.currentIndex > 0}
+          loading={fileViewer.isLoading}
         />
-      )}
-
-      {fileViewer.isLoading && fileViewer.isOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl flex items-center gap-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
-            <span className="text-gray-700">Loading file content...</span>
-          </div>
-        </div>
       )}
 
       <PdfAnnotationModal
