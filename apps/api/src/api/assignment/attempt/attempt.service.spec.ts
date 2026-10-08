@@ -955,6 +955,37 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
 
       expect(result.questions[0].choices[0].isCorrect).toBe(true);
     });
+
+    describe("translation status for a missing translation row", () => {
+      beforeEach(() => {
+        mockCompleted(completedAttempt(), completedAssignment());
+        mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue({
+          ...completedAttempt(),
+          preferredLanguage: "fr",
+        });
+        mockPrismaService.translation.findMany.mockResolvedValue([]);
+      });
+
+      it("marks the question pending while Redis reports the language in flight", async () => {
+        const hget = jest.fn().mockResolvedValue("1");
+        (service as any).redis = { status: "ready", hget };
+
+        const result = await service.getLearnerAssignmentAttempt(555);
+
+        expect(hget).toHaveBeenCalledTimes(1);
+        expect(result.questions[0].translationStatus).toBe("pending");
+      });
+
+      it("skips Redis and marks the question unavailable while the connection is not ready", async () => {
+        const hget = jest.fn().mockResolvedValue("1");
+        (service as any).redis = { status: "reconnecting", hget };
+
+        const result = await service.getLearnerAssignmentAttempt(555);
+
+        expect(hget).not.toHaveBeenCalled();
+        expect(result.questions[0].translationStatus).toBe("unavailable");
+      });
+    });
   });
 
   describe("getAssignmentContext - v1 URL context enrichment", () => {

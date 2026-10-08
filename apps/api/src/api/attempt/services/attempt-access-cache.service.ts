@@ -9,7 +9,10 @@ import {
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { PrismaService } from "src/database/prisma.service";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import {
+  createCacheRedisConnection,
+  isRedisReady,
+} from "src/job-queue/redis.connection";
 import { EnhancedAttemptQuestionDto } from "../common/utils/attempt-questions-mapper.util";
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 
@@ -107,7 +110,7 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
   }
 
   async invalidateForAssignment(assignmentId: number): Promise<void> {
-    if (!this.redis) {
+    if (!isRedisReady(this.redis)) {
       this.logger.debug(
         `attempt-access-cache.invalidate.skip { assignmentId: ${assignmentId}, reason: "no-redis" }`,
       );
@@ -158,7 +161,7 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
 
   private createRedisClient(): IORedis | undefined {
     try {
-      const client = createRedisConnection();
+      const client = createCacheRedisConnection();
       client.on("error", (error) => {
         this.logger.warn(
           `AttemptAccessCache Redis error (falling back to PostgreSQL): ${error.message}`,
@@ -188,7 +191,7 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
   private async redisGet(
     cacheKey: string,
   ): Promise<EnhancedAttemptQuestionDto[] | null> {
-    if (!this.redis) {
+    if (!isRedisReady(this.redis)) {
       return null;
     }
 
@@ -208,7 +211,7 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
     cacheKey: string,
     value: EnhancedAttemptQuestionDto[],
   ): Promise<void> {
-    if (!this.redis) {
+    if (!isRedisReady(this.redis)) {
       return;
     }
 

@@ -3,11 +3,13 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { GradingCacheService } from "./grading-cache.service";
 import { PrismaService } from "src/database/prisma.service";
 import { ICachedGradingResult } from "../interfaces/grading-cache.interface";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import { createCacheRedisConnection } from "src/job-queue/redis.connection";
 import { Prisma } from "@prisma/client";
 
 jest.mock("src/job-queue/redis.connection", () => ({
-  createRedisConnection: jest.fn(),
+  createCacheRedisConnection: jest.fn(),
+  isRedisReady: jest.requireActual("src/job-queue/redis.connection")
+    .isRedisReady,
 }));
 
 const makeResult = (
@@ -27,6 +29,7 @@ const makeResult = (
 });
 
 class FakeRedis {
+  public status = "ready";
   public readonly data = new Map<string, string>();
   public readonly ttls = new Map<string, number>();
 
@@ -101,7 +104,7 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     fakeRedis = new FakeRedis();
-    (createRedisConnection as jest.Mock).mockReturnValue(fakeRedis);
+    (createCacheRedisConnection as jest.Mock).mockReturnValue(fakeRedis);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -342,11 +345,79 @@ describe("GradingCacheService — Redis L1 cache (Change 8)", () => {
     });
   });
 
+  // ─── Redis not ready ───────────────────────────────────────────────────────
+
+  describe("when the Redis connection is not ready", () => {
+    beforeEach(() => {
+      fakeRedis.status = "reconnecting";
+    });
+
+    it("reads PostgreSQL without touching Redis and skips the backfill", async () => {
+      const getSpy = jest.spyOn(fakeRedis, "get");
+      mockPrisma.gradingCache.findUnique.mockResolvedValue({
+        cacheKey: "down-key",
+        questionId: 4,
+        rubricHash: "rh",
+        answerHash: "ah",
+        totalScore: 6,
+        maxScore: 10,
+        criteria: [],
+        overallFeedback: "OK",
+        cachedAt: new Date(),
+        hitCount: 0,
+        metadata: null,
+      });
+
+      const fetched = await service.getCachedGrading("down-key");
+
+      expect(fetched!.cacheKey).toBe("down-key");
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(fakeRedis.data.size).toBe(0);
+    });
+
+    it("skips the Redis invalidation scan", async () => {
+      const scanSpy = jest.spyOn(fakeRedis, "scan");
+      mockPrisma.gradingCache.deleteMany.mockResolvedValue({ count: 0 });
+
+      await service.invalidateQuestionCache(99);
+      await new Promise((r) => setImmediate(r));
+
+      expect(scanSpy).not.toHaveBeenCalled();
+      expect(mockPrisma.gradingCache.deleteMany).toHaveBeenCalled();
+    });
+  });
+
+  describe("when the Redis connection becomes ready again", () => {
+    it("backfills Redis on the next PostgreSQL hit", async () => {
+      mockPrisma.gradingCache.findUnique.mockResolvedValue({
+        cacheKey: "back-key",
+        questionId: 5,
+        rubricHash: "rh",
+        answerHash: "ah",
+        totalScore: 6,
+        maxScore: 10,
+        criteria: [],
+        overallFeedback: "OK",
+        cachedAt: new Date(),
+        hitCount: 0,
+        metadata: null,
+      });
+
+      fakeRedis.status = "reconnecting";
+      await service.getCachedGrading("back-key");
+      expect(fakeRedis.data.size).toBe(0);
+
+      fakeRedis.status = "ready";
+      await service.getCachedGrading("back-key");
+      expect(fakeRedis.data.has("mark:grading-cache:back-key")).toBe(true);
+    });
+  });
+
   // ─── Graceful Redis fallback ───────────────────────────────────────────────
 
   describe("Redis unavailable fallback", () => {
-    it("operates in PostgreSQL-only mode when createRedisConnection throws", async () => {
-      (createRedisConnection as jest.Mock).mockImplementation(() => {
+    it("operates in PostgreSQL-only mode when createCacheRedisConnection throws", async () => {
+      (createCacheRedisConnection as jest.Mock).mockImplementation(() => {
         throw new Error("Cannot connect to Redis");
       });
 
