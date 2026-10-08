@@ -25,7 +25,7 @@ describe("SnSupportService", () => {
       if (key === "SN_SUPPORT_URL") {
         return "https://support.skills.network/";
       }
-      if (key === "SN_SUPPORT_TOKEN") return "mark-api-key";
+      if (key === "SUPPORT_TOKEN_MARK") return "mark-api-key";
       return undefined;
     });
   });
@@ -298,7 +298,7 @@ describe("SnSupportService", () => {
     expect(body.reporterOrigin).toHaveLength(200);
   });
 
-  it("uses a product key without requiring the legacy token", async () => {
+  it("uses a product key without requiring the Mark fallback key", async () => {
     mockTicketResponse();
     configService.get.mockImplementation((key: string) =>
       key === "SN_SUPPORT_URL" ? "https://support.skills.network" : undefined,
@@ -316,6 +316,26 @@ describe("SnSupportService", () => {
       "Bearer product-key",
     );
   });
+
+  it.each([undefined, "", "   "])(
+    "does not send with a legacy token when the Mark key is %p",
+    async (markKey) => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === "SN_SUPPORT_URL") return "https://support.skills.network";
+        if (key === "SN_SUPPORT_TOKEN") return "legacy-key";
+        if (key === "SUPPORT_TOKEN_MARK") return markKey;
+        return undefined;
+      });
+      await expect(
+        service.createTicket({
+          title: "Report",
+          description: "Details",
+          reporterEmail: "learner@example.com",
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
+      expect(httpService.post).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a ticket without the reporter email required by v2", async () => {
     await expect(
