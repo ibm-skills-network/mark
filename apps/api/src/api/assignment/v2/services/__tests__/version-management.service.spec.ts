@@ -27,6 +27,10 @@ describe("VersionManagementService", () => {
     },
     questionVersion: {
       create: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    question: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
     versionHistory: {
       create: jest.fn(),
@@ -626,6 +630,313 @@ describe("VersionManagementService", () => {
       expect(
         tx.assignmentVersion.update.mock.calls[0][0].data,
       ).not.toHaveProperty("numberOfQuestionsPerAttempt");
+    });
+  });
+
+  describe("version question integrity", () => {
+    const authorSession = {
+      userId: "author@example.com",
+      role: UserRole.AUTHOR,
+    } as never;
+
+    // The prod shape: a draft saved from the editor holds the browser's random
+    // ids for questions that were never saved, alongside real question ids.
+    const unsavedEditorId = 293_869_113;
+
+    beforeEach(() => {
+      mockPrismaService.questionVersion.findMany.mockResolvedValue([]);
+      mockPrismaService.question.findMany.mockResolvedValue([]);
+    });
+
+    const unpublishedDraft = {
+      id: 8129,
+      assignmentId: 4419,
+      versionNumber: "1.0.2",
+      versionDescription: "Draft",
+      published: false,
+      isDraft: true,
+      isActive: false,
+      createdBy: "author@example.com",
+      createdAt: new Date(),
+      numberOfQuestionsPerAttempt: null,
+      _count: { questionVersions: 3 },
+    };
+
+    const buildPublishTx = () => ({
+      assignmentVersion: {
+        update: jest.fn().mockResolvedValue({
+          ...unpublishedDraft,
+          published: true,
+          isActive: true,
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      assignment: { update: jest.fn().mockResolvedValue({}) },
+      versionHistory: { create: jest.fn().mockResolvedValue({}) },
+    });
+
+    it("publishVersion refuses a version whose questions are not saved questions of the assignment", async () => {
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(
+        unpublishedDraft,
+      );
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      mockPrismaService.questionVersion.findMany.mockResolvedValue([
+        { id: 1, questionId: 30_718 },
+        { id: 2, questionId: unsavedEditorId },
+        { id: 3, questionId: null },
+      ]);
+      mockPrismaService.question.findMany.mockResolvedValue([{ id: 30_718 }]);
+      const tx = buildPublishTx();
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await expect(
+        service.publishVersion(4419, 8129, { userSession: authorSession }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(mockPrismaService.question.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: [30_718, unsavedEditorId] },
+          assignmentId: 4419,
+          isDeleted: false,
+        },
+        select: { id: true },
+      });
+      expect(tx.assignmentVersion.update).not.toHaveBeenCalled();
+      expect(tx.assignment.update).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          assignmentId: 4419,
+          versionId: 8129,
+          danglingQuestionIds: [unsavedEditorId],
+          unsavedQuestionCount: 1,
+        }),
+      );
+    });
+
+    it("publishVersion activates a version whose questions are all live questions of the assignment", async () => {
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(
+        unpublishedDraft,
+      );
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      mockPrismaService.questionVersion.findMany.mockResolvedValue([
+        { id: 1, questionId: 33_978 },
+        { id: 2, questionId: 33_979 },
+      ]);
+      mockPrismaService.question.findMany.mockResolvedValue([
+        { id: 33_978 },
+        { id: 33_979 },
+      ]);
+      const tx = buildPublishTx();
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.publishVersion(4419, 8129, { userSession: authorSession });
+
+      expect(tx.assignment.update).toHaveBeenCalledWith({
+        where: { id: 4419 },
+        data: { currentVersionId: 8129 },
+      });
+    });
+
+    it("activating a release-candidate draft refuses unsaved questions too", async () => {
+      const rcVersion = {
+        ...unpublishedDraft,
+        versionNumber: "1.0.2-rc1",
+        questionVersions: [
+          { id: 1, questionId: 30_718 },
+          { id: 2, questionId: unsavedEditorId },
+        ],
+      };
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(
+        rcVersion,
+      );
+      const tx = {
+        assignmentVersion: {
+          findUnique: jest.fn().mockResolvedValue(rcVersion),
+          findFirst: jest.fn().mockResolvedValue(null),
+          update: jest.fn(),
+          updateMany: jest.fn(),
+        },
+        question: { findMany: jest.fn().mockResolvedValue([{ id: 30_718 }]) },
+        assignment: { update: jest.fn() },
+        versionHistory: { create: jest.fn() },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await expect(
+        service.restoreVersion(
+          4419,
+          { versionId: 8129, createAsNewVersion: false },
+          authorSession,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(tx.assignmentVersion.update).not.toHaveBeenCalled();
+      expect(tx.assignment.update).not.toHaveBeenCalled();
+    });
+
+    it("refreshUnpublishedVersionSnapshot replaces a stale draft's questions with the given saved questions", async () => {
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue(
+        unpublishedDraft,
+      );
+      mockPrismaService.question.findMany.mockResolvedValue([
+        { id: 33_978, assignmentId: 4419 },
+        { id: 33_979, assignmentId: 4419 },
+      ]);
+      const tx = {
+        assignmentVersion: {
+          update: jest.fn().mockResolvedValue(unpublishedDraft),
+        },
+        questionVersion: {
+          deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
+          create: jest.fn().mockResolvedValue({}),
+        },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.refreshUnpublishedVersionSnapshot(4419, 8129, {
+        assignmentData: { name: "Assignment" },
+        questionsData: [
+          { id: 33_978, question: "Q1", type: "TEXT" },
+          { id: 33_979, question: "Q2", type: "TEXT" },
+        ],
+      });
+
+      expect(tx.questionVersion.deleteMany).toHaveBeenCalledWith({
+        where: { assignmentVersionId: 8129 },
+      });
+      expect(
+        tx.questionVersion.create.mock.calls.map(
+          (call) => call[0].data.questionId,
+        ),
+      ).toEqual([33_978, 33_979]);
+    });
+
+    it("refreshUnpublishedVersionSnapshot never rewrites a published version", async () => {
+      mockPrismaService.assignmentVersion.findUnique.mockResolvedValue({
+        ...unpublishedDraft,
+        published: true,
+      });
+
+      await expect(
+        service.refreshUnpublishedVersionSnapshot(4419, 8129, {
+          assignmentData: {},
+          questionsData: [],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("draft saves drop question ids that are not valid ids or belong to another assignment", async () => {
+      mockPrismaService.assignment.findUnique.mockResolvedValue({
+        id: 4419,
+        name: "Assignment",
+        questions: [],
+        AssignmentAuthor: [],
+      });
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue(null);
+      mockPrismaService.question.findMany.mockResolvedValue([
+        { id: 33_978, assignmentId: 4419 },
+        { id: 999, assignmentId: 1234 },
+      ]);
+      const tx = {
+        assignmentVersion: {
+          create: jest.fn().mockResolvedValue({
+            id: 9300,
+            versionNumber: "1.0.4",
+            isDraft: true,
+            isActive: false,
+            published: false,
+            createdBy: "author@example.com",
+            createdAt: new Date(),
+          }),
+        },
+        questionVersion: { create: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.saveDraftSnapshot(
+        4419,
+        {
+          versionNumber: "1.0.4",
+          assignmentData: {} as never,
+          questionsData: [
+            { id: 33_978, question: "Saved", type: "TEXT" },
+            { id: 999, question: "Someone else's", type: "TEXT" },
+            { id: unsavedEditorId, question: "Unsaved", type: "TEXT" },
+            { id: 3_000_000_000, question: "Out of range", type: "TEXT" },
+            { id: "12" as never, question: "Not a number", type: "TEXT" },
+          ] as never,
+        },
+        authorSession,
+      );
+
+      // A question of another assignment is never a valid reference: it would
+      // leak that question's variants through getVersion. Unsaved editor ids
+      // stay, because the editor keys reloaded draft questions by them and the
+      // publish job maps them to the questions it creates; publishing a draft
+      // that still holds them is refused.
+      expect(
+        tx.questionVersion.create.mock.calls.map(
+          (call) => call[0].data.questionId,
+        ),
+      ).toEqual([33_978, null, unsavedEditorId, null, null]);
+      expect(mockPrismaService.question.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [33_978, 999, unsavedEditorId] } },
+        select: { id: true, assignmentId: true },
+      });
+    });
+
+    it("auto-saved drafts drop another assignment's question ids too", async () => {
+      mockPrismaService.assignmentVersion.findFirst.mockResolvedValue({
+        id: 9301,
+      });
+      mockPrismaService.question.findMany.mockResolvedValue([
+        { id: 999, assignmentId: 1234 },
+      ]);
+      const tx = {
+        assignmentVersion: {
+          update: jest.fn().mockResolvedValue({
+            id: 9301,
+            versionNumber: "1.0.4-rc1",
+            isDraft: true,
+            isActive: false,
+            published: false,
+            createdBy: "author@example.com",
+            createdAt: new Date(),
+          }),
+        },
+        questionVersion: {
+          deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+          create: jest.fn().mockResolvedValue({}),
+        },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+
+      await service.saveDraft(
+        4419,
+        {
+          assignmentData: {},
+          questionsData: [{ id: 999, question: "Q", type: "TEXT" }],
+        },
+        authorSession,
+      );
+
+      expect(tx.questionVersion.create.mock.calls[0][0].data.questionId).toBe(
+        null,
+      );
     });
   });
 

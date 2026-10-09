@@ -25,6 +25,9 @@ import { PrismaService } from "../../../../database/prisma.service";
 import { AttemptAccessCacheService } from "../../../attempt/services/attempt-access-cache.service";
 import { QuestionDto } from "../../dto/update.questions.request.dto";
 
+/** Largest value a Postgres `integer` column (Question.id) can hold. */
+const MAX_INT4 = 2_147_483_647;
+
 export interface CreateVersionDto {
   versionNumber?: string;
   versionDescription?: string;
@@ -630,8 +633,163 @@ export class VersionManagementService {
     });
 
     return await (existingDraft
-      ? this.updateExistingDraft(existingDraft.id, saveDraftDto)
+      ? this.updateExistingDraft(assignmentId, existingDraft.id, saveDraftDto)
       : this.createDraftVersion(assignmentId, saveDraftDto, userSession));
+  }
+
+  /**
+   * Overwrites an unpublished version's content and question snapshot with
+   * the given data, so it can be published as what the caller just saved.
+   * The publish job uses this when the newest version is an unpublished one
+   * the publishing author did not create: publishing it as-is would serve
+   * whatever that version captured when it was saved, possibly weeks earlier
+   * and including questions that were never saved.
+   */
+  async refreshUnpublishedVersionSnapshot(
+    assignmentId: number,
+    versionId: number,
+    saveDraftDto: SaveDraftDto,
+  ): Promise<VersionSummary> {
+    const version = await this.prisma.assignmentVersion.findUnique({
+      where: { id: versionId, assignmentId },
+      select: { id: true, published: true },
+    });
+
+    if (!version) {
+      throw new NotFoundException(
+        `Version with ID ${versionId} not found for assignment ${assignmentId}`,
+      );
+    }
+
+    if (version.published) {
+      this.logger.warn("Refusing to re-snapshot a published version", {
+        assignmentId,
+        versionId,
+      });
+      throw new BadRequestException("Published versions cannot be modified");
+    }
+
+    this.logger.info("Re-snapshotting unpublished version before publish", {
+      assignmentId,
+      versionId,
+      questionCount: saveDraftDto.questionsData?.length ?? 0,
+    });
+
+    return this.updateExistingDraft(assignmentId, versionId, saveDraftDto);
+  }
+
+  /**
+   * Question ids a draft may store, aligned with `questionsData`. A draft is
+   * editor state: the editor keys reloaded draft questions by these ids, and
+   * unsaved questions carry ids the browser made up, which the publish job
+   * maps to the questions it creates. Those are kept; publishing a version
+   * that still holds them is refused by assertVersionQuestionsAreLive.
+   * Dropped (stored as null): anything that is not a positive 32-bit integer,
+   * and ids of questions that belong to a different assignment, which can
+   * never be correct and would leak that question's variants via getVersion.
+   */
+  private async resolveDraftQuestionIds(
+    assignmentId: number,
+    questionsData: ReadonlyArray<{ id?: unknown }>,
+  ): Promise<Array<number | null>> {
+    const candidateIds = questionsData.map(({ id }) =>
+      typeof id === "number" &&
+      Number.isInteger(id) &&
+      id > 0 &&
+      id <= MAX_INT4
+        ? id
+        : null,
+    );
+
+    const lookupIds = [
+      ...new Set(candidateIds.filter((id): id is number => id !== null)),
+    ];
+    if (lookupIds.length === 0) {
+      return candidateIds;
+    }
+
+    const rows = await this.prisma.question.findMany({
+      where: { id: { in: lookupIds } },
+      select: { id: true, assignmentId: true },
+    });
+    const foreignIds = new Set(
+      rows.filter((row) => row.assignmentId !== assignmentId).map((r) => r.id),
+    );
+
+    const resolvedIds = candidateIds.map((id) =>
+      id !== null && foreignIds.has(id) ? null : id,
+    );
+
+    const droppedCount = questionsData.filter(
+      ({ id }, index) =>
+        id !== undefined && id !== null && resolvedIds[index] === null,
+    ).length;
+    if (droppedCount > 0) {
+      this.logger.warn("Dropped invalid question ids from a draft snapshot", {
+        assignmentId,
+        foreignQuestionIds: [...foreignIds],
+        droppedCount,
+      });
+    }
+
+    return resolvedIds;
+  }
+
+  /**
+   * A version is what learners are served: every question in it must be a
+   * saved, non-deleted Question of this assignment, or attempt creation fails
+   * writing rows that reference the question.
+   */
+  private async assertVersionQuestionsAreLive(
+    database: Prisma.TransactionClient | PrismaService,
+    assignmentId: number,
+    versionId: number,
+    questionVersions: ReadonlyArray<{ id: number; questionId: number | null }>,
+    userId: string | undefined,
+  ): Promise<void> {
+    const referencedIds = [
+      ...new Set(
+        questionVersions
+          .map((qv) => qv.questionId)
+          .filter((id): id is number => id !== null),
+      ),
+    ];
+    const liveRows =
+      referencedIds.length > 0
+        ? await database.question.findMany({
+            where: {
+              id: { in: referencedIds },
+              assignmentId,
+              isDeleted: false,
+            },
+            select: { id: true },
+          })
+        : [];
+    const liveIds = new Set(liveRows.map((row) => row.id));
+
+    const danglingQuestionIds = referencedIds.filter((id) => !liveIds.has(id));
+    const unsavedQuestionCount = questionVersions.filter(
+      (qv) => qv.questionId === null,
+    ).length;
+
+    if (danglingQuestionIds.length === 0 && unsavedQuestionCount === 0) {
+      return;
+    }
+
+    this.logger.error(
+      "Refusing to publish a version whose questions are not saved questions of the assignment",
+      {
+        assignmentId,
+        versionId,
+        userId,
+        danglingQuestionIds,
+        unsavedQuestionCount,
+        totalQuestionVersions: questionVersions.length,
+      },
+    );
+    throw new BadRequestException(
+      "This version contains questions that are not saved to the assignment. Open it in the editor and publish from there.",
+    );
   }
 
   async restoreVersion(
@@ -928,6 +1086,18 @@ export class VersionManagementService {
       }
     }
 
+    const questionVersions = await this.prisma.questionVersion.findMany({
+      where: { assignmentVersionId: versionId },
+      select: { id: true, questionId: true },
+    });
+    await this.assertVersionQuestionsAreLive(
+      this.prisma,
+      assignmentId,
+      versionId,
+      questionVersions,
+      userSession?.userId,
+    );
+
     const originalVersionNumber = version.versionNumber;
     const wasAutoIncremented =
       publishedVersionNumber !== originalVersionNumber.replace(/-rc\d+$/, "");
@@ -1095,9 +1265,15 @@ export class VersionManagementService {
   }
 
   private async updateExistingDraft(
+    assignmentId: number,
     draftId: number,
     saveDraftDto: SaveDraftDto,
   ): Promise<VersionSummary> {
+    const questionIds = await this.resolveDraftQuestionIds(
+      assignmentId,
+      saveDraftDto.questionsData ?? [],
+    );
+
     return await this.prisma.$transaction(async (tx) => {
       const updatedDraft = await tx.assignmentVersion.update({
         where: { id: draftId },
@@ -1147,7 +1323,7 @@ export class VersionManagementService {
           await tx.questionVersion.create({
             data: {
               assignmentVersionId: draftId,
-              questionId: questionData.id || null,
+              questionId: questionIds[index],
               authorComment: questionData.authorComment ?? null,
               totalPoints: questionData.totalPoints || 0,
               type: questionData.type,
@@ -1460,6 +1636,11 @@ export class VersionManagementService {
       throw new NotFoundException("Assignment not found");
     }
 
+    const questionIds = await this.resolveDraftQuestionIds(
+      assignmentId,
+      saveDraftDto.questionsData ?? [],
+    );
+
     return await this.prisma.$transaction(async (tx) => {
       const lastVersion = await tx.assignmentVersion.findFirst({
         where: { assignmentId },
@@ -1542,7 +1723,7 @@ export class VersionManagementService {
           await tx.questionVersion.create({
             data: {
               assignmentVersionId: assignmentVersion.id,
-              questionId: questionData.id || null,
+              questionId: questionIds[index],
               authorComment: questionData.authorComment ?? null,
               totalPoints: questionData.totalPoints || 0,
               type: questionData.type,
@@ -2030,6 +2211,16 @@ export class VersionManagementService {
       throw new BadRequestException("Version is not an RC version");
     }
 
+    if (!rcVersion.published) {
+      await this.assertVersionQuestionsAreLive(
+        prisma,
+        assignmentId,
+        rcVersionId,
+        rcVersion.questionVersions,
+        userSession.userId,
+      );
+    }
+
     let finalVersionNumber = rcVersion.versionNumber.replace(/-rc\d+$/, "");
 
     const existingFinalVersion = await prisma.assignmentVersion.findFirst({
@@ -2163,6 +2354,11 @@ export class VersionManagementService {
       );
     }
 
+    const snapshotQuestionIds = await this.resolveDraftQuestionIds(
+      assignmentId,
+      draftData.questionsData ?? [],
+    );
+
     try {
       return await this.prisma.$transaction(async (tx) => {
         let assignmentVersion: AssignmentVersion;
@@ -2290,7 +2486,7 @@ export class VersionManagementService {
           await tx.questionVersion.create({
             data: {
               assignmentVersionId: assignmentVersion.id,
-              questionId: questionData.id || undefined,
+              questionId: snapshotQuestionIds[index],
               authorComment: questionData.authorComment ?? null,
               totalPoints: questionData.totalPoints || 0,
               type: questionData.type,
