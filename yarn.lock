@@ -12,10 +12,10 @@
   resolved "https://registry.yarnpkg.com/@adobe/css-tools/-/css-tools-4.4.4.tgz#2856c55443d3d461693f32d2b96fb6ea92e1ffa9"
   integrity sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==
 
-"@ai-sdk/gateway@2.0.162":
-  version "2.0.162"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.162.tgz#33282f02a678dfc5e0d9c2c65bd873a5bbd721f4"
-  integrity sha512-hC8/jPgPUr4Vly8Ths7t7qru2w6leH0cO2D9gr57CYRUYje6BUNz0hoGYVAjH2kzovXFAz5rK3QOX/mOMDcnOA==
+"@ai-sdk/gateway@2.0.164":
+  version "2.0.164"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.164.tgz#91d4ec98057b229d23efd0e87531701daaf54ca5"
+  integrity sha512-pol4Klaj4v1sO7s5P3L5NXfNPVLBBwseRzUGjs7gge4TMTK3Xdsu7CqiVzLVCFU7bCbm+mMy7TTxiL1Qkmw/6Q==
   dependencies:
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.41"
@@ -5510,11 +5510,11 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^5.0.52:
-  version "5.0.271"
-  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.271.tgz#3a1fbbf4568a7fbdbfec61f397364d081873fcce"
-  integrity sha512-VOBVhbcLcpyV28QcWHEN6Brz4DXiP4eBv8YM6xVrOHism6JP53YlQPIPEJ9B+fLTtpncU7nxo617vV+9k15lEA==
+  version "5.0.273"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.273.tgz#233d3553633fb0aa546a355de27f448c0ac46513"
+  integrity sha512-/rVEn93YcPAugzgKBJykrlWM/lPZuASrG+qvyjbV42/DJb0rEBJa7kg3wC/aKhdxGPppr8+O/pOdpYcXjtsDCQ==
   dependencies:
-    "@ai-sdk/gateway" "2.0.162"
+    "@ai-sdk/gateway" "2.0.164"
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.41"
     "@opentelemetry/api" "1.9.0"
