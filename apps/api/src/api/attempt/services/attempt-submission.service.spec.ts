@@ -338,7 +338,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       const questionVersions = [
         makeQuestionVersion({ id: 1001, questionId: 10, question: "Q1" }),
         makeQuestionVersion({ id: 1002, questionId: 20, question: "Q2" }),
-        makeQuestionVersion({ id: 1003, questionId: null, question: "Q3" }),
       ];
 
       const variant = {
@@ -412,42 +411,165 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       ];
       const questionWithVariant = orderedQuestions.find((q) => q.id === 10);
       const questionWithoutVariant = orderedQuestions.find((q) => q.id === 20);
-      const questionFromVersionOnly = orderedQuestions.find(
-        (q) => q.id === 1003,
-      );
 
       expect(questionWithVariant?.variants).toHaveLength(1);
       expect(questionWithVariant?.variants?.[0]?.id).toBe(501);
       expect(questionWithoutVariant?.variants).toHaveLength(0);
-      expect(questionFromVersionOnly?.variants).toHaveLength(0);
     });
 
-    it("skips batch lookup when questionIds are missing", async () => {
+    const spyOnError = () =>
+      jest
+        .spyOn(
+          (
+            service as unknown as {
+              logger: { error: (message: string, context?: unknown) => void };
+            }
+          ).logger,
+          "error",
+        )
+        .mockImplementation(() => undefined);
+
+    it("refuses a version whose questions point at ids with no Question row instead of failing on the foreign key", async () => {
+      // Shape of the broken prod versions: some questionIds are live, some are
+      // random ids the author's browser assigned to unsaved questions.
+      const questionVersions = [
+        makeQuestionVersion({ id: 6001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({
+          id: 6002,
+          questionId: 293_869_113,
+          question: "Q2",
+        }),
+      ];
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        currentVersionId: 9,
+        currentVersion: { id: 9, questionVersions },
+        questions: [{ id: 10, variants: [] }],
+      });
+      mockPrisma.question.findMany.mockResolvedValueOnce([]);
+      const errorSpy = spyOnError();
+
+      await expect(
+        service.createAssignmentAttempt(assignmentId, userSession),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(
+        mockQuestionVariantService.createAttemptQuestionVariants,
+      ).not.toHaveBeenCalled();
+      expect(mockPrisma.assignmentAttempt.create).not.toHaveBeenCalled();
+      expect(mockPrisma.question.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [293_869_113] }, assignmentId },
+        select: { id: true },
+      });
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          assignmentId,
+          versionId: 9,
+          danglingQuestionIds: [293_869_113],
+          questionVersionIds: [6002],
+        }),
+      );
+    });
+
+    it("refuses a version question with no questionId rather than using the QuestionVersion id as a Question id", async () => {
       const questionVersions = [
         makeQuestionVersion({ id: 2001, questionId: null, question: "Q1" }),
       ];
 
       mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
         currentVersionId: 9,
-        currentVersion: { questionVersions },
+        currentVersion: { id: 9, questionVersions },
         questions: [],
       });
+      const errorSpy = spyOnError();
 
-      await service.createAssignmentAttempt(assignmentId, userSession);
+      await expect(
+        service.createAssignmentAttempt(assignmentId, userSession),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
-      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
       expect(
         mockQuestionVariantService.createAttemptQuestionVariants,
-      ).toHaveBeenCalledTimes(1);
+      ).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          assignmentId,
+          versionId: 9,
+          questionVersionIds: [2001],
+          unsavedQuestionCount: 1,
+        }),
+      );
+    });
+
+    it("does not reveal which questions are broken to the learner", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 7001, questionId: 904_476_396 }),
+      ];
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        currentVersionId: 9,
+        currentVersion: { id: 9, questionVersions },
+        questions: [],
+      });
+      mockPrisma.question.findMany.mockResolvedValueOnce([]);
+      spyOnError();
+
+      const failure = await service
+        .createAssignmentAttempt(assignmentId, userSession)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(ServiceUnavailableException);
+      expect(JSON.stringify(failure)).not.toContain("904476396");
+    });
+
+    it("rejects a version question that belongs to another assignment", async () => {
+      const questionVersions = [
+        makeQuestionVersion({ id: 8001, questionId: 10 }),
+        makeQuestionVersion({ id: 8002, questionId: 777 }),
+      ];
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        currentVersionId: 9,
+        currentVersion: { id: 9, questionVersions },
+        questions: [{ id: 10, variants: [] }],
+      });
+      // The lookup is scoped to this assignment, so another assignment's
+      // question does not come back.
+      mockPrisma.question.findMany.mockResolvedValueOnce([]);
+      spyOnError();
+
+      await expect(
+        service.createAssignmentAttempt(assignmentId, userSession),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it("still serves a version question that was soft-deleted after the version was published", async () => {
+      // A published version is a snapshot: later edits soft-delete the live
+      // Question row but the row (and its foreign key target) still exists.
+      const questionVersions = [
+        makeQuestionVersion({ id: 9001, questionId: 10, question: "Q1" }),
+        makeQuestionVersion({ id: 9002, questionId: 30_718, question: "Q2" }),
+      ];
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        ...baseAssignment,
+        currentVersionId: 9,
+        currentVersion: { id: 9, questionVersions },
+        questions: [{ id: 10, variants: [] }],
+      });
+      mockPrisma.question.findMany.mockResolvedValueOnce([{ id: 30_718 }]);
+
+      await service.createAssignmentAttempt(assignmentId, userSession);
 
       const [, orderedQuestions] = mockQuestionVariantService
         .createAttemptQuestionVariants.mock.calls[0] as [
         number,
-        Array<{ id: number; variants?: Array<{ id?: number }> }>,
+        Array<{ id: number }>,
       ];
-      expect(orderedQuestions).toHaveLength(1);
-      expect(orderedQuestions[0].id).toBe(2001);
-      expect(orderedQuestions[0].variants).toHaveLength(0);
+      expect(orderedQuestions.map((question) => question.id).sort()).toEqual([
+        10, 30_718,
+      ]);
     });
 
     it("serves the whole pool when numberOfQuestionsPerAttempt exceeds it", async () => {
@@ -463,7 +585,10 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         numberOfQuestionsPerAttempt: 5,
         currentVersionId: 9,
         currentVersion: { questionVersions },
-        questions: [],
+        questions: [
+          { id: 10, variants: [] },
+          { id: 20, variants: [] },
+        ],
       });
 
       const result = await service.createAssignmentAttempt(
@@ -498,7 +623,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         numberOfQuestionsPerAttempt: 2,
         currentVersionId: 9,
         currentVersion: { questionVersions },
-        questions: [],
+        questions: [
+          { id: 10, variants: [] },
+          { id: 20, variants: [] },
+          { id: 30, variants: [] },
+        ],
       });
 
       await service.createAssignmentAttempt(assignmentId, userSession);
@@ -524,7 +653,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         questionOrder: [20, 10],
         currentVersionId: 9,
         currentVersion: { questionVersions },
-        questions: [],
+        questions: [
+          { id: 10, variants: [] },
+          { id: 20, variants: [] },
+          { id: 30, variants: [] },
+        ],
       });
 
       await service.createAssignmentAttempt(assignmentId, userSession);

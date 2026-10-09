@@ -18,6 +18,7 @@ import {
   Question,
   QuestionType,
   QuestionVariant,
+  QuestionVersion,
   ResponseType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
@@ -313,6 +314,12 @@ export class AttemptSubmissionService {
     );
     const activeVersionId = assignment.currentVersionId;
 
+    const versionQuestions = await this.resolveActiveVersionQuestions(
+      tx,
+      assignmentId,
+      assignment,
+    );
+
     const assignmentAttempt = await tx.assignmentAttempt.create({
       data: {
         expiresAt: attemptExpiresAt ?? null,
@@ -329,19 +336,17 @@ export class AttemptSubmissionService {
     const orderingSeed = Math.imul(selectionSeed, 2_654_435_761) >>> 0;
 
     let questions: QuestionDto[] = [];
-    if (assignment.currentVersion?.questionVersions?.length > 0) {
+    if (versionQuestions.length > 0) {
       const variantsByQuestionId = new Map<number, QuestionVariant[]>();
       for (const question of assignment.questions) {
         variantsByQuestionId.set(question.id, question.variants || []);
       }
 
-      questions = assignment.currentVersion.questionVersions.map((qv) => {
-        const variants = qv.questionId
-          ? (variantsByQuestionId.get(qv.questionId) ?? [])
-          : [];
+      questions = versionQuestions.map((qv) => {
+        const variants = variantsByQuestionId.get(qv.questionId) ?? [];
 
         return {
-          id: qv.questionId || qv.id,
+          id: qv.questionId,
           question: qv.question,
           type: qv.type,
           assignmentId: assignmentId,
@@ -479,6 +484,88 @@ export class AttemptSubmissionService {
       success: true,
       serverNow: readServerClock(),
     };
+  }
+
+  /**
+   * The active version's questions, each guaranteed to reference an existing
+   * Question row of this assignment. Rows soft-deleted after the version was
+   * published still count: a published version is a snapshot and keeps
+   * serving them. A questionId with no row at all (or a missing one) can only
+   * come from a version snapshot that stored ids the author's browser made up
+   * for unsaved questions; writing the attempt's variant rows would then fail
+   * on the foreign key. Refuse cleanly instead, and never substitute the live
+   * questions, which may be unpublished author edits.
+   */
+  private async resolveActiveVersionQuestions(
+    tx: Prisma.TransactionClient,
+    assignmentId: number,
+    assignment: Prisma.AssignmentGetPayload<{
+      include: {
+        currentVersion: { include: { questionVersions: true } };
+        questions: true;
+      };
+    }>,
+  ): Promise<Array<QuestionVersion & { questionId: number }>> {
+    const questionVersions = assignment.currentVersion?.questionVersions ?? [];
+    if (questionVersions.length === 0) {
+      return [];
+    }
+
+    const liveQuestionIds = new Set(assignment.questions.map((q) => q.id));
+    const unresolvedIds = [
+      ...new Set(
+        questionVersions
+          .map((qv) => qv.questionId)
+          .filter(
+            (id): id is number => id !== null && !liveQuestionIds.has(id),
+          ),
+      ),
+    ];
+
+    const knownIds = new Set(liveQuestionIds);
+    if (unresolvedIds.length > 0) {
+      const rows = await tx.question.findMany({
+        where: { id: { in: unresolvedIds }, assignmentId },
+        select: { id: true },
+      });
+      for (const row of rows) {
+        knownIds.add(row.id);
+      }
+    }
+
+    const resolved: Array<QuestionVersion & { questionId: number }> = [];
+    const broken: QuestionVersion[] = [];
+    for (const qv of questionVersions) {
+      if (qv.questionId !== null && knownIds.has(qv.questionId)) {
+        resolved.push({ ...qv, questionId: qv.questionId });
+      } else {
+        broken.push(qv);
+      }
+    }
+
+    if (broken.length > 0) {
+      this.logger.error(
+        "createAssignmentAttempt: active version references questions that do not exist",
+        {
+          assignmentId,
+          versionId: assignment.currentVersionId,
+          danglingQuestionIds: broken
+            .map((qv) => qv.questionId)
+            .filter((id): id is number => id !== null),
+          unsavedQuestionCount: broken.filter((qv) => qv.questionId === null)
+            .length,
+          questionVersionIds: broken.map((qv) => qv.id),
+          totalQuestionVersions: questionVersions.length,
+        },
+      );
+      throw new ServiceUnavailableException({
+        message:
+          "This assignment is temporarily unavailable. Please contact your instructor.",
+        code: "ASSIGNMENT_VERSION_UNAVAILABLE",
+      });
+    }
+
+    return resolved;
   }
 
   /**
