@@ -784,6 +784,30 @@ export class AssignmentServiceV2 implements OnModuleDestroy {
             },
           );
 
+          // This version is not the publishing author's own draft (that is
+          // the branch above), so its snapshot can be arbitrarily stale and
+          // may hold ids of questions that were never saved. Publish what was
+          // just saved, not what that version captured.
+          await this.versionManagementService.refreshUnpublishedVersionSnapshot(
+            assignmentId,
+            latestVersion.id,
+            {
+              assignmentData: {
+                name: updateDto.name,
+                introduction: updateDto.introduction,
+                instructions: updateDto.instructions,
+                gradingCriteriaOverview: updateDto.gradingCriteriaOverview,
+                timeEstimateMinutes: updateDto.timeEstimateMinutes,
+                requireAllQuestions: updateDto.requireAllQuestions,
+                optionalQuestionIds: updateDto.optionalQuestionIds,
+              },
+              questionsData: orderedUpdatedQuestions,
+              versionDescription:
+                updateDto.versionDescription ??
+                `Published version - ${new Date().toLocaleDateString()}`,
+            },
+          );
+
           versionResult = await this.versionManagementService.publishVersion(
             assignmentId,
             latestVersion.id,

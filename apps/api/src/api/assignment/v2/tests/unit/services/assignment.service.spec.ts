@@ -529,6 +529,71 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     );
   });
 
+  it("re-snapshots another author's stale unpublished version from the saved questions before publishing it", async () => {
+    // Prod shape: author A saved a draft from the editor (holding the
+    // browser's ids for unsaved questions); weeks later author B, who has no
+    // draft of their own, published. The job used to promote A's draft as-is,
+    // so learners were served questions that did not exist.
+    const assignmentId = 4419;
+    const jobId = "publish-job-stale-draft";
+    const dto = createMockUpdateAssignmentQuestionsDto({}, false);
+
+    assignmentRepository.findById.mockResolvedValue(
+      createMockGetAssignmentResponseDto({ published: true }),
+    );
+    questionService.getQuestionsForAssignment.mockResolvedValue([
+      createMockQuestionDto({ id: 33_978 }),
+      createMockQuestionDto({ id: 33_979 }),
+    ]);
+    versionManagementService.getUserLatestDraft.mockResolvedValue(null);
+    versionManagementService.getLatestVersion.mockResolvedValue({
+      id: 8129,
+      versionNumber: "1.0.2",
+      isDraft: true,
+      isActive: false,
+      published: false,
+      createdBy: "other-author@example.com",
+      createdAt: new Date(),
+      questionCount: 23,
+    });
+
+    jest
+      .spyOn<
+        any,
+        any
+      >(service as any, "haveTranslatableAssignmentFieldsChanged")
+      .mockReturnValue(false);
+    jest
+      .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
+      .mockReturnValue(false);
+
+    await service.runPublishJob(jobId, assignmentId, dto, "author-123");
+
+    expect(
+      versionManagementService.refreshUnpublishedVersionSnapshot,
+    ).toHaveBeenCalledWith(
+      assignmentId,
+      8129,
+      expect.objectContaining({
+        questionsData: [
+          expect.objectContaining({ id: 33_978 }),
+          expect.objectContaining({ id: 33_979 }),
+        ],
+      }),
+    );
+    expect(versionManagementService.publishVersion).toHaveBeenCalledWith(
+      assignmentId,
+      8129,
+      expect.anything(),
+    );
+    const refreshOrder =
+      versionManagementService.refreshUnpublishedVersionSnapshot.mock
+        .invocationCallOrder[0];
+    const publishOrder =
+      versionManagementService.publishVersion.mock.invocationCallOrder[0];
+    expect(refreshOrder).toBeLessThan(publishOrder);
+  });
+
   describe("resolveQuestionOrder", () => {
     it("uses explicit questionOrder even when questions payload is absent", () => {
       const existingAssignment = createMockGetAssignmentResponseDto();
