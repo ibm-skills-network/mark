@@ -54,9 +54,16 @@ env:
   # means ALL queues (single-deployment and local-dev behavior). Deploy
   # overlays use this to split the fast and heavy worker tiers, e.g.
   #   fast:  every queue except mark.attempt.heavy
-  #   heavy: "mark.attempt.heavy"
+  #   heavy: "mark.attempt.heavy,mark.file-extract"
   # An unknown queue name fails the pod at boot (crash loop) by design.
   # JOB_WORKER_QUEUES: ""
+  # BullMQ worker concurrency for mark.file-extract (author reference-file
+  # extraction) when consumed. Default 2: same pdf/canvas memory profile as
+  # heavy grading, bounded rather than deprioritized.
+  # FILE_EXTRACT_CONCURRENCY: "2"
+  # Per-file byte budget for extraction, mirroring mark-api's setting so a
+  # large reference file cannot OOM a worker pod.
+  FILE_PROCESSING_BUDGET_BYTES: "1073741824"
   # BullMQ worker concurrency for mark.attempt.heavy when consumed. Default 1:
   # heavy jobs are the file/image extraction memory hogs, so one at a time
   # per pod unless observation says otherwise.
