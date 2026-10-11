@@ -3,6 +3,7 @@ import { authorSessionHeaders } from "./author-session";
 import { absoluteUrl } from "./utils";
 import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import { apiClient, APIError } from "./api-client";
+import { decodeBase64Text } from "@/app/Helpers/data-transformer";
 import { withTransientRetry } from "./api-retry";
 import {
   DIRECT_UPLOAD_FALLBACK_MAX_BYTES,
@@ -888,11 +889,15 @@ export async function getFileContent(
 
   const url = `${getBaseApiPath("v1")}/files/content?${params.toString()}`;
 
-  return (await apiClient.get(url, {
+  // The shared decoder JSON-parses decoded text, which turns .ipynb/.json files into objects.
+  const response = (await apiClient.get(url, {
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
+    transformResponse: false,
   })) as FileContentResponse;
+
+  return { ...response, content: decodeBase64Text(response.content) };
 }
 
 /**
@@ -946,6 +951,7 @@ export async function fetchFileContentSafe(
           content: contentResponse.content,
           filename: fileName,
           questionId: "",
+          size: contentResponse.size,
         };
       } catch {}
     }
@@ -958,6 +964,7 @@ export async function fetchFileContentSafe(
       questionId: "",
       contentUrl: fileAccess.viewUrl,
       type: fileAccess.contentType,
+      size: fileAccess.size,
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
