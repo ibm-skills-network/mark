@@ -21,7 +21,8 @@ export interface QueueMetadata {
 
 // Keyed by the queue's wire name (the value in JOB_QUEUE_NAMES). Concurrency
 // defaults mirror the worker registration: v1/v2 author generation = 2 each,
-// grading (attempt) = 4, translations = 8, admin maintenance = 1.
+// grading (attempt) = 4, translations = 8, admin maintenance = 1, file
+// extraction = 2.
 export const QUEUE_METADATA: Record<string, QueueMetadata> = {
   [JOB_QUEUE_NAMES.ASSIGNMENT_V1]: {
     role: "author",
@@ -46,5 +47,9 @@ export const QUEUE_METADATA: Record<string, QueueMetadata> = {
   [JOB_QUEUE_NAMES.ADMIN_TRANSLATION]: {
     role: "admin-maintenance",
     defaultConcurrencyPerPod: 1,
+  },
+  [JOB_QUEUE_NAMES.FILE_EXTRACT]: {
+    role: "author",
+    defaultConcurrencyPerPod: 2,
   },
 };

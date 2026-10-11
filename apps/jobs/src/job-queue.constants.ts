@@ -8,6 +8,7 @@ export const JOB_QUEUE_NAMES = {
   ATTEMPT_HEAVY: "mark.attempt.heavy",
   ADMIN_TRANSLATION: "mark.admin.translation",
   ASSIGNMENT_V2_TRANSLATIONS: "mark.assignment.v2.translations",
+  FILE_EXTRACT: "mark.file-extract",
 } as const;
 
 export const JOB_NAMES = {
@@ -23,6 +24,7 @@ export const JOB_NAMES = {
   TRANSLATE_QUESTION: "assignment-v2.translate-question",
   TRANSLATE_VARIANT: "assignment-v2.translate-variant",
   TRANSLATE_META: "assignment-v2.translate-meta",
+  FILE_EXTRACT: "file.extract",
 } as const;
 
 // BullMQ processes jobs enqueued WITHOUT a priority before ALL prioritized

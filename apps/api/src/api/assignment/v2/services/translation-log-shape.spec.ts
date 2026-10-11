@@ -89,6 +89,7 @@ describe("Log shape contract: translation-job lifecycle", () => {
       noopService,
       noopService,
       translationService as any,
+      noopService,
       winstonLogger as any,
     );
 

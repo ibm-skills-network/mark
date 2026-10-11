@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common";
 import { JobExecutorService } from "./job-executor.service";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 
@@ -37,6 +38,7 @@ describe("JobExecutorService translation jobs", () => {
         noopService as never,
         noopService as never,
         translationService as never,
+        noopService as never,
         logger as never,
       ),
       translationService,
@@ -279,5 +281,65 @@ describe("JobExecutorService translation jobs", () => {
         },
       }),
     ).rejects.toThrow(/1 language/);
+  });
+});
+
+describe("JobExecutorService — file-extract", () => {
+  it("dispatches FILE_EXTRACT to AssignmentFileService.runAssignmentFileExtraction", async () => {
+    const assignmentFileService = {
+      runAssignmentFileExtraction: jest.fn().mockResolvedValue(undefined),
+    };
+    const logger = {
+      child: () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
+    };
+    const service = new JobExecutorService(
+      {} as never, // assignmentServiceV1
+      {} as never, // assignmentServiceV2
+      {} as never, // assignmentQuestionServiceV2
+      {} as never, // attemptService
+      {} as never, // translationRunner
+      {} as never, // translationService
+      assignmentFileService as never,
+      logger as never,
+    );
+
+    await service.executeJob({
+      queueName: JOB_QUEUE_NAMES.FILE_EXTRACT,
+      jobName: JOB_NAMES.FILE_EXTRACT,
+      payload: { assignmentId: 3, fileId: 7 },
+    });
+
+    expect(
+      assignmentFileService.runAssignmentFileExtraction,
+    ).toHaveBeenCalledWith(7);
+  });
+
+  it("rejects unknown job names on the file-extract queue", async () => {
+    const assignmentFileService = {
+      runAssignmentFileExtraction: jest.fn(),
+    };
+    const logger = {
+      child: () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
+    };
+    const service = new JobExecutorService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      assignmentFileService as never,
+      logger as never,
+    );
+    await expect(
+      service.executeJob({
+        queueName: JOB_QUEUE_NAMES.FILE_EXTRACT,
+        jobName: JOB_NAMES.ATTEMPT_GRADE,
+        payload: {},
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(
+      assignmentFileService.runAssignmentFileExtraction,
+    ).not.toHaveBeenCalled();
   });
 });

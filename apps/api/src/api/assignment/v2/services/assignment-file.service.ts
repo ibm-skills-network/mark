@@ -16,6 +16,8 @@ import { UploadType } from "src/api/files/dto/upload.dto";
 import { FilesService } from "src/api/files/services/files.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { PrismaService } from "src/database/prisma.service";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "src/job-queue/job-queue.constants";
+import { JobQueueService } from "src/job-queue/job-queue.service";
 import {
   CompleteAssignmentFileDto,
   InitiateAssignmentFileItemResponseDto,
@@ -52,6 +54,7 @@ export class AssignmentFileService {
     private readonly s3Service: S3Service,
     private readonly fileContentExtractionService: FileContentExtractionService,
     private readonly filesService: FilesService,
+    private readonly jobQueueService: JobQueueService,
   ) {}
 
   async initiateAssignmentFileUploads(
@@ -243,29 +246,105 @@ export class AssignmentFileService {
       );
     }
 
+    // Extraction moved off the request thread onto mark-jobs. Mark the row
+    // ready-to-serve with extraction pending, enqueue, and return immediately.
+    let updated: AssignmentFile;
+    try {
+      updated = await this.prisma.assignmentFile.update({
+        where: { id: fileId },
+        data: {
+          status: AssignmentFileStatus.READY,
+          extractionStatus: AssignmentFileExtractionStatus.PENDING,
+          extractionError: null,
+          extractedText: null,
+          extractedAt: null,
+          uploadId: null,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `completeAssignmentFileUpload: mark-pending update failed for fileId=${fileId}: ${message}`,
+      );
+      throw error;
+    }
+
+    try {
+      await this.jobQueueService.enqueue(
+        JOB_QUEUE_NAMES.FILE_EXTRACT,
+        JOB_NAMES.FILE_EXTRACT,
+        { assignmentId, fileId },
+        { jobId: `extract:${fileId}` },
+      );
+      this.logger.log(
+        `completeAssignmentFileUpload: fileId=${fileId} finalized status=READY extraction enqueued`,
+      );
+    } catch (error) {
+      // Leave the row PENDING so a re-enqueue (manual retry / sweeper) can pick
+      // it up; do not fail the author's upload over a transient broker hiccup.
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `completeAssignmentFileUpload: enqueue failed for fileId=${fileId}, row left PENDING: ${message}`,
+      );
+    }
+
+    return this.toResponse(updated);
+  }
+
+  /**
+   * Heavy extraction half of the reference-file upload, run on the mark-jobs
+   * worker. Loads the row by id (never trusts enqueued fields beyond it),
+   * downloads from S3, extracts, and persists extractedText + terminal
+   * extractionStatus. Idempotent: safe to re-run (overwrites).
+   */
+  async runAssignmentFileExtraction(fileId: number): Promise<void> {
+    const file = await this.prisma.assignmentFile.findUnique({
+      where: { id: fileId },
+    });
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
     let extractedFile: Awaited<
       ReturnType<
         typeof this.fileContentExtractionService.extractContentFromFiles
       >
     >[number];
 
+    // Download failures rethrow instead of persisting FAILED: they are
+    // transient infra errors, and the job's remaining BullMQ attempts are
+    // the recovery path. Only extraction itself (deterministic parsing that
+    // a retry cannot fix) falls through to the terminal failure envelope.
+    let buffer: Buffer;
     try {
       const object = await this.s3Service.getObject({
         Bucket: file.storageBucket,
         Key: file.storageKey,
       });
-      const buffer = await this.collectBodyToBuffer(object.Body);
-      const extractionInput = [
-        {
-          filename: file.filename,
-          content: "InCos",
-          fileType: file.mimeType || "application/octet-stream",
-          bucket: file.storageBucket,
-          key: file.storageKey,
-          buffer,
-        },
-      ];
+      buffer = await this.collectBodyToBuffer(object.Body);
+    } catch (downloadError) {
+      const message =
+        downloadError instanceof Error
+          ? downloadError.message
+          : String(downloadError);
+      this.logger.error(
+        `runAssignmentFileExtraction: S3 download failed for fileId=${fileId}, rethrowing for job retry: ${message}`,
+      );
+      throw downloadError;
+    }
 
+    const extractionInput = [
+      {
+        filename: file.filename,
+        content: "InCos",
+        fileType: file.mimeType || "application/octet-stream",
+        bucket: file.storageBucket,
+        key: file.storageKey,
+        buffer,
+      },
+    ];
+
+    try {
       try {
         [extractedFile] =
           await this.fileContentExtractionService.extractContentFromFiles(
@@ -275,12 +354,8 @@ export class AssignmentFileService {
         if (!(error instanceof OversizedSubmissionError)) {
           throw error;
         }
-        // Author reference material is context, not graded work: an over-cap
-        // PDF should degrade to truncated simple extraction (pre-existing
-        // behavior) rather than fail the upload. The evidence-block cap is a
-        // grading concern that does not apply here.
         this.logger.warn(
-          `completeAssignmentFileUpload: oversized reference file ${file.filename} (blockCount=${error.blockCount} cap=${error.cap}); retrying with structured extraction disabled`,
+          `runAssignmentFileExtraction: oversized reference file ${file.filename} (blockCount=${error.blockCount} cap=${error.cap}); retrying with structured extraction disabled`,
         );
         [extractedFile] =
           await this.fileContentExtractionService.extractContentFromFiles(
@@ -294,7 +369,7 @@ export class AssignmentFileService {
           ? extractionError.message
           : String(extractionError);
       this.logger.error(
-        `completeAssignmentFileUpload: post-complete step failed for fileId=${fileId}: ${message}`,
+        `runAssignmentFileExtraction: extraction failed for fileId=${fileId}: ${message}`,
       );
       extractedFile = {
         filename: file.filename,
@@ -322,77 +397,54 @@ export class AssignmentFileService {
     const safeExtractionError = extractionFailed
       ? this.sanitizeForTextColumn(extractedFile.error ?? null)
       : null;
-    const extractedLength = safeExtractedText?.length ?? 0;
-    const errorLength = safeExtractionError?.length ?? 0;
     this.logger.log(
-      `completeAssignmentFileUpload: fileId=${fileId} extractionFailed=${String(extractionFailed)} extractedLen=${extractedLength} errorLen=${errorLength}`,
+      `runAssignmentFileExtraction: fileId=${fileId} extractionFailed=${String(extractionFailed)} extractedLen=${safeExtractedText?.length ?? 0} errorLen=${safeExtractionError?.length ?? 0}`,
     );
 
-    let updated: AssignmentFile;
     try {
-      updated = await this.prisma.assignmentFile.update({
+      await this.prisma.assignmentFile.update({
         where: { id: fileId },
         data: {
-          status: AssignmentFileStatus.READY,
           extractedText: safeExtractedText,
           extractionStatus: extractionFailed
             ? AssignmentFileExtractionStatus.FAILED
             : AssignmentFileExtractionStatus.READY,
           extractionError: safeExtractionError,
           extractedAt: extractionFailed ? null : new Date(),
-          uploadId: null,
         },
       });
-      this.logger.log(
-        `completeAssignmentFileUpload: fileId=${fileId} primary update OK status=READY`,
-      );
     } catch (error) {
-      // Extractor output can be unsafe for Postgres TEXT even after sanitization
-      // (Prisma query engine rejects malformed UTF-8 / truncated \u escapes with
-      // "unexpected end of hex escape"). Fall back to storing a fixed-ASCII
-      // error marker via $executeRaw — that bypasses the query engine's JSON
-      // boundary so it cannot fail on extractor output. Keep the row usable.
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `completeAssignmentFileUpload: primary update failed for fileId=${fileId}: ${message}`,
+        `runAssignmentFileExtraction: primary update failed for fileId=${fileId}: ${message}`,
+      );
+      this.logger.warn(
+        `runAssignmentFileExtraction: attempting fallback raw update for fileId=${fileId}`,
       );
       try {
         await this.prisma.$executeRaw`
           UPDATE "AssignmentFile"
-          SET "status" = 'READY'::"AssignmentFileStatus",
-              "extractedText" = NULL,
+          SET "extractedText" = NULL,
               "extractionStatus" = 'FAILED'::"AssignmentFileExtractionStatus",
               "extractionError" = 'Extraction output rejected by storage layer',
               "extractedAt" = NULL,
-              "uploadId" = NULL,
               "updatedAt" = NOW()
           WHERE "id" = ${fileId}
         `;
-        this.logger.log(
-          `completeAssignmentFileUpload: fileId=${fileId} fallback raw update OK status=READY/FAILED`,
-        );
       } catch (fallbackError) {
-        const fm =
+        const fallbackMessage =
           fallbackError instanceof Error
             ? fallbackError.message
             : String(fallbackError);
         this.logger.error(
-          `completeAssignmentFileUpload: FALLBACK update ALSO failed for fileId=${fileId}: ${fm}`,
+          `runAssignmentFileExtraction: fallback raw update ALSO failed for fileId=${fileId}, rethrowing for job retry: ${fallbackMessage}`,
         );
         throw fallbackError;
       }
-      const reloaded = await this.prisma.assignmentFile.findUnique({
-        where: { id: fileId },
-      });
-      if (!reloaded) {
-        throw new NotFoundException(
-          `File with ID ${fileId} not found after fallback update`,
-        );
-      }
-      updated = reloaded;
+      this.logger.log(
+        `runAssignmentFileExtraction: fallback raw update succeeded for fileId=${fileId}, row marked FAILED`,
+      );
     }
-
-    return this.toResponse(updated);
   }
 
   /**
