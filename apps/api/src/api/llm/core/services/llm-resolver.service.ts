@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { LLM_ASSIGNMENT_SERVICE } from "../../llm.constants";
+import { DEFAULT_LLM_MODEL, LLM_ASSIGNMENT_SERVICE } from "../../llm.constants";
 import { LLMAssignmentService } from "./llm-assignment.service";
 
 export interface TaskComplexityContext {
@@ -137,7 +137,7 @@ export class LLMResolverService {
    */
   async getModelKeyWithFallback(
     featureKey: string,
-    fallbackModel = "gpt-4o-mini",
+    fallbackModel = DEFAULT_LLM_MODEL,
   ): Promise<string> {
     const resolvedModel = await this.resolveModelForFeature(featureKey);
     if (resolvedModel) {
@@ -162,13 +162,13 @@ export class LLMResolverService {
       return assignedModel;
     }
 
+    // Complexity no longer picks a tier: unassigned features use the default
+    // model and are routed elsewhere through their LLMFeatureAssignment.
     const complexity = this.analyzeTaskComplexity(context);
-    const selectedModel = this.selectModelForComplexity(complexity);
-
     this.logger.debug(
-      `Selected ${selectedModel} model based on ${complexity} complexity for feature ${context.featureKey}`,
+      `Using default model ${DEFAULT_LLM_MODEL} for ${complexity} task on unassigned feature ${context.featureKey}`,
     );
-    return selectedModel;
+    return DEFAULT_LLM_MODEL;
   }
 
   /**
@@ -239,23 +239,6 @@ export class LLMResolverService {
     }
 
     return complexityScore >= 2 ? "complex" : "simple";
-  }
-
-  /**
-   * Select model based on complexity level
-   */
-  private selectModelForComplexity(complexity: TaskComplexity): string {
-    switch (complexity) {
-      case "simple": {
-        return "gpt-4o-mini";
-      }
-      case "complex": {
-        return "gpt-4o";
-      }
-      default: {
-        return "gpt-4o-mini";
-      }
-    }
   }
 
   /**

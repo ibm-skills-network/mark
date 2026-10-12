@@ -7,9 +7,6 @@ import {
   Gpt56TerraLlmService,
 } from "./gpt56-llm.service";
 import { Gpt6LunaLlmService } from "./gpt6-luna-llm.service";
-import { Gpt5LlmService } from "./gpt5-llm.service";
-import { Gpt5MiniLlmService } from "./gpt5-mini-llm.service";
-import { Gpt5NanoLlmService } from "./gpt5-nano-llm.service";
 import { Gpt4VisionPreviewLlmService } from "./openai-llm-vision.service";
 import { OpenAiLlmMiniService } from "./openai-llm-mini.service";
 
@@ -24,9 +21,6 @@ jest.mock("@langchain/openai", () => ({
 // the SDK's 10-minute default timeout for callers that asked to fail
 // fast (the translation retry path depends on this).
 const PROVIDERS = [
-  ["Gpt5LlmService", Gpt5LlmService],
-  ["Gpt5MiniLlmService", Gpt5MiniLlmService],
-  ["Gpt5NanoLlmService", Gpt5NanoLlmService],
   ["Gpt4VisionPreviewLlmService", Gpt4VisionPreviewLlmService],
   ["OpenAiLlmMiniService", OpenAiLlmMiniService],
   ["Gpt54MiniLlmService", Gpt54MiniLlmService],

@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { ALL_LLM_PROVIDERS, LLM_RESOLVER_SERVICE } from "../../llm.constants";
+import {
+  ALL_LLM_PROVIDERS,
+  DEFAULT_LLM_MODEL,
+  LLM_RESOLVER_SERVICE,
+} from "../../llm.constants";
 import { IMultimodalLlmProvider } from "../interfaces/llm-provider.interface";
 import { LLMResolverService } from "./llm-resolver.service";
 
@@ -60,7 +64,7 @@ export class LlmRouter {
   /** Get provider with fallback model specification */
   async getForFeatureWithFallback(
     featureKey: string,
-    fallbackModelKey = "gpt-4o-mini",
+    fallbackModelKey = DEFAULT_LLM_MODEL,
   ): Promise<IMultimodalLlmProvider> {
     try {
       const assignedModelKey =
@@ -88,9 +92,9 @@ export class LlmRouter {
     return [...this.map.keys()];
   }
 
-  /** Convenience default (first registered) */
+  /** The DEFAULT_LLM_MODEL provider, or the first registered one if absent */
   getDefault(): IMultimodalLlmProvider {
-    return this.map.values().next().value;
+    return this.map.get(DEFAULT_LLM_MODEL) ?? this.map.values().next().value;
   }
 
   /** Get statistics about model usage */

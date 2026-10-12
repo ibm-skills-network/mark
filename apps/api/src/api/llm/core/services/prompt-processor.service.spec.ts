@@ -191,7 +191,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
 
   it("falls back to text parsing for providers without native structured output", async () => {
     const llm = {
-      key: "granite-4-h-small",
+      key: "text-only-model",
       invoke: jest.fn().mockResolvedValue({
         content: '{"grade": 2}',
         tokenUsage: { input: 3, output: 4 },
@@ -216,14 +216,14 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       AIUsageType.ASSIGNMENT_GRADING,
       3,
       4,
-      "granite-4-h-small",
+      "text-only-model",
     );
   });
 
   it("preserves code backticks in text-fallback JSON values", async () => {
     const code = "const label = `hello`;";
     router.getForFeatureWithFallback.mockResolvedValue({
-      key: "granite-4-h-small",
+      key: "text-only-model",
       invoke: jest.fn().mockResolvedValue({
         content: JSON.stringify({ code }),
         tokenUsage: { input: 3, output: 4 },
@@ -246,7 +246,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
     // string (the exact code-submission failure mode) must still parse.
     const codeSchema = z.object({ grade: z.number(), code: z.string() });
     const llm = {
-      key: "granite-4-h-small",
+      key: "text-only-model",
       invoke: jest.fn().mockResolvedValue({
         content: '{"grade": 2, "code": "a\nb"}',
         tokenUsage: { input: 3, output: 4 },

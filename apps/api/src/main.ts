@@ -55,7 +55,6 @@ async function bootstrap() {
   );
   logger.log(
     `feature flags: PGBOUNCER=${process.env.PGBOUNCER ?? "<unset>"} ` +
-      `WATSONX_PROJECT_ID=${process.env.WATSONX_PROJECT_ID ? "set" : "<unset>"} ` +
       `SENDGRID_API_KEY=${process.env.SENDGRID_API_KEY ? "set" : "<unset>"}`,
   );
 

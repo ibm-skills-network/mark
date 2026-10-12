@@ -45,9 +45,8 @@ describe("ContentSummarizationService.getSafeContextLimit", () => {
     expect(service.getSafeContextLimit("some-unknown-model")).toBe(25_600);
   });
 
-  // Every "gpt-5.6-*" key also contains "gpt-5"; the specific entry must win.
   it.each(["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"])(
-    "gives %s its 1.05M window, not the gpt-5 128k window",
+    "gives %s its 1.05M window",
     (modelKey) => {
       const { service } = buildMocks();
       expect(service.getContextWindow(modelKey)).toBe(1_050_000);

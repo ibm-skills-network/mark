@@ -1037,18 +1037,10 @@ export class LLMPricingService {
 
       "gpt-4.1": { input: 0.000_002, output: 0.000_008 },
       "gpt-4.1-mini": { input: 0.000_000_4, output: 0.000_001_6 },
-      "gpt-4.1-nano": { input: 0.000_000_1, output: 0.000_000_4 },
 
-      "gpt-5": { input: 0.000_001_25, output: 0.000_01 },
-      "gpt-5-mini": { input: 0.000_000_25, output: 0.000_002 },
-      "gpt-5-nano": { input: 0.000_000_05, output: 0.000_000_4 },
       "gpt-5.4-mini-2026-03-17": {
         input: 0.000_000_75,
         output: 0.000_004_5,
-      },
-      "gpt-5.4-nano-2026-03-17": {
-        input: 0.000_000_2,
-        output: 0.000_001_25,
       },
       // GPT-5.6 and Luna 6 short-context tiers. Long-context rates are added to metadata
       // below and selected for the whole request above the 272K threshold.
@@ -1056,19 +1048,6 @@ export class LLMPricingService {
       "gpt-5.6-luna": { input: 0.000_000_2, output: 0.000_001_2 },
       "gpt-5.6-terra": { input: 0.000_002, output: 0.000_012 },
       "gpt-5.6-sol": { input: 0.000_005, output: 0.000_03 },
-      "gpt-oss-120b": { input: 0.000_000_15, output: 0.000_000_6 },
-
-      o1: { input: 0.000_015, output: 0.000_06 },
-      "o1-pro": { input: 0.000_15, output: 0.0006 },
-      "o1-mini": { input: 0.000_001_1, output: 0.000_004_4 },
-
-      o3: { input: 0.000_002, output: 0.000_008 },
-      "o3-pro": { input: 0.000_02, output: 0.000_08 },
-      "o3-mini": { input: 0.000_001_1, output: 0.000_004_4 },
-      "o3-deep-research": { input: 0.000_01, output: 0.000_04 },
-
-      "o4-mini": { input: 0.000_001_1, output: 0.000_004_4 },
-      "o4-mini-deep-research": { input: 0.000_002, output: 0.000_008 },
     };
 
     const pricing = fallbackPrices[modelKey];
@@ -1087,9 +1066,7 @@ export class LLMPricingService {
           ? "Official OpenAI Standard-tier snapshot pricing"
           : modelKey.startsWith("gpt-5.6-") || modelKey === "gpt-6-luna"
             ? "Official OpenAI Standard-tier pricing, short-context (<=272K input) rate"
-            : modelKey.startsWith("gpt-5")
-              ? "Estimated pricing for model"
-              : "Known pricing when registry lookup failed",
+            : "Known pricing when registry lookup failed",
         ...getTieredPricingMetadata(modelKey, pricing.input, pricing.output),
       },
     };
@@ -1104,26 +1081,11 @@ export class LLMPricingService {
       "gpt-4o-mini",
       "gpt-4.1",
       "gpt-4.1-mini",
-      "gpt-4.1-nano",
-      "gpt-5",
-      "gpt-5-mini",
-      "gpt-5-nano",
       "gpt-5.4-mini-2026-03-17",
-      "gpt-5.4-nano-2026-03-17",
       "gpt-6-luna",
       "gpt-5.6-luna",
       "gpt-5.6-terra",
       "gpt-5.6-sol",
-      "gpt-oss-120b",
-      "o1",
-      "o1-pro",
-      "o1-mini",
-      "o3",
-      "o3-pro",
-      "o3-mini",
-      "o3-deep-research",
-      "o4-mini",
-      "o4-mini-deep-research",
     ];
     return modelKeys
       .map((modelKey) => this.getFallbackPricing(modelKey))

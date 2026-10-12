@@ -1,6 +1,5 @@
 /* eslint-disable unicorn/no-null */
 import {
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,9 +8,7 @@ import {
 import { Prisma } from "@prisma/client";
 import Bottleneck from "bottleneck";
 import IORedis from "ioredis";
-import { LLMResolverService } from "src/api/llm/core/services/llm-resolver.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { LLM_RESOLVER_SERVICE } from "src/api/llm/llm.constants";
 import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { PrismaService } from "src/database/prisma.service";
@@ -152,8 +149,6 @@ export class TranslationService implements OnModuleDestroy {
     );
   }
   private limiter: Bottleneck;
-  private watsonxLimiter: Bottleneck;
-  private useWatsonxLimiterForTranslation = false;
   private isResettingLimiter = false;
 
   private readonly MAX_BATCH_SIZE = 100;
@@ -219,8 +214,6 @@ export class TranslationService implements OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
-    @Inject(LLM_RESOLVER_SERVICE)
-    private readonly llmResolver: LLMResolverService,
     private readonly aiFlags: AiFeatureFlagsService,
     private readonly assignmentRepository: AssignmentRepository,
   ) {
@@ -233,7 +226,6 @@ export class TranslationService implements OnModuleDestroy {
       10_000;
 
     this.limiter = this.createDefaultLimiter();
-    this.watsonxLimiter = this.createWatsonxLimiter();
     this.limiterHealthInterval = setInterval(
       () => this.checkLimiterHealth(),
       30_000,
@@ -269,7 +261,6 @@ export class TranslationService implements OnModuleDestroy {
     clearInterval(this.limiterHealthInterval);
     clearInterval(this.jobTimeoutInterval);
     void this.limiter.disconnect().catch(() => null);
-    void this.watsonxLimiter.disconnect().catch(() => null);
     await this.translationStateRedis?.quit().catch(() => null);
   }
 
@@ -481,60 +472,8 @@ export class TranslationService implements OnModuleDestroy {
     });
   }
 
-  private createWatsonxLimiter(): Bottleneck {
-    return new Bottleneck({
-      maxConcurrent: 8,
-      minTime: 50,
-      reservoir: 20,
-      reservoirRefreshInterval: 1000,
-      reservoirRefreshAmount: 20,
-      highWater: 1000,
-      strategy: Bottleneck.strategy.OVERFLOW,
-      timeout: this.OPERATION_TIMEOUT,
-    });
-  }
-
-  /**
-   * Decide which limiter to use based on current translation model assignment
-   */
-  private async syncLimiterForTranslationModel(): Promise<void> {
-    try {
-      const modelKey = await this.llmResolver.getModelKeyWithFallback(
-        "translation",
-        "gpt-4o-mini",
-      );
-      const isWatsonx = this.isWatsonxModel(modelKey);
-      if (isWatsonx !== this.useWatsonxLimiterForTranslation) {
-        this.useWatsonxLimiterForTranslation = isWatsonx;
-        this.logger.debug(
-          `Translation limiter set to ${
-            isWatsonx ? "Watsonx profile" : "default profile"
-          } (model: ${modelKey})`,
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Could not resolve translation model; using default limiter. Reason: ${message}`,
-      );
-      this.useWatsonxLimiterForTranslation = false;
-    }
-  }
-
-  private isWatsonxModel(modelKey: string): boolean {
-    if (!modelKey) return false;
-    return (
-      modelKey.startsWith("granite-") ||
-      modelKey.startsWith("gpt-oss-") ||
-      modelKey === "llama-3-3-70b-instruct" ||
-      modelKey === "llama-4-maverick"
-    );
-  }
-
   private getActiveLimiter(): Bottleneck {
-    return this.useWatsonxLimiterForTranslation
-      ? this.watsonxLimiter
-      : this.limiter;
+    return this.limiter;
   }
 
   private isLimiterStoppedError(error: unknown): boolean {
@@ -859,22 +798,14 @@ export class TranslationService implements OnModuleDestroy {
       );
 
       const previousDefaultLimiter = this.limiter;
-      const previousWatsonxLimiter = this.watsonxLimiter;
 
       this.limiter = this.createDefaultLimiter();
-      this.watsonxLimiter = this.createWatsonxLimiter();
 
       void previousDefaultLimiter
         .stop({ dropWaitingJobs: true })
         .catch(() => null)
         .finally(() => {
           void previousDefaultLimiter.disconnect().catch(() => null);
-        });
-      void previousWatsonxLimiter
-        .stop({ dropWaitingJobs: true })
-        .catch(() => null)
-        .finally(() => {
-          void previousWatsonxLimiter.disconnect().catch(() => null);
         });
 
       this.logger.log("Translation limiters were recreated");
@@ -1186,7 +1117,6 @@ export class TranslationService implements OnModuleDestroy {
       );
     }
 
-    await this.syncLimiterForTranslationModel();
     const results = await this.processBatchesInParallel(
       languageCodes,
       async (lang: string) => {
@@ -1347,8 +1277,6 @@ export class TranslationService implements OnModuleDestroy {
           });
         }
       }
-
-      await this.syncLimiterForTranslationModel();
     } catch (error) {
       await this.markPreFanoutTranslationFailed(
         parentJobId,
@@ -1674,7 +1602,6 @@ export class TranslationService implements OnModuleDestroy {
       }
 
       await this.releaseInflightLanguages(assignmentId, skippedLanguages);
-      await this.syncLimiterForTranslationModel();
     } catch (error) {
       await this.markPreFanoutTranslationFailed(
         parentJobId,
@@ -1990,7 +1917,6 @@ export class TranslationService implements OnModuleDestroy {
       }
 
       await this.releaseInflightLanguages(assignmentId, skippedLanguages);
-      await this.syncLimiterForTranslationModel();
     } catch (error) {
       await this.markPreFanoutTranslationFailed(
         parentJobId,

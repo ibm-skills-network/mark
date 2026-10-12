@@ -17,7 +17,7 @@ import {
   ScoringDto,
 } from "../../../../assignment/dto/update.questions.request.dto";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { DEFAULT_LLM_MODEL, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IRubricService } from "../interfaces/rubric.interface";
 
 @Injectable()
@@ -123,7 +123,7 @@ export class RubricService implements IRubricService {
         assignmentId,
         AIUsageType.QUESTION_GENERATION,
         "rubric_generation",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
       );
 
       let parsed:
@@ -386,7 +386,7 @@ export class RubricService implements IRubricService {
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
         "rubric_generation",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
       );
       let parsed:
         | {
