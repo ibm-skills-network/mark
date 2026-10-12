@@ -1,16 +1,40 @@
-import { Controller, Get, Param, Post, Query } from "@nestjs/common";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Controller,
+  DefaultValuePipe,
+  Get,
+  Logger,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { AdminOrJobQueueSecretGuard } from "src/auth/guards/admin-or-job-queue-secret.guard";
 import { LtiGradeSyncService } from "../services/lti-grade-sync.service";
 import { PrismaService } from "../../../database/prisma.service";
 import { LtiSyncStatus } from "@prisma/client";
+
+const MAX_PAGE_LIMIT = 100;
 
 /**
  * Admin controller for monitoring and managing LTI grade synchronization.
  * Provides endpoints for viewing sync status, retry management, and health monitoring.
  */
 @ApiTags("Admin - LTI Grade Sync")
+// Admin session or the internal job-queue secret (used by the lti-sync-drain
+// CronJob to call retry). Applied at class level so new routes are gated too.
+@UseGuards(AdminOrJobQueueSecretGuard)
+@ApiBearerAuth()
 @Controller("admin/lti-sync")
 export class LtiSyncAdminController {
+  private readonly logger = new Logger(LtiSyncAdminController.name);
+
   constructor(
     private readonly ltiGradeSyncService: LtiGradeSyncService,
     private readonly prisma: PrismaService,
@@ -73,11 +97,11 @@ export class LtiSyncAdminController {
   @ApiOperation({ summary: "Get all permanently failed syncs" })
   @ApiResponse({ status: 200, description: "Failed syncs retrieved" })
   async getFailedSyncs(
-    @Query("page") page = "1",
-    @Query("limit") limit = "50",
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query("limit", new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    const pageNumber = Number.parseInt(page, 10);
-    const limitNumber = Number.parseInt(limit, 10);
+    const pageNumber = Math.max(1, page);
+    const limitNumber = Math.min(Math.max(1, limit), MAX_PAGE_LIMIT);
     const skip = (pageNumber - 1) * limitNumber;
 
     const [syncs, total] = await Promise.all([
@@ -124,10 +148,8 @@ export class LtiSyncAdminController {
   @ApiOperation({ summary: "Get sync status for an attempt" })
   @ApiResponse({ status: 200, description: "Sync status retrieved" })
   @ApiResponse({ status: 404, description: "Sync not found" })
-  async getSyncForAttempt(@Param("attemptId") attemptId: string) {
-    return await this.ltiGradeSyncService.getSyncStatus(
-      Number.parseInt(attemptId, 10),
-    );
+  async getSyncForAttempt(@Param("attemptId", ParseIntPipe) attemptId: number) {
+    return await this.ltiGradeSyncService.getSyncStatus(attemptId);
   }
 
   /**
@@ -137,9 +159,11 @@ export class LtiSyncAdminController {
   @ApiOperation({ summary: "Manually retry a failed sync" })
   @ApiResponse({ status: 200, description: "Sync retry initiated" })
   @ApiResponse({ status: 404, description: "Sync not found" })
-  async retrySync(@Param("syncId") syncId: string) {
-    const result = await this.ltiGradeSyncService.manualRetry(
-      Number.parseInt(syncId, 10),
+  async retrySync(@Param("syncId", ParseIntPipe) syncId: number) {
+    this.logger.log(`Manual LTI sync retry requested for sync ${syncId}`);
+    const result = await this.ltiGradeSyncService.manualRetry(syncId);
+    this.logger.log(
+      `Manual LTI sync retry for sync ${syncId}: success=${String(result.success)} status=${result.status}`,
     );
 
     return {
@@ -156,9 +180,9 @@ export class LtiSyncAdminController {
   @Get(":syncId/errors")
   @ApiOperation({ summary: "Get error logs for a sync" })
   @ApiResponse({ status: 200, description: "Error logs retrieved" })
-  async getErrorLogs(@Param("syncId") syncId: string) {
+  async getErrorLogs(@Param("syncId", ParseIntPipe) syncId: number) {
     const errors = await this.prisma.ltiSyncErrorLog.findMany({
-      where: { syncId: Number.parseInt(syncId, 10) },
+      where: { syncId },
       orderBy: { timestamp: "desc" },
     });
 

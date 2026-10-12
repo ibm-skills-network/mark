@@ -22,9 +22,10 @@
  *   --limit=N               cap total rows processed (default: no cap)
  *   --batch-size=500        DB page size (default 500)
  *
- * AUTH (only if you've put a guard on /admin/lti-sync/*):
- *   ADMIN_TOKEN=...   sets Authorization: Bearer <token>
- *   AUTH_COOKIE=...   sets Cookie: authentication=<value>
+ * AUTH (/admin/lti-sync/* requires an admin session or the job-queue secret):
+ *   JOB_QUEUE_SECRET=...  sets x-job-queue-secret (present in mark-jobs pods)
+ *   ADMIN_TOKEN=...       sets x-admin-token (a verified admin session)
+ *   AUTH_COOKIE=...       sets Cookie: authentication=<value>
  *
  * Reads the same DATABASE_URL as the running pod (so run it from a pod or with
  * a port-forward). Writes only via the API endpoint, never directly to the DB.
@@ -116,8 +117,11 @@ async function main() {
   }
 
   const headers = { "content-type": "application/json" };
+  if (process.env.JOB_QUEUE_SECRET) {
+    headers["x-job-queue-secret"] = process.env.JOB_QUEUE_SECRET;
+  }
   if (process.env.ADMIN_TOKEN) {
-    headers["authorization"] = `Bearer ${process.env.ADMIN_TOKEN}`;
+    headers["x-admin-token"] = process.env.ADMIN_TOKEN;
   }
   if (process.env.AUTH_COOKIE) {
     headers["cookie"] = `authentication=${process.env.AUTH_COOKIE}`;
