@@ -1453,7 +1453,7 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
     expect(evidenceSpy).not.toHaveBeenCalled();
   });
 
-  it("routes criteria-based CODE uploads through the pinned structured-file model", async () => {
+  it("routes criteria-based CODE uploads through the file_evidence_grading model", async () => {
     const { FileBasedQuestionResponseModel } = await import(
       "src/api/llm/model/file.based.question.response.model"
     );
@@ -1461,6 +1461,7 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
       "src/api/llm/model/file.based.question.evaluate.model"
     );
     const { ResponseType } = await import("@prisma/client");
+    const { DEFAULT_LLM_MODEL } = await import("src/api/llm/llm.constants");
     const pinnedModel = "gpt-5.4-mini-2026-03-17";
     service.llmResolver.getModelKeyWithFallback.mockResolvedValue(pinnedModel);
     jest
@@ -1502,7 +1503,7 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
     expect(result.feedback).toBe("Consistent code grade");
     expect(service.llmResolver.getModelKeyWithFallback).toHaveBeenCalledWith(
       "file_evidence_grading",
-      pinnedModel,
+      DEFAULT_LLM_MODEL,
     );
     expect(evidenceSpy).toHaveBeenCalledTimes(1);
     const call = evidenceSpy.mock.calls[0];

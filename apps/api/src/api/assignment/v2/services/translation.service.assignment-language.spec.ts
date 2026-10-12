@@ -83,7 +83,6 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
       prisma as never,
       llmFacade as never,
       { updateJobStatus: jest.fn() } as never,
-      { getModelKeyWithFallback: jest.fn() } as never,
       { isDisabled: () => false } as never,
       {} as never,
     );
@@ -145,10 +144,10 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
     const { service, prisma } = makeService();
     const assignment = makeAssignment(13);
 
-    await service.applyTranslationsToAssignment(
-      assignment,
-      ["ar", "en"] as unknown as string,
-    );
+    await service.applyTranslationsToAssignment(assignment, [
+      "ar",
+      "en",
+    ] as unknown as string);
 
     expect(prisma.assignmentTranslation.findUnique).not.toHaveBeenCalled();
     expect(assignment).toMatchObject(authored);

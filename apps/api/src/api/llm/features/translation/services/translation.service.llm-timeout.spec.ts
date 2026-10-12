@@ -1,4 +1,5 @@
 import { AIUsageType } from "@prisma/client";
+import { DEFAULT_LLM_MODEL } from "../../../llm.constants";
 import { TranslationService } from "./translation.service";
 
 describe("Translation feature LLM call options", () => {
@@ -38,7 +39,7 @@ describe("Translation feature LLM call options", () => {
       7,
       AIUsageType.TRANSLATION,
       "translation",
-      "gpt-4o-mini",
+      DEFAULT_LLM_MODEL,
       expect.objectContaining({
         timeoutMs: expect.any(Number),
         maxRetries: expect.any(Number),
@@ -56,7 +57,7 @@ describe("Translation feature LLM call options", () => {
       7,
       AIUsageType.TRANSLATION,
       "translation",
-      "gpt-4o-mini",
+      DEFAULT_LLM_MODEL,
       expect.objectContaining({
         timeoutMs: expect.any(Number),
         maxRetries: expect.any(Number),

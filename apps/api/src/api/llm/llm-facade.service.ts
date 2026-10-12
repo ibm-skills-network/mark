@@ -24,6 +24,7 @@ import { AssignmentTypeEnum } from "./features/question-generation/services/ques
 import { IRubricService } from "./features/rubric/interfaces/rubric.interface";
 import { ITranslationService } from "./features/translation/interfaces/translation.interface";
 import {
+  DEFAULT_LLM_MODEL,
   FILE_GRADING_SERVICE,
   IMAGE_GRADING_SERVICE,
   MODERATION_SERVICE,
@@ -97,7 +98,7 @@ export class LlmFacadeService {
   async getTextGradingModelIdentity(): Promise<string> {
     const provider = await this.llmRouter.getForFeatureWithFallback(
       "text_grading",
-      "gpt-4o-mini",
+      DEFAULT_LLM_MODEL,
     );
     return getGradingModelCacheIdentity(provider.key);
   }

@@ -110,15 +110,11 @@ describe("Runtime payload safety: TranslationService does not log translation co
     const jobStatusService = {
       updateJobStatus: jest.fn().mockResolvedValue(undefined),
     };
-    const llmResolver = {
-      getModelForFeature: jest.fn().mockReturnValue("gpt-5-nano"),
-    };
 
     return new TranslationService(
       prisma as any,
       llmFacade as any,
       jobStatusService as any,
-      llmResolver as any,
       { isDisabled: () => false } as any,
     );
   }

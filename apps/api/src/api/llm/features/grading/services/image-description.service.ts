@@ -18,7 +18,7 @@ import { Logger } from "winston";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { ContentBlock } from "src/api/attempt/services/structured-content.models";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { DEFAULT_LLM_MODEL, PROMPT_PROCESSOR } from "../../../llm.constants";
 
 export interface ImageDescriptionResult {
   blockId: string;
@@ -152,7 +152,7 @@ export class ImageDescriptionService {
         imageBlock.imageData,
         assignmentId,
         AIUsageType.ASSIGNMENT_GRADING,
-        "gpt-5-nano",
+        DEFAULT_LLM_MODEL,
         {
           imageDetail: options?.observeOnly ? "high" : "low",
         },

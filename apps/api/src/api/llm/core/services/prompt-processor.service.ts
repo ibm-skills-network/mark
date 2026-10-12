@@ -12,7 +12,7 @@ import { Logger } from "winston";
 import type { ZodTypeAny } from "zod";
 import { decodeFields, decodeIfBase64 } from "../../../../helpers/decoder";
 import { AiFeatureFlagsService } from "../../../ai-feature-flags/ai-feature-flags.service";
-import { USAGE_TRACKER } from "../../llm.constants";
+import { DEFAULT_LLM_MODEL, USAGE_TRACKER } from "../../llm.constants";
 import {
   ILlmProvider,
   LlmRequestOptions,
@@ -56,7 +56,7 @@ export class PromptProcessorService implements IPromptProcessor {
     assignmentId: number,
     usageType: AIUsageType,
     featureKey: string,
-    fallbackModel = "gpt-4o-mini",
+    fallbackModel = DEFAULT_LLM_MODEL,
     options?: LlmRequestOptions,
   ): Promise<string> {
     // Kill-switch backstop: never make a paid provider call for a disabled
@@ -133,7 +133,7 @@ export class PromptProcessorService implements IPromptProcessor {
     usageType: AIUsageType,
     featureKey: string,
     schema: ZodTypeAny,
-    fallbackModel = "gpt-4o-mini",
+    fallbackModel = DEFAULT_LLM_MODEL,
     options?: LlmRequestOptions,
   ): Promise<T> {
     // Kill-switch backstop (see processPromptForFeature).
@@ -254,13 +254,13 @@ export class PromptProcessorService implements IPromptProcessor {
     prompt: PromptTemplate | string,
     assignmentId: number,
     usageType: AIUsageType,
-    llmKey = "gpt-4o",
+    llmKey = DEFAULT_LLM_MODEL,
     options?: LlmRequestOptions,
   ): Promise<string> {
     // Kill-switch backstop (see processPromptForFeature).
     this.aiFlags.assertUsageEnabled(usageType);
     try {
-      const llm = this.router.get(llmKey ?? "gpt-4o");
+      const llm = this.router.get(llmKey ?? DEFAULT_LLM_MODEL);
 
       return await this._processPromptWithProvider(
         prompt,
@@ -410,13 +410,13 @@ export class PromptProcessorService implements IPromptProcessor {
     imageData: string | string[],
     assignmentId: number,
     usageType: AIUsageType,
-    llmKey = "gpt-4.1-mini",
+    llmKey = DEFAULT_LLM_MODEL,
     options?: LlmRequestOptions,
   ): Promise<string> {
     // Kill-switch backstop (see processPromptForFeature).
     this.aiFlags.assertUsageEnabled(usageType);
     try {
-      const llm = this.router.get(llmKey ?? "gpt-4.1-mini");
+      const llm = this.router.get(llmKey ?? DEFAULT_LLM_MODEL);
 
       if (prompt.partialVariables) {
         const stringVariables: { [key: string]: string | null } = {};

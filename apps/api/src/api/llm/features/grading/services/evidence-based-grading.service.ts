@@ -24,7 +24,7 @@ import {
 import { Logger } from "winston";
 import { z } from "zod";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { DEFAULT_LLM_MODEL, PROMPT_PROCESSOR } from "../../../llm.constants";
 import {
   CriterionGrade,
   DEFAULT_MODEL_SELECTION,
@@ -290,7 +290,8 @@ export class EvidenceBasedGradingService {
       highlighting,
       metadata: auditLog || {
         gradedAt: new Date().toISOString(),
-        modelUsed: "gpt-4o-mini",
+        modelUsed: (modelConfig?.modelOverrides ?? DEFAULT_MODEL_SELECTION)
+          .gradingModel,
         determinismChecksum: submission.metadata.checksum,
       },
     };
@@ -420,7 +421,7 @@ LANGUAGE: {language}`,
         AIUsageType.ASSIGNMENT_GRADING,
         "file_grading",
         EvidenceOutputSchema,
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
       );
 
     const allowedPoints = criterion.criteria.map((c) => c.points);

@@ -52,9 +52,6 @@ describe("TranslationService assignment-meta published text", () => {
     const jobStatusService = {
       updateJobStatus: jest.fn().mockResolvedValue(undefined),
     };
-    const llmResolver = {
-      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
-    };
     const assignmentRepository = {
       findMetaById: jest.fn().mockResolvedValue({ ...liveText }),
     };
@@ -63,7 +60,6 @@ describe("TranslationService assignment-meta published text", () => {
       prisma as never,
       llmFacade as never,
       jobStatusService as never,
-      llmResolver as never,
       { isDisabled: () => false } as never,
       assignmentRepository as never,
     );

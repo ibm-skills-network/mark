@@ -8,7 +8,7 @@ import { Logger } from "winston";
 const MAX_LOGGED_CHARS = 2000;
 
 export interface AiInvocationLog {
-  /** Provider/model key the call ran on, e.g. "gpt-5-nano". */
+  /** Provider/model key the call ran on, e.g. "gpt-6-luna". */
   modelKey: string;
   /** What the call was for, e.g. "criterion_judge" or an AIUsageType. */
   purpose: string;

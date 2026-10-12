@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BoundingBox } from "src/api/attempt/services/structured-content.models";
+import { DEFAULT_LLM_MODEL } from "../../../llm.constants";
 
 export interface RubricCriterionLevel {
   description: string;
@@ -239,9 +240,8 @@ export function getDeterministicGradingOptions(modelKey: string) {
     };
   }
 
-  // Original GPT-5-family reasoning models reject sampling controls. Keep
-  // admin-selected GPT-5 providers usable without pretending they are seeded
-  // or temperature-controlled.
+  // GPT-5.x and Luna 6 providers do not take sampling controls here. Keep
+  // them usable without pretending they are seeded or temperature-controlled.
   if (modelKey.startsWith("gpt-5") || modelKey === "gpt-6-luna") {
     return { maxRetries: 1 };
   }
@@ -249,13 +249,15 @@ export function getDeterministicGradingOptions(modelKey: string) {
   return { temperature: 0, maxRetries: 1 };
 }
 
+/**
+ * Fallbacks only: unless a caller marks its overrides final, each stage
+ * resolves its own feature (evidence_validation, criterion_grading,
+ * criterion_judge) and uses these when that feature has no model configured.
+ */
 export const DEFAULT_MODEL_SELECTION: ModelSelectionConfig = {
-  // This grading path requires controllable sampling. The original GPT-5
-  // mini/nano models reject temperature, so use one explicit model for all
-  // three stages and pin it at the call sites.
-  retrievalModel: "gpt-4o-mini",
-  gradingModel: "gpt-4o-mini",
-  judgeModel: "gpt-4o-mini",
+  retrievalModel: DEFAULT_LLM_MODEL,
+  gradingModel: DEFAULT_LLM_MODEL,
+  judgeModel: DEFAULT_LLM_MODEL,
 };
 
 export const CriterionGradeSchema = z.object({

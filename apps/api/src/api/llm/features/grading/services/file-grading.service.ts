@@ -27,12 +27,12 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
-import { Gpt54MiniLlmService } from "../../../core/services/gpt54-llm.service";
 import { getGradingModelCacheIdentity } from "../../../core/utils/grading-cache-identity.util";
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
-  LLM_RESOLVER_SERVICE,
+  DEFAULT_LLM_MODEL,
   GRADING_CACHE_SERVICE,
+  LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
   TOKEN_COUNTER,
@@ -334,7 +334,7 @@ export class FileGradingService implements IFileGradingService {
       this.logger.info("Using evidence-based grading with structured content");
       const evidenceFileModel = await this.llmResolver.getModelKeyWithFallback(
         "file_evidence_grading",
-        Gpt54MiniLlmService.MODEL,
+        DEFAULT_LLM_MODEL,
       );
       const modelConfig = {
         modelOverrides: {
@@ -412,7 +412,7 @@ export class FileGradingService implements IFileGradingService {
     const selectedModel = isCodeUploadRoute
       ? await this.llmResolver.getModelKeyWithFallback(
           "file_evidence_grading",
-          Gpt54MiniLlmService.MODEL,
+          DEFAULT_LLM_MODEL,
         )
       : await this.llmResolver.getModelForGradingTask(
           "file_grading",
@@ -671,7 +671,7 @@ export class FileGradingService implements IFileGradingService {
     try {
       const fallbackModel = await this.llmResolver.getModelKeyWithFallback(
         "file_grading_fallback",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
       );
       this.logger.warn(
         `Primary model ${primaryModel} failed after ${maxRetries} attempts, trying fallback model ${fallbackModel}`,
