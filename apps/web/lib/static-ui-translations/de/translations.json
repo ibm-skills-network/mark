@@ -1414,5 +1414,7 @@
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Dein Gerät hat nur einen Teil der Antwort erhalten. Das liegt meist an einer instabilen Verbindung oder an einem Datensparmodus bzw. Proxy, der die Seite verändert, nicht an der Aufgabe.",
   "Turn off data saving": "Datensparmodus ausschalten",
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datensparmodi und einige Browser wie Opera Mini können die Seite beschädigen. Schalte den Modus aus oder öffne die Aufgabe in einem anderen Browser.",
-  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Bilder können in einer Textantwort nicht bewertet werden. Füge stattdessen die Textausgabe ein oder beschreibe sie in Worten."
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Bilder können in einer Textantwort nicht bewertet werden. Füge stattdessen die Textausgabe ein oder beschreibe sie in Worten.",
+  "Your grade is on its way to yourLearning": "Ihre Note ist auf dem Weg zu yourLearning",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Die Synchronisierung Ihrer Note mit yourLearning kann einige Stunden dauern. Bitte haben Sie etwas Geduld. Ihre Note ist bei uns sicher gespeichert und Sie müssen nichts weiter tun. Sie können dieses Fenster schließen."
 }

@@ -1414,5 +1414,7 @@
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Ваш пристрій отримав лише частину відповіді. Зазвичай причина в нестабільному з'єднанні або в режимі економії трафіку браузера чи проксі, що змінює сторінку, а не в проблемі із завданням.",
   "Turn off data saving": "Вимкніть економію трафіку",
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Режими економії трафіку та деякі браузери, як-от Opera Mini, можуть порушувати роботу сторінки. Вимкніть цей режим або відкрийте завдання в іншому браузері.",
-  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Зображення в текстовій відповіді не оцінюються. Натомість вставте вивід як текст або опишіть його словами."
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Зображення в текстовій відповіді не оцінюються. Натомість вставте вивід як текст або опишіть його словами.",
+  "Your grade is on its way to yourLearning": "Ваша оцінка передається до yourLearning",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Синхронізація вашої оцінки з yourLearning може тривати кілька годин, тож, будь ласка, наберіться терпіння. Вашу оцінку надійно збережено в нас, і вам нічого не потрібно робити. Ви можете закрити це вікно."
 }

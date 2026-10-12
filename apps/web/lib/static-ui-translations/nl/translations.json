@@ -1414,5 +1414,7 @@
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Je apparaat heeft maar een deel van het antwoord ontvangen. Meestal komt dat door een instabiele verbinding, of door een databesparingsmodus van de browser of een proxy die de pagina wijzigt, niet door een probleem met de opdracht.",
   "Turn off data saving": "Zet databesparing uit",
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Databesparingsmodi en sommige browsers, zoals Opera Mini, kunnen de pagina beschadigen. Zet de modus uit of open de opdracht in een andere browser.",
-  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Afbeeldingen kunnen in een tekstantwoord niet worden beoordeeld. Plak in plaats daarvan de uitvoer als tekst, of beschrijf deze in woorden."
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Afbeeldingen kunnen in een tekstantwoord niet worden beoordeeld. Plak in plaats daarvan de uitvoer als tekst, of beschrijf deze in woorden.",
+  "Your grade is on its way to yourLearning": "Je cijfer is onderweg naar yourLearning",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Het synchroniseren van je cijfer met yourLearning kan een paar uur duren, dus even geduld alsjeblieft. Je cijfer is veilig bij ons vastgelegd en je hoeft niets te doen. Je kunt dit venster sluiten."
 }
