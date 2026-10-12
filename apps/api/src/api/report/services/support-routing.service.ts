@@ -25,7 +25,7 @@ export interface SupportRoute {
   productName?: string;
   /** Portal display name from portal-manager, when it knew the host. */
   portalName?: string;
-  via: "portal-manager" | "label" | "default" | "legacy" | "none";
+  via: "portal-manager" | "label" | "default" | "none";
 }
 
 const TOKEN_ENV_PREFIX = "SUPPORT_TOKEN_";
@@ -146,13 +146,7 @@ export class SupportRoutingService implements OnModuleInit {
       };
     }
 
-    // Pre-routing deploys (and local dev) still have a single token.
-    const legacyToken = this.configService
-      .get<string>("SN_SUPPORT_TOKEN")
-      ?.trim();
-    return legacyToken
-      ? { token: legacyToken, portalName: record?.portalName, via: "legacy" }
-      : { portalName: record?.portalName, via: "none" };
+    return { portalName: record?.portalName, via: "none" };
   }
 
   private tokenFor(productName?: string): string | undefined {
