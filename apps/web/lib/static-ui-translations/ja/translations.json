@@ -1414,5 +1414,7 @@
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "お使いのデバイスは応答の一部しか受信できませんでした。通常、これは不安定な接続、またはブラウザのデータ節約モードやページを書き換えるプロキシが原因であり、課題の問題ではありません。",
   "Turn off data saving": "データ節約をオフにする",
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "データ節約モードや Opera Mini などの一部のブラウザでは、ページが正しく表示されないことがあります。このモードをオフにするか、別のブラウザで課題を開いてください。",
-  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "テキスト回答に含まれる画像は採点できません。代わりに出力をテキストとして貼り付けるか、言葉で説明してください。"
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "テキスト回答に含まれる画像は採点できません。代わりに出力をテキストとして貼り付けるか、言葉で説明してください。",
+  "Your grade is on its way to yourLearning": "成績を yourLearning に送信しています",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning への成績の同期には数時間かかる場合がありますので、しばらくお待ちください。成績は当方で安全に記録されており、お客様が行う操作はありません。このウィンドウは閉じてかまいません。"
 }

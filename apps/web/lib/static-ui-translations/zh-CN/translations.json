@@ -1414,5 +1414,7 @@
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "您的设备只收到了部分响应。这通常是由于连接不稳定，或浏览器的省流量模式或代理修改了页面，而不是作业本身的问题。",
   "Turn off data saving": "关闭省流量模式",
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "省流量模式和某些浏览器（例如 Opera Mini）可能会导致页面损坏。请关闭该模式，或在其他浏览器中打开作业。",
-  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "文本答案中的图片无法评分。请改为粘贴文本形式的输出，或用文字描述。"
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "文本答案中的图片无法评分。请改为粘贴文本形式的输出，或用文字描述。",
+  "Your grade is on its way to yourLearning": "您的成绩正在同步到 yourLearning",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "将您的成绩同步到 yourLearning 可能需要几个小时，请耐心等待。您的成绩已安全记录在我们这里，您无需执行任何操作。您可以关闭此窗口。"
 }

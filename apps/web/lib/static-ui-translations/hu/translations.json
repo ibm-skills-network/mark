@@ -1414,5 +1414,7 @@
   "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Az eszközöd a válasznak csak egy részét kapta meg. Ezt általában instabil kapcsolat, vagy a böngésző adattakarékos módja, illetve az oldalt módosító proxy okozza, nem a feladattal van gond.",
   "Turn off data saving": "Kapcsold ki az adattakarékos módot",
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Az adattakarékos módok és egyes böngészők, például az Opera Mini, elronthatják az oldalt. Kapcsold ki ezt a módot, vagy nyisd meg a feladatot egy másik böngészőben.",
-  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "A szöveges válaszban lévő képeket nem lehet értékelni. Illeszd be inkább a kimenetet szövegként, vagy írd le szavakkal."
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "A szöveges válaszban lévő képeket nem lehet értékelni. Illeszd be inkább a kimenetet szövegként, vagy írd le szavakkal.",
+  "Your grade is on its way to yourLearning": "Az érdemjegye úton van a yourLearning felé",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Az érdemjegy szinkronizálása a yourLearning rendszerrel néhány órát is igénybe vehet, ezért kérjük, legyen türelemmel. Az érdemjegyét biztonságosan rögzítettük, Önnek nincs teendője. Bezárhatja ezt az ablakot."
 }

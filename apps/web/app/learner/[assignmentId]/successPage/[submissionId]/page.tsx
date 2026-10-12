@@ -863,6 +863,7 @@ function SuccessPage() {
             <GradeSyncStatus
               attemptId={attemptId}
               assignmentId={assignmentId}
+              lmsHost={lmsHost}
             />
           </motion.div>
         )}
