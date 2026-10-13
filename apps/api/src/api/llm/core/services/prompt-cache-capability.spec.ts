@@ -1,6 +1,6 @@
 import { Logger } from "winston";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
-import { Gpt54MiniLlmService, Gpt54NanoLlmService } from "./gpt54-llm.service";
+import { Gpt54MiniLlmService } from "./gpt54-llm.service";
 import {
   Gpt56LunaLlmService,
   Gpt56SolLlmService,
@@ -29,7 +29,6 @@ describe("explicit prompt-cache capability", () => {
 
   it.each([
     ["Gpt54MiniLlmService", new Gpt54MiniLlmService(tokenCounter, logger)],
-    ["Gpt54NanoLlmService", new Gpt54NanoLlmService(tokenCounter, logger)],
   ])("%s stays out", (_name, provider) => {
     expect(provider.supportsExplicitPromptCache).toBe(false);
   });

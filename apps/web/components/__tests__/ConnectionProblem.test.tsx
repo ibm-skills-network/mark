@@ -52,6 +52,21 @@ describe("ConnectionProblem", () => {
     ).not.toBeInTheDocument();
   });
 
+  // The response started arriving but did not finish intact — a dropped
+  // mobile link, or a data-saving browser proxy rewriting the page.
+  it("explains a response that arrived incomplete without blaming the server", () => {
+    const { container } = render(<ConnectionProblem kind="interrupted" />);
+
+    expect(
+      screen.getByRole("heading", { name: /didn't finish loading/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/turn off data saving/i)).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/\b500\b/);
+    expect(
+      screen.queryByText(/something went wrong on our side/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("offers a retry the learner can actually press", async () => {
     const reload = reloadPage as jest.Mock;
     reload.mockClear();

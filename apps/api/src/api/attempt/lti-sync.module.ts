@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
 import { ScheduleModule } from "@nestjs/schedule";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
+import { AdminOrJobQueueSecretGuard } from "../../auth/guards/admin-or-job-queue-secret.guard";
 import { LtiGradeSyncService } from "./services/lti-grade-sync.service";
 import { LtiSyncScheduler } from "./schedulers/lti-sync-scheduler";
 import { LtiSyncAdminController } from "./controllers/lti-sync-admin.controller";
@@ -26,6 +27,7 @@ import { LtiSyncAdminController } from "./controllers/lti-sync-admin.controller"
       useClass: LtiGradeSyncService,
     },
     LtiSyncScheduler,
+    AdminOrJobQueueSecretGuard,
   ],
   controllers: [LtiSyncAdminController],
   exports: [LtiGradeSyncService, "LtiGradeSyncService"],

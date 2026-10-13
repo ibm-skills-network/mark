@@ -27,12 +27,11 @@ export const RUBRIC_SERVICE = "RUBRIC_SERVICE";
 export const TRANSLATION_SERVICE = "TRANSLATION_SERVICE";
 export const VALIDATOR_SERVICE = "VALIDATOR_SERVICE";
 
-export const DEFAULT_LLM_MODEL = "gpt-4o";
-
-export const AVAILABLE_MODELS = {
-  OPENAI_GPT4O: "gpt-4o",
-  OPENAI_GPT4O_MINI: "gpt-4o-mini",
-} as const;
+/**
+ * Model used when a feature has no active LLMFeatureAssignment and no
+ * AIFeature.defaultModelKey. Per-feature routing lives in the database.
+ */
+export const DEFAULT_LLM_MODEL = "gpt-6-luna";
 
 export const RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS = {
   CODE: `

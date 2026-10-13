@@ -21,7 +21,13 @@ import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
+import {
+  ChoiceRendering,
+  matchChoiceIgnoringWrappingQuotes,
+  resolveChoiceAcrossRenderings,
+} from "../utils/choice-renderings.util";
 import { LocalizationService } from "../utils/localization.service";
+import { resolveNumberRewrittenChoice } from "../utils/numeric-choice-text.util";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
 @Injectable()
@@ -190,9 +196,30 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     const normalizedLearnerChoice = this.normalizeText(learnerChoice);
     const correctChoice = choices.find((choice) => choice.isCorrect);
 
-    const selectedChoice = choices.find(
-      (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
-    );
+    const selectedChoice =
+      choices.find(
+        (choice) =>
+          this.normalizeText(choice.choice) === normalizedLearnerChoice,
+      ) ??
+      this.matchIgnoringWrappingQuotes(
+        question,
+        choices,
+        learnerChoice,
+        context,
+      ) ??
+      (await this.resolveOutsideGradingLanguage(
+        question,
+        choices,
+        learnerChoice,
+        context,
+        { alignedOnly: false },
+      )) ??
+      this.resolveNumberRewrittenChoice(
+        question,
+        choices,
+        learnerChoice,
+        context,
+      );
 
     const data = {
       learnerChoice,
@@ -309,11 +336,18 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       return { responseDto, learnerResponse: [] };
     }
 
-    const normalizedLearnerChoices = new Set(
-      learnerResponse.map((choice) => this.normalizeText(choice)),
+    const choices = this.parseChoices(question.choices);
+    const gradedLearnerChoices = await this.mapChoicesToGradingLanguage(
+      question,
+      choices,
+      learnerResponse,
+      context,
     );
 
-    const choices = this.parseChoices(question.choices);
+    const normalizedLearnerChoices = new Set(
+      gradedLearnerChoices.map((choice) => this.normalizeText(choice)),
+    );
+
     const normalizedChoices = choices.map((choice) => ({
       original: choice,
       normalized: this.normalizeText(choice.choice),
@@ -328,7 +362,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     const feedbackDetails: string[] = [];
     const selectedChoices: Choice[] = [];
 
-    for (const learnerChoice of learnerResponse) {
+    for (const learnerChoice of gradedLearnerChoices) {
       const normalizedLearnerChoice = this.normalizeText(learnerChoice);
       const matchedChoice = normalizedChoices.find(
         (item) => item.normalized === normalizedLearnerChoice,
@@ -468,6 +502,250 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     };
 
     return { responseDto, learnerResponse };
+  }
+
+  /**
+   * Find the choice a learner meant when the submitted text is not in the
+   * grading language's set. The learner client submits the text of whatever
+   * language it last rendered, which can differ from the `language` the
+   * submit names, so every stored rendering of the question is consulted.
+   * Returns undefined when nothing matches or the match is ambiguous; the
+   * caller then grades the text as an invalid selection, as before.
+   */
+  private async resolveOutsideGradingLanguage(
+    question: QuestionDto,
+    gradingChoices: Choice[],
+    learnerChoice: unknown,
+    context: GradingContext,
+    options: { alignedOnly: boolean },
+    renderings?: ChoiceRendering[],
+  ): Promise<Choice | undefined> {
+    if (!context.loadChoiceRenderings && !renderings) return undefined;
+
+    const available =
+      renderings ?? (await this.loadChoiceRenderings(question, context));
+    const resolution = resolveChoiceAcrossRenderings(
+      learnerChoice,
+      gradingChoices,
+      available,
+      options,
+    );
+
+    const logContext = {
+      questionId: question.id,
+      attemptId: context.attemptId,
+      assignmentId: context.assignmentId,
+      language: context.language,
+      questionType: question.type,
+    };
+
+    if (resolution.kind === "matched") {
+      this.logger?.info(
+        "Matched a submitted choice outside the grading language",
+        {
+          ...logContext,
+          sources: resolution.sources,
+          gradingIndex: resolution.gradingIndex,
+          isCorrect: resolution.choice.isCorrect === true,
+        },
+      );
+      return resolution.choice;
+    }
+
+    if (resolution.kind === "ambiguous") {
+      this.logger?.warn(
+        "Submitted choice matches choices that score differently; grading it as an invalid selection",
+        { ...logContext, sources: resolution.sources },
+      );
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Rewrite each submitted choice of a multiple-correct question to the
+   * grading language's text, so the scoring below compares like with like.
+   * Only renderings in the grading set's own order are used: this scoring
+   * tracks which grading choices were picked. A choice picked twice (for
+   * example once per language) counts once.
+   */
+  private async mapChoicesToGradingLanguage(
+    question: QuestionDto,
+    gradingChoices: Choice[],
+    learnerResponse: string[],
+    context: GradingContext,
+  ): Promise<string[]> {
+    const known = new Set(
+      gradingChoices.map((choice) => this.normalizeText(choice.choice)),
+    );
+    let renderings: ChoiceRendering[] | undefined;
+    const mapped: string[] = [];
+    const seen = new Set<string>();
+
+    for (const learnerChoice of learnerResponse) {
+      let text = learnerChoice;
+      const unquoted = known.has(this.normalizeText(learnerChoice))
+        ? undefined
+        : this.matchIgnoringWrappingQuotes(
+            question,
+            gradingChoices,
+            learnerChoice,
+            context,
+          );
+      if (unquoted) {
+        text = this.coerceToString(unquoted.choice);
+      } else if (!known.has(this.normalizeText(learnerChoice))) {
+        if (context.loadChoiceRenderings && renderings === undefined) {
+          renderings = await this.loadChoiceRenderings(question, context);
+        }
+        const resolved = await this.resolveOutsideGradingLanguage(
+          question,
+          gradingChoices,
+          learnerChoice,
+          context,
+          { alignedOnly: true },
+          renderings,
+        );
+        const rewritten =
+          resolved ??
+          this.resolveNumberRewrittenChoice(
+            question,
+            gradingChoices,
+            learnerChoice,
+            context,
+          );
+        if (rewritten) {
+          text = this.coerceToString(rewritten.choice);
+        }
+      }
+
+      const key = this.normalizeText(text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      mapped.push(text);
+    }
+
+    return mapped;
+  }
+
+  /**
+   * Find the grading choice a numeric-looking submission was rewritten from
+   * ("1.620" submitted as "1.62"). Only the exact JSON-number rewrite counts,
+   * and only when it points at a single choice; anything else stays an
+   * invalid selection.
+   */
+  private resolveNumberRewrittenChoice(
+    question: QuestionDto,
+    gradingChoices: Choice[],
+    learnerChoice: unknown,
+    context: GradingContext,
+  ): Choice | undefined {
+    const resolution = resolveNumberRewrittenChoice(
+      learnerChoice,
+      gradingChoices,
+    );
+    if (resolution.kind === "none") return undefined;
+
+    const logContext = {
+      questionId: question.id,
+      attemptId: context.attemptId,
+      assignmentId: context.assignmentId,
+      language: context.language,
+      questionType: question.type,
+    };
+
+    if (resolution.kind === "ambiguous") {
+      this.logger?.warn(
+        "Numerically rewritten choice matches more than one choice; grading it as an invalid selection",
+        { ...logContext, choiceIndexes: resolution.indexes },
+      );
+      return undefined;
+    }
+
+    this.logger?.info(
+      "Matched a numerically rewritten choice to the authored text",
+      {
+        ...logContext,
+        gradingIndex: resolution.index,
+        isCorrect: resolution.choice.isCorrect === true,
+      },
+    );
+    return resolution.choice;
+  }
+
+  /**
+   * Find the grading choice a learner meant when the only difference is
+   * quotation marks around the whole choice: older learner clients dropped
+   * them when decoding the choice. Returns undefined when nothing matches, or
+   * when several choices read the same without their quotes.
+   */
+  private matchIgnoringWrappingQuotes(
+    question: QuestionDto,
+    gradingChoices: Choice[],
+    learnerChoice: unknown,
+    context: GradingContext,
+  ): Choice | undefined {
+    const match = matchChoiceIgnoringWrappingQuotes(
+      learnerChoice,
+      gradingChoices,
+    );
+    const logContext = {
+      questionId: question.id,
+      attemptId: context.attemptId,
+      assignmentId: context.assignmentId,
+      language: context.language,
+      questionType: question.type,
+    };
+
+    if (match.kind === "matched") {
+      const choice = gradingChoices[match.index];
+      this.logger?.info(
+        "Matched a submitted choice by ignoring the quotation marks around it",
+        {
+          ...logContext,
+          gradingIndex: match.index,
+          isCorrect: choice.isCorrect === true,
+        },
+      );
+      return choice;
+    }
+
+    if (match.kind === "ambiguous") {
+      this.logger?.warn(
+        "Submitted choice matches several choices once quotation marks are ignored; not picking one",
+        { ...logContext, gradingIndexes: match.indexes },
+      );
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Load the stored renderings of the question's choices. A failed read is
+   * logged and grading continues against the grading language alone, which
+   * is how every submission was graded before the lookup existed.
+   */
+  private async loadChoiceRenderings(
+    question: QuestionDto,
+    context: GradingContext,
+  ): Promise<ChoiceRendering[]> {
+    if (!context.loadChoiceRenderings) return [];
+    try {
+      return await context.loadChoiceRenderings();
+    } catch (error: unknown) {
+      this.logger?.error(
+        "Could not load stored choice renderings; grading against the submit language only",
+        {
+          questionId: question.id,
+          attemptId: context.attemptId,
+          assignmentId: context.assignmentId,
+          language: context.language,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
+      return [];
+    }
   }
 
   /**

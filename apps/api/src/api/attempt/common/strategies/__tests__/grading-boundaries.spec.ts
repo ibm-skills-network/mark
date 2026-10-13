@@ -14,6 +14,7 @@ import {
 import { safeGet } from "src/api/attempt/common/utils/ssrf-safe-http";
 
 jest.mock("src/api/attempt/common/utils/ssrf-safe-http", () => ({
+  ...jest.requireActual("src/api/attempt/common/utils/ssrf-safe-http"),
   safeGet: jest.fn(),
 }));
 const logger: any = {

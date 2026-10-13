@@ -1023,9 +1023,9 @@ export class ReportsService {
           product: route.productName,
           token_source: route.via,
         });
-        if (route.via === "default" || route.via === "legacy") {
+        if (route.via === "default") {
           this.logger.warn(
-            `SN ticket ${snTicket.ticketKey} filed under ${route.productName ?? "the legacy token"} — no product matched portal ${portalContext.portalHost ?? "(unknown)"}`,
+            `SN ticket ${snTicket.ticketKey} filed under ${route.productName} — no product matched portal ${portalContext.portalHost ?? "(unknown)"}`,
           );
         }
       } catch (error) {

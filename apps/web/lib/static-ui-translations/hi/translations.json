@@ -1409,5 +1409,12 @@
   "Your trim exceeds the": "आपकी ट्रिम इससे अधिक है",
   "ترجمة": "धन्यवाद",
   "번역 중": "ठीक है",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "पेज पूरी तरह लोड नहीं हुआ",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "आपके डिवाइस को प्रतिक्रिया का केवल एक हिस्सा मिला। ऐसा आमतौर पर अस्थिर कनेक्शन, या ब्राउज़र के डेटा-सेविंग मोड या पेज बदलने वाले प्रॉक्सी के कारण होता है, असाइनमेंट में किसी समस्या के कारण नहीं।",
+  "Turn off data saving": "डेटा सेविंग बंद करें",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "डेटा-सेविंग मोड और कुछ ब्राउज़र, जैसे Opera Mini, पेज को खराब कर सकते हैं। इस मोड को बंद करें या असाइनमेंट को किसी दूसरे ब्राउज़र में खोलें।",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "टेक्स्ट उत्तर में छवियों का मूल्यांकन नहीं किया जा सकता। इसके बजाय टेक्स्ट आउटपुट पेस्ट करें, या उसे शब्दों में बताएं।",
+  "Your grade is on its way to yourLearning": "आपका ग्रेड yourLearning पर भेजा जा रहा है",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "आपके ग्रेड को yourLearning के साथ सिंक होने में कुछ घंटे लग सकते हैं, इसलिए कृपया धैर्य रखें। आपका ग्रेड हमारे पास सुरक्षित रूप से दर्ज है और आपको कुछ भी करने की आवश्यकता नहीं है। आप यह विंडो बंद कर सकते हैं।"
 }

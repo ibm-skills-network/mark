@@ -13,7 +13,7 @@ import { z } from "zod";
 import { Choice } from "../../../../assignment/dto/update.questions.request.dto";
 import { LlmRequestOptions } from "../../../core/interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { DEFAULT_LLM_MODEL, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { ITranslationService } from "../interfaces/translation.interface";
 import {
   hasLostMarkup,
@@ -262,7 +262,7 @@ INSTRUCTIONS:
         assignmentId,
         AIUsageType.TRANSLATION,
         "translation",
-        "gpt-5-nano",
+        DEFAULT_LLM_MODEL,
         TranslationService.LLM_CALL_OPTIONS,
       );
 
@@ -354,7 +354,7 @@ INSTRUCTIONS:
         assignmentId,
         AIUsageType.TRANSLATION,
         "translation",
-        "gpt-5-nano",
+        DEFAULT_LLM_MODEL,
         TranslationService.LLM_CALL_OPTIONS,
       );
 
@@ -425,7 +425,7 @@ INSTRUCTIONS:
         assignmentId,
         AIUsageType.TRANSLATION,
         "translation",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
         TranslationService.LLM_CALL_OPTIONS,
       );
 
@@ -465,7 +465,7 @@ INSTRUCTIONS:
           fallbackPrompt,
           assignmentId,
           AIUsageType.TRANSLATION,
-          "gpt-4o-mini",
+          DEFAULT_LLM_MODEL,
           TranslationService.LLM_CALL_OPTIONS,
         );
         return this.finalizeQuestionTranslation(
@@ -860,7 +860,7 @@ INSTRUCTIONS:
         assignmentId,
         AIUsageType.TRANSLATION,
         "translation",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
         TranslationService.LLM_CALL_OPTIONS,
       );
 
@@ -892,7 +892,7 @@ INSTRUCTIONS:
           fallbackPrompt,
           assignmentId,
           AIUsageType.TRANSLATION,
-          "gpt-4o-mini",
+          DEFAULT_LLM_MODEL,
           TranslationService.LLM_CALL_OPTIONS,
         );
         return plain?.trim?.() ?? plain;

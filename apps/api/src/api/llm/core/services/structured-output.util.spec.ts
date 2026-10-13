@@ -44,7 +44,7 @@ describe("invokeStructuredChatModel", () => {
       schema,
       tokenCounter as never,
       logger as never,
-      "gpt-5-mini",
+      "gpt-6-luna",
     );
 
     expect(withStructuredOutput).toHaveBeenCalledWith(
@@ -115,7 +115,7 @@ describe("invokeStructuredChatModel", () => {
       schema,
       tokenCounter as never,
       makeLogger() as never,
-      "gpt-5-mini",
+      "gpt-6-luna",
     );
 
     expect(result.tokenUsage).toEqual({ input: 5, output: 5 });
@@ -136,7 +136,7 @@ describe("invokeStructuredChatModel", () => {
         schema,
         { countTokens: () => 1 } as never,
         logger as never,
-        "gpt-5-mini",
+        "gpt-6-luna",
       ),
     ).rejects.toThrow("boom");
     expect(logger.error).toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe("invokeStructuredChatModel", () => {
         schema,
         { countTokens: () => 1 } as never,
         logger as never,
-        "gpt-5-mini",
+        "gpt-6-luna",
       ),
     ).rejects.toThrow("produced no result");
     expect(logger.error).toHaveBeenCalled();

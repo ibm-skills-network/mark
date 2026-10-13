@@ -6,9 +6,6 @@ import {
   Gpt56TerraLlmService,
 } from "./gpt56-llm.service";
 import { Gpt6LunaLlmService } from "./gpt6-luna-llm.service";
-import { Gpt5LlmService } from "./gpt5-llm.service";
-import { Gpt5MiniLlmService } from "./gpt5-mini-llm.service";
-import { Gpt5NanoLlmService } from "./gpt5-nano-llm.service";
 import { Gpt4VisionPreviewLlmService } from "./openai-llm-vision.service";
 import { OpenAiLlmMiniService } from "./openai-llm-mini.service";
 import { OpenAiLlmService } from "./openai-llm.service";
@@ -29,9 +26,6 @@ const VISION_PROVIDERS = [
   ["OpenAiLlmService", OpenAiLlmService],
   ["OpenAiLlmMiniService", OpenAiLlmMiniService],
   ["Gpt4VisionPreviewLlmService", Gpt4VisionPreviewLlmService],
-  ["Gpt5LlmService", Gpt5LlmService],
-  ["Gpt5MiniLlmService", Gpt5MiniLlmService],
-  ["Gpt5NanoLlmService", Gpt5NanoLlmService],
   ["Gpt54MiniLlmService", Gpt54MiniLlmService],
   ["Gpt6LunaLlmService", Gpt6LunaLlmService],
   ["Gpt56LunaLlmService", Gpt56LunaLlmService],

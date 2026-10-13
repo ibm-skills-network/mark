@@ -1,4 +1,9 @@
-import { recentRequests, type RecordedRequest } from "@/lib/request-log";
+import {
+  recentClientErrors,
+  recentRequests,
+  type RecordedClientError,
+  type RecordedRequest,
+} from "@/lib/request-log";
 import { useLearnerStore } from "@/stores/learner";
 
 /**
@@ -41,6 +46,8 @@ export interface ReportDiagnosticsPayload {
     choices: { text: string; selected: boolean }[];
   }[];
   requests: RecordedRequest[];
+  /** What was thrown behind the failures this tab showed, newest last. */
+  errors: RecordedClientError[];
 }
 
 const CHOICE_TYPES = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
@@ -142,6 +149,7 @@ export function collectReportDiagnostics(context: {
           };
         }),
       requests: recentRequests(),
+      errors: recentClientErrors(),
     };
   } catch (error) {
     console.warn("collectReportDiagnostics: capture failed", error);

@@ -137,7 +137,6 @@ cp apps/api-gateway/.env.template apps/api-gateway/dev.env
 | `NATS_USERNAME`, `NATS_PASSWORD`, `NATS_URL` | API, Gateway | Self-hosted NATS config or [Synadia NGS](https://www.synadia.com/ngs) |
 | `DATABASE_URL`, `DATABASE_URL_DIRECT` | API | Format: `postgresql://user:password@host:port/db` |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | API | [GitHub OAuth Apps](https://github.com/settings/developers) |
-| `WATSONX_AI_API_KEY`, `WATSONX_PROJECT_ID` | API | IBM Cloud → watsonx.ai → Create credential |
 | `LTI_CREDENTIAL_MANAGER_USERNAME`, `LTI_CREDENTIAL_MANAGER_PASSWORD` | Gateway | Ask team or create service account |
 
 </details>

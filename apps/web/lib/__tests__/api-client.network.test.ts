@@ -8,6 +8,7 @@ import {
   NetworkError,
   isNetworkError,
 } from "../api-client";
+import { clearRequestLog, recentClientErrors } from "../request-log";
 
 jest.mock("../../app/Helpers/data-transformer", () => ({
   DataTransformer: {
@@ -104,18 +105,105 @@ describe("APIClient network failure classification", () => {
     expect(isNetworkError(failure)).toBe(false);
   });
 
-  // A body that arrives but cannot be decoded is our bug, not the network's.
-  it("does not disguise a response-parsing failure as a network failure", async () => {
+  // A 200 whose body never arrives intact is the connection's failure, not
+  // ours: a link that drops mid-transfer, or a data-saving proxy that rewrites
+  // or truncates the body. Reading it used to throw a bare SyntaxError or
+  // TypeError with no status, which the error screen floored to "500 —
+  // Something went wrong on our side" and auto-filed as a server fault.
+  it.each([
+    [
+      "a body that is not the JSON the server sent",
+      new SyntaxError(
+        "Unexpected token '<', \"<html><bo\"... is not valid JSON",
+      ),
+    ],
+    ["a body stream that was cut off", new TypeError("network error")],
+  ])("reports %s after a 2xx as an interrupted response", async (_l, cause) => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
       statusText: "OK",
-      json: jest.fn().mockRejectedValue(new TypeError("Unexpected token")),
+      headers: new Headers({ "content-length": "74824" }),
+      json: jest.fn().mockRejectedValue(cause),
+    });
+
+    const failure = await client.get("/thing").catch((error: unknown) => error);
+
+    expect(isNetworkError(failure)).toBe(true);
+    expect((failure as NetworkError).kind).toBe("interrupted");
+    expect(failure).not.toHaveProperty("status");
+    expect((failure as NetworkError).detail).toContain(cause.name);
+  });
+
+  // The parser's message quotes the start of the body; that is response
+  // content and must not travel into a bug report.
+  it("keeps the parser's error name but not the body excerpt it quotes", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      json: jest
+        .fn()
+        .mockRejectedValue(
+          new SyntaxError(
+            "Unexpected token 'a', \"alice@example.com\" is not valid JSON",
+          ),
+        ),
+    });
+
+    const failure = (await client
+      .get("/thing")
+      .catch((error: unknown) => error)) as NetworkError;
+
+    expect(failure.detail).toMatch(/^SyntaxError: /);
+    expect(failure.detail).not.toContain("alice");
+  });
+
+  // An empty 2xx is what the server deliberately sent (a handler with no
+  // return value); a retry returns the same thing, so it stays what it was.
+  it("does not treat a deliberately empty 2xx body as a dropped connection", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "content-length": "0" }),
+      json: jest
+        .fn()
+        .mockRejectedValue(new SyntaxError("Unexpected end of JSON input")),
     });
 
     const failure = await client.get("/thing").catch((error: unknown) => error);
 
     expect(isNetworkError(failure)).toBe(false);
-    expect(failure).toBeInstanceOf(TypeError);
+    expect(failure).toBeInstanceOf(SyntaxError);
+  });
+
+  it("leaves a trace of the interrupted response for a bug report", async () => {
+    clearRequestLog();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      json: jest.fn().mockRejectedValue(new TypeError("network error")),
+    });
+
+    await client.get("/api/v2/assignments/3049?lang=en").catch(() => undefined);
+
+    expect(recentClientErrors()).toEqual([
+      expect.objectContaining({
+        name: "NetworkError",
+        kind: "interrupted",
+        detail: "TypeError: network error",
+        path: "/api/v2/assignments/3049",
+      }),
+    ]);
+  });
+
+  it("recognises an interrupted response by shape across a module realm", () => {
+    expect(isNetworkError({ name: "NetworkError", kind: "interrupted" })).toBe(
+      true,
+    );
   });
 });

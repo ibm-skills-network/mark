@@ -14,7 +14,7 @@ interface ReuseLookup {
 interface ConsistencyResult {
   similar: boolean;
   previousGrade?: number;
-  previousFeedback?: string;
+  previousFeedback?: unknown;
   shouldAdjust: boolean;
   reuseReason?: string;
 }
@@ -225,5 +225,97 @@ describe("TextGradingStrategy prior-grade reuse", () => {
 
     expect(result).toBeNull();
     expect(checkConsistency).not.toHaveBeenCalled();
+  });
+
+  describe("feedback on a reused grade", () => {
+    const LEARNER_CONTEXT = {
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+      userRole: UserRole.LEARNER,
+      userId: LEARNER,
+      attemptId: 1_503_465,
+    };
+
+    const STRUCTURED = {
+      summary: "You earned 1/1. 1 of 1 criteria were fully met.",
+      criteria: [
+        {
+          name: "Creates the index",
+          pointsAwarded: 1,
+          maxPoints: 1,
+          status: "full",
+          evidence: "CREATE INDEX idx_billed ON billdata(billedamount);",
+          feedback: "Correct column.",
+        },
+      ],
+      guidance: "Nothing to add.",
+    };
+
+    type ReusedFeedback = Array<{
+      feedback: string;
+      structuredFeedback?: unknown;
+    }>;
+
+    async function reusedFeedback(previousFeedback: unknown) {
+      const built = buildStrategy({
+        similar: true,
+        previousGrade: 1,
+        previousFeedback,
+        shouldAdjust: false,
+        reuseReason: "exact_match",
+      });
+      const result = (await reuse(
+        built.strategy as unknown as Record<string, unknown>,
+        LEARNER_CONTEXT,
+      )) as { totalPoints: number; feedback: ReusedFeedback } | null;
+      return { result, logger: built.logger };
+    }
+
+    it("keeps the prior grade's structured feedback and appends the reuse note", async () => {
+      const { result } = await reusedFeedback([
+        {
+          feedback: "Score: 1/1 points (100%).",
+          structuredFeedback: STRUCTURED,
+        },
+      ]);
+
+      expect(result?.totalPoints).toBe(1);
+      expect(result?.feedback).toHaveLength(1);
+      const [entry] = result?.feedback ?? [];
+      expect(entry.structuredFeedback).toEqual(STRUCTURED);
+      expect(entry.feedback.startsWith("[")).toBe(false);
+      expect(entry.feedback).toBe(
+        "Score: 1/1 points (100%).\n\n**Score Rationale:** Reused prior grade (1/1).",
+      );
+    });
+
+    it("does not alter the prior grade's own feedback entries", async () => {
+      const prior = [
+        {
+          feedback: "Score: 1/1 points (100%).",
+          structuredFeedback: STRUCTURED,
+        },
+      ];
+
+      await reusedFeedback(prior);
+
+      expect(prior[0].feedback).toBe("Score: 1/1 points (100%).");
+    });
+
+    it("falls back to a plain note and warns when the prior feedback is unusable", async () => {
+      const { result, logger } = await reusedFeedback(undefined);
+
+      expect(result?.totalPoints).toBe(1);
+      expect(result?.feedback).toEqual([
+        {
+          feedback:
+            "Reused prior grading result for identical answer.\n\n**Score Rationale:** Reused prior grade (1/1).",
+        },
+      ]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ questionId: QUESTION.id }),
+      );
+    });
   });
 });

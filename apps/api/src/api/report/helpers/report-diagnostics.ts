@@ -12,6 +12,7 @@ const MAX_DRAFT_QUESTIONS = 100;
 const MAX_RENDERED_QUESTIONS = 100;
 const MAX_CHOICES = 12;
 const MAX_REQUESTS = 20;
+const MAX_ERRORS = 10;
 
 export interface ReportDiagnostics {
   v: 1;
@@ -51,6 +52,16 @@ export interface ReportDiagnostics {
     status: number | null;
     ms?: number;
     requestId?: string;
+    at?: string;
+  }[];
+  /** What the browser threw behind the failures it showed. */
+  errors?: {
+    name: string;
+    message?: string;
+    kind?: string;
+    detail?: string;
+    where?: string;
+    path?: string;
     at?: string;
   }[];
 }
@@ -169,6 +180,26 @@ function sanitizeRequests(value: unknown): ReportDiagnostics["requests"] {
   });
 }
 
+function sanitizeErrors(value: unknown): ReportDiagnostics["errors"] {
+  if (!Array.isArray(value)) return undefined;
+  return list(value, MAX_ERRORS).flatMap((entry) => {
+    if (!isBag(entry)) return [];
+    const name = text(entry.name, 60);
+    if (!name) return [];
+    return [
+      compact({
+        name,
+        message: text(entry.message, 200),
+        kind: text(entry.kind, 20),
+        detail: text(entry.detail, 200),
+        where: text(entry.where, 60),
+        path: text(entry.path, 300)?.split("?")[0],
+        at: text(entry.at, 40),
+      }),
+    ];
+  });
+}
+
 /**
  * @param raw - The `diagnostics` form field exactly as received
  * @returns The rebuilt diagnostics, or undefined when there is nothing usable
@@ -196,6 +227,7 @@ export function sanitizeReportDiagnostics(
     draft: sanitizeDraft(parsed.draft),
     rendered: sanitizeRendered(parsed.rendered),
     requests: sanitizeRequests(parsed.requests),
+    errors: sanitizeErrors(parsed.errors),
   });
 }
 

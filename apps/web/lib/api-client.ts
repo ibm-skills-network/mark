@@ -5,6 +5,7 @@ import {
 import { API_DECODE_CONFIG } from "@/app/Helpers/transform-config";
 import { toast } from "sonner";
 import { authorSessionHeaders } from "./author-session";
+import { recordClientError, redactErrorText } from "./request-log";
 
 interface APIClientConfig {
   baseURL?: string;
@@ -34,8 +35,18 @@ interface RequestOptions {
  * - `timeout`  — the browser gave up waiting; no response headers ever arrived.
  * - `unreachable` — the connection could not be completed at all (reset socket,
  *   offline device, a proxy dropping the request part-way).
+ * - `interrupted` — a success status arrived but its body did not arrive
+ *   intact: the link dropped mid-transfer, or something between us and the
+ *   browser (a data-saving proxy, an inspecting corporate proxy) rewrote or
+ *   cut it short, so it could not be read as the JSON the server sent.
  */
-export type NetworkFailureKind = "timeout" | "unreachable";
+export type NetworkFailureKind = "timeout" | "unreachable" | "interrupted";
+
+const NETWORK_FAILURE_KINDS: ReadonlySet<string> = new Set<NetworkFailureKind>([
+  "timeout",
+  "unreachable",
+  "interrupted",
+]);
 
 /**
  * A request that produced no HTTP response.
@@ -50,6 +61,11 @@ export class NetworkError extends Error {
   constructor(
     message: string,
     public readonly kind: NetworkFailureKind,
+    /**
+     * The underlying error's name and wording (quoted fragments removed), so a
+     * bug report can say what the browser actually threw.
+     */
+    public readonly detail?: string,
   ) {
     super(message);
     this.name = "NetworkError";
@@ -68,7 +84,9 @@ export function isNetworkError(error: unknown): error is NetworkError {
   }
   const { name, kind } = error as { name?: unknown; kind?: unknown };
   return (
-    name === "NetworkError" && (kind === "timeout" || kind === "unreachable")
+    name === "NetworkError" &&
+    typeof kind === "string" &&
+    NETWORK_FAILURE_KINDS.has(kind)
   );
 }
 
@@ -108,6 +126,24 @@ function classifyRequestFailure(
   }
 
   return error;
+}
+
+function describeCause(error: unknown): string {
+  if (error instanceof Error) {
+    return redactErrorText(`${error.name}: ${error.message}`);
+  }
+  return typeof error;
+}
+
+/**
+ * True when a 2xx carried no body on purpose (204, or an explicit zero
+ * length). Parsing that fails the same way on every retry, so it is not a
+ * connection problem and keeps surfacing as the parse error it is.
+ */
+function isDeliberatelyEmpty(response: Response): boolean {
+  return (
+    response.status === 204 || response.headers?.get("content-length") === "0"
+  );
 }
 
 export function getDefaultApiBaseURL(
@@ -230,10 +266,6 @@ export class APIClient {
 
     let response: Response;
     try {
-      // Only the fetch itself is classified as a network failure. Decoding the
-      // body below can also throw a TypeError, and that is our bug, not the
-      // connection's — wrapping it would hide a real defect behind a "check
-      // your connection" screen.
       response = await fetch(fullURL, {
         method,
         headers: requestHeaders,
@@ -242,10 +274,14 @@ export class APIClient {
         cache: "no-store",
       });
     } catch (error) {
-      throw classifyRequestFailure(error, {
+      const classified = classifyRequestFailure(error, {
         callerAborted: signal?.aborted === true,
         timeoutMs: this.timeout,
       });
+      if (isNetworkError(classified)) {
+        recordClientError(classified, { where: "api-request", path: url });
+      }
+      throw classified;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -294,10 +330,32 @@ export class APIClient {
       );
     }
 
-    const responseData = await response.json();
+    let responseData: T;
+    try {
+      responseData = (await response.json()) as T;
+    } catch (error) {
+      // The server answered with success, so a body that cannot be read or
+      // parsed did not leave us intact: the connection dropped mid-transfer,
+      // or an intermediary (a data-saving browser proxy, an inspecting
+      // corporate proxy) rewrote or truncated it. Without this it reached the
+      // learner as a bare SyntaxError, which has no status and was shown as
+      // "500 — Something went wrong on our side".
+      if (isDeliberatelyEmpty(response)) {
+        throw error;
+      }
+      const interrupted = new NetworkError(
+        "The response did not arrive complete.",
+        "interrupted",
+        describeCause(error),
+      );
+      recordClientError(interrupted, { where: "api-response", path: url });
+      throw interrupted;
+    }
 
+    // Decoding stays outside the classification above: a transform that
+    // throws is our defect, not the connection's.
     return transformResponse
-      ? DataTransformer.decodeFromAPI(responseData, finalTransformConfig)
+      ? (DataTransformer.decodeFromAPI(responseData, finalTransformConfig) as T)
       : responseData;
   }
 

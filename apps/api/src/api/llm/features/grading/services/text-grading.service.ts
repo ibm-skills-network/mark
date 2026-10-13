@@ -31,6 +31,7 @@ import { getGradingModelCacheIdentity } from "../../../core/utils/grading-cache-
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
   ANSWER_NORMALIZATION_SERVICE,
+  DEFAULT_LLM_MODEL,
   GRADING_CACHE_SERVICE,
   GRADING_JUDGE_SERVICE,
   MODERATION_SERVICE,
@@ -228,7 +229,7 @@ export class TextGradingService implements ITextGradingService {
       let cacheKey: string | null = null;
       const gradingProvider = await this.llmRouter.getForFeatureWithFallback(
         "text_grading",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
       );
       const gradingModel = gradingProvider.key;
       const modelCacheIdentity = getGradingModelCacheIdentity(gradingModel);
@@ -578,7 +579,7 @@ export class TextGradingService implements ITextGradingService {
     assignmentId: number,
     language?: string,
     safetyIdentifier?: string,
-    gradingModel = "gpt-4o-mini",
+    gradingModel = DEFAULT_LLM_MODEL,
     previousJudgeFeedback?: string | null,
   ): Promise<GradingAttempt> {
     const {
@@ -608,13 +609,10 @@ export class TextGradingService implements ITextGradingService {
     // fixed overhead first, then reduce the variable parts (context, then
     // response) only when over budget.
     //
-    // The "gpt-4o-mini" key here pins the limit to a >=128k context window. This
-    // assumes every model assignable to text_grading has at least that window;
-    // models absent from the registry fall back to a 32k default. If a
-    // smaller-context model is ever made assignable, replace this pin by
-    // resolving the feature's actual model key.
+    // Budget against the model text_grading actually resolved to; models
+    // absent from the context-window registry fall back to a 32k default.
     const safeLimit =
-      this.contentSummarization.getSafeContextLimit("gpt-4o-mini");
+      this.contentSummarization.getSafeContextLimit(gradingModel);
 
     const overheadText = [
       template,
@@ -655,7 +653,7 @@ export class TextGradingService implements ITextGradingService {
             text: learnerResponse,
             label: "learner response",
             questionText: question,
-            modelKey: "gpt-4o-mini",
+            modelKey: gradingModel,
             assignmentId,
             usageType: AIUsageType.ASSIGNMENT_GRADING,
             feature: "text_grading",
@@ -719,7 +717,7 @@ export class TextGradingService implements ITextGradingService {
 
     // Native structured output: the provider returns an object already
     // validated against GradingAttemptSchema. This replaces the old "ask for
-    // JSON text, then JSON.parse it" path, which failed whenever gpt-4o-mini
+    // JSON text, then JSON.parse it" path, which failed whenever the model
     // embedded code/quotes into a string field without escaping them.
     const parsedResponse =
       await this.promptProcessor.processStructuredPromptForFeature<GradingAttempt>(
@@ -729,8 +727,8 @@ export class TextGradingService implements ITextGradingService {
         "text_grading",
         GradingAttemptSchema,
         gradingModel,
-        // maxTokens must cover reasoning + the full JSON grade: gpt-5-mini
-        // spends its completion budget on reasoning first, and the provider
+        // maxTokens must cover reasoning + the full JSON grade: reasoning
+        // models spend their completion budget on reasoning first, and the provider
         // default of 4096 truncates the JSON on large rubrics, failing the
         // grading after all retries.
         {

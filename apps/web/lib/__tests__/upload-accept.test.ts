@@ -26,6 +26,16 @@ const USER_AGENTS = {
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
   iosWebView:
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+  courseraAndroid12:
+    "CourseraMobileApp/6.12.0 (Android; build 92560; Android 12; WebView)",
+  courseraAndroid16:
+    "CourseraMobileApp/6.12.0 (Android; build 92560; Android 16; WebView)",
+  courseraAndroid17:
+    "CourseraMobileApp/6.12.0 (Android; build 92560; Android 17; WebView)",
+  courseraIos:
+    "CourseraMobileApp/6.12.0 (iOS; build 92560; iOS 18.0; WKWebView)",
+  androidWebViewWord:
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36 WebViewer/2.0",
 };
 
 /** The MIME type each Office extension is actually registered under. */
@@ -95,6 +105,9 @@ describe("isAndroidWebView", () => {
   it.each([
     ["androidWebView", USER_AGENTS.androidWebView],
     ["androidWebViewReduced", USER_AGENTS.androidWebViewReduced],
+    ["courseraAndroid12", USER_AGENTS.courseraAndroid12],
+    ["courseraAndroid16", USER_AGENTS.courseraAndroid16],
+    ["courseraAndroid17", USER_AGENTS.courseraAndroid17],
   ])("detects %s", (_label, userAgent) => {
     expect(isAndroidWebView(userAgent)).toBe(true);
   });
@@ -106,6 +119,8 @@ describe("isAndroidWebView", () => {
     ["desktopChrome", USER_AGENTS.desktopChrome],
     ["iosSafari", USER_AGENTS.iosSafari],
     ["iosWebView", USER_AGENTS.iosWebView],
+    ["courseraIos", USER_AGENTS.courseraIos],
+    ["androidWebViewWord", USER_AGENTS.androidWebViewWord],
     ["empty", ""],
   ])("ignores %s", (_label, userAgent) => {
     expect(isAndroidWebView(userAgent)).toBe(false);
@@ -119,6 +134,12 @@ describe("shouldOmitAcceptFilter", () => {
     ["authoring documents", AUTHORING_DOCUMENT_ACCEPT],
   ])("drops the %s filter in an Android WebView", (_label, map) => {
     expect(shouldOmitAcceptFilter(map, USER_AGENTS.androidWebView)).toBe(true);
+  });
+
+  it("drops the learner upload filter in the Coursera Android app", () => {
+    expect(
+      shouldOmitAcceptFilter(UPLOAD_ACCEPT, USER_AGENTS.courseraAndroid12),
+    ).toBe(true);
   });
 
   it("keeps an image-only filter in an Android WebView", () => {

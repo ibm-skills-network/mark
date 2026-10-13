@@ -1409,5 +1409,12 @@
   "Your trim exceeds the": "Seu corte excede o",
   "ترجمة": "ترجمة",
   "번역 중": "번역중",
-  "翻訳中": "翻訳中"
+  "翻訳中": "翻訳中",
+  "The page didn't finish loading": "A página não terminou de carregar",
+  "Your device received only part of the response. That is usually an unstable connection, or a data-saving browser mode or proxy changing the page, not a problem with the assignment.": "Seu dispositivo recebeu apenas parte da resposta. Isso geralmente se deve a uma conexão instável, ou a um modo de economia de dados do navegador ou a um proxy que altera a página, e não a um problema com a atividade.",
+  "Turn off data saving": "Desative a economia de dados",
+  "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Modos de economia de dados e alguns navegadores, como o Opera Mini, podem quebrar a página. Desative esse modo ou abra a atividade em outro navegador.",
+  "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "As imagens não podem ser avaliadas em uma resposta de texto. Cole a saída como texto ou descreva-a com palavras.",
+  "Your grade is on its way to yourLearning": "Sua nota está a caminho do yourLearning",
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "A sincronização da sua nota com o yourLearning pode levar algumas horas, por isso pedimos que tenha paciência. Sua nota está registrada com segurança conosco e você não precisa fazer nada. Você pode fechar esta janela."
 }

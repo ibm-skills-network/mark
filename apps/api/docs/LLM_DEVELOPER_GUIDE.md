@@ -29,7 +29,7 @@ Create a new service class that implements the `ILlmProvider` interface.
 
 **Example: Adding Claude from Anthropic**
 
-For a real-world example, see the [Llama-4-Maverick implementation](#llama-4-maverick-implementation-example) below.
+For real providers, see `src/api/llm/core/services/gpt6-luna-llm.service.ts` and its `EffortNoneOpenAiLlmService` base.
 
 ```typescript
 // src/api/llm/core/services/claude-llm.service.ts

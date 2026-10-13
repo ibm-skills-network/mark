@@ -1,24 +1,12 @@
 import { Global, Module } from "@nestjs/common";
 import { S3Service } from "../files/services/s3.service";
 import { Gpt6LunaLlmService } from "./core/services/gpt6-luna-llm.service";
-import { Gpt5LlmService } from "./core/services/gpt5-llm.service";
-import { Gpt5MiniLlmService } from "./core/services/gpt5-mini-llm.service";
-import { Gpt5NanoLlmService } from "./core/services/gpt5-nano-llm.service";
-import {
-  Gpt54MiniLlmService,
-  Gpt54NanoLlmService,
-} from "./core/services/gpt54-llm.service";
+import { Gpt54MiniLlmService } from "./core/services/gpt54-llm.service";
 import {
   Gpt56LunaLlmService,
   Gpt56SolLlmService,
   Gpt56TerraLlmService,
 } from "./core/services/gpt56-llm.service";
-import { GptOss120bLlmService } from "./core/services/gpt-oss-120b-llm-service";
-import { Granite4HSmallLlmService } from "./core/services/granite-4-h-small-llm-service";
-import { GraniteVision322bLlmService } from "./core/services/granite-vision-3-2-2b-llm-service";
-import { Llama3370bInstructLlmService } from "./core/services/llama-3-3-70b-instruct-llm-service";
-import { Llama4MaverickLlmService } from "./core/services/llama-4-maverick-llm-service";
-import { MistralMedium2505LlmService } from "./core/services/mistral-medium-2505-llm-service";
 import { LLMAssignmentService } from "./core/services/llm-assignment.service";
 import { LLMPricingService } from "./core/services/llm-pricing.service";
 import { LLMResolverService } from "./core/services/llm-resolver.service";
@@ -56,6 +44,7 @@ import { QuestionGenerationService } from "./features/question-generation/servic
 import { QuestionValidatorService } from "./features/question-generation/services/question-validator.service";
 import { RubricService } from "./features/rubric/services/rubric.service";
 import { TranslationService } from "./features/translation/services/translation.service";
+import { IMultimodalLlmProvider } from "./core/interfaces/llm-provider.interface";
 import { LlmFacadeService } from "./llm-facade.service";
 import {
   ALL_LLM_PROVIDERS,
@@ -93,81 +82,22 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
     OpenAiLlmService,
     OpenAiLlmMiniService,
     Gpt4VisionPreviewLlmService,
-    Gpt5LlmService,
-    Gpt5MiniLlmService,
-    Gpt5NanoLlmService,
     Gpt54MiniLlmService,
-    Gpt54NanoLlmService,
     Gpt56LunaLlmService,
     Gpt56TerraLlmService,
     Gpt56SolLlmService,
     Gpt6LunaLlmService,
-    GptOss120bLlmService,
-    Granite4HSmallLlmService,
-    GraniteVision322bLlmService,
-    Llama3370bInstructLlmService,
-    Llama4MaverickLlmService,
-    MistralMedium2505LlmService,
     LlmRouter,
     {
       provide: ALL_LLM_PROVIDERS,
       useFactory: (
-        p1: OpenAiLlmService,
-        p2: OpenAiLlmMiniService,
-        p3: Gpt4VisionPreviewLlmService,
-        p4: Gpt5LlmService,
-        p5: Gpt5MiniLlmService,
-        p6: Gpt5NanoLlmService,
-        p7: GptOss120bLlmService,
-        p8: Granite4HSmallLlmService,
-        p9: GraniteVision322bLlmService,
-        p10: Llama3370bInstructLlmService,
-        p11: Llama4MaverickLlmService,
-        p12: MistralMedium2505LlmService,
-        p13: Gpt54MiniLlmService,
-        p14: Gpt54NanoLlmService,
-        // Append only: LlmRouter.getDefault() returns this array's first entry.
-        p15: Gpt56LunaLlmService,
-        p16: Gpt56TerraLlmService,
-        p17: Gpt56SolLlmService,
-        p18: Gpt6LunaLlmService,
-      ) => {
-        return [
-          p1,
-          p2,
-          p3,
-          p4,
-          p5,
-          p6,
-          p7,
-          p8,
-          p9,
-          p10,
-          p11,
-          p12,
-          p13,
-          p14,
-          p15,
-          p16,
-          p17,
-          p18,
-        ];
-      },
+        ...providers: IMultimodalLlmProvider[]
+      ): IMultimodalLlmProvider[] => providers,
       inject: [
         OpenAiLlmService,
         OpenAiLlmMiniService,
         Gpt4VisionPreviewLlmService,
-        Gpt5LlmService,
-        Gpt5MiniLlmService,
-        Gpt5NanoLlmService,
-        GptOss120bLlmService,
-        Granite4HSmallLlmService,
-        GraniteVision322bLlmService,
-        Llama3370bInstructLlmService,
-        Llama4MaverickLlmService,
-        MistralMedium2505LlmService,
         Gpt54MiniLlmService,
-        Gpt54NanoLlmService,
         Gpt56LunaLlmService,
         Gpt56TerraLlmService,
         Gpt56SolLlmService,

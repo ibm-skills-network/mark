@@ -19,6 +19,7 @@ import { z } from "zod";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import {
+  DEFAULT_LLM_MODEL,
   LLM_RESOLVER_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
@@ -500,7 +501,7 @@ Respond with a JSON object containing:
     try {
       const modelKey = await this.llmResolver.getModelKeyWithFallback(
         "image_grading",
-        "gpt-4.1-mini",
+        DEFAULT_LLM_MODEL,
       );
       this.logger.debug(
         `Using model ${modelKey} for image_grading feature (assignment ${assignmentId})`,
@@ -680,7 +681,7 @@ RUBRIC CRITERIA:
 
     const modelKey = await this.llmResolver.getModelKeyWithFallback(
       "image_grading",
-      "gpt-4.1-mini",
+      DEFAULT_LLM_MODEL,
     );
 
     const llmOut = await this.invokeVisionModel({

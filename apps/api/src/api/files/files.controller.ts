@@ -47,6 +47,10 @@ import { AuthGuard } from "./guards/auth.guard";
 import { UserThrottlerGuard } from "./guards/user-throttler.guard";
 import { FilesService } from "./services/files.service";
 import { S3Service } from "./services/s3.service";
+import {
+  buildContentDisposition,
+  displayNameFromStorageKey,
+} from "./services/storage-key";
 import { sanitizeForLog } from "../../logger/sanitize";
 
 export interface FileAccessDto {
@@ -422,7 +426,7 @@ export class FilesController {
         Key: key,
       });
 
-      const filename = key.split("/").pop() || key;
+      const filename = displayNameFromStorageKey(key);
       const contentType = this.getContentType(filename);
       const isImage = this.isImageFile(filename);
       const isPdf = this.isPdfFile(filename);
@@ -432,7 +436,7 @@ export class FilesController {
         Bucket: bucket,
         Key: key,
         Expires: expirationSeconds,
-        ResponseContentDisposition: `inline; filename="${filename}"`,
+        ResponseContentDisposition: buildContentDisposition("inline", filename),
         ResponseContentType: contentType,
       });
 
@@ -440,7 +444,10 @@ export class FilesController {
         Bucket: bucket,
         Key: key,
         Expires: expirationSeconds,
-        ResponseContentDisposition: `attachment; filename="${filename}"`,
+        ResponseContentDisposition: buildContentDisposition(
+          "attachment",
+          filename,
+        ),
         ResponseContentType: contentType,
       });
 

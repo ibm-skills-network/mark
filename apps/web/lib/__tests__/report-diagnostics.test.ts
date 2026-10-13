@@ -1,5 +1,5 @@
 import { collectReportDiagnostics } from "../report-diagnostics";
-import { clearRequestLog } from "../request-log";
+import { clearRequestLog, recordClientError } from "../request-log";
 import { useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@/config/types";
 
@@ -69,6 +69,21 @@ describe("collectReportDiagnostics", () => {
         { id: 29377, status: "edited", selected: ["1"], textLength: 0 },
       ],
     });
+  });
+
+  it("includes the errors the learner's screen was built from", () => {
+    recordClientError(new SyntaxError("Unexpected end of JSON input"), {
+      where: "learner-about-load",
+    });
+
+    const diagnostics = collectReportDiagnostics({ role: "learner" });
+
+    expect(diagnostics?.errors).toEqual([
+      expect.objectContaining({
+        name: "SyntaxError",
+        where: "learner-about-load",
+      }),
+    ]);
   });
 
   it("falls back to the authored choices when the language has none", () => {

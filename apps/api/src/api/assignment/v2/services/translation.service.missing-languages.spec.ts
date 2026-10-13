@@ -49,15 +49,11 @@ describe("TranslationService missing-language retries", () => {
     const jobStatusService = {
       updateJobStatus: jest.fn().mockResolvedValue(undefined),
     };
-    const llmResolver = {
-      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
-    };
 
     const service = new TranslationService(
       prisma as never,
       llmFacade as never,
       jobStatusService as never,
-      llmResolver as never,
       { isDisabled: () => false } as never,
     );
 

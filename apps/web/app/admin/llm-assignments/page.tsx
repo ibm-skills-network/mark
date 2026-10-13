@@ -258,23 +258,10 @@ export default function LLMAssignmentsPage() {
     return feature.assignedModel?.modelKey || feature.defaultModelKey || "none";
   };
 
-  const getAvailableModelsForFeature = (feature: AIFeature): LLMModel[] => {
-    const visionCapableFeatures = [
-      "image_grading",
-      "presentation_grading",
-      "video_grading",
-    ];
-
-    const visionModels = ["gpt-4.1-mini"];
-
-    if (visionCapableFeatures.includes(feature.featureKey)) {
-      return models.filter((m) => m.isActive);
-    } else {
-      return models.filter(
-        (m) => m.isActive && !visionModels.includes(m.modelKey),
-      );
-    }
-  };
+  // Every supported model takes both text and image input, so any active
+  // model can back any feature.
+  const getAvailableModelsForFeature = (): LLMModel[] =>
+    models.filter((m) => m.isActive);
 
   const hasChanges = changes.size > 0;
 
@@ -405,24 +392,19 @@ export default function LLMAssignmentsPage() {
                           <SelectValue placeholder="Select model" />
                         </SelectTrigger>
                         <SelectContent>
-                          {getAvailableModelsForFeature(feature).map(
-                            (model) => (
-                              <SelectItem
-                                key={model.modelKey}
-                                value={model.modelKey}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span>{model.displayName}</span>
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs"
-                                  >
-                                    {model.provider}
-                                  </Badge>
-                                </div>
-                              </SelectItem>
-                            ),
-                          )}
+                          {getAvailableModelsForFeature().map((model) => (
+                            <SelectItem
+                              key={model.modelKey}
+                              value={model.modelKey}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{model.displayName}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {model.provider}
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </TableCell>

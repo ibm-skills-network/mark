@@ -15,7 +15,10 @@ import {
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import IORedis from "ioredis";
-import { createRedisConnection } from "src/job-queue/redis.connection";
+import {
+  createCacheRedisConnection,
+  isRedisReady,
+} from "src/job-queue/redis.connection";
 import {
   Assignment,
   Question,
@@ -46,6 +49,7 @@ import { applyQuestionOrder } from "../utils/question-order.util";
 import { resolveTrueFalseAnswer } from "../utils/true-false-answer.util";
 import { PrismaService } from "../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../helpers/sanitize-unicode";
+import { stripImagesFromLearnerHtml } from "src/api/attempt/common/utils/learner-text-images.util";
 import { sanitizeForLog } from "../../../logger/sanitize";
 import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
@@ -140,7 +144,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
 
   private createRedisClient(): IORedis | undefined {
     try {
-      const client = createRedisConnection();
+      const client = createCacheRedisConnection();
       client.on("error", (error) => {
         this.logger.warn(
           `attempt.redis.error { message: ${JSON.stringify(error.message)} }`,
@@ -1122,7 +1126,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       // If the Redis connection is unavailable on this pod, treat as
       // not-in-flight (marker = "unavailable") rather than crashing the
       // learner request.
-      const languageInflight = this.redis
+      const languageInflight = isRedisReady(this.redis)
         ? await isLanguageInFlight(
             this.redis,
             assignment.id,
@@ -1753,6 +1757,27 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         assignmentInstructions: assignmentDetails?.instructions ?? "",
         questionAnswerContext: [],
       };
+    }
+    if (
+      question?.type === QuestionType.TEXT &&
+      typeof createQuestionResponseAttemptRequestDto.learnerTextResponse ===
+        "string"
+    ) {
+      // Text answers are graded on text alone; see stripImagesFromLearnerHtml.
+      const { html, removedCount } = stripImagesFromLearnerHtml(
+        createQuestionResponseAttemptRequestDto.learnerTextResponse,
+      );
+      if (removedCount > 0) {
+        this.logger.warn("Removed images from a text answer before grading", {
+          assignmentId,
+          assignmentAttemptId,
+          questionId,
+          userRole: role,
+          removedImageCount: removedCount,
+          imageOnly: html.length === 0,
+        });
+        createQuestionResponseAttemptRequestDto.learnerTextResponse = html;
+      }
     }
     const { responseDto, learnerResponse } = await this.processQuestionResponse(
       question,

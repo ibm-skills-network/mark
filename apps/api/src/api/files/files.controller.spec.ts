@@ -215,3 +215,78 @@ describe("FilesController direct upload", () => {
     });
   });
 });
+
+describe("FilesController file access", () => {
+  const childLogger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  };
+  const parentLogger = {
+    child: jest.fn().mockReturnValue(childLogger),
+  } as unknown as Logger;
+
+  const getSignedUrl = jest.fn();
+  const mockS3Service = {
+    isConfiguredUploadBucket: jest.fn().mockReturnValue(true),
+    headObject: jest
+      .fn()
+      .mockResolvedValue({ ContentLength: 10, LastModified: new Date(0) }),
+    getSignedUrl,
+  } as unknown as S3Service;
+
+  const request = {
+    userSession: {
+      userId: "learner@example.com",
+      role: UserRole.LEARNER,
+    },
+  } as unknown as UserSessionRequest;
+
+  let controller: FilesController;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getSignedUrl.mockResolvedValue("https://signed.example/object");
+    controller = new FilesController(
+      {} as unknown as FilesService,
+      mockS3Service,
+      parentLogger,
+    );
+  });
+
+  it("names downloads after the original upload, not the storage key", async () => {
+    const result = await controller.getFileAccess(
+      "2537/learner@example.com/26293/munx8fz6ywtb03w6lm-Fleet_END.XLSX",
+      "learner-bucket",
+      "3600",
+      request,
+    );
+
+    expect(result.filename).toBe("Fleet_END.XLSX");
+    const dispositions = getSignedUrl.mock.calls.map(
+      (call: [string, { ResponseContentDisposition: string }]) =>
+        call[1].ResponseContentDisposition,
+    );
+    expect(dispositions).toEqual([
+      `inline; filename="Fleet_END.XLSX"; filename*=UTF-8''Fleet_END.XLSX`,
+      `attachment; filename="Fleet_END.XLSX"; filename*=UTF-8''Fleet_END.XLSX`,
+    ]);
+  });
+
+  it("encodes quotes and control characters instead of interpolating them", async () => {
+    await controller.getFileAccess(
+      'learner@example.com/munx8fz6ywtb03w6lm-a"b.txt',
+      "learner-bucket",
+      "3600",
+      request,
+    );
+
+    const attachment = getSignedUrl.mock.calls[1][1] as {
+      ResponseContentDisposition: string;
+    };
+    expect(attachment.ResponseContentDisposition).toBe(
+      `attachment; filename="a_b.txt"; filename*=UTF-8''a%22b.txt`,
+    );
+  });
+});

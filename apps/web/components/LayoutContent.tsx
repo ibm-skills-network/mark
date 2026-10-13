@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Toaster } from "sonner";
 import { MarkChat } from "../app/chatbot/components/MarkChat";
 import AuthorStoreBridge from "../app/chatbot/store/AuthorStoreBridge";
+import AdminAssumeRoleButton from "@/components/AdminAssumeRoleButton";
 import ReportBugButton from "@/components/ReportBugButton";
 import { useChatbot } from "../hooks/useChatbot";
 import { useTheme } from "../hooks/useTheme";
@@ -92,6 +93,7 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
       {hideMarkChat ? null : <MarkChat />}
       {/* Bug reporting stays available even when the AI chat is disabled. */}
       {pathname?.startsWith("/admin") ? null : <ReportBugButton />}
+      <AdminAssumeRoleButton />
     </div>
   );
 }

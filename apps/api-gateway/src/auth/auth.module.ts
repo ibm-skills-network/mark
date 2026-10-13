@@ -31,6 +31,7 @@ import { JwtConfigService } from "./jwt/jwt.config.service";
     JwtBearerTokenAuthGuard,
     MockJwtBearerTokenAuthGuard,
     DynamicJwtBearerTokenAuthGuard,
+    JwtConfigService,
   ],
 })
 export class AuthModule {}

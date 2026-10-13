@@ -1151,3 +1151,139 @@ it("preserves typed rich-text tail evidence through validation AND grader quotes
   expect(rendered).toContain("REQUIRED_TAIL_EVIDENCE");
   expect(result.evidence.some((e) => e.quote === text)).toBe(true);
 });
+
+describe("CriterionEvidenceRetrievalService — validator rejects every candidate", () => {
+  const criterion: RubricCriterion = {
+    id: "c-slides",
+    rubricQuestion: "Does the presentation include an executive summary?",
+    description: "Checks the executive summary slide.",
+    criteria: [
+      { description: "Summary present and complete", points: 2 },
+      { description: "Summary missing", points: 0 },
+    ],
+    maxPoints: 2,
+  };
+
+  function rejectingService() {
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({ evidence: [] }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+    return { service, promptProcessor };
+  }
+
+  it("hands the top-ranked candidates to the grader when a substantial submission has every candidate rejected", async () => {
+    const chunks = Array.from({ length: 12 }, (_, index) =>
+      makeChunk(
+        `slide${index}`,
+        `Slide ${index + 1}: executive summary of the job postings analysis. ` +
+          "Python and SQL lead demand across the surveyed roles. ".repeat(3),
+      ),
+    );
+    const { service, promptProcessor } = rejectingService();
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Upload your capstone deck",
+        chunks,
+        assignmentId: 1,
+      },
+      new ChunkIndex(chunks),
+    );
+
+    // The validator is still asked twice before the fallback applies.
+    expect(promptProcessor.processStructuredPrompt).toHaveBeenCalledTimes(2);
+    expect(response.evidence.length).toBeGreaterThan(0);
+    expect(response.evidence.length).toBeLessThanOrEqual(6);
+    expect(response.debug).toEqual(
+      expect.objectContaining({ validatedCount: 0, unvalidatedFallback: true }),
+    );
+  });
+
+  it("keeps the empty verdict for a near-empty submission", async () => {
+    const chunks = [makeChunk("only", "My name")];
+    const { service } = rejectingService();
+
+    const response = await service.retrieveEvidence(
+      {
+        criterion,
+        question: "Upload your capstone deck",
+        chunks,
+        assignmentId: 1,
+      },
+      new ChunkIndex(chunks),
+    );
+
+    expect(response.evidence).toHaveLength(0);
+    expect(response.debug?.unvalidatedFallback).toBeUndefined();
+  });
+});
+
+describe("CriterionEvidenceRetrievalService — image evidence from document and image uploads", () => {
+  const criterion: RubricCriterion = {
+    id: "c-persona",
+    rubricQuestion: "Does each persona list goals and frustrations?",
+    description: "Persona fields.",
+    criteria: [{ description: "Level", points: 1 }],
+    maxPoints: 1,
+  };
+
+  function imageChunk(
+    id: string,
+    filename: string,
+    text: string,
+  ): ExtractedChunk {
+    return {
+      ...makeChunk(id, text),
+      anchor: { type: "image", page: 2, imageId: id },
+      metadata: { filename },
+    };
+  }
+
+  const personaText =
+    "Persona: Maria, 34, product manager. " +
+    "Goals: ship features faster, reduce context switching. ".repeat(10) +
+    "Frustrations: unclear requirements, slow approvals.";
+
+  it.each([
+    ["a PDF page image", "Personas.pdf"],
+    ["a slide image", "deck.pptx"],
+    ["an uploaded image", "persona.png"],
+  ])("does not cut %s to the 220-char prose cap", async (_label, filename) => {
+    const chunks = [imageChunk("img", filename, personaText)];
+    const promptProcessor = {
+      processStructuredPrompt: jest.fn().mockResolvedValue({
+        evidence: [{ chunkId: "img", relevance: "supports" }],
+      }),
+    };
+    const service = new CriterionEvidenceRetrievalService(
+      promptProcessor as any,
+      {
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      } as any,
+    );
+
+    const response = await service.retrieveEvidence(
+      { criterion, question: "Upload personas", chunks, assignmentId: 1 },
+      new ChunkIndex(chunks),
+    );
+
+    expect(personaText.length).toBeGreaterThan(240);
+    expect(response.evidence[0].quote).toBe(personaText);
+    const validationPrompt =
+      await promptProcessor.processStructuredPrompt.mock.calls[0][0].format({});
+    expect(validationPrompt).toContain("Frustrations: unclear requirements");
+  });
+
+  it("still bounds a very long image chunk to the page-sized cap", () => {
+    const huge = imageChunk("img", "scan.pdf", "x".repeat(20_000));
+    const excerpt = (makeService() as any).buildExcerpt(huge, 220);
+    expect(excerpt.length).toBe(4000);
+  });
+});
