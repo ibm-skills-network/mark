@@ -125,6 +125,53 @@ describe("SupportRoutingService.resolve", () => {
     });
   });
 
+  // Your Learning has no SN Support product: it goes to Mark whatever
+  // portal-manager says about it.
+  it.each(["yl.skillsnetwork.site", "courses.yl.skillsnetwork.site"])(
+    "routes %s to Mark without asking portal-manager",
+    async (host) => {
+      const { service, portalLookup } = make({
+        portalName: "Your Learning",
+        productName: "Portals",
+      });
+
+      await expect(
+        service.resolve({ portalHost: host, portalName: host }),
+      ).resolves.toEqual({
+        token: "sk_mark",
+        productName: "Mark",
+        portalName: "Your Learning",
+        via: "host",
+      });
+      expect(portalLookup.findByHost).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not treat a lookalike host as Your Learning", async () => {
+    const { service } = make({
+      portalName: "Lookalike",
+      productName: "Portals",
+    });
+
+    const route = await service.resolve({
+      portalHost: "evilyl.skillsnetwork.site",
+    });
+
+    expect(route).toMatchObject({ token: "sk_portals", via: "portal-manager" });
+  });
+
+  // IBM Training (learn.ibm.com) is labelled but has no SN Support product.
+  it("files IBM Training under Mark", async () => {
+    const { service } = make(undefined);
+
+    await expect(
+      service.resolve({
+        portalHost: "learn.ibm.com",
+        portalName: "IBM Training",
+      }),
+    ).resolves.toMatchObject({ token: "sk_mark", via: "default" });
+  });
+
   it("falls back to Mark for a portal nobody knows", async () => {
     const { service } = make(undefined);
 

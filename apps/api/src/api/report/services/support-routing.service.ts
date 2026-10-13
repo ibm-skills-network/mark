@@ -25,7 +25,7 @@ export interface SupportRoute {
   productName?: string;
   /** Portal display name from portal-manager, when it knew the host. */
   portalName?: string;
-  via: "portal-manager" | "label" | "default" | "none";
+  via: "host" | "portal-manager" | "label" | "default" | "none";
 }
 
 const TOKEN_ENV_PREFIX = "SUPPORT_TOKEN_";
@@ -39,6 +39,19 @@ const DEFAULT_PRODUCT = "Mark";
 // datacenters; matching by id as well as name survives a display-name change.
 const PRODUCT_NAME_BY_ID: Record<string, string> = {
   "fcb9d787-481b-4b3a-95c5-511b8b2b987f": "ICE",
+};
+
+// Hosts whose product is fixed here rather than asked of portal-manager,
+// matched on the hostname or any subdomain of it. Your Learning has no SN
+// Support product of its own, so its reports are Mark's to triage.
+const PRODUCT_BY_HOST_SUFFIX: Record<
+  string,
+  { productName: string; portalName: string }
+> = {
+  "yl.skillsnetwork.site": {
+    productName: DEFAULT_PRODUCT,
+    portalName: "Your Learning",
+  },
 };
 
 // Only used for the startup diagnostic below — routing itself never consults
@@ -62,6 +75,16 @@ export function tokenEnvironmentVariableFor(productName: string): string {
     .replaceAll(/[^\dA-Z]+/g, "_")
     .replaceAll(/^_+|_+$/g, "");
   return `${TOKEN_ENV_PREFIX}${normalized}`;
+}
+
+function productForHost(
+  host?: string,
+): { productName: string; portalName: string } | undefined {
+  if (!host) return;
+  for (const [suffix, product] of Object.entries(PRODUCT_BY_HOST_SUFFIX)) {
+    if (host === suffix || host.endsWith(`.${suffix}`)) return product;
+  }
+  return;
 }
 
 @Injectable()
@@ -98,6 +121,23 @@ export class SupportRoutingService implements OnModuleInit {
   }
 
   async resolve(portal: PortalContext): Promise<SupportRoute> {
+    const fixed = productForHost(portal.portalHost);
+    if (fixed) {
+      const token = this.tokenFor(fixed.productName);
+      if (token) {
+        return {
+          token,
+          productName: fixed.productName,
+          portalName: fixed.portalName,
+          via: "host",
+        };
+      }
+      this.logger.warn(
+        `No SN Support token for product "${fixed.productName}" (${tokenEnvironmentVariableFor(fixed.productName)}); falling back`,
+      );
+      return this.defaultRoute(fixed.portalName);
+    }
+
     const record = await this.portalLookup.findByHost(portal.portalHost);
     const productFromPortal =
       (record?.productId ? PRODUCT_NAME_BY_ID[record.productId] : undefined) ??
@@ -136,17 +176,20 @@ export class SupportRoutingService implements OnModuleInit {
       }
     }
 
-    const defaultToken = this.tokenFor(DEFAULT_PRODUCT);
-    if (defaultToken) {
+    return this.defaultRoute(record?.portalName);
+  }
+
+  private defaultRoute(portalName?: string): SupportRoute {
+    const token = this.tokenFor(DEFAULT_PRODUCT);
+    if (token) {
       return {
-        token: defaultToken,
+        token,
         productName: DEFAULT_PRODUCT,
-        portalName: record?.portalName,
+        portalName,
         via: "default",
       };
     }
-
-    return { portalName: record?.portalName, via: "none" };
+    return { portalName, via: "none" };
   }
 
   private tokenFor(productName?: string): string | undefined {
