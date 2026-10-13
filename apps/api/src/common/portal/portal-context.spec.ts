@@ -106,6 +106,7 @@ describe("derivePortalContext", () => {
         },
         "courses.yl.skillsnetwork.site",
         "Your Learning",
+        "https://yl.skillsnetwork.site",
       ],
       [
         "an absent return URL (Coursera)",
@@ -115,6 +116,7 @@ describe("derivePortalContext", () => {
         },
         "api.coursera.org",
         "Coursera",
+        undefined,
       ],
       [
         "an absent return URL (Cognitive Class)",
@@ -124,13 +126,15 @@ describe("derivePortalContext", () => {
         },
         "courses.cognitiveclass.ai",
         "courses.cognitiveclass.ai",
+        undefined,
       ],
-    ])("derives the host from %s", (_label, session, host, name) => {
+    ])("derives the host from %s", (_label, session, host, name, url) => {
       expect(derivePortalContext(session)).toEqual({
         portalHost: host,
         portalName: name,
-        // A grade-posting endpoint is not a page, so it never becomes portalUrl.
-        portalUrl: undefined,
+        // A grade-posting endpoint is not a page, so it never becomes
+        // portalUrl; only a known portal homepage does.
+        portalUrl: url,
       });
     });
 
@@ -313,7 +317,7 @@ describe("derivePortalContext course title", () => {
       ).toEqual({
         portalHost: "yl.skillsnetwork.site",
         portalName: "Your Learning",
-        portalUrl: undefined,
+        portalUrl: "https://yl.skillsnetwork.site",
         lmsFamily: family,
         courseTitle: "Quiz [Nomad L2]",
       });
@@ -328,6 +332,27 @@ describe("derivePortalContext course title", () => {
       ).toEqual({ lmsFamily: family });
     },
   );
+
+  // Your Learning sends its return URL empty; support still needs a link.
+  it("links Your Learning tickets to the portal homepage", () => {
+    expect(
+      derivePortalContext({
+        returnUrl: "",
+        lisOutcomeServiceUrl:
+          "http://courses.yl.skillsnetwork.site/courses/x/handler_noauth/outcome_service_handler",
+      }),
+    ).toMatchObject({
+      portalName: "Your Learning",
+      portalUrl: "https://yl.skillsnetwork.site",
+    });
+  });
+
+  it("does not invent a portal URL for Coursera", () => {
+    expect(
+      derivePortalContext({ toolConsumerInstanceGuid: "ondemand.coursera.org" })
+        .portalUrl,
+    ).toBeUndefined();
+  });
 
   it("prefers the grade-callback host over the LMS family", () => {
     expect(

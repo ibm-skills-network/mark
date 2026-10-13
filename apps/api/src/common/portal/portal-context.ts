@@ -57,6 +57,19 @@ const COURSE_FIELD_MAX_CHARS = 500;
 
 // Family codes that name LMS software rather than a site, so they say nothing
 // about which portal a learner used.
+// Homepages for portals whose launches send no usable return URL, so support
+// still gets a link. Matched on the hostname or any subdomain of it.
+const PORTAL_URL_BY_HOST_SUFFIX: Record<string, string> = {
+  "yl.skillsnetwork.site": "https://yl.skillsnetwork.site",
+};
+
+function portalUrlForHost(host: string): string | undefined {
+  for (const [suffix, url] of Object.entries(PORTAL_URL_BY_HOST_SUFFIX)) {
+    if (host === suffix || host.endsWith(`.${suffix}`)) return url;
+  }
+  return undefined;
+}
+
 // Family codes that identify one site, for launches that name no host.
 // Your Learning sends no instance guid, and its ungraded items no
 // grade-callback URL, so this is the only clue to where they came from.
@@ -133,7 +146,7 @@ export function derivePortalContext(
   if (!portalHost) return unnamed;
 
   const portalName = platformLabelForHost(portalHost) ?? portalHost;
-  const portalUrl = fromReturnUrl?.origin;
+  const portalUrl = fromReturnUrl?.origin ?? portalUrlForHost(portalHost);
 
   return {
     ...course,
