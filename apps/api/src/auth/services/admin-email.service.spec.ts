@@ -104,12 +104,12 @@ describe("AdminEmailService", () => {
 
       expect(sentMessage().from).toEqual({
         name: "Mark",
-        address: "noreply@skills.network",
+        address: "noreply@mark.skills.network",
       });
     });
 
     it("uses the configured sender and help link", async () => {
-      process.env.EMAIL_FROM = "noreply@staging.skills.network";
+      process.env.EMAIL_FROM = "noreply@mark.staging.skills.network";
       process.env.EMAIL_FROM_NAME = "Mark (staging)";
       process.env.EMAIL_HELP_URL = "https://support.staging.skills.network";
 
@@ -118,7 +118,7 @@ describe("AdminEmailService", () => {
       const message = sentMessage();
       expect(message.from).toEqual({
         name: "Mark (staging)",
-        address: "noreply@staging.skills.network",
+        address: "noreply@mark.staging.skills.network",
       });
       expect(message.text).toContain(
         "Need help? Visit https://support.staging.skills.network",

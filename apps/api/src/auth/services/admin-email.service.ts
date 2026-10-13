@@ -12,7 +12,7 @@ import { EmailSuppressionService } from "./email-suppression.service";
  *   SMTP_PORT        587 for STARTTLS (default) or 465 for implicit TLS
  *   SMTP_USER        SMTP username; sending is enabled once user and password are set
  *   SMTP_PASSWORD    SMTP password (for Event Notifications, an IAM API key)
- *   EMAIL_FROM       sender address on a verified domain (default noreply@skills.network)
+ *   EMAIL_FROM       sender address on a verified domain (default noreply@mark.skills.network)
  *   EMAIL_FROM_NAME  sender name (default Mark)
  *   EMAIL_HELP_URL   where recipients get help (default https://support.skills.network)
  *
@@ -66,7 +66,7 @@ interface SmtpError {
 
 const DEFAULT_SMTP_HOST = "smtp.us-south.event-notifications.cloud.ibm.com";
 const DEFAULT_SMTP_PORT = 587;
-const DEFAULT_FROM_EMAIL = "noreply@skills.network";
+const DEFAULT_FROM_EMAIL = "noreply@mark.skills.network";
 const DEFAULT_FROM_NAME = "Mark";
 const DEFAULT_HELP_URL = "https://support.skills.network";
 
