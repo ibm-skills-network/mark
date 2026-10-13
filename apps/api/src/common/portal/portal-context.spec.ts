@@ -105,7 +105,7 @@ describe("derivePortalContext", () => {
             "http://courses.yl.skillsnetwork.site/courses/course-v1:Org+X+v1/xblock/block-v1/handler_noauth/outcome_service_handler",
         },
         "courses.yl.skillsnetwork.site",
-        "courses.yl.skillsnetwork.site",
+        "Your Learning",
       ],
       [
         "an absent return URL (Coursera)",
@@ -291,15 +291,34 @@ describe("derivePortalContext course title", () => {
   it("names a hostless launch by a custom LMS family", () => {
     expect(
       derivePortalContext({
-        toolConsumerProductFamilyCode: "Public Your Learning",
+        toolConsumerProductFamilyCode: "Acme Academy",
         courseTitle: "Quiz [Nomad L2]",
       }),
     ).toEqual({
-      portalName: "Public Your Learning",
-      lmsFamily: "Public Your Learning",
+      portalName: "Acme Academy",
+      lmsFamily: "Acme Academy",
       courseTitle: "Quiz [Nomad L2]",
     });
   });
+
+  // Ungraded Your Learning items send no guid and no grade-callback URL.
+  it.each(["Public Your Learning", "public your learning"])(
+    "places a hostless %s launch on Your Learning",
+    (family) => {
+      expect(
+        derivePortalContext({
+          toolConsumerProductFamilyCode: family,
+          courseTitle: "Quiz [Nomad L2]",
+        }),
+      ).toEqual({
+        portalHost: "yl.skillsnetwork.site",
+        portalName: "Your Learning",
+        portalUrl: undefined,
+        lmsFamily: family,
+        courseTitle: "Quiz [Nomad L2]",
+      });
+    },
+  );
 
   it.each(["ims", "Moodle", "canvas"])(
     "does not name a portal after the generic LMS family %s",
@@ -310,7 +329,7 @@ describe("derivePortalContext course title", () => {
     },
   );
 
-  it("prefers the host's name over the LMS family", () => {
+  it("prefers the grade-callback host over the LMS family", () => {
     expect(
       derivePortalContext({
         toolConsumerProductFamilyCode: "Public Your Learning",
@@ -319,7 +338,7 @@ describe("derivePortalContext course title", () => {
       }),
     ).toMatchObject({
       portalHost: "courses.yl.skillsnetwork.site",
-      portalName: "courses.yl.skillsnetwork.site",
+      portalName: "Your Learning",
     });
   });
 

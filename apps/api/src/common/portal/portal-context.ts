@@ -46,6 +46,7 @@ const PLATFORM_LABEL_BY_HOST_SUFFIX: Record<string, string> = {
   "edx.org": "edX",
   "author.skills.network": "Faculty",
   "learn.ibm.com": "IBM Training",
+  "yl.skillsnetwork.site": "Your Learning",
 };
 
 // SN Support caps reporterOrigin at 200 chars and custom metadata values at
@@ -56,6 +57,13 @@ const COURSE_FIELD_MAX_CHARS = 500;
 
 // Family codes that name LMS software rather than a site, so they say nothing
 // about which portal a learner used.
+// Family codes that identify one site, for launches that name no host.
+// Your Learning sends no instance guid, and its ungraded items no
+// grade-callback URL, so this is the only clue to where they came from.
+const HOST_BY_LMS_FAMILY: Record<string, string> = {
+  "public your learning": "yl.skillsnetwork.site",
+};
+
 const GENERIC_LMS_FAMILIES = new Set([
   "blackboard",
   "brightspace",
@@ -101,8 +109,8 @@ export function derivePortalContext(
     activityTitle: boundedText(session?.activityTitle, COURSE_FIELD_MAX_CHARS),
     lmsFamily,
   });
-  // A custom family code (Your Learning sends "Public Your Learning") is the
-  // only name some launches carry; it labels the ticket but never routes it.
+  // An unrecognized custom family code is the only name some launches carry;
+  // it labels the ticket but never routes it.
   const familyPortalName =
     lmsFamily && !GENERIC_LMS_FAMILIES.has(lmsFamily.toLowerCase())
       ? lmsFamily
@@ -117,7 +125,8 @@ export function derivePortalContext(
   const host =
     fromReturnUrl?.hostname ??
     parseHostname(session?.toolConsumerInstanceGuid) ??
-    parseHttpUrl(session?.lisOutcomeServiceUrl)?.hostname;
+    parseHttpUrl(session?.lisOutcomeServiceUrl)?.hostname ??
+    (lmsFamily ? HOST_BY_LMS_FAMILY[lmsFamily.toLowerCase()] : undefined);
   if (!host) return unnamed;
 
   const portalHost = host.toLowerCase().replace(/^www\./, "");
