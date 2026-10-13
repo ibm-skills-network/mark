@@ -5,13 +5,18 @@ import {
 } from "./issue-template";
 
 const baseInput = {
-  issueType: "technical",
   assignmentId: 771,
   attemptId: 12_345,
   description: "Question 4 rejects my file upload with a client error 400.",
 };
 
 describe("buildSnSupportTicketTitle", () => {
+  it("prefixes every title with Mark instead of the issue type", () => {
+    expect(buildSnSupportTicketTitle(baseInput)).toMatch(
+      /^Mark: Assignment 771 - Attempt 12345: Question 4 rejects/,
+    );
+  });
+
   it("renders type and ids without any bracket prefixes", () => {
     const title = buildSnSupportTicketTitle(baseInput);
 
