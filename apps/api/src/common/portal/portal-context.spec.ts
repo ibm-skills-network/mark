@@ -143,7 +143,7 @@ describe("derivePortalContext", () => {
         }),
       ).toEqual({
         portalHost: "learn.ibm.com",
-        portalName: "learn.ibm.com",
+        portalName: "IBM Training",
         portalUrl: "https://learn.ibm.com",
       });
     });

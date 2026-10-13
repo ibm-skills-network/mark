@@ -160,6 +160,18 @@ describe("SupportRoutingService.resolve", () => {
     expect(route).toMatchObject({ token: "sk_portals", via: "portal-manager" });
   });
 
+  // IBM Training (learn.ibm.com) is labelled but has no SN Support product.
+  it("files IBM Training under Mark", async () => {
+    const { service } = make(undefined);
+
+    await expect(
+      service.resolve({
+        portalHost: "learn.ibm.com",
+        portalName: "IBM Training",
+      }),
+    ).resolves.toMatchObject({ token: "sk_mark", via: "default" });
+  });
+
   it("falls back to Mark for a portal nobody knows", async () => {
     const { service } = make(undefined);
 

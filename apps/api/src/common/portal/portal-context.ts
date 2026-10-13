@@ -45,6 +45,7 @@ const PLATFORM_LABEL_BY_HOST_SUFFIX: Record<string, string> = {
   "coursera.org": "Coursera",
   "edx.org": "edX",
   "author.skills.network": "Faculty",
+  "learn.ibm.com": "IBM Training",
 };
 
 // SN Support caps reporterOrigin at 200 chars and custom metadata values at
