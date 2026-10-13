@@ -52,11 +52,42 @@ Regression tests cover these behaviors using synthetic legacy and new content. R
 - TypeScript checks passed for the web app and shared package. Web lint passed with four existing warnings and no errors.
 - A standalone Chromium smoke test passed for legacy formatting, numbering, checklist markers, syntax highlighting, toolbar commands, image upload, video URL conversion, changed limits, and external answer loading. It used synthetic content and no backend connection.
 
-No database operations, staging deployment, or background migration job were performed. Staging comparisons and Mend verification remain outstanding.
+At completion of local validation, no database operations, staging deployment, or background migration job had been performed.
 
 ## Review cleanup
 
 Removed 725 net lines from the reviewed editor code and tests, mostly comments and duplication. Four formatting extensions now share one implementation, the client wrapper reuses the editor props, and counter rendering is shared. Regression coverage remains intact.
+
+## Staging results, 2026-10-13
+
+The user subsequently authorized staging database access and scoped test tokens. Testing used Chromium against the deployed application, existing records, and an isolated temporary assignment. No migration job or schema change was made.
+
+On image `2.8.4-rc1`, 94 distinct HTML values from 225 sampled fields retained their non-whitespace text through the deployed editor. Samples covered assignments, questions, responses, versions, and translations. Synthetic legacy content also retained significant spaces, indentation, alignment, direction, inline images, mixed-list numbering, checklist states, and code highlighting. This sampling is not proof of visual parity for every stored record.
+
+Both toolbars, heading levels, colours, links, code languages, author image upload/paste/drop, learner image blocking and notification, word and character limits, literal list markers, sanitized HTML paste, video embedding, preview rendering, and light/dark styling passed. New HTML and its code language persisted in a draft version without changing the published legacy version. Learner edits survived a same-browser reload.
+
+Opening existing author records emitted no assignment-content writes. Existing submitted responses rendered correctly. Database comparisons confirmed that four original assignments, their questions and current versions, and the two responses in the inspected submitted attempt remained unchanged. The temporary assignment, group, attempt, response, versions, and associated test chats were removed afterward.
+
+After redeployment, 27 core browser checks passed and two failed. Legacy version viewing, new draft version viewing, undo/redo, and switching the UI language were checked separately. Three issues remain:
+
+- A fresh learner session opens a saved answer blank. The API supplies responses at the attempt level, while question hydration reads only each question's responses. The relevant hydration and mapping code is unchanged from `master`; same-browser local persistence masks the failure.
+- Learner server rendering throws `DOMMatrix is not defined` (digest `2909363571`). React reports error 419 and falls back to client rendering. The browser eventually becomes usable, but the SSR failure remains. The browser PDF reader is imported at module scope in unchanged code. [React error 419](https://react.dev/errors/419) describes this fallback.
+
+- Version history intermittently omits the new draft despite the versions API returning it. Assignment hydration overwrites the full version list with the embedded active-version subset. Delaying the versions response restores both rows; delaying assignment hydration hides the draft. These hydration and loading functions are unchanged from `master`. Both old and new version viewers retain formatting and code highlighting when their rows are available.
+
+Quill packages were absent from the TipTap app container. Both Mend checks succeeded for PR head `43864f33`: [PR checks](https://github.com/ibm-skills-network/mark/pull/675/checks).
+
+Staging briefly rolled back to Quill image `2.8.2`, then the user restored `2.8.4-rc1`. The final tests above ran against the restored TipTap `3.31.3` deployment. The temporary fixture was removed and the original-record comparisons passed again afterward. Firefox and Safari were not tested. Resolve the saved-answer hydration issue before release; the learner rendering error and version-list race also remain follow-up work.
+
+## Follow-up fixes, 2026-10-13
+
+Saved-answer hydration now joins attempt-level responses to questions and selects the newest response across both response locations. Draft answers from the same attempt take precedence, including empty text, cleared selections, and false boolean answers. Drafts from other attempts are discarded.
+
+The PDF parser loads only when reading a PDF, so importing the learner page no longer evaluates its browser-only dependencies on the server. Assignment hydration no longer overwrites the version list; the dedicated versions endpoint owns it.
+
+Regression tests reproduced all three failures before the fixes. Afterward, 101 tests passed across hydration, file reading, learner persistence, version loading, limits, schema round-tripping, and related learner components. TypeScript, targeted lint, and the production build passed. Six Chromium checks against the local production build with a synthetic API verified fresh-session legacy answer restoration above the limit, cleared answers and drafts surviving reload, error-free learner rendering, and both version rows remaining visible with either API response delayed.
+
+These fixes are local and need deployment and staging confirmation. This follow-up performed no database operations and ran no commit hooks.
 
 ## Later retirement of legacy support
 

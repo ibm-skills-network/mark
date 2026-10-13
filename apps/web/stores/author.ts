@@ -1743,8 +1743,11 @@ export const useAuthorStore = createWithEqualityFn<
           const {
             questions: nextQuestionsInput,
             questionOrder: nextQuestionOrderInput,
+            versions,
             ...nextState
           } = state;
+          // The versions endpoint owns the full list; assignment payloads contain a subset.
+          void versions;
           const nextQuestions = nextQuestionsInput ?? currentState.questions;
           const { questionOrder, questions } = nextQuestionOrderInput?.length
             ? applyQuestionOrder(nextQuestions, nextQuestionOrderInput)
