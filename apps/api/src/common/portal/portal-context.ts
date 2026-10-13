@@ -29,6 +29,12 @@ export interface PortalContext {
   portalUrl?: string;
   /** LMS course the assignment was launched from (LTI context_title). */
   courseTitle?: string;
+  /** LMS course id (LTI context_id). */
+  courseId?: string;
+  /** The item in the course that launched Mark. */
+  activityTitle?: string;
+  /** LMS product family, e.g. "Public Your Learning". */
+  lmsFamily?: string;
 }
 
 /**
@@ -45,7 +51,23 @@ const PLATFORM_LABEL_BY_HOST_SUFFIX: Record<string, string> = {
 // 500; drop rather than send something that would be rejected downstream.
 const PORTAL_NAME_MAX_CHARS = 200;
 const PORTAL_URL_MAX_CHARS = 500;
-const COURSE_TITLE_MAX_CHARS = 500;
+const COURSE_FIELD_MAX_CHARS = 500;
+
+// Family codes that name LMS software rather than a site, so they say nothing
+// about which portal a learner used.
+const GENERIC_LMS_FAMILIES = new Set([
+  "blackboard",
+  "brightspace",
+  "canvas",
+  "d2l",
+  "desire2learn",
+  "ims",
+  "moodle",
+  "open_edx",
+  "openedx",
+  "sakai",
+  "schoology",
+]);
 
 export function platformLabelForHost(host: string): string | undefined {
   for (const [suffix, label] of Object.entries(PLATFORM_LABEL_BY_HOST_SUFFIX)) {
@@ -65,16 +87,28 @@ export function derivePortalContext(
     toolConsumerInstanceGuid?: unknown;
     lisOutcomeServiceUrl?: unknown;
     courseTitle?: unknown;
+    courseId?: unknown;
+    activityTitle?: unknown;
+    toolConsumerProductFamilyCode?: unknown;
   } | null,
 ): PortalContext {
-  const courseTitle =
-    typeof session?.courseTitle === "string" &&
-    session.courseTitle.trim() &&
-    session.courseTitle.trim().length <= COURSE_TITLE_MAX_CHARS
-      ? session.courseTitle.trim()
+  const lmsFamily = boundedText(session?.toolConsumerProductFamilyCode, 200);
+  // The course is worth reporting even when the launch names no site.
+  const course = withoutUndefined({
+    courseTitle: boundedText(session?.courseTitle, COURSE_FIELD_MAX_CHARS),
+    courseId: boundedText(session?.courseId, COURSE_FIELD_MAX_CHARS),
+    activityTitle: boundedText(session?.activityTitle, COURSE_FIELD_MAX_CHARS),
+    lmsFamily,
+  });
+  // A custom family code (Your Learning sends "Public Your Learning") is the
+  // only name some launches carry; it labels the ticket but never routes it.
+  const familyPortalName =
+    lmsFamily && !GENERIC_LMS_FAMILIES.has(lmsFamily.toLowerCase())
+      ? lmsFamily
       : undefined;
-  // A course is worth reporting even when the launch names no site.
-  const course = courseTitle ? { courseTitle } : {};
+  const unnamed = familyPortalName
+    ? { ...course, portalName: familyPortalName }
+    : course;
 
   const fromReturnUrl = parseHttpUrl(session?.returnUrl);
   // Only a host is taken from the guid or the callback endpoint; portalUrl
@@ -83,10 +117,10 @@ export function derivePortalContext(
     fromReturnUrl?.hostname ??
     parseHostname(session?.toolConsumerInstanceGuid) ??
     parseHttpUrl(session?.lisOutcomeServiceUrl)?.hostname;
-  if (!host) return course;
+  if (!host) return unnamed;
 
   const portalHost = host.toLowerCase().replace(/^www\./, "");
-  if (!portalHost) return course;
+  if (!portalHost) return unnamed;
 
   const portalName = platformLabelForHost(portalHost) ?? portalHost;
   const portalUrl = fromReturnUrl?.origin;
@@ -115,6 +149,20 @@ export function deriveLmsHost(
 // Canvas an opaque id); only a dotted DNS name identifies a site.
 const HOSTNAME_PATTERN =
   /^(?=.{1,253}$)(?:[\da-z](?:[\da-z-]{0,61}[\da-z])?\.)+[a-z]{2,63}$/i;
+
+function boundedText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") return;
+  const trimmed = value.trim();
+  return trimmed && trimmed.length <= maxLength ? trimmed : undefined;
+}
+
+function withoutUndefined<T extends Record<string, string | undefined>>(
+  value: T,
+): Partial<Record<keyof T, string>> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<Record<keyof T, string>>;
+}
 
 function parseHostname(value?: unknown): string | undefined {
   if (typeof value !== "string") return;

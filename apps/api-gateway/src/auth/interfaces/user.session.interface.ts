@@ -17,6 +17,9 @@ export interface UserSession {
   lisOutcomeServiceUrl?: string;
   toolConsumerInstanceGuid?: string;
   courseTitle?: string;
+  courseId?: string;
+  activityTitle?: string;
+  toolConsumerProductFamilyCode?: string;
 }
 
 export interface UserSessionPayload {
@@ -31,6 +34,9 @@ export interface UserSessionPayload {
   lis_outcome_service_url?: unknown;
   toolConsumerInstanceGuid?: unknown;
   courseTitle?: unknown;
+  courseId?: unknown;
+  activityTitle?: unknown;
+  toolConsumerProductFamilyCode?: unknown;
 }
 
 export interface UserSessionRequest extends Request {

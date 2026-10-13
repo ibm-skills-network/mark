@@ -266,6 +266,63 @@ describe("derivePortalContext course title", () => {
     });
   });
 
+  it("carries the course id and item alongside the course", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerInstanceGuid: "ondemand.coursera.org",
+        courseTitle: "Program Manager Capstone",
+        courseId: "ondemand~1WEwdGF8Ee-e0g4kKcdYJQ",
+        activityTitle: "Option 1: AI-Graded Submission and Evaluation",
+        toolConsumerProductFamilyCode: "ims",
+      }),
+    ).toEqual({
+      portalHost: "ondemand.coursera.org",
+      portalName: "Coursera",
+      portalUrl: undefined,
+      courseTitle: "Program Manager Capstone",
+      courseId: "ondemand~1WEwdGF8Ee-e0g4kKcdYJQ",
+      activityTitle: "Option 1: AI-Graded Submission and Evaluation",
+      lmsFamily: "ims",
+    });
+  });
+
+  // Your Learning sends no guid; its family code is the only name a launch
+  // without a grade-callback URL carries.
+  it("names a hostless launch by a custom LMS family", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerProductFamilyCode: "Public Your Learning",
+        courseTitle: "Quiz [Nomad L2]",
+      }),
+    ).toEqual({
+      portalName: "Public Your Learning",
+      lmsFamily: "Public Your Learning",
+      courseTitle: "Quiz [Nomad L2]",
+    });
+  });
+
+  it.each(["ims", "Moodle", "canvas"])(
+    "does not name a portal after the generic LMS family %s",
+    (family) => {
+      expect(
+        derivePortalContext({ toolConsumerProductFamilyCode: family }),
+      ).toEqual({ lmsFamily: family });
+    },
+  );
+
+  it("prefers the host's name over the LMS family", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerProductFamilyCode: "Public Your Learning",
+        lisOutcomeServiceUrl:
+          "http://courses.yl.skillsnetwork.site/courses/x/handler_noauth/outcome_service_handler",
+      }),
+    ).toMatchObject({
+      portalHost: "courses.yl.skillsnetwork.site",
+      portalName: "courses.yl.skillsnetwork.site",
+    });
+  });
+
   it.each([["   "], ["x".repeat(501)], [42]])(
     "drops an unusable course title (%p)",
     (courseTitle) => {

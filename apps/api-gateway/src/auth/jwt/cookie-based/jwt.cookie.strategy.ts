@@ -30,13 +30,13 @@ interface IJwtPayload extends UserSessionPayload {
 // Routed through winston: main.ts passes the winston logger to NestFactory.
 const logger = new Logger("JwtCookieStrategy");
 
-// SN Support caps course titles at 500 characters; control characters are
-// stripped so the title stays one line wherever it is shown.
-function courseTitleFrom(value: unknown): string | undefined {
+// LMS-supplied labels for support tickets. Control characters are stripped
+// so each stays one line wherever it is shown; SN Support caps these at 500.
+function singleLineText(value: unknown, maxLength = 500): string | undefined {
   if (typeof value !== "string") return undefined;
   // eslint-disable-next-line no-control-regex
-  const title = value.replaceAll(/[\u0000-\u001F\u007F]+/g, " ").trim();
-  return title && title.length <= 500 ? title : undefined;
+  const text = value.replaceAll(/[\u0000-\u001F\u007F]+/g, " ").trim();
+  return text && text.length <= maxLength ? text : undefined;
 }
 
 @Injectable()
@@ -181,7 +181,13 @@ export class JwtCookieStrategy extends PassportStrategy(
         /^[!-~]{1,255}$/.test(payload.toolConsumerInstanceGuid)
           ? payload.toolConsumerInstanceGuid
           : undefined,
-      courseTitle: courseTitleFrom(payload.courseTitle),
+      courseTitle: singleLineText(payload.courseTitle),
+      courseId: singleLineText(payload.courseId),
+      activityTitle: singleLineText(payload.activityTitle),
+      toolConsumerProductFamilyCode: singleLineText(
+        payload.toolConsumerProductFamilyCode,
+        255,
+      ),
     };
   }
 }

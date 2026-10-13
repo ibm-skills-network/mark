@@ -25,6 +25,12 @@ export interface UserSession extends ClientUserSession {
   toolConsumerInstanceGuid?: string;
   /** LMS course title (LTI context_title) from the signed launch. */
   courseTitle?: string;
+  /** LMS course id (LTI context_id), e.g. an Open edX course key. */
+  courseId?: string;
+  /** The item in the course that launched Mark. */
+  activityTitle?: string;
+  /** LTI tool_consumer_info_product_family_code, e.g. "Public Your Learning". */
+  toolConsumerProductFamilyCode?: string;
 }
 
 export interface UserSessionRequest extends Request {

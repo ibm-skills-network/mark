@@ -387,6 +387,32 @@ describe("ReportsService.reportIssue", () => {
     );
   });
 
+  it("forwards the course id, item and LMS family to SN Support", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-9" }),
+    };
+
+    await makeForReportIssue(snSupportService).service.reportIssue(
+      {
+        ...reportDto,
+        portal: {
+          ...reportDto.portal,
+          courseId: "ondemand~1WEwdGF8Ee-e0g4kKcdYJQ",
+          activityTitle: "Option 1: AI-Graded Submission and Evaluation",
+          lmsFamily: "ims",
+        },
+      },
+      session,
+    );
+
+    expect(snSupportService.createTicket.mock.calls[0][0]).toMatchObject({
+      courseId: "ondemand~1WEwdGF8Ee-e0g4kKcdYJQ",
+      activityTitle: "Option 1: AI-Graded Submission and Evaluation",
+      lmsFamily: "ims",
+    });
+  });
+
   it("forwards flag-button reports with a symptom title and plain-text body", async () => {
     const snSupportService = {
       isConfigured: jest.fn().mockReturnValue(true),

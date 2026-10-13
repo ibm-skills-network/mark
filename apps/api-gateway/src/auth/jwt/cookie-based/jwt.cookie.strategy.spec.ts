@@ -114,6 +114,29 @@ describe("JwtCookieStrategy", () => {
       expect(result.courseTitle).toBe(expected);
     });
 
+    it("passes the course id, item and LMS family through", () => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          courseId: "course-v1:Org+A303EN+v1",
+          activityTitle: "Your Assignment",
+          toolConsumerProductFamilyCode: "Public Your Learning",
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
+
+      expect(result).toMatchObject({
+        courseId: "course-v1:Org+A303EN+v1",
+        activityTitle: "Your Assignment",
+        toolConsumerProductFamilyCode: "Public Your Learning",
+      });
+    });
+
     it("should transform JWT payload to UserSession", () => {
       const payload = {
         userID: "user123",
