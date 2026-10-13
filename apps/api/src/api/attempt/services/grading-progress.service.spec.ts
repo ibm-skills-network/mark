@@ -98,6 +98,35 @@ describe("GradingProgressService.markComplete", () => {
     );
   });
 
+  it("logs a failure, not a success, when the email is not sent", async () => {
+    const logger = Reflect.get(service, "logger") as {
+      log: (message: string) => void;
+      error: (message: string) => void;
+    };
+    const log = jest.spyOn(logger, "log").mockImplementation(() => undefined);
+    const error = jest
+      .spyOn(logger, "error")
+      .mockImplementation(() => undefined);
+    mockEmailService.sendGradingCompletionEmail.mockResolvedValueOnce(false);
+    mockPrisma.gradingProgress.findUnique.mockResolvedValue({
+      attemptId: 77,
+      notifyOnComplete: true,
+      notificationEmail: "learner@example.com",
+      attempt: { assignmentId: 12, grade: 0.75, submitted: true },
+    });
+
+    await service.markComplete(77);
+
+    expect(error).toHaveBeenCalledWith(
+      "Grading completion email not sent for attempt 77",
+    );
+    expect(log).not.toHaveBeenCalledWith(
+      expect.stringContaining("Successfully sent grading completion email"),
+    );
+    log.mockRestore();
+    error.mockRestore();
+  });
+
   it("logs an error when it is reached before the attempt has been committed", async () => {
     const error = jest
       .spyOn(

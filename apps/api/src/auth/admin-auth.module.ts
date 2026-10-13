@@ -5,6 +5,7 @@ import { AdminGuard } from "./guards/admin.guard";
 import { AdminAssumeRoleService } from "./services/admin-assume-role.service";
 import { AdminEmailService } from "./services/admin-email.service";
 import { AdminVerificationService } from "./services/admin-verification.service";
+import { EmailSuppressionService } from "./services/email-suppression.service";
 
 @Module({
   imports: [
@@ -23,8 +24,14 @@ import { AdminVerificationService } from "./services/admin-verification.service"
     AdminVerificationService,
     AdminEmailService,
     AdminAssumeRoleService,
+    EmailSuppressionService,
     AdminGuard,
   ],
-  exports: [AdminVerificationService, AdminEmailService, AdminGuard],
+  exports: [
+    AdminVerificationService,
+    AdminEmailService,
+    EmailSuppressionService,
+    AdminGuard,
+  ],
 })
 export class AdminAuthModule {}

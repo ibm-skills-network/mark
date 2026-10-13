@@ -1,7 +1,6 @@
 import type { Config } from "jest";
 
 process.env.OPENAI_API_KEY = "dummy-key"; // pragma: allowlist secret
-process.env.SENDGRID_API_KEY = "SG.test-key"; // pragma: allowlist secret
 
 const config: Config = {
   moduleFileExtensions: ["js", "json", "ts", "node"],

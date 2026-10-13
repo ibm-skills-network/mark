@@ -1,26 +1,41 @@
 import { Injectable, Logger } from "@nestjs/common";
-import sgMail from "@sendgrid/mail";
+import { EmailSuppressionReason } from "@prisma/client";
 import * as nodemailer from "nodemailer";
+import { EmailSuppressionService } from "./email-suppression.service";
 
 /**
- * Sends transactional email through SendGrid or Gmail SMTP.
+ * Sends Mark's transactional email over SMTP, through IBM Cloud Event
+ * Notifications in staging and production.
  *
  * Configured via environment variables:
- *   EMAIL_PROVIDER       "sendgrid" (default) or "google"
- *   SENDGRID_API_KEY     enables SendGrid
- *   SENDGRID_FROM_EMAIL  sender address (default noreply@mark.skills.network)
- *   SENDGRID_FROM_NAME   sender name (default Mark)
- *   GMAIL_USER           Gmail address, enables Gmail SMTP
- *   GMAIL_APP_PASSWORD   Gmail app password
+ *   SMTP_HOST        SMTP server (default: the Event Notifications endpoint)
+ *   SMTP_PORT        587 for STARTTLS (default) or 465 for implicit TLS
+ *   SMTP_USER        SMTP username; sending is enabled once user and password are set
+ *   SMTP_PASSWORD    SMTP password (for Event Notifications, an IAM API key)
+ *   EMAIL_FROM       sender address on a verified domain (default noreply@skills.network)
+ *   EMAIL_FROM_NAME  sender name (default Mark)
+ *   EMAIL_HELP_URL   where recipients get help (default https://support.skills.network)
  *
- * If the preferred provider isn't configured it falls back to the other one.
- * With neither configured, emails are logged to the console in development and
- * skipped in production.
+ * Without SMTP credentials, emails are logged to the console in development
+ * and dropped, with an error, in production.
+ *
+ * Every send is checked against the suppression list first, and an address
+ * the receiving server rejects as permanently undeliverable is added to it.
  */
 
-type EmailProvider = "sendgrid" | "google" | "none";
+interface EmailContent {
+  to: string;
+  subject: string;
+  /** Heading for the HTML <title>. */
+  title: string;
+  /** HTML body, without the shared layout or footer. */
+  html: string;
+  /** Plain-text body, without the shared footer. */
+  text: string;
+}
 
-interface EmailMessage {
+interface OutgoingMessage {
+  from: { name: string; address: string };
   to: string;
   subject: string;
   html: string;
@@ -29,7 +44,7 @@ interface EmailMessage {
 
 // nodemailer ships no type definitions, so type the small surface we use.
 interface MailTransport {
-  sendMail(message: EmailMessage & { from: string }): Promise<unknown>;
+  sendMail(message: OutgoingMessage): Promise<unknown>;
   verify(): Promise<unknown>;
 }
 
@@ -43,87 +58,156 @@ const mailer = nodemailer as {
   }): MailTransport;
 };
 
-const DEFAULT_FROM_EMAIL = "noreply@mark.skills.network";
+interface SmtpError {
+  responseCode?: number;
+  response?: string;
+  command?: string;
+}
+
+const DEFAULT_SMTP_HOST = "smtp.us-south.event-notifications.cloud.ibm.com";
+const DEFAULT_SMTP_PORT = 587;
+const DEFAULT_FROM_EMAIL = "noreply@skills.network";
 const DEFAULT_FROM_NAME = "Mark";
+const DEFAULT_HELP_URL = "https://support.skills.network";
+
+// One address, no display name, no list separators. Every Mark email goes to
+// exactly one recipient.
+const SINGLE_ADDRESS = /^[^\s",;<>@]+@[^\s",;<>@]+\.[^\s",;<>@]+$/;
+
+// Enhanced status codes (RFC 3463) that mean the address itself is bad:
+// 5.1.x (no such user, bad domain, bad syntax) and 5.2.1 (mailbox disabled).
+// Policy and relay rejections (5.7.x) are not about the recipient and must
+// never suppress anyone, or one misconfiguration would suppress everybody.
+const PERMANENT_RECIPIENT_STATUS = /\b5\.(1\.\d{1,3}|2\.1)\b/;
 
 @Injectable()
 export class AdminEmailService {
   private readonly logger = new Logger(AdminEmailService.name);
-  private provider: EmailProvider = "none";
   private transporter?: MailTransport;
-  private from = `${DEFAULT_FROM_NAME} <${DEFAULT_FROM_EMAIL}>`;
+  private readonly from = {
+    name: process.env.EMAIL_FROM_NAME || DEFAULT_FROM_NAME,
+    address: process.env.EMAIL_FROM || DEFAULT_FROM_EMAIL,
+  };
+  private readonly helpUrl = process.env.EMAIL_HELP_URL || DEFAULT_HELP_URL;
 
-  constructor() {
-    this.configureProvider();
+  constructor(private readonly suppressions: EmailSuppressionService) {
+    this.configureTransport();
   }
 
-  private configureProvider(): void {
-    const preference = process.env.EMAIL_PROVIDER?.toLowerCase() ?? "sendgrid";
-    const sendgridKey = process.env.SENDGRID_API_KEY;
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
-
-    // Honor the requested provider, otherwise use whichever one is configured.
-    if (preference !== "google" && sendgridKey) {
-      this.useSendGrid(sendgridKey);
-    } else if (gmailUser && gmailPassword) {
-      this.useGmail(gmailUser, gmailPassword);
-    } else if (sendgridKey) {
-      this.useSendGrid(sendgridKey);
-    } else {
-      this.logger.warn(
-        "No email provider configured. Set SENDGRID_API_KEY or GMAIL_USER/GMAIL_APP_PASSWORD. Emails are logged to the console in development.",
-      );
+  private configureTransport(): void {
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASSWORD;
+    if (!user || !pass) {
+      const message =
+        "SMTP_USER/SMTP_PASSWORD not set; Mark email is disabled. Emails are logged to the console in development.";
+      if (process.env.NODE_ENV === "production") {
+        this.logger.error(message);
+      } else {
+        this.logger.warn(message);
+      }
+      return;
     }
-  }
 
-  private useSendGrid(key: string): void {
-    sgMail.setApiKey(key);
-    this.provider = "sendgrid";
-    const email = process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL;
-    const name = process.env.SENDGRID_FROM_NAME || DEFAULT_FROM_NAME;
-    this.from = `${name} <${email}>`;
-    this.logger.log("Email service using SendGrid");
-  }
-
-  private useGmail(user: string, pass: string): void {
-    this.provider = "google";
+    const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
+    const parsedPort = Number.parseInt(process.env.SMTP_PORT ?? "", 10);
+    const port = Number.isInteger(parsedPort) ? parsedPort : DEFAULT_SMTP_PORT;
+    const secure = port === 465;
     this.transporter = mailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      requireTLS: true,
+      host,
+      port,
+      secure,
+      // On 587 the session must upgrade with STARTTLS; never send in clear.
+      requireTLS: !secure,
       auth: { user, pass },
     });
-    this.from = `${DEFAULT_FROM_NAME} <${user}>`;
-    this.logger.log("Email service using Gmail SMTP");
+    this.logger.log(
+      `Email service using SMTP host=${host} port=${port} from=${this.from.address}`,
+    );
   }
 
-  private async send(message: EmailMessage): Promise<boolean> {
-    if (this.provider === "none") {
+  /**
+   * Returns true only when the SMTP server accepted the message (or, in
+   * development without SMTP, when it was logged). Every reason for not
+   * sending is logged here, so callers only need to log the outcome.
+   */
+  private async send(email: EmailContent): Promise<boolean> {
+    const to = email.to.trim();
+    if (!SINGLE_ADDRESS.test(to)) {
+      this.logger.warn(
+        `email.skipped.invalid_recipient subject="${email.subject}"`,
+      );
+      return false;
+    }
+
+    if (await this.suppressions.isSuppressed(to)) {
+      this.logger.warn(
+        `email.skipped.suppressed to=${to} subject="${email.subject}"`,
+      );
+      return false;
+    }
+
+    const message: OutgoingMessage = {
+      from: this.from,
+      to,
+      subject: email.subject,
+      html: this.layout(email.title, email.html),
+      text: `${email.text}\n\n${this.textFooter()}`,
+    };
+
+    if (!this.transporter) {
       if (process.env.NODE_ENV === "production") {
-        this.logger.error("Email service not configured; email not sent");
+        this.logger.error(
+          `email.not_sent.not_configured to=${to} subject="${email.subject}"`,
+        );
         return false;
       }
       this.logger.log(
-        `Email (no provider configured)\nTo: ${message.to}\nSubject: ${message.subject}\n\n${message.text}`,
+        `Email (SMTP not configured)\nTo: ${to}\nSubject: ${message.subject}\n\n${message.text}`,
       );
       return true;
     }
 
     try {
-      if (this.provider === "sendgrid") {
-        await sgMail.send({ ...message, from: this.from });
-      } else if (this.transporter) {
-        await this.transporter.sendMail({ ...message, from: this.from });
-      } else {
-        this.logger.error("Email provider not initialized; email not sent");
-        return false;
-      }
+      await this.transporter.sendMail(message);
+      this.logger.log(`email.sent to=${to} subject="${email.subject}"`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send email to ${message.to}`, error);
+      this.logger.error(
+        `email.failed to=${to} subject="${email.subject}"`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      await this.suppressIfPermanent(to, error);
       return false;
+    }
+  }
+
+  private async suppressIfPermanent(to: string, error: unknown): Promise<void> {
+    const smtp = (error ?? {}) as SmtpError;
+    const response = typeof smtp.response === "string" ? smtp.response : "";
+    const isPermanentRecipientFailure =
+      smtp.command === "RCPT TO" &&
+      typeof smtp.responseCode === "number" &&
+      smtp.responseCode >= 500 &&
+      smtp.responseCode < 600 &&
+      PERMANENT_RECIPIENT_STATUS.test(response);
+    if (!isPermanentRecipientFailure) return;
+
+    try {
+      await this.suppressions.suppress(
+        to,
+        EmailSuppressionReason.HARD_BOUNCE,
+        response,
+        "system",
+      );
+    } catch (suppressError) {
+      // The send already failed and was logged; losing the suppression only
+      // means the next send to this address fails the same way.
+      this.logger.error(
+        `email.suppression.record_failed to=${to}`,
+        suppressError instanceof Error
+          ? suppressError.stack
+          : String(suppressError),
+      );
     }
   }
 
@@ -131,11 +215,21 @@ export class AdminEmailService {
     return this.send({
       to: email,
       subject: "Mark admin verification code",
-      html: this.verificationHtml(code),
-      text: this.verificationText(code),
+      title: "Admin verification code",
+      html: `<h1 style="font-size: 20px;">Admin verification code</h1>
+       <p>Use this code to finish signing in. It expires in 10 minutes.</p>
+       <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; margin: 24px 0;">${this.escapeHtml(code)}</p>
+       <p>If you didn't request this, you can ignore this email. Don't share this code please.</p>`,
+      text: `Admin verification code: ${code}
+
+This code expires in 10 minutes. If you didn't request it, ignore this email.`,
     });
   }
 
+  /**
+   * Sends a plain-text message. The body is escaped and shown preformatted,
+   * so it may safely contain user-written text.
+   */
   async sendGenericEmail(
     to: string,
     subject: string,
@@ -144,8 +238,9 @@ export class AdminEmailService {
     return this.send({
       to,
       subject,
+      title: subject,
+      html: `<pre style="font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; white-space: pre-wrap; margin: 0;">${this.escapeHtml(body)}</pre>`,
       text: body,
-      html: `<pre style="font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; white-space: pre-wrap;">${body}</pre>`,
     });
   }
 
@@ -155,12 +250,27 @@ export class AdminEmailService {
     attemptId: number,
     grade?: number,
   ): Promise<boolean> {
-    const resultsUrl = `${this.webAppUrl()}/learner/${assignmentId}/successPage/${attemptId}`;
+    const resultsUrl = this.learnerResultsUrl(assignmentId, attemptId);
+    const scoreHtml =
+      grade === undefined
+        ? ""
+        : `<p style="font-size: 32px; font-weight: bold; margin: 16px 0;">${Math.round(grade)}%</p>`;
+    const scoreText =
+      grade === undefined ? "" : `Score: ${Math.round(grade)}%\n\n`;
     return this.send({
       to: email,
       subject: "Your assignment has been graded",
-      html: this.gradingHtml(resultsUrl, grade),
-      text: this.gradingText(resultsUrl, grade),
+      title: "Grading complete",
+      html: `<h1 style="font-size: 20px;">Your assignment has been graded</h1>
+       <p>Your results are ready to view.</p>
+       ${scoreHtml}
+       <p><a href="${this.escapeHtml(resultsUrl)}">View your results</a></p>
+       <p style="color: #64748b; font-size: 14px;">You received this email because you asked to be notified when this submission was graded.</p>`,
+      text: `Your assignment has been graded.
+
+${scoreText}View your results: ${resultsUrl}
+
+You received this email because you asked to be notified when this submission was graded.`,
     });
   }
 
@@ -176,6 +286,7 @@ export class AdminEmailService {
     return this.send({
       to: email,
       subject: "Are you still experiencing this issue?",
+      title: "Issue follow-up",
       html: this.bugRenewalHtml(
         issueTitle,
         issueBody,
@@ -196,7 +307,7 @@ export class AdminEmailService {
   }
 
   async testConnection(): Promise<boolean> {
-    if (this.provider === "none") {
+    if (!this.transporter) {
       if (process.env.NODE_ENV === "production") {
         this.logger.error("Email service not configured");
         return false;
@@ -205,70 +316,36 @@ export class AdminEmailService {
       return true;
     }
 
-    if (this.provider === "google" && this.transporter) {
-      try {
-        await this.transporter.verify();
-      } catch (error) {
-        this.logger.error("Gmail SMTP connection failed", error);
-        return false;
-      }
+    try {
+      await this.transporter.verify();
+      return true;
+    } catch (error) {
+      this.logger.error(
+        "SMTP connection failed",
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
     }
-
-    return true;
   }
 
   async sendTestEmail(to: string): Promise<boolean> {
-    if (this.provider === "none") {
+    if (!this.transporter) {
       this.logger.warn("Cannot send test email; email service not configured");
       return false;
     }
     return this.send({
       to,
       subject: "Mark email configuration test",
-      html: this.layout(
-        "Email configuration test",
-        `<h1 style="font-size: 20px;">Email configuration test</h1>
+      title: "Email configuration test",
+      html: `<h1 style="font-size: 20px;">Email configuration test</h1>
          <p>If you received this, sending email is working.</p>`,
-      ),
       text: "If you received this, sending email is working.",
     });
   }
 
-  private verificationHtml(code: string): string {
-    return this.layout(
-      "Admin verification code",
-      `<h1 style="font-size: 20px;">Admin verification code</h1>
-       <p>Use this code to finish signing in. It expires in 10 minutes.</p>
-       <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; margin: 24px 0;">${code}</p>
-       <p>If you didn't request this, you can ignore this email. Don't share this code please.</p>`,
-    );
-  }
-
-  private verificationText(code: string): string {
-    return `Admin verification code: ${code}
-
-This code expires in 10 minutes. If you didn't request it, ignore this email.`;
-  }
-
-  private gradingHtml(resultsUrl: string, grade?: number): string {
-    const score =
-      grade === undefined
-        ? ""
-        : `<p style="font-size: 32px; font-weight: bold; margin: 16px 0;">${Math.round(grade)}%</p>`;
-    return this.layout(
-      "Grading complete",
-      `<h1 style="font-size: 20px;">Your assignment has been graded</h1>
-       <p>Your results are ready to view.</p>
-       ${score}
-       <p><a href="${resultsUrl}">View your results</a></p>`,
-    );
-  }
-
-  private gradingText(resultsUrl: string, grade?: number): string {
-    const score = grade === undefined ? "" : `Score: ${Math.round(grade)}%\n\n`;
-    return `Your assignment has been graded.
-
-${score}View your results: ${resultsUrl}`;
+  /** Absolute link to a learner's results page for an attempt. */
+  learnerResultsUrl(assignmentId: number, attemptId: number): string {
+    return `${this.webAppUrl()}/learner/${assignmentId}/successPage/${attemptId}`;
   }
 
   private bugRenewalHtml(
@@ -289,22 +366,19 @@ ${score}View your results: ${resultsUrl}`;
       reference === safeTitle
         ? ""
         : `<p style="margin: 8px 0 0; font-weight: 600;">${safeTitle}</p>`;
-    return this.layout(
-      "Issue follow-up",
-      `<h1 style="font-size: 20px;">Are you still experiencing this issue?</h1>
+    return `<h1 style="font-size: 20px;">Are you still experiencing this issue?</h1>
        <p>The bug you reported hasn't been resolved yet. Let us know if it's still happening.</p>
        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
          <p style="margin: 0; font-weight: 600;">${reference}</p>
-         <p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Reported ${this.formatReportedAt(reportedAt)}</p>
+         <p style="margin: 4px 0 0; color: #64748b; font-size: 14px;">Reported ${this.escapeHtml(this.formatReportedAt(reportedAt))}</p>
          ${heading}
          <p style="margin: 12px 0 0; white-space: pre-wrap;">${safeBody}</p>
        </div>
        <p>
-         <a href="${renewLink}" style="display: inline-block; padding: 12px 20px; margin: 0 8px 0 0; border-radius: 8px; background: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600;">Yes, still happening</a>
-         <a href="${closeLink}" style="display: inline-block; padding: 12px 20px; border-radius: 8px; background: #e2e8f0; color: #0f172a; text-decoration: none; font-weight: 600;">No, resolved</a>
+         <a href="${this.escapeHtml(renewLink)}" style="display: inline-block; padding: 12px 20px; margin: 0 8px 0 0; border-radius: 8px; background: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600;">Yes, still happening</a>
+         <a href="${this.escapeHtml(closeLink)}" style="display: inline-block; padding: 12px 20px; border-radius: 8px; background: #e2e8f0; color: #0f172a; text-decoration: none; font-weight: 600;">No, resolved</a>
        </p>
-       <p>If we don't hear back within 7 days, we'll close the issue.</p>`,
-    );
+       <p>If we don't hear back within 7 days, we'll close the issue.</p>`;
   }
 
   private bugRenewalText(
@@ -332,18 +406,30 @@ No, resolved: ${closeLink}
 If we don't hear back within 7 days, we'll close the issue.`;
   }
 
+  // Mail is sent from a no-reply address, so every email says where to get
+  // help instead.
+  private textFooter(): string {
+    return `Need help? Visit ${this.helpUrl}
+This email was sent from an address that does not accept replies.`;
+  }
+
   private layout(title: string, content: string): string {
+    const helpUrl = this.escapeHtml(this.helpUrl);
     return `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${title}</title>
+    <title>${this.escapeHtml(title)}</title>
   </head>
   <body style="margin: 0; padding: 24px; background: #f5f5f5; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: #1e293b;">
     <div style="max-width: 480px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 32px; line-height: 1.6;">
       ${content}
-      <p style="color: #94a3b8; font-size: 12px; margin-top: 32px;">© ${new Date().getFullYear()} Mark</p>
+      <p style="color: #64748b; font-size: 13px; margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+        Need help? Visit <a href="${helpUrl}">${helpUrl}</a>.<br />
+        This email was sent from an address that does not accept replies.
+      </p>
+      <p style="color: #94a3b8; font-size: 12px; margin: 8px 0 0;">© ${new Date().getFullYear()} Mark</p>
     </div>
   </body>
 </html>`;

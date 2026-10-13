@@ -149,7 +149,14 @@ export class ReportsService {
     body: string,
   ) {
     if (!to) return;
-    await this.adminEmailService.sendGenericEmail(to, subject, body);
+    const sent = await this.adminEmailService.sendGenericEmail(
+      to,
+      subject,
+      body,
+    );
+    if (!sent) {
+      this.logger.error("sendReportEmail: email not sent", { to, subject });
+    }
   }
 
   private getRenewalTokenTtlSeconds(): number {
@@ -2532,10 +2539,17 @@ export class ReportsService {
       where: { issueNumber: dto.issueNumber },
     });
 
+    // Older mark-support issues have no Mark report. Skip them with a 2xx so
+    // the daily reminder run moves on to the next issue instead of stopping.
     if (!report) {
-      throw new NotFoundException(
-        `Report with issue number ${dto.issueNumber} not found`,
-      );
+      this.logger.warn("sendBugRenewalEmail: no report for issue", {
+        issue_number: dto.issueNumber,
+      });
+      return {
+        success: false,
+        skipped: true,
+        message: `No report found for issue #${dto.issueNumber}; renewal email skipped.`,
+      };
     }
 
     // Always send to the report's own reporter. The recipient is intentionally

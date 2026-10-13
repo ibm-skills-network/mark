@@ -89,11 +89,13 @@ describe("ReportsService.sendBugRenewalEmail", () => {
     expect(result.success).toBe(true);
   });
 
-  it("throws NotFound when the report does not exist", async () => {
+  it("skips, without throwing, when no report exists for the issue", async () => {
     prisma.report.findFirst.mockResolvedValue(null);
-    await expect(
-      make().sendBugRenewalEmail({ issueNumber: 9999 }),
-    ).rejects.toThrow(NotFoundException);
+    const result = await make().sendBugRenewalEmail({ issueNumber: 9999 });
+    expect(result).toEqual(
+      expect.objectContaining({ success: false, skipped: true }),
+    );
+    expect(adminEmailService.sendBugRenewalEmail).not.toHaveBeenCalled();
   });
 
   it("throws BadRequest when the reporter has no email", async () => {
@@ -162,7 +164,11 @@ describe("ReportsService.reportIssue", () => {
         },
       ],
       requests: [
-        { method: "PATCH", path: "/api/v2/assignments/42/attempts/84", status: 504 },
+        {
+          method: "PATCH",
+          path: "/api/v2/assignments/42/attempts/84",
+          status: 504,
+        },
       ],
     };
     const sn = () => ({
@@ -429,5 +435,69 @@ describe("ReportsService.reportIssue", () => {
     expect(snSupportService.createTicket).not.toHaveBeenCalled();
     expect(prisma.report.create).toHaveBeenCalled();
     expect(result.reportId).toBe(7);
+  });
+});
+
+describe("ReportsService.addReportComment emails", () => {
+  const commentPrisma = {
+    report: {
+      findUnique: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
+    },
+  };
+  const emailService = {
+    sendGenericEmail: jest.fn().mockResolvedValue(true),
+  };
+  const makeService = () =>
+    new ReportsService(
+      undefined as never,
+      commentPrisma as never,
+      undefined as never,
+      emailService as never,
+      undefined as never,
+      undefined as never,
+    );
+  // SN Support era report: no GitHub issue, so the comment goes out by email.
+  const report = {
+    id: 42,
+    issueNumber: null,
+    reporterId: "reporter@example.com",
+    status: "OPEN",
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.GITHUB_DEV_EMAIL = "dev@example.com";
+    commentPrisma.report.findUnique.mockResolvedValue({ ...report });
+  });
+
+  afterAll(() => {
+    delete process.env.GITHUB_DEV_EMAIL;
+  });
+
+  it("emails the reporter when an admin comments", async () => {
+    await makeService().addReportComment(42, "We found the cause.", {
+      userId: "admin@example.com",
+      role: "admin",
+    } as never);
+
+    expect(emailService.sendGenericEmail).toHaveBeenCalledWith(
+      "reporter@example.com",
+      "Update on your report #42",
+      expect.stringContaining("We found the cause."),
+    );
+  });
+
+  it("emails the developer address when the reporter comments", async () => {
+    await makeService().addReportComment(42, "Still broken for me.", {
+      userId: "reporter@example.com",
+      role: "learner",
+    } as never);
+
+    expect(emailService.sendGenericEmail).toHaveBeenCalledWith(
+      "dev@example.com",
+      "Update on your report #42",
+      expect.stringContaining("Still broken for me."),
+    );
   });
 });
