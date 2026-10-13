@@ -162,7 +162,11 @@ describe("ReportsService.reportIssue", () => {
         },
       ],
       requests: [
-        { method: "PATCH", path: "/api/v2/assignments/42/attempts/84", status: 504 },
+        {
+          method: "PATCH",
+          path: "/api/v2/assignments/42/attempts/84",
+          status: 504,
+        },
       ],
     };
     const sn = () => ({
@@ -354,6 +358,32 @@ describe("ReportsService.reportIssue", () => {
         portalName: "Coursera",
         portalUrl: "https://www.coursera.org",
       }),
+    );
+  });
+
+  it("reports the launch's course to SN Support over the client's", async () => {
+    const snSupportService = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-9" }),
+    };
+
+    await makeForReportIssue(snSupportService).service.reportIssue(
+      {
+        ...reportDto,
+        portal: {
+          ...reportDto.portal,
+          courseTitle: "Java Development with Databases",
+        },
+        additionalDetails: {
+          ...reportDto.additionalDetails,
+          courseTitle: "Client Claimed Course",
+        },
+      },
+      session,
+    );
+
+    expect(snSupportService.createTicket.mock.calls[0][0].courseTitle).toBe(
+      "Java Development with Databases",
     );
   });
 

@@ -1003,7 +1003,9 @@ export class ReportsService {
             pageUrl: detailString("pageUrl"),
             portalName,
             portalUrl: portalContext.portalUrl,
-            courseTitle: detailString("courseTitle"),
+            // The signed launch knows the course; the client field is a
+            // fallback for launches that predate it.
+            courseTitle: portal.courseTitle ?? detailString("courseTitle"),
             toolName: "Mark",
             browser: detailString("browser"),
             chatHistoryUrl: detailString("chatHistoryUrl"),
@@ -1020,6 +1022,7 @@ export class ReportsService {
           attempt_id: attemptId,
           portal_host: portalContext.portalHost,
           portal_name: portalName,
+          course_title: portal.courseTitle,
           product: route.productName,
           token_source: route.via,
         });

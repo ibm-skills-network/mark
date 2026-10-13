@@ -68,6 +68,52 @@ describe("JwtCookieStrategy", () => {
       expect(result.lisOutcomeServiceUrl).toBeUndefined();
     });
 
+    it.each([
+      ["ondemand.coursera.org", "ondemand.coursera.org"],
+      ["", undefined],
+      ["has space", undefined],
+      ["x".repeat(256), undefined],
+      [42, undefined],
+    ])("passes toolConsumerInstanceGuid %p through as %p", (guid, expected) => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          toolConsumerInstanceGuid: guid,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
+
+      expect(result.toolConsumerInstanceGuid).toBe(expected);
+    });
+
+    it.each([
+      ["Introducción a la IA", "Introducción a la IA"],
+      ["Line one\nLine two", "Line one Line two"],
+      ["   ", undefined],
+      ["x".repeat(501), undefined],
+      [42, undefined],
+    ])("passes courseTitle %p through as %p", (courseTitle, expected) => {
+      const result = strategy.validate(
+        { headers: {} } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          courseTitle,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
+
+      expect(result.courseTitle).toBe(expected);
+    });
+
     it("should transform JWT payload to UserSession", () => {
       const payload = {
         userID: "user123",

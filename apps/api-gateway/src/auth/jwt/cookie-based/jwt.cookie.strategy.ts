@@ -30,6 +30,15 @@ interface IJwtPayload extends UserSessionPayload {
 // Routed through winston: main.ts passes the winston logger to NestFactory.
 const logger = new Logger("JwtCookieStrategy");
 
+// SN Support caps course titles at 500 characters; control characters are
+// stripped so the title stays one line wherever it is shown.
+function courseTitleFrom(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // eslint-disable-next-line no-control-regex
+  const title = value.replaceAll(/[\u0000-\u001F\u007F]+/g, " ").trim();
+  return title && title.length <= 500 ? title : undefined;
+}
+
 @Injectable()
 export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
@@ -167,6 +176,12 @@ export class JwtCookieStrategy extends PassportStrategy(
         (value): value is string =>
           typeof value === "string" && /^[!-~]+$/.test(value),
       ),
+      toolConsumerInstanceGuid:
+        typeof payload.toolConsumerInstanceGuid === "string" &&
+        /^[!-~]{1,255}$/.test(payload.toolConsumerInstanceGuid)
+          ? payload.toolConsumerInstanceGuid
+          : undefined,
+      courseTitle: courseTitleFrom(payload.courseTitle),
     };
   }
 }

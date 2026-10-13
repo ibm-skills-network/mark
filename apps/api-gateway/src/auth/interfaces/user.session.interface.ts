@@ -15,6 +15,8 @@ export interface UserSession {
   returnUrl?: string;
   launch_presentation_locale?: string;
   lisOutcomeServiceUrl?: string;
+  toolConsumerInstanceGuid?: string;
+  courseTitle?: string;
 }
 
 export interface UserSessionPayload {
@@ -27,6 +29,8 @@ export interface UserSessionPayload {
   launch_presentation_locale?: string;
   grading?: { lis_outcome_service_url?: unknown };
   lis_outcome_service_url?: unknown;
+  toolConsumerInstanceGuid?: unknown;
+  courseTitle?: unknown;
 }
 
 export interface UserSessionRequest extends Request {

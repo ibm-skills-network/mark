@@ -174,6 +174,62 @@ describe("derivePortalContext", () => {
       });
     });
 
+    // Coursera's ungraded and final-project items send neither a return URL
+    // nor an outcome URL; the instance guid is all that names the platform.
+    it("uses a hostname guid when there is no return URL", () => {
+      expect(
+        derivePortalContext({
+          toolConsumerInstanceGuid: "ondemand.coursera.org",
+        }),
+      ).toEqual({
+        portalHost: "ondemand.coursera.org",
+        portalName: "Coursera",
+        portalUrl: undefined,
+      });
+    });
+
+    it("prefers the guid over the grade-callback host", () => {
+      expect(
+        derivePortalContext({
+          returnUrl: "",
+          toolConsumerInstanceGuid: "learn.ibm.com",
+          lisOutcomeServiceUrl: "https://grades.example.com/outcome",
+        }),
+      ).toMatchObject({ portalHost: "learn.ibm.com" });
+    });
+
+    it("prefers the return URL over the guid", () => {
+      expect(
+        derivePortalContext({
+          returnUrl: "https://courses.cognitiveclass.ai/courses/x",
+          toolConsumerInstanceGuid: "ondemand.coursera.org",
+        }),
+      ).toEqual({
+        portalHost: "courses.cognitiveclass.ai",
+        portalName: "courses.cognitiveclass.ai",
+        portalUrl: "https://courses.cognitiveclass.ai",
+      });
+    });
+
+    it.each([
+      "3f2a9c1e0b7d4e8f9a6b5c4d3e2f1a0b:canvas-lms",
+      "localhost",
+      "https://ondemand.coursera.org",
+      "evil.example.com/path",
+      "  ",
+      42,
+    ])("skips a guid that is not a hostname (%p)", (guid) => {
+      expect(
+        derivePortalContext({
+          toolConsumerInstanceGuid: guid,
+          lisOutcomeServiceUrl: "https://api.coursera.org/outcome",
+        }),
+      ).toMatchObject({ portalHost: "api.coursera.org" });
+      expect(derivePortalContext({ toolConsumerInstanceGuid: guid })).toEqual(
+        {},
+      );
+    });
+
     it.each([42, true, {}, ["https://api.coursera.org/outcome"]])(
       "ignores non-string claims (%j) without losing a usable fallback",
       (value) => {
@@ -189,6 +245,33 @@ describe("derivePortalContext", () => {
       },
     );
   });
+});
+
+describe("derivePortalContext course title", () => {
+  it("carries the course alongside the portal", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerInstanceGuid: "ondemand.coursera.org",
+        courseTitle: "  Java Development with Databases  ",
+      }),
+    ).toMatchObject({
+      portalName: "Coursera",
+      courseTitle: "Java Development with Databases",
+    });
+  });
+
+  it("keeps the course when the launch names no site", () => {
+    expect(derivePortalContext({ courseTitle: "PIA quiz" })).toEqual({
+      courseTitle: "PIA quiz",
+    });
+  });
+
+  it.each([["   "], ["x".repeat(501)], [42]])(
+    "drops an unusable course title (%p)",
+    (courseTitle) => {
+      expect(derivePortalContext({ courseTitle })).toEqual({});
+    },
+  );
 });
 
 describe("deriveLmsHost", () => {
