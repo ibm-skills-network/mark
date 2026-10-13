@@ -39,10 +39,11 @@ const ALLOWED_EMBED_HOSTS = new Set([
  * forms, no downloads. Scripts and its own origin are allowed because the
  * players need them, and the host is one we chose.
  */
-const EMBED_SANDBOX = "allow-scripts allow-same-origin allow-presentation";
+export const EMBED_SANDBOX =
+  "allow-scripts allow-same-origin allow-presentation";
 
-function isAllowedEmbedSource(source: string | null): boolean {
-  if (!source) {
+export function isAllowedEmbedSource(source: string | null): boolean {
+  if (!source || typeof window === "undefined") {
     return false;
   }
 
@@ -91,13 +92,15 @@ function registerEmbedHook(): void {
 /**
  * Sanitize an HTML string before it is written to `innerHTML`.
  *
- * The Quill-based viewer/editor render HTML that can originate from untrusted
- * sources (stored assignment content, learner submissions, hostile clients).
- * Quill itself does not strip active content, so every string is run through
- * DOMPurify before it reaches the DOM. The profile keeps the formatting tags,
- * classes, and data-attributes Quill emits, while removing `<script>`, inline
- * event handlers, `javascript:`-style URLs, interactive elements, and frames
- * that do not point at a known video host.
+ * The rich-text viewer and editor render HTML that can originate from
+ * untrusted sources (stored assignment content, learner submissions, hostile
+ * clients). Neither the editor nor the renderer strips active content on its
+ * own, so every string is run through DOMPurify before it reaches the DOM. The
+ * profile keeps the formatting tags, classes and data-attributes rich text is
+ * written with — including the shapes the previous editor stored, which are
+ * still read today — while removing `<script>`, inline event handlers,
+ * `javascript:`-style URLs, interactive elements, and frames that do not point
+ * at a known video host.
  *
  * The returned string is final. Anything that rewrites it before it reaches
  * the DOM re-opens what was closed here: sanitization is parse-then-serialize,

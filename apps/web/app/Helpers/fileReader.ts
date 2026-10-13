@@ -2,7 +2,6 @@
 import JSZip from "jszip";
 import mammoth from "mammoth";
 import Papa, { ParseResult } from "papaparse";
-import pdfToText from "react-pdftotext";
 import { remark } from "remark";
 import * as XLSX from "xlsx";
 import { clampWorkbookToUsedRanges } from "./spreadsheetUsedRange";
@@ -125,6 +124,7 @@ export const readPdf = async (
   questionId: number,
 ): Promise<FileContent> => {
   try {
+    const { default: pdfToText } = await import("react-pdftotext");
     const content = await pdfToText(file);
     return { filename: file.name, content, questionId };
   } catch (error: unknown) {

@@ -1,10 +1,7 @@
 import * as XLSX from "xlsx";
-import { readExcel, workbookToSheetData } from "./fileReader";
+import { readExcel, readPdf, workbookToSheetData } from "./fileReader";
 
-// fileReader.ts imports several ESM-only modules at module scope (react-pdftotext
-// pulls in an ESM pdfjs-dist build; remark ships pure ESM) that jest's transform
-// chain cannot parse. The Excel paths exercised here never touch those readers,
-// so stub the modules out to keep the import side of fileReader.ts loadable.
+// These readers depend on ESM modules that Jest cannot parse.
 jest.mock("react-pdftotext", () => ({
   __esModule: true,
   default: jest.fn(),
@@ -83,5 +80,27 @@ describe("readExcel", () => {
       ["Name", "Score"],
       ["Alice", 90],
     ]);
+  });
+});
+
+describe("readPdf", () => {
+  it("loads the PDF parser when reading a file and retains its result", async () => {
+    const pdfToText = (await import("react-pdftotext")).default as jest.Mock;
+    pdfToText.mockResolvedValue("PDF content");
+    const file = new File(["pdf"], "answer.pdf");
+    await expect(readPdf(file, 7)).resolves.toEqual({
+      filename: "answer.pdf",
+      content: "PDF content",
+      questionId: 7,
+    });
+    expect(pdfToText).toHaveBeenCalledWith(file);
+  });
+
+  it("reports PDF extraction failures", async () => {
+    const pdfToText = (await import("react-pdftotext")).default as jest.Mock;
+    pdfToText.mockRejectedValue(new Error("Invalid PDF"));
+    await expect(
+      readPdf(new File(["invalid"], "answer.pdf"), 7),
+    ).rejects.toThrow("Error reading PDF: Error: Invalid PDF");
   });
 });

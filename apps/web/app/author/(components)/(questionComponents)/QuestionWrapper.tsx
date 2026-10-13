@@ -1,6 +1,6 @@
 "use client";
 
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import WarningAlert from "@/components/WarningAlert";
 import type {
   Choice,
@@ -11,7 +11,7 @@ import type {
 } from "@/config/types";
 import { expandMarkingRubric, generateRubric } from "@/lib/talkToBackend";
 import { useAuthorStore, useQuestionStore } from "@/stores/author";
-import MarkdownEditor from "@components/MarkDownEditor";
+import RichTextEditorClient from "@/components/rich-text/RichTextEditorClient";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import React, {
   FC,
@@ -819,7 +819,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     >
       {toggleTitle && !preview ? (
         <div ref={titleRef} className="w-full">
-          <MarkdownEditor
+          <RichTextEditorClient
             className="title-placeholder placeholder-gray-500 w-full"
             value={localQuestionTitle}
             setValue={(value) => setLocalQuestionTitle(value?.trim())}
@@ -850,7 +850,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             )
           }
         >
-          <MarkdownViewer
+          <RichTextViewer
             className={`typography-body px-1 py-0.5 ${
               localQuestionTitle?.trim() === ""
                 ? "!text-gray-500 dark:!text-gray-400"
@@ -860,7 +860,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
             {localQuestionTitle?.trim() === ""
               ? "Enter question here"
               : localQuestionTitle}
-          </MarkdownViewer>
+          </RichTextViewer>
           <div className="border-b border-gray-200 dark:border-gray-700 w-full" />
         </div>
       )}

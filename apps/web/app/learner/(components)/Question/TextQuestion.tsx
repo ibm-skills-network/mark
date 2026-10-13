@@ -3,7 +3,7 @@ import { QuestionStore } from "@/config/types";
 import { useUiTranslation } from "@/hooks/use-ui-translation";
 import { TEXT_ANSWER_IMAGE_BLOCKED_MESSAGE } from "@/lib/text-answer-images";
 import { useLearnerStore, useAssignmentDetails } from "@/stores/learner";
-import MarkdownEditor from "@components/MarkDownEditor";
+import RichTextEditorClient from "@/components/rich-text/RichTextEditorClient";
 
 interface Props {
   question: QuestionStore;
@@ -25,14 +25,9 @@ function TextQuestion(props: Props) {
   const maxWords = question?.maxWords || null;
   const maxCharacters = question?.maxCharacters || null;
 
-  // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {
-  //   enabled: true,
-  //   debounceMs: 3000,
-  // });
-
   return (
     <div>
-      <MarkdownEditor
+      <RichTextEditorClient
         value={question?.learnerTextResponse || ""}
         setValue={(value) => setTextResponse(value, question.id)}
         placeholder="Type your answer here"
