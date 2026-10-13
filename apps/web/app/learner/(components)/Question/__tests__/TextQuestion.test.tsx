@@ -7,13 +7,13 @@ import type { QuestionStore } from "@/config/types";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import TextQuestion from "../TextQuestion";
 
-const mockMarkdownEditor = jest.fn();
+const mockRichTextEditor = jest.fn();
 const mockSetTextResponse = jest.fn();
 
-jest.mock("@components/MarkDownEditor", () => ({
+jest.mock("@/components/rich-text/RichTextEditorClient", () => ({
   __esModule: true,
   default: (props: unknown) => {
-    mockMarkdownEditor(props);
+    mockRichTextEditor(props);
     return null;
   },
 }));
@@ -60,7 +60,7 @@ describe("TextQuestion", () => {
   it("uses the simplified learner toolbar for text answers", () => {
     render(<TextQuestion question={question} />);
 
-    expect(mockMarkdownEditor).toHaveBeenCalledWith(
+    expect(mockRichTextEditor).toHaveBeenCalledWith(
       expect.objectContaining({
         allowCopy: false,
         maxCharacters: 500,
@@ -71,7 +71,7 @@ describe("TextQuestion", () => {
       }),
     );
 
-    const editorProps = mockMarkdownEditor.mock.calls[0][0] as {
+    const editorProps = mockRichTextEditor.mock.calls[0][0] as {
       setValue: (value: string) => void;
     };
     editorProps.setValue("<p>Updated answer</p>");
@@ -85,7 +85,7 @@ describe("TextQuestion", () => {
   it("keeps typed markdown list markers literal in learner answers", () => {
     render(<TextQuestion question={question} />);
 
-    expect(mockMarkdownEditor).toHaveBeenCalledWith(
+    expect(mockRichTextEditor).toHaveBeenCalledWith(
       expect.objectContaining({ disableListAutofill: true }),
     );
   });
@@ -93,7 +93,7 @@ describe("TextQuestion", () => {
   it("blocks images in learner text answers", () => {
     render(<TextQuestion question={question} />);
 
-    expect(mockMarkdownEditor).toHaveBeenCalledWith(
+    expect(mockRichTextEditor).toHaveBeenCalledWith(
       expect.objectContaining({ blockImages: true }),
     );
   });
@@ -105,7 +105,7 @@ describe("TextQuestion", () => {
       screen.queryByText(/Images can't be graded in a text answer/),
     ).not.toBeInTheDocument();
 
-    const editorProps = mockMarkdownEditor.mock.calls.at(-1)?.[0] as {
+    const editorProps = mockRichTextEditor.mock.calls.at(-1)?.[0] as {
       onImageBlocked: () => void;
     };
     act(() => {

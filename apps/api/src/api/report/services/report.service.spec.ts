@@ -162,7 +162,11 @@ describe("ReportsService.reportIssue", () => {
         },
       ],
       requests: [
-        { method: "PATCH", path: "/api/v2/assignments/42/attempts/84", status: 504 },
+        {
+          method: "PATCH",
+          path: "/api/v2/assignments/42/attempts/84",
+          status: 504,
+        },
       ],
     };
     const sn = () => ({

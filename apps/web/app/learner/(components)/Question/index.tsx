@@ -397,12 +397,37 @@ function QuestionPage(props: Props) {
         setAssignmentDetails(nextAssignmentDetails);
       }
 
-      const questionsWithStatus = questions.map((question) =>
-        hydrateQuestionResponse({
+      const storeState = useLearnerStore.getState();
+      const questionsWithStatus = questions.map((question) => {
+        const local =
+          storeState.activeAttemptId === id
+            ? storeState.questions.find((q) => q.id === question.id)
+            : undefined;
+        const hydrated = hydrateQuestionResponse({
           ...question,
-          status: question.status ?? "unedited",
-        }),
-      );
+          questionResponses: [
+            ...(question.questionResponses ?? []),
+            ...(attempt.questionResponses ?? []).filter(
+              (r) => r.questionId === question.id,
+            ),
+          ],
+          status: local?.status ?? question.status ?? "unedited",
+        });
+        return {
+          ...hydrated,
+          learnerTextResponse:
+            local?.learnerTextResponse ?? hydrated.learnerTextResponse,
+          learnerChoices: local?.learnerChoices ?? hydrated.learnerChoices,
+          learnerAnswerChoice:
+            local?.learnerAnswerChoice ?? hydrated.learnerAnswerChoice,
+          learnerUrlResponse:
+            local?.learnerUrlResponse ?? hydrated.learnerUrlResponse,
+          learnerFileResponse:
+            local?.learnerFileResponse ?? hydrated.learnerFileResponse,
+          presentationResponse:
+            local?.presentationResponse ?? hydrated.presentationResponse,
+        };
+      });
 
       const expiresAtMs = expiresAt
         ? typeof expiresAt === "string"
@@ -422,13 +447,6 @@ function QuestionPage(props: Props) {
         normalizedExpiresAt,
         serverTimeOffsetMs,
       );
-
-      // Read the attempt the store was on *before* beginAttempt adopts this
-      // one: afterwards activeAttemptId always equals `id`, so comparing
-      // against it below would never detect that the store had drifted (the
-      // timer resets it to null with expiresAt/attemptStartedAt on submit)
-      // and the clock state would never be re-published.
-      const storeState = useLearnerStore.getState();
 
       useLearnerStore.getState().beginAttempt(id);
       setQuestions(questionsWithStatus);

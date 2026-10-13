@@ -1,6 +1,7 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
 import { isLearnerUrlSubmittable } from "@/lib/url-response";
+import { hasRichTextContent } from "rich-text";
 import { type ClassValue, clsx } from "clsx";
 import { useCallback } from "react";
 import { twMerge } from "tailwind-merge";
@@ -145,9 +146,7 @@ const hasPresentationResponse = (
 };
 
 export const hasLearnerResponse = (question: QuestionStore): boolean => {
-  const text = question.learnerTextResponse?.trim() ?? "";
-  const hasText =
-    text.length > 0 && question.learnerTextResponse !== "<p><br></p>";
+  const hasText = hasRichTextContent(question.learnerTextResponse);
   const hasUrl = Boolean(question.learnerUrlResponse?.trim());
   const hasChoices = (question.learnerChoices?.length ?? 0) > 0;
   const hasAnswerChoice =
@@ -170,8 +169,7 @@ export const hasLearnerResponse = (question: QuestionStore): boolean => {
 
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter((q) => {
-    const text = q.learnerTextResponse?.trim() ?? "";
-    const hasText = text.length > 0 && q.learnerTextResponse !== "<p><br></p>";
+    const hasText = hasRichTextContent(q.learnerTextResponse);
     // Presence, not validity: a link the learner typed is an answer even when
     // it does not parse. Treating it as unanswered used to trip the
     // "you have unanswered questions" modal on a question they had filled in.
