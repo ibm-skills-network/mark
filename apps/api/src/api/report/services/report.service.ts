@@ -933,7 +933,6 @@ export class ReportsService {
     const highSimilarityReport = similarReports.find((r) => r.similarity > 0.7);
 
     const ticketTitle = buildSnSupportTicketTitle({
-      issueType,
       assignmentId,
       attemptId,
       description,
