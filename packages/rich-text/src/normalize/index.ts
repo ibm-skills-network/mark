@@ -1,5 +1,6 @@
 import { resolveParser } from "./parse";
-import { stripBlockIndent } from "./rules/block-indent";
+import { normalizeBlockIndent } from "./rules/block-indent";
+import { normalizeBlockFormats } from "./rules/block-formats";
 import { normalizeCodeBlocks } from "./rules/code-blocks";
 import { normalizeEmbeds } from "./rules/embeds";
 import { normalizeInlineColors } from "./rules/inline-colors";
@@ -13,44 +14,23 @@ import type {
   RuleContext,
 } from "./types";
 
-/**
- * Order is deliberate.
- *
- * Editor furniture goes first so later rules never see a stray marker span or a
- * serialised language dropdown. Code blocks are rebuilt before lists so the
- * per-line `<div>`s are gone before anything walks list structure. Block indent
- * runs after lists, so that list items have already had their indent consumed
- * as nesting and only non-list blocks are left for it. Colours run last, on the
- * final elements, so a hoisted wrapper is not left behind on an element another
- * rule was about to replace.
- */
+// Normalize block formats before code blocks, and colors after structure.
 const RULES: Rule[] = [
   stripEditorChrome,
+  normalizeBlockFormats,
+  normalizeBlockIndent,
   normalizeCodeBlocks,
   normalizeLists,
-  stripBlockIndent,
   normalizeEmbeds,
   normalizeTables,
   normalizeInlineColors,
 ];
 
 export interface NormalizeOptions {
-  /** Fragment parser. Defaults to the browser's `DOMParser` when present. */
   parse?: ParseFragment;
 }
 
-/**
- * Rewrites editor-specific markup into the plain HTML the current editor reads.
- *
- * Every rule keys off a marker the old editor produced and does nothing when
- * that marker is absent, so running this on already-converted content is a
- * no-op and running it twice gives the same answer as running it once.
- *
- * Safe on untrusted HTML: parsing happens in an inert document that runs no
- * scripts and loads nothing. Its output is not sanitized, so sanitize it before
- * it reaches the DOM — and do that last, since re-serializing sanitized markup
- * is how mutation XSS gets back in.
- */
+/** Idempotent legacy HTML conversion. Sanitize its output before rendering. */
 export function normalizeQuillHtml(
   html: string | null | undefined,
   options: NormalizeOptions = {},
@@ -74,10 +54,7 @@ export function normalizeQuillHtml(
   }
 
   return {
-    // Returning the original string when nothing fired keeps this byte-exact
-    // for untouched content: parsing and re-serialising alone rewrites
-    // entities and attribute quoting, which would look like a change to every
-    // caller that compares stored values.
+    // Preserve original bytes when no rule changed the content.
     html: context.changes === 0 ? input : root.innerHTML,
     changes: context.changes,
     rulesFired,

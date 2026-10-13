@@ -6,6 +6,34 @@ export interface VideoOptions {
   HTMLAttributes: Record<string, unknown>;
 }
 
+export function videoEmbedSource(source: string): string {
+  if (typeof window === "undefined") return source;
+  let url: URL;
+  try {
+    url = new URL(source, window.location.href);
+  } catch {
+    return source;
+  }
+  if (url.protocol !== "https:") return source;
+  if (url.hostname === "youtu.be") {
+    return `https://www.youtube.com/embed/${encodeURIComponent(url.pathname.slice(1))}`;
+  }
+  if (
+    ["youtube.com", "www.youtube.com"].includes(url.hostname) &&
+    url.pathname === "/watch" &&
+    url.searchParams.get("v")
+  ) {
+    return `https://www.youtube.com/embed/${encodeURIComponent(url.searchParams.get("v")!)}`;
+  }
+  if (
+    ["vimeo.com", "www.vimeo.com"].includes(url.hostname) &&
+    /^\/\d+$/.test(url.pathname)
+  ) {
+    return `https://player.vimeo.com/video${url.pathname}`;
+  }
+  return source;
+}
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     video: {
@@ -14,19 +42,6 @@ declare module "@tiptap/core" {
   }
 }
 
-/**
- * A video embed, stored as an `<iframe>`.
- *
- * Stored content already holds bare `<iframe>` elements, because that is what
- * the previous editor wrote, so this parses the plain element rather than a
- * wrapper of its own. Stored content reaches the editor through the sanitizer,
- * but pasted HTML and the toolbar's `setVideo` do not, so the node enforces the
- * sanitizer's host allowlist and sandbox itself. Both come from
- * `sanitize-html.ts`, so there is still one policy.
- *
- * It is an atom: the frame has no editable content, and without this the editor
- * would let the caret inside it.
- */
 export const Video = Node.create<VideoOptions>({
   name: "video",
   group: "block",
@@ -74,9 +89,16 @@ export const Video = Node.create<VideoOptions>({
     return {
       setVideo:
         (options) =>
-        ({ commands }) =>
-          isAllowedEmbedSource(options.src) &&
-          commands.insertContent({ type: this.name, attrs: options }),
+        ({ commands }) => {
+          const src = videoEmbedSource(options.src);
+          return (
+            isAllowedEmbedSource(src) &&
+            commands.insertContent({
+              type: this.name,
+              attrs: { src },
+            })
+          );
+        },
     };
   },
 });

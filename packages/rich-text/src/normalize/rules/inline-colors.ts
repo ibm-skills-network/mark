@@ -7,11 +7,6 @@ interface Declaration {
 
 const COLOR_PROPERTIES = new Set(["color", "background-color"]);
 
-/**
- * Values that say "no colour" and only exist because the content was pasted
- * from a word processor. Carrying them forward would paint every such run with
- * a literal colour the editor then has to round-trip.
- */
 const MEANINGLESS_COLORS = new Set([
   "",
   "windowtext",
@@ -24,15 +19,7 @@ const MEANINGLESS_COLORS = new Set([
   "auto",
 ]);
 
-/**
- * The `style` attribute is read as text rather than through `element.style`.
- *
- * The CSS object model silently discards values it considers invalid, and which
- * values those are differs between a browser and a Node DOM implementation — so
- * reading through it would make this rule behave one way in the browser and
- * another way under jsdom, which is precisely what a shared rule exists to
- * prevent: the verification runs would then disagree with what users see.
- */
+// Parse style text consistently across browser and Node DOM implementations.
 function parseStyle(text: string): Declaration[] {
   return text
     .split(";")
@@ -65,31 +52,13 @@ function writeStyle(element: Element, declarations: Declaration[]): void {
   element.setAttribute("style", formatStyle(declarations));
 }
 
-/**
- * Normalises inline text colour so the editor can actually read it.
- *
- * Two things happen here. Meaningless colours are dropped, and any colour
- * sitting on an element other than a `<span>` is moved onto a `<span>` wrapping
- * that element's contents.
- *
- * The move matters more than it looks. The editor's text-style mark only
- * matches `<span>`, so a colour written onto `<strong>` — which is how a word
- * processor paste arrives — is discarded outright on load, losing the colour
- * from thousands of stored fields. Teaching the mark to match `<strong>` is not
- * an option: a schema picks one rule per element, so it would shadow bold and
- * lose the emphasis instead.
- *
- * Scrubbing runs before hoisting so a colour that is about to be deleted never
- * gets a wrapper element built for it.
- */
+// TextStyle reads spans; move colors without losing the original element.
 export const normalizeInlineColors: Rule = {
   name: "inline-colors",
   apply(root, context) {
     const document_ = root.ownerDocument;
     const styled = Array.from(root.querySelectorAll("[style]"));
 
-    // Pass 1 — drop colours that carry no meaning, then any element left with
-    // nothing to say.
     for (const element of styled) {
       const declarations = parseStyle(element.getAttribute("style") ?? "");
       const kept = declarations.filter(
@@ -114,7 +83,6 @@ export const normalizeInlineColors: Rule = {
       }
     }
 
-    // Pass 2 — move surviving colours onto a span the editor will recognise.
     for (const element of Array.from(root.querySelectorAll("[style]"))) {
       if (element.tagName.toLowerCase() === "span") {
         continue;

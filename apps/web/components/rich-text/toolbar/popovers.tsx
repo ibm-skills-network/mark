@@ -13,20 +13,12 @@ import { cn } from "@/lib/strings";
 
 import { ACTIVE_CLASS, TOOLBAR_BUTTON_CLASS } from "./ToolbarButton";
 
-/**
- * The panels behind the colour, link, image and video controls.
- *
- * Both take plain callbacks rather than the editor: what a control does is
- * declared once in `toolbar-config.ts`, so these stay presentation and cannot
- * disagree with the table about which command runs.
- */
 const PanelTrigger: FC<{
   label: string;
   icon: LucideIcon;
   isActive: boolean;
 }> = ({ label, icon: Icon, isActive }) => (
   <PopoverTrigger
-    // Inside the author form, a plain button would submit it.
     type="button"
     aria-label={label}
     title={label}
@@ -36,12 +28,6 @@ const PanelTrigger: FC<{
   </PopoverTrigger>
 );
 
-/**
- * The swatch grid is the previous editor's own palette, so an author opens this
- * and sees the colours they already know. "Remove" is kept distinct from
- * picking white — unsetting the mark and painting white text look identical on
- * a white page and behave differently everywhere else.
- */
 export const ColorPopover: FC<{
   label: string;
   icon: LucideIcon;
@@ -87,13 +73,6 @@ export const ColorPopover: FC<{
   );
 };
 
-/**
- * A panel that takes one URL and applies it.
- *
- * Shared by link, image and video because the interaction is identical. The URL
- * is not validated here: the sanitizer decides which protocols and embed hosts
- * survive, and a second opinion in the toolbar is how the two drift apart.
- */
 export const UrlPopover: FC<{
   label: string;
   icon: LucideIcon;
@@ -104,6 +83,7 @@ export const UrlPopover: FC<{
   onSubmit: (url: string) => void;
   onRemove?: () => void;
   removeLabel?: string;
+  onFile?: (file: File) => void;
 }> = ({
   label,
   icon,
@@ -114,12 +94,11 @@ export const UrlPopover: FC<{
   onSubmit,
   onRemove,
   removeLabel,
+  onFile,
 }) => {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState(initialValue);
 
-  // Re-seeded each time the panel opens, so editing an existing link shows the
-  // current target rather than whatever was last typed.
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (next) {
@@ -156,6 +135,23 @@ export const UrlPopover: FC<{
             className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
           />
         </label>
+        {onFile ? (
+          <label className="mt-2 block text-sm font-medium text-gray-700 dark:text-gray-200">
+            Upload image
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-1 block w-full text-sm"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file && file.type.startsWith("image/")) {
+                  onFile(file);
+                  setOpen(false);
+                }
+              }}
+            />
+          </label>
+        ) : null}
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"

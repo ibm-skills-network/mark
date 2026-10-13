@@ -5,7 +5,6 @@ import { jsdomParseFragment } from "./test-parser";
 const run = (html: string) =>
   normalizeQuillHtml(html, { parse: jsdomParseFragment });
 
-/** Text content, ignoring markup — what a reader would actually lose. */
 const textOf = (html: string) =>
   html
     .replace(/<[^>]*>/g, "")
@@ -34,7 +33,7 @@ describe("lists", () => {
     const { html } = run(FIXTURES.mixedList);
 
     expect(html).toBe(
-      "<ol><li>One</li></ol><ul><li>Bullet</li></ul><ol><li>Two</li></ol>",
+      '<ol><li>One</li></ol><ul><li>Bullet</li></ul><ol start="2"><li>Two</li></ol>',
     );
   });
 
@@ -42,7 +41,7 @@ describe("lists", () => {
     const { html } = run(FIXTURES.indentedList);
 
     expect(html).not.toContain("ql-indent");
-    // The nested list hangs inside the item above it, not beside it.
+
     expect(html).toContain(
       "<li>Question 1: Upload your notebook.<ul><li>1.1: Notebook uploaded.</li>",
     );
@@ -59,14 +58,23 @@ describe("lists", () => {
     }
   });
 
-  it("reports a checklist rather than silently dropping its ticks", () => {
+  it("preserves a checklist's checked state", () => {
     const { warnings, html } = run(
       '<ol><li data-list="checked">Done</li></ol>',
     );
 
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/checklist/i);
-    expect(html).toContain("<ul><li>Done</li></ul>");
+    expect(warnings).toEqual([]);
+    expect(html).toContain('<ul><li data-checked="true">Done</li></ul>');
+  });
+
+  it("preserves a leading indentation and level jumps without inventing text", () => {
+    const source =
+      '<ol><li data-list="ordered" class="ql-indent-2">First</li><li data-list="ordered" class="ql-indent-2">Second</li><li data-list="ordered" class="ql-indent-5">Deep</li></ol>';
+    const result = run(source);
+    expect(result.html).toContain('type="i"');
+    expect(result.html.match(/data-indent="2"/g)).toHaveLength(3);
+    expect(textOf(result.html)).toBe(textOf(source));
+    expect(run(result.html).changes).toBe(0);
   });
 });
 
@@ -78,7 +86,7 @@ describe("code blocks", () => {
     expect(html).not.toContain("ql-code-block");
     expect(html).not.toContain("<select");
     expect(html).not.toContain("<option");
-    // Two source lines, so exactly one newline between them.
+
     expect(html.match(/\n/g) ?? []).toHaveLength(1);
   });
 
@@ -127,7 +135,7 @@ describe("inline colours", () => {
 
     expect(html).not.toContain("windowtext");
     expect(html).not.toContain("transparent");
-    // The span existed only to carry those values, so it goes too.
+
     expect(html).toContain("The <strong>final project</strong> consists of ");
   });
 
@@ -185,16 +193,12 @@ describe("idempotency", () => {
   });
 
   it("returns untouched content unchanged rather than re-serialised", () => {
-    // Parsing and re-serialising alone rewrites entities and attribute
-    // quoting; callers compare stored values, so an untouched field must come
-    // back exactly as it went in.
     const source = "<p title='single quoted'>caf&eacute;</p>";
     expect(run(source).html).toBe(source);
   });
 });
 
 describe("parsing", () => {
-  // A stray closing tag must not end the parse root early and drop the rest.
   it("keeps content after a stray closing div", () => {
     const { html } = run(
       '<ol><li data-list="bullet">Alpha</li></ol></div><p>tail</p>',
@@ -213,19 +217,21 @@ describe("empty input", () => {
 });
 
 describe("block indent", () => {
-  it("drops indentation from a paragraph and says so", () => {
+  it("preserves indentation from a paragraph without a warning", () => {
     const { html, warnings } = run(
       '<p class="ql-indent-1">Indented paragraph.</p>',
     );
 
-    expect(html).toBe("<p>Indented paragraph.</p>");
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/lost its indentation/);
+    expect(html).toContain('data-indent="1"');
+    expect(html).toContain("padding-inline-start: 3em");
+    expect(warnings).toEqual([]);
+    expect(run(html).changes).toBe(0);
   });
 
   it("keeps other classes on the same element", () => {
     const { html } = run('<p class="ql-indent-2 intro">Text</p>');
-    expect(html).toBe('<p class="intro">Text</p>');
+    expect(html).toContain('class="intro"');
+    expect(html).toContain('data-indent="2"');
   });
 
   it("leaves list item indentation to the list rule", () => {
@@ -233,5 +239,28 @@ describe("block indent", () => {
 
     expect(html).not.toContain("ql-indent");
     expect(warnings).toEqual([]);
+  });
+});
+
+describe("block alignment and direction", () => {
+  it("preserves alignment, direction and unrelated styles and classes", () => {
+    const { html } = run(
+      '<p class="ql-align-center ql-direction-rtl intro" style="line-height: 2">Text</p>',
+    );
+    expect(html).toContain('class="intro"');
+    expect(html).toContain("text-align: center");
+    expect(html).toContain("line-height: 2");
+    expect(html).toContain('dir="rtl"');
+    expect(run(html).changes).toBe(0);
+  });
+
+  it("keeps block formatting when rebuilding a code block", () => {
+    const { html } = run(
+      '<div class="ql-code-block-container ql-align-right ql-indent-1"><div class="ql-code-block" data-language="python">print(1)</div></div>',
+    );
+    expect(html).toContain("<pre ");
+    expect(html).toContain("text-align: right");
+    expect(html).toContain("padding-inline-start: 3em");
+    expect(html).toContain("language-python");
   });
 });

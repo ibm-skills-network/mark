@@ -48,5 +48,5 @@ yarn --cwd packages/rich-text compile    # the script reads dist/
 node packages/rich-text/scripts/validate-rows.js rows.json
 ```
 
-See that script's header for how to dump `rows.json` read-only. Run it after any
-rule change.
+Supply `rows.json` as an array of `{ "src": "column", "id": 1, "html": "..." }`
+objects exported separately. The validator does not connect to a database.

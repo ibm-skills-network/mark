@@ -1,6 +1,4 @@
-/**
- * @jest-environment jsdom
- */
+/** @jest-environment jsdom */
 
 import { Editor, generateHTML, generateJSON } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
@@ -8,27 +6,17 @@ import { normalizeQuillHtml } from "rich-text";
 
 import { createRichTextExtensions } from "../extensions";
 
-/**
- * The editor discards markup it has no rule for, without erroring. These tests
- * parse stored shapes into the document model and assert what survived, which
- * is the only way to see a silent drop before an author does.
- *
- * They need no layout, so they are unaffected by jsdom having none — unlike
- * mounting a real editor.
- */
 const extensions = createRichTextExtensions({
   mode: "full",
   placeholder: "",
 });
 
-/** Stored content always passes through the shared rules before the editor. */
 const parse = (html: string): JSONContent =>
   generateJSON(normalizeQuillHtml(html).html, extensions);
 
 const serialize = (html: string): string =>
   generateHTML(parse(html), extensions);
 
-/** Every node type present anywhere in the document. */
 const nodeTypes = (node: JSONContent | undefined): string[] =>
   !node
     ? []
@@ -49,6 +37,37 @@ const findNode = (node: JSONContent, type: string): JSONContent | undefined => {
 const textOf = (html: string) => html.replace(/<[^>]*>/g, "").trim();
 
 describe("stored lists survive the schema", () => {
+  it("preserves checked and unchecked states through editing and serialization", () => {
+    const doc = parse(
+      '<ol><li data-list="checked">Done</li><li data-list="unchecked">Pending</li></ol>',
+    );
+    const list = findNode(doc, "bulletList");
+    expect(list?.content?.map((node) => node.attrs?.checked)).toEqual([
+      true,
+      false,
+    ]);
+    expect(generateJSON(generateHTML(doc, extensions), extensions)).toEqual(
+      doc,
+    );
+  });
+  it("continues numbering across intervening bullets", () => {
+    const doc = parse(
+      '<ol><li data-list="ordered">One</li><li data-list="bullet">Bullet</li><li data-list="ordered">Two</li></ol>',
+    );
+    expect(doc.content?.[2]?.attrs?.start).toBe(2);
+    expect(generateHTML(doc, extensions)).toContain('start="2"');
+  });
+
+  it("keeps the numbering style and indentation of a leading indented item", () => {
+    const doc = parse(
+      '<ol><li data-list="ordered" class="ql-indent-2">Indented</li></ol>',
+    );
+    expect(findNode(doc, "orderedList")?.attrs?.type).toBe("i");
+    expect(findNode(doc, "listItem")?.attrs?.indent).toBe(2);
+    expect(generateJSON(generateHTML(doc, extensions), extensions)).toEqual(
+      doc,
+    );
+  });
   it("keeps bullets as a bullet list rather than renumbering them", () => {
     const doc = parse(
       '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Alpha</li></ol>',
@@ -143,8 +162,6 @@ describe("embeds, tables and scripts survive the schema", () => {
     expect(video?.attrs?.src).toBe("https://www.youtube.com/embed/abc123");
   });
 
-  // Pasted HTML reaches the schema without passing the sanitizer, so the node
-  // has to refuse frames the sanitizer would have removed.
   it.each([
     ["a script URL", "javascript:alert(1)"],
     ["an unlisted host", "https://evil.example/phish"],
@@ -180,6 +197,21 @@ describe("embeds, tables and scripts survive the schema", () => {
       "video",
     ]);
 
+    editor.destroy();
+  });
+
+  it.each([
+    [
+      "https://www.youtube.com/watch?v=abc123",
+      "https://www.youtube.com/embed/abc123",
+    ],
+    ["https://youtu.be/abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://vimeo.com/123456", "https://player.vimeo.com/video/123456"],
+    ["https://www.vimeo.com/123456", "https://player.vimeo.com/video/123456"],
+  ])("converts %s to a working video embed", (source, expected) => {
+    const editor = new Editor({ extensions });
+    editor.commands.setVideo({ src: source });
+    expect(findNode(editor.getJSON(), "video")?.attrs?.src).toBe(expected);
     editor.destroy();
   });
 
@@ -220,5 +252,37 @@ describe("nothing is lost across a full round trip", () => {
 
   it("keeps an empty paragraph as a paragraph", () => {
     expect(nodeTypes(parse("<p><br></p>"))).toContain("paragraph");
+  });
+});
+
+describe("legacy block formatting and inline content", () => {
+  it.each(["center", "right", "justify"])("preserves %s alignment", (align) => {
+    const html = serialize(`<p class="ql-align-${align}">Aligned</p>`);
+    expect(html).toContain(`text-align: ${align}`);
+  });
+
+  it("preserves paragraph indentation and right-to-left direction", () => {
+    const source = '<p class="ql-indent-2 ql-direction-rtl">مرحبا</p>';
+    const doc = parse(source);
+    expect(findNode(doc, "paragraph")?.attrs).toMatchObject({
+      indent: 2,
+      dir: "rtl",
+    });
+    const html = generateHTML(doc, extensions);
+    expect(html).toContain("padding-inline-start: 6em");
+    expect(html).toContain('dir="rtl"');
+    expect(generateJSON(html, extensions)).toEqual(doc);
+  });
+
+  it("keeps an image between its surrounding text in one paragraph", () => {
+    const doc = parse(
+      '<p>before <img src="data:image/png;base64,AAAA"> after</p>',
+    );
+    expect(doc.content).toHaveLength(1);
+    expect(doc.content?.[0].content?.map((node) => node.type)).toEqual([
+      "text",
+      "image",
+      "text",
+    ]);
   });
 });

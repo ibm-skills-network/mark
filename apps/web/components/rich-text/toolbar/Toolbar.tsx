@@ -3,6 +3,9 @@
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import type { FC } from "react";
+import { CODE_BLOCK_LANGUAGES } from "@/lib/rich-text/lowlight";
+import { insertImageFiles } from "@/lib/rich-text/insert-image-files";
+import { toast } from "sonner";
 
 import type { ToolbarMode } from "@/lib/rich-text/extensions";
 import {
@@ -14,46 +17,30 @@ import {
 import { ColorPopover, UrlPopover } from "./popovers";
 import ToolbarButton from "./ToolbarButton";
 
-/**
- * `shrink-0` and an explicit width because the toolbar is a wrapping flex row:
- * left to itself a native select is squeezed until its own label is clipped.
- *
- * `py-0` is load-bearing. A global form reset puts 8px of vertical padding on
- * `select`, which inside a 28px box leaves 10px of content for a 20px line and
- * crops the label's lower half — visible only at high resolution.
- */
+// Fixed width and zero vertical padding keep the native select legible.
 const SELECT_CLASS =
   "h-7 w-[7.5rem] shrink-0 rounded border border-gray-200 bg-transparent px-2 py-0 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300";
 
-/**
- * The editor's toolbar.
- *
- * Which controls exist, what they do and how they look are all one table in
- * `toolbar-config.ts`. This file only maps the four `kind`s onto components, so
- * adding a control never means editing this file.
- *
- * Every control's pressed and disabled state comes from a single
- * `useEditorState` selector. Reading `editor.isActive(...)` inline instead
- * would re-render the whole row on each keystroke, for each button.
- */
-const Toolbar: FC<{ editor: Editor; mode: ToolbarMode }> = ({
-  editor,
-  mode,
-}) => {
-  const groups = TOOLBAR_GROUPS_BY_MODE[mode];
+const Toolbar: FC<{
+  editor: Editor;
+  mode: ToolbarMode;
+  blockImages?: boolean;
+}> = ({ editor, mode, blockImages = false }) => {
+  const groups = TOOLBAR_GROUPS_BY_MODE[mode].map((group) =>
+    group.filter((id) => id !== "image" || !blockImages),
+  );
   const visible = groups.flat();
+  const language =
+    (editor.getAttributes("codeBlock").language as string | null) ?? "";
+  const languages = [
+    ...new Set([...CODE_BLOCK_LANGUAGES, ...(language ? [language] : [])]),
+  ];
 
-  /**
-   * Re-render the row only when something a control displays actually changes.
-   *
-   * The selector collapses every visible control's state into one string, which
-   * `useEditorState` compares; the controls then read from `editor` directly at
-   * render. Reading inline *without* this would re-render every button on every
-   * keystroke, and holding a typed snapshot object instead only added a cast.
-   */
+  // Subscribe to displayed state rather than every keystroke.
   useEditorState({
     editor,
     selector: ({ editor: current }) =>
+      `${current.isActive("codeBlock")}:${current.getAttributes("codeBlock").language ?? ""}|` +
       visible
         .map((id) => {
           const control = TOOLBAR_CONTROLS[id];
@@ -129,6 +116,15 @@ const Toolbar: FC<{ editor: Editor; mode: ToolbarMode }> = ({
             isActive={control.isActive?.(editor) ?? false}
             initialValue={control.current?.(editor) ?? ""}
             onSubmit={(url) => control.submit(editor, url)}
+            onFile={
+              id === "image"
+                ? (file) => {
+                    void insertImageFiles(editor, [file]).catch(() =>
+                      toast.error("Unable to read image"),
+                    );
+                  }
+                : undefined
+            }
             onRemove={
               control.remove && control.isActive?.(editor)
                 ? () => control.remove?.(editor)
@@ -158,6 +154,29 @@ const Toolbar: FC<{ editor: Editor; mode: ToolbarMode }> = ({
           {group.map((id) => renderControl(id))}
         </div>
       ))}
+      {mode === "full" && editor.isActive("codeBlock") ? (
+        <select
+          aria-label="Code language"
+          className={SELECT_CLASS}
+          value={language}
+          onChange={(event) =>
+            editor
+              .chain()
+              .focus()
+              .updateAttributes("codeBlock", {
+                language: event.target.value || null,
+              })
+              .run()
+          }
+        >
+          <option value="">Plain</option>
+          {languages.map((language) => (
+            <option key={language} value={language}>
+              {language}
+            </option>
+          ))}
+        </select>
+      ) : null}
     </div>
   );
 };

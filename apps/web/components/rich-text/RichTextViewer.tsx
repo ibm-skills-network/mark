@@ -14,21 +14,10 @@ import { prepareStoredHtml } from "@/lib/rich-text/prepare-stored-html";
 import { cn } from "@/lib/strings";
 
 export interface RichTextViewerProps extends ComponentPropsWithoutRef<"div"> {
-  /** When false, the rendered text cannot be selected or copied. */
   allowCopy?: boolean;
 }
 
-/**
- * Read-only renderer for stored rich text.
- *
- * It renders static markup and deliberately does not instantiate an editor. An
- * editor derives its own model from whatever is written into it and drops
- * anything it has no rule for, so a viewer built on one shows strictly less
- * than what was stored. Static markup shows exactly what survived sanitizing.
- *
- * Content goes through `prepareStoredHtml`, which owns the normalize-then-
- * sanitize order.
- */
+// Static rendering avoids dropping content outside the editor schema.
 const RichTextViewer: FC<RichTextViewerProps> = ({
   className,
   children,
@@ -38,17 +27,9 @@ const RichTextViewer: FC<RichTextViewerProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Preparing needs a DOM, so nothing is prepared until mount: the server pass
-  // and the first client paint render empty, and the content is committed on
-  // the client. Rendering the server-side fallback instead would leave a
-  // hydration mismatch React cannot repair for raw HTML.
+  // Wait for the DOM so SSR and hydration both start empty.
   const html = useMemo(
-    () =>
-      isMounted
-        ? prepareStoredHtml(
-            children === null || children === undefined ? "" : String(children),
-          )
-        : "",
+    () => (isMounted ? prepareStoredHtml(String(children ?? "")) : ""),
     [children, isMounted],
   );
 
@@ -72,8 +53,7 @@ const RichTextViewer: FC<RichTextViewerProps> = ({
         continue;
       }
 
-      // highlight.js escapes the source it is given, so its output carries no
-      // markup from the content itself.
+      // highlight.js escapes the source before producing markup.
       block.innerHTML = hljs.highlight(source, {
         language,
         ignoreIllegals: true,

@@ -1,6 +1,4 @@
-/**
- * @jest-environment jsdom
- */
+/** @jest-environment jsdom */
 
 import { normalizeQuillHtml } from "rich-text";
 
@@ -41,8 +39,6 @@ describe("prepareStoredHtml", () => {
     calls.length = 0;
   });
 
-  // The sanitizer's output has to be final: normalizing re-serializes, and
-  // doing that after sanitizing is the round trip mutation XSS relies on.
   it("sanitizes last, on the normalized markup", () => {
     const stored =
       '<ol><li data-list="bullet"><img src=x onerror=alert(1)>Alpha</li></ol>';

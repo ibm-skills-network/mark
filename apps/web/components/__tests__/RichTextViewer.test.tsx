@@ -1,27 +1,15 @@
-/**
- * @jest-environment jsdom
- */
+/** @jest-environment jsdom */
 
 import React from "react";
 import { act, render, waitFor } from "@testing-library/react";
 
 import RichTextViewer from "../rich-text/RichTextViewer";
 
-/**
- * Markup the previous editor produced, which is what the database still holds.
- * It stored every list as `<ol>` and put the real kind on each item, so a
- * bulleted list read literally comes back numbered.
- */
 const INSTRUCTIONS_HTML =
   "<p>Complete the lab before you begin.</p>" +
   '<ol><li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Review your notes.</li>' +
   '<li data-list="bullet"><span class="ql-ui" contenteditable="false"></span>Upload the workbook.</li></ol>';
 
-/**
- * A `data-list` value carrying an unescaped `>`. Sanitizing keeps it — the
- * value is inert once parsed — so anything that rewrites the sanitized string
- * with a regex could terminate the tag early and make the parked markup live.
- */
 const ATTRIBUTE_BREAKOUT_HTML =
   '<li data-list="a><img src=q onerror=alert(document.domain)>b">c</li>';
 
@@ -53,6 +41,24 @@ const contentOf = (container: HTMLElement) =>
   container.querySelector(".rich-text-content");
 
 describe("RichTextViewer", () => {
+  it("preserves legacy indentation, alignment, direction and inline image placement", async () => {
+    const { container } = render(
+      <RichTextViewer>
+        {
+          '<p class="ql-indent-2 ql-align-center ql-direction-rtl">قبل <img src="data:image/png;base64,AAAA"> بعد</p>'
+        }
+      </RichTextViewer>,
+    );
+    await flushEffects();
+    const paragraph = contentOf(container)?.querySelector("p");
+    expect(paragraph?.style.getPropertyValue("padding-inline-start")).toBe(
+      "6em",
+    );
+    expect(paragraph?.style.textAlign).toBe("center");
+    expect(paragraph?.getAttribute("dir")).toBe("rtl");
+    expect(paragraph?.childNodes).toHaveLength(3);
+    expect(container.querySelector(".ProseMirror")).toBeNull();
+  });
   it("renders the content as static markup, without an editor instance", async () => {
     const { container } = render(
       <RichTextViewer>{INSTRUCTIONS_HTML}</RichTextViewer>,
@@ -65,8 +71,7 @@ describe("RichTextViewer", () => {
       "Complete the lab before you begin.",
     );
     expect(content?.querySelectorAll("li")).toHaveLength(2);
-    // A live editor would re-derive its own model from whatever is written
-    // here and drop what it cannot map; static markup cannot.
+
     expect(container.querySelector(".ProseMirror")).toBeNull();
   });
 
@@ -79,7 +84,7 @@ describe("RichTextViewer", () => {
     const content = contentOf(container);
     expect(content?.querySelector("ul")).not.toBeNull();
     expect(content?.querySelector("ol")).toBeNull();
-    // The marker span was editor furniture, not content.
+
     expect(content?.querySelector(".ql-ui")).toBeNull();
   });
 

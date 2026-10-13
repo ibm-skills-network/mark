@@ -1,30 +1,4 @@
 #!/usr/bin/env node
-/**
- * Runs the normalization rules over real stored content and reports what they
- * did to it.
- *
- * Fixtures prove a rule does what its author intended. This proves it against
- * content nobody designed, which is a different question — it is what caught a
- * mixed bullet/number list silently dropping every item after the type switch,
- * and an entire markup shape (`<p class="ql-indent-N">`) that no fixture
- * covered. Run it before trusting any change to the rules.
- *
- * Get the input by dumping marker-bearing rows read-only, from inside a pod so
- * no credentials reach your machine (`-i` is required or stdin is dropped):
- *
- *   POD=$(kubectl --context <ctx> -n mark get pods \
- *     | awk '/^mark-api-[0-9a-f]/{print $1; exit}')
- *   kubectl --context <ctx> -n mark exec -i "$POD" -c mark-api -- \
- *     sh -c 'psql "$DATABASE_URL_DIRECT" -f -' < dump.sql > rows.json
- *
- * where dump.sql selects `json_agg(json_build_object('src',…,'id',…,'html',…))`
- * over the content columns, filtered on the markers below. psql prints a banner
- * before the JSON, so strip everything before the first "[".
- *
- *   node packages/rich-text/scripts/validate-rows.js rows.json
- *
- * Exits non-zero if any row loses text, keeps a marker, or is not idempotent.
- */
 
 const fs = require("fs");
 const path = require("path");
@@ -36,10 +10,8 @@ const { normalizeQuillHtml } = require(
 );
 
 const MARKERS =
-  /data-list|ql-ui|ql-indent|ql-code-block|ql-syntax|ql-cursor|ql-video/;
+  /data-list|ql-ui|ql-indent|ql-align|ql-direction|ql-code-block|ql-syntax|ql-cursor|ql-video/;
 
-// One document reused for every row. Building a JSDOM per row exhausts the heap
-// well before 2k rows.
 const doc = new JSDOM("<!doctype html><html><body></body></html>").window
   .document;
 
@@ -58,11 +30,6 @@ const textOf = (html) => {
     .trim();
 };
 
-/**
- * Whitespace-insensitive comparison. Code blocks legitimately change spacing
- * when per-line divs become newline-separated text, so real loss has to be
- * judged on the characters rather than the layout.
- */
 const dense = (html) => textOf(html).replace(/\s+/g, "");
 
 const input = process.argv[2];
@@ -131,8 +98,6 @@ for (const row of notIdempotent.slice(0, 10)) {
   );
 }
 
-// Warnings are expected, not failures: they record content the rules
-// deliberately could not carry across, such as paragraph indentation.
 const counted = new Map();
 for (const { warning } of warnings) {
   const key = warning.replace(/\d+/g, "N");

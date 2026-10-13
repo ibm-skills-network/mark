@@ -1,4 +1,4 @@
-import type { Rule, RuleContext } from "../types";
+import type { Rule } from "../types";
 
 type ListType = "bullet" | "ordered";
 
@@ -10,18 +10,13 @@ interface FlatItem {
 
 const INDENT_PATTERN = /^ql-indent-(\d+)$/;
 
-/** Quill wrote every list as `<ol>` and put the real kind on each item. */
-function itemType(item: Element, fallback: ListType, context: RuleContext) {
+// Quill encoded list kind on each item inside an <ol>.
+function itemType(item: Element, fallback: ListType) {
   const declared = item.getAttribute("data-list");
   if (declared === "ordered") return "ordered";
   if (declared === "bullet") return "bullet";
   if (declared === "checked" || declared === "unchecked") {
-    // A checklist needs a task-list extension in the editor before it can be
-    // represented. Degrading it to a bullet silently would drop the ticks, so
-    // say so and let the caller decide.
-    context.warnings.push(
-      `checklist item ("data-list=${declared}") converted to a bullet; ticked state is not preserved`,
-    );
+    item.setAttribute("data-checked", String(declared === "checked"));
     return "bullet";
   }
   return fallback;
@@ -37,7 +32,6 @@ function itemLevel(item: Element): number {
   return 0;
 }
 
-/** Strips the markers this rule consumes, leaving the item's content intact. */
 function cleanItem(item: Element): void {
   item.removeAttribute("data-list");
   for (const name of Array.from(item.classList)) {
@@ -50,27 +44,33 @@ function cleanItem(item: Element): void {
   }
 }
 
-function createList(document_: Document, type: ListType): Element {
-  return document_.createElement(type === "bullet" ? "ul" : "ol");
+function createList(
+  document_: Document,
+  type: ListType,
+  level: number,
+  start: number,
+): Element {
+  const list = document_.createElement(type === "bullet" ? "ul" : "ol");
+  if (type === "ordered") {
+    if (start > 1) list.setAttribute("start", String(start));
+    if (level > 0) list.setAttribute("type", ["1", "a", "i"][level % 3]!);
+  }
+  return list;
 }
 
-/**
- * Rebuilds a flat run of items, whose nesting is encoded as an indent level,
- * into genuinely nested lists.
- */
-function buildLists(
-  document_: Document,
-  items: FlatItem[],
-  context: RuleContext,
-): Element[] {
+function buildLists(document_: Document, items: FlatItem[]): Element[] {
   const roots: Element[] = [];
   const stack: { list: Element; type: ListType; level: number }[] = [];
+  const counters = new Map<number, number>();
 
   for (const entry of items) {
-    // An indent deeper than one step past the previous item has no parent to
-    // hang from; clamping keeps the content rather than inventing levels.
-    const deepest = stack.length === 0 ? 0 : stack[stack.length - 1]!.level + 1;
-    const level = Math.min(entry.level, deepest);
+    const level = entry.level;
+    // Continue numbering across bullet runs; reset deeper levels.
+    for (const depth of counters.keys()) {
+      if (depth > level) counters.delete(depth);
+    }
+    const start = (counters.get(level) ?? 0) + 1;
+    if (entry.type === "ordered") counters.set(level, start);
 
     while (stack.length > 0 && stack[stack.length - 1]!.level > level) {
       stack.pop();
@@ -79,12 +79,10 @@ function buildLists(
     const top = stack[stack.length - 1];
 
     if (!top || top.level < level) {
-      const list = createList(document_, entry.type);
+      const list = createList(document_, entry.type, level, start);
       if (!top) {
         roots.push(list);
       } else {
-        // A nested list belongs inside the item it hangs from, after that
-        // item's own content.
         const host = top.list.lastElementChild;
         if (host) {
           host.append(list);
@@ -94,15 +92,11 @@ function buildLists(
       }
       stack.push({ list, type: entry.type, level });
     } else if (top.type !== entry.type) {
-      // Same depth, different kind: Quill can mix both in one `<ol>`, so the
-      // run splits into sibling lists rather than one list of mixed items.
-      const list = createList(document_, entry.type);
+      const list = createList(document_, entry.type, level, start);
       if (top.list.parentNode) {
         top.list.after(list);
       } else {
-        // A list at the outermost level is still detached while it is being
-        // built, so it has no parent to insert a sibling into — it has to join
-        // the roots directly or the whole run after the switch is dropped.
+        // Detached root lists need to join the output explicitly.
         roots.push(list);
       }
       stack.pop();
@@ -110,24 +104,23 @@ function buildLists(
     }
 
     cleanItem(entry.item);
+    // Preserve indentation levels that have no parent item.
+    const parentLevel =
+      stack.length > 1 ? stack[stack.length - 2]!.level + 1 : 0;
+    const extraIndent = Math.max(0, level - parentLevel);
+    if (extraIndent > 0) {
+      entry.item.setAttribute("data-indent", String(extraIndent));
+      (entry.item as HTMLElement).style.setProperty(
+        "padding-inline-start",
+        `${extraIndent * 3}em`,
+      );
+    }
     stack[stack.length - 1]!.list.append(entry.item);
   }
 
   return roots;
 }
 
-/**
- * Converts Quill's list markup into ordinary nested `<ul>`/`<ol>`.
- *
- * Quill stored every list as `<ol>`, marking each item with `data-list` to say
- * whether it should draw as a bullet or a number, and encoding nesting as a
- * `ql-indent-N` class rather than as an actual nested list. Read literally by
- * any other editor, a bulleted list comes back numbered and indentation
- * disappears.
- *
- * A list with no `data-list` on any item is already in the target shape and is
- * left untouched, which is what makes this rule safe to run repeatedly.
- */
 export const normalizeLists: Rule = {
   name: "lists",
   apply(root, context) {
@@ -149,12 +142,12 @@ export const normalizeLists: Rule = {
         list.tagName.toLowerCase() === "ul" ? "bullet" : "ordered";
 
       const flat: FlatItem[] = items.map((item) => ({
-        type: itemType(item, fallback, context),
+        type: itemType(item, fallback),
         level: itemLevel(item),
         item,
       }));
 
-      const rebuilt = buildLists(document_, flat, context);
+      const rebuilt = buildLists(document_, flat);
       list.replaceWith(...rebuilt);
       context.changes += 1;
     }

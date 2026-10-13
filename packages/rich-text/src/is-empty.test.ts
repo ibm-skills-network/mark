@@ -45,11 +45,6 @@ describe("isRichTextEmpty", () => {
     expect(hasRichTextContent(value)).toBe(true);
   });
 
-  /**
-   * An attribute value may legally contain `>`. The pattern must not be
-   * talked into reading the tail of such a value as "nothing", so anything it
-   * cannot account for has to fall through as content.
-   */
   it("does not read an attribute value containing '>' as empty", () => {
     expect(isRichTextEmpty('<p data-note="a><br></p>b"></p>')).toBe(false);
   });

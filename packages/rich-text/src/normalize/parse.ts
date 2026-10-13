@@ -1,14 +1,6 @@
 import type { ParseFragment } from "./types";
 
-/**
- * Fragment parser backed by the browser's own `DOMParser`.
- *
- * The input is parsed as a fragment inside a container `<div>`, which gives
- * every rule one root to walk. It is assigned through `innerHTML` rather than
- * spliced into a document string, so a stray `</div>` in the content cannot
- * close the container and drop everything after it. The owning document comes
- * from `DOMParser`, so it is inert: nothing parsed into it runs or loads.
- */
+// An inert fragment container preserves content after stray closing tags.
 export const browserParseFragment: ParseFragment = (html) => {
   const document_ = new DOMParser().parseFromString("", "text/html");
   const root = document_.createElement("div");

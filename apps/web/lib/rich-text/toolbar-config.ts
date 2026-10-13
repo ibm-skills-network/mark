@@ -47,19 +47,6 @@ export type ToolbarItemId =
   | "video"
   | "clearFormatting";
 
-/**
- * The previous editor's toolbars, control for control and group for group.
- *
- * Kept as data so the two are comparable at a glance. Losing a control here is
- * the kind of regression nobody notices until an author goes looking for a
- * button that used to exist.
- *
- * Previously:
- *   full    = header, bold/italic/underline/strike, blockquote/code-block,
- *             ordered/bullet list, sub/super, indent -1/+1, rtl,
- *             colour/background, align, link/image/video, clean
- *   learner = bold/italic/underline, ordered/bullet list, link, clean
- */
 export const FULL_TOOLBAR_GROUPS: ToolbarItemId[][] = [
   ["heading"],
   ["bold", "italic", "underline", "strike"],
@@ -90,10 +77,6 @@ export const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 
 export const TEXT_ALIGNMENTS = ["left", "center", "right", "justify"] as const;
 
-/**
- * The previous editor's default palette, so an author opens the colour picker
- * and sees the grid they already know.
- */
 export const COLOR_SWATCHES = [
   "#000000",
   "#e60000",
@@ -132,19 +115,6 @@ export const COLOR_SWATCHES = [
   "#3d1466",
 ];
 
-/**
- * Every control, in one table.
- *
- * `kind` says how it is rendered, which is the only thing the toolbar component
- * needs to know — it switches on four shapes rather than on twenty-one ids, so
- * adding a control is one entry here and nothing else. Behaviour and
- * presentation live together on purpose: they were split across three parallel
- * maps keyed by the same ids, and keeping three lists in step by hand is how a
- * button ends up with the wrong icon or the wrong command.
- *
- * Icons are component references, not elements, so this stays a plain `.ts`
- * module with no JSX.
- */
 export type ToolbarControl =
   | {
       kind: "button";
@@ -157,7 +127,7 @@ export type ToolbarControl =
   | {
       kind: "select";
       label: string;
-      /** `value` is what the select shows; `set` applies the chosen option. */
+
       options: readonly { value: string; label: string }[];
       value: (editor: Editor) => string;
       set: (editor: Editor, value: string) => void;
@@ -178,7 +148,7 @@ export type ToolbarControl =
       placeholder: string;
       submitLabel: string;
       isActive?: (editor: Editor) => boolean;
-      /** Prefills the field, so editing a link shows its current target. */
+
       current?: (editor: Editor) => string;
       submit: (editor: Editor, url: string) => void;
       remove?: (editor: Editor) => void;
@@ -187,13 +157,6 @@ export type ToolbarControl =
 
 const chain = (editor: Editor) => editor.chain().focus();
 
-/**
- * The commands that are a plain on/off toggle over a mark or node.
- *
- * Ten of the controls are this exact shape, so they are generated rather than
- * written out. Spelling each one by hand is what lets `underline` quietly call
- * `toggleItalic` — both "toggle something", so no test notices.
- */
 type ToggleCommand =
   | "toggleBold"
   | "toggleItalic"
@@ -242,28 +205,30 @@ export const TOOLBAR_CONTROLS: Record<ToolbarItemId, ToolbarControl> = {
     "toggleSuperscript",
   ),
 
-  /**
-   * Indent and outdent apply only inside a list. The previous editor also
-   * indented bare paragraphs, which this cannot reproduce, so the button is
-   * disabled outside a list rather than doing nothing when pressed. No stored
-   * content relies on it — the 25 paragraphs that did are handled by the shared
-   * normalizer, which drops the indent and reports it.
-   */
   outdent: {
     kind: "button",
     label: "Decrease indent",
     icon: Outdent,
     isActive: () => false,
-    isDisabled: (editor) => !editor.can().liftListItem("listItem"),
-    run: (editor) => chain(editor).liftListItem("listItem").run(),
+    isDisabled: (editor) =>
+      !editor.can().decreaseIndent() && !editor.can().liftListItem("listItem"),
+    run: (editor) => {
+      if (editor.can().decreaseIndent()) chain(editor).decreaseIndent().run();
+      else chain(editor).liftListItem("listItem").run();
+    },
   },
   indent: {
     kind: "button",
     label: "Increase indent",
     icon: Indent,
     isActive: () => false,
-    isDisabled: (editor) => !editor.can().sinkListItem("listItem"),
-    run: (editor) => chain(editor).sinkListItem("listItem").run(),
+    isDisabled: (editor) =>
+      !editor.can().sinkListItem("listItem") && !editor.can().increaseIndent(),
+    run: (editor) => {
+      if (editor.can().sinkListItem("listItem"))
+        chain(editor).sinkListItem("listItem").run();
+      else chain(editor).increaseIndent().run();
+    },
   },
 
   rtl: {
