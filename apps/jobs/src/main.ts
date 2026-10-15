@@ -18,12 +18,15 @@ import { WinstonModule } from "nest-winston";
 import { JobsAppModule } from "./app.module";
 import { winstonOptions } from "./logger.config";
 import { registerProcessSafetyHandlers } from "./process-safety";
+import { validateRedisConnectionConfig } from "./redis.connection";
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(JobsAppModule, {
     logger: WinstonModule.createLogger(winstonOptions),
   });
   const logger = new Logger("JobsBootstrap");
+
+  validateRedisConnectionConfig();
 
   // Last-resort safety net: log escaping async rejections / sync throws and
   // keep the worker alive rather than letting one bad job (e.g. a pdfjs
