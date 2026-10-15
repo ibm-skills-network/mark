@@ -29,6 +29,7 @@ import { AppModule } from "./app.module";
 import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { SerializeDatesInterceptor } from "./common/interceptors/serialize-dates.interceptor";
+import { validateRedisConnectionConfig } from "./job-queue/redis.connection";
 import { winstonOptions } from "./logger/config";
 
 function redactDatabaseUrl(url: string | undefined): string {
@@ -68,6 +69,8 @@ async function bootstrap() {
       cors: false,
       logger: WinstonModule.createLogger(winstonOptions),
     });
+
+    validateRedisConnectionConfig();
 
     const configService = app.get(ConfigService);
 
@@ -287,7 +290,7 @@ async function bootstrap() {
      */
     logger.log("Application bootstrap completed successfully");
     logger.log(
-      `Swagger documentation available at: http://localhost:${port}/api`
+      `Swagger documentation available at: http://localhost:${port}/api`,
     );
     logger.log(`Health check endpoints:`);
     logger.log(`  - http://localhost:${port}/health`);
