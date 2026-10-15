@@ -38,7 +38,13 @@ function authenticate(
         { httpOnly: boolean; sameSite: string; path: string; maxAge: number },
       ]
     >(),
-    clearCookie: jest.fn(),
+    clearCookie: jest.fn<
+      void,
+      [
+        string,
+        { httpOnly: boolean; secure: boolean; sameSite: string; path: string },
+      ]
+    >(),
   };
   const request = {
     headers: { cookie, ...headers },
@@ -286,5 +292,119 @@ describe("learner sessions across author launches", () => {
         "/api/v2/assignments/4941/attempts/17",
       ).result,
     ).rejects.toThrow();
+  });
+});
+
+describe("saved session cookie cleanup", () => {
+  it("cleans both roles when the active cookie is unchanged", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const author = token({ iat: now - 100 });
+    const cookies = [
+      `authentication=${author}`,
+      `mark_author_4892=${author}`,
+      "theme=dark",
+      ...["author", "learner"].flatMap((role) =>
+        Array.from({ length: 5 }, (_, index) => {
+          const assignmentID = 5000 + index;
+          return `mark_${role}_${assignmentID}=${token({
+            role,
+            assignmentID,
+            iat: now - index,
+          })}`;
+        }),
+      ),
+    ];
+    const { result, response } = authenticate(cookies.join("; "), context);
+    await result;
+
+    expect(response.cookie).not.toHaveBeenCalled();
+    expect(
+      response.clearCookie.mock.calls.map(([name]) => name).sort(),
+    ).toEqual(
+      ["mark_author_5003", "mark_author_5004", "mark_learner_5004"].sort(),
+    );
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      "mark_author_5004",
+      expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" }),
+    );
+  });
+
+  it.each([false, true])(
+    "shares the byte budget across roles and protects the active assignment (already saved: %s)",
+    async (alreadySaved) => {
+      const now = Math.floor(Date.now() / 1000);
+      const author = token({ iat: now - 100, padding: "x".repeat(1600) });
+      const saved = [
+        [
+          "mark_learner_5001",
+          token({
+            role: "learner",
+            assignmentID: 5001,
+            iat: now - 1,
+            padding: "x".repeat(1600),
+          }),
+        ],
+        [
+          "mark_author_5002",
+          token({
+            assignmentID: 5002,
+            iat: now - 2,
+            padding: "x".repeat(1600),
+          }),
+        ],
+        [
+          "mark_learner_5003",
+          token({
+            role: "learner",
+            assignmentID: 5003,
+            iat: now - 3,
+            padding: "x".repeat(1600),
+          }),
+        ],
+      ];
+      const cookie = [
+        `authentication=${author}`,
+        ...(alreadySaved ? [`mark_author_4892=${author}`] : []),
+        ...saved.map(([name, value]) => `${name}=${value}`),
+      ].join("; ");
+      const { result, response } = authenticate(cookie, context);
+      await expect(result).resolves.toMatchObject({ assignmentId: 4892 });
+
+      const removed = response.clearCookie.mock.calls.map(([name]) => name);
+      expect(removed.sort()).toEqual(
+        ["mark_author_5002", "mark_learner_5003"].sort(),
+      );
+      const retained = [
+        ["mark_author_4892", author],
+        ...saved.filter(([name]) => !removed.includes(name)),
+      ];
+      const bytes = Buffer.byteLength(
+        retained
+          .map(([name, value]) => `${name}=${encodeURIComponent(value)}; `)
+          .join(""),
+      );
+      expect(bytes).toBeLessThanOrEqual(6 * 1024);
+      expect(response.cookie).toHaveBeenCalledTimes(alreadySaved ? 0 : 1);
+      expect(dedupeAuthenticationCookieHeader(cookie, context)).toBe(
+        `authentication=${author}`,
+      );
+    },
+  );
+
+  it("does not rewrite cookies when saved sessions fit the limits", async () => {
+    const author = token();
+    const cookie = `authentication=${author}; mark_author_4892=${author}; mark_learner_4892=${token({ role: "learner" })}; theme=dark`;
+    const { result, response } = authenticate(cookie, context);
+    await result;
+    expect(response.cookie).not.toHaveBeenCalled();
+    expect(response.clearCookie).not.toHaveBeenCalled();
+  });
+
+  it("does not clean cookies when authentication fails", async () => {
+    const cookie = `authentication=${token({}, "wrong-secret")}; mark_author_5001=${token({ assignmentID: 5001 })}`;
+    const { result, response } = authenticate(cookie, context);
+    await expect(result).rejects.toThrow();
+    expect(response.cookie).not.toHaveBeenCalled();
+    expect(response.clearCookie).not.toHaveBeenCalled();
   });
 });
