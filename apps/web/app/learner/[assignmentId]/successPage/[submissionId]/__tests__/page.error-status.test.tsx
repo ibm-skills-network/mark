@@ -135,7 +135,7 @@ describe("results page — a failed load is reported as what failed", () => {
     ["a gateway failure", 502],
     ["a gateway timeout", 504],
   ])(
-    "shows %s as itself, not as someone else's submission",
+    "shows %s as a temporary problem, not as someone else's submission",
     async (_label, status) => {
       getCompletedAttemptMock.mockRejectedValue(
         new APIError("x", status, "failed"),
@@ -143,10 +143,15 @@ describe("results page — a failed load is reported as what failed", () => {
 
       await renderAndSettle();
 
-      const modal = screen.getByTestId("error-modal");
-      expect(modal).toHaveAttribute("data-status", String(status));
-      expect(modal).not.toHaveTextContent(/belongs to another account/i);
-      expect(modal).not.toHaveTextContent(/no longer exists/i);
+      expect(screen.queryByTestId("error-modal")).toBeNull();
+      expect(
+        screen.getByRole("heading", {
+          name: /having trouble loading your results/i,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(String(status))).toBeInTheDocument();
+      expect(screen.queryByText(/belongs to another account/i)).toBeNull();
+      expect(screen.queryByText(/no longer exists/i)).toBeNull();
     },
   );
 
@@ -158,11 +163,13 @@ describe("results page — a failed load is reported as what failed", () => {
 
     await renderAndSettle();
 
-    const modal = screen.getByTestId("error-modal");
-    expect(modal).toHaveAttribute("data-status", "503");
-    expect(modal.getAttribute("data-headline")).not.toMatch(
-      /another assignment/i,
-    );
+    expect(screen.queryByTestId("error-modal")).toBeNull();
+    expect(
+      screen.getByRole("heading", {
+        name: /having trouble loading your results/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/another assignment/i)).toBeNull();
   });
 
   it("still explains a replaced session when the server refused the read", async () => {

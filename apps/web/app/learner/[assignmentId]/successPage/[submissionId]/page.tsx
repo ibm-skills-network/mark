@@ -25,6 +25,13 @@ import {
   type AttemptViewError,
 } from "@/lib/attempt-error";
 import { statusFromError } from "@/lib/error-screen";
+import {
+  classifyResultsLoadFailure,
+  hasAutomaticRetriesLeft,
+  resultsRetryDelayMs,
+  RESULTS_TROUBLE_COPY,
+  type RetryableResultsFailure,
+} from "@/lib/results-load-retry";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import { Rating, RoundedStar } from "@smastrom/react-rating";
@@ -34,7 +41,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Image, { StaticImageData } from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   buildStyles,
   CircularProgressbarWithChildren,
@@ -44,7 +51,9 @@ import "@smastrom/react-rating/style.css";
 
 import Button from "@/components/Button";
 import ConnectionProblem from "@/components/ConnectionProblem";
-import { isNetworkError, type NetworkFailureKind } from "@/lib/api-client";
+import ErrorPage from "@/components/ErrorPage";
+import { isNetworkError } from "@/lib/api-client";
+import { recordClientError } from "@/lib/request-log";
 import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
@@ -126,10 +135,15 @@ function SuccessPage() {
   const [userId, setUserId] = useState<string>(null);
   const [lmsHost, setLmsHost] = useState<string>();
   const [errorConfig, setErrorConfig] = useState<AttemptViewError | null>(null);
-  // Set only when the request produced no HTTP response at all, which is a
-  // different screen from any status the server could return.
-  const [connectionFailure, setConnectionFailure] =
-    useState<NetworkFailureKind | null>(null);
+  // Set when the results could not be loaded for a reason that is likely to
+  // clear on its own (no response, a timeout, a 5xx). These are retried rather
+  // than reported as a missing attempt or a session problem.
+  const [retryableFailure, setRetryableFailure] =
+    useState<RetryableResultsFailure | null>(null);
+  // Bumped to re-run the load effect for a retry.
+  const [loadGeneration, setLoadGeneration] = useState(0);
+  const [autoRetryCount, setAutoRetryCount] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const [stateTimeline, setStateTimeline] = useState<
     { step: string; detail?: string; timestamp?: string }[]
   >([]);
@@ -143,19 +157,63 @@ function SuccessPage() {
     ]);
   };
 
+  const retryLoad = useCallback((trigger: "auto" | "manual") => {
+    logState("Retrying results load", trigger);
+    setRetrying(true);
+    setLoadGeneration((generation) => generation + 1);
+  }, []);
+
   useEffect(() => {
     logState(
       "Start loading success page",
       `Assignment ${assignmentId}, attempt ${attemptId}`,
     );
+    const showRetryableFailure = (
+      step: string,
+      failure: RetryableResultsFailure,
+      error: unknown,
+    ) => {
+      logState(
+        step,
+        failure.kind === "network"
+          ? `No response (${failure.networkKind}), will retry`
+          : `Status ${failure.status}, will retry`,
+      );
+      // The web app has no structured logger: the console reaches browser
+      // monitoring, and the client error log travels with a bug report. The
+      // api client already records failures that produced no response.
+      console.warn(
+        `Results load failed for assignment ${assignmentId}, attempt ${attemptId}; retryable:`,
+        error,
+      );
+      if (failure.kind === "http") {
+        recordClientError(error, { where: "results-load" });
+      }
+      setErrorConfig(null);
+      setRetryableFailure(failure);
+      setRetrying(false);
+      setLoading(false);
+    };
     const fetchData = async () => {
       let user: Awaited<ReturnType<typeof getUser>>;
       try {
         user = await getUser();
       } catch (error) {
         if (cancelled) return;
+        // The user lookup throws a bare Error for every non-401 response and
+        // a raw TypeError for a dropped connection, so anything other than a
+        // status it did carry is treated as a temporary failure.
+        const userFailure = classifyResultsLoadFailure(error, {
+          untypedFailuresAreRetryable: true,
+        });
+        if (userFailure) {
+          showRetryableFailure("User fetch failed", userFailure, error);
+          return;
+        }
         const status = statusFromError(error);
         logState("User fetch failed", `Status ${status}`);
+        setRetryableFailure(null);
+        setRetrying(false);
         setErrorConfig(
           resolveAttemptViewError({ status, routeAssignmentId: assignmentId }),
         );
@@ -182,17 +240,22 @@ function SuccessPage() {
             );
           } catch (error) {
             if (cancelled) return;
-            // A request that produced no response has no status to report and
-            // nothing failed on our side, so it gets the connection screen
-            // rather than being dressed up as a missing attempt.
-            if (isNetworkError(error)) {
-              logState("Attempt fetch failed", `No response (${error.kind})`);
-              setConnectionFailure(error.kind);
-              setLoading(false);
+            // No response, a timeout (the /api proxy answers 500 after 30s),
+            // or a server fault says nothing about the attempt itself: retry
+            // it rather than dressing it up as a missing attempt.
+            const attemptFailure = classifyResultsLoadFailure(error);
+            if (attemptFailure) {
+              showRetryableFailure(
+                "Attempt fetch failed",
+                attemptFailure,
+                error,
+              );
               return;
             }
             const status = statusFromError(error);
             logState("Attempt fetch failed", `Status ${status}`);
+            setRetryableFailure(null);
+            setRetrying(false);
             setErrorConfig(
               resolveAttemptViewError({
                 status,
@@ -205,6 +268,12 @@ function SuccessPage() {
             return;
           }
           if (cancelled) return;
+          // The read answered, so leave the trouble screen. On a retry the
+          // page has already left its initial loading state; restore it until
+          // the rest of the load settles.
+          setRetryableFailure(null);
+          setRetrying(false);
+          setLoading(true);
           if (!submissionDetails) {
             logState("Attempt fetch failed", "Attempt not found");
             const viewError = resolveAttemptViewError({
@@ -320,6 +389,8 @@ function SuccessPage() {
           submissionDetails = undefined;
         }
         if (cancelled) return;
+        setRetryableFailure(null);
+        setRetrying(false);
 
         if (submissionDetails) {
           setQuestions(submissionDetails.questions);
@@ -392,6 +463,8 @@ function SuccessPage() {
         setLoading(false);
       } else {
         logState("Unknown role", user.role);
+        setRetryableFailure(null);
+        setRetrying(false);
         setLoading(false);
       }
     };
@@ -412,7 +485,24 @@ function SuccessPage() {
     zustandTotalPointsEarned,
     zustandTotalPoints,
     zustandAssignmentDetails,
+    loadGeneration,
   ]);
+
+  // Automatic retries with backoff while a retryable failure is on screen.
+  // A retry in flight, or one the learner started, cancels the pending timer.
+  useEffect(() => {
+    if (!retryableFailure || retrying) return;
+    const delayMs = resultsRetryDelayMs(autoRetryCount);
+    if (delayMs === null) {
+      logState("Automatic retries exhausted", `${autoRetryCount} retries`);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setAutoRetryCount((count) => count + 1);
+      retryLoad("auto");
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [retryableFailure, retrying, autoRetryCount, retryLoad]);
 
   useEffect(() => {
     setPlayAnimations(true);
@@ -546,8 +636,42 @@ function SuccessPage() {
     },
   };
 
-  if (connectionFailure) {
-    return <ConnectionProblem kind={connectionFailure} />;
+  if (retryableFailure) {
+    const retryStatus = retrying
+      ? RESULTS_TROUBLE_COPY.retryingNow
+      : hasAutomaticRetriesLeft(autoRetryCount)
+        ? RESULTS_TROUBLE_COPY.retryingAutomatically
+        : RESULTS_TROUBLE_COPY.retriesExhausted;
+    // A retry already in flight is not restarted by another click.
+    const onManualRetry = () => {
+      if (!retrying) retryLoad("manual");
+    };
+    // A request that produced no response keeps the connection screen, whose
+    // advice depends on how the connection failed; it now retries in place.
+    if (retryableFailure.kind === "network") {
+      return (
+        <ConnectionProblem
+          kind={retryableFailure.networkKind}
+          onRetry={onManualRetry}
+          context={retryStatus}
+        />
+      );
+    }
+    return (
+      <ErrorPage
+        statusCode={retryableFailure.status}
+        headline={RESULTS_TROUBLE_COPY.headline}
+        error={RESULTS_TROUBLE_COPY.message}
+        context={retryStatus}
+        userSteps={[...RESULTS_TROUBLE_COPY.steps]}
+        onRetry={onManualRetry}
+        debugDetails={[
+          { label: "AssignmentId", value: String(assignmentId) },
+          { label: "AttemptId", value: String(attemptId) },
+        ]}
+        stateTimeline={stateTimeline}
+      />
+    );
   }
 
   if (errorConfig) {

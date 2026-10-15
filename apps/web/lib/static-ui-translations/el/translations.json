@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Οι λειτουργίες εξοικονόμησης δεδομένων και ορισμένα προγράμματα περιήγησης, όπως το Opera Mini, μπορεί να χαλάσουν τη σελίδα. Απενεργοποιήστε τη λειτουργία ή ανοίξτε την εργασία σε άλλο πρόγραμμα περιήγησης.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Οι εικόνες δεν μπορούν να βαθμολογηθούν σε απάντηση κειμένου. Επικολλήστε αντί γι' αυτό την έξοδο ως κείμενο ή περιγράψτε την με λόγια.",
   "Your grade is on its way to yourLearning": "Ο βαθμός σας είναι καθ' οδόν προς το yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Ο συγχρονισμός του βαθμού σας με το yourLearning μπορεί να διαρκέσει μερικές ώρες, γι' αυτό σας παρακαλούμε να είστε υπομονετικοί. Ο βαθμός σας έχει καταγραφεί με ασφάλεια σε εμάς και δεν χρειάζεται να κάνετε τίποτα. Μπορείτε να κλείσετε αυτό το παράθυρο."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Ο συγχρονισμός του βαθμού σας με το yourLearning μπορεί να διαρκέσει μερικές ώρες, γι' αυτό σας παρακαλούμε να είστε υπομονετικοί. Ο βαθμός σας έχει καταγραφεί με ασφάλεια σε εμάς και δεν χρειάζεται να κάνετε τίποτα. Μπορείτε να κλείσετε αυτό το παράθυρο.",
+  "We're having trouble loading your results": "Αντιμετωπίζουμε πρόβλημα με τη φόρτωση των αποτελεσμάτων σας",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Η υποβολή σας έχει αποθηκευτεί και ο βαθμός σας είναι ασφαλής. Οι διακομιστές μας αποκρίνονται αργά αυτή τη στιγμή, γι' αυτό τα αποτελέσματά σας δεν φορτώθηκαν.",
+  "Trying again automatically…": "Αυτόματη νέα προσπάθεια…",
+  "Loading your results again…": "Γίνεται ξανά φόρτωση των αποτελεσμάτων σας…",
+  "Your results still did not load. Use Try again in a moment.": "Τα αποτελέσματά σας εξακολουθούν να μην φορτώνονται. Χρησιμοποιήστε το «Δοκιμάστε ξανά» σε λίγο.",
+  "Wait a moment": "Περιμένετε λίγο",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Αυτή η σελίδα δοκιμάζει ξανά μόνη της μερικές φορές. Οι περισσότερες καθυστερήσεις λύνονται μέσα σε ένα λεπτό.",
+  "Load your results again whenever you are ready.": "Φορτώστε ξανά τα αποτελέσματά σας όποτε είστε έτοιμοι.",
+  "Nothing is lost": "Δεν χάνεται τίποτα",
+  "Your submission and grade were saved before this page started loading.": "Η υποβολή και ο βαθμός σας αποθηκεύτηκαν πριν αρχίσει να φορτώνεται αυτή η σελίδα."
 }

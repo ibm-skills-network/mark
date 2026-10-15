@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "โหมดประหยัดข้อมูลและเบราว์เซอร์บางตัว เช่น Opera Mini อาจทำให้หน้าเว็บเสียหาย ให้ปิดโหมดนี้หรือเปิดงานที่มอบหมายในเบราว์เซอร์อื่น",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "ไม่สามารถให้คะแนนรูปภาพในคำตอบแบบข้อความได้ โปรดวางผลลัพธ์เป็นข้อความแทน หรืออธิบายเป็นคำพูด",
   "Your grade is on its way to yourLearning": "คะแนนของคุณกำลังส่งไปยัง yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "การซิงค์คะแนนของคุณไปยัง yourLearning อาจใช้เวลาสองสามชั่วโมง โปรดอดทนรอ คะแนนของคุณได้รับการบันทึกไว้กับเราอย่างปลอดภัยแล้ว และคุณไม่ต้องทำอะไรเพิ่มเติม คุณสามารถปิดหน้าต่างนี้ได้"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "การซิงค์คะแนนของคุณไปยัง yourLearning อาจใช้เวลาสองสามชั่วโมง โปรดอดทนรอ คะแนนของคุณได้รับการบันทึกไว้กับเราอย่างปลอดภัยแล้ว และคุณไม่ต้องทำอะไรเพิ่มเติม คุณสามารถปิดหน้าต่างนี้ได้",
+  "We're having trouble loading your results": "เรากำลังมีปัญหาในการโหลดผลลัพธ์ของคุณ",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "งานที่ส่งของคุณถูกบันทึกแล้วและคะแนนของคุณปลอดภัย ขณะนี้เซิร์ฟเวอร์ของเราตอบสนองช้า ผลลัพธ์ของคุณจึงไม่ถูกโหลด",
+  "Trying again automatically…": "กำลังลองใหม่โดยอัตโนมัติ…",
+  "Loading your results again…": "กำลังโหลดผลลัพธ์ของคุณอีกครั้ง…",
+  "Your results still did not load. Use Try again in a moment.": "ผลลัพธ์ของคุณยังไม่ถูกโหลด โปรดใช้ ลองอีกครั้ง ในอีกสักครู่",
+  "Wait a moment": "รอสักครู่",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "หน้านี้จะลองใหม่เองสองสามครั้ง ความล่าช้าส่วนใหญ่จะหายไปภายในหนึ่งนาที",
+  "Load your results again whenever you are ready.": "โหลดผลลัพธ์ของคุณอีกครั้งเมื่อคุณพร้อม",
+  "Nothing is lost": "ไม่มีอะไรสูญหาย",
+  "Your submission and grade were saved before this page started loading.": "งานที่ส่งและคะแนนของคุณถูกบันทึกไว้ก่อนที่หน้านี้จะเริ่มโหลด"
 }

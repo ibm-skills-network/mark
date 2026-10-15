@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "डेटा-सेविंग मोड और कुछ ब्राउज़र, जैसे Opera Mini, पेज को खराब कर सकते हैं। इस मोड को बंद करें या असाइनमेंट को किसी दूसरे ब्राउज़र में खोलें।",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "टेक्स्ट उत्तर में छवियों का मूल्यांकन नहीं किया जा सकता। इसके बजाय टेक्स्ट आउटपुट पेस्ट करें, या उसे शब्दों में बताएं।",
   "Your grade is on its way to yourLearning": "आपका ग्रेड yourLearning पर भेजा जा रहा है",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "आपके ग्रेड को yourLearning के साथ सिंक होने में कुछ घंटे लग सकते हैं, इसलिए कृपया धैर्य रखें। आपका ग्रेड हमारे पास सुरक्षित रूप से दर्ज है और आपको कुछ भी करने की आवश्यकता नहीं है। आप यह विंडो बंद कर सकते हैं।"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "आपके ग्रेड को yourLearning के साथ सिंक होने में कुछ घंटे लग सकते हैं, इसलिए कृपया धैर्य रखें। आपका ग्रेड हमारे पास सुरक्षित रूप से दर्ज है और आपको कुछ भी करने की आवश्यकता नहीं है। आप यह विंडो बंद कर सकते हैं।",
+  "We're having trouble loading your results": "हमें आपके परिणाम लोड करने में समस्या हो रही है",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "आपका सबमिशन सहेजा गया है और आपका ग्रेड सुरक्षित है। हमारे सर्वर अभी धीरे जवाब दे रहे हैं, इसलिए आपके परिणाम लोड नहीं हुए।",
+  "Trying again automatically…": "स्वचालित रूप से फिर से प्रयास किया जा रहा है…",
+  "Loading your results again…": "आपके परिणाम फिर से लोड किए जा रहे हैं…",
+  "Your results still did not load. Use Try again in a moment.": "आपके परिणाम अभी भी लोड नहीं हुए। थोड़ी देर में फिर से प्रयास करें का उपयोग करें।",
+  "Wait a moment": "थोड़ा इंतज़ार करें",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "यह पेज अपने आप कुछ बार फिर से प्रयास करता है। अधिकांश देरी एक मिनट के भीतर ठीक हो जाती है।",
+  "Load your results again whenever you are ready.": "जब भी आप तैयार हों, अपने परिणाम फिर से लोड करें।",
+  "Nothing is lost": "कुछ भी नहीं खोया है",
+  "Your submission and grade were saved before this page started loading.": "इस पेज के लोड होना शुरू होने से पहले ही आपका सबमिशन और ग्रेड सहेज लिया गया था।"
 }

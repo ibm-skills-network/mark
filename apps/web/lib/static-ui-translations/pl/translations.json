@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Tryby oszczędzania danych i niektóre przeglądarki, takie jak Opera Mini, mogą psuć stronę. Wyłącz ten tryb lub otwórz zadanie w innej przeglądarce.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Obrazów w odpowiedzi tekstowej nie można ocenić. Zamiast tego wklej wynik jako tekst lub opisz go słowami.",
   "Your grade is on its way to yourLearning": "Twoja ocena jest w drodze do yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Synchronizacja oceny z yourLearning może potrwać kilka godzin, prosimy o cierpliwość. Twoja ocena jest u nas bezpiecznie zapisana i nie musisz nic robić. Możesz zamknąć to okno."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Synchronizacja oceny z yourLearning może potrwać kilka godzin, prosimy o cierpliwość. Twoja ocena jest u nas bezpiecznie zapisana i nie musisz nic robić. Możesz zamknąć to okno.",
+  "We're having trouble loading your results": "Mamy problem z wczytaniem Twoich wyników",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Twoje zgłoszenie zostało zapisane, a ocena jest bezpieczna. Nasze serwery odpowiadają teraz wolno, dlatego wyniki się nie wczytały.",
+  "Trying again automatically…": "Automatyczna ponowna próba…",
+  "Loading your results again…": "Ponowne wczytywanie wyników…",
+  "Your results still did not load. Use Try again in a moment.": "Wyniki nadal się nie wczytały. Za chwilę użyj opcji Spróbuj ponownie.",
+  "Wait a moment": "Poczekaj chwilę",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Ta strona sama ponawia próbę kilka razy. Większość opóźnień ustępuje w ciągu minuty.",
+  "Load your results again whenever you are ready.": "Wczytaj wyniki ponownie, kiedy będziesz gotowy.",
+  "Nothing is lost": "Nic nie zostało utracone",
+  "Your submission and grade were saved before this page started loading.": "Twoje zgłoszenie i ocena zostały zapisane, zanim ta strona zaczęła się wczytywać."
 }

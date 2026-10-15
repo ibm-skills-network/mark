@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "데이터 절약 모드와 Opera Mini 같은 일부 브라우저는 페이지를 손상시킬 수 있습니다. 해당 모드를 끄거나 다른 브라우저에서 과제를 여세요.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "텍스트 답변의 이미지는 채점할 수 없습니다. 대신 출력 내용을 텍스트로 붙여 넣거나 말로 설명해 주세요.",
   "Your grade is on its way to yourLearning": "성적이 yourLearning으로 전송되는 중입니다",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning에 성적이 동기화되기까지 몇 시간이 걸릴 수 있으니 조금만 기다려 주세요. 성적은 안전하게 기록되었으며 따로 하실 일은 없습니다. 이 창을 닫으셔도 됩니다."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning에 성적이 동기화되기까지 몇 시간이 걸릴 수 있으니 조금만 기다려 주세요. 성적은 안전하게 기록되었으며 따로 하실 일은 없습니다. 이 창을 닫으셔도 됩니다.",
+  "We're having trouble loading your results": "결과를 불러오는 데 문제가 있습니다",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "제출물은 저장되었고 성적도 안전합니다. 지금 서버 응답이 느려 결과를 불러오지 못했습니다.",
+  "Trying again automatically…": "자동으로 다시 시도하는 중…",
+  "Loading your results again…": "결과를 다시 불러오는 중…",
+  "Your results still did not load. Use Try again in a moment.": "결과가 아직 불러와지지 않았습니다. 잠시 후 다시 시도를 사용하세요.",
+  "Wait a moment": "잠시 기다려 주세요",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "이 페이지는 자동으로 몇 번 다시 시도합니다. 대부분의 지연은 1분 이내에 해결됩니다.",
+  "Load your results again whenever you are ready.": "준비되면 언제든지 결과를 다시 불러오세요.",
+  "Nothing is lost": "잃어버린 것은 없습니다",
+  "Your submission and grade were saved before this page started loading.": "이 페이지가 로드되기 전에 제출물과 성적이 저장되었습니다."
 }

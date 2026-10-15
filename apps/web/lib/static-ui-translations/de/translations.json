@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datensparmodi und einige Browser wie Opera Mini können die Seite beschädigen. Schalte den Modus aus oder öffne die Aufgabe in einem anderen Browser.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Bilder können in einer Textantwort nicht bewertet werden. Füge stattdessen die Textausgabe ein oder beschreibe sie in Worten.",
   "Your grade is on its way to yourLearning": "Ihre Note ist auf dem Weg zu yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Die Synchronisierung Ihrer Note mit yourLearning kann einige Stunden dauern. Bitte haben Sie etwas Geduld. Ihre Note ist bei uns sicher gespeichert und Sie müssen nichts weiter tun. Sie können dieses Fenster schließen."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Die Synchronisierung Ihrer Note mit yourLearning kann einige Stunden dauern. Bitte haben Sie etwas Geduld. Ihre Note ist bei uns sicher gespeichert und Sie müssen nichts weiter tun. Sie können dieses Fenster schließen.",
+  "We're having trouble loading your results": "Wir haben Probleme, deine Ergebnisse zu laden",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Deine Abgabe ist gespeichert und deine Note ist sicher. Unsere Server antworten gerade langsam, deshalb wurden deine Ergebnisse nicht geladen.",
+  "Trying again automatically…": "Automatischer neuer Versuch…",
+  "Loading your results again…": "Deine Ergebnisse werden erneut geladen…",
+  "Your results still did not load. Use Try again in a moment.": "Deine Ergebnisse wurden noch immer nicht geladen. Verwende gleich „Erneut versuchen“.",
+  "Wait a moment": "Einen Moment warten",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Diese Seite versucht es einige Male von selbst erneut. Die meisten Verzögerungen sind innerhalb einer Minute behoben.",
+  "Load your results again whenever you are ready.": "Lade deine Ergebnisse erneut, wann immer du bereit bist.",
+  "Nothing is lost": "Nichts geht verloren",
+  "Your submission and grade were saved before this page started loading.": "Deine Abgabe und deine Note wurden gespeichert, bevor diese Seite zu laden begann."
 }

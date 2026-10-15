@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datasparlägen och vissa webbläsare, som Opera Mini, kan förstöra sidan. Stäng av läget eller öppna uppgiften i en annan webbläsare.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Bilder kan inte bedömas i ett textsvar. Klistra in utdata som text i stället, eller beskriv det med ord.",
   "Your grade is on its way to yourLearning": "Ditt betyg är på väg till yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Det kan ta några timmar att synkronisera ditt betyg till yourLearning, så ha tålamod. Ditt betyg är säkert registrerat hos oss och du behöver inte göra något. Du kan stänga det här fönstret."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Det kan ta några timmar att synkronisera ditt betyg till yourLearning, så ha tålamod. Ditt betyg är säkert registrerat hos oss och du behöver inte göra något. Du kan stänga det här fönstret.",
+  "We're having trouble loading your results": "Vi har problem med att läsa in dina resultat",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Din inlämning är sparad och ditt betyg är säkert. Våra servrar svarar långsamt just nu, så dina resultat lästes inte in.",
+  "Trying again automatically…": "Försöker igen automatiskt…",
+  "Loading your results again…": "Läser in dina resultat igen…",
+  "Your results still did not load. Use Try again in a moment.": "Dina resultat har fortfarande inte lästs in. Använd Försök igen om en stund.",
+  "Wait a moment": "Vänta en stund",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Den här sidan försöker igen av sig själv några gånger. De flesta fördröjningar går över inom en minut.",
+  "Load your results again whenever you are ready.": "Läs in dina resultat igen när du är redo.",
+  "Nothing is lost": "Inget går förlorat",
+  "Your submission and grade were saved before this page started loading.": "Din inlämning och ditt betyg sparades innan den här sidan började läsas in."
 }

@@ -111,10 +111,13 @@ export default function ConnectionProblem({
   kind,
   variant,
   onRetry = reloadPage,
+  context,
 }: {
   kind: NetworkFailureKind;
   variant?: "page" | "modal";
   onRetry?: () => void;
+  /** Extra status line, e.g. that the page is retrying by itself. */
+  context?: string;
 }) {
   const copy = COPY[kind];
 
@@ -128,6 +131,7 @@ export default function ConnectionProblem({
       userSteps={copy.steps}
       onRetry={onRetry}
       variant={variant}
+      context={context}
     />
   );
 }

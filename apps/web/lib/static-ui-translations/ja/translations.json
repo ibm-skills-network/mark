@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "データ節約モードや Opera Mini などの一部のブラウザでは、ページが正しく表示されないことがあります。このモードをオフにするか、別のブラウザで課題を開いてください。",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "テキスト回答に含まれる画像は採点できません。代わりに出力をテキストとして貼り付けるか、言葉で説明してください。",
   "Your grade is on its way to yourLearning": "成績を yourLearning に送信しています",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning への成績の同期には数時間かかる場合がありますので、しばらくお待ちください。成績は当方で安全に記録されており、お客様が行う操作はありません。このウィンドウは閉じてかまいません。"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning への成績の同期には数時間かかる場合がありますので、しばらくお待ちください。成績は当方で安全に記録されており、お客様が行う操作はありません。このウィンドウは閉じてかまいません。",
+  "We're having trouble loading your results": "結果の読み込みに問題が発生しています",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "提出物は保存されており、成績も安全です。現在サーバーの応答が遅いため、結果を読み込めませんでした。",
+  "Trying again automatically…": "自動的に再試行しています…",
+  "Loading your results again…": "結果を再読み込みしています…",
+  "Your results still did not load. Use Try again in a moment.": "結果はまだ読み込まれていません。しばらくしてから「再試行」を使用してください。",
+  "Wait a moment": "少しお待ちください",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "このページは自動的に数回再試行します。ほとんどの遅延は1分以内に解消されます。",
+  "Load your results again whenever you are ready.": "準備ができたらいつでも結果を再読み込みしてください。",
+  "Nothing is lost": "何も失われていません",
+  "Your submission and grade were saved before this page started loading.": "提出物と成績は、このページの読み込みが始まる前に保存されています。"
 }

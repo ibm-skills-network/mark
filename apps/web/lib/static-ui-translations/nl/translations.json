@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Databesparingsmodi en sommige browsers, zoals Opera Mini, kunnen de pagina beschadigen. Zet de modus uit of open de opdracht in een andere browser.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Afbeeldingen kunnen in een tekstantwoord niet worden beoordeeld. Plak in plaats daarvan de uitvoer als tekst, of beschrijf deze in woorden.",
   "Your grade is on its way to yourLearning": "Je cijfer is onderweg naar yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Het synchroniseren van je cijfer met yourLearning kan een paar uur duren, dus even geduld alsjeblieft. Je cijfer is veilig bij ons vastgelegd en je hoeft niets te doen. Je kunt dit venster sluiten."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Het synchroniseren van je cijfer met yourLearning kan een paar uur duren, dus even geduld alsjeblieft. Je cijfer is veilig bij ons vastgelegd en je hoeft niets te doen. Je kunt dit venster sluiten.",
+  "We're having trouble loading your results": "We hebben problemen met het laden van je resultaten",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Je inzending is opgeslagen en je cijfer is veilig. Onze servers reageren momenteel traag, daarom zijn je resultaten niet geladen.",
+  "Trying again automatically…": "Automatisch opnieuw proberen…",
+  "Loading your results again…": "Je resultaten worden opnieuw geladen…",
+  "Your results still did not load. Use Try again in a moment.": "Je resultaten zijn nog steeds niet geladen. Gebruik over een moment Probeer het opnieuw.",
+  "Wait a moment": "Wacht even",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Deze pagina probeert het zelf een paar keer opnieuw. De meeste vertragingen zijn binnen een minuut verholpen.",
+  "Load your results again whenever you are ready.": "Laad je resultaten opnieuw wanneer je er klaar voor bent.",
+  "Nothing is lost": "Er gaat niets verloren",
+  "Your submission and grade were saved before this page started loading.": "Je inzending en cijfer zijn opgeslagen voordat deze pagina begon te laden."
 }

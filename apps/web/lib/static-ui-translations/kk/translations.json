@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Деректерді үнемдеу режимдері және Opera Mini сияқты кейбір браузерлер бетті бұзуы мүмкін. Бұл режимді өшіріңіз немесе тапсырманы басқа браузерде ашыңыз.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Мәтіндік жауаптағы суреттер бағаланбайды. Оның орнына шығысты мәтін ретінде қойыңыз немесе оны сөзбен сипаттаңыз.",
   "Your grade is on its way to yourLearning": "Бағаңыз yourLearning жүйесіне жіберілуде",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Бағаңызды yourLearning жүйесімен синхрондау бірнеше сағатқа созылуы мүмкін, сондықтан шыдамдылық танытыңыз. Бағаңыз бізде қауіпсіз сақталған және сізге ештеңе істеудің қажеті жоқ. Бұл терезені жаба аласыз."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Бағаңызды yourLearning жүйесімен синхрондау бірнеше сағатқа созылуы мүмкін, сондықтан шыдамдылық танытыңыз. Бағаңыз бізде қауіпсіз сақталған және сізге ештеңе істеудің қажеті жоқ. Бұл терезені жаба аласыз.",
+  "We're having trouble loading your results": "Нәтижелеріңізді жүктеуде қиындық туындап тұр",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Жіберіліміңіз сақталды және бағаңыз қауіпсіз. Серверлеріміз қазір баяу жауап беріп жатыр, сондықтан нәтижелеріңіз жүктелмеді.",
+  "Trying again automatically…": "Автоматты түрде қайта әрекет жасалуда…",
+  "Loading your results again…": "Нәтижелеріңіз қайта жүктелуде…",
+  "Your results still did not load. Use Try again in a moment.": "Нәтижелеріңіз әлі жүктелмеді. Біраздан кейін «Қайталап көріңіз» батырмасын пайдаланыңыз.",
+  "Wait a moment": "Сәл күтіңіз",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Бұл бет бірнеше рет өздігінен қайта әрекет жасайды. Кідірістердің көбі бір минут ішінде жойылады.",
+  "Load your results again whenever you are ready.": "Дайын болған кезде нәтижелеріңізді қайта жүктеңіз.",
+  "Nothing is lost": "Ештеңе жоғалған жоқ",
+  "Your submission and grade were saved before this page started loading.": "Жіберіліміңіз бен бағаңыз осы бет жүктеле бастағанға дейін сақталған."
 }

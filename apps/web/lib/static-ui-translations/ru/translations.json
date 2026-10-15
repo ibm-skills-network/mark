@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Режимы экономии трафика и некоторые браузеры, например Opera Mini, могут нарушать работу страницы. Отключите этот режим или откройте задание в другом браузере.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Изображения в текстовом ответе не оцениваются. Вставьте вывод в виде текста или опишите его словами.",
   "Your grade is on its way to yourLearning": "Ваша оценка передаётся в yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Синхронизация вашей оценки с yourLearning может занять несколько часов, поэтому, пожалуйста, наберитесь терпения. Ваша оценка надёжно сохранена у нас, и вам ничего не нужно делать. Это окно можно закрыть."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Синхронизация вашей оценки с yourLearning может занять несколько часов, поэтому, пожалуйста, наберитесь терпения. Ваша оценка надёжно сохранена у нас, и вам ничего не нужно делать. Это окно можно закрыть.",
+  "We're having trouble loading your results": "Не удаётся загрузить ваши результаты",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Ваша работа сохранена, и ваша оценка в безопасности. Наши серверы сейчас медленно отвечают, поэтому результаты не загрузились.",
+  "Trying again automatically…": "Автоматическая повторная попытка…",
+  "Loading your results again…": "Повторная загрузка результатов…",
+  "Your results still did not load. Use Try again in a moment.": "Результаты всё ещё не загрузились. Чуть позже нажмите «Повторить попытку».",
+  "Wait a moment": "Подождите немного",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Эта страница сама повторяет попытку несколько раз. Большинство задержек проходит в течение минуты.",
+  "Load your results again whenever you are ready.": "Загрузите результаты снова, когда будете готовы.",
+  "Nothing is lost": "Ничего не потеряно",
+  "Your submission and grade were saved before this page started loading.": "Ваша работа и оценка были сохранены до того, как эта страница начала загружаться."
 }

@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "قد تؤدي أوضاع توفير البيانات وبعض المتصفحات، مثل Opera Mini، إلى تعطّل الصفحة. أوقف هذا الوضع أو افتح الواجب في متصفح آخر.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "لا يمكن تقييم الصور في الإجابة النصية. الصق المخرجات النصية بدلاً من ذلك، أو صِفها بالكلمات.",
   "Your grade is on its way to yourLearning": "درجتك في طريقها إلى yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "قد تستغرق مزامنة درجتك مع yourLearning بضع ساعات، لذا يُرجى التحلي بالصبر. درجتك مسجلة لدينا بأمان ولا يلزمك فعل أي شيء. يمكنك إغلاق هذه النافذة."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "قد تستغرق مزامنة درجتك مع yourLearning بضع ساعات، لذا يُرجى التحلي بالصبر. درجتك مسجلة لدينا بأمان ولا يلزمك فعل أي شيء. يمكنك إغلاق هذه النافذة.",
+  "We're having trouble loading your results": "نواجه مشكلة في تحميل نتائجك",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "تم حفظ إرسالك ودرجتك آمنة. خوادمنا بطيئة في الاستجابة حاليًا، لذلك لم يتم تحميل نتائجك.",
+  "Trying again automatically…": "جارٍ إعادة المحاولة تلقائيًا…",
+  "Loading your results again…": "جارٍ تحميل نتائجك مرة أخرى…",
+  "Your results still did not load. Use Try again in a moment.": "لم يتم تحميل نتائجك بعد. استخدم \"حاول مرة أخرى\" بعد قليل.",
+  "Wait a moment": "انتظر قليلًا",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "تعيد هذه الصفحة المحاولة تلقائيًا عدة مرات. تزول معظم حالات التأخير خلال دقيقة.",
+  "Load your results again whenever you are ready.": "أعد تحميل نتائجك متى كنت مستعدًا.",
+  "Nothing is lost": "لم يُفقد أي شيء",
+  "Your submission and grade were saved before this page started loading.": "تم حفظ إرسالك ودرجتك قبل أن تبدأ هذه الصفحة في التحميل."
 }

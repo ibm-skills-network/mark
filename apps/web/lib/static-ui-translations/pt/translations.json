@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Modos de economia de dados e alguns navegadores, como o Opera Mini, podem quebrar a página. Desative esse modo ou abra a atividade em outro navegador.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "As imagens não podem ser avaliadas em uma resposta de texto. Cole a saída como texto ou descreva-a com palavras.",
   "Your grade is on its way to yourLearning": "Sua nota está a caminho do yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "A sincronização da sua nota com o yourLearning pode levar algumas horas, por isso pedimos que tenha paciência. Sua nota está registrada com segurança conosco e você não precisa fazer nada. Você pode fechar esta janela."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "A sincronização da sua nota com o yourLearning pode levar algumas horas, por isso pedimos que tenha paciência. Sua nota está registrada com segurança conosco e você não precisa fazer nada. Você pode fechar esta janela.",
+  "We're having trouble loading your results": "Estamos com problemas para carregar seus resultados",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Seu envio está salvo e sua nota está segura. Nossos servidores estão lentos para responder agora, por isso seus resultados não foram carregados.",
+  "Trying again automatically…": "Tentando novamente automaticamente…",
+  "Loading your results again…": "Carregando seus resultados novamente…",
+  "Your results still did not load. Use Try again in a moment.": "Seus resultados ainda não foram carregados. Use Tente novamente em instantes.",
+  "Wait a moment": "Aguarde um momento",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Esta página tenta novamente sozinha algumas vezes. A maioria dos atrasos se resolve em até um minuto.",
+  "Load your results again whenever you are ready.": "Carregue seus resultados novamente quando estiver pronto.",
+  "Nothing is lost": "Nada foi perdido",
+  "Your submission and grade were saved before this page started loading.": "Seu envio e sua nota foram salvos antes de esta página começar a carregar."
 }

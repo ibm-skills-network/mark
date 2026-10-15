@@ -1416,5 +1416,15 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Veri tasarrufu modları ve Opera Mini gibi bazı tarayıcılar sayfayı bozabilir. Bu modu kapatın veya ödevi başka bir tarayıcıda açın.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Metin yanıtındaki görseller notlandırılamaz. Bunun yerine çıktıyı metin olarak yapıştırın veya kelimelerle açıklayın.",
   "Your grade is on its way to yourLearning": "Notunuz yourLearning'e gönderiliyor",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Notunuzun yourLearning ile eşitlenmesi birkaç saat sürebilir, lütfen sabırlı olun. Notunuz bizde güvenle kayıtlıdır ve yapmanız gereken bir şey yoktur. Bu pencereyi kapatabilirsiniz."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Notunuzun yourLearning ile eşitlenmesi birkaç saat sürebilir, lütfen sabırlı olun. Notunuz bizde güvenle kayıtlıdır ve yapmanız gereken bir şey yoktur. Bu pencereyi kapatabilirsiniz.",
+  "We're having trouble loading your results": "Sonuçlarınızı yüklerken sorun yaşıyoruz",
+  "Your submission is saved and your grade is safe. Our servers are slow to respond right now, so your results did not load.": "Gönderiniz kaydedildi ve notunuz güvende. Sunucularımız şu anda yavaş yanıt veriyor, bu yüzden sonuçlarınız yüklenmedi.",
+  "Trying again automatically…": "Otomatik olarak yeniden deneniyor…",
+  "Loading your results again…": "Sonuçlarınız yeniden yükleniyor…",
+  "Your results still did not load. Use Try again in a moment.": "Sonuçlarınız hâlâ yüklenmedi. Birazdan Tekrar dene seçeneğini kullanın.",
+  "Wait a moment": "Biraz bekleyin",
+  "This page tries again by itself a few times. Most delays clear within a minute.": "Bu sayfa birkaç kez kendiliğinden yeniden dener. Gecikmelerin çoğu bir dakika içinde düzelir.",
+  "Load your results again whenever you are ready.": "Hazır olduğunuzda sonuçlarınızı yeniden yükleyin.",
+  "Nothing is lost": "Hiçbir şey kaybolmadı",
+  "Your submission and grade were saved before this page started loading.": "Gönderiniz ve notunuz bu sayfa yüklenmeye başlamadan önce kaydedildi."
 }
