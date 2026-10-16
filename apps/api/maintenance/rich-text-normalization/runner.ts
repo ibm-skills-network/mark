@@ -15,6 +15,7 @@ import {
 } from "./database";
 import { isolatedConvert } from "./isolated-converter";
 import { from, modelByName, MODELS, scopeClause } from "./manifest";
+import { unchangedWithoutParsing } from "./prefilter";
 import type { Conversion, Item, Model, Run, Snapshot, Values } from "./types";
 
 type Convert = (
@@ -190,7 +191,8 @@ export class MigrationRunner {
       };
     }
     const conversion = snapshot
-      ? await this.converter(model, snapshot, origin)
+      ? (unchangedWithoutParsing(model, snapshot) ??
+        (await this.converter(model, snapshot, origin)))
       : undefined;
     if (
       conversion &&
