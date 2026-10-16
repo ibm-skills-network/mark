@@ -453,6 +453,21 @@ jobs:
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
+      - name: Test rich text migration recovery on PostgreSQL
+        env:
+          RICH_TEXT_MIGRATION_TEST_URL: postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark_rich_text_migration_test_ci # pragma: allowlist secret
+        run: |
+          node <<'NODE'
+          const { Client } = require('pg');
+          const client = new Client({ connectionString: process.env.DATABASE_URL });
+          (async () => {
+            await client.connect();
+            try { await client.query('CREATE DATABASE mark_rich_text_migration_test_ci'); }
+            finally { await client.end(); }
+          })().catch(() => { console.error('Could not create isolated migration test database'); process.exitCode = 1; });
+          NODE
+          yarn --cwd apps/api jest --runInBand --runTestsByPath maintenance/rich-text-normalization/converter.spec.ts maintenance/rich-text-normalization/integration.spec.ts
+
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:

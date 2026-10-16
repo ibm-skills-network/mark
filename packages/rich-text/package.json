@@ -16,5 +16,8 @@
     "ts-jest": "^29.2.5",
     "tsconfig": "*",
     "typescript": "^5.2.*"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.14"
   }
 }
