@@ -67,6 +67,8 @@ describe("QuestionPage assignment hydration", () => {
     jest.clearAllMocks();
     useAssignmentDetails.setState({ assignmentDetails: null });
     useLearnerStore.setState({ questions: [] });
+    localStorage.clear();
+    useLearnerStore.setState({ activeAttemptId: null });
     getAssignmentMock.mockResolvedValue({
       id: 42,
       name: "Quiz",
@@ -105,4 +107,162 @@ describe("QuestionPage assignment hydration", () => {
 
     expect(getAssignmentMock).not.toHaveBeenCalled();
   });
+
+  const savedAnswer = '<p class="ql-indent-1">old   saved answer</p>';
+  const makeResponse = (id: number, questionId = 7, answer = savedAnswer) => ({
+    id,
+    questionId,
+    assignmentAttemptId: 500,
+    learnerResponse: JSON.stringify(answer),
+    points: 0,
+    feedback: [],
+  });
+  const textAttempt = {
+    ...attemptWithoutDetails,
+    name: "Quiz",
+    questions: [
+      {
+        id: 7,
+        type: "TEXT",
+        question: "Write",
+        totalPoints: 1,
+        maxCharacters: 5,
+      },
+    ],
+    questionResponses: [
+      makeResponse(90),
+      makeResponse(91, 8, "Other question"),
+    ],
+  } as AssignmentAttemptWithQuestions;
+
+  it("restores attempt-level saved HTML in a fresh session, including answers over the limit", async () => {
+    render(<QuestionPage attempt={textAttempt} assignmentId={42} />);
+    await waitFor(() =>
+      expect(useLearnerStore.getState().questions[0]?.learnerTextResponse).toBe(
+        savedAnswer,
+      ),
+    );
+    expect(useLearnerStore.getState().questions[0].status).toBe("unedited");
+    expect(textAttempt.questions[0].questionResponses).toBeUndefined();
+  });
+
+  it("uses the newest response across nested and attempt-level responses", async () => {
+    const attempt = {
+      ...textAttempt,
+      questions: [
+        {
+          ...textAttempt.questions[0],
+          questionResponses: [makeResponse(100, 7, "Newest nested answer")],
+        },
+      ],
+    };
+    render(<QuestionPage attempt={attempt} assignmentId={42} />);
+    await waitFor(() =>
+      expect(useLearnerStore.getState().questions[0]?.learnerTextResponse).toBe(
+        "Newest nested answer",
+      ),
+    );
+  });
+
+  it.each(["Unsaved draft", ""])(
+    "preserves a local answer %j for the same attempt",
+    async (draft) => {
+      useLearnerStore.setState({
+        activeAttemptId: 500,
+        questions: [
+          {
+            ...textAttempt.questions[0],
+            learnerTextResponse: draft,
+            status: "edited",
+          },
+        ],
+      });
+      render(<QuestionPage attempt={textAttempt} assignmentId={42} />);
+      await waitFor(() =>
+        expect(
+          useLearnerStore.getState().questions[0]?.questionResponses,
+        ).toHaveLength(1),
+      );
+      expect(useLearnerStore.getState().questions[0].learnerTextResponse).toBe(
+        draft,
+      );
+    },
+  );
+
+  it("discards a different attempt's local answer before restoring the saved answer", async () => {
+    useLearnerStore.setState({
+      activeAttemptId: 499,
+      questions: [
+        {
+          ...textAttempt.questions[0],
+          learnerTextResponse: "Previous attempt",
+        },
+      ],
+    });
+    render(<QuestionPage attempt={textAttempt} assignmentId={42} />);
+    await waitFor(() =>
+      expect(useLearnerStore.getState().questions[0]?.learnerTextResponse).toBe(
+        savedAnswer,
+      ),
+    );
+  });
+
+  it.each([
+    ["SINGLE_CORRECT", "learnerChoices", ["B"], ["1"], []],
+    ["TRUE_FALSE", "learnerAnswerChoice", true, true, false],
+    [
+      "URL",
+      "learnerUrlResponse",
+      "https://example.com",
+      "https://example.com",
+      "",
+    ],
+    [
+      "UPLOAD",
+      "learnerFileResponse",
+      [{ filename: "answer.pdf" }],
+      [{ filename: "answer.pdf" }],
+      [],
+    ],
+  ] as const)(
+    "restores %s answers and preserves cleared local values",
+    async (type, field, saved, restored, draft) => {
+      const attempt = {
+        ...textAttempt,
+        questions: [
+          {
+            ...textAttempt.questions[0],
+            type,
+            choices: [
+              { choice: "A", points: 0, isCorrect: false },
+              { choice: "B", points: 1, isCorrect: true },
+            ],
+          },
+        ],
+        questionResponses: [
+          { ...makeResponse(90), learnerResponse: JSON.stringify(saved) },
+        ],
+      } as AssignmentAttemptWithQuestions;
+      const { unmount } = render(
+        <QuestionPage attempt={attempt} assignmentId={42} />,
+      );
+      await waitFor(() =>
+        expect(useLearnerStore.getState().questions[0]?.[field]).toEqual(
+          restored,
+        ),
+      );
+      unmount();
+      useLearnerStore.setState({
+        activeAttemptId: 500,
+        questions: [{ ...attempt.questions[0], [field]: draft }],
+      });
+      render(<QuestionPage attempt={attempt} assignmentId={42} />);
+      await waitFor(() =>
+        expect(
+          useLearnerStore.getState().questions[0]?.questionResponses,
+        ).toHaveLength(1),
+      );
+      expect(useLearnerStore.getState().questions[0][field]).toEqual(draft);
+    },
+  );
 });

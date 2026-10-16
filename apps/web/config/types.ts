@@ -742,7 +742,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questionControls?: QuestionControls;
   comments?: string;
   preferredLanguage?: string;
-  questionResponses?: Array<{ questionId: number }>;
+  questionResponses?: QuestionResponse[];
 }
 
 export interface QuestionControls {

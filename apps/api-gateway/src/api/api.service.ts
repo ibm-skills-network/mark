@@ -36,6 +36,16 @@ const SENSITIVE_HEADERS = new Set([
   "admin-token",
 ]);
 
+// Header values must be ASCII, but sessions carry LMS text such as course
+// titles in any language. \uXXXX escapes keep the JSON identical to every
+// JSON.parse reader while making the header value pure ASCII.
+export function asciiJson(value: unknown): string {
+  return JSON.stringify(value).replaceAll(
+    /[\u007F-\uFFFF]/g,
+    (char) => `\\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 @Injectable()
 export class ApiService {
   private readonly logger: Logger;
@@ -117,7 +127,7 @@ export class ApiService {
         }
 
         extraHeaders = {
-          "user-session": JSON.stringify(request.user),
+          "user-session": asciiJson(request.user),
           "Cache-Control": "no-cache",
         };
 

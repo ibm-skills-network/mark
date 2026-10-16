@@ -18,6 +18,9 @@ export interface SnSupportTicket {
   portalName?: string;
   portalUrl?: string;
   courseTitle?: string;
+  courseId?: string;
+  activityTitle?: string;
+  lmsFamily?: string;
   toolName?: string;
   browser?: string;
   chatHistoryUrl?: string;
@@ -159,6 +162,10 @@ export class SnSupportService {
     addMetadata("portalName", ticket.portalName);
     addMetadata("toolName", ticket.toolName);
     addMetadata("courseTitle", ticket.courseTitle);
+    // SN Support has no field for these; custom metadata is shown verbatim.
+    addMetadata("mark.courseId", ticket.courseId);
+    addMetadata("mark.activityTitle", ticket.activityTitle);
+    addMetadata("mark.lmsFamily", ticket.lmsFamily);
     addMetadata("mark.issueType", ticket.issueType);
     // SN Support has an Issue.portalUrl column, but the v2 contract cannot set
     // it — unknown top-level keys are rejected outright — so the portal URL

@@ -2,7 +2,7 @@
 
 import animationData from "@/animations/LoadSN.json";
 import LoadingPage from "@/app/loading";
-import MarkdownEditor from "@/components/MarkDownEditor";
+import RichTextEditorClient from "@/components/rich-text/RichTextEditorClient";
 import { useAuthorStore } from "@/stores/author";
 import { SectionWithTitle } from "../ReusableSections/SectionWithTitle";
 import React from "react";
@@ -72,7 +72,7 @@ const MainContent = () => {
         required={stepOneSections.introduction.required}
         error={errors.introduction}
       >
-        <MarkdownEditor
+        <RichTextEditorClient
           value={introduction}
           setValue={setIntroduction}
           placeholder={stepOneSections.introduction.placeholder}
@@ -84,7 +84,7 @@ const MainContent = () => {
         required={stepOneSections.instructions.required}
         error={errors.instructions}
       >
-        <MarkdownEditor
+        <RichTextEditorClient
           value={instructions}
           setValue={setInstructions}
           placeholder={stepOneSections.instructions.placeholder}
@@ -96,7 +96,7 @@ const MainContent = () => {
         required={stepOneSections.overview.required}
         error={errors.gradingCriteriaOverview}
       >
-        <MarkdownEditor
+        <RichTextEditorClient
           value={gradingCriteriaOverview}
           setValue={setGradingCriteriaOverview}
           placeholder={stepOneSections.overview.placeholder}

@@ -1,9 +1,15 @@
 import type { QuestionResponse } from "../dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 
-/** What an untouched rich-text editor serialises to. */
-const EMPTY_RICH_TEXT = /^(?:<p>(?:<br\s*\/?>)?<\/p>|<br\s*\/?>|&nbsp;|\s)*$/i;
+/**
+ * What an emptied rich-text editor serialises to. Paragraphs may carry
+ * attributes (alignment, `dir`) that survive deleting their text. Kept in step
+ * with `isRichTextEmpty` in `packages/rich-text`, which the web app uses.
+ */
+const EMPTY_RICH_TEXT =
+  /^(?:<p(?:\s[^>]*)?>(?:\s|&nbsp;|&#160;|&#xa0;|<br\s*\/?>)*<\/p>|<br\s*\/?>|&nbsp;|&#160;|&#xa0;|\s)*$/i;
 
-const hasText = (value: unknown): boolean =>
+/** Whether a text or rich-text field holds more than an empty editor's markup. */
+export const hasTextContent = (value: unknown): boolean =>
   typeof value === "string" &&
   value.trim().length > 0 &&
   !EMPTY_RICH_TEXT.test(value.trim());
@@ -20,8 +26,8 @@ export const isAnsweredResponse = (
   }
 
   return (
-    hasText(response.learnerTextResponse) ||
-    hasText(response.learnerUrlResponse) ||
+    hasTextContent(response.learnerTextResponse) ||
+    hasTextContent(response.learnerUrlResponse) ||
     (Array.isArray(response.learnerChoices) &&
       response.learnerChoices.length > 0) ||
     typeof response.learnerAnswerChoice === "boolean" ||
