@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -98,7 +99,12 @@ export async function main(): Promise<void> {
     Number.MAX_SAFE_INTEGER,
   );
   const parserVersion = (
-    JSON.parse(readFileSync(require.resolve("jsdom/package.json"), "utf8")) as {
+    JSON.parse(
+      readFileSync(
+        createRequire(__filename).resolve("jsdom/package.json"),
+        "utf8",
+      ),
+    ) as {
       version: string;
     }
   ).version;
