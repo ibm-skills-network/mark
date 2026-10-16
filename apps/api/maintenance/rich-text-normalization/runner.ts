@@ -887,7 +887,7 @@ export class MigrationRunner {
           ),
         true,
       );
-      let cursor: string | null = null;
+      let cursor: bigint | null = null;
       while (!this.stopping) {
         const backups: Backup[] = await rows<Backup>(
           this.database,
@@ -897,7 +897,7 @@ export class MigrationRunner {
         );
         const [backup] = backups;
         if (!backup) break;
-        cursor = String(backup.sequence);
+        cursor = backup.sequence;
         if (
           digest(backup.before) !== backup.beforeHash ||
           digest(backup.after) !== backup.afterHash
