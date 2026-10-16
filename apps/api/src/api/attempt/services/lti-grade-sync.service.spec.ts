@@ -37,6 +37,10 @@ describe("LtiGradeSyncService", () => {
 
   const mockAdminEmailService = {
     sendGenericEmail: jest.fn().mockResolvedValue(true),
+    learnerResultsUrl: jest.fn(
+      (assignmentId: number, attemptId: number) =>
+        `https://mark.example.com/learner/${assignmentId}/successPage/${attemptId}`,
+    ),
   };
 
   beforeEach(async () => {
@@ -334,6 +338,94 @@ describe("LtiGradeSyncService", () => {
           title: "Grade sync failed",
         }),
       });
+    });
+  });
+
+  describe("attemptSync - learner emails", () => {
+    const failingSync = (retryCount: number) => ({
+      id: 1,
+      attemptId: 123,
+      userId: "learner@example.com",
+      assignmentId: 789,
+      grade: 0.85,
+      authCookie: "test-cookie",
+      ltiGatewayUrl: "https://test-lti-gateway.com/grades",
+      retryCount,
+      status: LtiSyncStatus.SCHEDULED,
+      errorHistory: [],
+      attempt: {},
+    });
+
+    it("emails the learner at most twice for one failing sync", async () => {
+      mockAdminEmailService.sendGenericEmail.mockResolvedValue(true);
+      const emailCalls: unknown[][] = [];
+
+      // Every attempt fails: the first try plus all eight retries.
+      for (let retryCount = 0; retryCount < 9; retryCount++) {
+        const sync = failingSync(retryCount);
+        mockPrismaService.ltiGradeSync.findUnique.mockResolvedValue(sync);
+        mockPrismaService.ltiGradeSync.update.mockImplementation((arguments_) =>
+          Promise.resolve({ ...sync, ...arguments_.data }),
+        );
+        mockPrismaService.ltiSyncErrorLog.create.mockResolvedValue({});
+        mockPrismaService.userNotification.create.mockResolvedValue({});
+        mockHttpService.put.mockReturnValue(
+          throwError(() => new Error("Gateway down")),
+        );
+
+        await service.attemptSync(1);
+
+        // The in-app notification still records every retry.
+        expect(mockPrismaService.userNotification.create).toHaveBeenCalledTimes(
+          1,
+        );
+        emailCalls.push(...mockAdminEmailService.sendGenericEmail.mock.calls);
+        jest.clearAllMocks();
+      }
+
+      expect(emailCalls).toHaveLength(2);
+
+      const [first, last] = emailCalls as [string, string, string][];
+      expect(first[0]).toBe("learner@example.com");
+      expect(first[1]).toBe("Mark - Retrying grade sync");
+      expect(first[2]).toContain(
+        "https://mark.example.com/learner/789/successPage/123",
+      );
+      expect(first[2]).toContain("temporary difficulty syncing your grade");
+
+      expect(last[0]).toBe("learner@example.com");
+      expect(last[1]).toBe("Mark - Grade sync failed");
+      expect(last[2]).toContain(
+        "https://mark.example.com/learner/789/successPage/123",
+      );
+      expect(last[2]).toContain("After multiple attempts");
+    });
+
+    it("logs an error when the learner email is not sent", async () => {
+      const sync = failingSync(0);
+      mockPrismaService.ltiGradeSync.findUnique.mockResolvedValue(sync);
+      mockPrismaService.ltiGradeSync.update.mockImplementation((arguments_) =>
+        Promise.resolve({ ...sync, ...arguments_.data }),
+      );
+      mockPrismaService.ltiSyncErrorLog.create.mockResolvedValue({});
+      mockPrismaService.userNotification.create.mockResolvedValue({});
+      mockHttpService.put.mockReturnValue(
+        throwError(() => new Error("Gateway down")),
+      );
+      mockAdminEmailService.sendGenericEmail.mockResolvedValueOnce(false);
+      const errorSpy = jest
+        .spyOn(
+          (service as unknown as { logger: { error: () => void } }).logger,
+          "error",
+        )
+        .mockImplementation(() => undefined);
+
+      await service.attemptSync(1);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Failed to send email notification to learner@example.com for sync 1",
+      );
+      errorSpy.mockRestore();
     });
   });
 
