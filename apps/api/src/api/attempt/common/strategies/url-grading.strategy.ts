@@ -230,6 +230,10 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       return responseDto;
     }
 
+    const urlBody =
+      typeof urlFetchResponse.body === "string"
+        ? urlFetchResponse.body
+        : JSON.stringify(urlFetchResponse.body);
     const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(
       question.question,
       context.questionAnswerContext,
@@ -238,7 +242,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
       // scheme the learner happened to leave off.
       targetUrl,
       urlFetchResponse.isFunctional,
-      JSON.stringify(urlFetchResponse.body),
+      urlBody,
       question.totalPoints,
       question.scoring?.type ?? "",
       question.scoring,
@@ -255,7 +259,16 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         context.assignmentId,
         context.language,
       );
-    } catch {
+    } catch (error) {
+      this.logger?.error(
+        "URL grading LLM call failed; awarding fallback credit",
+        {
+          assignmentId: context.assignmentId,
+          questionId: question.id,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
       return this.createFallbackResponse(
         question,
         learnerResponse,
@@ -270,8 +283,8 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     responseDto.metadata = {
       ...responseDto.metadata,
       url: learnerResponse,
-      contentSummary: this.summarizeContent(urlFetchResponse.body),
-      contentLength: urlFetchResponse.body.length,
+      contentSummary: this.summarizeContent(urlBody),
+      contentLength: urlBody.length,
       isGithubRepo: targetUrl.includes("github.com"),
       gradingRationale:
         gradingModel.gradingRationale || "URL content evaluated",
