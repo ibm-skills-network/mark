@@ -395,12 +395,20 @@ export class EvidenceChunkingService {
   }
 
   private codeFilenameFromUrl(url: string): string | undefined {
-    let segment: string;
+    let parsed: URL;
     try {
-      segment = new URL(url).pathname.split("/").pop() ?? "";
+      parsed = new URL(url);
     } catch {
       return undefined;
     }
+    // On github.com only a blob path is a file; repo roots and other pages are not.
+    if (
+      parsed.hostname === "github.com" &&
+      !parsed.pathname.includes("/blob/")
+    ) {
+      return undefined;
+    }
+    let segment = parsed.pathname.split("/").pop() ?? "";
     try {
       segment = decodeURIComponent(segment);
     } catch {

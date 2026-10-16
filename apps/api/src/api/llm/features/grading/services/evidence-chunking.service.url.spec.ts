@@ -105,6 +105,22 @@ describe("EvidenceChunkingService.extractFromUrl", () => {
   });
 
   describe("non-code URLs", () => {
+    it.each([
+      "https://github.com/learner/portfolio.js",
+      "https://github.com/learner/shop/tree/main/app.py",
+    ])("does not treat the GitHub page %s as a file", (url) => {
+      const chunks = service.extractFromUrl(
+        url,
+        "# Portfolio\n\nA site built with Express.",
+      );
+
+      expect(chunks.map((chunk) => chunk.text)).toEqual([
+        "# Portfolio",
+        "A site built with Express.",
+      ]);
+      expect(chunks.every((chunk) => !chunk.metadata?.filename)).toBe(true);
+    });
+
     it("keeps angle-bracket text that is not HTML", () => {
       const chunks = service.extractFromUrl(
         "https://example.com/notes.txt",
