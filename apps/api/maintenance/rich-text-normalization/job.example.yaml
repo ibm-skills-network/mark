@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rich-text-migration-REPLACE-RUN-ID
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration
+          image: REPLACE-WITH-PINNED-API-IMAGE-DIGEST
+          command: ["node", "dist/rich-text-migration/main.js"]
+          args:
+            [
+              "apply",
+              "--run",
+              "REPLACE-RUN-ID",
+              "--target",
+              "REPLACE-AUDIT-TARGET",
+              "--max-updates",
+              "10",
+            ]
+          env:
+            - name: RICH_TEXT_MIGRATION_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rich-text-migration-database
+                  key: url
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=384"
+          resources:
+            requests: { cpu: "500m", memory: "512Mi" }
+            limits: { cpu: "1", memory: "1Gi" }

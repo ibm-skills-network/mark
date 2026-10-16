@@ -4,7 +4,7 @@ module.exports = {
   parserOptions: {
     ecmaVersion: "latest",
     tsconfigRootDir: __dirname,
-    project: ["./tsconfig.json"],
+    project: ["./tsconfig.json", "./tsconfig.rich-text-migration.json"],
     warnOnUnsupportedTypeScriptVersion: false,
   },
   extends: [
@@ -33,6 +33,12 @@ module.exports = {
   parser: "@typescript-eslint/parser",
   plugins: ["@typescript-eslint", "unicorn"],
   root: true,
+  overrides: [
+    {
+      files: ["maintenance/rich-text-normalization/*.ts"],
+      rules: { "unicorn/prefer-module": "off" },
+    },
+  ],
   ignorePatterns: [
     "dist/",
     "**/dist/**",

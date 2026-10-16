@@ -5,6 +5,71 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model RichTextMigrationRun {
+  id          String                   @id
+  target      String
+  fingerprint String
+  scope       Int[]
+  origin      String
+  byteLimit   Int
+  status      String                   @default("planned")
+  operation   String                   @default("apply")
+  cursor      Json                     @default("{}")
+  upper       Json                     @default("{}")
+  cleanSweeps Int                      @default(0)
+  createdAt   DateTime                 @default(dbgenerated("clock_timestamp()")) @db.Timestamptz
+  updatedAt   DateTime                 @default(dbgenerated("clock_timestamp()")) @db.Timestamptz
+  leases      RichTextMigrationLease[]
+  items       RichTextMigrationItem[]
+}
+
+model RichTextMigrationLease {
+  key        String                @id
+  runId      String?
+  run        RichTextMigrationRun? @relation(fields: [runId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  owner      String?
+  generation BigInt                @default(0)
+  expiresAt  DateTime              @default(dbgenerated("clock_timestamp()")) @db.Timestamptz
+}
+
+model RichTextMigrationItem {
+  id              String                   @id
+  runId           String
+  run             RichTextMigrationRun     @relation(fields: [runId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  model           String
+  rowId           Int
+  sourceHash      String
+  context         String?
+  destinationHash String?
+  state           String
+  reason          String?
+  rules           String[]                 @default([])
+  attempts        Int                      @default(0)
+  retryAt         DateTime?                @db.Timestamptz
+  successorId     String?
+  successor       RichTextMigrationItem?   @relation("MigrationSuccessor", fields: [successorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  predecessors    RichTextMigrationItem[]  @relation("MigrationSuccessor")
+  updatedAt       DateTime                 @default(dbgenerated("clock_timestamp()")) @db.Timestamptz
+  backup          RichTextMigrationBackup?
+
+  @@unique([runId, model, rowId, sourceHash])
+  @@index([runId, state, retryAt], map: "RichTextMigrationItem_work")
+}
+
+model RichTextMigrationBackup {
+  id            String                @id
+  sequence      BigInt                @unique @default(autoincrement())
+  itemId        String                @unique
+  item          RichTextMigrationItem @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  before        Json
+  after         Json
+  beforeHash    String
+  afterHash     String
+  appliedAt     DateTime              @default(dbgenerated("clock_timestamp()")) @db.Timestamptz
+  rolledBackAt  DateTime?             @db.Timestamptz
+  rollbackState String                @default("pending")
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
