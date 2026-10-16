@@ -246,7 +246,9 @@ export async function fetchReadmeForBranch(
     .join("/");
   const readmeUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodedBranch}/README.md`;
   try {
-    const response = await safeGet<string>(readmeUrl);
+    const response = await safeGet<string>(readmeUrl, {
+      responseType: "text",
+    });
     return response.status === 200 ? truncate(response.data) : undefined;
   } catch (error) {
     throwIfRetryable(error, readmeUrl, "readme");
@@ -510,7 +512,10 @@ async function fetchGithubBlobContent(
   rawUrl: string,
 ): Promise<GithubFetchResult> {
   try {
-    const response = await safeGet<string>(rawUrl);
+    // Otherwise Axios parses JSON and notebooks into objects.
+    const response = await safeGet<string>(rawUrl, {
+      responseType: "text",
+    });
     if (response.status === 200) {
       return { body: truncate(response.data), isFunctional: true };
     }
@@ -599,9 +604,19 @@ async function fetchGithubRepoRootContent(
   return { body: "", isFunctional: false };
 }
 
+function isPlainTextResponse(contentType: unknown): boolean {
+  if (typeof contentType !== "string") return false;
+  const mediaType = contentType.split(";")[0].trim().toLowerCase();
+  return mediaType.startsWith("text/") && mediaType !== "text/html";
+}
+
 async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
   try {
-    const response = await safeGet<string>(url);
+    const response = await safeGet<string>(url, { responseType: "text" });
+    // The HTML parser would eat code such as `List<Order>` in raw files.
+    if (isPlainTextResponse(response.headers?.["content-type"])) {
+      return { body: truncate(response.data), isFunctional: true };
+    }
     const $ = cheerio.load(response.data);
     stripNoiseNodes($);
     const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
