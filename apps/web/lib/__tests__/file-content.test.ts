@@ -61,6 +61,31 @@ describe("fetchFileContentSafe", () => {
     expect(result.size).toBe(size);
   });
 
+  it.each([
+    '[1, "two", null]',
+    '"quoted JSON string"',
+    "null",
+    "true",
+    "12345678901",
+    "SGVsbG8=",
+    "こんにちは 🌍 café",
+    "",
+  ])("preserves file text exactly: %j", async (text) => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        content: serverEncode(text),
+        filename: "data.txt",
+        size: Buffer.byteLength(text),
+      }),
+    );
+    const result = await fetchFileContentSafe(
+      "learner/7/data.txt",
+      "learner-bucket",
+      "data.txt",
+    );
+    expect(result.content).toBe(text);
+  });
+
   it("keeps short digit-only text the API sends unencoded", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ content: "0400", filename: "count.txt", size: 4 }),

@@ -46,9 +46,18 @@ jest.mock("@/components/FileExplorer/FilePreview", () => ({
   default: (props: {
     loading?: boolean;
     content?: ExtendedFileContent | null;
+    onNext?: () => void;
+    onPrevious?: () => void;
+    onClose?: () => void;
   }) => {
     previewProps.push({ loading: props.loading, content: props.content });
-    return null;
+    return (
+      <>
+        <button onClick={props.onNext}>Next file</button>
+        <button onClick={props.onPrevious}>Previous file</button>
+        <button onClick={props.onClose}>Close preview</button>
+      </>
+    );
   },
 }));
 jest.mock("../PdfAnnotationModal", () => ({
@@ -130,6 +139,84 @@ describe("results page — previewing a stored upload", () => {
     expect(previewProps.at(-1)?.content).toMatchObject({
       content: '{"cells": []}',
       size: 1363149,
+    });
+  });
+  it("ignores an older request after navigating away and back", async () => {
+    const resolvers: Array<(value: ExtendedFileContent) => void> = [];
+    mockFetchFileContentSafe.mockImplementation(
+      () =>
+        new Promise<ExtendedFileContent>((resolve) => resolvers.push(resolve)),
+    );
+    const question = {
+      ...uploadQuestion,
+      questionResponses: [
+        {
+          ...uploadQuestion.questionResponses[0],
+          learnerResponse: JSON.stringify(
+            ["first", "second"].map((name) => ({
+              filename: `${name}.ipynb`,
+              content: "InCos",
+              key: `learner/7/${name}.ipynb`,
+              bucket: "learner-bucket",
+            })),
+          ),
+        },
+      ],
+    } as unknown as QuestionStore;
+    render(
+      <Question
+        question={question}
+        number={1}
+        language="en"
+        showSubmissionFeedback
+      />,
+    );
+    fireEvent.click(screen.getAllByText("View Content")[0]);
+    fireEvent.click(screen.getByText("Next file"));
+    fireEvent.click(screen.getByText("Previous file"));
+
+    await act(async () => {
+      resolvers[0]({ content: "stale first", size: 11 });
+    });
+    expect(previewProps.at(-1)).toEqual({ loading: true, content: null });
+    await act(async () => {
+      resolvers[2]({ content: "current first", size: 13 });
+    });
+    await act(async () => {
+      resolvers[1]({ content: "stale second", size: 12 });
+    });
+    expect(previewProps.at(-1)).toMatchObject({
+      loading: false,
+      content: { content: "current first", size: 13 },
+    });
+  });
+  it("ignores a pending request after closing and reopening the preview", async () => {
+    const resolvers: Array<(value: ExtendedFileContent) => void> = [];
+    mockFetchFileContentSafe.mockImplementation(
+      () =>
+        new Promise<ExtendedFileContent>((resolve) => resolvers.push(resolve)),
+    );
+    render(
+      <Question
+        question={uploadQuestion}
+        number={1}
+        language="en"
+        showSubmissionFeedback
+      />,
+    );
+    fireEvent.click(screen.getByText("View Content"));
+    fireEvent.click(screen.getByText("Close preview"));
+    fireEvent.click(screen.getByText("View Content"));
+    await act(async () => {
+      resolvers[0]({ content: "old content", size: 11 });
+    });
+    expect(previewProps.at(-1)).toEqual({ loading: true, content: null });
+    await act(async () => {
+      resolvers[1]({ content: "new content", size: 12 });
+    });
+    expect(previewProps.at(-1)).toMatchObject({
+      loading: false,
+      content: { content: "new content", size: 12 },
     });
   });
 });
