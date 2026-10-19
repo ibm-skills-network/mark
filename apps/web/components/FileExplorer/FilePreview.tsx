@@ -41,6 +41,7 @@ interface FilePreviewProps {
   onPrevious?: () => void;
   hasNext?: boolean;
   hasPrevious?: boolean;
+  loading?: boolean;
 }
 
 const FilePreview = ({
@@ -52,6 +53,7 @@ const FilePreview = ({
   onPrevious,
   hasNext = false,
   hasPrevious = false,
+  loading = false,
 }: FilePreviewProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,6 +67,7 @@ const FilePreview = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const contentRef = useRef<HTMLImageElement>(null);
+  const displaySize = file.fileSize || file.size || content?.size || 0;
 
   const getFileType = () => {
     const fileName = file.fileName;
@@ -435,7 +438,7 @@ const FilePreview = ({
           <div>
             <h3 className="font-semibold text-lg">{file.fileName}</h3>
             <p className="text-gray-500 text-sm">
-              {formatFileSize(file.fileSize || file.size)}
+              {formatFileSize(displaySize)}
             </p>
           </div>
         </div>
@@ -488,7 +491,7 @@ const FilePreview = ({
             {file.fileName}
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {formatFileSize(file.fileSize || file.size)}
+            {formatFileSize(displaySize)}
           </p>
         </div>
 
@@ -559,7 +562,7 @@ const FilePreview = ({
 
         <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400 mb-6">
           <div>File: {file.fileName}</div>
-          <div>Size: {formatFileSize(file.fileSize || file.size)}</div>
+          <div>Size: {formatFileSize(displaySize)}</div>
         </div>
 
         <div className="space-y-2">
@@ -587,7 +590,7 @@ const FilePreview = ({
   );
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading || loading) {
       return (
         <div className="h-full flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">

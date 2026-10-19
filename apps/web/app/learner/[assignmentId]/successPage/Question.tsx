@@ -146,6 +146,7 @@ const Question: FC<Props> = ({
     choices,
   } = question;
 
+  const filePreviewRequest = useRef(0);
   const [fileViewer, setFileViewer] = useState<FileViewerState>({
     isOpen: false,
     currentFile: null,
@@ -247,6 +248,7 @@ const Question: FC<Props> = ({
         questionId: question.id.toString(),
         error: result.error,
         type: result.type,
+        size: result.size,
       };
     } catch (err: unknown) {
       const errorMessage =
@@ -283,6 +285,7 @@ const Question: FC<Props> = ({
       }
     }
 
+    const request = ++filePreviewRequest.current;
     setFileViewer({
       isOpen: true,
       currentFile: selectedFile,
@@ -294,6 +297,7 @@ const Question: FC<Props> = ({
 
     try {
       const content = await fetchFileContent(selectedFile);
+      if (request !== filePreviewRequest.current) return;
       setFileViewer((prev) => ({
         ...prev,
         currentContent: content,
@@ -304,6 +308,7 @@ const Question: FC<Props> = ({
         toast.error(`Error loading file: ${content.error}`);
       }
     } catch (error: unknown) {
+      if (request !== filePreviewRequest.current) return;
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       setFileViewer((prev) => ({
@@ -323,6 +328,7 @@ const Question: FC<Props> = ({
     const nextIndex = fileViewer.currentIndex + 1;
     if (nextIndex >= fileViewer.allFiles.length) return;
 
+    const request = ++filePreviewRequest.current;
     const nextFile = fileViewer.allFiles[nextIndex];
     setFileViewer((prev) => ({
       ...prev,
@@ -333,6 +339,7 @@ const Question: FC<Props> = ({
     }));
 
     const content = await fetchFileContent(nextFile);
+    if (request !== filePreviewRequest.current) return;
     setFileViewer((prev) => ({
       ...prev,
       currentContent: content,
@@ -344,6 +351,7 @@ const Question: FC<Props> = ({
     const prevIndex = fileViewer.currentIndex - 1;
     if (prevIndex < 0) return;
 
+    const request = ++filePreviewRequest.current;
     const prevFile = fileViewer.allFiles[prevIndex];
     setFileViewer((prev) => ({
       ...prev,
@@ -354,6 +362,7 @@ const Question: FC<Props> = ({
     }));
 
     const content = await fetchFileContent(prevFile);
+    if (request !== filePreviewRequest.current) return;
     setFileViewer((prev) => ({
       ...prev,
       currentContent: content,
@@ -362,6 +371,7 @@ const Question: FC<Props> = ({
   };
 
   const handleCloseFileViewer = () => {
+    filePreviewRequest.current += 1;
     setFileViewer({
       isOpen: false,
       currentFile: null,
@@ -1218,16 +1228,8 @@ const Question: FC<Props> = ({
           }
           hasNext={fileViewer.currentIndex < fileViewer.allFiles.length - 1}
           hasPrevious={fileViewer.currentIndex > 0}
+          loading={fileViewer.isLoading}
         />
-      )}
-
-      {fileViewer.isLoading && fileViewer.isOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl flex items-center gap-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
-            <span className="text-gray-700">Loading file content...</span>
-          </div>
-        </div>
       )}
 
       <PdfAnnotationModal
