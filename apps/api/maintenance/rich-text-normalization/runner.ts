@@ -13,7 +13,11 @@ import {
   sizeSql,
   type Database,
 } from "./database";
-import { isolatedConvert } from "./isolated-converter";
+import {
+  isolatedConvert,
+  TRANSIENT_PARSER_REASONS,
+} from "./isolated-converter";
+import { describeError, logger } from "./log";
 import { from, modelByName, MODELS, scopeClause } from "./manifest";
 import { unchangedWithoutParsing } from "./prefilter";
 import type { Conversion, Item, Model, Run, Snapshot, Values } from "./types";
@@ -54,6 +58,8 @@ interface Backup {
 const MAX_ATTEMPTS = 5;
 const INITIAL_CURSOR = -2_147_483_649;
 const LEASE_KEY = "rich-text-normalization";
+const DISCOVERY_BATCH_ROWS = 20;
+const DISCOVERY_BATCH_BYTES = 8 * 1024 * 1024;
 
 export class MigrationRunner {
   private lease?: Lease;
@@ -278,10 +284,18 @@ export class MigrationRunner {
             owner,
             lease.generation,
           );
-          if (changed !== 1) this.lostLease = true;
+          if (changed !== 1) {
+            this.lostLease = true;
+            logger.warn("migration lease lost", { run: run.id });
+          }
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          // Fail closed: without a renewed lease, stop writing.
           this.lostLease = true;
+          logger.error("migration lease renewal failed", {
+            run: run.id,
+            error: describeError(error),
+          });
         });
     }, 15_000);
     try {
@@ -367,7 +381,7 @@ export class MigrationRunner {
       sourceHash,
       snapshot?.context ?? null,
       destinationHash,
-      conversion.state,
+      isTransient(conversion) ? "retryable" : conversion.state,
       conversion.reason ?? null,
       conversion.rules,
     );
@@ -403,25 +417,30 @@ export class MigrationRunner {
         if (page.length === 0) {
           cursor = run.upper[model.name];
         }
-        for (const row of page) {
-          const { snapshot, conversion } = await this.inspect(
-            model,
-            row.id,
-            run.scope,
-            run.origin,
-            run.byteLimit,
-          );
-          run.cursor[model.name] = row.id;
+        // Record items with their cursor atomically, in small batches bounded by
+        // count and bytes so a transaction stays short and memory stays flat.
+        let batch: ({ id: number } & Awaited<
+          ReturnType<MigrationRunner["inspect"]>
+        >)[] = [];
+        let batchBytes = 0;
+        const flush = async () => {
+          const last = batch.at(-1);
+          if (!last) return;
+          const items = batch;
+          batch = [];
+          batchBytes = 0;
+          run.cursor[model.name] = last.id;
           await this.transaction(async (database) => {
-            if (conversion)
-              await this.insertItem(
-                database,
-                run,
-                model,
-                row.id,
-                snapshot,
-                conversion,
-              );
+            for (const { id, snapshot, conversion } of items)
+              if (conversion)
+                await this.insertItem(
+                  database,
+                  run,
+                  model,
+                  id,
+                  snapshot,
+                  conversion,
+                );
             await execute(
               database,
               'UPDATE "RichTextMigrationRun" SET cursor = $2::jsonb, "updatedAt" = clock_timestamp() WHERE id = $1',
@@ -429,8 +448,28 @@ export class MigrationRunner {
               JSON.stringify(run.cursor),
             );
           });
-          cursor = row.id;
+          cursor = last.id;
+        };
+        for (const row of page) {
+          if (this.stopping) throw new Error("worker-stopped-or-lease-lost");
+          batch.push({
+            id: row.id,
+            ...(await this.inspect(
+              model,
+              row.id,
+              run.scope,
+              run.origin,
+              run.byteLimit,
+            )),
+          });
+          batchBytes += Number(row.bytes);
+          if (
+            batch.length >= DISCOVERY_BATCH_ROWS ||
+            batchBytes >= DISCOVERY_BATCH_BYTES
+          )
+            await flush();
         }
+        await flush();
         if (page.length === 0) {
           run.cursor[model.name] = cursor;
           await this.transaction((database) =>
@@ -459,16 +498,42 @@ export class MigrationRunner {
     );
   }
 
+  /** Returns "paused" when an operator paused the run while this worker was applying it. */
   async apply(
     run: Run,
     maxUpdates: number,
     resumePaused = false,
-  ): Promise<void> {
+  ): Promise<"finished" | "paused"> {
     if (["verified", "canary_verified", "rolled_back"].includes(run.status))
       throw new Error("run-is-terminal");
     if (run.operation !== "apply") throw new Error("run-is-rolling-back");
     if (run.status === "paused" && !resumePaused)
       throw new Error("run-is-paused");
+    try {
+      await this.applyWithLease(run, maxUpdates, resumePaused);
+      return "finished";
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        error.message !== "worker-stopped-or-lease-lost"
+      )
+        throw error;
+      const [current] = await rows<{ status: string }>(
+        this.database,
+        'SELECT status FROM "RichTextMigrationRun" WHERE id = $1',
+        run.id,
+      );
+      if (current?.status !== "paused") throw error;
+      logger.info("run paused by operator; worker stopping", { run: run.id });
+      return "paused";
+    }
+  }
+
+  private async applyWithLease(
+    run: Run,
+    maxUpdates: number,
+    resumePaused: boolean,
+  ): Promise<void> {
     await this.withLease(run, async () => {
       if (run.operation !== "apply") throw new Error("run-is-rolling-back");
       if (["verified", "canary_verified", "rolled_back"].includes(run.status))
@@ -525,8 +590,23 @@ export class MigrationRunner {
           if (
             !code ||
             !["40001", "40P01", "55P03", "57014", "23505"].includes(code)
-          )
+          ) {
+            logger.error("row transaction failed", {
+              run: run.id,
+              item: item.id,
+              model: item.model,
+              rowId: item.rowId,
+              error: describeError(error),
+            });
             throw new Error("migration-transaction-failed");
+          }
+          logger.warn("row transaction will be retried", {
+            run: run.id,
+            item: item.id,
+            model: item.model,
+            rowId: item.rowId,
+            code,
+          });
           await this.transaction((database) =>
             execute(
               database,
@@ -592,6 +672,16 @@ export class MigrationRunner {
         return false;
       }
       let state: string | undefined;
+      if (actual && isTransient(conversion)) {
+        await execute(
+          database,
+          `UPDATE "RichTextMigrationItem" SET state = 'retryable', reason = $2, attempts = attempts + 1, "retryAt" = clock_timestamp() + ($3::int * interval '1 second') WHERE id = $1`,
+          item.id,
+          conversion?.reason,
+          Math.min(30, 2 ** current.attempts),
+        );
+        return false;
+      }
       if (!actual) state = "deleted";
       else if (
         !snapshot ||
@@ -683,7 +773,7 @@ export class MigrationRunner {
     });
   }
 
-  async resume(run: Run, maxUpdates: number): Promise<void> {
+  async resume(run: Run, maxUpdates: number): Promise<"finished" | "paused"> {
     return this.apply(run, maxUpdates, true);
   }
 
@@ -723,10 +813,14 @@ export class MigrationRunner {
           if (
             digest(snapshot ?? { oversized: item.rowId }) === item.sourceHash
           ) {
-            if (item.state === "retryable")
+            // Parser timeouts/crashes from older runs were quarantined; retry them too.
+            if (
+              item.state === "retryable" ||
+              TRANSIENT_PARSER_REASONS.has(item.reason ?? "")
+            )
               await execute(
                 database,
-                `UPDATE "RichTextMigrationItem" SET state = 'pending', attempts = 0, "retryAt" = NULL WHERE id = $1`,
+                `UPDATE "RichTextMigrationItem" SET state = 'pending', reason = NULL, attempts = 0, "retryAt" = NULL WHERE id = $1`,
                 item.id,
               );
             return;
@@ -893,7 +987,7 @@ export class MigrationRunner {
       while (!this.stopping) {
         const backups: Backup[] = await rows<Backup>(
           this.database,
-          `SELECT b.*, i.model, i."rowId" FROM "RichTextMigrationBackup" b JOIN "RichTextMigrationItem" i ON i.id = b."itemId" WHERE i."runId" = $1 AND b."rollbackState" != 'restored' AND ($2::bigint IS NULL OR b.sequence < $2::bigint) ORDER BY b.sequence DESC LIMIT 1`,
+          `SELECT b.*, i.model, i."rowId" FROM "RichTextMigrationBackup" b JOIN "RichTextMigrationItem" i ON i.id = b."itemId" WHERE i."runId" = $1 AND b."rollbackState" NOT IN ('restored', 'partial') AND ($2::bigint IS NULL OR b.sequence < $2::bigint) ORDER BY b.sequence DESC LIMIT 1`,
           run.id,
           cursor,
         );
@@ -927,31 +1021,47 @@ export class MigrationRunner {
                 oversized = true;
               else throw error;
             }
-            const state = oversized
-              ? "conflict"
-              : current
-                ? Object.keys(backup.after).some(
-                    (field) => current.values[field] !== backup.after[field],
+            // Restore each field that still holds the migration's replacement; keep later edits.
+            const restorable =
+              current && !oversized
+                ? Object.keys(backup.after).filter(
+                    (field) => current.values[field] === backup.after[field],
                   )
+                : [];
+            const fields = Object.keys(backup.after);
+            const state =
+              !current && !oversized
+                ? "deleted"
+                : restorable.length === 0
                   ? "conflict"
-                  : "restored"
-                : "deleted";
-            if (state === "restored") {
+                  : restorable.length === fields.length
+                    ? "restored"
+                    : "partial";
+            if (restorable.length > 0) {
               try {
                 await replaceValues(
                   database,
                   model,
                   backup.rowId,
-                  backup.before,
+                  Object.fromEntries(
+                    restorable.map((field) => [field, backup.before[field]]),
+                  ),
                 );
               } catch (error) {
                 if (postgresCode(error) === "23505") throw error;
+                logger.error("rollback write failed", {
+                  run: run.id,
+                  backup: backup.id,
+                  model: backup.model,
+                  rowId: backup.rowId,
+                  error: describeError(error),
+                });
                 throw new Error("rollback-verification-failed");
               }
             }
             await execute(
               database,
-              'UPDATE "RichTextMigrationBackup" SET "rollbackState" = $2, "rolledBackAt" = CASE WHEN $2 = \'restored\' THEN clock_timestamp() ELSE NULL END WHERE id = $1',
+              'UPDATE "RichTextMigrationBackup" SET "rollbackState" = $2, "rolledBackAt" = CASE WHEN $2 IN (\'restored\', \'partial\') THEN clock_timestamp() ELSE NULL END WHERE id = $1',
               backup.id,
               state,
             );
@@ -977,6 +1087,13 @@ export class MigrationRunner {
       );
     });
   }
+}
+
+function isTransient(conversion: Conversion | undefined): boolean {
+  return (
+    conversion?.state === "quarantined" &&
+    TRANSIENT_PARSER_REASONS.has(conversion.reason ?? "")
+  );
 }
 
 function postgresCode(error: unknown): string | undefined {

@@ -470,6 +470,163 @@ integration("PostgreSQL migration recovery", () => {
       "run-is-rolling-back",
     );
   });
+  it("converts pre-versioning responses using the question's current type", async () => {
+    await execute(
+      database,
+      'INSERT INTO "AssignmentAttempt" (id, "assignmentId", "assignmentVersionId") VALUES (18, 1, NULL)',
+    );
+    await execute(
+      database,
+      'INSERT INTO "QuestionResponse" (id, "assignmentAttemptId", "questionId", "learnerResponse") VALUES (19, 18, 7, $1)',
+      JSON.stringify(legacy),
+    );
+    const run = await plan();
+    await runner.apply(run, 100);
+    const [response] = await rows<{ learnerResponse: string }>(
+      database,
+      'SELECT "learnerResponse" FROM "QuestionResponse" WHERE id = 19',
+    );
+    expect(response.learnerResponse).not.toContain("ql-");
+    expect(JSON.parse(response.learnerResponse)).toContain("old   saved");
+    const [item] = await rows<{ state: string; context: string }>(
+      database,
+      `SELECT state, context FROM "RichTextMigrationItem" WHERE model = 'QuestionResponse' AND "rowId" = 19`,
+    );
+    expect(item.state).toBe("applied");
+    expect(JSON.parse(item.context)).toMatchObject({
+      types: ["TEXT"],
+      typeSource: "question",
+    });
+    await execute(database, "UPDATE \"Question\" SET type = 'UPLOAD'");
+    await execute(
+      database,
+      'UPDATE "QuestionResponse" SET "learnerResponse" = $1 WHERE id = 19',
+      JSON.stringify(legacy),
+    );
+    expect(
+      (await runner.audit([1], origin, 4 * 1024 * 1024)).models
+        .QuestionResponse,
+    ).toMatchObject({ pending: 0, quarantined: 0 });
+  });
+  it("rolls back each field that still holds its replacement and keeps later edits", async () => {
+    const run = await plan();
+    await runner.apply(run, 100);
+    await execute(
+      database,
+      `UPDATE "AssignmentTranslation" SET "translatedIntroduction" = 'later translation' WHERE id = 15`,
+    );
+    await runner.rollback(await refresh(run));
+    const [translation] = await rows<{
+      introduction: string;
+      translatedIntroduction: string;
+    }>(
+      database,
+      'SELECT introduction, "translatedIntroduction" FROM "AssignmentTranslation" WHERE id = 15',
+    );
+    expect(translation).toEqual({
+      introduction: legacy,
+      translatedIntroduction: "later translation",
+    });
+    const states = await rows<{ rollbackState: string; count: number }>(
+      database,
+      'SELECT "rollbackState", count(*)::int AS count FROM "RichTextMigrationBackup" GROUP BY 1 ORDER BY 1',
+    );
+    expect(states).toEqual([
+      { rollbackState: "partial", count: 1 },
+      { rollbackState: "restored", count: 8 },
+    ]);
+    expect((await runner.status(run)).status).toBe("needs_review");
+    await runner.rollback(await refresh(run));
+    expect(
+      (
+        await rows<{ translatedIntroduction: string }>(
+          database,
+          'SELECT "translatedIntroduction" FROM "AssignmentTranslation" WHERE id = 15',
+        )
+      )[0].translatedIntroduction,
+    ).toBe("later translation");
+  });
+  it("returns paused instead of failing when an operator pauses a running worker", async () => {
+    const slow = new MigrationRunner(
+      database,
+      url!,
+      "postgres-integration",
+      async (...arguments_) => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return convert(...arguments_);
+      },
+    );
+    const run = await plan();
+    const applying = slow.apply(await refresh(run), 100);
+    while ((await count("RichTextMigrationBackup")) < 1)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    await runner.pause(await refresh(run));
+    await expect(applying).resolves.toBe("paused");
+    expect(await count("RichTextMigrationBackup")).toBeLessThan(9);
+    await expect(runner.resume(await refresh(run), 100)).resolves.toBe(
+      "finished",
+    );
+    expect(await count("RichTextMigrationBackup")).toBe(9);
+  });
+  it("retries parser timeouts instead of quarantining the row permanently", async () => {
+    let timeouts = 2;
+    const flaky = new MigrationRunner(
+      database,
+      url!,
+      "postgres-integration",
+      async (model, snapshot, origin_) => {
+        if (model.name === "Question" && timeouts > 0) {
+          timeouts--;
+          return {
+            state: "quarantined",
+            before: snapshot.values,
+            after: snapshot.values,
+            rules: [],
+            reason: "parser-timeout",
+          };
+        }
+        return convert(model, snapshot, origin_);
+      },
+    );
+    const run = await flaky.plan([1], origin, 4 * 1024 * 1024, target);
+    expect((await flaky.status(run)).items).toContainEqual({
+      state: "retryable",
+      count: 1,
+    });
+    await flaky.apply(await flaky.getRun(run.id, target), 100);
+    expect(await count("RichTextMigrationBackup")).toBe(9);
+    expect(
+      (
+        await rows<{ question: string }>(
+          database,
+          'SELECT question FROM "Question" WHERE id = 7',
+        )
+      )[0].question,
+    ).not.toContain("ql-");
+
+    await execute(
+      database,
+      'UPDATE "Question" SET question = $1 WHERE id = 7',
+      legacy,
+    );
+    const second = await plan();
+    await execute(
+      database,
+      `UPDATE "RichTextMigrationItem" SET state = 'quarantined', reason = 'parser-timeout' WHERE "runId" = $1 AND model = 'Question'`,
+      second.id,
+    );
+    await runner.retryConflicts(await refresh(second));
+    await runner.apply(await refresh(second), 100);
+    expect(
+      (
+        await rows<{ state: string }>(
+          database,
+          `SELECT state FROM "RichTextMigrationItem" WHERE "runId" = $1 AND model = 'Question'`,
+          second.id,
+        )
+      )[0].state,
+    ).toBe("applied");
+  });
   it("detects backup tampering and requires two attested clean sweeps for global completion", async () => {
     const run = await plan([]);
     await runner.apply(run, 100);

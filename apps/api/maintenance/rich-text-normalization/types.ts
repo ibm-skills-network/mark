@@ -42,5 +42,6 @@ export interface Item {
   context: string | null;
   destinationHash: string | null;
   state: string;
+  reason: string | null;
   attempts: number;
 }

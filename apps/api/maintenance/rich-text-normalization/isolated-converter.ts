@@ -1,8 +1,16 @@
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
+import { describeError, logger } from "./log";
 import type { Conversion, Model, Snapshot } from "./types";
 
-export function isolatedConvert(
+// Worker failures that depend on load rather than content; worth another attempt.
+export const TRANSIENT_PARSER_REASONS = new Set([
+  "parser-timeout",
+  "parser-exited",
+  "parser-failed",
+]);
+
+function convertOnce(
   model: Model,
   snapshot: Snapshot,
   origin: string,
@@ -30,9 +38,32 @@ export function isolatedConvert(
       });
     const timer = setTimeout(() => failure("parser-timeout"), 10_000);
     worker.once("message", (result: Conversion) => finish(result));
-    worker.once("error", () => failure("parser-failed"));
-    worker.once("exit", () => {
+    worker.once("error", (error) => {
+      logger.warn("parser worker failed", {
+        model: model.name,
+        error: describeError(error),
+      });
+      failure("parser-failed");
+    });
+    worker.once("exit", (code) => {
+      if (!finished)
+        logger.warn("parser worker exited early", { model: model.name, code });
       if (!finished) failure("parser-exited");
     });
   });
+}
+
+export async function isolatedConvert(
+  model: Model,
+  snapshot: Snapshot,
+  origin: string,
+): Promise<Conversion> {
+  const first = await convertOnce(model, snapshot, origin);
+  if (!first.reason || !TRANSIENT_PARSER_REASONS.has(first.reason))
+    return first;
+  logger.warn("retrying parser in a fresh worker", {
+    model: model.name,
+    reason: first.reason,
+  });
+  return convertOnce(model, snapshot, origin);
 }

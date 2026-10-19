@@ -173,13 +173,11 @@ describe("hydrateAuthorStore", () => {
       });
       (listAssignmentVersions as jest.Mock).mockResolvedValue([draft, active]);
       const hydrate = () =>
-        useAuthorStore
-          .getState()
-          .hydrateAuthorStore({
-            activeAssignmentId: 42,
-            versions: [active],
-            name: "Quiz",
-          });
+        useAuthorStore.getState().hydrateAuthorStore({
+          activeAssignmentId: 42,
+          versions: [active],
+          name: "Quiz",
+        });
       if (order === "assignment-first") hydrate();
       await useAuthorStore.getState().loadVersions();
       if (order === "versions-first") hydrate();

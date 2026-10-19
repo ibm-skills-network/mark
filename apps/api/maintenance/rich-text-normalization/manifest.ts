@@ -68,7 +68,8 @@ export const MODELS: Model[] = [
     fields: ["learnerResponse"],
     scope: 'a."assignmentId"',
     joins: 'LEFT JOIN "AssignmentAttempt" a ON a.id = r."assignmentAttemptId"',
-    context: `(SELECT jsonb_build_object('attemptId', r."assignmentAttemptId", 'questionId', r."questionId", 'attemptVersion', a."assignmentVersionId", 'types', COALESCE(jsonb_agg(DISTINCT v.type::text), '[]'::jsonb))::text FROM "QuestionVersion" v WHERE v."assignmentVersionId" = a."assignmentVersionId" AND v."questionId" = r."questionId")`,
+    // Attempts from before versioning have no version; use the question's own type.
+    context: `(SELECT jsonb_build_object('attemptId', r."assignmentAttemptId", 'questionId', r."questionId", 'attemptVersion', a."assignmentVersionId", 'types', CASE WHEN a.id IS NOT NULL AND a."assignmentVersionId" IS NULL THEN COALESCE((SELECT jsonb_agg(q.type::text) FROM "Question" q WHERE q.id = r."questionId"), '[]'::jsonb) ELSE COALESCE(jsonb_agg(DISTINCT v.type::text), '[]'::jsonb) END, 'typeSource', CASE WHEN a.id IS NOT NULL AND a."assignmentVersionId" IS NULL THEN 'question' ELSE 'version' END)::text FROM "QuestionVersion" v WHERE v."assignmentVersionId" = a."assignmentVersionId" AND v."questionId" = r."questionId")`,
   },
   {
     name: "FeedbackTranslation",

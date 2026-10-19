@@ -145,6 +145,12 @@ export async function lockSource(
           attempt.assignmentVersionId,
           response.questionId,
         );
+      else if (attempt)
+        await rows(
+          database,
+          'SELECT id FROM "Question" WHERE id = $1 FOR SHARE',
+          response.questionId,
+        );
     }
   }
 }
