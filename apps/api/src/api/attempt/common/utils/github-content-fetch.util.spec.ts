@@ -2,6 +2,7 @@ import { Logger } from "@nestjs/common";
 import axios from "axios";
 import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { RetryableUrlFetchError } from "src/api/llm/features/grading/errors/retryable-url-fetch.error";
+import { EvidenceChunkingService } from "src/api/llm/features/grading/services/evidence-chunking.service";
 import { safeGet } from "./ssrf-safe-http";
 import {
   clearGithubDefaultBranchCache,
@@ -848,19 +849,56 @@ describe("fetchUrlContentForGrading", () => {
       );
     });
 
-    it("still scrapes a text/html page down to its text", async () => {
-      mockedSafeGet.mockResolvedValue({
-        data: "<html><body>Hello <b>world</b></body></html>",
-        status: 200,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      } as any);
+    it.each([
+      "text/plain",
+      "application/javascript",
+      "application/octet-stream",
+      "application/json",
+      undefined,
+    ])(
+      "preserves source through fetching and chunking with %s",
+      async (contentType) => {
+        const source = [
+          "// Render the required control",
+          'const button = "<button>Save</button>";',
+          "console.log(button);",
+        ].join("\n");
+        mockedSafeGet.mockResolvedValue({
+          data: source,
+          status: 200,
+          headers: contentType ? { "content-type": contentType } : {},
+        } as any);
+        const url = "https://example.com/answer.js";
 
-      const result = await fetchUrlContentForGrading(
-        "https://example.com/portfolio",
-      );
+        const result = await fetchUrlContentForGrading(url);
+        const chunks = new EvidenceChunkingService().extractFromUrl(
+          url,
+          result.body,
+        );
 
-      expect(result).toEqual({ body: "Hello world", isFunctional: true });
-    });
+        expect(result).toEqual({ body: source, isFunctional: true });
+        expect(chunks.find((chunk) => chunk.metadata?.pinned)?.text).toBe(
+          `=== FILE: answer.js (complete) ===\n${source}`,
+        );
+      },
+    );
+
+    it.each(["text/html; charset=utf-8", "application/xhtml+xml", "TEXT/HTML"])(
+      "still scrapes a %s page down to its text",
+      async (contentType) => {
+        mockedSafeGet.mockResolvedValue({
+          data: "<html><body>Hello <b>world</b></body></html>",
+          status: 200,
+          headers: { "content-type": contentType },
+        } as any);
+
+        const result = await fetchUrlContentForGrading(
+          "https://example.com/portfolio",
+        );
+
+        expect(result).toEqual({ body: "Hello world", isFunctional: true });
+      },
+    );
 
     it("returns isFunctional:false (does not throw) on a confirmed miss", async () => {
       // 4xx means the grader looked and there is nothing there. A 5xx or a

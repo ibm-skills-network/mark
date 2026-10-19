@@ -604,17 +604,24 @@ async function fetchGithubRepoRootContent(
   return { body: "", isFunctional: false };
 }
 
-function isPlainTextResponse(contentType: unknown): boolean {
-  if (typeof contentType !== "string") return false;
-  const mediaType = contentType.split(";")[0].trim().toLowerCase();
-  return mediaType.startsWith("text/") && mediaType !== "text/html";
+function isHtmlResponse(contentType: unknown, body: string): boolean {
+  const mediaType =
+    typeof contentType === "string"
+      ? contentType.split(";")[0].trim().toLowerCase()
+      : "";
+  if (mediaType) {
+    return mediaType === "text/html" || mediaType === "application/xhtml+xml";
+  }
+  // Without a declared type, require an HTML document or common page tag;
+  // arbitrary angle brackets in source code are not evidence of HTML.
+  return /<!doctype\s+html\b|<\/?(?:html|body|p|div)(?=[\s/>])/i.test(body);
 }
 
 async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
   try {
     const response = await safeGet<string>(url, { responseType: "text" });
     // The HTML parser would eat code such as `List<Order>` in raw files.
-    if (isPlainTextResponse(response.headers?.["content-type"])) {
+    if (!isHtmlResponse(response.headers?.["content-type"], response.data)) {
       return { body: truncate(response.data), isFunctional: true };
     }
     const $ = cheerio.load(response.data);
