@@ -12,19 +12,19 @@
   resolved "https://registry.yarnpkg.com/@adobe/css-tools/-/css-tools-4.4.4.tgz#2856c55443d3d461693f32d2b96fb6ea92e1ffa9"
   integrity sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==
 
-"@ai-sdk/gateway@2.0.164":
-  version "2.0.164"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.164.tgz#91d4ec98057b229d23efd0e87531701daaf54ca5"
-  integrity sha512-pol4Klaj4v1sO7s5P3L5NXfNPVLBBwseRzUGjs7gge4TMTK3Xdsu7CqiVzLVCFU7bCbm+mMy7TTxiL1Qkmw/6Q==
+"@ai-sdk/gateway@2.0.168":
+  version "2.0.168"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-2.0.168.tgz#7a13dd61f1f89e4f87264baa009c1831270e3f79"
+  integrity sha512-mX6iGOVs79OgIFPqHjBqXf8XGtaDp1np4ZS3uTiYleoNs7XSuKYb6ylHMuUQLVJrx0qtFy3ZsKvHmC0FPY/ZLw==
   dependencies:
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.41"
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
-  version "2.0.133"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.133.tgz#03a9c28815ce920d261d18c75ba6d808f969f4ef"
-  integrity sha512-UfrnVucrMcYxAKBh8yEW5J7asBvSFqHA9VnIFzuMQuVdmX3KCwIBhe6F4WsZ0oWB1GSsoBJJTXr/K1G7nFKL0w==
+  version "2.0.135"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.135.tgz#6bbdc1f2328d9c2ef017e80844f8fa27adeb8d0b"
+  integrity sha512-WegblLiMdG0NR/2Ef0tKeT31Xslmq1oZB8kZeI3Bhl6RaFp1eEfCUX5VeOLvYpflgvsTBg/L+suwMBTJoR3+Tg==
   dependencies:
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.41"
@@ -3519,29 +3519,6 @@
   resolved "https://registry.yarnpkg.com/@scarf/scarf/-/scarf-1.4.0.tgz#3bbb984085dbd6d982494538b523be1ce6562972"
   integrity sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==
 
-"@sendgrid/client@^8.1.5":
-  version "8.1.5"
-  resolved "https://registry.yarnpkg.com/@sendgrid/client/-/client-8.1.5.tgz#e6586c1ea02ec587b393c1f2a63d9eec8c94e34d"
-  integrity sha512-Jqt8aAuGIpWGa15ZorTWI46q9gbaIdQFA21HIPQQl60rCjzAko75l3D1z7EyjFrNr4MfQ0StusivWh8Rjh10Cg==
-  dependencies:
-    "@sendgrid/helpers" "^8.0.0"
-    axios "^1.8.2"
-
-"@sendgrid/helpers@^8.0.0":
-  version "8.0.0"
-  resolved "https://registry.yarnpkg.com/@sendgrid/helpers/-/helpers-8.0.0.tgz#f74bf9743bacafe4c8573be46166130c604c0fc1"
-  integrity sha512-Ze7WuW2Xzy5GT5WRx+yEv89fsg/pgy3T1E3FS0QEx0/VvRmigMZ5qyVGhJz4SxomegDkzXv/i0aFPpHKN8qdAA==
-  dependencies:
-    deepmerge "^4.2.2"
-
-"@sendgrid/mail@^8.1.6":
-  version "8.1.6"
-  resolved "https://registry.yarnpkg.com/@sendgrid/mail/-/mail-8.1.6.tgz#9c253c13d49867fdb6f7df1360643825236eef22"
-  integrity sha512-/ZqxUvKeEztU9drOoPC/8opEPOk+jLlB2q4+xpx6HVLq6aFu3pMpalkTpAQz8XfRfpLp8O25bh6pGPcHDCYpqg==
-  dependencies:
-    "@sendgrid/client" "^8.1.5"
-    "@sendgrid/helpers" "^8.0.0"
-
 "@simple-libs/child-process-utils@^1.0.0":
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/@simple-libs/child-process-utils/-/child-process-utils-1.0.2.tgz#cb182d310c9bed3ace200b26258e090d898a1736"
@@ -3930,9 +3907,9 @@
     "@babel/runtime" "^7.12.5"
 
 "@testing-library/user-event@^14.6.7":
-  version "14.6.7"
-  resolved "https://registry.yarnpkg.com/@testing-library/user-event/-/user-event-14.6.7.tgz#c453ccfcaffed110cc79048ed18fccb0f4224f3b"
-  integrity sha512-MPCpX8bxe8zS+JmmTwLp8jd0dy1rAm60Te/SL8JrQM3qvQJcBOs1d7IefJMyZzqM3EWBrDn/LWDt1BCGu4ASfg==
+  version "14.6.8"
+  resolved "https://registry.yarnpkg.com/@testing-library/user-event/-/user-event-14.6.8.tgz#9433b5008d8aff4cdf60c177f5789ce32062b763"
+  integrity sha512-vgSSqnANMnkcYR/vUNDbwS7aM3OErRLNUG8vCVVlj4oc6cKffUrccX7UAS5AmJQQNZTSibi9z5GvvRZ0aYgUCQ==
 
 "@tippyjs/react@^4.2.6":
   version "4.2.6"
@@ -5740,11 +5717,11 @@ agentkeepalive@^4.2.1:
     humanize-ms "^1.2.1"
 
 ai@^5.0.52:
-  version "5.0.273"
-  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.273.tgz#233d3553633fb0aa546a355de27f448c0ac46513"
-  integrity sha512-/rVEn93YcPAugzgKBJykrlWM/lPZuASrG+qvyjbV42/DJb0rEBJa7kg3wC/aKhdxGPppr8+O/pOdpYcXjtsDCQ==
+  version "5.0.277"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-5.0.277.tgz#7f035e36d24057e52c4ef3f11503e983ad7af0ea"
+  integrity sha512-qt5LR/P7K+2a8npyJLID49i2y2gYj2BDoyxJf9S1fZKf3CgItp4l0LacY099OyJ6z64Ywujv/+iMgdQgVExdsQ==
   dependencies:
-    "@ai-sdk/gateway" "2.0.164"
+    "@ai-sdk/gateway" "2.0.168"
     "@ai-sdk/provider" "2.0.5"
     "@ai-sdk/provider-utils" "3.0.41"
     "@opentelemetry/api" "1.9.0"
@@ -6103,7 +6080,7 @@ axe-core@^4.10.0:
   resolved "https://registry.yarnpkg.com/axe-core/-/axe-core-4.10.3.tgz#04145965ac7894faddbac30861e5d8f11bfd14fc"
   integrity sha512-Xm7bpRXnDSX2YE2YFfBk2FnF0ep6tmG7xPh8iHee8MIcrgq762Nkce856dYtJYLkuIoYZvGfTs/PbZhideTcEg==
 
-axios@1.20.0, axios@^1.19.0, axios@^1.20.0, axios@^1.8.2:
+axios@1.20.0, axios@^1.19.0, axios@^1.20.0:
   version "1.20.0"
   resolved "https://registry.yarnpkg.com/axios/-/axios-1.20.0.tgz#515513445aa60e71d04b6521ca6210829ccb4786"
   integrity sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==
@@ -7469,9 +7446,9 @@ domhandler@^5.0.2, domhandler@^5.0.3:
     domelementtype "^2.3.0"
 
 dompurify@^3.3.1, dompurify@^3.4.14:
-  version "3.4.16"
-  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-3.4.16.tgz#c51b3709ea15ee9abb07e804f2ef30ea9b953128"
-  integrity sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==
+  version "3.4.17"
+  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-3.4.17.tgz#074bbb24eaa419535ac19ffe7f663104b0e1543d"
+  integrity sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==
   optionalDependencies:
     "@types/trusted-types" "^2.0.7"
 

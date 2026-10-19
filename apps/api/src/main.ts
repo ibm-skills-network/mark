@@ -55,7 +55,7 @@ async function bootstrap() {
   );
   logger.log(
     `feature flags: PGBOUNCER=${process.env.PGBOUNCER ?? "<unset>"} ` +
-      `SENDGRID_API_KEY=${process.env.SENDGRID_API_KEY ? "set" : "<unset>"}`,
+      `SMTP_USER=${process.env.SMTP_USER ? "set" : "<unset>"}`,
   );
 
   try {

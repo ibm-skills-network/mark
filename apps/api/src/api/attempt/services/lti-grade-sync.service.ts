@@ -256,6 +256,10 @@ export class LtiGradeSyncService {
           delayMinutes,
         )}. You don't need to do anything.`,
         nextRetryAt,
+        LtiSyncStatus.SCHEDULED,
+        // Email only the first failure. Later retries update the in-app
+        // notification, and the learner hears again only if every retry fails.
+        newRetryCount === 1,
       );
 
       return {
@@ -287,6 +291,8 @@ export class LtiGradeSyncService {
         `Grade sync failed`,
         `We were unable to sync your grade to your course platform after multiple attempts. Your grade is safely stored in our system. Please contact your instructor or support if your grade doesn't appear in your course within 24 hours.`,
         null,
+        LtiSyncStatus.FAILED,
+        true,
       );
 
       return {
@@ -300,19 +306,24 @@ export class LtiGradeSyncService {
   }
 
   /**
-   * Creates a notification for the learner about grade sync status.
-   * Also sends an email notification.
+   * Creates a notification for the learner about grade sync status, and
+   * optionally emails it. A single failed sync sends at most two emails: one
+   * when it first fails and one if it fails permanently.
    *
    * @param sync - The sync record
    * @param title - Notification title
    * @param message - Notification message
    * @param nextRetryAt - Next retry time (if applicable)
+   * @param status - The status the sync was just moved to
+   * @param sendEmail - Whether to email the learner as well
    */
   private async createLearnerNotification(
     sync: SyncWithAttempt,
     title: string,
     message: string,
     nextRetryAt: Date | null,
+    status: LtiSyncStatus,
+    sendEmail: boolean,
   ): Promise<void> {
     try {
       // Create in-app notification
@@ -345,8 +356,15 @@ export class LtiGradeSyncService {
         `📧 Created notification for user ${sync.userId} about sync ${sync.id}`,
       );
 
-      // Send email notification
-      await this.sendEmailNotification(sync, title, message, nextRetryAt);
+      if (sendEmail) {
+        await this.sendEmailNotification(
+          sync,
+          title,
+          message,
+          nextRetryAt,
+          status,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to create learner notification for sync ${sync.id}`,
@@ -362,15 +380,23 @@ export class LtiGradeSyncService {
    * @param title - Email subject
    * @param message - Email message
    * @param nextRetryAt - Next retry time (if applicable)
+   * @param status - The status the sync was just moved to
    */
   private async sendEmailNotification(
     sync: SyncWithAttempt,
     title: string,
     message: string,
     nextRetryAt: Date | null,
+    status: LtiSyncStatus,
   ): Promise<void> {
     try {
-      const emailBody = this.buildEmailBody(sync, title, message, nextRetryAt);
+      const emailBody = this.buildEmailBody(
+        sync,
+        title,
+        message,
+        nextRetryAt,
+        status,
+      );
 
       const emailSent = await this.emailService.sendGenericEmail(
         sync.userId, // userId is the email address
@@ -383,7 +409,7 @@ export class LtiGradeSyncService {
           `✉️ Sent email notification to ${sync.userId} about sync ${sync.id}`,
         );
       } else {
-        this.logger.warn(
+        this.logger.error(
           `Failed to send email notification to ${sync.userId} for sync ${sync.id}`,
         );
       }
@@ -402,6 +428,7 @@ export class LtiGradeSyncService {
    * @param title - Notification title
    * @param message - Notification message
    * @param nextRetryAt - Next retry time (if applicable)
+   * @param status - The status the sync was just moved to
    * @returns Formatted email body
    */
   private buildEmailBody(
@@ -409,9 +436,12 @@ export class LtiGradeSyncService {
     title: string,
     message: string,
     nextRetryAt: Date | null,
+    status: LtiSyncStatus,
   ): string {
-    const baseUrl = process.env.WEB_APP_URL || "http://localhost:3010";
-    const resultsUrl = `${baseUrl}/learner/${sync.assignmentId}/successPage/${sync.attemptId}`;
+    const resultsUrl = this.emailService.learnerResultsUrl(
+      sync.assignmentId,
+      sync.attemptId,
+    );
     const gradePercent = Math.round(sync.grade * 100);
 
     let emailBody = `
@@ -434,7 +464,7 @@ View Your Results: ${resultsUrl}
 ---
 
 What This Means:
-${this.getStatusExplanation(sync.status, nextRetryAt)}
+${this.getStatusExplanation(status, nextRetryAt)}
 
 ---
 

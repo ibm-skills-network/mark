@@ -289,16 +289,22 @@ export class GradingProgressService {
                 ? undefined
                 : gradingProgress.attempt.grade * 100;
 
-            await this.emailService.sendGradingCompletionEmail(
+            const sent = await this.emailService.sendGradingCompletionEmail(
               gradingProgress.notificationEmail,
               assignmentId,
               attemptId,
               grade,
             );
 
-            this.logger.log(
-              `Successfully sent grading completion email for attempt ${attemptId}`,
-            );
+            if (sent) {
+              this.logger.log(
+                `Successfully sent grading completion email for attempt ${attemptId}`,
+              );
+            } else {
+              this.logger.error(
+                `Grading completion email not sent for attempt ${attemptId}`,
+              );
+            }
           } catch (emailError) {
             this.logger.error(
               `Failed to send grading completion email for attempt ${attemptId}`,
