@@ -25,16 +25,17 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
   let localizationService: jest.Mocked<LocalizationService>;
   let llmFacadeService: jest.Mocked<LlmFacadeService>;
   let gradingAuditService: jest.Mocked<GradingAuditService>;
+  let mockLogger: jest.Mocked<Logger>;
 
   beforeEach(async () => {
-    const mockLogger = {
+    mockLogger = {
       error: jest.fn(),
       warn: jest.fn(),
       log: jest.fn(),
       debug: jest.fn(),
       info: jest.fn(),
       child: jest.fn().mockReturnThis(),
-    } as unknown as Logger;
+    } as unknown as jest.Mocked<Logger>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -426,6 +427,72 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
         ),
       ).rejects.toThrow(GithubRateLimitedError);
       expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
+    });
+
+    it("passes fetched text to the grader as-is, not JSON-encoded", async () => {
+      const body = 'class A {\n    String s = "x";\n}';
+      mockedFetch.mockResolvedValue({ body, isFunctional: true });
+      llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+        points: 8,
+        feedback: "ok",
+      } as any);
+
+      await strategy.gradeResponse(
+        mockQuestion,
+        "https://github.com/acme/shop/blob/main/A.java",
+        context,
+      );
+
+      expect(
+        llmFacadeService.gradeUrlBasedQuestion.mock.calls[0][0].urlBody,
+      ).toBe(body);
+    });
+
+    it("JSON-encodes a body that is not a string", async () => {
+      const body = { cells: [] };
+      mockedFetch.mockResolvedValue({ body, isFunctional: true } as any);
+      llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+        points: 8,
+        feedback: "ok",
+      } as any);
+
+      await strategy.gradeResponse(
+        mockQuestion,
+        "https://github.com/acme/shop/blob/main/a.ipynb",
+        context,
+      );
+
+      expect(
+        llmFacadeService.gradeUrlBasedQuestion.mock.calls[0][0].urlBody,
+      ).toBe('{"cells":[]}');
+    });
+
+    it("logs an LLM grading failure and keeps the half-credit fallback", async () => {
+      mockedFetch.mockResolvedValue({ body: "class A {}", isFunctional: true });
+      const failure = new Error("model unavailable");
+      llmFacadeService.gradeUrlBasedQuestion.mockRejectedValue(failure);
+
+      const result = await strategy.gradeResponse(
+        mockQuestion,
+        "https://github.com/acme/shop/blob/main/A.java",
+        context,
+      );
+
+      expect(result.totalPoints).toBe(5);
+      expect(result.metadata).toMatchObject({
+        error: "llm_grading_failed",
+        status: "fallback_grading",
+        requiresManualReview: true,
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          assignmentId: 42,
+          questionId: 1,
+          error: "model unavailable",
+          stack: failure.stack,
+        }),
+      );
     });
   });
 });

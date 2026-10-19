@@ -1,8 +1,6 @@
 /* eslint-disable */
-import { Logger } from "@nestjs/common";
-
+import { splitCodeIntoSegments } from "./code-evidence-blocks.utils";
 import { CODE_SEGMENT_MAX_CHARS } from "./source-code.utils";
-import { FileGradingService } from "./file-grading.service";
 
 /**
  * Notebook evidence segmentation.
@@ -16,17 +14,6 @@ import { FileGradingService } from "./file-grading.service";
  * "submission shows only the solution template" false zeros).
  */
 
-function makeService(): FileGradingService {
-  const service = Object.create(FileGradingService.prototype);
-  (service as any).logger = {
-    debug: jest.fn(),
-    log: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  } as unknown as Logger;
-  return service as FileGradingService;
-}
-
 function mdCell(n: number, text: string): string {
   return `=== CELL ${n} [MARKDOWN] ===\n${text}`;
 }
@@ -38,14 +25,8 @@ function codeCell(n: number, text: string): string {
 const HEADER = "=== JUPYTER NOTEBOOK: test.ipynb ===\nFormat: v4.5";
 
 describe("FileGradingService notebook section segmentation", () => {
-  let service: FileGradingService;
-
-  beforeEach(() => {
-    service = makeService();
-  });
-
   function split(text: string): string[] {
-    return (service as any).splitCodeIntoSegments(text);
+    return splitCodeIntoSegments(text);
   }
 
   it("attaches a task's code cells to the preceding markdown run", () => {

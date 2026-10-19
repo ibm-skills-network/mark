@@ -246,7 +246,9 @@ export async function fetchReadmeForBranch(
     .join("/");
   const readmeUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodedBranch}/README.md`;
   try {
-    const response = await safeGet<string>(readmeUrl);
+    const response = await safeGet<string>(readmeUrl, {
+      responseType: "text",
+    });
     return response.status === 200 ? truncate(response.data) : undefined;
   } catch (error) {
     throwIfRetryable(error, readmeUrl, "readme");
@@ -510,7 +512,10 @@ async function fetchGithubBlobContent(
   rawUrl: string,
 ): Promise<GithubFetchResult> {
   try {
-    const response = await safeGet<string>(rawUrl);
+    // Otherwise Axios parses JSON and notebooks into objects.
+    const response = await safeGet<string>(rawUrl, {
+      responseType: "text",
+    });
     if (response.status === 200) {
       return { body: truncate(response.data), isFunctional: true };
     }
@@ -599,9 +604,26 @@ async function fetchGithubRepoRootContent(
   return { body: "", isFunctional: false };
 }
 
+function isHtmlResponse(contentType: unknown, body: string): boolean {
+  const mediaType =
+    typeof contentType === "string"
+      ? contentType.split(";")[0].trim().toLowerCase()
+      : "";
+  if (mediaType) {
+    return mediaType === "text/html" || mediaType === "application/xhtml+xml";
+  }
+  // Without a declared type, require an HTML document or common page tag;
+  // arbitrary angle brackets in source code are not evidence of HTML.
+  return /<!doctype\s+html\b|<\/?(?:html|body|p|div)(?=[\s/>])/i.test(body);
+}
+
 async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
   try {
-    const response = await safeGet<string>(url);
+    const response = await safeGet<string>(url, { responseType: "text" });
+    // The HTML parser would eat code such as `List<Order>` in raw files.
+    if (!isHtmlResponse(response.headers?.["content-type"], response.data)) {
+      return { body: truncate(response.data), isFunctional: true };
+    }
     const $ = cheerio.load(response.data);
     stripNoiseNodes($);
     const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");

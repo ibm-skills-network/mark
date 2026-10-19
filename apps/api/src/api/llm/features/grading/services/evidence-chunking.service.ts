@@ -11,10 +11,17 @@ import {
 } from "../types/criterion-evidence.types";
 import { LearnerImageUpload } from "src/api/llm/model/image.based.evalutate.model";
 import {
+  buildCodeEvidenceBlocks,
+  normalizeCodeSubmissionText,
+} from "./code-evidence-blocks.utils";
+import {
   DOC_WHOLE_SUBMISSION_BLOCK_MAX_CHARS,
+  isCodeLikeFilename,
   PROSE_SECTION_MAX_CHARS,
   sanitizeFilenameForMarker,
 } from "./source-code.utils";
+
+const HTML_TAG_PATTERN = /<\/?(?:html|body|p|div)(?=[\s/>])/i;
 
 interface HtmlParagraph {
   text: string;
@@ -357,6 +364,9 @@ export class EvidenceChunkingService {
   }
 
   extractFromUrl(url: string, body: string): ExtractedChunk[] {
+    const filename = this.codeFilenameFromUrl(url);
+    if (filename) return this.extractCodeFromUrl(url, filename, body);
+
     const paragraphs = this.extractParagraphsFromHtml(body);
     const chunks: ExtractedChunk[] = [];
 
@@ -382,6 +392,53 @@ export class EvidenceChunkingService {
     }
 
     return chunks;
+  }
+
+  private codeFilenameFromUrl(url: string): string | undefined {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return undefined;
+    }
+    // On github.com only a blob path is a file; repo roots and other pages are not.
+    if (
+      parsed.hostname === "github.com" &&
+      !parsed.pathname.includes("/blob/")
+    ) {
+      return undefined;
+    }
+    let segment = parsed.pathname.split("/").pop() ?? "";
+    try {
+      segment = decodeURIComponent(segment);
+    } catch {
+      // Malformed escapes: keep the raw segment.
+    }
+    const filename = sanitizeFilenameForMarker(segment);
+    return isCodeLikeFilename(filename) ? filename : undefined;
+  }
+
+  private extractCodeFromUrl(
+    url: string,
+    filename: string,
+    body: string,
+  ): ExtractedChunk[] {
+    const code = normalizeCodeSubmissionText(body);
+    if (!code.trim()) return [];
+
+    return buildCodeEvidenceBlocks(code, 1, { filename }).map((block, index) =>
+      this.createChunk({
+        text: block.text,
+        sourceType: "url",
+        sourceId: url,
+        anchor: { type: "url", url, paragraphIndex: index + 1 },
+        metadata: {
+          url,
+          filename,
+          ...(block.pinnedEvidence ? { pinned: true } : {}),
+        },
+      }),
+    );
   }
 
   extractFromImages(images: LearnerImageUpload[]): ExtractedChunk[] {
@@ -479,7 +536,7 @@ export class EvidenceChunkingService {
   private extractParagraphsFromHtml(body: string): HtmlParagraph[] {
     if (!body) return [];
 
-    const hasHtml = /<[^>]+>/.test(body);
+    const hasHtml = HTML_TAG_PATTERN.test(body);
 
     if (!hasHtml) {
       return this.splitIntoParagraphs(body).map((text) => ({ text }));
