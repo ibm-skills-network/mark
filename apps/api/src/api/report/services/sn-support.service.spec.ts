@@ -137,56 +137,41 @@ describe("SnSupportService", () => {
     },
   );
 
-  it("passes the screenshot as metadata.imageUrl and drops non-HTTP values", async () => {
-    httpService.post.mockReturnValue(
-      of({
-        data: {
-          ticketKey: "SUPPORT-102",
-          reportKey: "SUPPORT-102-1",
-          status: "open",
-          createdAt: "2026-08-12T18:00:00.000Z",
-        },
-      }),
-    );
+  it("sends screenshots as top-level screenshotUrls, not metadata.imageUrl", async () => {
+    mockTicketResponse();
 
     await service.createTicket({
       title: "Mark report",
       description: "Details",
       reporterEmail: "learner@example.com",
-      screenshotUrl: "https://cos.example.com/bucket/shot.png",
+      screenshotUrls: ["https://cos.example.com/bucket/shot.png"],
     });
-    expect(httpService.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          imageUrl: "https://cos.example.com/bucket/shot.png",
-        }),
-      }),
-      expect.any(Object),
-    );
 
-    httpService.post.mockClear();
-    httpService.post.mockReturnValue(
-      of({
-        data: {
-          ticketKey: "SUPPORT-103",
-          reportKey: "SUPPORT-103-1",
-          status: "open",
-          createdAt: "2026-08-12T18:00:00.000Z",
-        },
-      }),
-    );
-    await service.createTicket({
-      title: "Mark report",
-      description: "Details",
-      reporterEmail: "learner@example.com",
-      screenshotUrl: "not-a-url",
-    });
     const [, sentBody] = httpService.post.mock.calls[0] as [
       string,
-      { metadata: Record<string, string> },
+      { screenshotUrls?: string[]; metadata: Record<string, string> },
     ];
+    expect(sentBody.screenshotUrls).toEqual([
+      "https://cos.example.com/bucket/shot.png",
+    ]);
     expect(sentBody.metadata.imageUrl).toBeUndefined();
+  });
+
+  it("drops non-HTTP screenshot URLs and omits the field when none remain", async () => {
+    mockTicketResponse();
+
+    await service.createTicket({
+      title: "Mark report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      screenshotUrls: ["not-a-url", "javascript:alert(1)"],
+    });
+
+    const [, sentBody] = httpService.post.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(sentBody).not.toHaveProperty("screenshotUrls");
   });
 
   // The v2 create contract has no portalUrl field and rejects unknown

@@ -31,6 +31,10 @@ import {
   ReportDiagnostics,
   summarizeReportDiagnostics,
 } from "../helpers/report-diagnostics";
+import {
+  buildScreenshotKey,
+  detectScreenshotFormat,
+} from "../helpers/screenshot";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
@@ -604,6 +608,56 @@ export class ReportsService {
       },
     };
   }
+
+  /**
+   * Stores a report's screenshot public-read and returns the URL SN Support
+   * renders it from. SN Support only links to the URL, so the object must be
+   * readable by the agent's browser; see helpers/screenshot.ts for why only
+   * byte-verified images under a random key are made public. A screenshot
+   * never fails the report it rides on.
+   */
+  private async uploadReportScreenshot(
+    screenshot: Express.Multer.File,
+    logContext: Record<string, unknown>,
+  ): Promise<string | undefined> {
+    const bucket = process.env.IBM_COS_DEBUG_BUCKET;
+    const cosEndpoint = process.env.IBM_COS_ENDPOINT?.replace(/\/+$/, "");
+    if (!bucket || !cosEndpoint) {
+      this.logger.warn("Report screenshot dropped: storage not configured", {
+        ...logContext,
+        has_bucket: Boolean(bucket),
+        has_endpoint: Boolean(cosEndpoint),
+      });
+      return undefined;
+    }
+
+    const format = detectScreenshotFormat(screenshot.buffer);
+    if (!format) {
+      this.logger.warn("Report screenshot dropped: not a supported image", {
+        ...logContext,
+        claimed_type: screenshot.mimetype,
+        bytes: screenshot.size,
+      });
+      return undefined;
+    }
+
+    const key = buildScreenshotKey(format);
+    try {
+      await this.filesService.directUpload(screenshot, bucket, key, {
+        acl: "public-read",
+        contentType: format.mimeType,
+      });
+    } catch (error) {
+      this.logger.error("Report screenshot upload failed", {
+        ...logContext,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+
+    return `${cosEndpoint}/${bucket}/${key}`;
+  }
+
   private mapIssueTypeToReportType(issueType: string): ReportType {
     switch (issueType.toLowerCase()) {
       case "bug":
@@ -906,28 +960,6 @@ export class ReportsService {
       );
     }
 
-    let screenshotUrl: string | undefined;
-    if (screenshot && screenshot.buffer) {
-      try {
-        const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
-        if (debugBucket) {
-          const uniqueId =
-            Date.now().toString(36) + Math.random().toString(36).slice(2);
-          const screenshotKey = `issue-screenshots/${uniqueId}-${screenshot.originalname}`;
-
-          await this.filesService.directUpload(
-            screenshot,
-            debugBucket,
-            screenshotKey,
-          );
-
-          screenshotUrl = screenshotKey;
-        }
-      } catch {
-        // Ignore screenshot upload failures; continue without screenshot
-      }
-    }
-
     const mappedIssueType = this.mapIssueTypeToReportType(issueType);
 
     const similarReports = await this.findSimilarReports(
@@ -944,24 +976,6 @@ export class ReportsService {
       attemptId,
       description,
     });
-
-    const finalScreenshotUrl =
-      screenshotUrl || additionalDetails?.screenshotUrl;
-    let fullScreenshotUrl: string | undefined;
-    if (finalScreenshotUrl && typeof finalScreenshotUrl === "string") {
-      const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
-      const cosEndpoint = process.env.IBM_COS_ENDPOINT;
-
-      if (
-        cosEndpoint &&
-        debugBucket &&
-        (screenshotUrl || finalScreenshotUrl.includes(debugBucket))
-      ) {
-        fullScreenshotUrl = screenshotUrl
-          ? `${cosEndpoint}/${debugBucket}/${screenshotUrl}`
-          : `${cosEndpoint}/${debugBucket}/${finalScreenshotUrl}`;
-      }
-    }
 
     // SN Support is the support queue for new reports. The v2 API requires a
     // reporter email, so anonymous reports exist only as DB rows below.
@@ -987,6 +1001,14 @@ export class ReportsService {
 
     let snTicketKey: string | undefined;
     if (canForward && route?.token) {
+      // Uploaded only when a ticket goes out: the ticket is the only place the
+      // public URL is recorded, so a screenshot without one would be orphaned.
+      const screenshotUrl = screenshot?.buffer
+        ? await this.uploadReportScreenshot(screenshot, {
+            assignment_id: assignmentId,
+            attempt_id: attemptId,
+          })
+        : undefined;
       const supportDescription = [
         stripSectionLabelMarkdown(description),
         "",
@@ -1018,7 +1040,7 @@ export class ReportsService {
             toolName: "Mark",
             browser: detailString("browser"),
             chatHistoryUrl: detailString("chatHistoryUrl"),
-            screenshotUrl: fullScreenshotUrl,
+            screenshotUrls: screenshotUrl ? [screenshotUrl] : undefined,
           },
           route.token,
         );

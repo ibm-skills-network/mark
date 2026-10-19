@@ -107,7 +107,10 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
     useDropzone({
       onDrop,
       accept: {
-        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
+        "image/png": [".png"],
+        "image/jpeg": [".jpg", ".jpeg"],
+        "image/gif": [".gif"],
+        "image/webp": [".webp"],
       },
       multiple: false,
       maxSize: 100 * 1024 * 1024,

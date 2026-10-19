@@ -126,7 +126,10 @@ describe("ReportsService.reportIssue", () => {
     userId: "employee@ibm.com",
   };
 
-  const makeForReportIssue = (snSupportService: unknown) => {
+  const makeForReportIssue = (
+    snSupportService: unknown,
+    filesService: unknown = undefined,
+  ) => {
     const prisma = {
       report: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -145,7 +148,7 @@ describe("ReportsService.reportIssue", () => {
     const service = new ReportsService(
       floService as never,
       prisma as never,
-      undefined as never,
+      filesService as never,
       undefined as never,
       snSupportService as never,
       supportRouting as never,
@@ -288,7 +291,7 @@ describe("ReportsService.reportIssue", () => {
         toolName: "Mark",
         browser: undefined,
         chatHistoryUrl: undefined,
-        screenshotUrl: undefined,
+        screenshotUrls: undefined,
       },
       // The product-scoped key is what routes the ticket to Coursera.
       "sk_coursera",
@@ -487,6 +490,104 @@ describe("ReportsService.reportIssue", () => {
     expect(snSupportService.createTicket).not.toHaveBeenCalled();
     expect(prisma.report.create).toHaveBeenCalled();
     expect(result.reportId).toBe(7);
+  });
+  describe("report screenshots", () => {
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(32),
+    ]);
+    const asUpload = (buffer: Buffer, mimetype = "image/png") =>
+      ({
+        buffer,
+        size: buffer.length,
+        mimetype,
+        originalname: "my screen shot.png",
+      }) as Express.Multer.File;
+    const sn = () => ({
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-5" }),
+    });
+    const env = { ...process.env };
+
+    beforeEach(() => {
+      process.env.IBM_COS_DEBUG_BUCKET = "debug-bkt";
+      process.env.IBM_COS_ENDPOINT = "https://s3.example.com/";
+    });
+    afterEach(() => {
+      process.env = { ...env };
+    });
+
+    it("stores the image public-read under a random key and sends its URL", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      await service.reportIssue(reportDto, session, asUpload(png, "text/html"));
+
+      const [, bucket, key, options] = filesService.directUpload.mock.calls[0];
+      expect(bucket).toBe("debug-bkt");
+      expect(key).toMatch(/^issue-screenshots\/[\da-f-]{36}\.png$/);
+      // The sniffed type wins over the client's claim.
+      expect(options).toEqual({ acl: "public-read", contentType: "image/png" });
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toEqual([`https://s3.example.com/debug-bkt/${key}`]);
+    });
+
+    it("drops a file that is not an image and still files the report", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn() };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(Buffer.from("<!doctype html><script>alert(1)</script>")),
+      );
+
+      expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toBeUndefined();
+      expect(result.reportId).toBe(7);
+    });
+
+    it("does not publish a screenshot when no ticket goes out", async () => {
+      const snSupportService = {
+        isConfigured: jest.fn().mockReturnValue(false),
+        createTicket: jest.fn(),
+      };
+      const filesService = { directUpload: jest.fn() };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(png),
+      );
+
+      expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(result.reportId).toBe(7);
+    });
+
+    it("files the report without a screenshot when the upload fails", async () => {
+      const snSupportService = sn();
+      const filesService = {
+        directUpload: jest.fn().mockRejectedValue(new Error("storage down")),
+      };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(png),
+      );
+
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toBeUndefined();
+      expect(result.reportId).toBe(7);
+    });
   });
 });
 
