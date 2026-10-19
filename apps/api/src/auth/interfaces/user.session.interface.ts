@@ -19,7 +19,18 @@ export interface ClientUserSession {
 export interface UserSession extends ClientUserSession {
   groupId: string;
   gradingCallbackRequired?: boolean;
+  /** Grade callback endpoint; only its host is exposed to the browser. */
   lisOutcomeServiceUrl?: string;
+  /** LTI tool_consumer_instance_guid, e.g. "ondemand.coursera.org". */
+  toolConsumerInstanceGuid?: string;
+  /** LMS course title (LTI context_title) from the signed launch. */
+  courseTitle?: string;
+  /** LMS course id (LTI context_id), e.g. an Open edX course key. */
+  courseId?: string;
+  /** The item in the course that launched Mark. */
+  activityTitle?: string;
+  /** LTI tool_consumer_info_product_family_code, e.g. "Public Your Learning". */
+  toolConsumerProductFamilyCode?: string;
 }
 
 export interface UserSessionRequest extends Request {

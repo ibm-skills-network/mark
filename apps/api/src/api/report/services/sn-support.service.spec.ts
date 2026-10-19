@@ -25,7 +25,7 @@ describe("SnSupportService", () => {
       if (key === "SN_SUPPORT_URL") {
         return "https://support.skills.network/";
       }
-      if (key === "SN_SUPPORT_TOKEN") return "mark-api-key";
+      if (key === "SUPPORT_TOKEN_MARK") return "mark-api-key";
       return undefined;
     });
   });
@@ -213,6 +213,31 @@ describe("SnSupportService", () => {
     });
   });
 
+  it("sends the course id, item and LMS family as custom metadata", async () => {
+    mockTicketResponse();
+
+    await service.createTicket({
+      title: "Mark report",
+      description: "Details",
+      reporterEmail: "learner@example.com",
+      courseTitle: "Quiz [Nomad L2]",
+      courseId: "course-v1:IBMTechnologySales_SkillsVitality+A303EN+v1",
+      activityTitle: "Your Assignment",
+      lmsFamily: "Public Your Learning",
+    });
+
+    const [, sentBody] = httpService.post.mock.calls[0] as [
+      string,
+      { metadata: Record<string, string> },
+    ];
+    expect(sentBody.metadata).toMatchObject({
+      courseTitle: "Quiz [Nomad L2]",
+      "mark.courseId": "course-v1:IBMTechnologySales_SkillsVitality+A303EN+v1",
+      "mark.activityTitle": "Your Assignment",
+      "mark.lmsFamily": "Public Your Learning",
+    });
+  });
+
   // SN Support's base mapper (used for the unregistered source "Mark") drops
   // pageUrl and browser before they reach the Issue row; the metadata copies
   // are what actually survive.
@@ -298,7 +323,7 @@ describe("SnSupportService", () => {
     expect(body.reporterOrigin).toHaveLength(200);
   });
 
-  it("uses a product key without requiring the legacy token", async () => {
+  it("uses a product key without requiring the Mark fallback key", async () => {
     mockTicketResponse();
     configService.get.mockImplementation((key: string) =>
       key === "SN_SUPPORT_URL" ? "https://support.skills.network" : undefined,
@@ -316,6 +341,26 @@ describe("SnSupportService", () => {
       "Bearer product-key",
     );
   });
+
+  it.each([undefined, "", "   "])(
+    "does not send with a legacy token when the Mark key is %p",
+    async (markKey) => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === "SN_SUPPORT_URL") return "https://support.skills.network";
+        if (key === "SN_SUPPORT_TOKEN") return "legacy-key";
+        if (key === "SUPPORT_TOKEN_MARK") return markKey;
+        return undefined;
+      });
+      await expect(
+        service.createTicket({
+          title: "Report",
+          description: "Details",
+          reporterEmail: "learner@example.com",
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
+      expect(httpService.post).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a ticket without the reporter email required by v2", async () => {
     await expect(

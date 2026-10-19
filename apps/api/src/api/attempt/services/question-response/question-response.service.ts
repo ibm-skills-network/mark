@@ -34,6 +34,7 @@ import {
   fetchUrlContentForGrading,
 } from "src/api/attempt/common/utils/github-content-fetch.util";
 import { normalizeLearnerUrl } from "src/api/attempt/common/utils/learner-url.util";
+import { stripImagesFromLearnerHtml } from "src/api/attempt/common/utils/learner-text-images.util";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { RetryableUrlFetchError } from "../../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
@@ -42,6 +43,11 @@ import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
 import { sanitizeUnicodeForJson } from "../../../../helpers/sanitize-unicode";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
+import {
+  buildChoiceRenderings,
+  ChoiceRendering,
+  parseStoredChoices,
+} from "../../common/utils/choice-renderings.util";
 import {
   applyQuestionTranslation,
   findQuestionTranslation,
@@ -887,6 +893,16 @@ export class QuestionResponseService {
   }> {
     const questionId = question.id;
 
+    if (question.type === QuestionType.TEXT) {
+      this.removeImagesFromTextResponse(
+        requestDto,
+        questionId,
+        assignmentId,
+        assignmentAttemptId,
+        role,
+      );
+    }
+
     if (this.isEmptyResponse(requestDto)) {
       const { responseDto, learnerResponse } =
         this.handleEmptyResponse(language);
@@ -909,6 +925,15 @@ export class QuestionResponseService {
         responseType: question.responseType,
       },
     };
+
+    if (
+      role === UserRole.LEARNER &&
+      (question.type === QuestionType.SINGLE_CORRECT ||
+        question.type === QuestionType.MULTIPLE_CORRECT)
+    ) {
+      gradingContext.loadChoiceRenderings = () =>
+        this.loadChoiceRenderings(questionId, assignmentAttemptId);
+    }
 
     let responseDto: CreateQuestionResponseAttemptResponseDto;
     let learnerResponse: unknown;
@@ -1046,6 +1071,67 @@ export class QuestionResponseService {
     }
 
     return { learnerResponse, responseDto };
+  }
+
+  /**
+   * Every stored set of choices the learner can have been shown for this
+   * question in this attempt: the authored choices of the question or its
+   * drawn variant, and their stored translations. Read from the database by
+   * attempt and question, never from the request.
+   */
+  private async loadChoiceRenderings(
+    questionId: number,
+    assignmentAttemptId: number,
+  ): Promise<ChoiceRendering[]> {
+    const [question, mapping] = await Promise.all([
+      this.prisma.question.findUnique({
+        where: { id: questionId },
+        select: { choices: true },
+      }),
+      this.prisma.assignmentAttemptQuestionVariant.findUnique({
+        where: {
+          assignmentAttemptId_questionId: { assignmentAttemptId, questionId },
+        },
+        select: { questionVariant: { select: { id: true, choices: true } } },
+      }),
+    ]);
+
+    const variant = mapping?.questionVariant ?? null;
+    const variantId = variant?.id ?? null;
+    const baseChoices = parseStoredChoices(question?.choices);
+    const ownChoices =
+      (variant ? parseStoredChoices(variant.choices) : undefined) ??
+      baseChoices;
+
+    const rows = await this.prisma.translation.findMany({
+      where: {
+        questionId,
+        OR: [{ variantId: null }, ...(variantId ? [{ variantId }] : [])],
+      },
+      select: {
+        languageCode: true,
+        variantId: true,
+        translatedChoices: true,
+        untranslatedChoices: true,
+      },
+    });
+
+    const renderings = buildChoiceRenderings({
+      ownChoices,
+      baseChoices,
+      variantId,
+      rows,
+    });
+
+    this.logger.debug("Loaded stored choice renderings", {
+      questionId,
+      assignmentAttemptId,
+      variantId,
+      translationRows: rows.length,
+      renderings: renderings.map((rendering) => rendering.source),
+    });
+
+    return renderings;
   }
 
   /**
@@ -1543,6 +1629,39 @@ export class QuestionResponseService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Text questions are graded on text alone, so an image pasted into the
+   * answer is invisible to the grader and only bloats the stored response.
+   * The learner editor blocks images; this covers any client that does not.
+   * The submission is still accepted, with whatever text remains.
+   */
+  private removeImagesFromTextResponse(
+    requestDto: CreateQuestionResponseAttemptRequestDto,
+    questionId: number,
+    assignmentId: number,
+    assignmentAttemptId: number,
+    role: UserRole,
+  ): void {
+    if (typeof requestDto.learnerTextResponse !== "string") return;
+
+    const { html, removedCount } = stripImagesFromLearnerHtml(
+      requestDto.learnerTextResponse,
+    );
+    if (removedCount === 0) return;
+
+    this.logger.warn("Removed images from a text answer before grading", {
+      assignmentId,
+      assignmentAttemptId,
+      questionId,
+      userRole: role,
+      removedImageCount: removedCount,
+      originalLength: requestDto.learnerTextResponse.length,
+      remainingLength: html.length,
+      imageOnly: html.length === 0,
+    });
+    requestDto.learnerTextResponse = html;
   }
 
   /**

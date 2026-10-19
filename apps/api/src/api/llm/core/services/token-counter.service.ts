@@ -22,9 +22,6 @@ export class TokenCounterService implements ITokenCounter {
     if (!text) return 0;
 
     try {
-      if (modelKey?.includes("llama")) {
-        return this.countLlamaTokens(text);
-      }
       return this.encoding.encode(text, [modelKey]).length;
     } catch (error) {
       this.logger.error(
@@ -32,19 +29,6 @@ export class TokenCounterService implements ITokenCounter {
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
-      return Math.ceil(text.length / 4);
-    }
-  }
-
-  /**
-   * Count tokens for Llama models (rough approximation)
-   * Llama models typically use a similar tokenization to GPT, so we use the same encoding
-   * but could be refined with actual Llama tokenizer if needed
-   */
-  private countLlamaTokens(text: string): number {
-    try {
-      return this.encoding.encode(text).length;
-    } catch {
       return Math.ceil(text.length / 4);
     }
   }

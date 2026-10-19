@@ -30,6 +30,25 @@ interface IJwtPayload extends UserSessionPayload {
 // Routed through winston: main.ts passes the winston logger to NestFactory.
 const logger = new Logger("JwtCookieStrategy");
 
+// Leave room for the launch cookie(s), shared-domain cookies and other headers
+// below Node's default 16 KiB header limit. Both roles share this budget.
+const MAX_SAVED_SESSION_COOKIE_BYTES = 6 * 1024;
+const MAX_SAVED_SESSION_COOKIES_PER_ROLE = 4;
+
+function sessionCookieBytes(name: string, token: string): number {
+  // Express URL-encodes cookie values; include the Cookie header separator.
+  return Buffer.byteLength(`${name}=${encodeURIComponent(token)}; `);
+}
+
+// LMS-supplied labels for support tickets. Control characters are stripped
+// so each stays one line wherever it is shown; SN Support caps these at 500.
+function singleLineText(value: unknown, maxLength = 500): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // eslint-disable-next-line no-control-regex
+  const text = value.replaceAll(/[\u0000-\u001F\u007F]+/g, " ").trim();
+  return text && text.length <= maxLength ? text : undefined;
+}
+
 @Injectable()
 export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
@@ -112,7 +131,8 @@ export class JwtCookieStrategy extends PassportStrategy(
       }
     }
     // Only persist tokens after passport has verified their signature and expiry.
-    // A bounded set per role keeps author and learner launches independent.
+    // Bound both roles together on every verified request, even when the
+    // active cookie is unchanged. Always retain the active assignment first.
     if (
       (payload.role === "author" || payload.role === "learner") &&
       Number.isSafeInteger(payload.assignmentID) &&
@@ -125,7 +145,7 @@ export class JwtCookieStrategy extends PassportStrategy(
           ? AUTHOR_COOKIE_PREFIX
           : LEARNER_COOKIE_PREFIX;
       const name = `${prefix}${payload.assignmentID}`;
-      if (token && request.cookies?.[name] !== token) {
+      if (token) {
         const secure = process.env.NODE_ENV === "production";
         const options = {
           httpOnly: true,
@@ -134,21 +154,44 @@ export class JwtCookieStrategy extends PassportStrategy(
           path: "/",
         };
         const others = Object.entries(request.cookies ?? {})
-          .filter(([key]) => key.startsWith(prefix) && key !== name)
+          .filter(
+            ([key]) =>
+              key !== name &&
+              (key.startsWith(AUTHOR_COOKIE_PREFIX) ||
+                key.startsWith(LEARNER_COOKIE_PREFIX)),
+          )
           .sort(
             (a, b) =>
               (unverifiedSession(b[1]).iat ?? 0) -
               (unverifiedSession(a[1]).iat ?? 0),
           );
-        for (const [key] of others.slice(3))
-          request.res.clearCookie(key, options);
-        request.res.cookie(name, token, {
-          ...options,
-          maxAge: Math.max(
-            0,
-            Math.min(payload.exp * 1000 - Date.now(), 6 * 60 * 60 * 1000),
-          ),
-        });
+        let savedBytes = sessionCookieBytes(name, token);
+        const counts = { author: 0, learner: 0 };
+        counts[payload.role] = 1;
+        for (const [key, value] of others) {
+          const role = key.startsWith(AUTHOR_COOKIE_PREFIX)
+            ? "author"
+            : "learner";
+          const bytes = sessionCookieBytes(key, value);
+          if (
+            counts[role] >= MAX_SAVED_SESSION_COOKIES_PER_ROLE ||
+            savedBytes + bytes > MAX_SAVED_SESSION_COOKIE_BYTES
+          ) {
+            request.res.clearCookie(key, options);
+          } else {
+            counts[role]++;
+            savedBytes += bytes;
+          }
+        }
+        if (request.cookies?.[name] !== token) {
+          request.res.cookie(name, token, {
+            ...options,
+            maxAge: Math.max(
+              0,
+              Math.min(payload.exp * 1000 - Date.now(), 6 * 60 * 60 * 1000),
+            ),
+          });
+        }
       }
     }
     return {
@@ -166,6 +209,18 @@ export class JwtCookieStrategy extends PassportStrategy(
       ].find(
         (value): value is string =>
           typeof value === "string" && /^[!-~]+$/.test(value),
+      ),
+      toolConsumerInstanceGuid:
+        typeof payload.toolConsumerInstanceGuid === "string" &&
+        /^[!-~]{1,255}$/.test(payload.toolConsumerInstanceGuid)
+          ? payload.toolConsumerInstanceGuid
+          : undefined,
+      courseTitle: singleLineText(payload.courseTitle),
+      courseId: singleLineText(payload.courseId),
+      activityTitle: singleLineText(payload.activityTitle),
+      toolConsumerProductFamilyCode: singleLineText(
+        payload.toolConsumerProductFamilyCode,
+        255,
       ),
     };
   }

@@ -12,7 +12,7 @@ describe("logAiInvocation", () => {
 
   it("logs the model, purpose, prompt, and response in the headline message", () => {
     logAiInvocation(logger, {
-      modelKey: "gpt-5-nano",
+      modelKey: "gpt-6-luna",
       purpose: "criterion_judge",
       prompt: "Judge this answer",
       response: "The answer is correct",
@@ -21,7 +21,7 @@ describe("logAiInvocation", () => {
     expect(infoMock).toHaveBeenCalledTimes(1);
     const [message] = infoMock.mock.calls[0] as [string, unknown];
     expect(message).toBe(
-      "[gpt-5-nano] CRITERION_JUDGE - Judge this answer ; The answer is correct",
+      "[gpt-6-luna] CRITERION_JUDGE - Judge this answer ; The answer is correct",
     );
   });
 
@@ -42,7 +42,7 @@ describe("logAiInvocation", () => {
     const response = "b".repeat(6000);
 
     logAiInvocation(logger, {
-      modelKey: "gpt-5-mini",
+      modelKey: "gpt-5.6-luna",
       purpose: "text_grading",
       prompt,
       response,

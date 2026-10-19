@@ -94,6 +94,17 @@ describe("ErrorScreen with a client network failure", () => {
     );
   });
 
+  it("shows the connection screen when a 2xx response arrived incomplete", () => {
+    const error = new NetworkError("cut off", "interrupted");
+
+    render(<ErrorScreen status={statusFromError(error)} error={error} />);
+
+    expect(screen.getByTestId("connection-problem")).toHaveTextContent(
+      "interrupted",
+    );
+    expect(screen.queryByTestId("error-page")).not.toBeInTheDocument();
+  });
+
   it("still renders real statuses when an error is passed alongside", () => {
     const error = { status: 403 };
 

@@ -57,7 +57,9 @@ jest.mock("@/components/ReportModal", () => ({
 }));
 jest.mock("@/components/GradeSyncStatus", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { lmsHost?: string }) => (
+    <div data-testid="grade-sync" data-lms-host={props.lmsHost} />
+  ),
 }));
 jest.mock("@/components/promo/PromoBanner", () => ({
   __esModule: true,
@@ -218,6 +220,38 @@ describe("results page — completion promo", () => {
     expect(banner).toHaveAttribute(
       "data-lms-host",
       "courses.cognitiveclass.ai",
+    );
+  });
+});
+
+describe("results page — grade sync notice", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getAttemptsMock.mockResolvedValue([]);
+  });
+
+  it("passes the session's LMS host to the grade sync status", async () => {
+    getUserMock.mockResolvedValue({
+      ...learner,
+      lmsHost: "courses.yl.skillsnetwork.site",
+    });
+    getCompletedAttemptMock.mockResolvedValue({
+      id: 2486,
+      name: "Quiz",
+      questions: [],
+      showQuestions: false,
+      grade: 0.4,
+      passingGrade: 50,
+      passed: false,
+      totalPossiblePoints: 10,
+      totalPointsEarned: 4,
+    });
+
+    await renderAndSettle();
+
+    expect(screen.getByTestId("grade-sync")).toHaveAttribute(
+      "data-lms-host",
+      "courses.yl.skillsnetwork.site",
     );
   });
 });

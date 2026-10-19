@@ -1634,6 +1634,15 @@ export interface AdminReportDiagnostics {
       requestId?: string;
       at?: string;
     }[];
+    errors?: {
+      name: string;
+      message?: string;
+      kind?: string;
+      detail?: string;
+      where?: string;
+      path?: string;
+      at?: string;
+    }[];
   };
 }
 

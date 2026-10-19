@@ -1,0 +1,337 @@
+.rich-text-content {
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.3;
+  text-align: left;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.rich-text-content > *:first-child {
+  margin-top: 0;
+}
+
+.rich-text-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-content p,
+.rich-text-content li,
+.rich-text-content blockquote {
+  margin: 0.25em 0;
+}
+
+/* Restore list markers removed by Tailwind preflight. */
+.rich-text-content ul {
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.rich-text-content ol {
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+
+.rich-text-content ul,
+.rich-text-content ol {
+  padding-left: 1.5em;
+  margin: 0.25em 0;
+}
+
+.rich-text-content li > ul,
+.rich-text-content li > ol {
+  padding-inline-start: 3em;
+}
+
+.rich-text-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.rich-text-content ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.rich-text-content ol[type="1"] {
+  list-style-type: decimal;
+}
+
+.rich-text-content ol[type="a"] {
+  list-style-type: lower-alpha;
+}
+
+.rich-text-content ol[type="i"] {
+  list-style-type: lower-roman;
+}
+
+.rich-text-content ol[type="A"] {
+  list-style-type: upper-alpha;
+}
+
+.rich-text-content ol[type="I"] {
+  list-style-type: upper-roman;
+}
+
+.rich-text-content li[data-checked="true"]::marker {
+  content: "☑ ";
+}
+
+.rich-text-content li[data-checked="false"]::marker {
+  content: "☐ ";
+}
+
+.rich-text-content li > p {
+  margin: 0;
+}
+
+/* Preserve blank paragraphs serialized without a <br>. */
+.rich-text-content p:empty::before {
+  content: "";
+  display: inline-block;
+  height: 1em;
+}
+
+.rich-text-content h1 {
+  font-size: 2em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h3 {
+  font-size: 1.17em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h5 {
+  font-size: 0.83em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content h6 {
+  font-size: 0.67em;
+  font-weight: 600;
+  margin: 0.4em 0;
+}
+
+.rich-text-content a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.rich-text-content blockquote {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 1em;
+  margin-left: 0;
+}
+
+.rich-text-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.rich-text-content iframe {
+  display: block;
+  max-width: 100%;
+}
+
+.rich-text-content code {
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 85%;
+  white-space: pre-wrap;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background-color: #f5f5f5;
+}
+
+.rich-text-content pre {
+  background-color: #f5f5f5;
+  color: inherit;
+  padding: 0.6em 0.8em;
+  border-radius: 5px;
+  overflow-x: auto;
+}
+
+.rich-text-content pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.95em;
+  white-space: pre;
+}
+
+.rich-text-content table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.rich-text-content th,
+.rich-text-content td {
+  border: 1px solid #e5e7eb;
+  padding: 0.25em 0.5em;
+  vertical-align: top;
+}
+
+.rich-text-content th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.rich-text-viewer {
+  overflow-x: auto;
+}
+
+/* Dark theme overrides for highlight.js. */
+
+.dark .rich-text-content {
+  color: #e5e7eb;
+}
+
+.dark .rich-text-content a {
+  color: #93c5fd;
+}
+
+.dark .rich-text-content blockquote {
+  border-left-color: #374151;
+}
+
+.dark .rich-text-content code,
+.dark .rich-text-content pre {
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+.dark .rich-text-content th,
+.dark .rich-text-content td {
+  border-color: #374151;
+}
+
+.dark .rich-text-content th {
+  background-color: #1f2937;
+}
+
+.dark .rich-text-content .hljs-comment,
+.dark .rich-text-content .hljs-quote {
+  color: #8b949e;
+}
+
+.dark .rich-text-content .hljs-keyword,
+.dark .rich-text-content .hljs-selector-tag,
+.dark .rich-text-content .hljs-literal,
+.dark .rich-text-content .hljs-doctag {
+  color: #ff7b72;
+}
+
+.dark .rich-text-content .hljs-string,
+.dark .rich-text-content .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+
+.dark .rich-text-content .hljs-number,
+.dark .rich-text-content .hljs-symbol,
+.dark .rich-text-content .hljs-bullet {
+  color: #79c0ff;
+}
+
+.dark .rich-text-content .hljs-title,
+.dark .rich-text-content .hljs-section,
+.dark .rich-text-content .hljs-name {
+  color: #d2a8ff;
+}
+
+.dark .rich-text-content .hljs-attr,
+.dark .rich-text-content .hljs-attribute,
+.dark .rich-text-content .hljs-variable,
+.dark .rich-text-content .hljs-template-variable {
+  color: #ffa657;
+}
+
+.dark .rich-text-content .hljs-type,
+.dark .rich-text-content .hljs-built_in,
+.dark .rich-text-content .hljs-builtin-name {
+  color: #7ee787;
+}
+
+.dark .rich-text-content .hljs-addition {
+  color: #7ee787;
+  background-color: #033a16;
+}
+
+.dark .rich-text-content .hljs-deletion {
+  color: #ffa198;
+  background-color: #67060c;
+}
+
+@media (max-width: 768px) {
+  .rich-text-content {
+    font-size: 15px;
+  }
+
+  .rich-text-content pre {
+    padding: 0.5em;
+  }
+}
+
+.rich-text-editor-surface {
+  min-height: 98px;
+  padding: 0;
+}
+
+.rich-text-editor-surface:focus,
+.rich-text-editor-surface:focus-visible {
+  outline: none;
+}
+
+.rich-text-editor-surface p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: #9ca3af;
+}
+
+.rich-text-editor-surface .ProseMirror-selectednode {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
+}
+
+.rich-text-editor-surface .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(124 58 237 / 12%);
+  pointer-events: none;
+}
+
+.rich-text-editor-surface th,
+.rich-text-editor-surface td {
+  position: relative;
+}
+
+.rich-text-editor-surface .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  background-color: #7c3aed;
+  pointer-events: none;
+}
+
+.dark .rich-text-editor-surface p.is-editor-empty:first-child::before {
+  color: #6b7280;
+}

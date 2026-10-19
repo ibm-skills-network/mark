@@ -159,6 +159,31 @@ describe("hydrateAuthorStore", () => {
     expect(state.questions[0].id).toBe(10);
     expect(state.hasUnsavedChanges).toBe(false);
   });
+
+  it.each(["assignment-first", "versions-first"])(
+    "retains the full version list when requests finish %s",
+    async (order) => {
+      const active = { id: 7, versionNumber: "1.0.0", isActive: true } as any;
+      const draft = { id: 8, versionNumber: "1.0.1", isActive: false } as any;
+      useAuthorStore.setState({
+        activeAssignmentId: 42,
+        versions: [],
+        isLoadingVersions: false,
+        checkedOutVersion: undefined,
+      });
+      (listAssignmentVersions as jest.Mock).mockResolvedValue([draft, active]);
+      const hydrate = () =>
+        useAuthorStore.getState().hydrateAuthorStore({
+          activeAssignmentId: 42,
+          versions: [active],
+          name: "Quiz",
+        });
+      if (order === "assignment-first") hydrate();
+      await useAuthorStore.getState().loadVersions();
+      if (order === "versions-first") hydrate();
+      expect(useAuthorStore.getState().versions).toEqual([draft, active]);
+    },
+  );
 });
 
 describe("restoreVersion", () => {

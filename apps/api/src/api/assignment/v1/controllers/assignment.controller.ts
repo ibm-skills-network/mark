@@ -25,7 +25,6 @@ import {
 } from "@nestjs/swagger";
 import { ReportType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
   UserRole,
   UserSessionRequest,
@@ -64,7 +63,6 @@ export class AssignmentControllerV1 {
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly assignmentService: AssignmentServiceV1,
-    private readonly llmFacadeService: LlmFacadeService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV1.name });
   }
@@ -173,32 +171,6 @@ export class AssignmentControllerV1 {
       Number(id),
     );
     return { languages };
-  }
-
-  @Post("test-language-detection")
-  @ApiOperation({ summary: "Test language detection" })
-  @ApiBody({
-    schema: {
-      type: "object",
-      properties: {
-        text: {
-          type: "string",
-          example: "This is a test string",
-          description: "The string to test language detection on",
-        },
-      },
-    },
-    description: `[See full example of schema here](${ASSIGNMENT_SCHEMA_URL})`,
-  })
-  @ApiResponse({ status: 200, type: BaseAssignmentResponseDto })
-  @ApiResponse({ status: 403 })
-  async testLanguageDetection(
-    @Body() language: { text: string },
-  ): Promise<{ languageCode: string }> {
-    const languageCode: string = await this.llmFacadeService.getLanguageCode(
-      language.text,
-    );
-    return { languageCode };
   }
 
   @Put(":id")

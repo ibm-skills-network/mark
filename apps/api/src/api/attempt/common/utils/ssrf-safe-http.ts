@@ -2,6 +2,7 @@ import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import { Agent as HttpAgent } from "node:http";
 import { Agent as HttpsAgent } from "node:https";
 import { BlockList, isIP, isIPv4, type LookupFunction } from "node:net";
+import { Logger } from "@nestjs/common";
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 
 /**
@@ -17,7 +18,12 @@ import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
  *     open a socket to any non-public address. Because it runs per socket, it
  *     also covers redirect hops and DNS-rebinding (every connection is
  *     re-resolved and re-checked), which a one-shot pre-flight cannot.
+ *
+ * Plain http:// URLs are tried over https first: cluster egress only allows
+ * port 443, and almost every site serves the same page on both schemes.
  */
+
+const logger = new Logger("SsrfSafeHttp");
 
 const blockedAddresses = new BlockList();
 
@@ -139,12 +145,55 @@ export function assertFetchableUrl(rawUrl: string): URL {
 }
 
 /**
- * Drop-in replacement for `axios.get` for learner-supplied URLs: enforces the
- * SSRF guard and applies sane timeout / size / redirect bounds.
+ * True when the service mesh, not the origin, produced the response because
+ * the outbound connect was refused (in-cluster egress policy, or a host that
+ * is not listening). That fails identically on every retry, so callers must
+ * not treat it as a transient 5xx.
  */
-export async function safeGet<T = unknown>(
+export function isMeshConnectRefused(error: unknown): boolean {
+  const response = (
+    error as {
+      response?: { status?: unknown; headers?: Record<string, unknown> };
+    }
+  )?.response;
+  if (response?.status !== 504) {
+    return false;
+  }
+  const proxyError = response.headers?.["l5d-proxy-error"];
+  return (
+    typeof proxyError === "string" &&
+    proxyError.includes("client error (Connect)")
+  );
+}
+
+/** Transport codes after which retrying the same host over http is pointless. */
+const NO_HTTP_FALLBACK_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_NONAME",
+  "ERR_BLOCKED_ADDRESS",
+]);
+
+/**
+ * Whether a failed https attempt of an upgraded http:// URL should be retried
+ * on the original http:// URL. Only when the host could not be spoken to over
+ * TLS (refused, TLS handshake failure, reset, timeout). If the https server
+ * answered at all, that answer stands; if the host does not resolve or the
+ * address guard refused it, http would fail the same way.
+ */
+function shouldFallBackToHttp(error: unknown): boolean {
+  if (error instanceof BlockedUrlError) {
+    return false;
+  }
+  if ((error as { response?: unknown })?.response !== undefined) {
+    return false;
+  }
+  const code = (error as { code?: unknown })?.code;
+  return !(typeof code === "string" && NO_HTTP_FALLBACK_CODES.has(code));
+}
+
+function guardedGet<T>(
   url: string,
-  config: AxiosRequestConfig = {},
+  config: AxiosRequestConfig,
 ): Promise<AxiosResponse<T>> {
   assertFetchableUrl(url);
   return axios.get<T>(url, {
@@ -160,4 +209,56 @@ export async function safeGet<T = unknown>(
     // SSRF check would be silently bypassed.
     proxy: false,
   });
+}
+
+/**
+ * Drop-in replacement for `axios.get` for learner-supplied URLs: enforces the
+ * SSRF guard and applies sane timeout / size / redirect bounds.
+ *
+ * An http:// URL on the default port is fetched as https:// first, falling
+ * back to the original URL only when the host cannot be reached over TLS.
+ * Both requests go through the same guard and limits.
+ */
+export async function safeGet<T = unknown>(
+  url: string,
+  config: AxiosRequestConfig = {},
+): Promise<AxiosResponse<T>> {
+  const parsed = assertFetchableUrl(url);
+  if (parsed.protocol !== "http:" || parsed.port !== "") {
+    return guardedGet<T>(url, config);
+  }
+
+  const upgraded = new URL(parsed.href);
+  upgraded.protocol = "https:";
+  try {
+    return await guardedGet<T>(upgraded.href, config);
+  } catch (httpsError) {
+    if (!shouldFallBackToHttp(httpsError)) {
+      throw httpsError;
+    }
+    logger.debug(
+      `https upgrade failed for host ${parsed.hostname} (${describeError(httpsError)}); retrying over http`,
+    );
+    try {
+      return await guardedGet<T>(url, config);
+    } catch (httpError) {
+      // When egress refuses port 80 the http error says nothing about the
+      // site; the https failure is the one that explains what went wrong.
+      if (isMeshConnectRefused(httpError)) {
+        logger.debug(
+          `http fallback refused by cluster egress for host ${parsed.hostname}; reporting the https failure`,
+        );
+        throw httpsError;
+      }
+      throw httpError;
+    }
+  }
+}
+
+function describeError(error: unknown): string {
+  const code = (error as { code?: unknown })?.code;
+  if (typeof code === "string") {
+    return code;
+  }
+  return error instanceof Error ? error.message : "unknown error";
 }

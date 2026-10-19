@@ -1,5 +1,4 @@
 export interface SnTicketTitleInput {
-  issueType: string;
   assignmentId?: number | null;
   attemptId?: number | null;
   description: string;
@@ -34,11 +33,6 @@ function summarizeDescription(description: string): string {
  */
 export function stripSectionLabelMarkdown(description: string): string {
   return description.replaceAll(SECTION_LABEL_PATTERN, "$1:").trim();
-}
-
-function capitalizeIssueType(issueType: string): string {
-  if (!issueType) return "Unknown";
-  return issueType.charAt(0).toUpperCase() + issueType.slice(1).toLowerCase();
 }
 
 /**
@@ -77,7 +71,8 @@ export function buildSnSupportTicketTitle(input: SnTicketTitleInput): string {
     normalizedDescription.length > TITLE_SUMMARY_MAX_CHARS ? "..." : "";
   const attemptSegment = input.attemptId ? ` - Attempt ${input.attemptId}` : "";
 
-  return `${capitalizeIssueType(input.issueType)}: Assignment ${
+  // Every ticket is Mark's; the issue type is already in the description.
+  return `Mark: Assignment ${
     input.assignmentId || "N/A"
   }${attemptSegment}: ${summary}${ellipsis}`;
 }

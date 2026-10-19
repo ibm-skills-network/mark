@@ -1,6 +1,6 @@
 /**
  * Salvage helpers for the text-parsing fallback path (providers without native
- * structured output — e.g. watsonx llama/granite/mistral/gpt-oss). Native
+ * structured output). Native
  * structured output cannot emit invalid JSON, but free-form "respond with JSON"
  * generation routinely does: unescaped control characters inside strings
  * (common in code-heavy submissions) break JSON.parse. These restore the

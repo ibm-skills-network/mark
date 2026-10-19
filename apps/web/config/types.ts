@@ -485,6 +485,9 @@ export interface LearnerGetQuestionResponse extends BaseQuestion {
       translatedChoices: Choice[];
     };
   };
+  // Client-only: the language `choices` was fetched in (the attempt read's
+  // `lang`). Not part of any API response or request body.
+  contentLanguage?: string;
   // Response-only marker. Omitted entirely when the translation row is present.
   // Frontend MUST NOT echo this back in any request body.
   translationStatus?: "pending" | "unavailable";
@@ -740,7 +743,7 @@ export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questionControls?: QuestionControls;
   comments?: string;
   preferredLanguage?: string;
-  questionResponses?: Array<{ questionId: number }>;
+  questionResponses?: QuestionResponse[];
 }
 
 export interface QuestionControls {

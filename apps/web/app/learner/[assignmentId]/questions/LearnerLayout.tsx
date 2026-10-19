@@ -169,21 +169,26 @@ async function LearnerLayout(props: Props) {
 
   let listOfAttempts;
   try {
+    // throwOnError: every failure arrives here with its real status (after
+    // the fetch's own retries), so a 503 from a momentary database drop, an
+    // expired session or the learner's own connection each get their own
+    // screen instead of one hard-coded "500 — Attempts could not be fetched".
     listOfAttempts = await getAttempts(assignmentId, cookieHeader, {
-      throwOnAuthError: true,
+      throwOnError: true,
       learnerContext: true,
     });
+    if (!listOfAttempts) {
+      throw new Error("Attempts list came back empty");
+    }
   } catch (error) {
-    // An expired session or revoked access is the learner's situation, not a
-    // server fault — route it to the matching screen instead of a 500 modal.
     const status = statusFromError(error);
-    log("Attempts fetch unauthorized", `Status ${status}`);
-    return <ErrorScreen status={status} error={error} />;
-  }
-  if (!listOfAttempts) {
-    log("Attempts fetch failed");
+    log("Attempts fetch failed", `Status ${status}`);
     return (
-      <ErrorModal error={"Attempts could not be fetched"} statusCode={500} />
+      <ErrorScreen
+        status={status}
+        message="Attempts could not be fetched"
+        error={error}
+      />
     );
   }
 

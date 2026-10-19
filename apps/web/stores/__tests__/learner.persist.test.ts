@@ -110,9 +110,9 @@ describe("useLearnerStore attempt-scoped drafts", () => {
     useLearnerStore.getState().beginAttempt(101);
     useLearnerStore.getState().setQuestions([served()]);
 
-    expect(useLearnerStore.getState().questions[0].learnerChoices ?? []).toEqual(
-      [],
-    );
+    expect(
+      useLearnerStore.getState().questions[0].learnerChoices ?? [],
+    ).toEqual([]);
   });
 
   it("keeps the draft when the same attempt is loaded again", () => {

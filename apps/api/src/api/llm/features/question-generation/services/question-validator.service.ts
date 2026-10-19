@@ -14,7 +14,7 @@ import { Criteria } from "src/api/assignment/question/dto/create.update.question
 import { IPromptProcessor } from "src/api/llm/core/interfaces/prompt-processor.interface";
 import { Logger } from "winston";
 import { z } from "zod";
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
+import { DEFAULT_LLM_MODEL, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IQuestionValidatorService } from "../interfaces/question-validator.interface";
 import { DifficultyLevel } from "./question-generation.service";
 
@@ -155,7 +155,7 @@ export class QuestionValidatorService implements IQuestionValidatorService {
         assignmentId,
         AIUsageType.ASSIGNMENT_GENERATION,
         "question_generation",
-        "gpt-4o-mini",
+        DEFAULT_LLM_MODEL,
       );
 
       const parsed = await parser.parse(response);

@@ -1026,6 +1026,58 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       fetchSpy.mockRestore();
     });
   });
+
+  describe("createQuestionResponse - images in text answers", () => {
+    const PNG =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    const capture = async (type: string, learnerTextResponse: string) => {
+      const stop = new Error("stop after capture");
+      const processSpy = jest
+        .spyOn(service as any, "processQuestionResponse")
+        .mockRejectedValue(stop);
+
+      await expect(
+        service.createQuestionResponse(
+          9,
+          7,
+          { learnerTextResponse } as any,
+          UserRole.AUTHOR,
+          3,
+          "en",
+          [{ id: 7, type, question: "Paste the output" } as any],
+        ),
+      ).rejects.toBe(stop);
+
+      const sent = (processSpy.mock.calls[0][1] as any).learnerTextResponse;
+      processSpy.mockRestore();
+      return sent as string;
+    };
+
+    it("removes pasted images from a TEXT answer before grading", async () => {
+      const sent = await capture(
+        "TEXT",
+        `<p>result: 42</p><p><img src="${PNG}"></p>`,
+      );
+
+      expect(sent).toContain("result: 42");
+      expect(sent).not.toMatch(/<img|data:image/i);
+      expect(mockLogger.child().warn).toHaveBeenCalledWith(
+        expect.stringContaining("image"),
+        expect.objectContaining({
+          assignmentId: 3,
+          assignmentAttemptId: 9,
+          questionId: 7,
+          removedImageCount: 1,
+        }),
+      );
+    });
+
+    it("leaves other question types alone", async () => {
+      const html = `<p><img src="${PNG}"></p>`;
+      expect(await capture("UPLOAD", html)).toBe(html);
+    });
+  });
 });
 
 describe("AttemptServiceV1 - server clock and blank expired submissions", () => {

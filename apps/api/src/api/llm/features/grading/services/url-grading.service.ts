@@ -9,7 +9,10 @@ import { Logger } from "winston";
 import { z } from "zod";
 import { EvidenceChunkingService } from "./evidence-chunking.service";
 import { CriterionEvidencePipelineService } from "./criterion-evidence-pipeline.service";
-import { RubricCriterion } from "../types/criterion-evidence.types";
+import {
+  DEFAULT_MODEL_SELECTION,
+  RubricCriterion,
+} from "../types/criterion-evidence.types";
 import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import {
@@ -106,11 +109,7 @@ export class UrlGradingService implements IUrlGradingService {
         language,
         maxConcurrency: 6,
         maxRetries: 3,
-        modelOverrides: {
-          retrievalModel: "gpt-5-nano",
-          gradingModel: "gpt-5-mini",
-          judgeModel: "gpt-5-mini",
-        },
+        modelOverrides: DEFAULT_MODEL_SELECTION,
       });
 
       return this.buildUrlResponseFromPipeline(pipelineResult, totalPoints);

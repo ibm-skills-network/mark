@@ -3,7 +3,7 @@ import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import CollapsibleFeedback, {
   StructuredFeedbackData,
 } from "@/components/CollapsibleFeedback";
-import MarkdownViewer from "@/components/MarkdownViewer";
+import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import dynamic from "next/dynamic";
 
 const PdfFeedbackViewer = dynamic(
@@ -572,10 +572,17 @@ const Question: FC<Props> = ({
         let jsonString = feedbackText.trim();
         let bracketCount = 0;
         let jsonEndIndex = -1;
+        // Brackets inside JSON strings (e.g. quoted code) are not structure.
+        let inString = false;
 
         for (let index = 0; index < jsonString.length; index++) {
-          if (jsonString[index] === "[") bracketCount++;
-          else if (jsonString[index] === "]") {
+          const char = jsonString[index];
+          if (inString) {
+            if (char === "\\") index++;
+            else if (char === '"') inString = false;
+          } else if (char === '"') inString = true;
+          else if (char === "[") bracketCount++;
+          else if (char === "]") {
             bracketCount--;
             if (bracketCount === 0) {
               jsonEndIndex = index + 1;
@@ -761,12 +768,12 @@ const Question: FC<Props> = ({
               : "bg-gray-50 border border-gray-300 rounded p-2"
           }`}
         >
-          <MarkdownViewer
+          <RichTextViewer
             className="text-gray-800"
             allowCopy={!(questionControls?.disableCopy ?? false)}
           >
             {learnerResponse.toString()}
-          </MarkdownViewer>
+          </RichTextViewer>
         </p>
       );
     } else if (
@@ -808,16 +815,21 @@ const Question: FC<Props> = ({
       }
 
       const isSingleChoice = type === "SINGLE_CORRECT";
+      // Answers reach this page as the chosen choice text, which is also what
+      // the grader matched, so selection is by text alone. Matching positions
+      // too made a digit answer like "2" also select whichever choice sat at
+      // index 2. String() undoes JSON parsing a bare digit answer to a number.
+      const selectedTexts = new Set(
+        (Array.isArray(learnerResponse)
+          ? (learnerResponse as unknown[])
+          : [learnerResponse]
+        ).map((ans) => String(ans)),
+      );
 
       return (
         <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
           {choices.map((choiceObj, idx) => {
-            const isSelected = Array.isArray(learnerResponse)
-              ? (learnerResponse as string[]).some(
-                  (ans) => ans === choiceObj.choice || ans === String(idx),
-                )
-              : learnerResponse === choiceObj.choice ||
-                learnerResponse === String(idx);
+            const isSelected = selectedTexts.has(choiceObj.choice);
 
             const isCorrect = choiceObj.isCorrect;
             return (
@@ -1051,12 +1063,12 @@ const Question: FC<Props> = ({
         )}
       </div>
 
-      <MarkdownViewer
+      <RichTextViewer
         className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700"
         allowCopy={!(questionControls?.disableCopy ?? false)}
       >
         {questionText}
-      </MarkdownViewer>
+      </RichTextViewer>
 
       {checkToShowRubric() && (
         <ShowHideRubric
@@ -1163,12 +1175,12 @@ const Question: FC<Props> = ({
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   {parsedFeedback.feedbackText && (
                     <div className="prose prose-sm max-w-none text-gray-800">
-                      <MarkdownViewer
+                      <RichTextViewer
                         className="text-gray-800"
                         allowCopy={!(questionControls?.disableCopy ?? false)}
                       >
                         {parsedFeedback.feedbackText}
-                      </MarkdownViewer>
+                      </RichTextViewer>
                     </div>
                   )}
                   {!parsedFeedback.feedbackText && (

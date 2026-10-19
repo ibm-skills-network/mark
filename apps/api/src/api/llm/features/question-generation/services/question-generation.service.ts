@@ -17,7 +17,11 @@ import {
   ScoringDto,
   VariantDto,
 } from "../../../../assignment/dto/update.questions.request.dto";
-import { PROMPT_PROCESSOR, VALIDATOR_SERVICE } from "../../../llm.constants";
+import {
+  DEFAULT_LLM_MODEL,
+  PROMPT_PROCESSOR,
+  VALIDATOR_SERVICE,
+} from "../../../llm.constants";
 import { IQuestionGenerationService } from "../interfaces/question-generation.interface";
 import { IQuestionValidatorService } from "../interfaces/question-validator.interface";
 
@@ -378,7 +382,7 @@ export class QuestionGenerationService implements IQuestionGenerationService {
           assignmentId,
           AIUsageType.ASSIGNMENT_GENERATION,
           "question_generation",
-          "gpt-4o-mini",
+          DEFAULT_LLM_MODEL,
           { maxTokens: 8000 },
         );
 
@@ -1247,7 +1251,7 @@ Rules:
       assignmentId,
       AIUsageType.ASSIGNMENT_GENERATION,
       "question_generation",
-      "gpt-4o-mini",
+      DEFAULT_LLM_MODEL,
       { maxTokens: 4000 },
     );
 

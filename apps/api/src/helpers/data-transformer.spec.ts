@@ -322,7 +322,10 @@ describe("DataTransformer API", () => {
       ["a whole number", "27"],
       ["a boolean word", "true"],
       ["the word null", "null"],
-      ["text the author wrapped in quotation marks", '"We have an inconsistent user experience"'],
+      [
+        "text the author wrapped in quotation marks",
+        '"We have an inconsistent user experience"',
+      ],
     ])("keeps %s exactly as the text that was sent", (_label, text) => {
       const b64 = Buffer.from(text, "utf8").toString("base64");
 

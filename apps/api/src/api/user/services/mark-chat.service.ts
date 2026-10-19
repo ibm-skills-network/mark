@@ -24,6 +24,7 @@ import { FileContentExtractionService } from "src/api/attempt/services/file-cont
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { logAiInvocation } from "src/api/llm/core/utils/ai-invocation-log.util";
+import { DEFAULT_LLM_MODEL } from "src/api/llm/llm.constants";
 import {
   UserRole,
   UserSession,
@@ -64,7 +65,13 @@ const STANDARD_ERROR_MESSAGE =
   "Sorry for the inconvenience, I am still new around here and this capability is not there yet, my developers are working on it!";
 const CHAT_DISABLED_MESSAGE =
   "Mark's AI assistant is temporarily unavailable. Please try again later.";
-const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
+// MARK_CHAT_MODEL overrides this; the chat does not go through AIFeature routing.
+const DEFAULT_CHAT_MODEL = DEFAULT_LLM_MODEL;
+// Reasoning off, matching the grading providers. The SDK drops it with a
+// warning for non-reasoning overrides such as gpt-4o-mini.
+const CHAT_PROVIDER_OPTIONS = {
+  openai: { reasoningEffort: "none" },
+} as const;
 const DEFAULT_MODEL_CONTEXT_TOKENS = 128 * 1000;
 const DEFAULT_RESPONSE_MAX_TOKENS = 15 * 100;
 const DEFAULT_CONTEXT_RESERVE_TOKENS = 8 * 1000;
@@ -446,6 +453,7 @@ export class MarkChatService {
 
     const result = await generateText({
       model: openai(chatModel),
+      providerOptions: CHAT_PROVIDER_OPTIONS,
       system:
         systemPrompt +
         (systemContextMessages.length > 0
@@ -557,6 +565,7 @@ export class MarkChatService {
 
     const result = streamText({
       model: openai(chatModel),
+      providerOptions: CHAT_PROVIDER_OPTIONS,
       system:
         systemPrompt +
         (systemContextMessages.length > 0

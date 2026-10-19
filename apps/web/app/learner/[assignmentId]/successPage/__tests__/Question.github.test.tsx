@@ -41,7 +41,7 @@ jest.mock("@/stores/learner", () => ({
 // The bootstrap under test is the only thing these renders exercise; the
 // presentation pieces pull in Quill, PDF.js and the file explorer, none of
 // which this file is about.
-jest.mock("@/components/MarkdownViewer", () => ({
+jest.mock("@/components/rich-text/RichTextViewer", () => ({
   __esModule: true,
   default: ({ content }: { content?: string }) => <div>{content}</div>,
 }));

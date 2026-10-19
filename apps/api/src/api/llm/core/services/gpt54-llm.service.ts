@@ -17,16 +17,3 @@ export class Gpt54MiniLlmService extends EffortNoneOpenAiLlmService {
     super(Gpt54MiniLlmService.MODEL, tokenCounter, parentLogger);
   }
 }
-
-@Injectable()
-export class Gpt54NanoLlmService extends EffortNoneOpenAiLlmService {
-  static readonly MODEL = "gpt-5.4-nano-2026-03-17";
-  readonly key = Gpt54NanoLlmService.MODEL;
-
-  constructor(
-    @Inject(TOKEN_COUNTER) tokenCounter: ITokenCounter,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
-  ) {
-    super(Gpt54NanoLlmService.MODEL, tokenCounter, parentLogger);
-  }
-}

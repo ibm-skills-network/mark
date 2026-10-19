@@ -12,6 +12,7 @@ import {
 } from "./github-content-fetch.util";
 
 jest.mock("./ssrf-safe-http", () => ({
+  ...jest.requireActual<typeof import("./ssrf-safe-http")>("./ssrf-safe-http"),
   safeGet: jest.fn(),
 }));
 
@@ -477,6 +478,31 @@ describe("fetchUrlContentForGrading", () => {
       await expect(
         fetchUrlContentForGrading("https://learner.example.com/report"),
       ).rejects.toBeInstanceOf(RetryableUrlFetchError);
+    });
+
+    it("reports a connect refused by cluster egress as unreadable, not as a transient 5xx", async () => {
+      mockedSafeGet.mockRejectedValue(
+        axiosError(504, {
+          "l5d-proxy-error":
+            "endpoint 151.101.2.132:80: client error (Connect)",
+        }),
+      );
+
+      await expect(
+        fetchUrlContentForGrading("http://www.apache.org/licenses/"),
+      ).resolves.toEqual({ body: "", isFunctional: false });
+    });
+
+    it("still retries a 504 that the origin itself returned", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(504));
+
+      await expect(
+        fetchUrlContentForGrading("https://learner.example.com/report"),
+      ).rejects.toMatchObject({
+        name: "RetryableUrlFetchError",
+        reason: "server_error",
+        status: 504,
+      });
     });
 
     it("still reports a confirmed 404 as unreadable content", async () => {

@@ -1,12 +1,15 @@
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { PrismaService } from "../../../database/prisma.service";
-import { createRedisConnection } from "../../../job-queue/redis.connection";
+import { createCacheRedisConnection } from "../../../job-queue/redis.connection";
 
 jest.mock("../../../job-queue/redis.connection", () => ({
-  createRedisConnection: jest.fn(),
+  createCacheRedisConnection: jest.fn(),
+  isRedisReady: jest.requireActual("../../../job-queue/redis.connection")
+    .isRedisReady,
 }));
 
 class FakeRedis {
+  public status = "ready";
   public readonly values = new Map<string, string>();
   public readonly ttls = new Map<string, number>();
   public readonly quit = jest.fn(async () => undefined);
@@ -95,7 +98,7 @@ describe("AttemptAccessCacheService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     fakeRedis = new FakeRedis();
-    (createRedisConnection as jest.Mock).mockReturnValue(fakeRedis);
+    (createCacheRedisConnection as jest.Mock).mockReturnValue(fakeRedis);
     service = new AttemptAccessCacheService(mockPrisma, logger as never);
   });
 
@@ -289,6 +292,69 @@ describe("AttemptAccessCacheService", () => {
       expect(childLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining("attempt-access-cache.invalidate.failed"),
       );
+    });
+  });
+
+  describe("when the Redis connection is not ready", () => {
+    beforeEach(() => {
+      fakeRedis.status = "reconnecting";
+      fakeRedis.get = jest.fn(async () => {
+        throw new Error("get must not be called while disconnected");
+      });
+      (mockPrisma.question.findMany as jest.Mock).mockResolvedValue([]);
+    });
+
+    it("skips the cache read entirely and builds from the database", async () => {
+      const result = await service.getQuestionDtosForAttemptAccess({
+        assignmentId: 44,
+        assignmentUpdatedAt: new Date("2026-04-26T01:00:00.000Z"),
+        assignmentVersionId: null,
+      });
+
+      expect(result).toEqual([]);
+      expect(fakeRedis.get).not.toHaveBeenCalled();
+      expect(mockPrisma.question.findMany).toHaveBeenCalled();
+    });
+
+    it("skips the cache write so nothing blocks on a dead connection", async () => {
+      (mockPrisma.question.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 101,
+          question: "Database question",
+          type: "TEXT",
+          assignmentId: 44,
+          totalPoints: 10,
+          maxWords: null,
+          maxCharacters: null,
+          choices: [],
+          scoring: { type: "CRITERIA_BASED", rubrics: [] },
+          answer: false,
+          gradingContextQuestionIds: [],
+          responseType: "TEXT",
+          isDeleted: false,
+          randomizedChoices: false,
+          videoPresentationConfig: null,
+          liveRecordingConfig: null,
+        },
+      ]);
+
+      const result = await service.getQuestionDtosForAttemptAccess({
+        assignmentId: 44,
+        assignmentUpdatedAt: new Date("2026-04-26T01:00:00.000Z"),
+        assignmentVersionId: null,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(fakeRedis.values.size).toBe(0);
+    });
+
+    it("skips invalidation scans instead of hanging on them", async () => {
+      const scanSpy = jest.spyOn(fakeRedis, "scan");
+
+      await expect(
+        service.invalidateForAssignment(44),
+      ).resolves.toBeUndefined();
+      expect(scanSpy).not.toHaveBeenCalled();
     });
   });
 });

@@ -149,7 +149,14 @@ export class ReportsService {
     body: string,
   ) {
     if (!to) return;
-    await this.adminEmailService.sendGenericEmail(to, subject, body);
+    const sent = await this.adminEmailService.sendGenericEmail(
+      to,
+      subject,
+      body,
+    );
+    if (!sent) {
+      this.logger.error("sendReportEmail: email not sent", { to, subject });
+    }
   }
 
   private getRenewalTokenTtlSeconds(): number {
@@ -933,7 +940,6 @@ export class ReportsService {
     const highSimilarityReport = similarReports.find((r) => r.similarity > 0.7);
 
     const ticketTitle = buildSnSupportTicketTitle({
-      issueType,
       assignmentId,
       attemptId,
       description,
@@ -1003,7 +1009,12 @@ export class ReportsService {
             pageUrl: detailString("pageUrl"),
             portalName,
             portalUrl: portalContext.portalUrl,
-            courseTitle: detailString("courseTitle"),
+            // The signed launch knows the course; the client field is a
+            // fallback for launches that predate it.
+            courseTitle: portal.courseTitle ?? detailString("courseTitle"),
+            courseId: portal.courseId,
+            activityTitle: portal.activityTitle,
+            lmsFamily: portal.lmsFamily,
             toolName: "Mark",
             browser: detailString("browser"),
             chatHistoryUrl: detailString("chatHistoryUrl"),
@@ -1020,12 +1031,16 @@ export class ReportsService {
           attempt_id: attemptId,
           portal_host: portalContext.portalHost,
           portal_name: portalName,
+          course_title: portal.courseTitle,
+          course_id: portal.courseId,
+          activity_title: portal.activityTitle,
+          lms_family: portal.lmsFamily,
           product: route.productName,
           token_source: route.via,
         });
-        if (route.via === "default" || route.via === "legacy") {
+        if (route.via === "default") {
           this.logger.warn(
-            `SN ticket ${snTicket.ticketKey} filed under ${route.productName ?? "the legacy token"} — no product matched portal ${portalContext.portalHost ?? "(unknown)"}`,
+            `SN ticket ${snTicket.ticketKey} filed under ${route.productName} — no product matched portal ${portalContext.portalHost ?? "(unknown)"}`,
           );
         }
       } catch (error) {
@@ -2532,10 +2547,17 @@ export class ReportsService {
       where: { issueNumber: dto.issueNumber },
     });
 
+    // Older mark-support issues have no Mark report. Skip them with a 2xx so
+    // the daily reminder run moves on to the next issue instead of stopping.
     if (!report) {
-      throw new NotFoundException(
-        `Report with issue number ${dto.issueNumber} not found`,
-      );
+      this.logger.warn("sendBugRenewalEmail: no report for issue", {
+        issue_number: dto.issueNumber,
+      });
+      return {
+        success: false,
+        skipped: true,
+        message: `No report found for issue #${dto.issueNumber}; renewal email skipped.`,
+      };
     }
 
     // Always send to the report's own reporter. The recipient is intentionally

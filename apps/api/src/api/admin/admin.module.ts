@@ -14,6 +14,7 @@ import { AdminRepository } from "./admin.repository";
 import { AdminService } from "./admin.service";
 import { AdminDashboardController } from "./controllers/admin-dashboard.controller";
 import { AttemptAdminController } from "./controllers/attempt-admin.controller";
+import { EmailSuppressionController } from "./controllers/email-suppression.controller";
 import { AssignmentLevelStandardsController } from "./controllers/assignment-level-standards.controller";
 import { AssignmentAnalyticsController } from "./controllers/assignment-analytics.controller";
 import { FlaggedSubmissionsController } from "./controllers/flagged-submissions.controller";
@@ -54,6 +55,7 @@ import { QueueStatusService } from "./services/queue-status.service";
     TranslationMaintenanceController,
     QueueStatusController,
     AttemptAdminController,
+    EmailSuppressionController,
   ],
   providers: [
     AdminService,

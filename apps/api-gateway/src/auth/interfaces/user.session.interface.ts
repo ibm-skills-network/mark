@@ -15,6 +15,11 @@ export interface UserSession {
   returnUrl?: string;
   launch_presentation_locale?: string;
   lisOutcomeServiceUrl?: string;
+  toolConsumerInstanceGuid?: string;
+  courseTitle?: string;
+  courseId?: string;
+  activityTitle?: string;
+  toolConsumerProductFamilyCode?: string;
 }
 
 export interface UserSessionPayload {
@@ -27,6 +32,11 @@ export interface UserSessionPayload {
   launch_presentation_locale?: string;
   grading?: { lis_outcome_service_url?: unknown };
   lis_outcome_service_url?: unknown;
+  toolConsumerInstanceGuid?: unknown;
+  courseTitle?: unknown;
+  courseId?: unknown;
+  activityTitle?: unknown;
+  toolConsumerProductFamilyCode?: unknown;
 }
 
 export interface UserSessionRequest extends Request {

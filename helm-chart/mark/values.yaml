@@ -91,9 +91,6 @@ api:
   secretEnv:
     # SN Support ticket forwarding; unset leaves the integration disabled.
     SN_SUPPORT_URL: ""
-    # Legacy single-product key. Used only when no SUPPORT_TOKEN_* below
-    # matches the reporting portal's product.
-    SN_SUPPORT_TOKEN: ""
     # SN Support resolves a ticket's product from the API key alone, so Mark
     # holds one key per product and picks by portal at report time. The var
     # name is derived from the product name (uppercase, non-alphanumerics to
@@ -112,7 +109,7 @@ api:
     SUPPORT_TOKEN_FACULTY: ""
     # portal-manager is the source of truth for which product owns a portal
     # hostname. Without it, known LTI platforms use their product key; other
-    # hosts use Mark, then the legacy key if Mark is unset.
+    # hosts use SUPPORT_TOKEN_MARK. No ticket is sent without a usable key.
     PORTAL_MANAGER_API_BASE_URL: ""
     PORTAL_MANAGER_TOKEN_URL: ""
     PORTAL_MANAGER_UID: ""

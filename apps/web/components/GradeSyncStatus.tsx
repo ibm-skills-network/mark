@@ -1,10 +1,60 @@
 "use client";
 
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
+import { isYourLearningHost } from "@/lib/portal";
 
 interface GradeSyncStatusProps {
   attemptId: number;
   assignmentId: number;
+  /** Session lmsHost from /user-session; selects the yourLearning notice. */
+  lmsHost?: string;
+}
+
+export const YOUR_LEARNING_SYNC_HEADING =
+  "Your grade is on its way to yourLearning";
+export const YOUR_LEARNING_SYNC_MESSAGE =
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.";
+
+/**
+ * Every English string the yourLearning notice renders. The UI translation
+ * catalogs are keyed by exact source text, so a test checks each one is
+ * present in every language.
+ */
+export const YOUR_LEARNING_SYNC_SOURCE_STRINGS: readonly string[] = [
+  YOUR_LEARNING_SYNC_HEADING,
+  YOUR_LEARNING_SYNC_MESSAGE,
+];
+
+/**
+ * yourLearning can take hours to show a grade even after it is delivered, so
+ * its learners get one steady notice instead of the per-status boxes.
+ */
+function YourLearningSyncNotice() {
+  return (
+    <div
+      role="status"
+      data-testid="yourlearning-sync-notice"
+      className="p-5 sm:p-6 mt-5 rounded-xl border-2 border-blue-300 bg-blue-50 shadow-sm"
+    >
+      <div className="flex items-start gap-4">
+        <span className="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full bg-blue-100">
+          <InformationCircleIcon
+            className="w-7 h-7 text-blue-600"
+            aria-hidden="true"
+          />
+        </span>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold text-blue-800">
+            {YOUR_LEARNING_SYNC_HEADING}
+          </h2>
+          <p className="text-base text-gray-700 mt-1">
+            {YOUR_LEARNING_SYNC_MESSAGE}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface SyncStatus {
@@ -26,6 +76,7 @@ interface SyncStatus {
 export default function GradeSyncStatus({
   attemptId,
   assignmentId,
+  lmsHost,
 }: GradeSyncStatusProps) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,8 +95,9 @@ export default function GradeSyncStatus({
       );
 
       if (response.ok) {
-        const data = await response.json();
-        setSyncStatus(data);
+        // An attempt with no sync row answers 200 with an empty body.
+        const body = await response.text();
+        setSyncStatus(body ? (JSON.parse(body) as SyncStatus | null) : null);
       } else if (response.status === 404 || response.status === 401) {
         setSyncStatus(null);
       } else {
@@ -127,6 +179,10 @@ export default function GradeSyncStatus({
 
   if (!statusDisplay) {
     return null;
+  }
+
+  if (isYourLearningHost(lmsHost)) {
+    return <YourLearningSyncNotice />;
   }
 
   return (

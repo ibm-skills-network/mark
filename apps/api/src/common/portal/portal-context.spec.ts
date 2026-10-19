@@ -91,6 +91,288 @@ describe("derivePortalContext", () => {
       derivePortalContext({ returnUrl: "http://[::1" }),
     ).not.toThrow();
   });
+
+  // Open edX portals send launch_presentation_return_url empty and Coursera
+  // omits it, so without this fallback the majority of real launches have no
+  // portal identity and their tickets cannot be routed.
+  describe("falling back to the grade-callback host", () => {
+    it.each([
+      [
+        "an empty return URL (Open edX)",
+        {
+          returnUrl: "",
+          lisOutcomeServiceUrl:
+            "http://courses.yl.skillsnetwork.site/courses/course-v1:Org+X+v1/xblock/block-v1/handler_noauth/outcome_service_handler",
+        },
+        "courses.yl.skillsnetwork.site",
+        "Your Learning",
+        "https://yl.skillsnetwork.site",
+      ],
+      [
+        "an absent return URL (Coursera)",
+        {
+          lisOutcomeServiceUrl:
+            "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+        },
+        "api.coursera.org",
+        "Coursera",
+        undefined,
+      ],
+      [
+        "an absent return URL (Cognitive Class)",
+        {
+          lisOutcomeServiceUrl:
+            "https://courses.cognitiveclass.ai/courses/x/handler_noauth/outcome_service_handler",
+        },
+        "courses.cognitiveclass.ai",
+        "courses.cognitiveclass.ai",
+        undefined,
+      ],
+    ])("derives the host from %s", (_label, session, host, name, url) => {
+      expect(derivePortalContext(session)).toEqual({
+        portalHost: host,
+        portalName: name,
+        // A grade-posting endpoint is not a page, so it never becomes
+        // portalUrl; only a known portal homepage does.
+        portalUrl: url,
+      });
+    });
+
+    it("prefers the return URL when both are present", () => {
+      expect(
+        derivePortalContext({
+          returnUrl: "https://learn.ibm.com/mod/lti/return.php?course=1",
+          lisOutcomeServiceUrl:
+            "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+        }),
+      ).toEqual({
+        portalHost: "learn.ibm.com",
+        portalName: "IBM Training",
+        portalUrl: "https://learn.ibm.com",
+      });
+    });
+
+    it.each([
+      ["neither claim", {}],
+      ["both empty", { returnUrl: "  ", lisOutcomeServiceUrl: "  " }],
+      ["a malformed callback URL", { lisOutcomeServiceUrl: "not-a-url" }],
+      [
+        "a non-http callback scheme",
+        { lisOutcomeServiceUrl: "javascript:alert(1)" },
+      ],
+    ])("returns an empty context for %s", (_label, session) => {
+      expect(derivePortalContext(session)).toEqual({});
+    });
+
+    // A malformed returnUrl must not swallow a usable callback host.
+    it("falls through when the return URL is unusable", () => {
+      expect(
+        derivePortalContext({
+          returnUrl: "javascript:alert(1)",
+          lisOutcomeServiceUrl:
+            "https://api.coursera.org/api/onDemandLtiOutcomes.v1",
+        }),
+      ).toMatchObject({
+        portalHost: "api.coursera.org",
+        portalName: "Coursera",
+      });
+    });
+
+    // Coursera's ungraded and final-project items send neither a return URL
+    // nor an outcome URL; the instance guid is all that names the platform.
+    it("uses a hostname guid when there is no return URL", () => {
+      expect(
+        derivePortalContext({
+          toolConsumerInstanceGuid: "ondemand.coursera.org",
+        }),
+      ).toEqual({
+        portalHost: "ondemand.coursera.org",
+        portalName: "Coursera",
+        portalUrl: undefined,
+      });
+    });
+
+    it("prefers the guid over the grade-callback host", () => {
+      expect(
+        derivePortalContext({
+          returnUrl: "",
+          toolConsumerInstanceGuid: "learn.ibm.com",
+          lisOutcomeServiceUrl: "https://grades.example.com/outcome",
+        }),
+      ).toMatchObject({ portalHost: "learn.ibm.com" });
+    });
+
+    it("prefers the return URL over the guid", () => {
+      expect(
+        derivePortalContext({
+          returnUrl: "https://courses.cognitiveclass.ai/courses/x",
+          toolConsumerInstanceGuid: "ondemand.coursera.org",
+        }),
+      ).toEqual({
+        portalHost: "courses.cognitiveclass.ai",
+        portalName: "courses.cognitiveclass.ai",
+        portalUrl: "https://courses.cognitiveclass.ai",
+      });
+    });
+
+    it.each([
+      "3f2a9c1e0b7d4e8f9a6b5c4d3e2f1a0b:canvas-lms",
+      "localhost",
+      "https://ondemand.coursera.org",
+      "evil.example.com/path",
+      "  ",
+      42,
+    ])("skips a guid that is not a hostname (%p)", (guid) => {
+      expect(
+        derivePortalContext({
+          toolConsumerInstanceGuid: guid,
+          lisOutcomeServiceUrl: "https://api.coursera.org/outcome",
+        }),
+      ).toMatchObject({ portalHost: "api.coursera.org" });
+      expect(derivePortalContext({ toolConsumerInstanceGuid: guid })).toEqual(
+        {},
+      );
+    });
+
+    it.each([42, true, {}, ["https://api.coursera.org/outcome"]])(
+      "ignores non-string claims (%j) without losing a usable fallback",
+      (value) => {
+        expect(derivePortalContext({ lisOutcomeServiceUrl: value })).toEqual(
+          {},
+        );
+        expect(
+          derivePortalContext({
+            returnUrl: value,
+            lisOutcomeServiceUrl: "https://api.coursera.org/outcome",
+          }),
+        ).toMatchObject({ portalHost: "api.coursera.org" });
+      },
+    );
+  });
+});
+
+describe("derivePortalContext course title", () => {
+  it("carries the course alongside the portal", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerInstanceGuid: "ondemand.coursera.org",
+        courseTitle: "  Java Development with Databases  ",
+      }),
+    ).toMatchObject({
+      portalName: "Coursera",
+      courseTitle: "Java Development with Databases",
+    });
+  });
+
+  it("keeps the course when the launch names no site", () => {
+    expect(derivePortalContext({ courseTitle: "PIA quiz" })).toEqual({
+      courseTitle: "PIA quiz",
+    });
+  });
+
+  it("carries the course id and item alongside the course", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerInstanceGuid: "ondemand.coursera.org",
+        courseTitle: "Program Manager Capstone",
+        courseId: "ondemand~1WEwdGF8Ee-e0g4kKcdYJQ",
+        activityTitle: "Option 1: AI-Graded Submission and Evaluation",
+        toolConsumerProductFamilyCode: "ims",
+      }),
+    ).toEqual({
+      portalHost: "ondemand.coursera.org",
+      portalName: "Coursera",
+      portalUrl: undefined,
+      courseTitle: "Program Manager Capstone",
+      courseId: "ondemand~1WEwdGF8Ee-e0g4kKcdYJQ",
+      activityTitle: "Option 1: AI-Graded Submission and Evaluation",
+      lmsFamily: "ims",
+    });
+  });
+
+  // Your Learning sends no guid; its family code is the only name a launch
+  // without a grade-callback URL carries.
+  it("names a hostless launch by a custom LMS family", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerProductFamilyCode: "Acme Academy",
+        courseTitle: "Quiz [Nomad L2]",
+      }),
+    ).toEqual({
+      portalName: "Acme Academy",
+      lmsFamily: "Acme Academy",
+      courseTitle: "Quiz [Nomad L2]",
+    });
+  });
+
+  // Ungraded Your Learning items send no guid and no grade-callback URL.
+  it.each(["Public Your Learning", "public your learning"])(
+    "places a hostless %s launch on Your Learning",
+    (family) => {
+      expect(
+        derivePortalContext({
+          toolConsumerProductFamilyCode: family,
+          courseTitle: "Quiz [Nomad L2]",
+        }),
+      ).toEqual({
+        portalHost: "yl.skillsnetwork.site",
+        portalName: "Your Learning",
+        portalUrl: "https://yl.skillsnetwork.site",
+        lmsFamily: family,
+        courseTitle: "Quiz [Nomad L2]",
+      });
+    },
+  );
+
+  it.each(["ims", "Moodle", "canvas"])(
+    "does not name a portal after the generic LMS family %s",
+    (family) => {
+      expect(
+        derivePortalContext({ toolConsumerProductFamilyCode: family }),
+      ).toEqual({ lmsFamily: family });
+    },
+  );
+
+  // Your Learning sends its return URL empty; support still needs a link.
+  it("links Your Learning tickets to the portal homepage", () => {
+    expect(
+      derivePortalContext({
+        returnUrl: "",
+        lisOutcomeServiceUrl:
+          "http://courses.yl.skillsnetwork.site/courses/x/handler_noauth/outcome_service_handler",
+      }),
+    ).toMatchObject({
+      portalName: "Your Learning",
+      portalUrl: "https://yl.skillsnetwork.site",
+    });
+  });
+
+  it("does not invent a portal URL for Coursera", () => {
+    expect(
+      derivePortalContext({ toolConsumerInstanceGuid: "ondemand.coursera.org" })
+        .portalUrl,
+    ).toBeUndefined();
+  });
+
+  it("prefers the grade-callback host over the LMS family", () => {
+    expect(
+      derivePortalContext({
+        toolConsumerProductFamilyCode: "Public Your Learning",
+        lisOutcomeServiceUrl:
+          "http://courses.yl.skillsnetwork.site/courses/x/handler_noauth/outcome_service_handler",
+      }),
+    ).toMatchObject({
+      portalHost: "courses.yl.skillsnetwork.site",
+      portalName: "Your Learning",
+    });
+  });
+
+  it.each([["   "], ["x".repeat(501)], [42]])(
+    "drops an unusable course title (%p)",
+    (courseTitle) => {
+      expect(derivePortalContext({ courseTitle })).toEqual({});
+    },
+  );
 });
 
 describe("deriveLmsHost", () => {

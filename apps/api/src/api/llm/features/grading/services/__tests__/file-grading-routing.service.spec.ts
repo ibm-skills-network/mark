@@ -1453,7 +1453,7 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
     expect(evidenceSpy).not.toHaveBeenCalled();
   });
 
-  it("routes criteria-based CODE uploads through the pinned structured-file model", async () => {
+  it("routes criteria-based CODE uploads through the file_evidence_grading model", async () => {
     const { FileBasedQuestionResponseModel } = await import(
       "src/api/llm/model/file.based.question.response.model"
     );
@@ -1461,6 +1461,7 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
       "src/api/llm/model/file.based.question.evaluate.model"
     );
     const { ResponseType } = await import("@prisma/client");
+    const { DEFAULT_LLM_MODEL } = await import("src/api/llm/llm.constants");
     const pinnedModel = "gpt-5.4-mini-2026-03-17";
     service.llmResolver.getModelKeyWithFallback.mockResolvedValue(pinnedModel);
     jest
@@ -1502,7 +1503,7 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
     expect(result.feedback).toBe("Consistent code grade");
     expect(service.llmResolver.getModelKeyWithFallback).toHaveBeenCalledWith(
       "file_evidence_grading",
-      pinnedModel,
+      DEFAULT_LLM_MODEL,
     );
     expect(evidenceSpy).toHaveBeenCalledTimes(1);
     const call = evidenceSpy.mock.calls[0];
@@ -1578,5 +1579,103 @@ describe("FileGradingService - deterministic grading runs before evidence-based"
 
     expect(results.map((result) => result.points)).toEqual([8, 8, 8, 8, 8]);
     expect(grade).toHaveBeenCalledTimes(1);
+  });
+  describe("evidence-free minimum grades", () => {
+    const sentinelScore = {
+      rubricQuestion: "Slides answer every sub-question",
+      pointsAwarded: 0,
+      maxPoints: 14,
+      justification: "No supporting evidence found in the submission.",
+      evidence: [],
+      status: "none",
+    };
+
+    function cacheRequest(grade: jest.Mock) {
+      const file = makeCodeFile("deck.py");
+      (file as any).structuredContent = {
+        submissionId: "submission",
+        metadata: {
+          wordCount: 5,
+          pageCount: 1,
+          blockCount: 1,
+          sourceType: "pdf",
+          checksum: "stable-deck",
+          extractedAt: "2026-01-01T00:00:00.000Z",
+        },
+        pages: [{ pageNumber: 1, blocks: [] }],
+      };
+      return {
+        questionId: 77,
+        question: "Upload your capstone deck",
+        learnerResponse: [file],
+        scoringCriteria: { type: "CRITERIA_BASED", rubrics: [] },
+        questionMaxPoints: 14,
+        language: "en",
+        modelSnapshot: "gpt-5.4-mini-2026-03-17",
+        grade,
+      };
+    }
+
+    it("does not store a grade containing an evidence-free minimum", async () => {
+      const { FileBasedQuestionResponseModel } = await import(
+        "src/api/llm/model/file.based.question.response.model"
+      );
+      service.cacheService = {
+        getCachedGrading: jest.fn().mockResolvedValue(null),
+        cacheGradingIfAbsent: jest.fn(async (candidate: any) => candidate),
+      };
+      const grade = jest
+        .fn()
+        .mockResolvedValue(
+          new FileBasedQuestionResponseModel(
+            0,
+            "Zero",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            [sentinelScore as any],
+          ),
+        );
+
+      const result = await service.gradeEvidenceFileWithCache(
+        cacheRequest(grade),
+      );
+
+      expect(result.points).toBe(0);
+      expect(service.cacheService.cacheGradingIfAbsent).not.toHaveBeenCalled();
+    });
+
+    it("grades again instead of replaying a stored evidence-free minimum", async () => {
+      const { FileBasedQuestionResponseModel } = await import(
+        "src/api/llm/model/file.based.question.response.model"
+      );
+      service.cacheService = {
+        getCachedGrading: jest.fn().mockResolvedValue({
+          cacheKey: "k",
+          totalScore: 0,
+          overallFeedback: "Zero",
+          criteria: [],
+          metadata: {
+            fileResponse: {
+              points: 0,
+              feedback: "Zero",
+              rubricScores: [sentinelScore],
+            },
+          },
+        }),
+        cacheGradingIfAbsent: jest.fn(async (candidate: any) => candidate),
+      };
+      const grade = jest
+        .fn()
+        .mockResolvedValue(new FileBasedQuestionResponseModel(10, "Graded"));
+
+      const result = await service.gradeEvidenceFileWithCache(
+        cacheRequest(grade),
+      );
+
+      expect(grade).toHaveBeenCalledTimes(1);
+      expect(result.points).toBe(10);
+    });
   });
 });
