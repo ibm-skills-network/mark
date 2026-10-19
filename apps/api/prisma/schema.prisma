@@ -1053,3 +1053,21 @@ model FileUpload {
   @@index([userId, storageKey])
   @@index([status])
 }
+
+/// Why an address stopped receiving Mark email
+enum EmailSuppressionReason {
+  HARD_BOUNCE /// The receiving server permanently rejected the address
+  COMPLAINT /// The recipient reported Mark email as spam
+  MANUAL /// An admin suppressed the address
+}
+
+/// Addresses Mark must not email. Checked before every send.
+model EmailSuppression {
+  id        Int                    @id @default(autoincrement())
+  email     String                 @unique /// Lowercased recipient address
+  reason    EmailSuppressionReason
+  detail    String? /// SMTP response or admin note, truncated
+  createdBy String? /// Admin email, or "system" for automatic suppressions
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+}

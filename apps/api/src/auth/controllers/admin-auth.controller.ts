@@ -388,11 +388,14 @@ export class AdminAuthController {
     };
   }
 
+  // Admin-only: without the guard any session could make Mark send mail to
+  // an arbitrary address.
   @Post("test-email")
+  @UseGuards(AdminGuard)
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   @ApiOperation({
     summary: "Test email configuration",
-    description:
-      "Send a test email to verify Gmail SMTP configuration is working",
+    description: "Send a test email to verify SMTP configuration is working",
   })
   @ApiResponse({
     status: 200,

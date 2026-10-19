@@ -3519,29 +3519,6 @@
   resolved "https://registry.yarnpkg.com/@scarf/scarf/-/scarf-1.4.0.tgz#3bbb984085dbd6d982494538b523be1ce6562972"
   integrity sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==
 
-"@sendgrid/client@^8.1.5":
-  version "8.1.5"
-  resolved "https://registry.yarnpkg.com/@sendgrid/client/-/client-8.1.5.tgz#e6586c1ea02ec587b393c1f2a63d9eec8c94e34d"
-  integrity sha512-Jqt8aAuGIpWGa15ZorTWI46q9gbaIdQFA21HIPQQl60rCjzAko75l3D1z7EyjFrNr4MfQ0StusivWh8Rjh10Cg==
-  dependencies:
-    "@sendgrid/helpers" "^8.0.0"
-    axios "^1.8.2"
-
-"@sendgrid/helpers@^8.0.0":
-  version "8.0.0"
-  resolved "https://registry.yarnpkg.com/@sendgrid/helpers/-/helpers-8.0.0.tgz#f74bf9743bacafe4c8573be46166130c604c0fc1"
-  integrity sha512-Ze7WuW2Xzy5GT5WRx+yEv89fsg/pgy3T1E3FS0QEx0/VvRmigMZ5qyVGhJz4SxomegDkzXv/i0aFPpHKN8qdAA==
-  dependencies:
-    deepmerge "^4.2.2"
-
-"@sendgrid/mail@^8.1.6":
-  version "8.1.6"
-  resolved "https://registry.yarnpkg.com/@sendgrid/mail/-/mail-8.1.6.tgz#9c253c13d49867fdb6f7df1360643825236eef22"
-  integrity sha512-/ZqxUvKeEztU9drOoPC/8opEPOk+jLlB2q4+xpx6HVLq6aFu3pMpalkTpAQz8XfRfpLp8O25bh6pGPcHDCYpqg==
-  dependencies:
-    "@sendgrid/client" "^8.1.5"
-    "@sendgrid/helpers" "^8.0.0"
-
 "@simple-libs/child-process-utils@^1.0.0":
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/@simple-libs/child-process-utils/-/child-process-utils-1.0.2.tgz#cb182d310c9bed3ace200b26258e090d898a1736"
@@ -6103,7 +6080,7 @@ axe-core@^4.10.0:
   resolved "https://registry.yarnpkg.com/axe-core/-/axe-core-4.10.3.tgz#04145965ac7894faddbac30861e5d8f11bfd14fc"
   integrity sha512-Xm7bpRXnDSX2YE2YFfBk2FnF0ep6tmG7xPh8iHee8MIcrgq762Nkce856dYtJYLkuIoYZvGfTs/PbZhideTcEg==
 
-axios@1.20.0, axios@^1.19.0, axios@^1.20.0, axios@^1.8.2:
+axios@1.20.0, axios@^1.19.0, axios@^1.20.0:
   version "1.20.0"
   resolved "https://registry.yarnpkg.com/axios/-/axios-1.20.0.tgz#515513445aa60e71d04b6521ca6210829ccb4786"
   integrity sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==
