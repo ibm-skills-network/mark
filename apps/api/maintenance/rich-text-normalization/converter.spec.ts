@@ -128,6 +128,22 @@ describe("migration conversion", () => {
     expect(result.after.learnerResponse).toContain("language-python");
     expect(result.after.learnerResponse).toContain("  print(1)\n  print(2)");
   });
+  it("drops the Quill code-block language picker but not other chrome with text", () => {
+    const picker =
+      '<div class="ql-code-block-container" spellcheck="false"><select class="ql-ui" contenteditable="false"><option value="plain">Plain</option><option value="bash">Bash</option><option value="python">Python</option></select><div class="ql-code-block" data-language="python">def f():</div><div class="ql-code-block" data-language="python">    return 1</div></div>';
+    const result = response(JSON.stringify(picker));
+    expect(result.state).toBe("pending");
+    const html = JSON.parse(result.after.learnerResponse!) as string;
+    expect(html).toBe(
+      '<pre><code class="language-python">def f():\n    return 1</code></pre>',
+    );
+    for (const value of [
+      '<p>a<span class="ql-ui">typed text</span></p>',
+      '<div class="ql-code-block-container"><span class="ql-ui">typed</span><div class="ql-code-block">a</div></div>',
+      '<p><select class="ql-ui"><option>Plain</option></select>a</p>',
+    ])
+      expect(response(value).reason).toBe("editor-chrome-has-text");
+  });
   it("keeps allowed embeds and applies the browser sandbox policy", () => {
     const result = response(
       '<iframe class="ql-video" src="https://www.youtube.com/embed/abc"></iframe>',

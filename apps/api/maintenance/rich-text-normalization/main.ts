@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { Prisma } from "@prisma/client";
 import { connect, digest } from "./database";
+import { describeError, logger } from "./log";
 import { MigrationRunner } from "./runner";
 
 declare const __RICH_TEXT_MIGRATION_LOCK_HASH__: string;
@@ -18,7 +19,9 @@ pause|status|retry-conflicts|rollback --target <audit-target> --run <id>
 verify --target <audit-target> --run <id> [--write-boundary-confirmed] [--canary-approved]
 audit and plan accept --max-document-bytes (default 4194304, maximum 33554432).
 --max-updates is a TOTAL applied-row cap for the run, including prior executions (default 10).
-Use verify twice after completion; flags attest separately tested rollout prerequisites.`;
+Use verify twice after completion; flags attest separately tested rollout prerequisites.
+apply/resume exit 0 when the run is paused, so a Job does not retry it.
+Diagnostics are JSON lines on stderr (RICH_TEXT_MIGRATION_LOG_LEVEL, default info).`;
 
 const output = (value: unknown) => console.log(JSON.stringify(value));
 const integer = (
@@ -125,7 +128,16 @@ export async function main(): Promise<void> {
     undefined,
     output,
   );
-  const stop = () => runner.stop();
+  logger.info("command started", {
+    command,
+    run: values.run,
+    scopeSize: scope.length,
+    maxUpdates: ["apply", "resume"].includes(command) ? maxUpdates : undefined,
+  });
+  const stop = () => {
+    logger.warn("stop signal received; finishing current row", { command });
+    runner.stop();
+  };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
   try {
@@ -157,12 +169,17 @@ export async function main(): Promise<void> {
       return;
     }
     switch (command) {
-      case "apply": {
-        await runner.apply(run, maxUpdates);
-        break;
-      }
+      case "apply":
       case "resume": {
-        await runner.resume(run, maxUpdates);
+        if (command === "apply" && run.status === "paused") {
+          logger.info("run is paused; nothing to apply", { run: run.id });
+          break;
+        }
+        const outcome =
+          command === "apply"
+            ? await runner.apply(run, maxUpdates)
+            : await runner.resume(run, maxUpdates);
+        logger.info("apply finished", { run: run.id, outcome });
         break;
       }
       case "pause": {
@@ -188,7 +205,13 @@ export async function main(): Promise<void> {
         break;
       }
     }
-    output(await runner.status(run));
+    const status = await runner.status(run);
+    logger.info("command finished", {
+      command,
+      run: run.id,
+      status: status.status,
+    });
+    output(status);
   } finally {
     process.removeListener("SIGTERM", stop);
     process.removeListener("SIGINT", stop);
@@ -198,6 +221,7 @@ export async function main(): Promise<void> {
 
 if (require.main === module)
   void main().catch((error: unknown) => {
+    logger.error("command failed", { error: describeError(error) });
     const message =
       error instanceof Error && /^[a-z]+(?:-[a-z]+){1,10}$/.test(error.message)
         ? error.message

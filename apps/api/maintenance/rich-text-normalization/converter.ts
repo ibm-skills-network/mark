@@ -12,10 +12,20 @@ function hasLegacy(root: Element): boolean {
   );
 }
 
+// Quill's code-block language picker: its option labels are UI text, not content.
+function isLanguagePicker(element: Element): boolean {
+  return (
+    element.tagName === "SELECT" &&
+    !!element.parentElement?.classList.contains("ql-code-block-container") &&
+    [...element.children].every((child) => child.tagName === "OPTION")
+  );
+}
+
 function textProjection(root: Element): string {
   const copy = root.cloneNode(true) as Element;
   for (const chrome of copy.querySelectorAll(".ql-ui, .ql-cursor")) {
-    if (chrome.textContent?.trim()) throw new Error("editor-chrome-has-text");
+    if (chrome.textContent?.trim() && !isLanguagePicker(chrome))
+      throw new Error("editor-chrome-has-text");
     chrome.remove();
   }
   for (const container of copy.querySelectorAll(".ql-code-block-container")) {
