@@ -3,15 +3,21 @@
 import { UserRole } from "../../interfaces/user.session.interface";
 import { JwtConfigService } from "../jwt.config.service";
 import { JwtCookieStrategy } from "./jwt.cookie.strategy";
+import { SavedSessionStore } from "./saved-session.store";
 
 describe("JwtCookieStrategy", () => {
   let strategy: JwtCookieStrategy;
   let configService: JwtConfigService;
+  let savedSessions: { save: jest.Mock };
 
   beforeEach(() => {
     process.env.SECRET = "test-secret";
     configService = new JwtConfigService();
-    strategy = new JwtCookieStrategy(configService);
+    savedSessions = { save: jest.fn().mockReturnValue(new Promise(() => {})) };
+    strategy = new JwtCookieStrategy(
+      configService,
+      savedSessions as unknown as SavedSessionStore,
+    );
   });
 
   afterEach(() => {
@@ -19,6 +25,40 @@ describe("JwtCookieStrategy", () => {
   });
 
   describe("validate", () => {
+    it("returns the session without waiting for the saved-session write", () => {
+      const storeId = "7f0c6c1e-3c1a-4c55-9a8e-2b8f6f1d0a11";
+      const result = strategy.validate(
+        {
+          headers: {
+            cookie: `authentication=launch-token; mark_saved_sessions=${storeId}`,
+            "x-mark-learner-assignment": "789",
+          },
+          cookies: {
+            authentication: "launch-token",
+            mark_saved_sessions: storeId,
+          },
+          res: { cookie: jest.fn(), clearCookie: jest.fn() },
+        } as any,
+        {
+          userID: "user123",
+          role: UserRole.LEARNER,
+          groupID: "group456",
+          assignmentID: 789,
+          iat: 1_234_567_890,
+          exp: 1_234_567_890 + 3600,
+        } as any,
+      );
+
+      expect(result).not.toBeInstanceOf(Promise);
+      expect(result).toMatchObject({ userId: "user123", assignmentId: 789 });
+      expect(savedSessions.save).toHaveBeenCalledWith(
+        storeId,
+        "learner",
+        789,
+        "launch-token",
+      );
+    });
+
     // Most launches send returnUrl empty, so the grade-callback host is the
     // only portal identity mark-api gets. It is copied out by name: this
     // allowlist defines what the API is willing to believe about a session.

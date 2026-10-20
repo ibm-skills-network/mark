@@ -84,6 +84,8 @@ export interface AuthCookieSelection {
 export function selectAuthenticationCookie(
   request: Pick<Request, "headers"> & {
     cookies?: Record<string, string>;
+    /** The token saved server-side for this request's quiz context. */
+    savedSession?: string;
   },
 ): AuthCookieSelection {
   const rawHeader = request.headers?.cookie;
@@ -93,13 +95,7 @@ export function selectAuthenticationCookie(
       headers: { cookie: rawHeader },
       cookies: request.cookies,
     });
-    const scoped = parseCookiePairs(rawHeader)
-      .filter(
-        (pair) =>
-          pair.name ===
-          `${context.role === "author" ? AUTHOR_COOKIE_PREFIX : LEARNER_COOKIE_PREFIX}${context.assignmentId}`,
-      )
-      .map((pair) => tryDecodeUriComponent(pair.rawValue));
+    const scoped = request.savedSession ? [request.savedSession] : [];
     const legacyClaims = unverifiedSession(legacy.token);
     if (scoped.length > 0) {
       const newest = scoped[pickNewestIatIndex(scoped)];
@@ -152,6 +148,7 @@ export function selectAuthenticationCookie(
 export function dedupeAuthenticationCookieHeader(
   rawHeader?: string,
   headers: Request["headers"] = {},
+  savedSession?: string,
 ): string | undefined {
   const pairs = parseCookiePairs(rawHeader);
   const authPairs = pairs.filter((pair) => pair.name === COOKIE_NAME);
@@ -160,12 +157,13 @@ export function dedupeAuthenticationCookieHeader(
       pair.name.startsWith(AUTHOR_COOKIE_PREFIX) ||
       pair.name.startsWith(LEARNER_COOKIE_PREFIX),
   );
-  if (authPairs.length <= 1 && !hasScopedCookies) {
+  if (authPairs.length <= 1 && !hasScopedCookies && !savedSession) {
     return undefined;
   }
 
   const { token } = selectAuthenticationCookie({
     headers: { ...headers, cookie: rawHeader },
+    savedSession,
   });
 
   const kept = pairs.filter(

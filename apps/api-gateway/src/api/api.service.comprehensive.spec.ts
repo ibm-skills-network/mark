@@ -87,6 +87,53 @@ describe("ApiService - Comprehensive Stress Tests (Simplified)", () => {
       expect(extraHeaders.cookie).toBeUndefined();
       expect(extraHeaders.Cookie).toBeUndefined();
     });
+
+    it("forwards the saved session the request authenticated with", () => {
+      const launch = makeToken(2000, "launch");
+      const saved = makeToken(1000, "saved");
+      const mockRequest = {
+        originalUrl: "/api/v1/test",
+        user: { userId: "test-user" },
+        headers: {
+          cookie: `theme=dark; authentication=${launch}`,
+          "x-mark-learner-assignment": "4892",
+        },
+        savedSession: saved,
+      } as any;
+
+      const { extraHeaders } = service.getForwardingDetails(
+        DownstreamService.MARK_API,
+        mockRequest,
+      );
+
+      expect(extraHeaders.cookie).toBe(`theme=dark; authentication=${saved}`);
+    });
+
+    it.each([
+      "/api/v1/../internal/saved-sessions/lookup",
+      "/api/v1/%2e%2e/internal/saved-sessions/lookup",
+    ])("never forwards the saved-session secret (%s)", (originalUrl) => {
+      const queueSecret = "gateway-queue-secret"; // pragma: allowlist secret
+      const environment = process.env;
+      process.env = { ...environment, JOB_QUEUE_SECRET: queueSecret }; // pragma: allowlist secret
+      try {
+        const { extraHeaders } = service.getForwardingDetails(
+          DownstreamService.MARK_API,
+          {
+            originalUrl,
+            user: { userId: "test-user" },
+            headers: { cookie: "authentication=launch" },
+          } as any,
+        );
+
+        expect(
+          Object.keys(extraHeaders).map((key) => key.toLowerCase()),
+        ).not.toContain("x-job-queue-secret");
+        expect(JSON.stringify(extraHeaders)).not.toContain(queueSecret);
+      } finally {
+        process.env = environment;
+      }
+    });
   });
 
   describe("Error Resilience Tests", () => {

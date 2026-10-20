@@ -13,6 +13,7 @@ import { DynamicJwtCookieAuthGuard } from "../auth/jwt/cookie-based/dynamic.jwt.
 import { JwtCookieAuthGuard } from "../auth/jwt/cookie-based/jwt.cookie.auth.guard";
 import { JwtCookieStrategy } from "../auth/jwt/cookie-based/jwt.cookie.strategy";
 import { MockJwtCookieAuthGuard } from "../auth/jwt/cookie-based/mock.jwt.cookie.auth.guard";
+import { SavedSessionStore } from "../auth/jwt/cookie-based/saved-session.store";
 import { JwtConfigService } from "../auth/jwt/jwt.config.service";
 import { MessagingService } from "../messaging/messaging.service";
 import { AdminAssumeRoleController } from "./admin-assume-role.controller";
@@ -53,6 +54,7 @@ describe("AdminAssumeRoleController", () => {
         JwtCookieStrategy,
         JwtCookieAuthGuard,
         MockJwtCookieAuthGuard,
+        { provide: SavedSessionStore, useValue: { find: jest.fn() } },
         DynamicJwtCookieAuthGuard,
         JwtBearerTokenAuthGuard,
         MockJwtBearerTokenAuthGuard,

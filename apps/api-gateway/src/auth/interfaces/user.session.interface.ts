@@ -41,4 +41,5 @@ export interface UserSessionPayload {
 
 export interface UserSessionRequest extends Request {
   user: UserSession;
+  savedSession?: string;
 }

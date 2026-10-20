@@ -9,6 +9,7 @@ import { DynamicJwtCookieAuthGuard } from "./jwt/cookie-based/dynamic.jwt.cookie
 import { JwtCookieAuthGuard } from "./jwt/cookie-based/jwt.cookie.auth.guard";
 import { JwtCookieStrategy } from "./jwt/cookie-based/jwt.cookie.strategy";
 import { MockJwtCookieAuthGuard } from "./jwt/cookie-based/mock.jwt.cookie.auth.guard";
+import { SavedSessionStore } from "./jwt/cookie-based/saved-session.store";
 import { JwtConfigService } from "./jwt/jwt.config.service";
 
 @Module({
@@ -23,6 +24,7 @@ import { JwtConfigService } from "./jwt/jwt.config.service";
     JwtCookieStrategy,
     JwtBearerTokenStrategy,
     JwtConfigService,
+    SavedSessionStore,
   ],
   exports: [
     JwtCookieAuthGuard,
