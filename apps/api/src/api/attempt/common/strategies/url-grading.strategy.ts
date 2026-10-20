@@ -1,3 +1,7 @@
+import {
+  SourceProcessingError,
+  RetryableProcessingError,
+} from "../../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -119,7 +123,7 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     // Guard: an unparseable URL is a learner input error, not a system
     // failure. Grade it 0 with feedback and skip the fetch/LLM path entirely
-    // (mirrors the unfetchable-URL branch below). validateResponse lets
+    // (unlike a source processing failure). validateResponse lets
     // invalid formats through on purpose so they are graded here rather than
     // failing the job.
     const urlValidation = validateLearnerUrl(learnerResponse, {
@@ -181,7 +185,6 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         this.logger?.warn(
           "Transient failure fetching a learner URL for grading; propagating as retryable",
           {
-            url: targetUrl,
             assignmentId: context.assignmentId,
             questionId: question.id,
             reason: error.reason,
@@ -190,44 +193,29 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         );
         throw error;
       }
-      return this.createFallbackResponse(
-        question,
-        learnerResponse,
-        context,
-        "url_fetch_completely_failed",
-      );
+      this.logger?.warn("grading.source_processing.blocked", {
+        assignmentId: context.assignmentId,
+        attemptId: context.attemptId,
+        questionId: question.id,
+        reason: "source_unavailable",
+        sourceReference: "url",
+        retryable: true,
+        scoringBlocked: true,
+      });
+      throw new RetryableProcessingError("source_unavailable", "url");
     }
 
-    if (!urlFetchResponse.isFunctional) {
-      const responseDto = this.createResponseDto(0, [
-        {
-          feedback:
-            this.localizationService?.getLocalizedString?.(
-              "unableToFetchUrl",
-              context.language,
-              { url: learnerResponse },
-            ) || `Unable to fetch content from URL: ${learnerResponse}`,
-        },
-      ]);
+    if (
+      !urlFetchResponse.isFunctional ||
+      (typeof urlFetchResponse.body === "string"
+        ? !urlFetchResponse.body.trim()
+        : urlFetchResponse.body == null)
+    ) {
+      this.blockSource(question, context, "url_fetch_failed");
+    }
 
-      responseDto.metadata = {
-        error: "url_fetch_failed",
-        url: learnerResponse,
-        status: "error",
-        maxPossiblePoints: question.totalPoints,
-      };
-
-      await this.recordGrading(
-        question,
-        {
-          learnerUrlResponse: learnerResponse,
-        } as CreateQuestionResponseAttemptRequestDto,
-        responseDto,
-        context,
-        "UrlGradingStrategy-Failed",
-      );
-
-      return responseDto;
+    if (question.responseType === "REPO" && urlFetchResponse.evidenceKind) {
+      this.blockSource(question, context, "insufficient_source_evidence");
     }
 
     const urlBody =
@@ -260,21 +248,14 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         context.language,
       );
     } catch (error) {
-      this.logger?.error(
-        "URL grading LLM call failed; awarding fallback credit",
-        {
-          assignmentId: context.assignmentId,
-          questionId: question.id,
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-      );
-      return this.createFallbackResponse(
-        question,
-        learnerResponse,
-        context,
-        "llm_grading_failed",
-      );
+      this.logger?.warn("grading.provider.blocked", {
+        assignmentId: context.assignmentId,
+        attemptId: context.attemptId,
+        questionId: question.id,
+        scoringBlocked: true,
+      });
+      if (error instanceof RetryableProcessingError) throw error;
+      throw new RetryableProcessingError("grading_unavailable");
     }
 
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -304,41 +285,22 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     return responseDto;
   }
 
-  /**
-   * Create a fallback response when URL grading fails
-   */
-  private createFallbackResponse(
+  private blockSource(
     question: QuestionDto,
-    learnerResponse: string,
     context: GradingContext,
-    errorType: string,
-  ): CreateQuestionResponseAttemptResponseDto {
-    const maxPoints = question.totalPoints || 0;
-    const fallbackPoints = maxPoints > 0 ? Math.floor(maxPoints * 0.5) : 0;
-
-    const errorMessages: Record<string, string> = {
-      url_fetch_completely_failed: "Unable to access the provided URL",
-      llm_grading_failed: "Automated grading service temporarily unavailable",
-    };
-
-    const errorMessage = errorMessages[errorType] || "Technical error occurred";
-
-    const responseDto = this.createResponseDto(fallbackPoints, [
-      {
-        feedback: `${errorMessage}. Partial credit (${fallbackPoints}/${maxPoints}) awarded pending manual review. URL submitted: ${learnerResponse}`,
-      },
-    ]);
-
-    responseDto.metadata = {
-      error: errorType,
-      url: learnerResponse,
-      status: "fallback_grading",
-      fallbackReason: errorMessage,
-      requiresManualReview: true,
-      maxPossiblePoints: question.totalPoints,
-    };
-
-    return responseDto;
+    reason: "url_fetch_failed" | "insufficient_source_evidence",
+  ): never {
+    const error = new SourceProcessingError(reason, "url");
+    this.logger?.warn("grading.source_processing.blocked", {
+      assignmentId: context.assignmentId,
+      attemptId: context.attemptId,
+      questionId: question.id,
+      reason,
+      sourceReference: error.sourceReference,
+      retryable: error.retryable,
+      scoringBlocked: true,
+    });
+    throw error;
   }
 
   /**

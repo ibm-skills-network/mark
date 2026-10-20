@@ -223,6 +223,8 @@ export class FileGradingService implements IFileGradingService {
     // zero with instructions to contact the instructor.
     const moderationVerdict = await this.moderationService.assessContent(
       learnerResponse.map((item) => item.content).join(" "),
+      undefined,
+      { requireSuccessfulCheck: true },
     );
     if (moderationVerdict.action === "block_severe") {
       this.logger.warn("grading.moderation.blocked_severe", {

@@ -1,3 +1,4 @@
+import { ModerationService } from "../../../core/services/moderation.service";
 import { FileGradingService } from "./file-grading.service";
 
 function mockLogger() {
@@ -59,7 +60,11 @@ describe("FileGradingService moderation verdicts", () => {
         expect(error.message).not.toBe("Learner response validation failed");
       });
 
-    expect(assessContent).toHaveBeenCalledWith("chapter one chapter two");
+    expect(assessContent).toHaveBeenCalledWith(
+      "chapter one chapter two",
+      undefined,
+      { requireSuccessfulCheck: true },
+    );
     expect(mockLogger.warn).toHaveBeenCalledWith(
       "grading.moderation.flagged",
       expect.objectContaining({ assignmentId: 1736 }),
@@ -88,4 +93,29 @@ describe("FileGradingService moderation verdicts", () => {
       service.promptProcessor.processStructuredPromptForFeature,
     ).not.toHaveBeenCalled();
   });
+});
+
+it("does not call the grading provider if the actual moderation request fails", async () => {
+  const moderation = Object.create(ModerationService.prototype);
+  const create = jest
+    .fn()
+    .mockRejectedValue(new Error("moderation unavailable"));
+  moderation.openAiClient = { moderations: { create } };
+  moderation.logger = mockLogger();
+  moderation.severeCategories = new Set(["sexual/minors"]);
+  const { service } = buildService(jest.fn());
+  service.moderationService = moderation;
+  await expect(
+    service.gradeFileBasedQuestion(gradeModel(), 1736),
+  ).rejects.toMatchObject({
+    name: "RetryableProcessingError",
+    reason: "moderation_unavailable",
+  });
+  expect(create).toHaveBeenCalledWith({
+    model: "omni-moderation-latest",
+    input: [{ type: "text", text: "chapter one chapter two" }],
+  });
+  expect(
+    service.promptProcessor.processStructuredPromptForFeature,
+  ).not.toHaveBeenCalled();
 });

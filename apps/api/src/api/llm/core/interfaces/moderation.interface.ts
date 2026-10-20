@@ -14,6 +14,7 @@ export interface IModerationService {
   assessContent(
     content: string,
     imageUrls?: string[],
+    options?: { requireSuccessfulCheck?: boolean },
   ): Promise<ModerationVerdict>;
 
   /**

@@ -1,3 +1,8 @@
+import {
+  SourceProcessingError,
+  RetryableProcessingError,
+} from "../../../llm/features/grading/errors/source-processing.error";
+import { assertRequiredSourceEvidence } from "../utils/required-source-evidence";
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/require-await */
@@ -265,6 +270,26 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           provenanceShadow: true,
         },
       );
+
+    try {
+      assertRequiredSourceEvidence(extractedFiles, learnerResponse.length);
+    } catch (error) {
+      if (
+        error instanceof SourceProcessingError ||
+        error instanceof RetryableProcessingError
+      ) {
+        this.logger?.warn("grading.source_processing.blocked", {
+          assignmentId: context.assignmentId,
+          attemptId: context.attemptId,
+          questionId: question.id,
+          reason: error.reason,
+          sourceReference: error.sourceReference,
+          retryable: error.retryable,
+          scoringBlocked: true,
+        });
+      }
+      throw error;
+    }
 
     const processedFiles = await this.processExtractedFiles(
       extractedFiles,

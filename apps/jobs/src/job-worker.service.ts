@@ -726,7 +726,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       throw new UnrecoverableError(
         error instanceof LearnerFacingGradingError
           ? error.learnerMessage
-          : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
+          : errorName === "SourceProcessingError"
+            ? reason
+            : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
       );
     }
 
@@ -929,6 +931,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   // Error objects carrying only the original `name`.
   private static readonly TERMINAL_GRADING_ERROR_NAMES = new Set([
     "OversizedSubmissionError",
+    "SourceProcessingError",
     "UnsupportedImageFormatError",
   ]);
 
@@ -1106,6 +1109,26 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
     if (!response.ok) {
       const responseBody = await response.text().catch(() => "");
+      // Only reconstruct the explicitly supported processing outcome. Generic
+      // upstream errors retain normal bounded retries and diagnostics below.
+      let processing:
+        | { error?: unknown; message?: unknown; retryable?: unknown }
+        | undefined;
+      try {
+        processing = JSON.parse(responseBody) as typeof processing;
+      } catch {
+        // A proxy may return HTML instead of the API error envelope.
+      }
+      if (
+        response.status === 422 &&
+        processing?.error === "SourceProcessingError" &&
+        processing.retryable === false &&
+        typeof processing.message === "string"
+      ) {
+        const error = new Error(processing.message);
+        error.name = "SourceProcessingError";
+        throw error;
+      }
       const details = responseBody ? ` - ${responseBody}` : "";
       throw new Error(
         `Mark API job execution failed for ${job.name}#${job.id ?? "unknown"}: ${response.status} ${response.statusText}${details}`,

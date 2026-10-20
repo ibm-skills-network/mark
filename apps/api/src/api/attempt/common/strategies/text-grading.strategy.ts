@@ -1,3 +1,4 @@
+import { RetryableProcessingError } from "../../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
 import {
@@ -171,6 +172,7 @@ export class TextGradingStrategy extends AbstractGradingStrategy<string> {
 
       return responseDto;
     } catch (error) {
+      if (error instanceof RetryableProcessingError) throw error;
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Error in text grading: ${errorMessage}`);

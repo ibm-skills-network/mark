@@ -1,3 +1,4 @@
+import { RetryableProcessingError } from "../../features/grading/errors/source-processing.error";
 import { Inject, Injectable } from "@nestjs/common";
 import { sanitize } from "isomorphic-dompurify";
 import OpenAI from "openai";
@@ -82,6 +83,7 @@ export class ModerationService implements IModerationService {
   async assessContent(
     content: string,
     imageUrls?: string[],
+    options?: { requireSuccessfulCheck?: boolean },
   ): Promise<ModerationVerdict> {
     const allow: ModerationVerdict = {
       action: "allow",
@@ -103,7 +105,11 @@ export class ModerationService implements IModerationService {
     const flaggedByClass: string[][] = [];
     if (hasText) {
       flaggedByClass.push(
-        await this.runModeration([{ type: "text", text: content }], "text"),
+        await this.runModeration(
+          [{ type: "text", text: content }],
+          "text",
+          options?.requireSuccessfulCheck,
+        ),
       );
     }
     if (hasImages) {
@@ -116,6 +122,7 @@ export class ModerationService implements IModerationService {
             }),
           ),
           "image",
+          options?.requireSuccessfulCheck,
         ),
       );
     }
@@ -151,19 +158,24 @@ export class ModerationService implements IModerationService {
 
   /**
    * Runs a single moderations.create call for one input class (text or
-   * images) and fails open ONLY for that class's content on error. Scoped
+   * images). Strict grading callers receive a retryable processing error;
+   * legacy/authoring callers retain fail-open behavior for that class. Scoped
    * so a failure here (e.g. an unfetchable image URL) can never downgrade a
    * verdict already computed from the other class's call.
    */
   private async runModeration(
     input: OpenAI.ModerationMultiModalInput[],
     inputClass: "text" | "image",
+    requireSuccessfulCheck = false,
   ): Promise<string[]> {
     try {
       const response = await this.getClient().moderations.create({
         model: MODERATION_MODEL,
         input,
       });
+      if (!response.results?.length) {
+        throw new Error("Moderation returned no result");
+      }
       const flagged = new Set<string>();
       for (const result of response.results) {
         for (const [category, isFlagged] of Object.entries(result.categories)) {
@@ -177,6 +189,9 @@ export class ModerationService implements IModerationService {
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
+      if (requireSuccessfulCheck) {
+        throw new RetryableProcessingError("moderation_unavailable");
+      }
       return [];
     }
   }

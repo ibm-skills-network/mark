@@ -77,6 +77,33 @@ describe("ModerationService.assessContent", () => {
     expect(verdict.severeCategories).toEqual(["sexual/minors"]);
   });
 
+  it.each([new Error("provider down"), new Error("invalid request")])(
+    "blocks strict grading checks on provider failure",
+    async (error) => {
+      const { service } = buildService(jest.fn().mockRejectedValue(error));
+      await expect(
+        service.assessContent("learner text", undefined, {
+          requireSuccessfulCheck: true,
+        }),
+      ).rejects.toMatchObject({
+        name: "RetryableProcessingError",
+        reason: "moderation_unavailable",
+        retryable: true,
+      });
+    },
+  );
+
+  it("does not treat an empty provider result as a successful strict check", async () => {
+    const { service } = buildService(
+      jest.fn().mockResolvedValue({ results: [] }),
+    );
+    await expect(
+      service.assessContent("learner text", undefined, {
+        requireSuccessfulCheck: true,
+      }),
+    ).rejects.toMatchObject({ reason: "moderation_unavailable" });
+  });
+
   it("fails open (allow) when the moderation API errors", async () => {
     const create = jest.fn().mockRejectedValue(new Error("api down"));
     const { service, logger } = buildService(create);
