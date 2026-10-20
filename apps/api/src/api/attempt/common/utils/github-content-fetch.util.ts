@@ -262,6 +262,8 @@ export async function fetchReadmeForBranch(
 }
 
 export interface GithubFetchResult {
+  /** Root-repository fallbacks do not establish implementation evidence. */
+  evidenceKind?: "readme" | "repository_metadata" | "repository_page";
   body: string;
   isFunctional: boolean;
 }
@@ -567,7 +569,7 @@ async function fetchGithubRepoRootContent(
   for (const branch of candidateBranches) {
     try {
       const body = await fetchReadmeForBranch(owner, repo, branch);
-      if (body) return { body, isFunctional: true };
+      if (body) return { body, isFunctional: true, evidenceKind: "readme" };
     } catch (error) {
       if (!(error instanceof RetryableUrlFetchError)) throw error;
       transientError ??= error;
@@ -582,7 +584,12 @@ async function fetchGithubRepoRootContent(
   if (!transientError) {
     try {
       const summary = await fetchRepoMetadataSummary(owner, repo);
-      if (summary) return { body: summary, isFunctional: true };
+      if (summary)
+        return {
+          body: summary,
+          isFunctional: true,
+          evidenceKind: "repository_metadata",
+        };
     } catch (error) {
       if (error instanceof GithubRateLimitedError) throw error;
       if (error instanceof RetryableUrlFetchError) transientError = error;
@@ -595,7 +602,12 @@ async function fetchGithubRepoRootContent(
 
   try {
     const scraped = await scrapeGithubPage(url, Boolean(transientError));
-    if (scraped) return { body: scraped, isFunctional: true };
+    if (scraped)
+      return {
+        body: scraped,
+        isFunctional: true,
+        evidenceKind: "repository_page",
+      };
   } catch (error) {
     if (!(error instanceof RetryableUrlFetchError)) throw error;
     transientError ??= error;

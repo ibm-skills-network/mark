@@ -71,8 +71,11 @@ export class UrlGradingService implements IUrlGradingService {
       safetyIdentifier,
     } = urlBasedQuestionEvaluateModel;
 
-    const moderationVerdict =
-      await this.moderationService.assessContent(urlProvided);
+    const moderationVerdict = await this.moderationService.assessContent(
+      urlProvided,
+      undefined,
+      { requireSuccessfulCheck: true },
+    );
     if (moderationVerdict.action === "block_severe") {
       this.logger.warn("grading.moderation.blocked_severe", {
         assignmentId,

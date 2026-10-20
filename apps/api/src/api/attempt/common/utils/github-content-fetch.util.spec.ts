@@ -616,6 +616,7 @@ describe("fetchUrlContentForGrading", () => {
 
       expect(result).toEqual({
         body: "# Develop branch readme",
+        evidenceKind: "readme",
         isFunctional: true,
       });
       // Must not have guessed main/master when the real branch resolved.
@@ -648,7 +649,11 @@ describe("fetchUrlContentForGrading", () => {
         "https://github.com/octocat/hello-world",
       );
 
-      expect(result).toEqual({ body: "# Master readme", isFunctional: true });
+      expect(result).toEqual({
+        body: "# Master readme",
+        isFunctional: true,
+        evidenceKind: "readme",
+      });
     });
 
     it("throws GithubRateLimitedError instead of silently grading 0 when rate-limited and no README guess lands", async () => {
@@ -743,6 +748,7 @@ describe("fetchUrlContentForGrading", () => {
 
       expect(result).toEqual({
         body: "Scraped readme text",
+        evidenceKind: "repository_page",
         isFunctional: true,
       });
     });
@@ -1040,6 +1046,7 @@ describe("GitHub transient fallback boundaries", () => {
       if (readmeAvailable)
         await expect(result).resolves.toEqual({
           body: "Recovered assignment evidence",
+          evidenceKind: "repository_page",
           isFunctional: true,
         });
       else await expect(result).rejects.toBeInstanceOf(RetryableUrlFetchError);

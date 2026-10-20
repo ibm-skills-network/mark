@@ -1,3 +1,7 @@
+import {
+  SourceProcessingError,
+  RetryableProcessingError,
+} from "../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import {
@@ -135,6 +139,11 @@ export class AttemptSubmissionService {
       // the same code; translate it here so the learner sees a clear 400 with
       // the learner-facing reason instead of a generic 500 from the global
       // filter.
+      if (
+        error instanceof SourceProcessingError ||
+        error instanceof RetryableProcessingError
+      )
+        throw error;
       if (error instanceof LearnerFacingGradingError) {
         throw new BadRequestException(error.learnerMessage);
       }

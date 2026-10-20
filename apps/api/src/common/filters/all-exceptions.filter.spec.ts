@@ -1,3 +1,7 @@
+import {
+  SourceProcessingError,
+  RetryableProcessingError,
+} from "../../api/llm/features/grading/errors/source-processing.error";
 import { ArgumentsHost, HttpStatus } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { Logger } from "winston";
@@ -152,4 +156,27 @@ describe("AllExceptionsFilter database connection failures", () => {
     );
     expect(response.setHeader).not.toHaveBeenCalled();
   });
+});
+
+describe("processing failures", () => {
+  it.each([
+    [new SourceProcessingError("extraction_failed", "file:1"), 422],
+    [new RetryableProcessingError("moderation_unavailable"), 503],
+  ] as const)(
+    "exposes a safe structured processing outcome",
+    (error, status) => {
+      const { filter } = makeFilter();
+      const { host, response } = makeHost();
+      filter.catch(error, host);
+      expect(response.status).toHaveBeenCalledWith(status);
+      expect(response.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: error.message,
+          error: error.name,
+          reason: error.reason,
+          retryable: error.retryable,
+        }),
+      );
+    },
+  );
 });

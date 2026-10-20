@@ -1,3 +1,4 @@
+import { RetryableProcessingError } from "../../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -1047,7 +1048,10 @@ export class QuestionResponseService {
       // fetch is a system fault the caller must be able to retry, not a 400.
       // Wrapping it here would erase the class identity the retry
       // classification depends on.
-      if (error instanceof RetryableUrlFetchError) {
+      if (
+        error instanceof RetryableUrlFetchError ||
+        error instanceof RetryableProcessingError
+      ) {
         throw error;
       }
 
