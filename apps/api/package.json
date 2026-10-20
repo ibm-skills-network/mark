@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && yarn build:rich-text-migration",
     "clean": "rimraf dist && rimraf node_modules",
     "dev": "yarn start:dev",
     "dev:e2e": "yarn dev",
@@ -32,7 +32,9 @@
     "test:watch": "jest --watch",
     "create-initial-versions": "dotenv -e ./dev.env -- ts-node src/scripts/create-initial-versions.ts",
     "translation-audit": "node dist/scripts/translation-audit.js",
-    "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts"
+    "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts",
+    "rich-text-migration": "node dist/rich-text-migration/main.js",
+    "build:rich-text-migration": "tsc --noEmit -p tsconfig.rich-text-migration.json && node scripts/build-rich-text-migration.cjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -79,6 +81,7 @@
     "iconv-lite": "^0.7.3",
     "ioredis": "^5.4.1",
     "isomorphic-dompurify": "^2.36.0",
+    "jsdom": "^26.1.0",
     "jsonwebtoken": "^9.0.3",
     "langchain": "^1.5.14",
     "mammoth": "^1.13.0",
@@ -98,6 +101,7 @@
     "prisma": "^5.22.0",
     "redis": "^4.7.0",
     "reflect-metadata": "0.2.2",
+    "rich-text": "*",
     "rxjs": "7.8.2",
     "sharp": "^0.35.5",
     "sn-messaging-ts-client": "^0.4.0",
@@ -146,6 +150,7 @@
     "ts-loader": "^9.6.2",
     "ts-node": "^10.9.1",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.1.3"
+    "typescript": "^5.1.3",
+    "webpack": "5.106.2"
   }
 }

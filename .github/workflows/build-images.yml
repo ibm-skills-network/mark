@@ -340,6 +340,87 @@ jobs:
         run: yarn workspace ${{ matrix.service }} run test --watchAll=false
         timeout-minutes: 10
 
+  rich-text-migration:
+    name: Rich text migration recovery
+    runs-on: ubuntu-latest
+    # Gates build-and-deploy: the migration job ships inside the API image.
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mark-pg-user
+          POSTGRES_PASSWORD: mark-pg-password # pragma: allowlist secret
+          POSTGRES_DB: mark_rich_text_migration_test_ci
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if migration code changed
+        id: changes
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            elif [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="$(git rev-parse origin/master)"
+            else
+              BASE_SHA="${{ github.event.before }}"
+            fi
+            # Fail closed: if the diff itself fails, run the suite.
+            if ! CHANGED=$(git diff --name-only "$BASE_SHA"...${{ github.sha }}); then
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            elif echo "$CHANGED" | grep -E "(^apps/api/maintenance/|^apps/api/prisma/|^apps/api/scripts/build-rich-text-migration|^apps/api/tsconfig\.rich-text-migration|^apps/api/package\.json|^packages/rich-text/|^package\.json|^yarn\.lock|^\.github/workflows/)"; then
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "needs_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "yarn"
+
+      - name: Install dependencies
+        if: steps.changes.outputs.needs_build == 'true'
+        run: yarn install --frozen-lockfile
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
+          HUSKY: 0
+        timeout-minutes: 15
+
+      - name: Build and smoke-test the migration bundle
+        if: steps.changes.outputs.needs_build == 'true'
+        run: |
+          yarn --cwd apps/api prisma generate
+          yarn --cwd apps/api build:rich-text-migration
+          cd apps/api && node dist/rich-text-migration/main.js --help
+          # Starts, connects, and refuses the empty database: proves the bundle runs outside webpack's tree.
+          out=$(RICH_TEXT_MIGRATION_DATABASE_URL=postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark_rich_text_migration_test_ci node dist/rich-text-migration/main.js audit --origin https://mark.example.test 2>&1 || true) # pragma: allowlist secret
+          echo "$out" | grep -q '"error":"missing-application-tables"' || { echo "$out"; exit 1; }
+
+      - name: Test rich text migration recovery on PostgreSQL
+        if: steps.changes.outputs.needs_build == 'true'
+        env:
+          RICH_TEXT_MIGRATION_TEST_URL: postgresql://mark-pg-user:mark-pg-password@localhost:5432/mark_rich_text_migration_test_ci # pragma: allowlist secret
+        run: yarn --cwd apps/api jest --runInBand --runTestsByPath maintenance/rich-text-normalization/converter.spec.ts maintenance/rich-text-normalization/prefilter.spec.ts maintenance/rich-text-normalization/integration.spec.ts
+
   playwright:
     name: Playwright E2E
     runs-on: ubuntu-latest
@@ -582,7 +663,7 @@ jobs:
     # Depend on test for correctness; lint is intentionally NOT a dep so a tag
     # push (where the lint job is skipped) doesn't cascade-skip the deploy.
     # Branch protection should still require both Lint and Test on PRs.
-    needs: [security-scan, test]
+    needs: [security-scan, test, rich-text-migration]
     permissions:
       contents: read
       packages: write
