@@ -62,7 +62,8 @@
     "start": "scripts/start.sh",
     "start:e2e": "bash scripts/start-e2e.sh",
     "studio": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma studio",
-    "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts"
+    "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts",
+    "benchmark:assignments": "node benchmarks/assignments/cli.cjs"
   },
   "dependencies": {
     "@cypress/request": "3.0.10",
