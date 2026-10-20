@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Request } from "express";
@@ -13,13 +14,18 @@ import {
   quizSessionContext,
   LEARNER_COOKIE_PREFIX,
   selectAuthenticationCookie,
-  unverifiedSession,
 } from "./jwt.cookie.extractor";
+import {
+  isStoreId,
+  SAVED_SESSION_COOKIE,
+  SavedSessionStore,
+} from "./saved-session.store";
 
 interface IRequestWithCookies extends Request {
   cookies: {
     [key: string]: string;
   };
+  savedSession?: string;
 }
 
 interface IJwtPayload extends UserSessionPayload {
@@ -30,15 +36,11 @@ interface IJwtPayload extends UserSessionPayload {
 // Routed through winston: main.ts passes the winston logger to NestFactory.
 const logger = new Logger("JwtCookieStrategy");
 
-// Leave room for the launch cookie(s), shared-domain cookies and other headers
-// below Node's default 16 KiB header limit. Both roles share this budget.
-const MAX_SAVED_SESSION_COOKIE_BYTES = 6 * 1024;
-const MAX_SAVED_SESSION_COOKIES_PER_ROLE = 4;
-
-function sessionCookieBytes(name: string, token: string): number {
-  // Express URL-encodes cookie values; include the Cookie header separator.
-  return Buffer.byteLength(`${name}=${encodeURIComponent(token)}; `);
-}
+const SAVED_SESSION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+// Matches only the names the old per-quiz cookies used, so clearing never throws.
+const LEGACY_SESSION_COOKIE = new RegExp(
+  `^(?:${AUTHOR_COOKIE_PREFIX}|${LEARNER_COOKIE_PREFIX})\\d+$`,
+);
 
 // LMS-supplied labels for support tickets. Control characters are stripped
 // so each stays one line wherever it is shown; SN Support caps these at 500.
@@ -54,7 +56,10 @@ export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
   "cookie-strategy",
 ) {
-  constructor(private configService: JwtConfigService) {
+  constructor(
+    private configService: JwtConfigService,
+    private savedSessions: SavedSessionStore,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: IRequestWithCookies) => {
@@ -109,7 +114,7 @@ export class JwtCookieStrategy extends PassportStrategy(
         "Return to the account that opened this editor",
       );
     }
-    // A scoped cookie must not revive an expired, tampered, or signed-out
+    // A saved session must not revive an expired, tampered, or signed-out
     // browser session. Passport verifies the selected token; verify the
     // current launch separately before using it as the account-switch boundary.
     const selected = selectAuthenticationCookie(request).token;
@@ -130,68 +135,38 @@ export class JwtCookieStrategy extends PassportStrategy(
         );
       }
     }
-    // Only persist tokens after passport has verified their signature and expiry.
-    // Bound both roles together on every verified request, even when the
-    // active cookie is unchanged. Always retain the active assignment first.
-    if (
-      (payload.role === "author" || payload.role === "learner") &&
-      Number.isSafeInteger(payload.assignmentID) &&
-      payload.assignmentID > 0 &&
-      request.res
-    ) {
-      const { token } = selectAuthenticationCookie(request);
-      const prefix =
-        payload.role === "author"
-          ? AUTHOR_COOKIE_PREFIX
-          : LEARNER_COOKIE_PREFIX;
-      const name = `${prefix}${payload.assignmentID}`;
-      if (token) {
-        const secure = process.env.NODE_ENV === "production";
-        const options = {
-          httpOnly: true,
-          secure,
-          sameSite: "lax" as const,
-          path: "/",
-        };
-        const others = Object.entries(request.cookies ?? {})
-          .filter(
-            ([key]) =>
-              key !== name &&
-              (key.startsWith(AUTHOR_COOKIE_PREFIX) ||
-                key.startsWith(LEARNER_COOKIE_PREFIX)),
-          )
-          .sort(
-            (a, b) =>
-              (unverifiedSession(b[1]).iat ?? 0) -
-              (unverifiedSession(a[1]).iat ?? 0),
+    if (request.res) {
+      const options = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax" as const,
+        path: "/",
+      };
+      for (const key of Object.keys(request.cookies ?? {})) {
+        if (LEGACY_SESSION_COOKIE.test(key))
+          request.res.clearCookie(key, options);
+      }
+      // validate() has already matched the payload to this quiz context.
+      if (
+        context !== undefined &&
+        selected &&
+        selected !== request.savedSession
+      ) {
+        const existing = request.cookies?.[SAVED_SESSION_COOKIE];
+        const stored = isStoreId(existing);
+        const storeId = stored ? existing : randomUUID();
+        request.res.cookie(SAVED_SESSION_COOKIE, storeId, {
+          ...options,
+          maxAge: SAVED_SESSION_MAX_AGE_MS,
+        });
+        // Only save once the browser has kept the store cookie.
+        if (stored)
+          void this.savedSessions.save(
+            storeId,
+            context.role,
+            context.assignmentId,
+            selected,
           );
-        let savedBytes = sessionCookieBytes(name, token);
-        const counts = { author: 0, learner: 0 };
-        counts[payload.role] = 1;
-        for (const [key, value] of others) {
-          const role = key.startsWith(AUTHOR_COOKIE_PREFIX)
-            ? "author"
-            : "learner";
-          const bytes = sessionCookieBytes(key, value);
-          if (
-            counts[role] >= MAX_SAVED_SESSION_COOKIES_PER_ROLE ||
-            savedBytes + bytes > MAX_SAVED_SESSION_COOKIE_BYTES
-          ) {
-            request.res.clearCookie(key, options);
-          } else {
-            counts[role]++;
-            savedBytes += bytes;
-          }
-        }
-        if (request.cookies?.[name] !== token) {
-          request.res.cookie(name, token, {
-            ...options,
-            maxAge: Math.max(
-              0,
-              Math.min(payload.exp * 1000 - Date.now(), 6 * 60 * 60 * 1000),
-            ),
-          });
-        }
       }
     }
     return {
