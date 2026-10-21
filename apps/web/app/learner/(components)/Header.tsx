@@ -54,6 +54,7 @@ import {
   isAttemptAlreadySubmittedError,
   isGradingStreamLostError,
 } from "@/lib/learner";
+import { withTextFileContent } from "@/lib/learner-file-content";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -340,7 +341,9 @@ function LearnerHeader() {
                 .filter((choice) => choice !== undefined) || []
             : selectedChoiceTexts(q, userPreferedLanguage).texts,
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
-        learnerFileResponse: q.learnerFileResponse || [],
+        learnerFileResponse: (q.learnerFileResponse || []).map(
+          withTextFileContent,
+        ),
         learnerPresentationResponse: q.presentationResponse ?? null,
       }));
     } catch (error: unknown) {

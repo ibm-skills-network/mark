@@ -16,6 +16,7 @@ import { createJSONStorage, devtools, persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { createSafeStorage } from "@/lib/safe-storage";
+import { withTextFileContent } from "@/lib/learner-file-content";
 
 type GitHubQuestionState = {
   repos: RepoType[];
@@ -705,7 +706,10 @@ export const useLearnerStore = createWithEqualityFn<
               if (q.id === questionId) {
                 return {
                   ...q,
-                  learnerFileResponse: [...(q.learnerFileResponse || []), file],
+                  learnerFileResponse: [
+                    ...(q.learnerFileResponse || []),
+                    withTextFileContent(file),
+                  ],
                 };
               }
               return q;
@@ -734,7 +738,9 @@ export const useLearnerStore = createWithEqualityFn<
         onFileChange: (files, questionId) => {
           // Preserve source metadata through selection, autosave, and grading.
           // The API requires a GitHub URL or storage coordinates for each file.
-          const formattedFiles = files.map((file) => ({ ...file }));
+          const formattedFiles = files.map((file) =>
+            withTextFileContent({ ...file }),
+          );
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
               if (q.id === questionId) {
