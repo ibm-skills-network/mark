@@ -51,10 +51,6 @@ jest.mock("@/components/Loading", () => ({
   __esModule: true,
   default: () => <div>loading</div>,
 }));
-jest.mock("@/components/ReportModal", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 jest.mock("@/components/GradeSyncStatus", () => ({
   __esModule: true,
   default: (props: { lmsHost?: string }) => (
@@ -253,5 +249,35 @@ describe("results page — grade sync notice", () => {
       "data-lms-host",
       "courses.yl.skillsnetwork.site",
     );
+  });
+});
+
+describe("results page — reporting", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getAttemptsMock.mockResolvedValue([]);
+    getUserMock.mockResolvedValue(learner);
+    getCompletedAttemptMock.mockResolvedValue({
+      id: 2486,
+      name: "Quiz",
+      questions: [],
+      showQuestions: false,
+      grade: 0.4,
+      passingGrade: 50,
+      passed: false,
+      totalPossiblePoints: 10,
+      totalPointsEarned: 4,
+    });
+  });
+
+  it("leaves reporting to the floating report button", async () => {
+    await renderAndSettle();
+
+    expect(
+      screen.getByRole("button", { name: /retake assignment/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /report an issue/i }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -95,6 +95,34 @@ describe("submitBugReport", () => {
     expect(body.get("assignmentId")).toBe("42");
   });
 
+  it("tells a grading dispute it was recorded for review, not ticketed", async () => {
+    const { toast } = jest.requireMock("sonner");
+    toast.success.mockClear();
+
+    await submitBugReport(
+      { issueType: "FALSE_MARKING", description: "Q3 marked wrong" },
+      { category: "Flag Button Report", user },
+    );
+
+    const [message] = toast.success.mock.calls[0];
+    expect(message).toMatch(/recorded for review/i);
+    expect(message).not.toMatch(/ticket|email|bug/i);
+  });
+
+  it("confirms other reports as before", async () => {
+    const { toast } = jest.requireMock("sonner");
+    toast.success.mockClear();
+
+    await submitBugReport(
+      { issueType: "BUG", description: "spinner never stops" },
+      { category: "Flag Button Report", user },
+    );
+
+    expect(toast.success).toHaveBeenCalledWith(
+      "Bug report submitted. Thank you!",
+    );
+  });
+
   it("attaches the browser capture as a hidden field", async () => {
     (collectReportDiagnostics as jest.Mock).mockReturnValue({
       v: 1,
