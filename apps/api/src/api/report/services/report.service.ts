@@ -14,6 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma, ReportStatus, ReportType } from "@prisma/client";
 import axios from "axios";
 import * as jwt from "jsonwebtoken";
+import sharp from "sharp";
 import { WordTokenizer } from "natural/lib/natural/tokenizers";
 import { FilesService } from "src/api/files/services/files.service";
 import {
@@ -31,6 +32,10 @@ import {
   ReportDiagnostics,
   summarizeReportDiagnostics,
 } from "../helpers/report-diagnostics";
+import {
+  buildScreenshotKey,
+  detectScreenshotFormat,
+} from "../helpers/screenshot";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
@@ -604,6 +609,112 @@ export class ReportsService {
       },
     };
   }
+
+  /**
+   * Stores a report's screenshot public-read and returns the URL SN Support
+   * renders it from. SN Support only links to the URL, so the object must be
+   * readable by the agent's browser; see helpers/screenshot.ts for why only
+   * byte-verified images under a random key are made public. The image is
+   * re-encoded first so EXIF (GPS, device) and any bytes trailing the image
+   * never become public. A screenshot never fails the report it rides on.
+   */
+  private async uploadReportScreenshot(
+    screenshot: Express.Multer.File,
+    logContext: Record<string, unknown>,
+  ): Promise<{ url: string; key: string } | undefined> {
+    const bucket = process.env.IBM_COS_DEBUG_BUCKET;
+    const cosEndpoint = process.env.IBM_COS_ENDPOINT?.replace(/\/+$/, "");
+    if (!bucket || !cosEndpoint) {
+      this.logger.warn("Report screenshot dropped: storage not configured", {
+        ...logContext,
+        has_bucket: Boolean(bucket),
+        has_endpoint: Boolean(cosEndpoint),
+      });
+      return undefined;
+    }
+
+    const format = detectScreenshotFormat(screenshot.buffer);
+    if (!format) {
+      this.logger.warn("Report screenshot dropped: not a supported image", {
+        ...logContext,
+        claimed_type: screenshot.mimetype,
+        bytes: screenshot.size,
+      });
+      return undefined;
+    }
+
+    let cleaned: Buffer;
+    try {
+      const animated =
+        format.mimeType === "image/gif" || format.mimeType === "image/webp";
+      const image = sharp(screenshot.buffer, { animated });
+      // sharp drops metadata on output by default; rotate() bakes in the EXIF
+      // orientation that stripping would otherwise lose.
+      cleaned = await (
+        format.mimeType === "image/jpeg" ? image.rotate() : image
+      ).toBuffer();
+    } catch (error) {
+      this.logger.warn("Report screenshot dropped: image failed to decode", {
+        ...logContext,
+        claimed_type: screenshot.mimetype,
+        bytes: screenshot.size,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return undefined;
+    }
+
+    const key = buildScreenshotKey(format);
+    this.logger.log("Uploading report screenshot", {
+      ...logContext,
+      key,
+      content_type: format.mimeType,
+      bytes: cleaned.length,
+    });
+    try {
+      await this.filesService.directUpload(
+        { ...screenshot, buffer: cleaned, size: cleaned.length },
+        bucket,
+        key,
+        { acl: "public-read", contentType: format.mimeType },
+      );
+    } catch (error) {
+      this.logger.error("Report screenshot upload failed", {
+        ...logContext,
+        key,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return undefined;
+    }
+
+    return { url: `${cosEndpoint}/${bucket}/${key}`, key };
+  }
+
+  /**
+   * Removes a published screenshot whose ticket was never created, so no
+   * public object outlives the only record of its URL.
+   */
+  private async discardReportScreenshot(
+    key: string,
+    logContext: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.filesService.deleteFile("debug", key);
+      this.logger.log("Discarded orphaned report screenshot", {
+        ...logContext,
+        key,
+      });
+    } catch (error) {
+      this.logger.error("Failed to discard orphaned report screenshot", {
+        ...logContext,
+        key,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  }
+
   private mapIssueTypeToReportType(issueType: string): ReportType {
     switch (issueType.toLowerCase()) {
       case "bug":
@@ -906,28 +1017,6 @@ export class ReportsService {
       );
     }
 
-    let screenshotUrl: string | undefined;
-    if (screenshot && screenshot.buffer) {
-      try {
-        const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
-        if (debugBucket) {
-          const uniqueId =
-            Date.now().toString(36) + Math.random().toString(36).slice(2);
-          const screenshotKey = `issue-screenshots/${uniqueId}-${screenshot.originalname}`;
-
-          await this.filesService.directUpload(
-            screenshot,
-            debugBucket,
-            screenshotKey,
-          );
-
-          screenshotUrl = screenshotKey;
-        }
-      } catch {
-        // Ignore screenshot upload failures; continue without screenshot
-      }
-    }
-
     const mappedIssueType = this.mapIssueTypeToReportType(issueType);
 
     const similarReports = await this.findSimilarReports(
@@ -944,24 +1033,6 @@ export class ReportsService {
       attemptId,
       description,
     });
-
-    const finalScreenshotUrl =
-      screenshotUrl || additionalDetails?.screenshotUrl;
-    let fullScreenshotUrl: string | undefined;
-    if (finalScreenshotUrl && typeof finalScreenshotUrl === "string") {
-      const debugBucket = process.env.IBM_COS_DEBUG_BUCKET;
-      const cosEndpoint = process.env.IBM_COS_ENDPOINT;
-
-      if (
-        cosEndpoint &&
-        debugBucket &&
-        (screenshotUrl || finalScreenshotUrl.includes(debugBucket))
-      ) {
-        fullScreenshotUrl = screenshotUrl
-          ? `${cosEndpoint}/${debugBucket}/${screenshotUrl}`
-          : `${cosEndpoint}/${debugBucket}/${finalScreenshotUrl}`;
-      }
-    }
 
     // SN Support is the support queue for new reports. The v2 API requires a
     // reporter email, so anonymous reports exist only as DB rows below.
@@ -987,6 +1058,15 @@ export class ReportsService {
 
     let snTicketKey: string | undefined;
     if (canForward && route?.token) {
+      // Uploaded only when a ticket goes out: the ticket is the only place the
+      // public URL is recorded, so a screenshot without one would be orphaned.
+      const screenshotLogContext = {
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+      };
+      const uploadedScreenshot = screenshot?.buffer
+        ? await this.uploadReportScreenshot(screenshot, screenshotLogContext)
+        : undefined;
       const supportDescription = [
         stripSectionLabelMarkdown(description),
         "",
@@ -1018,7 +1098,9 @@ export class ReportsService {
             toolName: "Mark",
             browser: detailString("browser"),
             chatHistoryUrl: detailString("chatHistoryUrl"),
-            screenshotUrl: fullScreenshotUrl,
+            screenshotUrls: uploadedScreenshot
+              ? [uploadedScreenshot.url]
+              : undefined,
           },
           route.token,
         );
@@ -1053,6 +1135,12 @@ export class ReportsService {
           assignment_id: assignmentId,
           attempt_id: attemptId,
         });
+        if (uploadedScreenshot) {
+          await this.discardReportScreenshot(
+            uploadedScreenshot.key,
+            screenshotLogContext,
+          );
+        }
       }
     } else {
       // Without a ticket the report reaches no support queue — DB row only.

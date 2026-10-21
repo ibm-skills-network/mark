@@ -107,14 +107,17 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
     useDropzone({
       onDrop,
       accept: {
-        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
+        "image/png": [".png"],
+        "image/jpeg": [".jpg", ".jpeg"],
+        "image/gif": [".gif"],
+        "image/webp": [".webp"],
       },
       multiple: false,
-      maxSize: 100 * 1024 * 1024,
+      maxSize: 10 * 1024 * 1024,
       onDropRejected: (rejectedFiles) => {
         const error = rejectedFiles[0]?.errors[0];
         if (error?.code === "file-too-large") {
-          toast.error("File is too large. Maximum size is 100MB.");
+          toast.error("File is too large. Maximum size is 10MB.");
         } else if (error?.code === "file-invalid-type") {
           toast.error("Invalid file type. Please select an image file.");
         } else {
@@ -206,7 +209,7 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
               Drop screenshot here or click to select
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              PNG, JPG, GIF up to 100MB
+              PNG, JPG, GIF, WebP up to 10MB
             </p>
           </>
         )}
