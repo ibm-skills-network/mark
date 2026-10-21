@@ -1,3 +1,4 @@
+import { ModerationService } from "../../../core/services/moderation.service";
 import { UrlGradingService } from "./url-grading.service";
 
 function mockLogger() {
@@ -83,4 +84,29 @@ describe("UrlGradingService moderation verdicts", () => {
       expect.objectContaining({ categories: ["violence"] }),
     );
   });
+});
+
+it("does not call the grading provider if the actual moderation request fails", async () => {
+  const moderation = Object.create(ModerationService.prototype);
+  const create = jest
+    .fn()
+    .mockRejectedValue(new Error("moderation unavailable"));
+  moderation.openAiClient = { moderations: { create } };
+  moderation.logger = mockLogger();
+  moderation.severeCategories = new Set(["sexual/minors"]);
+  const { service } = buildService(jest.fn());
+  service.moderationService = moderation;
+  await expect(
+    service.gradeUrlBasedQuestion(gradeModel(), 1736),
+  ).rejects.toMatchObject({
+    name: "RetryableProcessingError",
+    reason: "moderation_unavailable",
+  });
+  expect(create).toHaveBeenCalledWith({
+    model: "omni-moderation-latest",
+    input: [{ type: "text", text: "https://example.com/project" }],
+  });
+  expect(
+    service.promptProcessor.processStructuredPromptForFeature,
+  ).not.toHaveBeenCalled();
 });

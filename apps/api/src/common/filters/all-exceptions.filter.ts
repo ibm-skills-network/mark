@@ -1,3 +1,7 @@
+import {
+  SourceProcessingError,
+  RetryableProcessingError,
+} from "../../api/llm/features/grading/errors/source-processing.error";
 /**
  * Global exception filter for the Mark API.
  *
@@ -132,16 +136,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const lostConnection = this.isLostConnection(exception);
     const responseBody =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : {
+      exception instanceof SourceProcessingError ||
+      exception instanceof RetryableProcessingError
+        ? {
             statusCode: status,
-            message: lostConnection
-              ? "Service temporarily unavailable"
-              : status >= HttpStatus.INTERNAL_SERVER_ERROR
-                ? "Internal server error"
-                : message,
-          };
+            message: exception.message,
+            error: exception.name,
+            reason: exception.reason,
+            retryable: exception.retryable,
+            ...(exception instanceof SourceProcessingError
+              ? { sourceReference: exception.sourceReference }
+              : {}),
+          }
+        : exception instanceof HttpException
+          ? exception.getResponse()
+          : {
+              statusCode: status,
+              message: lostConnection
+                ? "Service temporarily unavailable"
+                : status >= HttpStatus.INTERNAL_SERVER_ERROR
+                  ? "Internal server error"
+                  : message,
+            };
 
     if (!response.headersSent) {
       if (lostConnection) {
@@ -152,6 +168,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private resolveStatus(exception: unknown): number {
+    if (exception instanceof SourceProcessingError)
+      return HttpStatus.UNPROCESSABLE_ENTITY;
+    if (exception instanceof RetryableProcessingError)
+      return HttpStatus.SERVICE_UNAVAILABLE;
     if (exception instanceof HttpException) {
       return exception.getStatus();
     }

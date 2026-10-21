@@ -173,6 +173,8 @@ export class TextGradingService implements ITextGradingService {
       // zero with instructions to contact the instructor.
       const moderationVerdict = await this.moderationService.assessContent(
         sanitizedLearnerResponse,
+        undefined,
+        { requireSuccessfulCheck: true },
       );
       if (moderationVerdict.action === "block_severe") {
         this.logger.warn("grading.moderation.blocked_severe", {

@@ -62,7 +62,8 @@
     "start": "scripts/start.sh",
     "start:e2e": "bash scripts/start-e2e.sh",
     "studio": "cd ./apps/api && dotenv -e ./dev.env -- npx prisma studio",
-    "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts"
+    "translation-audit:dev": "cd ./apps/api && dotenv -e ./dev.env -- ts-node src/scripts/translation-audit.ts",
+    "benchmark:assignments": "node benchmarks/assignments/cli.cjs"
   },
   "dependencies": {
     "@cypress/request": "3.0.10",
@@ -111,7 +112,7 @@
     "tar-fs": "^3.1.3",
     "tmp": "^0.2.6",
     "tsparticles": "^3.5.0",
-    "undici": "^7.30.0",
+    "undici": "^8.0.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -156,7 +157,7 @@
     "mongoose": "^8.24.3",
     "socket.io-parser": "^4.2.7",
     "@ai-sdk/provider-utils": "^3.0.26",
-    "undici": "^7.30.0",
+    "undici": "^8.0.0",
     "ws": "^8.21.0",
     "tar": "^7.5.22",
     "**/node-fetch": "^2.7.0",

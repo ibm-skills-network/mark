@@ -1320,6 +1320,38 @@ describe("JobWorkerService", () => {
       } as unknown as Job;
     }
 
+    it("treats source processing failures as terminal without retrying", async () => {
+      const error = new Error(
+        "Required source material could not be processed. No new grade was saved.",
+      );
+      error.name = "SourceProcessingError";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(error);
+      await expect(
+        asTestAccessor(service).handleAttemptJob(makeAttemptJob()),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+    });
+
+    it("preserves terminal source failure across the remote executor boundary", async () => {
+      process.env.JOBS_EXECUTE_LOCALLY = "false";
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        statusText: "Unprocessable Entity",
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            error: "SourceProcessingError",
+            message:
+              "Check or replace the submitted file. No new grade was saved.",
+            retryable: false,
+          }),
+        ),
+      });
+      await expect(
+        asTestAccessor(service).handleAttemptJob(makeAttemptJob()),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+    });
+
     it("wraps OversizedSubmissionError in UnrecoverableError without touching Redis", async () => {
       const oversized = new Error(
         "Submission would produce 1048644 blocks, exceeding the per-submission cap of 50000.",

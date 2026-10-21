@@ -1,3 +1,4 @@
+import { RetryableProcessingError } from "../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable */
 import * as crypto from "crypto";
 import { Readable } from "node:stream";
@@ -129,6 +130,7 @@ export interface ExtractedFileContent {
   fileType: string;
   /** Set when extraction failed; absence means success. */
   error?: string;
+  retryable?: boolean;
   extractedText?: string;
   fileUrl?: string;
   useVisionMode?: boolean;
@@ -137,6 +139,7 @@ export interface ExtractedFileContent {
   archiveEntries?: ArchiveEntryContent[];
   metadata?: {
     size: number;
+    extractionFailed?: boolean;
     encoding?: string;
     language?: string;
     pageCount?: number;
@@ -320,6 +323,7 @@ export class FileContentExtractionService {
               `File type: ${file.fileType}\n` +
               `This file could not be processed, but it exists in the submission.`,
             error: errorMessage,
+            retryable: error instanceof RetryableProcessingError,
             fileType: file.fileType,
             metadata: { size: 0 },
           };
@@ -972,7 +976,14 @@ export class FileContentExtractionService {
         `Failed to download file from COS: ${bucket}/${key}`,
         error,
       );
-      throw new BadRequestException(`Could not retrieve file: ${key}`);
+      const status = (error as { $metadata?: { httpStatusCode?: number } })
+        ?.$metadata?.httpStatusCode;
+      if (status === 403 || status === 404) {
+        throw new BadRequestException(
+          "The uploaded file is unavailable. Upload it again.",
+        );
+      }
+      throw new RetryableProcessingError("source_unavailable");
     }
   }
 
@@ -1057,6 +1068,7 @@ export class FileContentExtractionService {
       );
       return fallbackResult;
     } catch (error) {
+      if (error instanceof OversizedSubmissionError) throw error;
       this.logger.warn(
         `Primary extraction failed: filename=${filename} ` +
           `extension=${fileExtension} byteSize=${byteSize} sha256=${sha256Short} ` +
@@ -1064,7 +1076,14 @@ export class FileContentExtractionService {
           `error=${error instanceof Error ? error.message : String(error)}`,
         error instanceof Error ? error.stack : undefined,
       );
-      return await this.extractWithFallback(buffer, filename);
+      const fallback = await this.extractWithFallback(buffer, filename);
+      return {
+        ...fallback,
+        additionalMetadata: {
+          ...fallback.additionalMetadata,
+          extractionFailed: true,
+        },
+      };
     }
   }
 
@@ -2119,10 +2138,11 @@ export class FileContentExtractionService {
     extractedText: string;
     archiveListing?: string;
     archiveEntries?: ArchiveEntryContent[];
-    additionalMetadata: { fileCount: number };
+    additionalMetadata: { fileCount: number; extractionFailed: boolean };
   }> {
     try {
       let fileList: string[] = [];
+      let extractionFailed = false;
       const header = `=== ARCHIVE: ${filename} (${type.toUpperCase()}) ===\n`;
       let extractedContent = header;
       let archiveListing: string | undefined;
@@ -2171,7 +2191,8 @@ export class FileContentExtractionService {
               });
               contentChars += Math.min(textResult.text.length, cap);
             } catch {
-              // Unreadable entry: stays in the listing, contributes no content.
+              extractionFailed = true;
+              // Keep the listing for previews, but grading must reject this result.
             }
           }
 
@@ -2191,12 +2212,14 @@ export class FileContentExtractionService {
               "\n[Additional file contents omitted: archive content budget reached]\n";
           }
         } catch (error) {
+          extractionFailed = true;
           extractedContent += `Error reading archive: ${error}\n`;
           extractedContent += `Archive size: ${this.formatFileSize(
             buffer.length,
           )}\n`;
         }
       } else {
+        extractionFailed = true;
         extractedContent += `Archive type: ${type}\n`;
         extractedContent += `Size: ${this.formatFileSize(buffer.length)}\n`;
         extractedContent += `\nNote: Full extraction for ${type} archives requires additional libraries.\n`;
@@ -2218,7 +2241,7 @@ export class FileContentExtractionService {
         extractedText: extractedContent,
         archiveListing,
         archiveEntries,
-        additionalMetadata: { fileCount: fileList.length },
+        additionalMetadata: { fileCount: fileList.length, extractionFailed },
       };
     } catch (error) {
       throw new Error(`Archive extraction failed: ${error}`);
@@ -3346,7 +3369,7 @@ export class FileContentExtractionService {
             return {
               text: fallbackText,
               extractedText: fallbackText,
-              additionalMetadata: { pageCount: 0 },
+              additionalMetadata: { pageCount: 0, extractionFailed: true },
             };
           }
         }
@@ -3373,7 +3396,7 @@ export class FileContentExtractionService {
           return {
             text: fallbackText,
             extractedText: fallbackText,
-            additionalMetadata: { pageCount: 0 },
+            additionalMetadata: { pageCount: 0, extractionFailed: true },
           };
         }
       } catch (fallbackError2) {

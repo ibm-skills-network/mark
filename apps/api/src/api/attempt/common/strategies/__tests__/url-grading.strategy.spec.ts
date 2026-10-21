@@ -1,3 +1,7 @@
+import {
+  SourceProcessingError,
+  RetryableProcessingError,
+} from "../../../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { BadRequestException } from "@nestjs/common";
@@ -339,17 +343,47 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       );
     });
 
-    it("returns a 0-point fallback response when the fetch reports isFunctional:false", async () => {
+    it("blocks scoring when required URL content cannot be fetched", async () => {
       mockedFetch.mockResolvedValue({ body: "", isFunctional: false });
+      await expect(
+        strategy.gradeResponse(
+          mockQuestion,
+          "https://example.com/work",
+          context,
+        ),
+      ).rejects.toBeInstanceOf(SourceProcessingError);
+      expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
+      expect(gradingAuditService.recordGrading).not.toHaveBeenCalled();
+    });
 
-      const result = await strategy.gradeResponse(
-        mockQuestion,
-        "https://github.com/octocat/private-or-broken",
-        context,
-      );
+    it.each(["readme", "repository_metadata", "repository_page"] as const)(
+      "blocks REPO grading based only on %s evidence",
+      async (evidenceKind) => {
+        mockedFetch.mockResolvedValue({
+          body: "Repository description",
+          isFunctional: true,
+          evidenceKind,
+        });
+        await expect(
+          strategy.gradeResponse(
+            { ...mockQuestion, responseType: "REPO" } as QuestionDto,
+            "https://github.com/acme/repo",
+            context,
+          ),
+        ).rejects.toMatchObject({ reason: "insufficient_source_evidence" });
+        expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
+      },
+    );
 
-      expect(result.totalPoints).toBe(0);
-      expect(JSON.stringify(result)).toMatch(/unable to fetch/i);
+    it("blocks an unexpected fetch exception rather than awarding fallback credit", async () => {
+      mockedFetch.mockRejectedValue(new Error("fetch failed"));
+      await expect(
+        strategy.gradeResponse(
+          mockQuestion,
+          "https://example.com/work",
+          context,
+        ),
+      ).rejects.toBeInstanceOf(RetryableProcessingError);
       expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
     });
 
@@ -467,32 +501,19 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       ).toBe('{"cells":[]}');
     });
 
-    it("logs an LLM grading failure and keeps the half-credit fallback", async () => {
+    it("retries provider failures without awarding fallback credit", async () => {
       mockedFetch.mockResolvedValue({ body: "class A {}", isFunctional: true });
-      const failure = new Error("model unavailable");
-      llmFacadeService.gradeUrlBasedQuestion.mockRejectedValue(failure);
-
-      const result = await strategy.gradeResponse(
-        mockQuestion,
-        "https://github.com/acme/shop/blob/main/A.java",
-        context,
+      llmFacadeService.gradeUrlBasedQuestion.mockRejectedValue(
+        new Error("model unavailable"),
       );
-
-      expect(result.totalPoints).toBe(5);
-      expect(result.metadata).toMatchObject({
-        error: "llm_grading_failed",
-        status: "fallback_grading",
-        requiresManualReview: true,
-      });
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          assignmentId: 42,
-          questionId: 1,
-          error: "model unavailable",
-          stack: failure.stack,
-        }),
-      );
+      await expect(
+        strategy.gradeResponse(
+          mockQuestion,
+          "https://example.com/work",
+          context,
+        ),
+      ).rejects.toBeInstanceOf(RetryableProcessingError);
+      expect(gradingAuditService.recordGrading).not.toHaveBeenCalled();
     });
   });
 });

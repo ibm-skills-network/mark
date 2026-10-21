@@ -1,3 +1,4 @@
+import { SourceProcessingError } from "../../llm/features/grading/errors/source-processing.error";
 import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
@@ -682,6 +683,25 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     } as unknown as Parameters<
       AttemptSubmissionService["autoSaveQuestionResponse"]
     >[3];
+
+    it("keeps previous responses when re-evaluation encounters a source failure", async () => {
+      const error = new SourceProcessingError("extraction_failed", "file:0");
+      mockQuestionResponseService.createQuestionResponse.mockRejectedValueOnce(
+        error,
+      );
+      await expect(
+        service.autoSaveQuestionResponse(
+          1,
+          99,
+          2,
+          requestDto,
+          learnerSession,
+          "en",
+        ),
+      ).rejects.toBe(error);
+      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
+      expect(mockLtiGradeSyncService.createAndSync).not.toHaveBeenCalled();
+    });
 
     it("translates an OversizedSubmissionError into a BadRequestException carrying the learner message", async () => {
       const oversized = new OversizedSubmissionError({
@@ -2155,6 +2175,30 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         expect(callOrder.indexOf("lti")).toBeGreaterThan(
           callOrder.indexOf("commit"),
         );
+      });
+
+      it("does not commit, complete, or export a grade when required evidence fails", async () => {
+        const error = new SourceProcessingError("extraction_failed", "file:1");
+        mockQuestionResponseService.gradeQuestionsForLearner.mockRejectedValueOnce(
+          error,
+        );
+        await expect(
+          (service as unknown as LearnerAttemptRunner).updateLearnerAttempt(
+            555,
+            2580,
+            updateDto,
+            "cookie",
+            true,
+            request,
+          ),
+        ).rejects.toBe(error);
+        expect(
+          mockQuestionResponseService.commitAttemptWithResponses,
+        ).not.toHaveBeenCalled();
+        expect(
+          mockQuestionResponseService.markGradingComplete,
+        ).not.toHaveBeenCalled();
+        expect(mockLtiGradeSyncService.createAndSync).not.toHaveBeenCalled();
       });
 
       it("never delivers a grade to the LMS when the commit fails", async () => {
