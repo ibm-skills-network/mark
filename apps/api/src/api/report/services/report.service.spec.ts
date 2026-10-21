@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
+import sharp from "sharp";
 import { ReportsService } from "./report.service";
 
 // sendBugRenewalEmail only touches prisma (report read/update) and the email
@@ -492,10 +493,19 @@ describe("ReportsService.reportIssue", () => {
     expect(result.reportId).toBe(7);
   });
   describe("report screenshots", () => {
-    const png = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(32),
-    ]);
+    let png: Buffer;
+    beforeAll(async () => {
+      png = await sharp({
+        create: {
+          width: 2,
+          height: 2,
+          channels: 3,
+          background: "#fff",
+        },
+      })
+        .png()
+        .toBuffer();
+    });
     const asUpload = (buffer: Buffer, mimetype = "image/png") =>
       ({
         buffer,
@@ -567,6 +577,63 @@ describe("ReportsService.reportIssue", () => {
       );
 
       expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(result.reportId).toBe(7);
+    });
+
+    it("strips EXIF metadata before publishing", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+      const jpeg = await sharp({
+        create: { width: 2, height: 2, channels: 3, background: "#fff" },
+      })
+        .jpeg()
+        .withExif({ IFD0: { Artist: "reporter-device" } })
+        .toBuffer();
+
+      await service.reportIssue(reportDto, session, asUpload(jpeg));
+
+      const [file, , key] = filesService.directUpload.mock.calls[0];
+      expect(key).toMatch(/\.jpg$/);
+      expect((await sharp(file.buffer).metadata()).exif).toBeUndefined();
+    });
+
+    it("drops a file whose header sniffs as an image but does not decode", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn() };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(Buffer.concat([png.subarray(0, 8), Buffer.alloc(32)])),
+      );
+
+      expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toBeUndefined();
+    });
+
+    it("deletes the published screenshot when the ticket is not created", async () => {
+      const snSupportService = {
+        isConfigured: jest.fn().mockReturnValue(true),
+        createTicket: jest.fn().mockRejectedValue(new Error("SN down")),
+      };
+      const filesService = {
+        directUpload: jest.fn().mockResolvedValue({}),
+        deleteFile: jest.fn().mockResolvedValue({}),
+      };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(png),
+      );
+
+      const [, , key] = filesService.directUpload.mock.calls[0];
+      expect(filesService.deleteFile).toHaveBeenCalledWith("debug", key);
       expect(result.reportId).toBe(7);
     });
 
