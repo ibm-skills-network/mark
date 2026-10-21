@@ -45,7 +45,6 @@ import "@smastrom/react-rating/style.css";
 import Button from "@/components/Button";
 import ConnectionProblem from "@/components/ConnectionProblem";
 import { isNetworkError, type NetworkFailureKind } from "@/lib/api-client";
-import ReportModal from "@/components/ReportModal";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
@@ -121,7 +120,6 @@ function SuccessPage() {
     window.dispatchEvent(new Event("resize"));
   }, [isFeedbackModalOpen]);
 
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [BackendComments, setBackendComments] = useState("");
   const [userId, setUserId] = useState<string>(null);
   const [lmsHost, setLmsHost] = useState<string>();
@@ -928,16 +926,6 @@ function SuccessPage() {
         )}
 
         <div className="flex flex-wrap justify-between mb-10 px-5">
-          {role === "learner" && (
-            <div className="flex items-center gap-x-4 justify-center">
-              <button
-                onClick={() => setIsReportModalOpen(true)}
-                className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition mb-2 sm:mb-0"
-              >
-                <div className="flex items-center gap-x-2">Report an issue</div>
-              </button>
-            </div>
-          )}
           <Button
             onClick={() =>
               role?.toLowerCase() === "learner"
@@ -1120,17 +1108,6 @@ function SuccessPage() {
               </motion.div>
             </div>
           </Dialog>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {isReportModalOpen && (
-          <ReportModal
-            assignmentId={assignmentId}
-            attemptId={attemptId}
-            isReportModalOpen={isReportModalOpen}
-            setIsReportModalOpen={setIsReportModalOpen}
-            isAuthor={role === "author"}
-          />
         )}
       </AnimatePresence>
     </div>
