@@ -21,6 +21,7 @@ import {
   ArchiveEntryContent,
   LearnerFileUpload,
 } from "../common/interfaces/attempt.interface";
+import { normalizeLearnerFileContent } from "../common/utils/learner-file-content.util";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
 import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../../llm/features/grading/constants";
@@ -278,6 +279,28 @@ export class FileContentExtractionService {
     }
   }
 
+  /**
+   * Inline content is read as text below. Stored responses and request
+   * bodies can carry a JSON file's content already parsed into an object;
+   * serialize it back so the file is extracted instead of failing on it.
+   */
+  private withTextContent(file: LearnerFileUpload): LearnerFileUpload {
+    const raw: unknown = file.content;
+    if (typeof raw === "string" || raw === undefined || raw === null) {
+      return file;
+    }
+
+    const { content, originalType } = normalizeLearnerFileContent(raw);
+    this.logger.warn("file_extraction.non_string_content", {
+      filename: file.filename,
+      questionId: file.questionId,
+      recordId: file.recordId,
+      contentType: originalType,
+      serializedLength: content?.length ?? 0,
+    });
+    return { ...file, content: content ?? "" };
+  }
+
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
     options?: {
@@ -296,7 +319,10 @@ export class FileContentExtractionService {
           );
           const startTime = Date.now();
 
-          const result = await this.extractSingleFileContent(file, options);
+          const result = await this.extractSingleFileContent(
+            this.withTextContent(file),
+            options,
+          );
 
           const duration = Date.now() - startTime;
           this.logger.debug(

@@ -35,6 +35,7 @@ import TipsView from "./TipsView";
 import SecurityMonitor from "../SecurityMonitor";
 import VersionMismatchBanner from "../VersionMismatchBanner";
 import { clearAssignmentLocalStorage } from "@/app/learner/utils/localStorage";
+import { withTextFileContent } from "@/lib/learner-file-content";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -225,9 +226,9 @@ const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
     !hasPresentation
   ) {
     if (isLearnerFileResponseArray(parsedResponse)) {
-      updated.learnerFileResponse = parsedResponse;
+      updated.learnerFileResponse = parsedResponse.map(withTextFileContent);
     } else if (isLearnerFileResponse(parsedResponse)) {
-      updated.learnerFileResponse = [parsedResponse];
+      updated.learnerFileResponse = [withTextFileContent(parsedResponse)];
     }
   }
 

@@ -53,6 +53,14 @@ function matchesConfiguredField(
   });
 }
 
+/**
+ * A learner file's content is the file's text. A notebook or .json upload is
+ * JSON text, and parsing it hands grading an object instead of the file.
+ */
+function isLearnerFileField(fieldPath: string): boolean {
+  return normalizeFieldPath(fieldPath).includes("learnerFileResponse");
+}
+
 export const TRANSFORM_METADATA_KEY = "data-transform";
 
 /**
@@ -211,7 +219,7 @@ export class DataTransformInterceptor implements NestInterceptor {
           result[key] =
             operation === "encode"
               ? this.encodeValue(value)
-              : this.decodeValue(value);
+              : this.decodeValue(value, !isLearnerFileField(fieldPath));
         }
       } else if (deep && value && typeof value === "object") {
         result[key] = this.transformData(value, options, operation, fieldPath);

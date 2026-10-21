@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { toast } from "sonner";
+import { decodeGithubFileContent } from "@/lib/github-file-content";
 
 /**
  * Opens a file in a new tab after retrieving its content from GitHub.
@@ -38,7 +39,7 @@ export const openFileInNewTab = async (fileUrl: string, octokit: Octokit) => {
     if (response.data && "content" in response.data) {
       const fileContent = response.data.content;
       if (fileContent) {
-        const decodedContent = atob(fileContent);
+        const decodedContent = decodeGithubFileContent(fileContent);
         const blob = new Blob([decodedContent], { type: "text/plain" });
         const blobUrl = URL.createObjectURL(blob);
         window.open(blobUrl, "_blank");

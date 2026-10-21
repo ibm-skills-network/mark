@@ -32,6 +32,7 @@ import { IconSearch } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { decodeGithubFileContent } from "@/lib/github-file-content";
 
 const GithubModal: React.FC<{
   onClose: () => void;
@@ -430,7 +431,7 @@ const GithubModal: React.FC<{
           if (data && "content" in data && data.content) {
             return {
               filename: file.filename,
-              content: atob(data.content),
+              content: decodeGithubFileContent(data.content),
               githubUrl: file.githubUrl,
             } as learnerFileResponse;
           } else {

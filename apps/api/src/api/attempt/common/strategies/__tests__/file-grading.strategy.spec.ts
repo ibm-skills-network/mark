@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
@@ -291,6 +292,44 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
 
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toEqual(files);
+    });
+  });
+
+  describe("extractLearnerResponse - parsed file content", () => {
+    it("serializes an object-valued notebook content to text", async () => {
+      const notebook = { cells: [{ cell_type: "code", source: ["x = 1"] }] };
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "lab.ipynb",
+            githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
+            content: notebook,
+          },
+        ],
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const [file] = await strategy.extractLearnerResponse(requestDto);
+      expect(typeof file.content).toBe("string");
+      expect(JSON.parse(file.content)).toEqual(notebook);
+      expect(file.githubUrl).toBe(
+        "https://github.com/learner/repo/blob/main/lab.ipynb",
+      );
+    });
+
+    it("rejects oversized parsed content with a generic error", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "lab.ipynb",
+            githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
+            content: { blob: "x".repeat(25_000_000) },
+          },
+        ],
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(strategy.extractLearnerResponse(requestDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
