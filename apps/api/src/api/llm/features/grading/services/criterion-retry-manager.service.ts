@@ -6,6 +6,9 @@ import {
   SupportScoreBreakdown,
 } from "../types/criterion-evidence.types";
 
+/** Support scores closer than this are treated as equal. */
+const SUPPORT_SCORE_TIE_TOLERANCE = 1e-9;
+
 @Injectable()
 export class CriterionRetryManagerService {
   computeSupportScore(
@@ -50,9 +53,22 @@ export class CriterionRetryManagerService {
       throw new Error("No attempts provided for selection");
     }
 
-    return [...attempts].sort(
-      (a, b) => b.support.supportScore - a.support.supportScore,
-    )[0];
+    // Equal support means support cannot tell the attempts apart. A retry was
+    // graded with the judge's feedback on the earlier ones, so on a tie the
+    // latest attempt is preferred over the original the judge flagged.
+    let best = attempts[0];
+    for (const candidate of attempts.slice(1)) {
+      const difference =
+        candidate.support.supportScore - best.support.supportScore;
+      if (
+        difference > SUPPORT_SCORE_TIE_TOLERANCE ||
+        (Math.abs(difference) <= SUPPORT_SCORE_TIE_TOLERANCE &&
+          candidate.attempt >= best.attempt)
+      ) {
+        best = candidate;
+      }
+    }
+    return best;
   }
 
   attachAttempt(

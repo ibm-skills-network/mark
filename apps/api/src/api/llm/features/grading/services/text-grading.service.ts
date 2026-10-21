@@ -213,6 +213,7 @@ export class TextGradingService implements ITextGradingService {
             questionId ? `question-${questionId}` : "learner-response",
           ),
           assignmentId,
+          questionId,
           language,
           maxConcurrency: 8,
           maxRetries: 3,

@@ -367,6 +367,7 @@ export class FileGradingService implements IFileGradingService {
           modelConfig,
           true,
           isCodeUploadRoute,
+          questionId,
         );
         return this.scaleFileBasedModelToQuestionMax(
           model,
@@ -3217,6 +3218,7 @@ export class FileGradingService implements IFileGradingService {
     },
     failLoudly = false,
     includeCodeUploads = false,
+    questionId?: number,
   ): Promise<FileBasedQuestionResponseModel> {
     try {
       // Grade the first evidence-eligible file, honoring the CODE/REPO route
@@ -3264,6 +3266,7 @@ export class FileGradingService implements IFileGradingService {
         language || "en",
         judgeFeedback,
         modelConfig,
+        questionId,
       );
 
       this.logger.info(

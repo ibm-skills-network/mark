@@ -135,6 +135,7 @@ export class EvidenceBasedGradingService {
       };
       modelOverridesAreFinal?: boolean;
     },
+    questionId?: number,
   ): Promise<EvidenceBasedGradingResult> {
     this.logger.debug(
       `Starting evidence-based grading for ${submission.submissionId}: ${criteria.length} criteria`,
@@ -182,6 +183,7 @@ export class EvidenceBasedGradingService {
         criteria,
         chunks,
         assignmentId,
+        questionId,
         language,
         judgeFeedback,
         maxConcurrency: 8,
