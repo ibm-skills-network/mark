@@ -91,6 +91,13 @@ type GradingOutput = {
   rubricScores?: RubricScore[];
 };
 
+/** Any `=== ... ===` section header the spreadsheet extractor writes. */
+const WORKBOOK_SECTION_HEADER_PATTERN = /^=== .+ ===$/;
+
+/** Extractor sections whose entries describe one workbook object each. */
+const WORKBOOK_OBJECT_SECTION_HEADER_PATTERN =
+  /^=== (?:CHARTS|PIVOT TABLES|EMBEDDED IMAGES) \(\d+ total\) ===$/;
+
 const FileGradingSchema = z.object({
   points: z.number(),
   feedback: z.string(),
@@ -1752,11 +1759,14 @@ export class FileGradingService implements IFileGradingService {
       const blocks: ContentBlock[] = [];
       let index = startIndex;
 
-      for (const line of lines) {
+      const blockTexts = text.includes("=== EXCEL WORKBOOK ===")
+        ? this.groupWorkbookObjectLines(text)
+        : lines;
+      for (const blockText of blockTexts) {
         blocks.push({
           blockId: `p1b${index}`,
           type: "paragraph",
-          text: line,
+          text: blockText,
           page: 1,
         });
         index += 1;
@@ -1823,6 +1833,65 @@ export class FileGradingService implements IFileGradingService {
     }
 
     return blocks;
+  }
+
+  /**
+   * Spreadsheet lines, one per evidence block, except that each chart, pivot
+   * table and embedded image the extractor describes stays a single block:
+   * its "- " heading (type, title, sheet) together with its indented detail
+   * lines (legend, series, fields), and the section header together with the
+   * first entry. Evidence chunking packs blocks into bounded sections, so a
+   * description split across blocks could be split across chunks, leaving a
+   * chunk that holds a chart's legend without its type or title.
+   */
+  private groupWorkbookObjectLines(text: string): string[] {
+    const grouped: string[] = [];
+    let inObjectSection = false;
+    let pendingHeader: string | undefined;
+    let entry: string[] | undefined;
+
+    const flushEntry = () => {
+      if (entry) grouped.push(entry.join("\n"));
+      entry = undefined;
+    };
+    const flushHeader = () => {
+      if (pendingHeader) grouped.push(pendingHeader);
+      pendingHeader = undefined;
+    };
+
+    for (const rawLine of text.split("\n")) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      if (WORKBOOK_SECTION_HEADER_PATTERN.test(line)) {
+        flushEntry();
+        flushHeader();
+        inObjectSection = WORKBOOK_OBJECT_SECTION_HEADER_PATTERN.test(line);
+        if (inObjectSection) {
+          pendingHeader = line;
+        } else {
+          grouped.push(line);
+        }
+        continue;
+      }
+
+      if (!inObjectSection) {
+        grouped.push(line);
+        continue;
+      }
+
+      if (line.startsWith("- ") || !entry) {
+        flushEntry();
+        entry = pendingHeader ? [pendingHeader, line] : [line];
+        pendingHeader = undefined;
+        continue;
+      }
+      entry.push(rawLine.trimEnd());
+    }
+
+    flushEntry();
+    flushHeader();
+    return grouped;
   }
 
   private normalizeSubmissionTextForEvidence(text: string): string {
