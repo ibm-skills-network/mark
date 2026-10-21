@@ -28,6 +28,7 @@ interface PipelineRequest {
   criteria: RubricCriterion[];
   chunks: ExtractedChunk[];
   assignmentId: number;
+  questionId?: number;
   language?: string;
   judgeFeedback?: string;
   maxConcurrency?: number;
@@ -287,7 +288,7 @@ export class CriterionEvidencePipelineService {
 
     if (!judgeCritique.approved) {
       this.logger.warn(
-        `Judge did not approve after ${maxRetries} retries. Selecting best supported attempts.`,
+        `Judge did not approve after ${retryCount} retries. Selecting best supported attempts.`,
       );
 
       const selectedGrades: CriterionGrade[] = [];
@@ -302,6 +303,25 @@ export class CriterionEvidencePipelineService {
         }
         const bestAttempt = this.retryManager.selectBestAttempt(history);
         selectedGrades.push(bestAttempt.grade);
+
+        const finalIssues = judgeCritique.issues.filter(
+          (issue) => issue.criterionId === criterion.id,
+        );
+        if (finalIssues.length > 0) {
+          // The grade stands although the judge still disputes it; surface it
+          // so inconsistent criteria can be found without the audit row.
+          this.logger.warn(
+            `grading.criterion_unresolved ${JSON.stringify({
+              assignmentId: request.assignmentId,
+              questionId: request.questionId,
+              criterionId: criterion.id,
+              attempts: history.length,
+              selectedAttempt: bestAttempt.attempt,
+              supportScores: history.map((item) => item.support.supportScore),
+              finalIssueSeverities: finalIssues.map((issue) => issue.severity),
+            })}`,
+          );
+        }
       }
       currentGrades = selectedGrades;
       finalSelectionReason = "highest_support_score";

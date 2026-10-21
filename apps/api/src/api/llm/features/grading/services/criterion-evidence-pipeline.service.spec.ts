@@ -219,3 +219,176 @@ it("rechecks missed notebook evidence before grading an audit retry", async () =
   expect(judge.judge.mock.calls[1][0].evidence[0].evidence).toEqual([evidence]);
   expect(result.grades[0].pointsAwarded).toBe(2);
 });
+
+describe("unresolved criteria after the judge never approves", () => {
+  const criterion = (id: string): RubricCriterion => ({
+    id,
+    rubricQuestion: `Criterion ${id}`,
+    description: "",
+    criteria: [
+      { description: "Not met", points: 0 },
+      { description: "Met", points: 3 },
+    ],
+    maxPoints: 3,
+  });
+  const chunk: ExtractedChunk = {
+    chunkId: "chunk1",
+    text: "evidence text",
+    sourceType: "text",
+    sourceId: "answer",
+    anchor: { type: "text", startOffset: 0, endOffset: 10 },
+    hash: "hash1",
+  };
+
+  function buildPipeline(judge: { judge: jest.Mock }) {
+    const retrieval = {
+      retrieveEvidence: jest.fn().mockImplementation(async ({ criterion }) => ({
+        criterionId: criterion.id,
+        evidence: [
+          {
+            chunkId: "chunk1",
+            quote: "evidence",
+            anchor: { type: "text", startOffset: 0, endOffset: 10 },
+            sourceType: "text",
+            sourceId: "answer",
+            relevanceScore: 0.5,
+          },
+        ],
+        strategyUsed: "search",
+        retrievedAt: new Date().toISOString(),
+      })),
+    };
+    const grader = {
+      gradeCriterion: jest
+        .fn()
+        .mockImplementation(async ({ criterion, attempt, evidence }) => ({
+          criterionId: criterion.id,
+          rubricQuestion: criterion.rubricQuestion,
+          pointsAwarded: attempt === 1 ? 0 : 3,
+          maxPoints: 3,
+          rationale: `attempt ${attempt}`,
+          citations: ["chunk1"],
+          confidence: "medium",
+          decision: attempt === 1 ? "does_not_meet" : "meets",
+          evidence,
+          attempt,
+          gradedAt: new Date().toISOString(),
+          modelUsed: "test",
+        })),
+    };
+    const pipeline = new CriterionEvidencePipelineService(
+      retrieval as any,
+      grader as any,
+      judge as any,
+      new CriterionRetryManagerService(),
+      new CriterionGradeCompilerService(),
+    );
+    const warn = jest.fn();
+    (pipeline as any).logger = {
+      warn,
+      log: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+    };
+    return { pipeline, warn };
+  }
+
+  function unresolvedPayloads(warn: jest.Mock): any[] {
+    const prefix = "grading.criterion_unresolved ";
+    return warn.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.startsWith(prefix))
+      .map((line) => JSON.parse(line.slice(prefix.length)));
+  }
+
+  it("selects the latest attempt when every attempt ties on support", async () => {
+    const judge = {
+      judge: jest.fn().mockResolvedValue({
+        approved: false,
+        issues: [
+          { criterionId: "c0", severity: "high", issue: "Contradiction" },
+        ],
+      }),
+    };
+    const { pipeline } = buildPipeline(judge);
+
+    const result = await pipeline.gradeWithEvidence({
+      question: "Question",
+      criteria: [criterion("c0")],
+      chunks: [chunk],
+      assignmentId: 3782,
+      maxRetries: 2,
+    });
+
+    expect(result.grades[0].attempt).toBe(3);
+    expect(result.grades[0].pointsAwarded).toBe(3);
+    expect(result.audit.finalSelection[0]).toMatchObject({
+      attempt: 3,
+      reason: "highest_support_score",
+    });
+  });
+
+  it("warns once per criterion still flagged in the final critique", async () => {
+    const judge = {
+      judge: jest
+        .fn()
+        .mockResolvedValueOnce({
+          approved: false,
+          issues: [
+            { criterionId: "c0", severity: "high", issue: "Contradiction" },
+            { criterionId: "c1", severity: "medium", issue: "Weak quote" },
+          ],
+        })
+        .mockResolvedValue({
+          approved: false,
+          issues: [
+            { criterionId: "c0", severity: "high", issue: "Still wrong" },
+          ],
+        }),
+    };
+    const { pipeline, warn } = buildPipeline(judge);
+
+    await pipeline.gradeWithEvidence({
+      question: "Question",
+      criteria: [criterion("c0"), criterion("c1")],
+      chunks: [chunk],
+      assignmentId: 3782,
+      questionId: 10_848,
+      maxRetries: 2,
+    });
+
+    const payloads = unresolvedPayloads(warn);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toEqual({
+      assignmentId: 3782,
+      questionId: 10_848,
+      criterionId: "c0",
+      attempts: 3,
+      selectedAttempt: 3,
+      supportScores: [
+        expect.any(Number),
+        expect.any(Number),
+        expect.any(Number),
+      ],
+      finalIssueSeverities: ["high"],
+    });
+    expect(new Set(payloads[0].supportScores).size).toBe(1);
+  });
+
+  it("does not warn when the judge approves", async () => {
+    const judge = {
+      judge: jest.fn().mockResolvedValue({ approved: true, issues: [] }),
+    };
+    const { pipeline, warn } = buildPipeline(judge);
+
+    await pipeline.gradeWithEvidence({
+      question: "Question",
+      criteria: [criterion("c0")],
+      chunks: [chunk],
+      assignmentId: 3782,
+      maxRetries: 2,
+    });
+
+    expect(unresolvedPayloads(warn)).toHaveLength(0);
+  });
+});
