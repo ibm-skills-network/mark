@@ -9,8 +9,15 @@ import type {
 import { APIError, apiClient } from "./api-client";
 import {
   sendWithStallDetection,
+  StorageHttpError,
   UploadTransportError,
 } from "./uploadTransport";
+
+/** The step a multipart upload is on, so a failure can say where it broke. */
+export type MultipartPhase =
+  | "multipart_initiate"
+  | "multipart_part"
+  | "multipart_complete";
 
 interface UploadProgress {
   loaded: number;
@@ -222,12 +229,14 @@ async function uploadPartWithRetry(
         onUploadProgress: (progress) => onPartProgress?.(progress.loaded),
       });
 
+      // Storage's own errors are unreadable cross-origin, so a status here
+      // came from an intermediary. The caller decides whether another route
+      // can get past it; a 5xx may be transient and is worth a retry first.
       if (response.status < 200 || response.status >= 300) {
-        throw new UploadError(
+        throw new StorageHttpError(
           `Part upload failed with status ${response.status}`,
-          "We hit a problem while uploading. Please try again.",
           response.status,
-          response.status >= 500,
+          response,
         );
       }
 
@@ -260,6 +269,9 @@ async function uploadPartWithRetry(
       if (lastError instanceof UploadError && !lastError.retryable) {
         break;
       }
+      if (lastError instanceof StorageHttpError && lastError.status < 500) {
+        break;
+      }
 
       if (attempt < maxRetries) {
         // Exponential backoff: 1s → 2s → 4s
@@ -277,11 +289,13 @@ export async function reliableUpload(
   uploadRequest: UploadRequest,
   onProgress?: (progress: UploadProgress) => void,
   onWaiting?: (info: UploadWaitingInfo) => void,
+  onPhase?: (phase: MultipartPhase) => void,
 ): Promise<MultipartUploadInitiateResponse> {
   if (file.size === 0) {
     throw new Error("Cannot upload empty file");
   }
 
+  onPhase?.("multipart_initiate");
   const multipartUpload = await initiateMultipartUpload(
     uploadRequest,
     onWaiting,
@@ -295,6 +309,7 @@ export async function reliableUpload(
   let completedBytes = 0;
 
   try {
+    onPhase?.("multipart_part");
     for (const part of multipartUpload.urls) {
       // Compute the byte range for this part
       const start = (part.partNumber - 1) * multipartUpload.partSizeBytes;
@@ -323,6 +338,7 @@ export async function reliableUpload(
       });
     }
 
+    onPhase?.("multipart_complete");
     await completeMultipartUpload({
       uploadId: multipartUpload.uploadId,
       key: multipartUpload.key,

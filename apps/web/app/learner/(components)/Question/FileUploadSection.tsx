@@ -47,6 +47,7 @@ const FileUploadSection = ({
   const learnerFileResponse = useLearnerStore((state) =>
     state.getFileUpload(questionId),
   );
+  const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
   const [fileBlob] = useState<Blob | null>(null);
   const onDrop = async (acceptedFiles: File[]) => {
     try {
@@ -181,6 +182,7 @@ const FileUploadSection = ({
               <FileUploader
                 key={`file-uploader-${questionId}`}
                 uploadType={"learner"}
+                attemptId={activeAttemptId ?? undefined}
                 context={{
                   assignmentId,
                   questionId,
