@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "데이터 절약 모드와 Opera Mini 같은 일부 브라우저는 페이지를 손상시킬 수 있습니다. 해당 모드를 끄거나 다른 브라우저에서 과제를 여세요.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "텍스트 답변의 이미지는 채점할 수 없습니다. 대신 출력 내용을 텍스트로 붙여 넣거나 말로 설명해 주세요.",
   "Your grade is on its way to yourLearning": "성적이 yourLearning으로 전송되는 중입니다",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning에 성적이 동기화되기까지 몇 시간이 걸릴 수 있으니 조금만 기다려 주세요. 성적은 안전하게 기록되었으며 따로 하실 일은 없습니다. 이 창을 닫으셔도 됩니다."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning에 성적이 동기화되기까지 몇 시간이 걸릴 수 있으니 조금만 기다려 주세요. 성적은 안전하게 기록되었으며 따로 하실 일은 없습니다. 이 창을 닫으셔도 됩니다.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Coursera 앱에서는 파일 업로드가 작동하지 않을 수 있습니다. 대신 Chrome이나 Safari 같은 브라우저에서 이 과제를 여세요.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "이 인앱 브라우저에서는 파일 업로드가 작동하지 않을 수 있습니다. 대신 Chrome이나 Safari 같은 브라우저에서 이 과제를 여세요.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "질문 {question}의 파일이 업로드되지 않았습니다. 그래도 제출하시겠습니까?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "질문 {questions}의 파일이 업로드되지 않았습니다. 그래도 제출하시겠습니까?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "질문 {question}의 파일 업로드에 실패하여 이 질문에 대해서는 아무것도 제출되지 않습니다. 그래도 제출하시겠습니까?",
+  "You have flagged questions. Are you sure you want to submit?": "플래그가 지정된 질문이 있습니다. 정말 제출하시겠습니까?",
+  "You have unanswered questions. Are you sure you want to submit?": "답하지 않은 질문이 있습니다. 정말 제출하시겠습니까?"
 }

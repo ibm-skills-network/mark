@@ -19,6 +19,7 @@ import GithubUploadModal from "./GithubUploadModal";
 import PresentationGrader from "./PresentationGrader";
 import VideoPresentationEditor from "./VideoPresentationEditor";
 import FileUploader from "@/components/FileUploader";
+import InAppBrowserUploadNotice from "./InAppBrowserUploadNotice";
 
 interface FileUploadSectionProps {
   question: QuestionStore;
@@ -182,6 +183,7 @@ const FileUploadSection = ({
                   </button>
                 </div>
               )}
+              <InAppBrowserUploadNotice />
               <FileUploader
                 key={`file-uploader-${questionId}`}
                 uploadType={"learner"}

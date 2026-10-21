@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Databesparingsmodi en sommige browsers, zoals Opera Mini, kunnen de pagina beschadigen. Zet de modus uit of open de opdracht in een andere browser.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Afbeeldingen kunnen in een tekstantwoord niet worden beoordeeld. Plak in plaats daarvan de uitvoer als tekst, of beschrijf deze in woorden.",
   "Your grade is on its way to yourLearning": "Je cijfer is onderweg naar yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Het synchroniseren van je cijfer met yourLearning kan een paar uur duren, dus even geduld alsjeblieft. Je cijfer is veilig bij ons vastgelegd en je hoeft niets te doen. Je kunt dit venster sluiten."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Het synchroniseren van je cijfer met yourLearning kan een paar uur duren, dus even geduld alsjeblieft. Je cijfer is veilig bij ons vastgelegd en je hoeft niets te doen. Je kunt dit venster sluiten.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Bestanden uploaden werkt mogelijk niet in de Coursera-app. Open deze opdracht in plaats daarvan in een browser zoals Chrome of Safari.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "Bestanden uploaden werkt mogelijk niet in deze in-app-browser. Open deze opdracht in plaats daarvan in een browser zoals Chrome of Safari.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "Je bestand voor vraag {question} is niet geüpload. Toch indienen?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "De bestanden voor de vragen {questions} zijn niet geüpload. Toch indienen?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Het uploaden van het bestand voor vraag {question} is mislukt, dus voor deze vraag wordt niets ingediend. Toch indienen?",
+  "You have flagged questions. Are you sure you want to submit?": "Je hebt gemarkeerde vragen. Weet je zeker dat je wilt indienen?",
+  "You have unanswered questions. Are you sure you want to submit?": "Je hebt onbeantwoorde vragen. Weet je zeker dat je wilt indienen?"
 }
