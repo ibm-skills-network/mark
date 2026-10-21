@@ -25,10 +25,12 @@ import {
   submitAssignment,
 } from "@/lib/talkToBackend";
 import {
-  editedQuestionsOnly,
+  buildSubmitWarning,
   getSubmitButtonStatus,
   hasLearnerResponse,
+  type SubmitWarning,
 } from "@/lib/utils";
+import { useUiTranslation } from "@/hooks/use-ui-translation";
 import {
   isSupportedUiLanguage,
   DEFAULT_UI_LANGUAGE,
@@ -115,13 +117,18 @@ function LearnerHeader() {
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
   const isUploadingFiles = useLearnerStore((state) => state.isUploadingFiles);
+  const uploadStatusByQuestion = useLearnerStore(
+    (state) => state.uploadStatusByQuestion,
+  );
   const buttonStatus = getSubmitButtonStatus(
     questions,
     submitting,
     isUploadingFiles,
     assignmentDetails?.requireAllQuestions,
     assignmentDetails?.optionalQuestionIds,
+    uploadStatusByQuestion,
   );
+  const { t } = useUiTranslation();
 
   const [returnUrl, setReturnUrl] = useState<string>("");
   const authorQuestions = authorPreviewPayload?.questions ?? questions;
@@ -139,7 +146,9 @@ function LearnerHeader() {
   const isAttemptPage = pathname.includes("attempts");
   const isSuccessPage = pathname.includes("successPage");
   const [toggleWarning, setToggleWarning] = useState<boolean>(false);
-  const [toggleEmptyWarning, setToggleEmptyWarning] = useState<boolean>(false);
+  const [submitWarning, setSubmitWarning] = useState<SubmitWarning | null>(
+    null,
+  );
   const [role, setRole] = useState<string | undefined>(undefined);
   const [languages, setLanguages] = useState<string[]>([]);
   const getUserPreferedLanguageFromLTI = useLearnerStore(
@@ -270,6 +279,7 @@ function LearnerHeader() {
       isUploadingFiles,
       assignmentDetails?.requireAllQuestions,
       assignmentDetails?.optionalQuestionIds,
+      uploadStatusByQuestion,
     );
     if (submitStatus.disabled) {
       toast.error(submitStatus.reason);
@@ -296,18 +306,23 @@ function LearnerHeader() {
       return;
     }
 
-    const flaggedQuestions = questions.filter((q) => q.status === "flagged");
-    if (flaggedQuestions.length > 0) {
+    const warning = buildSubmitWarning(questions, {
+      optionalQuestionIds: assignmentDetails?.optionalQuestionIds,
+      uploadStatusByQuestion,
+    });
+    if (warning) {
+      setSubmitWarning(warning);
       setToggleWarning(true);
     } else {
-      if (requiredQuestions.every((q) => editedQuestionsOnly([q]).length > 0)) {
-        void handleSubmitAssignment();
-      } else {
-        setToggleEmptyWarning(true);
-        setToggleWarning(true);
-      }
+      void handleSubmitAssignment();
     }
-  }, [questions, assignmentDetails, submitting, isUploadingFiles]);
+  }, [
+    questions,
+    assignmentDetails,
+    submitting,
+    isUploadingFiles,
+    uploadStatusByQuestion,
+  ]);
 
   const handleCloseModal = () => {
     setToggleWarning(false);
@@ -809,9 +824,15 @@ function LearnerHeader() {
           isOpen={toggleWarning}
           onClose={handleCloseModal}
           onConfirm={handleConfirmSubmission}
-          description={`You have ${
-            toggleEmptyWarning ? "unanswered" : "flagged"
-          } questions. Are you sure you want to submit?`}
+          description={
+            submitWarning ? (
+              <span data-no-ui-translate="true">
+                {t(submitWarning.message, submitWarning.params)}
+              </span>
+            ) : (
+              ""
+            )
+          }
         />
       </header>
 
