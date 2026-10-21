@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Logger, NotFoundException } from "@nestjs/common";
 import sharp from "sharp";
 import { ReportsService } from "./report.service";
 
@@ -492,6 +492,172 @@ describe("ReportsService.reportIssue", () => {
     expect(prisma.report.create).toHaveBeenCalled();
     expect(result.reportId).toBe(7);
   });
+  describe("routing away from SN Support", () => {
+    const sn = () => ({
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-4" }),
+    });
+    const diagnostics = {
+      v: 1 as const,
+      session: { attemptId: 84 },
+    };
+    let logSpy: jest.SpyInstance;
+    beforeEach(() => {
+      logSpy = jest.spyOn(Logger.prototype, "log").mockImplementation();
+    });
+    afterEach(() => logSpy.mockRestore());
+
+    const filler =
+      "**Steps to reproduce:**\r\nno\r\n\r\n**Expected result:**\r\nno\r\n\r\n**Actual result:**\r\nok";
+
+    it("records a report with no usable text without filing a ticket", async () => {
+      const snSupportService = sn();
+      const { service, prisma, supportRouting } =
+        makeForReportIssue(snSupportService);
+      const create = jest.fn().mockResolvedValue({ id: 1 });
+      (prisma as Record<string, unknown>).reportDiagnostics = { create };
+
+      const result = await service.reportIssue(
+        {
+          ...reportDto,
+          issueType: "BUG",
+          description: filler,
+          diagnostics,
+          additionalDetails: { category: "Flag Button Report" },
+        },
+        session,
+      );
+
+      expect(snSupportService.createTicket).not.toHaveBeenCalled();
+      expect(supportRouting.resolve).not.toHaveBeenCalled();
+      const row = prisma.report.create.mock.calls[0][0].data;
+      expect(row.description).toBe(filler);
+      expect(row.status).toBe("CLOSED");
+      expect(row.closureReason).toBe("junk");
+      expect(create).toHaveBeenCalledWith({
+        data: { reportId: 7, data: diagnostics },
+      });
+      expect(logSpy).toHaveBeenCalledWith(
+        "Report recorded without an SN Support ticket",
+        expect.objectContaining({
+          report_id: 7,
+          user_id: "employee@ibm.com",
+          assignment_id: 42,
+          reason: "filler_only",
+        }),
+      );
+    });
+
+    it("answers a junk report exactly like any report filed without a ticket", async () => {
+      const junk = makeForReportIssue(sn());
+      const junkResult = await junk.service.reportIssue(
+        { ...reportDto, description: "." },
+        session,
+      );
+
+      const offline = makeForReportIssue({
+        isConfigured: jest.fn().mockReturnValue(false),
+        createTicket: jest.fn(),
+      });
+      const offlineResult = await offline.service.reportIssue(
+        reportDto,
+        session,
+      );
+
+      expect(junkResult).toEqual(offlineResult);
+    });
+
+    it("still files an error-dialog report the reporter typed nothing into", async () => {
+      const snSupportService = sn();
+      const { service } = makeForReportIssue(snSupportService);
+
+      await service.reportIssue(
+        {
+          ...reportDto,
+          description:
+            "**Steps to reproduce:**\r\n1. I was using /learner/42 normally.\r\n2. The error dialog appeared.\r\n(Auto-filled — please describe what you were doing if you can.)\r\n\r\n**Actual result:**\r\nAn error dialog appeared:\r\nStatus: 500 — Something went wrong",
+          additionalDetails: { category: "Error Dialog Report" },
+        },
+        session,
+      );
+
+      expect(snSupportService.createTicket).toHaveBeenCalled();
+    });
+
+    it.each(["FALSE_MARKING", "grading", "false marking"])(
+      "records a grading dispute (%s) without filing a ticket",
+      async (issueType) => {
+        const snSupportService = sn();
+        const { service, prisma } = makeForReportIssue(snSupportService);
+        const create = jest.fn().mockResolvedValue({ id: 1 });
+        (prisma as Record<string, unknown>).reportDiagnostics = { create };
+
+        const result = await service.reportIssue(
+          {
+            ...reportDto,
+            issueType,
+            description: "Question 3 was marked wrong but matches the slides",
+            diagnostics,
+          },
+          session,
+        );
+
+        expect(snSupportService.createTicket).not.toHaveBeenCalled();
+        const row = prisma.report.create.mock.calls[0][0].data;
+        expect(row.issueType).toBe("FALSE_MARKING");
+        expect(row.status).toBe("OPEN");
+        expect(row.closureReason).toBeNull();
+        expect(create).toHaveBeenCalled();
+        expect(result.reportId).toBe(7);
+        expect(result.message).toContain("recorded for review");
+        expect(result.message).not.toMatch(/ticket|email/i);
+        expect(logSpy).toHaveBeenCalledWith(
+          "Report recorded without an SN Support ticket",
+          expect.objectContaining({
+            report_id: 7,
+            reason: "grading_dispute",
+          }),
+        );
+      },
+    );
+
+    it("still files a bug report with real text", async () => {
+      const snSupportService = sn();
+      const { service, prisma } = makeForReportIssue(snSupportService);
+
+      const result = await service.reportIssue(
+        { ...reportDto, issueType: "BUG", description: "Q3 answer key wrong" },
+        session,
+      );
+
+      expect(snSupportService.createTicket).toHaveBeenCalledTimes(1);
+      expect(prisma.report.create.mock.calls[0][0].data.status).toBe("OPEN");
+      expect(result.message).toContain("SUPPORT-4");
+    });
+
+    it("shows the reporter a junk report as an ordinary open report", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      (prisma.report.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 7,
+          reporterId: "employee@ibm.com",
+          status: "CLOSED",
+          closureReason: "junk",
+          statusMessage: "Not forwarded to support: filler_only",
+          duplicateOfReportId: null,
+        },
+      ]);
+
+      const [shown] = await service.getReportsForUser("employee@ibm.com");
+
+      expect(shown.status).toBe("OPEN");
+      expect(shown.closureReason).toBeNull();
+      expect(shown.statusMessage).toBe(
+        "Your issue has been reported and is being reviewed.",
+      );
+    });
+  });
+
   describe("report screenshots", () => {
     let png: Buffer;
     beforeAll(async () => {

@@ -29,6 +29,11 @@ import {
   stripSectionLabelMarkdown,
 } from "../helpers/issue-template";
 import {
+  classifyReportText,
+  JUNK_CLOSURE_REASON,
+  type JunkReason,
+} from "../helpers/junk-report";
+import {
   ReportDiagnostics,
   summarizeReportDiagnostics,
 } from "../helpers/report-diagnostics";
@@ -62,6 +67,29 @@ interface ReportFilterParameters {
   startDate?: string;
   endDate?: string;
 }
+const REPORTER_STATUS_MESSAGE =
+  "Your issue has been reported and is being reviewed.";
+
+/**
+ * A report held back as junk is shown to its reporter as an ordinary open
+ * report: telling them it was judged junk only invites resubmission.
+ */
+function presentToReporter<
+  T extends {
+    status: ReportStatus;
+    statusMessage: string | null;
+    closureReason: string | null;
+  },
+>(report: T): T {
+  if (report.closureReason !== JUNK_CLOSURE_REASON) return report;
+  return {
+    ...report,
+    status: ReportStatus.OPEN,
+    statusMessage: REPORTER_STATUS_MESSAGE,
+    closureReason: null,
+  };
+}
+
 @Injectable()
 export class ReportsService {
   private ghTokenCache: { value: string; expiresAt: number } | null = null;
@@ -1019,11 +1047,30 @@ export class ReportsService {
 
     const mappedIssueType = this.mapIssueTypeToReportType(issueType);
 
-    const similarReports = await this.findSimilarReports(
-      description,
-      mappedIssueType,
-      assignmentId,
-    );
+    // Some reports are kept in Mark but never reach the support queue: ones
+    // with nothing actionable typed into them, and grading disputes, which
+    // are reviewed from Mark's own report list. The reporter is answered the
+    // same way either way.
+    const textCheck = classifyReportText(description, {
+      category: detailString("category"),
+    });
+    const junkReason: JunkReason | undefined = textCheck.junk
+      ? textCheck.reason
+      : undefined;
+    const heldReason: JunkReason | "grading_dispute" | undefined =
+      junkReason ??
+      (mappedIssueType === ReportType.FALSE_MARKING
+        ? "grading_dispute"
+        : undefined);
+
+    // A junk report would only match other junk.
+    const similarReports = junkReason
+      ? []
+      : await this.findSimilarReports(
+          description,
+          mappedIssueType,
+          assignmentId,
+        );
 
     const potentialDuplicate = similarReports.find((r) => r.similarity > 0.85);
     const highSimilarityReport = similarReports.find((r) => r.similarity > 0.7);
@@ -1046,7 +1093,9 @@ export class ReportsService {
       portalUrl: portal.portalUrl,
     };
     const canForward =
-      this.snSupportService.isConfigured() && safeUserEmail !== "Unknown";
+      !heldReason &&
+      this.snSupportService.isConfigured() &&
+      safeUserEmail !== "Unknown";
     // Only when a ticket is actually going out: routing calls portal-manager,
     // and an anonymous report or a disabled integration has nowhere to send.
     const route = canForward
@@ -1142,7 +1191,7 @@ export class ReportsService {
           );
         }
       }
-    } else {
+    } else if (!heldReason) {
       // Without a ticket the report reaches no support queue — DB row only.
       // portal_host is logged even here: while the integration is off it is
       // the only way to sample what LTI actually sends as a return URL, which
@@ -1160,9 +1209,20 @@ export class ReportsService {
     // Duplicates inherit the parent's resolution so reporters aren't told a
     // fixed issue is still open.
     let reportStatus: ReportStatus = ReportStatus.OPEN;
-    let statusMessage = "Your issue has been reported and is being reviewed.";
+    let statusMessage =
+      heldReason === "grading_dispute"
+        ? "Your grading report has been recorded for review."
+        : REPORTER_STATUS_MESSAGE;
     let closureReason: string | null = null;
     const isDuplicate = Boolean(potentialDuplicate);
+
+    if (junkReason) {
+      // Closed so it stays out of the open queue and duplicate matching;
+      // admins filter on the closure reason. The reporter never sees this.
+      reportStatus = ReportStatus.CLOSED;
+      closureReason = JUNK_CLOSURE_REASON;
+      statusMessage = `Not forwarded to support: no actionable description (${junkReason}).`;
+    }
 
     if (potentialDuplicate) {
       const parentReport = await this.prisma.report.findUnique({
@@ -1231,32 +1291,47 @@ export class ReportsService {
         await this.storeReportDiagnostics(report.id, diagnostics);
       }
 
+      if (heldReason) {
+        this.logger.log("Report recorded without an SN Support ticket", {
+          report_id: report.id,
+          user_id: userSession?.userId,
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+          issue_type: mappedIssueType,
+          reason: heldReason,
+        });
+      }
+
       // Fire-and-forget: Flo is best-effort telemetry. Never block the
       // request on its NATS publish — the underlying ts-nats client opens a
       // fresh connection per call and has no built-in deadline.
-      void this.floService
-        .sendError(ticketTitle, description, {
-          severity: issueSeverity,
-          tags: ["mark", "chat", "report", role || "user", issueType],
-          assignmentId,
-          attemptId,
-          sn_ticket: snTicketKey,
-          report_id: report.id,
-          is_duplicate: isDuplicate,
-          portalName,
-          portalUrl: portalContext.portalUrl,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `Flo sendError dispatch failed for report ${report.id}: ${
-              (error as Error).message
-            }`,
-          );
-        });
+      if (!junkReason) {
+        void this.floService
+          .sendError(ticketTitle, description, {
+            severity: issueSeverity,
+            tags: ["mark", "chat", "report", role || "user", issueType],
+            assignmentId,
+            attemptId,
+            sn_ticket: snTicketKey,
+            report_id: report.id,
+            is_duplicate: isDuplicate,
+            portalName,
+            portalUrl: portalContext.portalUrl,
+          })
+          .catch((error) => {
+            this.logger.warn(
+              `Flo sendError dispatch failed for report ${report.id}: ${
+                (error as Error).message
+              }`,
+            );
+          });
+      }
 
       const ticketSegment = snTicketKey
         ? `Support ticket ${snTicketKey} has been created and our team will review it soon.`
-        : `Our team will review it soon.`;
+        : heldReason === "grading_dispute"
+          ? `It has been recorded for review.`
+          : `Our team will review it soon.`;
       let message = `Thank you for your report. ${ticketSegment} You can check the status anytime by asking about your reported issues.`;
 
       if (isDuplicate) {
@@ -1499,7 +1574,7 @@ export class ReportsService {
     const parentById = new Map(parents.map((p) => [p.id, p]));
 
     return reports.map((report) => {
-      if (!report.duplicateOfReportId) return report;
+      if (!report.duplicateOfReportId) return presentToReporter(report);
 
       const parent = parentById.get(report.duplicateOfReportId);
       if (!parent) return report;
@@ -1520,7 +1595,7 @@ export class ReportsService {
         }
       }
 
-      return report;
+      return presentToReporter(report);
     });
   }
 
@@ -1828,18 +1903,19 @@ export class ReportsService {
       },
     });
 
+    const shown = presentToReporter(report);
     return {
       id: report.id,
       issueType: report.issueType,
       description: report.description,
-      status: report.status,
-      statusMessage: report.statusMessage,
+      status: shown.status,
+      statusMessage: shown.statusMessage,
       created: report.createdAt,
       updated: report.updatedAt,
       issueNumber: report.issueNumber,
       developerComment: report.comments,
       resolution: report.resolution,
-      closureReason: report.closureReason,
+      closureReason: shown.closureReason,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       duplicateInfo,
       duplicates: duplicates.length > 0 ? duplicates : undefined,
