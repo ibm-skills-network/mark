@@ -40,6 +40,10 @@ import { GradingAuditService } from "../../services/question-response/grading-au
 import { LearnerFileUpload } from "../interfaces/attempt.interface";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
+import {
+  LearnerFileContentTooLargeError,
+  normalizeLearnerFileContent,
+} from "../utils/learner-file-content.util";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
 @Injectable()
@@ -247,7 +251,40 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
   async extractLearnerResponse(
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<LearnerFileUpload[]> {
-    return requestDto.learnerFileResponse;
+    const files = requestDto.learnerFileResponse;
+    if (!Array.isArray(files)) return files;
+
+    // Content is persisted with the response and read back as text by
+    // extraction and regrades, so a parsed JSON value is stored as its text.
+    return files.map((file) => {
+      const raw: unknown = file.content;
+      if (typeof raw === "string" || raw === undefined || raw === null) {
+        return file;
+      }
+
+      let normalized: ReturnType<typeof normalizeLearnerFileContent>;
+      try {
+        normalized = normalizeLearnerFileContent(raw);
+      } catch (error) {
+        if (error instanceof LearnerFileContentTooLargeError) {
+          this.logger?.warn("file_response.content_too_large", {
+            filename: file.filename,
+            serializedLength: error.length,
+          });
+          throw new BadRequestException("Invalid file response");
+        }
+        throw error;
+      }
+
+      this.logger?.warn("file_response.non_string_content", {
+        filename: file.filename,
+        hasGithubUrl: Boolean(file.githubUrl),
+        hasStorageKey: Boolean(file.key),
+        contentType: normalized.originalType,
+        serializedLength: normalized.content?.length ?? 0,
+      });
+      return { ...file, content: normalized.content ?? "" };
+    });
   }
 
   /**
