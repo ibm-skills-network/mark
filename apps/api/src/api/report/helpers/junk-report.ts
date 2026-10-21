@@ -117,6 +117,11 @@ const FILLER_TOKENS = new Set([
   "thanks",
   "thank",
   "you",
+  "bad",
+  "good",
+  "fine",
+  "done",
+  "sorry",
   "nada",
   "rien",
   "nichts",
@@ -139,8 +144,10 @@ const FILLER_TOKENS = new Set([
 const LOGOGRAPHIC =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
-// Runs along a keyboard row ("asdfgh", "qwerty", "zxcvbn").
-const KEYBOARD_RUN = /^(?:asdf|qwert|zxcv)/;
+// Runs along a keyboard row ("asdfgh", "qwerty", "zxcvbn"), or a mash of five
+// or more Latin letters with no vowel ("sdrghdfn"). Four-letter acronyms such
+// as "HTML" stay below that length.
+const KEYBOARD_RUN = /^(?:asdf|qwert|zxcv|[b-df-hj-np-tv-xz]{5,}$)/;
 
 const TOKEN = /[\p{L}\p{N}]+(?:\/[\p{L}\p{N}]+)*/gu;
 
