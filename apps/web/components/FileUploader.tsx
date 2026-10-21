@@ -41,6 +41,8 @@ interface FileUploaderProps {
   showUploadedFiles?: boolean;
   uploadedFiles?: learnerFileResponse[];
   restrictFileTypes?: boolean;
+  /** Attempt the upload belongs to; only used to label failure reports. */
+  attemptId?: number;
 }
 
 /**
@@ -61,6 +63,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   showUploadedFiles = false,
   uploadedFiles = [],
   restrictFileTypes = true,
+  attemptId,
 }) => {
   const [files, setFiles] = useState<FileData[]>([]);
   const [uploadStatus, setUploadStatus] = useState<
@@ -199,6 +202,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       };
 
       const uploadedFile = await uploadFileToStorage(file, uploadRequest, {
+        attemptId,
         onUploadProgress: (ProgressEvent: {
           loaded: number;
           total: number;

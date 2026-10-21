@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "โหมดประหยัดข้อมูลและเบราว์เซอร์บางตัว เช่น Opera Mini อาจทำให้หน้าเว็บเสียหาย ให้ปิดโหมดนี้หรือเปิดงานที่มอบหมายในเบราว์เซอร์อื่น",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "ไม่สามารถให้คะแนนรูปภาพในคำตอบแบบข้อความได้ โปรดวางผลลัพธ์เป็นข้อความแทน หรืออธิบายเป็นคำพูด",
   "Your grade is on its way to yourLearning": "คะแนนของคุณกำลังส่งไปยัง yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "การซิงค์คะแนนของคุณไปยัง yourLearning อาจใช้เวลาสองสามชั่วโมง โปรดอดทนรอ คะแนนของคุณได้รับการบันทึกไว้กับเราอย่างปลอดภัยแล้ว และคุณไม่ต้องทำอะไรเพิ่มเติม คุณสามารถปิดหน้าต่างนี้ได้"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "การซิงค์คะแนนของคุณไปยัง yourLearning อาจใช้เวลาสองสามชั่วโมง โปรดอดทนรอ คะแนนของคุณได้รับการบันทึกไว้กับเราอย่างปลอดภัยแล้ว และคุณไม่ต้องทำอะไรเพิ่มเติม คุณสามารถปิดหน้าต่างนี้ได้",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "การอัปโหลดไฟล์อาจใช้ไม่ได้ในแอป Coursera โปรดเปิดงานนี้ในเบราว์เซอร์ เช่น Chrome หรือ Safari แทน",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "การอัปโหลดไฟล์อาจใช้ไม่ได้ในเบราว์เซอร์ในแอปนี้ โปรดเปิดงานนี้ในเบราว์เซอร์ เช่น Chrome หรือ Safari แทน",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "ไฟล์ของคุณสำหรับคำถามที่ {question} ยังไม่ได้อัปโหลด ต้องการส่งต่อไปหรือไม่",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "ไฟล์สำหรับคำถามที่ {questions} ยังไม่ได้อัปโหลด ต้องการส่งต่อไปหรือไม่",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "การอัปโหลดไฟล์สำหรับคำถามที่ {question} ล้มเหลว จึงจะไม่มีการส่งสิ่งใดสำหรับคำถามนี้ ต้องการส่งต่อไปหรือไม่",
+  "You have flagged questions. Are you sure you want to submit?": "คุณมีคำถามที่ติดธงไว้ แน่ใจหรือไม่ว่าต้องการส่ง",
+  "You have unanswered questions. Are you sure you want to submit?": "คุณมีคำถามที่ยังไม่ได้ตอบ แน่ใจหรือไม่ว่าต้องการส่ง"
 }

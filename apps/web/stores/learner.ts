@@ -17,6 +17,7 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { createSafeStorage } from "@/lib/safe-storage";
 import { withTextFileContent } from "@/lib/learner-file-content";
+import type { QuestionUploadStatus, UploadStatusByQuestion } from "@/lib/utils";
 
 type GitHubQuestionState = {
   repos: RepoType[];
@@ -364,6 +365,11 @@ export type LearnerState = {
   globalLanguage: string;
   userPreferedLanguage: string | null;
   isUploadingFiles: boolean;
+  /**
+   * Per-question upload state for the submit guard. Session-only: an upload
+   * does not survive a reload, so neither does its status.
+   */
+  uploadStatusByQuestion: UploadStatusByQuestion;
 };
 
 export type learnerFileResponse = {
@@ -461,6 +467,10 @@ export type LearnerActions = {
   getUserPreferedLanguageFromLTI: () => Promise<string>;
   clearLearnerAnswers: () => void;
   setIsUploadingFiles: (isUploading: boolean) => void;
+  setQuestionUploadStatus: (
+    questionId: number,
+    status: QuestionUploadStatus | null,
+  ) => void;
 };
 
 export type AssignmentDetailsState = {
@@ -873,7 +883,11 @@ export const useLearnerStore = createWithEqualityFn<
           // be relied on here — so they have to be dropped with the drafts or
           // the new attempt opens with the last attempt's repo files attached.
           useGitHubStore.getState().clearGithubStore();
-          set({ activeAttemptId: id, questions: [] });
+          set({
+            activeAttemptId: id,
+            questions: [],
+            uploadStatusByQuestion: {},
+          });
         },
         activeQuestionNumber: 1,
         setActiveQuestionNumber: (id) => set({ activeQuestionNumber: id }),
@@ -885,6 +899,20 @@ export const useLearnerStore = createWithEqualityFn<
         isUploadingFiles: false,
         setIsUploadingFiles: (isUploading) =>
           set({ isUploadingFiles: isUploading }),
+        uploadStatusByQuestion: {},
+        setQuestionUploadStatus: (questionId, status) =>
+          set((state) => {
+            const next = { ...state.uploadStatusByQuestion };
+            if (status) {
+              next[questionId] = status;
+            } else {
+              delete next[questionId];
+            }
+            return {
+              uploadStatusByQuestion: next,
+              isUploadingFiles: Object.values(next).includes("uploading"),
+            };
+          }),
         showSubmissionFeedback: false,
         setShowSubmissionFeedback: (showSubmissionFeedback) =>
           set({ showSubmissionFeedback }),

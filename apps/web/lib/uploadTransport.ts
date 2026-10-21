@@ -101,6 +101,96 @@ export function failureKindOf(error: unknown): UploadFailureKind {
 }
 
 /**
+ * What a readable non-2xx from the storage leg told us about who sent it.
+ *
+ * Object storage never makes its own error responses readable to the page (it
+ * sends no Access-Control-Allow-Origin on them), so a status the browser lets
+ * us read came from something in between — a corporate proxy or DLP filter.
+ * These fields exist to identify that intermediary, nothing more.
+ */
+export interface StorageResponseDetails {
+  /** `Server` header, when the response exposed it. */
+  server?: string;
+  /** Whether the response carried a storage request id (real storage reply). */
+  hasAmzRequestId: boolean;
+  /** Start of the body, scrubbed of anything identifying. */
+  bodySnippet?: string;
+}
+
+const MAX_SNIPPET_LENGTH = 200;
+const MAX_SERVER_HEADER_LENGTH = 100;
+
+/**
+ * Reduce a response body to a short, non-identifying excerpt.
+ *
+ * Block pages from filtering proxies routinely echo the user's name, email,
+ * IP address or the blocked URL (whose query string here is a presigned
+ * credential). Tags, emails, IPs, query strings and long opaque tokens are
+ * removed before anything is kept.
+ */
+export function sanitizeResponseSnippet(body: string): string | undefined {
+  const cleaned = body
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[ip]")
+    .replace(/\?[^\s"'<>]*/g, "")
+    .replace(/[A-Za-z0-9+/=_-]{32,}/g, "[token]")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.length > 0 ? cleaned.slice(0, MAX_SNIPPET_LENGTH) : undefined;
+}
+
+function readHeader(
+  response: UploadTransportResponse,
+  name: string,
+): string | null {
+  try {
+    return response.getResponseHeader(name);
+  } catch {
+    // Some engines throw for headers the CORS policy withholds; that is the
+    // same as the header being absent.
+    return null;
+  }
+}
+
+export function describeStorageResponse(
+  response: UploadTransportResponse,
+): StorageResponseDetails {
+  const server = readHeader(response, "server");
+  return {
+    server: server
+      ? server.replace(/\s+/g, " ").trim().slice(0, MAX_SERVER_HEADER_LENGTH)
+      : undefined,
+    hasAmzRequestId: Boolean(readHeader(response, "x-amz-request-id")),
+    bodySnippet: sanitizeResponseSnippet(response.responseText ?? ""),
+  };
+}
+
+/**
+ * The storage leg produced a readable HTTP response that was not a success.
+ *
+ * Because storage's own errors are unreadable cross-origin, this is the mark
+ * of an intermediary answering in storage's place. The same bytes sent to the
+ * API on the site's own origin usually get past it.
+ */
+export class StorageHttpError extends Error {
+  public readonly details: StorageResponseDetails;
+
+  constructor(
+    message: string,
+    public readonly status: number,
+    response: UploadTransportResponse,
+  ) {
+    super(message);
+    this.name = "StorageHttpError";
+    this.details = describeStorageResponse(response);
+  }
+}
+
+/**
  * How long to wait for a response after the body has been fully handed off.
  * Scales with the payload because the bytes XHR already counted as "sent" may
  * still be draining out of the socket buffer on a slow link.

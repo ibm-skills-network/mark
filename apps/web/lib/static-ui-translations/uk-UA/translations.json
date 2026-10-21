@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Режими економії трафіку та деякі браузери, як-от Opera Mini, можуть порушувати роботу сторінки. Вимкніть цей режим або відкрийте завдання в іншому браузері.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Зображення в текстовій відповіді не оцінюються. Натомість вставте вивід як текст або опишіть його словами.",
   "Your grade is on its way to yourLearning": "Ваша оцінка передається до yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Синхронізація вашої оцінки з yourLearning може тривати кілька годин, тож, будь ласка, наберіться терпіння. Вашу оцінку надійно збережено в нас, і вам нічого не потрібно робити. Ви можете закрити це вікно."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Синхронізація вашої оцінки з yourLearning може тривати кілька годин, тож, будь ласка, наберіться терпіння. Вашу оцінку надійно збережено в нас, і вам нічого не потрібно робити. Ви можете закрити це вікно.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Завантаження файлів може не працювати в застосунку Coursera. Відкрийте це завдання в браузері, наприклад Chrome або Safari.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "Завантаження файлів може не працювати в цьому вбудованому браузері. Відкрийте це завдання в браузері, наприклад Chrome або Safari.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "Ваш файл для запитання {question} не завантажено. Усе одно надіслати?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Файли для запитань {questions} не завантажено. Усе одно надіслати?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Не вдалося завантажити файл для запитання {question}, тому для нього нічого не буде надіслано. Усе одно надіслати?",
+  "You have flagged questions. Are you sure you want to submit?": "У вас є позначені запитання. Ви впевнені, що хочете надіслати?",
+  "You have unanswered questions. Are you sure you want to submit?": "У вас є запитання без відповіді. Ви впевнені, що хочете надіслати?"
 }

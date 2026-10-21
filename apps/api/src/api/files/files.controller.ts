@@ -6,6 +6,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Inject,
@@ -31,10 +32,12 @@ import {
   UserSession,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
+import { Roles } from "src/auth/role/roles.global.guard";
 import { Logger } from "winston";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
+import { STORAGE_LEG_PHASES, UploadEventDto } from "./dto/upload-event.dto";
 import {
   AbortMultipartUploadRequestDto,
   CompleteMultipartUploadRequestDto,
@@ -213,6 +216,76 @@ export class FilesController {
       body,
       request.userSession.userId,
     );
+  }
+
+  /**
+   * Record a learner upload that failed, or only succeeded via the API
+   * fallback, as the browser saw it.
+   *
+   * The storage leg goes straight from the browser to object storage, so its
+   * failures never reach any server log; this is the only place they become
+   * observable. Log-only by design. The reporter is the session user — the
+   * body carries no identity, and its assignment id is compared to the
+   * session's, never used in its place. Rate limited per user because a
+   * flapping network would otherwise turn every retry into a log line.
+   */
+  @Post("upload-events")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AuthGuard, UserThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: "Report a failed or rerouted learner upload" })
+  reportUploadEvent(
+    @Body() body: UploadEventDto,
+    @Req() request: UserSessionRequest,
+  ): void {
+    const session = request.userSession;
+    // Response details only mean anything for a rejection the storage leg
+    // read back; anywhere else they are noise a client could stuff.
+    const storageRejection =
+      body.failureKind === "http" && STORAGE_LEG_PHASES.has(body.phase);
+    const userAgent = request.headers?.["user-agent"];
+
+    const fields = {
+      user_id: sanitizeForLog(session.userId),
+      role: sanitizeForLog(session.role),
+      assignment_id: session.assignmentId,
+      assignment_mismatch:
+        body.assignmentId !== undefined &&
+        body.assignmentId !== session.assignmentId,
+      question_id: body.questionId,
+      attempt_id: body.attemptId,
+      phase: body.phase,
+      outcome: body.outcome,
+      http_status: body.httpStatus ?? null,
+      failure_kind: body.failureKind,
+      fallback_attempted: body.fallbackAttempted,
+      fallback_outcome: body.fallbackOutcome,
+      fallback_http_status: body.fallbackAttempted
+        ? (body.fallbackHttpStatus ?? null)
+        : undefined,
+      size_bucket: body.sizeBucket,
+      mime_type: body.mimeType,
+      file_extension: body.fileExtension?.toLowerCase(),
+      response_server: storageRejection
+        ? sanitizeForLog(body.responseServer)
+        : undefined,
+      has_amz_request_id: storageRejection ? body.hasAmzRequestId : undefined,
+      response_body_snippet: storageRejection
+        ? sanitizeForLog(body.responseBodySnippet)
+        : undefined,
+      is_webview: body.isWebView,
+      is_coursera_app: body.isCourseraApp,
+      in_iframe: body.inIframe,
+      user_agent:
+        typeof userAgent === "string" ? sanitizeForLog(userAgent) : undefined,
+    };
+
+    if (body.outcome === "failed") {
+      this.logger.warn("learner_upload_failed", fields);
+    } else {
+      this.logger.info("learner_upload_rescued_by_fallback", fields);
+    }
   }
 
   /**

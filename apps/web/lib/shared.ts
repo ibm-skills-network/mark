@@ -10,8 +10,16 @@ import {
   failureKindOf,
   isReroutableFailure,
   sendWithStallDetection,
+  StorageHttpError,
   type UploadFailureKind,
 } from "./uploadTransport";
+import {
+  createUploadTrace,
+  noteFallbackResult,
+  noteUploadFailure,
+  reportUploadEvent,
+  type UploadTrace,
+} from "./upload-telemetry";
 import type {
   Assignment,
   BaseBackendResponse,
@@ -153,8 +161,21 @@ interface UploadCallbacks {
    * server and the file is about to be re-sent through the API instead.
    * The UI should say so rather than silently snapping back to 0%.
    */
-  onFallback?: (info: { reason: UploadFailureKind }) => void;
+  onFallback?: (info: { reason: FallbackReason }) => void;
+  /** The attempt this upload belongs to, carried on failure reports only. */
+  attemptId?: number;
 }
+
+/**
+ * Why the storage leg was abandoned for the API route: a transport failure,
+ * or `http` — a readable rejection, which only an intermediary produces.
+ */
+export type FallbackReason = Exclude<UploadFailureKind, "aborted"> | "http";
+
+const BLOCKED_BY_NETWORK_MESSAGE =
+  "This upload appears to be blocked by your network. Try a different network or device, or another browser.";
+const BLOCKED_TOO_LARGE_MESSAGE =
+  "Your network appears to be blocking this upload, and the file is too large to send another way. Try a different network, device or browser, or a smaller file.";
 
 /**
  * Shared helper for the common presigned-upload flow used across the app.
@@ -173,10 +194,52 @@ export async function uploadFileToStorage(
 
   const wantsMultipart =
     USE_MULTIPART_FROM_BROWSER && file.size > MULTIPART_THRESHOLD_BYTES;
-  if (!wantsMultipart) {
-    return singlePutFileToStorage(file, resolvedUploadRequest, options);
-  }
+  const trace = createUploadTrace(
+    wantsMultipart ? "multipart_initiate" : "presign",
+  );
+  // Learner uploads are the ones whose silent failures leave empty answers;
+  // author and chatbot uploads fail in front of someone who can retry.
+  const report =
+    resolvedUploadRequest.uploadType === "learner"
+      ? (outcome: "failed" | "fallback_succeeded") =>
+          reportUploadEvent({
+            trace,
+            outcome,
+            file,
+            uploadRequest: resolvedUploadRequest,
+            attemptId: options?.attemptId,
+          })
+      : undefined;
 
+  try {
+    const result = wantsMultipart
+      ? await multipartFileToStorage(
+          file,
+          resolvedUploadRequest,
+          trace,
+          options,
+        )
+      : await singlePutFileToStorage(
+          file,
+          resolvedUploadRequest,
+          trace,
+          options,
+        );
+    if (trace.fallback) report?.("fallback_succeeded");
+    return result;
+  } catch (error) {
+    noteUploadFailure(trace, error);
+    report?.("failed");
+    throw error;
+  }
+}
+
+async function multipartFileToStorage(
+  file: File,
+  resolvedUploadRequest: UploadRequest,
+  trace: UploadTrace,
+  options?: UploadCallbacks,
+): Promise<MultipartUploadedStorageFile> {
   const { reliableUpload, UploadError } = await import("./reliableUpload");
 
   let multipartResponse: MultipartUploadInitiateResponse;
@@ -193,16 +256,22 @@ export async function uploadFileToStorage(
           }
         : undefined,
       options?.onWaitingForCapacity,
+      (phase) => {
+        trace.phase = phase;
+      },
     );
   } catch (error: unknown) {
+    noteUploadFailure(trace, error);
     // Every part goes straight to the storage domain, so a blocked route
-    // fails all of them identically. Re-send through the API instead of
-    // telling the learner to try a different network.
-    if (isReroutableFailure(error)) {
+    // fails all of them identically — whether it hangs or an intermediary
+    // answers in storage's place. Re-send through the API instead of telling
+    // the learner to try a different network.
+    if (isReroutableFailure(error) || error instanceof StorageHttpError) {
       return uploadThroughApiFallback(
         file,
         resolvedUploadRequest,
-        failureKindOf(error),
+        fallbackReasonOf(error),
+        trace,
         options,
       );
     }
@@ -221,18 +290,28 @@ export async function uploadFileToStorage(
   };
 }
 
+function fallbackReasonOf(error: unknown): FallbackReason {
+  if (error instanceof StorageHttpError) return "http";
+  const kind = failureKindOf(error);
+  return kind === "aborted" ? "network" : kind;
+}
+
 async function singlePutFileToStorage(
   file: File,
   uploadRequest: UploadRequest,
+  trace: UploadTrace,
   options?: UploadCallbacks,
 ): Promise<MultipartUploadedStorageFile> {
   const { UploadError } = await import("./reliableUpload");
   let uploadResponse: UploadResponse;
+  trace.phase = "presign";
   try {
     uploadResponse = await generateUploadUrl(uploadRequest, options?.cookies);
   } catch (error) {
+    noteUploadFailure(trace, error);
     throw await translateInitiateError(error);
   }
+  trace.phase = "storage_put";
 
   options?.onUploadProgress?.({ loaded: 0, total: file.size });
 
@@ -249,6 +328,7 @@ async function singlePutFileToStorage(
       onUploadProgress: (progress) => options?.onUploadProgress?.(progress),
     });
   } catch (error) {
+    noteUploadFailure(trace, error);
     // The PUT never reached a server — a blocked storage domain, a proxy that
     // accepted the connection and went quiet, or a cross-origin rejection.
     // The same bytes can still go through the API on this origin.
@@ -256,7 +336,8 @@ async function singlePutFileToStorage(
       return uploadThroughApiFallback(
         file,
         uploadRequest,
-        failureKindOf(error),
+        fallbackReasonOf(error),
+        trace,
         options,
       );
     }
@@ -268,16 +349,25 @@ async function singlePutFileToStorage(
     );
   }
 
-  // A status means the storage service answered: the network is fine and the
-  // fallback would only repeat whatever it objected to.
+  // Storage sends no Access-Control-Allow-Origin on its error responses, so
+  // its own rejections reach us as status 0 (handled above). A status we can
+  // read was written by something in between — a corporate proxy or a DLP
+  // filter — and the same-origin API route usually gets past it.
   if (response.status < 200 || response.status >= 300) {
-    throw new UploadError(
-      `Single-PUT upload failed with status ${response.status}`,
-      response.status === 403
-        ? "Upload session expired. Please refresh and try again."
-        : "We hit a problem while uploading. Please try again.",
-      response.status,
-      false,
+    noteUploadFailure(
+      trace,
+      new StorageHttpError(
+        `Single-PUT upload failed with status ${response.status}`,
+        response.status,
+        response,
+      ),
+    );
+    return uploadThroughApiFallback(
+      file,
+      uploadRequest,
+      "http",
+      trace,
+      options,
     );
   }
 
@@ -308,15 +398,19 @@ async function singlePutFileToStorage(
 async function uploadThroughApiFallback(
   file: File,
   uploadRequest: UploadRequest,
-  reason: UploadFailureKind,
+  reason: FallbackReason,
+  trace: UploadTrace,
   options?: UploadCallbacks,
 ): Promise<MultipartUploadedStorageFile> {
   const { UploadError } = await import("./reliableUpload");
 
   if (file.size > DIRECT_UPLOAD_FALLBACK_MAX_BYTES) {
+    noteFallbackResult(trace, "too_large");
     throw new UploadError(
       `Storage upload failed (${reason}) and the file exceeds the fallback limit of ${DIRECT_UPLOAD_FALLBACK_MAX_BYTES} bytes`,
-      "Your network is blocking our file storage service, and this file is too large to send the slower way. Please try a different network or a smaller file.",
+      reason === "http"
+        ? BLOCKED_TOO_LARGE_MESSAGE
+        : "Your network is blocking our file storage service, and this file is too large to send the slower way. Please try a different network or a smaller file.",
       undefined,
       false,
     );
@@ -334,21 +428,26 @@ async function uploadThroughApiFallback(
       onUploadProgress: (progress) => options?.onUploadProgress?.(progress),
     });
   } catch (error) {
+    noteFallbackResult(trace, "failed", error);
     // The API answered with a status: that message is the useful one.
     if (error instanceof UploadError) {
       throw error;
     }
-    // Both routes died without reaching a server — the connection itself is
+    // Both routes died without reaching a server. After a readable rejection
+    // that is a network refusing uploads; otherwise the connection itself is
     // the problem, not the storage domain.
     throw new UploadError(
       `Fallback upload failed after storage upload failed (${reason}): ${
         error instanceof Error ? error.message : String(error)
       }`,
-      "We couldn't upload this file — your connection dropped partway through. Please check your network and try again.",
+      reason === "http"
+        ? BLOCKED_BY_NETWORK_MESSAGE
+        : "We couldn't upload this file — your connection dropped partway through. Please check your network and try again.",
       undefined,
       false,
     );
   }
+  noteFallbackResult(trace, "succeeded");
 
   options?.onUploadProgress?.({ loaded: file.size, total: file.size });
 
