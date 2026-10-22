@@ -13,7 +13,7 @@ describe("JwtCookieStrategy", () => {
   beforeEach(() => {
     process.env.SECRET = "test-secret";
     configService = new JwtConfigService();
-    savedSessions = { save: jest.fn().mockReturnValue(new Promise(() => {})) };
+    savedSessions = { save: jest.fn().mockResolvedValue(undefined) };
     strategy = new JwtCookieStrategy(
       configService,
       savedSessions as unknown as SavedSessionStore,
@@ -25,8 +25,14 @@ describe("JwtCookieStrategy", () => {
   });
 
   describe("validate", () => {
-    it("returns the session without waiting for the saved-session write", () => {
+    it("waits for the saved-session write before completing authentication", async () => {
       const storeId = "7f0c6c1e-3c1a-4c55-9a8e-2b8f6f1d0a11";
+      let finishSave!: () => void;
+      savedSessions.save.mockReturnValue(
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+      );
       const result = strategy.validate(
         {
           headers: {
@@ -49,21 +55,30 @@ describe("JwtCookieStrategy", () => {
         } as any,
       );
 
-      expect(result).not.toBeInstanceOf(Promise);
-      expect(result).toMatchObject({ userId: "user123", assignmentId: 789 });
+      let authenticated = false;
+      void Promise.resolve(result).then(() => {
+        authenticated = true;
+      });
+      await Promise.resolve();
+      expect(authenticated).toBe(false);
       expect(savedSessions.save).toHaveBeenCalledWith(
         storeId,
         "learner",
         789,
         "launch-token",
       );
+      finishSave();
+      await expect(result).resolves.toMatchObject({
+        userId: "user123",
+        assignmentId: 789,
+      });
     });
 
     // Most launches send returnUrl empty, so the grade-callback host is the
     // only portal identity mark-api gets. It is copied out by name: this
     // allowlist defines what the API is willing to believe about a session.
-    it("passes the grade-callback URL through as lisOutcomeServiceUrl", () => {
-      const result = strategy.validate(
+    it("passes the grade-callback URL through as lisOutcomeServiceUrl", async () => {
+      const result = await strategy.validate(
         { headers: {} } as any,
         {
           userID: "user123",
@@ -92,8 +107,8 @@ describe("JwtCookieStrategy", () => {
       expect(JSON.stringify(result)).not.toContain("sourcedid");
     });
 
-    it("leaves lisOutcomeServiceUrl undefined when the launch has no grading block", () => {
-      const result = strategy.validate(
+    it("leaves lisOutcomeServiceUrl undefined when the launch has no grading block", async () => {
+      const result = await strategy.validate(
         { headers: {} } as any,
         {
           userID: "user123",
@@ -114,22 +129,25 @@ describe("JwtCookieStrategy", () => {
       ["has space", undefined],
       ["x".repeat(256), undefined],
       [42, undefined],
-    ])("passes toolConsumerInstanceGuid %p through as %p", (guid, expected) => {
-      const result = strategy.validate(
-        { headers: {} } as any,
-        {
-          userID: "user123",
-          role: UserRole.LEARNER,
-          groupID: "group456",
-          assignmentID: 789,
-          toolConsumerInstanceGuid: guid,
-          iat: 1_234_567_890,
-          exp: 1_234_567_890 + 3600,
-        } as any,
-      );
+    ])(
+      "passes toolConsumerInstanceGuid %p through as %p",
+      async (guid, expected) => {
+        const result = await strategy.validate(
+          { headers: {} } as any,
+          {
+            userID: "user123",
+            role: UserRole.LEARNER,
+            groupID: "group456",
+            assignmentID: 789,
+            toolConsumerInstanceGuid: guid,
+            iat: 1_234_567_890,
+            exp: 1_234_567_890 + 3600,
+          } as any,
+        );
 
-      expect(result.toolConsumerInstanceGuid).toBe(expected);
-    });
+        expect(result.toolConsumerInstanceGuid).toBe(expected);
+      },
+    );
 
     it.each([
       ["Introducción a la IA", "Introducción a la IA"],
@@ -137,8 +155,8 @@ describe("JwtCookieStrategy", () => {
       ["   ", undefined],
       ["x".repeat(501), undefined],
       [42, undefined],
-    ])("passes courseTitle %p through as %p", (courseTitle, expected) => {
-      const result = strategy.validate(
+    ])("passes courseTitle %p through as %p", async (courseTitle, expected) => {
+      const result = await strategy.validate(
         { headers: {} } as any,
         {
           userID: "user123",
@@ -154,8 +172,8 @@ describe("JwtCookieStrategy", () => {
       expect(result.courseTitle).toBe(expected);
     });
 
-    it("passes the course id, item and LMS family through", () => {
-      const result = strategy.validate(
+    it("passes the course id, item and LMS family through", async () => {
+      const result = await strategy.validate(
         { headers: {} } as any,
         {
           userID: "user123",
@@ -177,7 +195,7 @@ describe("JwtCookieStrategy", () => {
       });
     });
 
-    it("should transform JWT payload to UserSession", () => {
+    it("should transform JWT payload to UserSession", async () => {
       const payload = {
         userID: "user123",
         role: UserRole.LEARNER,
@@ -190,7 +208,7 @@ describe("JwtCookieStrategy", () => {
         exp: 1_234_567_890 + 3600,
       };
 
-      const result = strategy.validate({ headers: {} } as any, payload);
+      const result = await strategy.validate({ headers: {} } as any, payload);
 
       expect(result).toEqual({
         userId: "user123",
@@ -203,7 +221,7 @@ describe("JwtCookieStrategy", () => {
       });
     });
 
-    it("should handle payload with undefined optional fields", () => {
+    it("should handle payload with undefined optional fields", async () => {
       const payload = {
         userID: "user123",
         role: UserRole.AUTHOR,
@@ -216,7 +234,7 @@ describe("JwtCookieStrategy", () => {
         exp: 1_234_567_890 + 3600,
       } as any;
 
-      const result = strategy.validate({ headers: {} } as any, payload);
+      const result = await strategy.validate({ headers: {} } as any, payload);
 
       expect(result.userId).toBe("user123");
       expect(result.role).toBe(UserRole.AUTHOR);
@@ -224,7 +242,7 @@ describe("JwtCookieStrategy", () => {
       expect(result.assignmentId).toBeUndefined();
     });
 
-    it("should handle payload with null optional fields", () => {
+    it("should handle payload with null optional fields", async () => {
       const payload = {
         userID: "user123",
         role: UserRole.ADMIN,
@@ -237,13 +255,13 @@ describe("JwtCookieStrategy", () => {
         exp: 1_234_567_890 + 3600,
       } as any;
 
-      const result = strategy.validate({ headers: {} } as any, payload);
+      const result = await strategy.validate({ headers: {} } as any, payload);
 
       expect(result.userId).toBe("user123");
       expect(result.role).toBe(UserRole.ADMIN);
     });
 
-    it("should handle different role types", () => {
+    it("should handle different role types", async () => {
       const roles = [UserRole.LEARNER, UserRole.AUTHOR, UserRole.ADMIN];
 
       for (const role of roles) {
@@ -256,12 +274,12 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate({ headers: {} } as any, payload);
+        const result = await strategy.validate({ headers: {} } as any, payload);
         expect(result.role).toBe(role);
       }
     });
 
-    it("should handle different locale formats", () => {
+    it("should handle different locale formats", async () => {
       const locales = ["en-US", "fr-FR", "es-ES", "de-DE", "ja-JP", "zh-CN"];
 
       for (const locale of locales) {
@@ -275,12 +293,12 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate({ headers: {} } as any, payload);
+        const result = await strategy.validate({ headers: {} } as any, payload);
         expect(result.launch_presentation_locale).toBe(locale);
       }
     });
 
-    it("should handle boolean gradingCallbackRequired values", () => {
+    it("should handle boolean gradingCallbackRequired values", async () => {
       for (const value of [true, false]) {
         const payload = {
           userID: "user123",
@@ -292,12 +310,12 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate({ headers: {} } as any, payload);
+        const result = await strategy.validate({ headers: {} } as any, payload);
         expect(result.gradingCallbackRequired).toBe(value);
       }
     });
 
-    it("should handle various URL formats", () => {
+    it("should handle various URL formats", async () => {
       const urls = [
         "https://example.com",
         "http://localhost:3000",
@@ -316,12 +334,12 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate({ headers: {} } as any, payload);
+        const result = await strategy.validate({ headers: {} } as any, payload);
         expect(result.returnUrl).toBe(url);
       }
     });
 
-    it("forwards the first usable outcome service URL", () => {
+    it("forwards the first usable outcome service URL", async () => {
       const graded = "https://courses.cognitiveclass.ai/outcome";
       const topLevel = "https://courses.cognitiveclass.ai/top-level";
       const cases: [unknown, unknown, string | undefined][] = [
@@ -346,7 +364,7 @@ describe("JwtCookieStrategy", () => {
           exp: 1_234_567_890 + 3600,
         };
 
-        const result = strategy.validate({ headers: {} } as any, payload);
+        const result = await strategy.validate({ headers: {} } as any, payload);
         expect(result.lisOutcomeServiceUrl).toBe(expected);
       }
     });

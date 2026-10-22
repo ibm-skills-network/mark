@@ -76,6 +76,7 @@ describe("existing browsers after saved sessions move server-side", () => {
   let warn: jest.SpyInstance;
   let storeStatus: number;
   let lookupHangs: boolean;
+  let saveHangs: boolean;
   const saved = new Map<string, string>();
   const forwarded: { cookie?: string; session: Record<string, unknown> }[] = [];
   const environment = { ...process.env };
@@ -117,9 +118,6 @@ describe("existing browsers after saved sessions move server-side", () => {
     const response = await request(app.getHttpServer())
       .get(path)
       .set({ ...headers, Cookie: cookie });
-    await Promise.all(
-      saveCalls.mock.results.map(({ value }) => value as Promise<void>),
-    );
     const setCookies =
       (response.headers["set-cookie"] as unknown as string[] | undefined) ?? [];
     return {
@@ -145,6 +143,7 @@ describe("existing browsers after saved sessions move server-side", () => {
       incoming.on("data", (chunk: Buffer) => (body += chunk.toString()));
       incoming.on("end", () => {
         if (lookupHangs && incoming.url?.endsWith("/lookup")) return;
+        if (saveHangs && incoming.method === "PUT") return;
         const [status, payload] = handle(
           incoming.method,
           incoming.url,
@@ -201,6 +200,7 @@ describe("existing browsers after saved sessions move server-side", () => {
     forwarded.length = 0;
     storeStatus = 200;
     lookupHangs = false;
+    saveHangs = false;
     warn = jest.spyOn(Logger.prototype, "warn").mockReturnValue();
     saveCalls = jest.spyOn(store, "save");
   });
@@ -230,7 +230,7 @@ describe("existing browsers after saved sessions move server-side", () => {
     expect(storeCookie).toMatch(
       /^mark_saved_sessions=[\da-f-]{36}; Max-Age=259200;.*HttpOnly; SameSite=Lax/,
     );
-    expect(saved.size).toBe(0);
+    expect([...saved.values()]).toEqual([launch]);
   });
 
   it("logs in on pages without quiz context and drops the old cookies", async () => {
@@ -248,7 +248,7 @@ describe("existing browsers after saved sessions move server-side", () => {
     expect(saveCalls).not.toHaveBeenCalled();
   });
 
-  it("saves once the store cookie comes back, then resumes the quiz after another launch", async () => {
+  it("saves the first visit, then resumes the quiz after another launch", async () => {
     const launchA = learner(4892, now - 60);
     const first = await send(
       "/api/v2/assignments/4892/attempts",
@@ -258,6 +258,7 @@ describe("existing browsers after saved sessions move server-side", () => {
     const storeId =
       /^mark_saved_sessions=([^;]+)/.exec(first.storeCookie ?? "")?.[1] ?? "";
     expect(storeId).toMatch(/^[\da-f-]{36}$/);
+    expect([...saved.values()]).toEqual([launchA]);
 
     await send(
       "/api/v2/assignments/4892/attempts",
@@ -283,6 +284,28 @@ describe("existing browsers after saved sessions move server-side", () => {
     );
     expect(current.response.status).toBe(200);
     expect(forwardedAuthentication()).toEqual([launchB]);
+  });
+
+  it("resumes a quiz visited only once before another launch", async () => {
+    const launchA = learner(4892, now - 60);
+    const first = await send(
+      "/api/v1/user-session",
+      `authentication=${launchA}`,
+      quizA,
+    );
+    const storeId =
+      /^mark_saved_sessions=([^;]+)/.exec(first.storeCookie ?? "")?.[1] ?? "";
+    expect(first.response.status).toBe(200);
+
+    const resumed = await send(
+      "/api/v2/assignments/4892/attempts",
+      `authentication=${learner(4941, now)}; mark_saved_sessions=${storeId}`,
+      quizA,
+    );
+
+    expect(resumed.response.status).toBe(200);
+    expect(forwarded[0].session).toMatchObject({ assignmentId: 4892 });
+    expect(forwardedAuthentication()).toEqual([launchA]);
   });
 
   it("asks for a relaunch, not an error, when a quiz was only saved in an old cookie", async () => {
@@ -344,6 +367,26 @@ describe("existing browsers after saved sessions move server-side", () => {
     expect(forwardedAuthentication()).toEqual([launch]);
     expect(warn).toHaveBeenCalledWith(
       "Saved session lookup failed (ECONNABORTED)",
+    );
+  });
+
+  it("keeps the first visit available when the session save times out", async () => {
+    saveHangs = true;
+    const launch = learner(4892, now);
+    const started = Date.now();
+
+    const { response, storeCookie } = await send(
+      "/api/v2/assignments/4892/attempts",
+      `authentication=${launch}`,
+      quizA,
+    );
+
+    expect(Date.now() - started).toBeLessThan(2500);
+    expect(response.status).toBe(200);
+    expect(storeCookie).toBeDefined();
+    expect(forwardedAuthentication()).toEqual([launch]);
+    expect(warn).toHaveBeenCalledWith(
+      "Saved session save failed (ECONNABORTED)",
     );
   });
 

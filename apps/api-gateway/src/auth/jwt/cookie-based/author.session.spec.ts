@@ -214,11 +214,10 @@ describe("verified author sessions", () => {
     ).resolves.toMatchObject({ assignmentId: 4941 });
   });
 
-  it("sets an HttpOnly store id cookie, then saves once the browser returns it", async () => {
+  it("saves the first visit under the HttpOnly store id cookie", async () => {
     const author = token();
     const first = authenticate(`authentication=${author}`, context);
     await first.result;
-    expect(first.store.save).not.toHaveBeenCalled();
     expect(first.response.cookie).toHaveBeenCalledTimes(1);
     const [[name, id, options]] = first.response.cookie.mock.calls;
     expect(name).toBe("mark_saved_sessions");
@@ -229,6 +228,7 @@ describe("verified author sessions", () => {
       path: "/",
       maxAge: 3 * 24 * 60 * 60 * 1000,
     });
+    expect(first.store.save).toHaveBeenCalledWith(id, "author", 4892, author);
 
     const second = authenticate(
       `authentication=${author}; mark_saved_sessions=${id}`,
@@ -341,26 +341,30 @@ describe("saved session store", () => {
     expect(response.cookie.mock.calls[0][1]).toBe(storeId);
   });
 
-  it("replaces a store id that is not a GUID without saving under it", async () => {
+  it("replaces an invalid store id and saves under the new id", async () => {
+    const author = token();
     const { result, response, store } = authenticate(
-      `authentication=${token()}; mark_saved_sessions=not-a-guid`,
+      `authentication=${author}; mark_saved_sessions=not-a-guid`,
       context,
     );
     await result;
-    expect(response.cookie.mock.calls[0][1]).toMatch(uuid);
-    expect(store.save).not.toHaveBeenCalled();
+    const id = response.cookie.mock.calls[0][1];
+    expect(id).toMatch(uuid);
+    expect(store.save).toHaveBeenCalledWith(id, "author", 4892, author);
   });
 
-  it("does not save for a browser that keeps dropping the store cookie", async () => {
+  it("issues fresh store ids when the browser drops its cookie", async () => {
     const ids = [];
     for (let attempt = 0; attempt < 3; attempt++) {
+      const author = token();
       const { result, response, store } = authenticate(
-        `authentication=${token()}`,
+        `authentication=${author}`,
         context,
       );
       await result;
-      expect(store.save).not.toHaveBeenCalled();
-      ids.push(response.cookie.mock.calls[0][1]);
+      const id = response.cookie.mock.calls[0][1];
+      expect(store.save).toHaveBeenCalledWith(id, "author", 4892, author);
+      ids.push(id);
     }
     expect(new Set(ids).size).toBe(3);
   });
