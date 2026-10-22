@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Pliki do pytań {questions} nie zostały przesłane. Czy mimo to przesłać?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Przesyłanie pliku do pytania {question} nie powiodło się, więc nic nie zostanie dla niego przesłane. Czy mimo to przesłać?",
   "You have flagged questions. Are you sure you want to submit?": "Masz oznaczone pytania. Czy na pewno chcesz przesłać?",
-  "You have unanswered questions. Are you sure you want to submit?": "Masz pytania bez odpowiedzi. Czy na pewno chcesz przesłać?"
+  "You have unanswered questions. Are you sure you want to submit?": "Masz pytania bez odpowiedzi. Czy na pewno chcesz przesłać?",
+  "This attempt is closed": "To podejście jest zamknięte",
+  "This attempt was already closed at its time limit.": "To podejście zostało już zamknięte po upływie limitu czasu.",
+  "This attempt has already been submitted.": "To podejście zostało już przesłane.",
+  "This attempt's time limit has passed.": "Limit czasu tego podejścia minął.",
+  "View results": "Zobacz wyniki",
+  "Back to assignment": "Wróć do zadania"
 }

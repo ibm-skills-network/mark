@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Файли для запитань {questions} не завантажено. Усе одно надіслати?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Не вдалося завантажити файл для запитання {question}, тому для нього нічого не буде надіслано. Усе одно надіслати?",
   "You have flagged questions. Are you sure you want to submit?": "У вас є позначені запитання. Ви впевнені, що хочете надіслати?",
-  "You have unanswered questions. Are you sure you want to submit?": "У вас є запитання без відповіді. Ви впевнені, що хочете надіслати?"
+  "You have unanswered questions. Are you sure you want to submit?": "У вас є запитання без відповіді. Ви впевнені, що хочете надіслати?",
+  "This attempt is closed": "Цю спробу закрито",
+  "This attempt was already closed at its time limit.": "Цю спробу вже було закрито після закінчення ліміту часу.",
+  "This attempt has already been submitted.": "Цю спробу вже надіслано.",
+  "This attempt's time limit has passed.": "Ліміт часу цієї спроби минув.",
+  "View results": "Переглянути результати",
+  "Back to assignment": "Повернутися до завдання"
 }

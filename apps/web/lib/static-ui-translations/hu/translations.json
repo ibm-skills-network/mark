@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "A(z) {questions}. kérdésekhez tartozó fájlok nincsenek feltöltve. Mégis beküldi?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "A(z) {question}. kérdés fájlfeltöltése sikertelen volt, így ehhez a kérdéshez semmi sem lesz beküldve. Mégis beküldi?",
   "You have flagged questions. Are you sure you want to submit?": "Vannak megjelölt kérdései. Biztosan be szeretné küldeni?",
-  "You have unanswered questions. Are you sure you want to submit?": "Vannak megválaszolatlan kérdései. Biztosan be szeretné küldeni?"
+  "You have unanswered questions. Are you sure you want to submit?": "Vannak megválaszolatlan kérdései. Biztosan be szeretné küldeni?",
+  "This attempt is closed": "Ez a próbálkozás lezárult",
+  "This attempt was already closed at its time limit.": "Ez a próbálkozás az időkorlát lejártakor már lezárult.",
+  "This attempt has already been submitted.": "Ezt a próbálkozást már beküldték.",
+  "This attempt's time limit has passed.": "Ennek a próbálkozásnak lejárt az időkorlátja.",
+  "View results": "Eredmények megtekintése",
+  "Back to assignment": "Vissza a feladathoz"
 }

@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "{questions} сұрақтарына арналған файлдар жүктелмеді. Бәрібір жіберу керек пе?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "{question}-сұраққа файл жүктеу сәтсіз аяқталды, сондықтан ол үшін ештеңе жіберілмейді. Бәрібір жіберу керек пе?",
   "You have flagged questions. Are you sure you want to submit?": "Сізде белгіленген сұрақтар бар. Шынымен жібергіңіз келе ме?",
-  "You have unanswered questions. Are you sure you want to submit?": "Сізде жауап берілмеген сұрақтар бар. Шынымен жібергіңіз келе ме?"
+  "You have unanswered questions. Are you sure you want to submit?": "Сізде жауап берілмеген сұрақтар бар. Шынымен жібергіңіз келе ме?",
+  "This attempt is closed": "Бұл әрекет жабылды",
+  "This attempt was already closed at its time limit.": "Бұл әрекет уақыт шегі біткенде жабылып қойған.",
+  "This attempt has already been submitted.": "Бұл әрекет әлдеқашан жіберілген.",
+  "This attempt's time limit has passed.": "Бұл әрекеттің уақыт шегі өтіп кетті.",
+  "View results": "Нәтижелерді көру",
+  "Back to assignment": "Тапсырмаға оралу"
 }

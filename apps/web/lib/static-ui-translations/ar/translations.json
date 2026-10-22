@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "لم يتم رفع الملفات للأسئلة {questions}. هل تريد الإرسال على أي حال؟",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "فشل رفع الملف للسؤال {question}، لذلك لن يُرسل أي شيء له. هل تريد الإرسال على أي حال؟",
   "You have flagged questions. Are you sure you want to submit?": "لديك أسئلة معلَّمة. هل أنت متأكد أنك تريد الإرسال؟",
-  "You have unanswered questions. Are you sure you want to submit?": "لديك أسئلة لم تتم الإجابة عنها. هل أنت متأكد أنك تريد الإرسال؟"
+  "You have unanswered questions. Are you sure you want to submit?": "لديك أسئلة لم تتم الإجابة عنها. هل أنت متأكد أنك تريد الإرسال؟",
+  "This attempt is closed": "هذه المحاولة مغلقة",
+  "This attempt was already closed at its time limit.": "تم إغلاق هذه المحاولة بالفعل عند انتهاء الوقت المحدد لها.",
+  "This attempt has already been submitted.": "تم تسليم هذه المحاولة بالفعل.",
+  "This attempt's time limit has passed.": "انتهى الوقت المحدد لهذه المحاولة.",
+  "View results": "عرض النتائج",
+  "Back to assignment": "العودة إلى المهمة"
 }

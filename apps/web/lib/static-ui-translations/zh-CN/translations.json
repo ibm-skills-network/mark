@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "问题 {questions} 的文件尚未上传。仍要提交吗？",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "问题 {question} 的文件上传失败，因此不会为该问题提交任何内容。仍要提交吗？",
   "You have flagged questions. Are you sure you want to submit?": "您有已标记的问题。确定要提交吗？",
-  "You have unanswered questions. Are you sure you want to submit?": "您有未回答的问题。确定要提交吗？"
+  "You have unanswered questions. Are you sure you want to submit?": "您有未回答的问题。确定要提交吗？",
+  "This attempt is closed": "此次作答已关闭",
+  "This attempt was already closed at its time limit.": "此次作答已在时间限制到达时关闭。",
+  "This attempt has already been submitted.": "此次作答已提交。",
+  "This attempt's time limit has passed.": "此次作答的时间限制已过。",
+  "View results": "查看结果",
+  "Back to assignment": "返回作业"
 }

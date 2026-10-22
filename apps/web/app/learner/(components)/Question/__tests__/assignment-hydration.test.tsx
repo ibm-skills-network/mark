@@ -8,6 +8,13 @@ import { getAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import QuestionPage from "../index";
 
+// The fresh status read is unavailable here, so these cases exercise the
+// payload-clock fallback.
+jest.mock("@/lib/attempt-submission-status", () => ({
+  ...jest.requireActual("@/lib/attempt-submission-status"),
+  getAttemptSubmissionStatus: jest.fn().mockResolvedValue({ ok: false }),
+}));
+
 jest.mock("@/lib/talkToBackend", () => ({
   getAssignment: jest.fn(),
   getUser: jest.fn(),

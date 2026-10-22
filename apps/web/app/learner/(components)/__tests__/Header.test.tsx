@@ -396,6 +396,35 @@ describe("LearnerHeader duplicate-submit conflict", () => {
   });
 });
 
+describe("LearnerHeader submit on an attempt closed at its time limit", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+  });
+
+  it("says the attempt was closed at its time limit, then shows its results", async () => {
+    const { AttemptAlreadySubmittedError } =
+      jest.requireActual("@/lib/learner");
+    mockUseParams.mockReturnValue({ assignmentId: "771" });
+    seedLearnerState(null);
+    mockSubmitAssignment.mockRejectedValue(
+      new AttemptAlreadySubmittedError(999, true),
+    );
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "This attempt was already closed at its time limit.",
+    );
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Grading failed"),
+    );
+    expect(mockPush).toHaveBeenCalledWith("/learner/771/successPage/999");
+  });
+});
+
 // The attempt response now carries only the language it was requested in, so
 // the page has to notice when the server sent a language the learner did not
 // ask for — otherwise a learner reaching /questions without a `lang` parameter
