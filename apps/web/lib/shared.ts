@@ -1742,6 +1742,15 @@ export interface AdminReportDiagnostics {
       path?: string;
       at?: string;
     }[];
+    /** Where the server stored the report's screenshot, if it had one. */
+    screenshot?: {
+      bucket: string;
+      key: string;
+      contentType: string;
+      bytes: number;
+      /** True only for the copy linked from a support ticket. */
+      public: boolean;
+    };
   };
 }
 

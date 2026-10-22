@@ -40,11 +40,27 @@ import {
 import {
   buildScreenshotKey,
   detectScreenshotFormat,
+  type ReportScreenshotLocation,
+  type ScreenshotFormat,
 } from "../helpers/screenshot";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
 import { SupportRoutingService } from "./support-routing.service";
+
+/** A screenshot that passed the image checks, ready to store. */
+interface PreparedScreenshot {
+  file: Express.Multer.File;
+  cleaned: Buffer;
+  format: ScreenshotFormat;
+  bucket: string;
+  cosEndpoint: string;
+}
+
+interface StoredScreenshot {
+  url: string;
+  location: ReportScreenshotLocation;
+}
 
 interface FeedbackFilterParameters {
   page: number;
@@ -639,17 +655,15 @@ export class ReportsService {
   }
 
   /**
-   * Stores a report's screenshot public-read and returns the URL SN Support
-   * renders it from. SN Support only links to the URL, so the object must be
-   * readable by the agent's browser; see helpers/screenshot.ts for why only
-   * byte-verified images under a random key are made public. The image is
-   * re-encoded first so EXIF (GPS, device) and any bytes trailing the image
-   * never become public. A screenshot never fails the report it rides on.
+   * Checks a report's screenshot and re-encodes it for storage: only
+   * byte-verified raster images are kept (see helpers/screenshot.ts), and the
+   * re-encode drops EXIF (GPS, device) and any bytes trailing the image. A
+   * screenshot never fails the report it rides on.
    */
-  private async uploadReportScreenshot(
+  private async prepareReportScreenshot(
     screenshot: Express.Multer.File,
     logContext: Record<string, unknown>,
-  ): Promise<{ url: string; key: string } | undefined> {
+  ): Promise<PreparedScreenshot | undefined> {
     const bucket = process.env.IBM_COS_DEBUG_BUCKET;
     const cosEndpoint = process.env.IBM_COS_ENDPOINT?.replace(/\/+$/, "");
     if (!bucket || !cosEndpoint) {
@@ -692,31 +706,59 @@ export class ReportsService {
       return undefined;
     }
 
+    return { file: screenshot, cleaned, format, bucket, cosEndpoint };
+  }
+
+  /**
+   * Stores a prepared screenshot under a random key. A ticket's copy is
+   * public-read, because SN Support only links to the URL and the agent's
+   * browser must be able to load it; every other copy stays private and is
+   * reachable only through the admin diagnostics view.
+   */
+  private async storeReportScreenshot(
+    prepared: PreparedScreenshot,
+    visibility: "public" | "private",
+    logContext: Record<string, unknown>,
+  ): Promise<StoredScreenshot | undefined> {
+    const { file, cleaned, format, bucket, cosEndpoint } = prepared;
     const key = buildScreenshotKey(format);
     this.logger.log("Uploading report screenshot", {
       ...logContext,
       key,
+      visibility,
       content_type: format.mimeType,
       bytes: cleaned.length,
     });
     try {
       await this.filesService.directUpload(
-        { ...screenshot, buffer: cleaned, size: cleaned.length },
+        { ...file, buffer: cleaned, size: cleaned.length },
         bucket,
         key,
-        { acl: "public-read", contentType: format.mimeType },
+        visibility === "public"
+          ? { acl: "public-read", contentType: format.mimeType }
+          : { contentType: format.mimeType },
       );
     } catch (error) {
       this.logger.error("Report screenshot upload failed", {
         ...logContext,
         key,
+        visibility,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
       return undefined;
     }
 
-    return { url: `${cosEndpoint}/${bucket}/${key}`, key };
+    return {
+      url: `${cosEndpoint}/${bucket}/${key}`,
+      location: {
+        bucket,
+        key,
+        contentType: format.mimeType,
+        bytes: cleaned.length,
+        public: visibility === "public",
+      },
+    };
   }
 
   /**
@@ -1106,15 +1148,26 @@ export class ReportsService {
     const portalName = route?.portalName ?? portalContext.portalName;
 
     let snTicketKey: string | undefined;
+    const screenshotLogContext = {
+      assignment_id: assignmentId,
+      attempt_id: attemptId,
+    };
+    const preparedScreenshot = screenshot?.buffer
+      ? await this.prepareReportScreenshot(screenshot, screenshotLogContext)
+      : undefined;
+    // Where the screenshot ended up, recorded with the report for admins.
+    // Reports that get no ticket keep only a private copy, stored once the
+    // report row exists so a failed insert leaves nothing behind.
+    let storedScreenshot: StoredScreenshot | undefined;
     if (canForward && route?.token) {
-      // Uploaded only when a ticket goes out: the ticket is the only place the
-      // public URL is recorded, so a screenshot without one would be orphaned.
-      const screenshotLogContext = {
-        assignment_id: assignmentId,
-        attempt_id: attemptId,
-      };
-      const uploadedScreenshot = screenshot?.buffer
-        ? await this.uploadReportScreenshot(screenshot, screenshotLogContext)
+      // Published only when a ticket goes out, since SN Support needs a
+      // public URL; a ticket that fails takes its public copy with it.
+      const uploadedScreenshot = preparedScreenshot
+        ? await this.storeReportScreenshot(
+            preparedScreenshot,
+            "public",
+            screenshotLogContext,
+          )
         : undefined;
       const supportDescription = [
         stripSectionLabelMarkdown(description),
@@ -1154,6 +1207,7 @@ export class ReportsService {
           route.token,
         );
         snTicketKey = snTicket.ticketKey;
+        storedScreenshot = uploadedScreenshot;
         // A ticket in the wrong product looks exactly like one in the right
         // product, so how the product was chosen is logged on every report.
         this.logger.log("Created SN Support ticket for report", {
@@ -1186,7 +1240,7 @@ export class ReportsService {
         });
         if (uploadedScreenshot) {
           await this.discardReportScreenshot(
-            uploadedScreenshot.key,
+            uploadedScreenshot.location.key,
             screenshotLogContext,
           );
         }
@@ -1287,8 +1341,20 @@ export class ReportsService {
     try {
       const report = await this.prisma.report.create({ data: reportData });
 
-      if (diagnostics) {
-        await this.storeReportDiagnostics(report.id, diagnostics);
+      if (preparedScreenshot && !storedScreenshot) {
+        storedScreenshot = await this.storeReportScreenshot(
+          preparedScreenshot,
+          "private",
+          { ...screenshotLogContext, report_id: report.id },
+        );
+      }
+
+      if (diagnostics || storedScreenshot) {
+        await this.storeReportDiagnostics(
+          report.id,
+          diagnostics,
+          storedScreenshot?.location,
+        );
       }
 
       if (heldReason) {
@@ -1392,19 +1458,27 @@ export class ReportsService {
    */
   private async storeReportDiagnostics(
     reportId: number,
-    diagnostics: ReportDiagnostics,
+    diagnostics: ReportDiagnostics | undefined,
+    screenshot?: ReportScreenshotLocation,
   ): Promise<void> {
+    // The screenshot reference is written by the server, never the client.
+    const data: ReportDiagnostics & { screenshot?: ReportScreenshotLocation } =
+      {
+        ...(diagnostics ?? { v: 1 }),
+        ...(screenshot ? { screenshot } : {}),
+      };
     try {
       await this.prisma.reportDiagnostics.create({
         data: {
           reportId,
-          data: diagnostics as unknown as Prisma.InputJsonValue,
+          data: data as unknown as Prisma.InputJsonValue,
         },
       });
       this.logger.log("Stored report diagnostics", {
         report_id: reportId,
-        attempt_id: diagnostics.session?.attemptId,
-        recent_requests: diagnostics.requests?.length ?? 0,
+        attempt_id: diagnostics?.session?.attemptId,
+        recent_requests: diagnostics?.requests?.length ?? 0,
+        screenshot_key: screenshot?.key,
       });
     } catch (error) {
       this.logger.error("Failed to store report diagnostics", {

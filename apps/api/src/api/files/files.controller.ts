@@ -37,7 +37,12 @@ import { Logger } from "winston";
 import { CreateFolderDto } from "./dto/create-folder.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { RenameFileDto } from "./dto/rename-file.dto";
-import { STORAGE_LEG_PHASES, UploadEventDto } from "./dto/upload-event.dto";
+import {
+  allowlistedErrorCode,
+  serverProductToken,
+  STORAGE_LEG_PHASES,
+  UploadEventDto,
+} from "./dto/upload-event.dto";
 import {
   AbortMultipartUploadRequestDto,
   CompleteMultipartUploadRequestDto,
@@ -267,13 +272,21 @@ export class FilesController {
       size_bucket: body.sizeBucket,
       mime_type: body.mimeType,
       file_extension: body.fileExtension?.toLowerCase(),
+      // Re-checked here rather than trusted from validation: these are the
+      // only response-derived values that reach the logs.
       response_server: storageRejection
-        ? sanitizeForLog(body.responseServer)
+        ? serverProductToken(body.responseServer)
         : undefined,
       has_amz_request_id: storageRejection ? body.hasAmzRequestId : undefined,
-      response_body_snippet: storageRejection
-        ? sanitizeForLog(body.responseBodySnippet)
+      response_error_code: storageRejection
+        ? allowlistedErrorCode(body.responseErrorCode)
         : undefined,
+      response_body_length:
+        storageRejection &&
+        Number.isSafeInteger(body.responseBodyLength) &&
+        (body.responseBodyLength ?? -1) >= 0
+          ? body.responseBodyLength
+          : undefined,
       is_webview: body.isWebView,
       is_coursera_app: body.isCourseraApp,
       in_iframe: body.inIframe,

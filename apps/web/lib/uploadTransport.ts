@@ -109,38 +109,59 @@ export function failureKindOf(error: unknown): UploadFailureKind {
  * These fields exist to identify that intermediary, nothing more.
  */
 export interface StorageResponseDetails {
-  /** `Server` header, when the response exposed it. */
+  /** Product token of the `Server` header, when the response exposed it. */
   server?: string;
   /** Whether the response carried a storage request id (real storage reply). */
   hasAmzRequestId: boolean;
-  /** Start of the body, scrubbed of anything identifying. */
-  bodySnippet?: string;
+  /** Error code the body named (`<Code>…</Code>` or a JSON code). */
+  errorCode?: string;
+  /** Length of the body, in characters. */
+  bodyLength: number;
 }
 
-const MAX_SNIPPET_LENGTH = 200;
-const MAX_SERVER_HEADER_LENGTH = 100;
+/**
+ * The only shape kept from a response body: one identifier, so it cannot
+ * carry a name, email, IP address or credential. Matches the API's check.
+ */
+const ERROR_CODE = /^[A-Za-z][\w.-]{0,63}$/;
+const XML_CODE = /<Code>([^<]{1,64})<\/Code>/i;
+const SERVER_PRODUCT_TOKEN =
+  /^[\w!#$%&'*+.^`|~-]{1,64}(?:\/[\w!#$%&'*+.^`|~-]{1,64})?$/;
+const MAX_SERVER_TOKEN_LENGTH = 64;
 
 /**
- * Reduce a response body to a short, non-identifying excerpt.
+ * The error code a rejection body names, and nothing else from it.
  *
  * Block pages from filtering proxies routinely echo the user's name, email,
  * IP address or the blocked URL (whose query string here is a presigned
- * credential). Tags, emails, IPs, query strings and long opaque tokens are
- * removed before anything is kept.
+ * credential), so no free text from the body is ever kept.
  */
-export function sanitizeResponseSnippet(body: string): string | undefined {
-  const cleaned = body
-    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
-    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[ip]")
-    .replace(/\?[^\s"'<>]*/g, "")
-    .replace(/[A-Za-z0-9+/=_-]{32,}/g, "[token]")
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return cleaned.length > 0 ? cleaned.slice(0, MAX_SNIPPET_LENGTH) : undefined;
+export function extractStorageErrorCode(body: string): string | undefined {
+  const xml = XML_CODE.exec(body)?.[1]?.trim();
+  if (xml !== undefined) return ERROR_CODE.test(xml) ? xml : undefined;
+  if (!body.trimStart().startsWith("{")) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { code, error } = parsed as { code?: unknown; error?: unknown };
+    const candidate = typeof code === "string" ? code : error;
+    return typeof candidate === "string" && ERROR_CODE.test(candidate)
+      ? candidate
+      : undefined;
+  } catch {
+    // Not JSON after all: there is no code to keep.
+    return undefined;
+  }
+}
+
+/** The first product token of a `Server` header ("nginx/1.18.0"). */
+function serverProductToken(value: string): string | undefined {
+  const [first] = value.trim().split(/\s/);
+  return first &&
+    first.length <= MAX_SERVER_TOKEN_LENGTH &&
+    SERVER_PRODUCT_TOKEN.test(first)
+    ? first
+    : undefined;
 }
 
 function readHeader(
@@ -160,12 +181,13 @@ export function describeStorageResponse(
   response: UploadTransportResponse,
 ): StorageResponseDetails {
   const server = readHeader(response, "server");
+  const body =
+    typeof response.responseText === "string" ? response.responseText : "";
   return {
-    server: server
-      ? server.replace(/\s+/g, " ").trim().slice(0, MAX_SERVER_HEADER_LENGTH)
-      : undefined,
+    server: server ? serverProductToken(server) : undefined,
     hasAmzRequestId: Boolean(readHeader(response, "x-amz-request-id")),
-    bodySnippet: sanitizeResponseSnippet(response.responseText ?? ""),
+    errorCode: extractStorageErrorCode(body),
+    bodyLength: body.length,
   };
 }
 

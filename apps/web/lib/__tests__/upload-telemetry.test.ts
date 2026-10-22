@@ -6,7 +6,8 @@ import { uploadFileToStorage } from "../shared";
 import type { UploadRequest } from "@config/types";
 import { clearRequestLog, recentClientErrors } from "../request-log";
 import {
-  sanitizeResponseSnippet,
+  describeStorageResponse,
+  extractStorageErrorCode,
   UploadTransportError,
   type UploadTransportRequest,
   type UploadTransportResponse,
@@ -145,7 +146,11 @@ describe("upload failure telemetry", () => {
     expect(raw).not.toContain("jane@corp.example");
     expect(raw).not.toContain("10.1.2.3");
     expect(raw).not.toContain("X-Amz-Signature");
-    expect(event.responseBodySnippet).toContain("Access Denied");
+    expect(raw).not.toContain("Access Denied");
+    expect(event).not.toHaveProperty("responseBodySnippet");
+    expect(event.responseErrorCode).toBeUndefined();
+    expect(event.responseBodyLength).toBeGreaterThan(0);
+    expect(JSON.stringify(recentClientErrors())).not.toContain("jane@");
 
     const [, init] = fetchMock.mock.calls[0];
     expect(init).toMatchObject({ method: "POST", keepalive: true });
@@ -305,24 +310,61 @@ describe("upload failure telemetry", () => {
   });
 });
 
-describe("sanitizeResponseSnippet", () => {
-  it("drops markup, identities, query strings and tokens and bounds the length", () => {
-    const snippet = sanitizeResponseSnippet(
-      `<style>.x{}</style><p>Blocked for bob.smith+x@example.co.uk at 192.168.0.1</p> see /deny?user=bob ${"A".repeat(
-        40,
-      )} ${"x ".repeat(300)}`,
-    );
-
-    expect(snippet).toBeDefined();
-    expect(snippet.length).toBeLessThanOrEqual(200);
-    expect(snippet).toContain("Blocked for [email] at [ip]");
-    expect(snippet).not.toContain("user=bob");
-    expect(snippet).not.toContain("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-    expect(snippet).not.toMatch(/[<>]/);
+describe("describeStorageResponse", () => {
+  const response = (
+    body: string,
+    headers: Record<string, string> = {},
+  ): UploadTransportResponse => ({
+    status: 403,
+    responseText: body,
+    getResponseHeader: (name: string) => headers[name.toLowerCase()] ?? null,
   });
 
-  it("returns nothing for an empty body", () => {
-    expect(sanitizeResponseSnippet("   ")).toBeUndefined();
+  it("keeps only the code of a storage XML error", () => {
+    const body =
+      '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Access Denied for jane@corp.example</Message><Resource>/bucket/42/u/7/x?X-Amz-Credential=abc</Resource><RequestId>abc-123</RequestId></Error>';
+    const details = describeStorageResponse(response(body));
+
+    expect(details).toEqual({
+      server: undefined,
+      hasAmzRequestId: false,
+      errorCode: "AccessDenied",
+      bodyLength: body.length,
+    });
+  });
+
+  it("keeps only the code of a JSON error", () => {
+    expect(
+      extractStorageErrorCode('{"error":"request_blocked","user":"Jane Doe"}'),
+    ).toBe("request_blocked");
+    expect(extractStorageErrorCode('{"code":"ERR_POLICY"}')).toBe("ERR_POLICY");
+  });
+
+  it.each([
+    ["a name", "<html>Blocked for Jane Doe</html>"],
+    ["a bearer credential", "Authorization: Bearer short-secret"],
+    ["an IPv6 address", "<Code>2001:db8::1</Code>"],
+    ["an email in a code slot", '{"code":"jane@corp.example"}'],
+    ["a sentence in a code slot", "<Code>Access denied for Jane</Code>"],
+  ])("extracts nothing from %s", (_name, body) => {
+    const details = describeStorageResponse(response(body));
+    expect(details.errorCode).toBeUndefined();
+    expect(JSON.stringify(details)).not.toMatch(
+      /Jane|short-secret|Bearer|2001:db8|jane@/,
+    );
+  });
+
+  it("keeps only the product token of the server header", () => {
+    expect(
+      describeStorageResponse(
+        response("", { server: "nginx/1.18.0 (Ubuntu; host=10.0.0.4)" }),
+      ).server,
+    ).toBe("nginx/1.18.0");
+    expect(
+      describeStorageResponse(
+        response("", { server: "Authorization: Bearer short-secret" }),
+      ).server,
+    ).toBeUndefined();
   });
 });
 

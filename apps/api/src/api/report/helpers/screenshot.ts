@@ -50,6 +50,18 @@ export function detectScreenshotFormat(
   return undefined;
 }
 
+/**
+ * Where a report's screenshot was stored, kept with the report's diagnostics
+ * for admins. `public` is true only for the copy linked from a support ticket.
+ */
+export interface ReportScreenshotLocation {
+  bucket: string;
+  key: string;
+  contentType: ScreenshotFormat["mimeType"];
+  bytes: number;
+  public: boolean;
+}
+
 export function buildScreenshotKey(format: ScreenshotFormat): string {
   return `issue-screenshots/${randomUUID()}.${format.extension}`;
 }

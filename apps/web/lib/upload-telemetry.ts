@@ -73,7 +73,8 @@ export interface UploadEventPayload {
   fileExtension?: string;
   responseServer?: string;
   hasAmzRequestId?: boolean;
-  responseBodySnippet?: string;
+  responseErrorCode?: string;
+  responseBodyLength?: number;
   isWebView: boolean;
   isCourseraApp: boolean;
   inIframe: boolean;
@@ -200,7 +201,8 @@ export function buildUploadEvent(input: UploadEventInput): UploadEventPayload {
     fileExtension: extensionOf(uploadRequest.fileName || file.name),
     responseServer: storage?.server,
     hasAmzRequestId: storage ? storage.hasAmzRequestId : undefined,
-    responseBodySnippet: storage?.bodySnippet,
+    responseErrorCode: storage?.errorCode,
+    responseBodyLength: storage?.bodyLength,
     isWebView: isAndroidWebView(input.userAgent),
     isCourseraApp: isCourseraMobileApp(input.userAgent),
     inIframe: input.inIframe,

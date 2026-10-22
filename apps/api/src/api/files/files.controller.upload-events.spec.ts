@@ -47,7 +47,8 @@ describe("FilesController upload events", () => {
     fileExtension: "pdf",
     responseServer: "BlueCoat\u0007-ProxySG",
     hasAmzRequestId: false,
-    responseBodySnippet: "Access Denied\r\nforged_log_line",
+    responseErrorCode: "AccessDenied",
+    responseBodyLength: 412,
     isWebView: true,
     isCourseraApp: true,
     inIframe: false,
@@ -99,9 +100,45 @@ describe("FilesController upload events", () => {
       user_agent: "CourseraMobileApp/6.13 (Android; WebView)",
     });
     expect(JSON.stringify(fields)).not.toContain("someone-else");
-    // Control characters cannot forge log lines.
-    expect(fields.response_server).toBe("BlueCoat -ProxySG");
-    expect(fields.response_body_snippet).toBe("Access Denied  forged_log_line");
+    // A control character is not a token character, so the value is dropped.
+    expect(fields.response_server).toBeUndefined();
+    expect(fields.response_error_code).toBe("AccessDenied");
+    expect(fields.response_body_length).toBe(412);
+    expect(fields).not.toHaveProperty("response_body_snippet");
+  });
+
+  it("never logs free text a client sends about the storage response", () => {
+    const hostile = {
+      ...failure,
+      responseServer: "Authorization: Bearer short-secret",
+      responseErrorCode: "jane.doe@corp.example 2001:db8::1",
+      responseBodySnippet:
+        "Blocked for Jane Doe <jane.doe@corp.example> from 2001:db8::1. Authorization: Bearer short-secret",
+    } as UploadEventDto;
+    controller.reportUploadEvent(hostile, request);
+
+    const [, fields] = childLogger.warn.mock.calls[0];
+    const raw = JSON.stringify(fields);
+    for (const leaked of [
+      "Jane Doe",
+      "jane.doe@corp.example",
+      "2001:db8::1",
+      "short-secret",
+      "Bearer",
+    ]) {
+      expect(raw).not.toContain(leaked);
+    }
+    expect(fields.response_error_code).toBeUndefined();
+  });
+
+  it("keeps a server header's product name and drops its comment", () => {
+    controller.reportUploadEvent(
+      { ...failure, responseServer: "nginx/1.18.0 (Ubuntu; host=10.0.0.4)" },
+      request,
+    );
+
+    const [, fields] = childLogger.warn.mock.calls[0];
+    expect(fields.response_server).toBe("nginx/1.18.0");
   });
 
   it("logs a fallback rescue at info", () => {
@@ -141,7 +178,8 @@ describe("FilesController upload events", () => {
     );
 
     const [, fields] = childLogger.warn.mock.calls[0];
-    expect(fields.response_body_snippet).toBeUndefined();
+    expect(fields.response_error_code).toBeUndefined();
+    expect(fields.response_body_length).toBeUndefined();
     expect(fields.response_server).toBeUndefined();
     expect(fields.has_amz_request_id).toBeUndefined();
   });
