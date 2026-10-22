@@ -29,17 +29,38 @@ import {
   stripSectionLabelMarkdown,
 } from "../helpers/issue-template";
 import {
+  classifyReportText,
+  JUNK_CLOSURE_REASON,
+  type JunkReason,
+} from "../helpers/junk-report";
+import {
   ReportDiagnostics,
   summarizeReportDiagnostics,
 } from "../helpers/report-diagnostics";
 import {
   buildScreenshotKey,
   detectScreenshotFormat,
+  type ReportScreenshotLocation,
+  type ScreenshotFormat,
 } from "../helpers/screenshot";
 import { BugRenewalEmailDto, ReportIssueDto } from "../types/report.types";
 import { FloService } from "./flo.service";
 import { SnSupportService } from "./sn-support.service";
 import { SupportRoutingService } from "./support-routing.service";
+
+/** A screenshot that passed the image checks, ready to store. */
+interface PreparedScreenshot {
+  file: Express.Multer.File;
+  cleaned: Buffer;
+  format: ScreenshotFormat;
+  bucket: string;
+  cosEndpoint: string;
+}
+
+interface StoredScreenshot {
+  url: string;
+  location: ReportScreenshotLocation;
+}
 
 interface FeedbackFilterParameters {
   page: number;
@@ -62,6 +83,29 @@ interface ReportFilterParameters {
   startDate?: string;
   endDate?: string;
 }
+const REPORTER_STATUS_MESSAGE =
+  "Your issue has been reported and is being reviewed.";
+
+/**
+ * A report held back as junk is shown to its reporter as an ordinary open
+ * report: telling them it was judged junk only invites resubmission.
+ */
+function presentToReporter<
+  T extends {
+    status: ReportStatus;
+    statusMessage: string | null;
+    closureReason: string | null;
+  },
+>(report: T): T {
+  if (report.closureReason !== JUNK_CLOSURE_REASON) return report;
+  return {
+    ...report,
+    status: ReportStatus.OPEN,
+    statusMessage: REPORTER_STATUS_MESSAGE,
+    closureReason: null,
+  };
+}
+
 @Injectable()
 export class ReportsService {
   private ghTokenCache: { value: string; expiresAt: number } | null = null;
@@ -611,17 +655,15 @@ export class ReportsService {
   }
 
   /**
-   * Stores a report's screenshot public-read and returns the URL SN Support
-   * renders it from. SN Support only links to the URL, so the object must be
-   * readable by the agent's browser; see helpers/screenshot.ts for why only
-   * byte-verified images under a random key are made public. The image is
-   * re-encoded first so EXIF (GPS, device) and any bytes trailing the image
-   * never become public. A screenshot never fails the report it rides on.
+   * Checks a report's screenshot and re-encodes it for storage: only
+   * byte-verified raster images are kept (see helpers/screenshot.ts), and the
+   * re-encode drops EXIF (GPS, device) and any bytes trailing the image. A
+   * screenshot never fails the report it rides on.
    */
-  private async uploadReportScreenshot(
+  private async prepareReportScreenshot(
     screenshot: Express.Multer.File,
     logContext: Record<string, unknown>,
-  ): Promise<{ url: string; key: string } | undefined> {
+  ): Promise<PreparedScreenshot | undefined> {
     const bucket = process.env.IBM_COS_DEBUG_BUCKET;
     const cosEndpoint = process.env.IBM_COS_ENDPOINT?.replace(/\/+$/, "");
     if (!bucket || !cosEndpoint) {
@@ -664,31 +706,59 @@ export class ReportsService {
       return undefined;
     }
 
+    return { file: screenshot, cleaned, format, bucket, cosEndpoint };
+  }
+
+  /**
+   * Stores a prepared screenshot under a random key. A ticket's copy is
+   * public-read, because SN Support only links to the URL and the agent's
+   * browser must be able to load it; every other copy stays private and is
+   * reachable only through the admin diagnostics view.
+   */
+  private async storeReportScreenshot(
+    prepared: PreparedScreenshot,
+    visibility: "public" | "private",
+    logContext: Record<string, unknown>,
+  ): Promise<StoredScreenshot | undefined> {
+    const { file, cleaned, format, bucket, cosEndpoint } = prepared;
     const key = buildScreenshotKey(format);
     this.logger.log("Uploading report screenshot", {
       ...logContext,
       key,
+      visibility,
       content_type: format.mimeType,
       bytes: cleaned.length,
     });
     try {
       await this.filesService.directUpload(
-        { ...screenshot, buffer: cleaned, size: cleaned.length },
+        { ...file, buffer: cleaned, size: cleaned.length },
         bucket,
         key,
-        { acl: "public-read", contentType: format.mimeType },
+        visibility === "public"
+          ? { acl: "public-read", contentType: format.mimeType }
+          : { contentType: format.mimeType },
       );
     } catch (error) {
       this.logger.error("Report screenshot upload failed", {
         ...logContext,
         key,
+        visibility,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
       return undefined;
     }
 
-    return { url: `${cosEndpoint}/${bucket}/${key}`, key };
+    return {
+      url: `${cosEndpoint}/${bucket}/${key}`,
+      location: {
+        bucket,
+        key,
+        contentType: format.mimeType,
+        bytes: cleaned.length,
+        public: visibility === "public",
+      },
+    };
   }
 
   /**
@@ -1019,11 +1089,30 @@ export class ReportsService {
 
     const mappedIssueType = this.mapIssueTypeToReportType(issueType);
 
-    const similarReports = await this.findSimilarReports(
-      description,
-      mappedIssueType,
-      assignmentId,
-    );
+    // Some reports are kept in Mark but never reach the support queue: ones
+    // with nothing actionable typed into them, and grading disputes, which
+    // are reviewed from Mark's own report list. The reporter is answered the
+    // same way either way.
+    const textCheck = classifyReportText(description, {
+      category: detailString("category"),
+    });
+    const junkReason: JunkReason | undefined = textCheck.junk
+      ? textCheck.reason
+      : undefined;
+    const heldReason: JunkReason | "grading_dispute" | undefined =
+      junkReason ??
+      (mappedIssueType === ReportType.FALSE_MARKING
+        ? "grading_dispute"
+        : undefined);
+
+    // A junk report would only match other junk.
+    const similarReports = junkReason
+      ? []
+      : await this.findSimilarReports(
+          description,
+          mappedIssueType,
+          assignmentId,
+        );
 
     const potentialDuplicate = similarReports.find((r) => r.similarity > 0.85);
     const highSimilarityReport = similarReports.find((r) => r.similarity > 0.7);
@@ -1046,7 +1135,9 @@ export class ReportsService {
       portalUrl: portal.portalUrl,
     };
     const canForward =
-      this.snSupportService.isConfigured() && safeUserEmail !== "Unknown";
+      !heldReason &&
+      this.snSupportService.isConfigured() &&
+      safeUserEmail !== "Unknown";
     // Only when a ticket is actually going out: routing calls portal-manager,
     // and an anonymous report or a disabled integration has nowhere to send.
     const route = canForward
@@ -1057,15 +1148,26 @@ export class ReportsService {
     const portalName = route?.portalName ?? portalContext.portalName;
 
     let snTicketKey: string | undefined;
+    const screenshotLogContext = {
+      assignment_id: assignmentId,
+      attempt_id: attemptId,
+    };
+    const preparedScreenshot = screenshot?.buffer
+      ? await this.prepareReportScreenshot(screenshot, screenshotLogContext)
+      : undefined;
+    // Where the screenshot ended up, recorded with the report for admins.
+    // Reports that get no ticket keep only a private copy, stored once the
+    // report row exists so a failed insert leaves nothing behind.
+    let storedScreenshot: StoredScreenshot | undefined;
     if (canForward && route?.token) {
-      // Uploaded only when a ticket goes out: the ticket is the only place the
-      // public URL is recorded, so a screenshot without one would be orphaned.
-      const screenshotLogContext = {
-        assignment_id: assignmentId,
-        attempt_id: attemptId,
-      };
-      const uploadedScreenshot = screenshot?.buffer
-        ? await this.uploadReportScreenshot(screenshot, screenshotLogContext)
+      // Published only when a ticket goes out, since SN Support needs a
+      // public URL; a ticket that fails takes its public copy with it.
+      const uploadedScreenshot = preparedScreenshot
+        ? await this.storeReportScreenshot(
+            preparedScreenshot,
+            "public",
+            screenshotLogContext,
+          )
         : undefined;
       const supportDescription = [
         stripSectionLabelMarkdown(description),
@@ -1105,6 +1207,7 @@ export class ReportsService {
           route.token,
         );
         snTicketKey = snTicket.ticketKey;
+        storedScreenshot = uploadedScreenshot;
         // A ticket in the wrong product looks exactly like one in the right
         // product, so how the product was chosen is logged on every report.
         this.logger.log("Created SN Support ticket for report", {
@@ -1137,12 +1240,12 @@ export class ReportsService {
         });
         if (uploadedScreenshot) {
           await this.discardReportScreenshot(
-            uploadedScreenshot.key,
+            uploadedScreenshot.location.key,
             screenshotLogContext,
           );
         }
       }
-    } else {
+    } else if (!heldReason) {
       // Without a ticket the report reaches no support queue — DB row only.
       // portal_host is logged even here: while the integration is off it is
       // the only way to sample what LTI actually sends as a return URL, which
@@ -1160,9 +1263,20 @@ export class ReportsService {
     // Duplicates inherit the parent's resolution so reporters aren't told a
     // fixed issue is still open.
     let reportStatus: ReportStatus = ReportStatus.OPEN;
-    let statusMessage = "Your issue has been reported and is being reviewed.";
+    let statusMessage =
+      heldReason === "grading_dispute"
+        ? "Your grading report has been recorded for review."
+        : REPORTER_STATUS_MESSAGE;
     let closureReason: string | null = null;
     const isDuplicate = Boolean(potentialDuplicate);
+
+    if (junkReason) {
+      // Closed so it stays out of the open queue and duplicate matching;
+      // admins filter on the closure reason. The reporter never sees this.
+      reportStatus = ReportStatus.CLOSED;
+      closureReason = JUNK_CLOSURE_REASON;
+      statusMessage = `Not forwarded to support: no actionable description (${junkReason}).`;
+    }
 
     if (potentialDuplicate) {
       const parentReport = await this.prisma.report.findUnique({
@@ -1227,36 +1341,63 @@ export class ReportsService {
     try {
       const report = await this.prisma.report.create({ data: reportData });
 
-      if (diagnostics) {
-        await this.storeReportDiagnostics(report.id, diagnostics);
+      if (preparedScreenshot && !storedScreenshot) {
+        storedScreenshot = await this.storeReportScreenshot(
+          preparedScreenshot,
+          "private",
+          { ...screenshotLogContext, report_id: report.id },
+        );
+      }
+
+      if (diagnostics || storedScreenshot) {
+        await this.storeReportDiagnostics(
+          report.id,
+          diagnostics,
+          storedScreenshot?.location,
+        );
+      }
+
+      if (heldReason) {
+        this.logger.log("Report recorded without an SN Support ticket", {
+          report_id: report.id,
+          user_id: userSession?.userId,
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+          issue_type: mappedIssueType,
+          reason: heldReason,
+        });
       }
 
       // Fire-and-forget: Flo is best-effort telemetry. Never block the
       // request on its NATS publish — the underlying ts-nats client opens a
       // fresh connection per call and has no built-in deadline.
-      void this.floService
-        .sendError(ticketTitle, description, {
-          severity: issueSeverity,
-          tags: ["mark", "chat", "report", role || "user", issueType],
-          assignmentId,
-          attemptId,
-          sn_ticket: snTicketKey,
-          report_id: report.id,
-          is_duplicate: isDuplicate,
-          portalName,
-          portalUrl: portalContext.portalUrl,
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `Flo sendError dispatch failed for report ${report.id}: ${
-              (error as Error).message
-            }`,
-          );
-        });
+      if (!junkReason) {
+        void this.floService
+          .sendError(ticketTitle, description, {
+            severity: issueSeverity,
+            tags: ["mark", "chat", "report", role || "user", issueType],
+            assignmentId,
+            attemptId,
+            sn_ticket: snTicketKey,
+            report_id: report.id,
+            is_duplicate: isDuplicate,
+            portalName,
+            portalUrl: portalContext.portalUrl,
+          })
+          .catch((error) => {
+            this.logger.warn(
+              `Flo sendError dispatch failed for report ${report.id}: ${
+                (error as Error).message
+              }`,
+            );
+          });
+      }
 
       const ticketSegment = snTicketKey
         ? `Support ticket ${snTicketKey} has been created and our team will review it soon.`
-        : `Our team will review it soon.`;
+        : heldReason === "grading_dispute"
+          ? `It has been recorded for review.`
+          : `Our team will review it soon.`;
       let message = `Thank you for your report. ${ticketSegment} You can check the status anytime by asking about your reported issues.`;
 
       if (isDuplicate) {
@@ -1317,19 +1458,27 @@ export class ReportsService {
    */
   private async storeReportDiagnostics(
     reportId: number,
-    diagnostics: ReportDiagnostics,
+    diagnostics: ReportDiagnostics | undefined,
+    screenshot?: ReportScreenshotLocation,
   ): Promise<void> {
+    // The screenshot reference is written by the server, never the client.
+    const data: ReportDiagnostics & { screenshot?: ReportScreenshotLocation } =
+      {
+        ...(diagnostics ?? { v: 1 }),
+        ...(screenshot ? { screenshot } : {}),
+      };
     try {
       await this.prisma.reportDiagnostics.create({
         data: {
           reportId,
-          data: diagnostics as unknown as Prisma.InputJsonValue,
+          data: data as unknown as Prisma.InputJsonValue,
         },
       });
       this.logger.log("Stored report diagnostics", {
         report_id: reportId,
-        attempt_id: diagnostics.session?.attemptId,
-        recent_requests: diagnostics.requests?.length ?? 0,
+        attempt_id: diagnostics?.session?.attemptId,
+        recent_requests: diagnostics?.requests?.length ?? 0,
+        screenshot_key: screenshot?.key,
       });
     } catch (error) {
       this.logger.error("Failed to store report diagnostics", {
@@ -1499,7 +1648,7 @@ export class ReportsService {
     const parentById = new Map(parents.map((p) => [p.id, p]));
 
     return reports.map((report) => {
-      if (!report.duplicateOfReportId) return report;
+      if (!report.duplicateOfReportId) return presentToReporter(report);
 
       const parent = parentById.get(report.duplicateOfReportId);
       if (!parent) return report;
@@ -1520,7 +1669,7 @@ export class ReportsService {
         }
       }
 
-      return report;
+      return presentToReporter(report);
     });
   }
 
@@ -1828,18 +1977,19 @@ export class ReportsService {
       },
     });
 
+    const shown = presentToReporter(report);
     return {
       id: report.id,
       issueType: report.issueType,
       description: report.description,
-      status: report.status,
-      statusMessage: report.statusMessage,
+      status: shown.status,
+      statusMessage: shown.statusMessage,
       created: report.createdAt,
       updated: report.updatedAt,
       issueNumber: report.issueNumber,
       developerComment: report.comments,
       resolution: report.resolution,
-      closureReason: report.closureReason,
+      closureReason: shown.closureReason,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       duplicateInfo,
       duplicates: duplicates.length > 0 ? duplicates : undefined,

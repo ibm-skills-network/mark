@@ -290,6 +290,64 @@ describe("FileContentExtractionService - existing .ipynb content handling", () =
   });
 });
 
+describe("FileContentExtractionService - inline content that arrived parsed", () => {
+  let service: FileContentExtractionService;
+
+  beforeEach(() => {
+    service = createService();
+  });
+
+  const notebook = {
+    nbformat: 4,
+    nbformat_minor: 5,
+    metadata: { language_info: { name: "python" } },
+    cells: [
+      {
+        cell_type: "code",
+        source: ["total = 2 + 3\n", "print(total)\n"],
+        execution_count: 1,
+        outputs: [{ output_type: "stream", name: "stdout", text: ["5\n"] }],
+        metadata: {},
+      },
+    ],
+  };
+
+  it("extracts notebook cells from an object-valued content instead of the error placeholder", async () => {
+    const [result] = await service.extractContentFromFiles([
+      {
+        filename: "lab.ipynb",
+        // The request decoder turns notebook JSON text into an object.
+        content: notebook as unknown as string,
+        githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
+      },
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.content).not.toContain("could not be processed");
+    expect(result.content).toContain("=== JUPYTER NOTEBOOK: lab.ipynb ===");
+    expect(result.content).toContain("=== CELL 1 [CODE] [1] ===");
+    expect(result.content).toContain("total = 2 + 3");
+    expect(result.content).toContain("5");
+    expect((service as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("non_string_content"),
+      expect.objectContaining({ filename: "lab.ipynb", contentType: "object" }),
+    );
+  });
+
+  it("reads an array-valued .json content as its JSON text", async () => {
+    const [result] = await service.extractContentFromFiles([
+      {
+        filename: "rows.json",
+        content: [{ id: 1, name: "a" }] as unknown as string,
+        githubUrl: "https://github.com/learner/repo/blob/main/rows.json",
+      },
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.content).toContain('"name":"a"');
+  });
+});
+
 // ─── Notebook structured content (cell blocks + plot images) ──────────────
 
 describe("FileContentExtractionService - notebook structured content", () => {

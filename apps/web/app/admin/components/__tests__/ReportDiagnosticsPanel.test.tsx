@@ -76,6 +76,30 @@ describe("ReportDiagnosticsPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows where the report's screenshot was stored", async () => {
+    (getAdminReportDiagnostics as jest.Mock).mockResolvedValue({
+      ...capture,
+      diagnostics: {
+        v: 1,
+        screenshot: {
+          bucket: "debug-bkt",
+          key: "issue-screenshots/0b7e5c1e-8f0e-4a8e-9a39-6f4f7b1d2c3a.png",
+          contentType: "image/png",
+          bytes: 2048,
+          public: false,
+        },
+      },
+    });
+
+    await mount();
+
+    expect(
+      await screen.findByText(
+        "debug-bkt/issue-screenshots/0b7e5c1e-8f0e-4a8e-9a39-6f4f7b1d2c3a.png (private)",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows an admin what the reporter saw and which requests failed", async () => {
     (getAdminReportDiagnostics as jest.Mock).mockResolvedValue(capture);
 

@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Datasparlägen och vissa webbläsare, som Opera Mini, kan förstöra sidan. Stäng av läget eller öppna uppgiften i en annan webbläsare.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Bilder kan inte bedömas i ett textsvar. Klistra in utdata som text i stället, eller beskriv det med ord.",
   "Your grade is on its way to yourLearning": "Ditt betyg är på väg till yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Det kan ta några timmar att synkronisera ditt betyg till yourLearning, så ha tålamod. Ditt betyg är säkert registrerat hos oss och du behöver inte göra något. Du kan stänga det här fönstret."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Det kan ta några timmar att synkronisera ditt betyg till yourLearning, så ha tålamod. Ditt betyg är säkert registrerat hos oss och du behöver inte göra något. Du kan stänga det här fönstret.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Filuppladdning kanske inte fungerar i Coursera-appen. Öppna i stället uppgiften i en webbläsare som Chrome eller Safari.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "Filuppladdning kanske inte fungerar i den här inbyggda webbläsaren. Öppna i stället uppgiften i en webbläsare som Chrome eller Safari.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "Din fil för fråga {question} har inte laddats upp. Skicka in ändå?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Filerna för frågorna {questions} har inte laddats upp. Skicka in ändå?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Uppladdningen av filen för fråga {question} misslyckades, så inget skickas in för den. Skicka in ändå?",
+  "You have flagged questions. Are you sure you want to submit?": "Du har flaggade frågor. Är du säker på att du vill skicka in?",
+  "You have unanswered questions. Are you sure you want to submit?": "Du har obesvarade frågor. Är du säker på att du vill skicka in?"
 }

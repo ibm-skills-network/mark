@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -8,6 +9,8 @@ import { PrismaService } from "../../../database/prisma.service";
 
 @Injectable()
 export class AttemptReportingService {
+  private readonly logger = new Logger(AttemptReportingService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -33,12 +36,31 @@ export class AttemptReportingService {
       throw new NotFoundException("Assignment not found");
     }
 
-    const assignmentAttemptExists =
-      await this.prisma.assignmentAttempt.findUnique({
-        where: { id: attemptId },
+    // The route's ids come from the client: the attempt must be the
+    // reporter's own and belong to this assignment. Every refusal looks the
+    // same, so the endpoint cannot be used to probe for other attempts.
+    const attempt =
+      Number.isSafeInteger(attemptId) && attemptId > 0
+        ? await this.prisma.assignmentAttempt.findUnique({
+            where: { id: attemptId },
+            select: { userId: true, assignmentId: true },
+          })
+        : null;
+    if (
+      !attempt ||
+      attempt.userId !== userId ||
+      attempt.assignmentId !== assignmentId
+    ) {
+      this.logger.warn("createReport: attempt not reportable by this user", {
+        user_id: userId,
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+        reason: attempt
+          ? attempt.userId === userId
+            ? "assignment_mismatch"
+            : "not_owner"
+          : "not_found",
       });
-
-    if (!assignmentAttemptExists) {
       throw new NotFoundException("Assignment attempt not found");
     }
 

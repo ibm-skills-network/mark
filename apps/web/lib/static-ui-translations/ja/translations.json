@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "データ節約モードや Opera Mini などの一部のブラウザでは、ページが正しく表示されないことがあります。このモードをオフにするか、別のブラウザで課題を開いてください。",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "テキスト回答に含まれる画像は採点できません。代わりに出力をテキストとして貼り付けるか、言葉で説明してください。",
   "Your grade is on its way to yourLearning": "成績を yourLearning に送信しています",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning への成績の同期には数時間かかる場合がありますので、しばらくお待ちください。成績は当方で安全に記録されており、お客様が行う操作はありません。このウィンドウは閉じてかまいません。"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "yourLearning への成績の同期には数時間かかる場合がありますので、しばらくお待ちください。成績は当方で安全に記録されており、お客様が行う操作はありません。このウィンドウは閉じてかまいません。",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Coursera アプリではファイルをアップロードできない場合があります。代わりに Chrome や Safari などのブラウザでこの課題を開いてください。",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "このアプリ内ブラウザではファイルをアップロードできない場合があります。代わりに Chrome や Safari などのブラウザでこの課題を開いてください。",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "質問 {question} のファイルがアップロードされていません。このまま提出しますか？",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "質問 {questions} のファイルがアップロードされていません。このまま提出しますか？",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "質問 {question} のファイルのアップロードに失敗したため、この質問には何も提出されません。このまま提出しますか？",
+  "You have flagged questions. Are you sure you want to submit?": "フラグを付けた質問があります。提出してもよろしいですか？",
+  "You have unanswered questions. Are you sure you want to submit?": "未回答の質問があります。提出してもよろしいですか？"
 }

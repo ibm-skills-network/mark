@@ -12,13 +12,14 @@ import { Octokit } from "@octokit/rest";
 import { IconBrandGithub } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import CustomFileViewer from "./FileViewer";
 import GithubUploadModal from "./GithubUploadModal";
 import PresentationGrader from "./PresentationGrader";
 import VideoPresentationEditor from "./VideoPresentationEditor";
 import FileUploader from "@/components/FileUploader";
+import InAppBrowserUploadNotice from "./InAppBrowserUploadNotice";
 
 interface FileUploadSectionProps {
   question: QuestionStore;
@@ -39,14 +40,18 @@ const FileUploadSection = ({
     null,
   );
   const addFileUpload = useLearnerStore((state) => state.addFileUpload);
-  const setIsUploadingFiles = useLearnerStore(
-    (state) => state.setIsUploadingFiles,
+  const setQuestionUploadStatus = useLearnerStore(
+    (state) => state.setQuestionUploadStatus,
   );
+  // Whether the latest upload on this question failed, so the submit guard
+  // can name it once the uploader goes idle.
+  const lastUploadFailedRef = useRef(false);
   const [, setError] = useState<string | null>(null);
   const [showContent, setShowContent] = useState(false);
   const learnerFileResponse = useLearnerStore((state) =>
     state.getFileUpload(questionId),
   );
+  const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
   const [fileBlob] = useState<Blob | null>(null);
   const onDrop = async (acceptedFiles: File[]) => {
     try {
@@ -178,14 +183,17 @@ const FileUploadSection = ({
                   </button>
                 </div>
               )}
+              <InAppBrowserUploadNotice />
               <FileUploader
                 key={`file-uploader-${questionId}`}
                 uploadType={"learner"}
+                attemptId={activeAttemptId ?? undefined}
                 context={{
                   assignmentId,
                   questionId,
                 }}
                 onUploadComplete={(file: learnerFileResponse) => {
+                  lastUploadFailedRef.current = false;
                   addFileUpload(file, questionId);
                   changeSelectedFiles(questionId, [...selectedFiles, file]);
                 }}
@@ -201,8 +209,19 @@ const FileUploadSection = ({
                     );
                   }
                 }}
+                onUploadError={() => {
+                  lastUploadFailedRef.current = true;
+                }}
                 onUploadStateChange={(isUploading) => {
-                  setIsUploadingFiles(isUploading);
+                  if (isUploading) {
+                    lastUploadFailedRef.current = false;
+                    setQuestionUploadStatus(questionId, "uploading");
+                    return;
+                  }
+                  setQuestionUploadStatus(
+                    questionId,
+                    lastUploadFailedRef.current ? "failed" : null,
+                  );
                 }}
                 showUploadedFiles={true}
                 uploadedFiles={learnerFileResponse}

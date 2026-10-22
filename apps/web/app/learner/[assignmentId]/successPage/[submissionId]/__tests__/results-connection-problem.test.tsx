@@ -31,10 +31,6 @@ jest.mock("../../Question", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("@/components/ReportModal", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 jest.mock("@/components/GradeSyncStatus", () => ({
   __esModule: true,
   default: () => null,

@@ -65,7 +65,7 @@ export function ReportDiagnosticsPanel({
     );
   }
 
-  const { session, page, rendered, requests, draft, errors } =
+  const { session, page, rendered, requests, draft, errors, screenshot } =
     state.capture.diagnostics;
   const facts: [string, unknown][] = [
     ["Attempt", session?.attemptId],
@@ -83,6 +83,12 @@ export function ReportDiagnosticsPanel({
     ["Draft belongs to attempt", draft?.activeAttemptId],
     ["Page", page?.url],
     ["Browser", page?.userAgent],
+    [
+      "Screenshot",
+      screenshot
+        ? `${screenshot.bucket}/${screenshot.key} (${screenshot.public ? "public, linked from ticket" : "private"})`
+        : undefined,
+    ],
   ];
 
   return (

@@ -4,7 +4,9 @@ import {
   getUploadAcceptMap,
   IMAGE_ACCEPT,
   isAndroidWebView,
+  isCourseraMobileApp,
   shouldOmitAcceptFilter,
+  shouldSuggestOpeningInBrowser,
   UPLOAD_ACCEPT,
   type UploadAcceptMap,
 } from "@/lib/upload-accept";
@@ -32,6 +34,7 @@ const USER_AGENTS = {
     "CourseraMobileApp/6.12.0 (Android; build 92560; Android 16; WebView)",
   courseraAndroid17:
     "CourseraMobileApp/6.12.0 (Android; build 92560; Android 17; WebView)",
+  courseraAndroid613: "CourseraMobileApp/6.13 (Android; WebView)",
   courseraIos:
     "CourseraMobileApp/6.12.0 (iOS; build 92560; iOS 18.0; WKWebView)",
   androidWebViewWord:
@@ -158,5 +161,46 @@ describe("shouldOmitAcceptFilter", () => {
     ["unknown (pre-mount)", ""],
   ])("keeps the filter for %s", (_label, userAgent) => {
     expect(shouldOmitAcceptFilter(UPLOAD_ACCEPT, userAgent)).toBe(false);
+  });
+});
+
+describe("isCourseraMobileApp", () => {
+  it.each([
+    ["courseraAndroid613", USER_AGENTS.courseraAndroid613],
+    ["courseraAndroid12", USER_AGENTS.courseraAndroid12],
+    ["courseraIos", USER_AGENTS.courseraIos],
+  ])("detects %s", (_label, userAgent) => {
+    expect(isCourseraMobileApp(userAgent)).toBe(true);
+  });
+
+  it.each([
+    ["androidWebView", USER_AGENTS.androidWebView],
+    ["chromeAndroid", USER_AGENTS.chromeAndroid],
+    ["desktopChrome", USER_AGENTS.desktopChrome],
+    ["iosSafari", USER_AGENTS.iosSafari],
+    ["empty", ""],
+  ])("ignores %s", (_label, userAgent) => {
+    expect(isCourseraMobileApp(userAgent)).toBe(false);
+  });
+});
+
+describe("shouldSuggestOpeningInBrowser", () => {
+  it.each([
+    ["courseraAndroid613", USER_AGENTS.courseraAndroid613],
+    ["courseraIos", USER_AGENTS.courseraIos],
+    ["androidWebView", USER_AGENTS.androidWebView],
+    ["androidWebViewReduced", USER_AGENTS.androidWebViewReduced],
+  ])("suggests a browser for %s", (_label, userAgent) => {
+    expect(shouldSuggestOpeningInBrowser(userAgent)).toBe(true);
+  });
+
+  it.each([
+    ["chromeAndroid", USER_AGENTS.chromeAndroid],
+    ["samsungInternet", USER_AGENTS.samsungInternet],
+    ["desktopChrome", USER_AGENTS.desktopChrome],
+    ["iosSafari", USER_AGENTS.iosSafari],
+    ["unknown (pre-mount)", ""],
+  ])("stays quiet for %s", (_label, userAgent) => {
+    expect(shouldSuggestOpeningInBrowser(userAgent)).toBe(false);
   });
 });

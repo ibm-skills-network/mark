@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Veri tasarrufu modları ve Opera Mini gibi bazı tarayıcılar sayfayı bozabilir. Bu modu kapatın veya ödevi başka bir tarayıcıda açın.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Metin yanıtındaki görseller notlandırılamaz. Bunun yerine çıktıyı metin olarak yapıştırın veya kelimelerle açıklayın.",
   "Your grade is on its way to yourLearning": "Notunuz yourLearning'e gönderiliyor",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Notunuzun yourLearning ile eşitlenmesi birkaç saat sürebilir, lütfen sabırlı olun. Notunuz bizde güvenle kayıtlıdır ve yapmanız gereken bir şey yoktur. Bu pencereyi kapatabilirsiniz."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Notunuzun yourLearning ile eşitlenmesi birkaç saat sürebilir, lütfen sabırlı olun. Notunuz bizde güvenle kayıtlıdır ve yapmanız gereken bir şey yoktur. Bu pencereyi kapatabilirsiniz.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Dosya yükleme Coursera uygulamasında çalışmayabilir. Bunun yerine bu ödevi Chrome veya Safari gibi bir tarayıcıda açın.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "Dosya yükleme bu uygulama içi tarayıcıda çalışmayabilir. Bunun yerine bu ödevi Chrome veya Safari gibi bir tarayıcıda açın.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "Soru {question} için dosyanız yüklenmedi. Yine de gönderilsin mi?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Soru {questions} için dosyalar yüklenmedi. Yine de gönderilsin mi?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Soru {question} için dosya yüklemesi başarısız oldu, bu nedenle bu soru için hiçbir şey gönderilmeyecek. Yine de gönderilsin mi?",
+  "You have flagged questions. Are you sure you want to submit?": "İşaretlenmiş sorularınız var. Göndermek istediğinizden emin misiniz?",
+  "You have unanswered questions. Are you sure you want to submit?": "Yanıtlanmamış sorularınız var. Göndermek istediğinizden emin misiniz?"
 }

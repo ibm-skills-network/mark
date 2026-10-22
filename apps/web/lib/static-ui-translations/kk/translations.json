@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Деректерді үнемдеу режимдері және Opera Mini сияқты кейбір браузерлер бетті бұзуы мүмкін. Бұл режимді өшіріңіз немесе тапсырманы басқа браузерде ашыңыз.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Мәтіндік жауаптағы суреттер бағаланбайды. Оның орнына шығысты мәтін ретінде қойыңыз немесе оны сөзбен сипаттаңыз.",
   "Your grade is on its way to yourLearning": "Бағаңыз yourLearning жүйесіне жіберілуде",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Бағаңызды yourLearning жүйесімен синхрондау бірнеше сағатқа созылуы мүмкін, сондықтан шыдамдылық танытыңыз. Бағаңыз бізде қауіпсіз сақталған және сізге ештеңе істеудің қажеті жоқ. Бұл терезені жаба аласыз."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "Бағаңызды yourLearning жүйесімен синхрондау бірнеше сағатқа созылуы мүмкін, сондықтан шыдамдылық танытыңыз. Бағаңыз бізде қауіпсіз сақталған және сізге ештеңе істеудің қажеті жоқ. Бұл терезені жаба аласыз.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Coursera қолданбасында файл жүктеу жұмыс істемеуі мүмкін. Оның орнына бұл тапсырманы Chrome немесе Safari сияқты браузерде ашыңыз.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "Бұл қолданба ішіндегі браузерде файл жүктеу жұмыс істемеуі мүмкін. Оның орнына бұл тапсырманы Chrome немесе Safari сияқты браузерде ашыңыз.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "{question}-сұраққа арналған файлыңыз жүктелмеді. Бәрібір жіберу керек пе?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "{questions} сұрақтарына арналған файлдар жүктелмеді. Бәрібір жіберу керек пе?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "{question}-сұраққа файл жүктеу сәтсіз аяқталды, сондықтан ол үшін ештеңе жіберілмейді. Бәрібір жіберу керек пе?",
+  "You have flagged questions. Are you sure you want to submit?": "Сізде белгіленген сұрақтар бар. Шынымен жібергіңіз келе ме?",
+  "You have unanswered questions. Are you sure you want to submit?": "Сізде жауап берілмеген сұрақтар бар. Шынымен жібергіңіз келе ме?"
 }

@@ -13,6 +13,13 @@ export interface BugReportSubmission {
   assignmentId?: number;
 }
 
+// Issue types the server files as a grading dispute (ReportType FALSE_MARKING).
+const GRADING_DISPUTE_TYPES = new Set([
+  "false_marking",
+  "false marking",
+  "grading",
+]);
+
 /**
  * Submits a bug report to the reports endpoint (same flow for the floating
  * flag button and the error-dialog report button, so reports land in GitHub
@@ -83,7 +90,13 @@ export async function submitBugReport(
       throw new Error(errorBody.message || `HTTP error ${response.status}`);
     }
 
-    toast.success("Bug report submitted. Thank you!");
+    // Grading disputes are reviewed inside Mark rather than by the support
+    // desk, so they are not described as a filed bug.
+    toast.success(
+      GRADING_DISPUTE_TYPES.has((value.issueType || "").toLowerCase())
+        ? "Grading report recorded for review. Thank you!"
+        : "Bug report submitted. Thank you!",
+    );
     return true;
   } catch (error) {
     console.error("submitBugReport: report submit failed:", error);

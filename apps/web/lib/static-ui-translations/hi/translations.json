@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "डेटा-सेविंग मोड और कुछ ब्राउज़र, जैसे Opera Mini, पेज को खराब कर सकते हैं। इस मोड को बंद करें या असाइनमेंट को किसी दूसरे ब्राउज़र में खोलें।",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "टेक्स्ट उत्तर में छवियों का मूल्यांकन नहीं किया जा सकता। इसके बजाय टेक्स्ट आउटपुट पेस्ट करें, या उसे शब्दों में बताएं।",
   "Your grade is on its way to yourLearning": "आपका ग्रेड yourLearning पर भेजा जा रहा है",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "आपके ग्रेड को yourLearning के साथ सिंक होने में कुछ घंटे लग सकते हैं, इसलिए कृपया धैर्य रखें। आपका ग्रेड हमारे पास सुरक्षित रूप से दर्ज है और आपको कुछ भी करने की आवश्यकता नहीं है। आप यह विंडो बंद कर सकते हैं।"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "आपके ग्रेड को yourLearning के साथ सिंक होने में कुछ घंटे लग सकते हैं, इसलिए कृपया धैर्य रखें। आपका ग्रेड हमारे पास सुरक्षित रूप से दर्ज है और आपको कुछ भी करने की आवश्यकता नहीं है। आप यह विंडो बंद कर सकते हैं।",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Coursera ऐप में फ़ाइल अपलोड काम नहीं कर सकते। इसके बजाय यह असाइनमेंट Chrome या Safari जैसे ब्राउज़र में खोलें।",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "इस इन-ऐप ब्राउज़र में फ़ाइल अपलोड काम नहीं कर सकते। इसके बजाय यह असाइनमेंट Chrome या Safari जैसे ब्राउज़र में खोलें।",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "प्रश्न {question} के लिए आपकी फ़ाइल अपलोड नहीं हुई है। फिर भी सबमिट करें?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "प्रश्न {questions} के लिए फ़ाइलें अपलोड नहीं हुई हैं। फिर भी सबमिट करें?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "प्रश्न {question} के लिए फ़ाइल अपलोड विफल रहा, इसलिए इसके लिए कुछ भी सबमिट नहीं होगा। फिर भी सबमिट करें?",
+  "You have flagged questions. Are you sure you want to submit?": "आपके कुछ प्रश्न फ़्लैग किए गए हैं। क्या आप वाकई सबमिट करना चाहते हैं?",
+  "You have unanswered questions. Are you sure you want to submit?": "आपके कुछ प्रश्नों के उत्तर नहीं दिए गए हैं। क्या आप वाकई सबमिट करना चाहते हैं?"
 }
