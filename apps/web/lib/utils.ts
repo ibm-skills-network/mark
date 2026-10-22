@@ -200,17 +200,48 @@ export type SubmitButtonStatus =
   | { disabled: true; reason: string }
   | { disabled: false; reason: null };
 
+/**
+ * Where a question's latest upload stands, while it matters: in flight, or
+ * failed with nothing stored. Absent once a file lands (or none was tried).
+ */
+export type QuestionUploadStatus = "uploading" | "failed";
+export type UploadStatusByQuestion = Record<number, QuestionUploadStatus>;
+
+/** Display position (1-based, in the order the learner sees them). */
+const positionsOf = (
+  questions: QuestionStore[],
+  predicate: (question: QuestionStore) => boolean,
+): number[] =>
+  questions
+    .map((question, index) => ({ question, position: index + 1 }))
+    .filter(({ question }) => predicate(question))
+    .map(({ position }) => position);
+
 export const getSubmitButtonStatus = (
   questions: QuestionStore[],
   submitting: boolean,
   isUploadingFiles?: boolean,
   requireAllQuestions?: boolean,
   optionalQuestionIds?: number[],
+  uploadStatusByQuestion?: UploadStatusByQuestion,
 ): SubmitButtonStatus => {
   if (submitting) {
     return { disabled: true, reason: "Submitting assignment..." };
   }
 
+  const uploadingPositions = positionsOf(
+    questions,
+    (question) => uploadStatusByQuestion?.[question.id] === "uploading",
+  );
+  if (uploadingPositions.length > 0) {
+    const plural = uploadingPositions.length > 1;
+    return {
+      disabled: true,
+      reason: `Wait for the ${plural ? "files" : "file"} on Question${
+        plural ? "s" : ""
+      } ${uploadingPositions.join(", ")} to finish uploading.`,
+    };
+  }
   if (isUploadingFiles) {
     return { disabled: true, reason: "File upload in progress..." };
   }
@@ -269,6 +300,91 @@ export const getSubmitButtonStatus = (
   }
 
   return { disabled: false, reason: null };
+};
+
+/** Question types whose answer is a file the learner has to upload. */
+const FILE_QUESTION_TYPES = new Set(["UPLOAD", "CODE"]);
+
+export const SUBMIT_WARNING_MESSAGES = {
+  fileMissing:
+    "Your file for Question {question} hasn't been uploaded. Submit anyway?",
+  filesMissing:
+    "Files for Questions {questions} haven't been uploaded. Submit anyway?",
+  uploadFailed:
+    "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?",
+  flagged: "You have flagged questions. Are you sure you want to submit?",
+  unanswered: "You have unanswered questions. Are you sure you want to submit?",
+} as const;
+
+/** Every template the submit warning can show, for the translation catalogs. */
+export const SUBMIT_WARNING_SOURCE_STRINGS: readonly string[] = Object.values(
+  SUBMIT_WARNING_MESSAGES,
+);
+
+export interface SubmitWarning {
+  /** Translation-catalog key; render with `t(message, params)`. */
+  message: string;
+  params?: Record<string, string | number>;
+}
+
+/**
+ * The confirmation to show before submitting, or null to submit straight
+ * away. A missing file is named by question number, because "you have
+ * unanswered questions" reads as fine to a learner who believes the upload
+ * went through. A failed upload is called out even on an optional question:
+ * the learner tried to answer it.
+ */
+export const buildSubmitWarning = (
+  questions: QuestionStore[],
+  options: {
+    optionalQuestionIds?: number[];
+    uploadStatusByQuestion?: UploadStatusByQuestion;
+  },
+): SubmitWarning | null => {
+  const optional = new Set(options.optionalQuestionIds ?? []);
+  const isAnswered = (question: QuestionStore) =>
+    editedQuestionsOnly([question]).length > 0;
+  const uploadFailed = (question: QuestionStore) =>
+    options.uploadStatusByQuestion?.[question.id] === "failed";
+
+  const failedPositions = positionsOf(
+    questions,
+    (question) => !isAnswered(question) && uploadFailed(question),
+  );
+  const missingFilePositions = positionsOf(
+    questions,
+    (question) =>
+      !isAnswered(question) &&
+      (uploadFailed(question) ||
+        (FILE_QUESTION_TYPES.has(question.type) && !optional.has(question.id))),
+  );
+
+  if (missingFilePositions.length === 1) {
+    return {
+      message:
+        failedPositions.length === 1
+          ? SUBMIT_WARNING_MESSAGES.uploadFailed
+          : SUBMIT_WARNING_MESSAGES.fileMissing,
+      params: { question: missingFilePositions[0] },
+    };
+  }
+  if (missingFilePositions.length > 1) {
+    return {
+      message: SUBMIT_WARNING_MESSAGES.filesMissing,
+      params: { questions: missingFilePositions.join(", ") },
+    };
+  }
+
+  if (questions.some((question) => question.status === "flagged")) {
+    return { message: SUBMIT_WARNING_MESSAGES.flagged };
+  }
+
+  const unansweredRequired = questions.some(
+    (question) => !optional.has(question.id) && !isAnswered(question),
+  );
+  return unansweredRequired
+    ? { message: SUBMIT_WARNING_MESSAGES.unanswered }
+    : null;
 };
 
 export const generateTempQuestionId = (): number => {

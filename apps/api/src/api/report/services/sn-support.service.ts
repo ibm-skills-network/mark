@@ -24,7 +24,7 @@ export interface SnSupportTicket {
   toolName?: string;
   browser?: string;
   chatHistoryUrl?: string;
-  screenshotUrl?: string;
+  screenshotUrls?: string[];
 }
 
 interface SnSupportTicketResponse {
@@ -42,6 +42,9 @@ const REQUESTED_PRIORITY_BY_SEVERITY: Record<string, string> = {
   error: "HIGH",
   critical: "CRITICAL",
 };
+
+// SN Support rejects a ticket carrying more than ten screenshots.
+const MAX_SCREENSHOT_URLS = 10;
 
 function normalizeHttpUrl(field: string, value?: string): string | undefined {
   const normalizedValue = value?.trim();
@@ -181,11 +184,12 @@ export class SnSupportService {
     // "Mark" mapper, after which this duplication can go.
     addMetadata("mark.pageUrl", pageUrl);
     addMetadata("mark.browser", browser);
-    // SN Support surfaces an opening screenshot from metadata.imageUrl.
-    addMetadata(
-      "imageUrl",
-      this.optionalHttpUrl("screenshot URL", ticket.screenshotUrl),
-    );
+
+    // SN Support renders each screenshot straight from its URL and never
+    // fetches it. screenshotUrls supersedes the deprecated metadata.imageUrl.
+    const screenshotUrls = (ticket.screenshotUrls ?? [])
+      .flatMap((url) => this.optionalHttpUrl("screenshot URL", url) ?? [])
+      .slice(0, MAX_SCREENSHOT_URLS);
 
     const supportTicket = {
       title: ticket.title,
@@ -199,6 +203,7 @@ export class SnSupportService {
         "chat history URL",
         ticket.chatHistoryUrl,
       ),
+      ...(screenshotUrls.length > 0 ? { screenshotUrls } : {}),
       metadata,
     };
 

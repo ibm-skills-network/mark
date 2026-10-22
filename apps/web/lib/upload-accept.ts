@@ -103,6 +103,19 @@ export function isAndroidWebView(userAgent: string): boolean {
   );
 }
 
+/** The Coursera app identifies itself as `CourseraMobileApp/<version> (...)`. */
+export function isCourseraMobileApp(userAgent: string): boolean {
+  return /\bCourseraMobileApp\//i.test(userAgent);
+}
+
+/**
+ * In-app browsers often cannot open a file picker at all, so the learner taps
+ * the drop zone and nothing happens. Worth a nudge to open a real browser.
+ */
+export function shouldSuggestOpeningInBrowser(userAgent: string): boolean {
+  return isCourseraMobileApp(userAgent) || isAndroidWebView(userAgent);
+}
+
 /** WebView types the picker intent from the first entry, so mixed lists open image pickers. */
 export function shouldOmitAcceptFilter(
   acceptMap: UploadAcceptMap,

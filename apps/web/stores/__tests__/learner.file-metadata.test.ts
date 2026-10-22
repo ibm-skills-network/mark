@@ -51,4 +51,23 @@ describe("learner file source metadata", () => {
       [githubFile, storedFile],
     );
   });
+
+  it("stores a parsed notebook's content as its JSON text", () => {
+    const notebook = { cells: [{ cell_type: "code", source: ["x = 1"] }] };
+    const parsed = {
+      filename: "lab.ipynb",
+      githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
+      content: notebook,
+    } as unknown as learnerFileResponse;
+
+    useLearnerStore.getState().onFileChange([parsed], 7);
+    let [file] = useLearnerStore.getState().questions[0].learnerFileResponse;
+    expect(typeof file.content).toBe("string");
+    expect(JSON.parse(file.content)).toEqual(notebook);
+
+    useLearnerStore.getState().onFileChange([], 7);
+    useLearnerStore.getState().addFileUpload(parsed, 7);
+    [file] = useLearnerStore.getState().questions[0].learnerFileResponse!;
+    expect(typeof file.content).toBe("string");
+  });
 });

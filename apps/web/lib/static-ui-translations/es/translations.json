@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "Los modos de ahorro de datos y algunos navegadores, como Opera Mini, pueden dañar la página. Desactiva ese modo o abre la tarea en otro navegador.",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "Las imágenes no se pueden calificar en una respuesta de texto. Pega la salida en texto o descríbela con palabras.",
   "Your grade is on its way to yourLearning": "Tu calificación está en camino a yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "La sincronización de tu calificación con yourLearning puede tardar unas horas, así que te pedimos paciencia. Tu calificación está registrada de forma segura con nosotros y no necesitas hacer nada. Puedes cerrar esta ventana."
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "La sincronización de tu calificación con yourLearning puede tardar unas horas, así que te pedimos paciencia. Tu calificación está registrada de forma segura con nosotros y no necesitas hacer nada. Puedes cerrar esta ventana.",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "Es posible que la carga de archivos no funcione en la aplicación de Coursera. Abre esta tarea en un navegador como Chrome o Safari.",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "Es posible que la carga de archivos no funcione en este navegador integrado. Abre esta tarea en un navegador como Chrome o Safari.",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "Tu archivo para la pregunta {question} no se ha subido. ¿Enviar de todos modos?",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Los archivos de las preguntas {questions} no se han subido. ¿Enviar de todos modos?",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "La carga del archivo para la pregunta {question} falló, así que no se enviará nada para ella. ¿Enviar de todos modos?",
+  "You have flagged questions. Are you sure you want to submit?": "Tienes preguntas marcadas. ¿Seguro que quieres enviar?",
+  "You have unanswered questions. Are you sure you want to submit?": "Tienes preguntas sin responder. ¿Seguro que quieres enviar?"
 }

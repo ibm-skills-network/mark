@@ -125,7 +125,9 @@ describe("workbook pivot-table metadata", () => {
   });
 
   it("reports the row-field sort order", () => {
-    expect(section).toMatch(/Row fields: Region \(sorted descending\)/);
+    expect(section).toMatch(
+      /Row fields: Region \(sorted descending by label\)/,
+    );
   });
 });
 

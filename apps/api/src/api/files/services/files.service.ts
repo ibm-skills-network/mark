@@ -1,3 +1,4 @@
+import type { ObjectCannedACL } from "@aws-sdk/client-s3";
 import {
   BadRequestException,
   ForbiddenException,
@@ -830,11 +831,16 @@ export class FilesService {
    * The claim is taken here rather than at admission because multer has
    * already materialised the whole body in memory by the time any handler
    * runs — this bounds the concurrent storage work, not the buffering itself.
+   *
+   * `options.contentType` overrides the client-claimed `file.mimetype`, and
+   * `options.acl` sets a canned ACL on the object; both default to the
+   * private, as-uploaded behaviour.
    */
   async directUpload(
     file: Express.Multer.File,
     bucket: string,
     key: string,
+    options: { acl?: ObjectCannedACL; contentType?: string } = {},
   ): Promise<{ success: true; key: string; bucket: string; etag?: string }> {
     if (!this.processingBudget.tryAcquire(file.size)) {
       this.logger.warn(
@@ -849,7 +855,8 @@ export class FilesService {
         Bucket: bucket,
         Key: key,
         Body: file.buffer,
-        ContentType: file.mimetype,
+        ContentType: options.contentType ?? file.mimetype,
+        ...(options.acl ? { ACL: options.acl } : {}),
       });
 
       return {

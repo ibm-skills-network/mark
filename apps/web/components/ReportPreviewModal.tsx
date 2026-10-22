@@ -36,7 +36,10 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"],
+      "image/png": [".png"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/gif": [".gif"],
+      "image/webp": [".webp"],
     },
     multiple: false,
     maxSize: 10 * 1024 * 1024,
@@ -80,7 +83,7 @@ const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
               Drag and drop an image, or click to select
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              PNG, JPG, GIF up to 10MB
+              PNG, JPG, GIF, WebP up to 10MB
             </p>
           </div>
         )}

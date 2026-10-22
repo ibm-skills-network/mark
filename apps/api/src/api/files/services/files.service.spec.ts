@@ -438,6 +438,31 @@ describe("FilesService", () => {
       });
     });
 
+    it("stores private with the client's type unless options say otherwise", async () => {
+      const s3 = mockS3Service as unknown as { putObject: jest.Mock };
+      s3.putObject.mockResolvedValue({ ETag: '"etag"' });
+
+      await service.directUpload(file, "author-bucket", "a/plain.txt");
+      expect(s3.putObject).toHaveBeenLastCalledWith({
+        Bucket: "author-bucket",
+        Key: "a/plain.txt",
+        Body: file.buffer,
+        ContentType: "text/plain",
+      });
+
+      await service.directUpload(file, "debug-bucket", "a/shot.png", {
+        acl: "public-read",
+        contentType: "image/png",
+      });
+      expect(s3.putObject).toHaveBeenLastCalledWith({
+        Bucket: "debug-bucket",
+        Key: "a/shot.png",
+        Body: file.buffer,
+        ContentType: "image/png",
+        ACL: "public-read",
+      });
+    });
+
     it("releases the claim when the storage write fails", async () => {
       const s3 = mockS3Service as unknown as { putObject: jest.Mock };
       s3.putObject.mockRejectedValue(new Error("storage down"));

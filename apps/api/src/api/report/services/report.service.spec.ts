@@ -1,5 +1,6 @@
 import "reflect-metadata";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Logger, NotFoundException } from "@nestjs/common";
+import sharp from "sharp";
 import { ReportsService } from "./report.service";
 
 // sendBugRenewalEmail only touches prisma (report read/update) and the email
@@ -126,7 +127,10 @@ describe("ReportsService.reportIssue", () => {
     userId: "employee@ibm.com",
   };
 
-  const makeForReportIssue = (snSupportService: unknown) => {
+  const makeForReportIssue = (
+    snSupportService: unknown,
+    filesService: unknown = undefined,
+  ) => {
     const prisma = {
       report: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -145,7 +149,7 @@ describe("ReportsService.reportIssue", () => {
     const service = new ReportsService(
       floService as never,
       prisma as never,
-      undefined as never,
+      filesService as never,
       undefined as never,
       snSupportService as never,
       supportRouting as never,
@@ -288,7 +292,7 @@ describe("ReportsService.reportIssue", () => {
         toolName: "Mark",
         browser: undefined,
         chatHistoryUrl: undefined,
-        screenshotUrl: undefined,
+        screenshotUrls: undefined,
       },
       // The product-scoped key is what routes the ticket to Coursera.
       "sk_coursera",
@@ -487,6 +491,473 @@ describe("ReportsService.reportIssue", () => {
     expect(snSupportService.createTicket).not.toHaveBeenCalled();
     expect(prisma.report.create).toHaveBeenCalled();
     expect(result.reportId).toBe(7);
+  });
+  describe("routing away from SN Support", () => {
+    const sn = () => ({
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-4" }),
+    });
+    const diagnostics = {
+      v: 1 as const,
+      session: { attemptId: 84 },
+    };
+    let logSpy: jest.SpyInstance;
+    beforeEach(() => {
+      logSpy = jest.spyOn(Logger.prototype, "log").mockImplementation();
+    });
+    afterEach(() => logSpy.mockRestore());
+
+    const filler =
+      "**Steps to reproduce:**\r\nno\r\n\r\n**Expected result:**\r\nno\r\n\r\n**Actual result:**\r\nok";
+
+    it("records a report with no usable text without filing a ticket", async () => {
+      const snSupportService = sn();
+      const { service, prisma, supportRouting } =
+        makeForReportIssue(snSupportService);
+      const create = jest.fn().mockResolvedValue({ id: 1 });
+      (prisma as Record<string, unknown>).reportDiagnostics = { create };
+
+      const result = await service.reportIssue(
+        {
+          ...reportDto,
+          issueType: "BUG",
+          description: filler,
+          diagnostics,
+          additionalDetails: { category: "Flag Button Report" },
+        },
+        session,
+      );
+
+      expect(snSupportService.createTicket).not.toHaveBeenCalled();
+      expect(supportRouting.resolve).not.toHaveBeenCalled();
+      const row = prisma.report.create.mock.calls[0][0].data;
+      expect(row.description).toBe(filler);
+      expect(row.status).toBe("CLOSED");
+      expect(row.closureReason).toBe("junk");
+      expect(create).toHaveBeenCalledWith({
+        data: { reportId: 7, data: diagnostics },
+      });
+      expect(logSpy).toHaveBeenCalledWith(
+        "Report recorded without an SN Support ticket",
+        expect.objectContaining({
+          report_id: 7,
+          user_id: "employee@ibm.com",
+          assignment_id: 42,
+          reason: "filler_only",
+        }),
+      );
+    });
+
+    it("answers a junk report exactly like any report filed without a ticket", async () => {
+      const junk = makeForReportIssue(sn());
+      const junkResult = await junk.service.reportIssue(
+        { ...reportDto, description: "." },
+        session,
+      );
+
+      const offline = makeForReportIssue({
+        isConfigured: jest.fn().mockReturnValue(false),
+        createTicket: jest.fn(),
+      });
+      const offlineResult = await offline.service.reportIssue(
+        reportDto,
+        session,
+      );
+
+      expect(junkResult).toEqual(offlineResult);
+    });
+
+    it("still files an error-dialog report the reporter typed nothing into", async () => {
+      const snSupportService = sn();
+      const { service } = makeForReportIssue(snSupportService);
+
+      await service.reportIssue(
+        {
+          ...reportDto,
+          description:
+            "**Steps to reproduce:**\r\n1. I was using /learner/42 normally.\r\n2. The error dialog appeared.\r\n(Auto-filled — please describe what you were doing if you can.)\r\n\r\n**Actual result:**\r\nAn error dialog appeared:\r\nStatus: 500 — Something went wrong",
+          additionalDetails: { category: "Error Dialog Report" },
+        },
+        session,
+      );
+
+      expect(snSupportService.createTicket).toHaveBeenCalled();
+    });
+
+    it.each(["FALSE_MARKING", "grading", "false marking"])(
+      "records a grading dispute (%s) without filing a ticket",
+      async (issueType) => {
+        const snSupportService = sn();
+        const { service, prisma } = makeForReportIssue(snSupportService);
+        const create = jest.fn().mockResolvedValue({ id: 1 });
+        (prisma as Record<string, unknown>).reportDiagnostics = { create };
+
+        const result = await service.reportIssue(
+          {
+            ...reportDto,
+            issueType,
+            description: "Question 3 was marked wrong but matches the slides",
+            diagnostics,
+          },
+          session,
+        );
+
+        expect(snSupportService.createTicket).not.toHaveBeenCalled();
+        const row = prisma.report.create.mock.calls[0][0].data;
+        expect(row.issueType).toBe("FALSE_MARKING");
+        expect(row.status).toBe("OPEN");
+        expect(row.closureReason).toBeNull();
+        expect(create).toHaveBeenCalled();
+        expect(result.reportId).toBe(7);
+        expect(result.message).toContain("recorded for review");
+        expect(result.message).not.toMatch(/ticket|email/i);
+        expect(logSpy).toHaveBeenCalledWith(
+          "Report recorded without an SN Support ticket",
+          expect.objectContaining({
+            report_id: 7,
+            reason: "grading_dispute",
+          }),
+        );
+      },
+    );
+
+    it("still files a bug report with real text", async () => {
+      const snSupportService = sn();
+      const { service, prisma } = makeForReportIssue(snSupportService);
+
+      const result = await service.reportIssue(
+        { ...reportDto, issueType: "BUG", description: "Q3 answer key wrong" },
+        session,
+      );
+
+      expect(snSupportService.createTicket).toHaveBeenCalledTimes(1);
+      expect(prisma.report.create.mock.calls[0][0].data.status).toBe("OPEN");
+      expect(result.message).toContain("SUPPORT-4");
+    });
+
+    it("shows the reporter a junk report as an ordinary open report", async () => {
+      const { service, prisma } = makeForReportIssue(sn());
+      (prisma.report.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 7,
+          reporterId: "employee@ibm.com",
+          status: "CLOSED",
+          closureReason: "junk",
+          statusMessage: "Not forwarded to support: filler_only",
+          duplicateOfReportId: null,
+        },
+      ]);
+
+      const [shown] = await service.getReportsForUser("employee@ibm.com");
+
+      expect(shown.status).toBe("OPEN");
+      expect(shown.closureReason).toBeNull();
+      expect(shown.statusMessage).toBe(
+        "Your issue has been reported and is being reviewed.",
+      );
+    });
+  });
+
+  describe("report screenshots", () => {
+    let png: Buffer;
+    beforeAll(async () => {
+      png = await sharp({
+        create: {
+          width: 2,
+          height: 2,
+          channels: 3,
+          background: "#fff",
+        },
+      })
+        .png()
+        .toBuffer();
+    });
+    const asUpload = (buffer: Buffer, mimetype = "image/png") =>
+      ({
+        buffer,
+        size: buffer.length,
+        mimetype,
+        originalname: "my screen shot.png",
+      }) as Express.Multer.File;
+    const sn = () => ({
+      isConfigured: jest.fn().mockReturnValue(true),
+      createTicket: jest.fn().mockResolvedValue({ ticketKey: "SUPPORT-5" }),
+    });
+    const env = { ...process.env };
+
+    beforeEach(() => {
+      process.env.IBM_COS_DEBUG_BUCKET = "debug-bkt";
+      process.env.IBM_COS_ENDPOINT = "https://s3.example.com/";
+    });
+    afterEach(() => {
+      process.env = { ...env };
+    });
+
+    it("stores the image public-read under a random key and sends its URL", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      await service.reportIssue(reportDto, session, asUpload(png, "text/html"));
+
+      const [, bucket, key, options] = filesService.directUpload.mock.calls[0];
+      expect(bucket).toBe("debug-bkt");
+      expect(key).toMatch(/^issue-screenshots\/[\da-f-]{36}\.png$/);
+      // The sniffed type wins over the client's claim.
+      expect(options).toEqual({ acl: "public-read", contentType: "image/png" });
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toEqual([`https://s3.example.com/debug-bkt/${key}`]);
+    });
+
+    it("drops a file that is not an image and still files the report", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn() };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(Buffer.from("<!doctype html><script>alert(1)</script>")),
+      );
+
+      expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toBeUndefined();
+      expect(result.reportId).toBe(7);
+    });
+
+    const withDiagnosticsTable = (prisma: Record<string, unknown>) => {
+      const create = jest.fn().mockResolvedValue({ id: 1 });
+      prisma.reportDiagnostics = { create };
+      return create;
+    };
+
+    it("stores the screenshot privately when no ticket goes out", async () => {
+      const snSupportService = {
+        isConfigured: jest.fn().mockReturnValue(false),
+        createTicket: jest.fn(),
+      };
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(png),
+      );
+
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      const [, bucket, key, options] = filesService.directUpload.mock.calls[0];
+      expect(bucket).toBe("debug-bkt");
+      expect(key).toMatch(/^issue-screenshots\/[\da-f-]{36}\.png$/);
+      expect(options).toEqual({ contentType: "image/png" });
+      expect(create.mock.calls[0][0].data.data.screenshot).toEqual({
+        bucket: "debug-bkt",
+        key,
+        contentType: "image/png",
+        bytes: expect.any(Number),
+        public: false,
+      });
+      expect(result.reportId).toBe(7);
+    });
+
+    it("stores a grading dispute's screenshot privately against the report", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+      const diagnostics = { v: 1 as const, session: { attemptId: 84 } };
+
+      await service.reportIssue(
+        {
+          ...reportDto,
+          issueType: "FALSE_MARKING",
+          description: "Question 3 was marked wrong but matches the slides",
+          diagnostics,
+        },
+        session,
+        asUpload(png),
+      );
+
+      expect(snSupportService.createTicket).not.toHaveBeenCalled();
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      const [, , key, options] = filesService.directUpload.mock.calls[0];
+      expect(options).not.toHaveProperty("acl");
+      expect(create).toHaveBeenCalledTimes(1);
+      const { data } = create.mock.calls[0][0];
+      expect(data.reportId).toBe(7);
+      // The capture is kept alongside the screenshot reference.
+      expect(data.data.session).toEqual({ attemptId: 84 });
+      expect(data.data.screenshot).toMatchObject({ key, public: false });
+    });
+
+    it("stores a junk report's screenshot privately", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      await service.reportIssue(
+        { ...reportDto, issueType: "BUG", description: "ok" },
+        session,
+        asUpload(png),
+      );
+
+      expect(snSupportService.createTicket).not.toHaveBeenCalled();
+      expect(prisma.report.create.mock.calls[0][0].data.closureReason).toBe(
+        "junk",
+      );
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      expect(filesService.directUpload.mock.calls[0][3]).toEqual({
+        contentType: "image/png",
+      });
+      expect(create.mock.calls[0][0].data.data.screenshot).toMatchObject({
+        public: false,
+      });
+    });
+
+    it("uploads a ticketed report's screenshot once and records it", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      await service.reportIssue(
+        { ...reportDto, issueType: "BUG" },
+        session,
+        asUpload(png),
+      );
+
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      const [, , key, options] = filesService.directUpload.mock.calls[0];
+      expect(options).toEqual({ acl: "public-read", contentType: "image/png" });
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toEqual([`https://s3.example.com/debug-bkt/${key}`]);
+      expect(create.mock.calls[0][0].data.data.screenshot).toMatchObject({
+        key,
+        public: true,
+      });
+    });
+
+    it("strips EXIF metadata before publishing", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+      const jpeg = await sharp({
+        create: { width: 2, height: 2, channels: 3, background: "#fff" },
+      })
+        .jpeg()
+        .withExif({ IFD0: { Artist: "reporter-device" } })
+        .toBuffer();
+
+      await service.reportIssue(reportDto, session, asUpload(jpeg));
+
+      const [file, , key] = filesService.directUpload.mock.calls[0];
+      expect(key).toMatch(/\.jpg$/);
+      expect((await sharp(file.buffer).metadata()).exif).toBeUndefined();
+    });
+
+    it("drops a file whose header sniffs as an image but does not decode", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn() };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(Buffer.concat([png.subarray(0, 8), Buffer.alloc(32)])),
+      );
+
+      expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toBeUndefined();
+    });
+
+    it("deletes the published screenshot when the ticket is not created", async () => {
+      const snSupportService = {
+        isConfigured: jest.fn().mockReturnValue(true),
+        createTicket: jest.fn().mockRejectedValue(new Error("SN down")),
+      };
+      const filesService = {
+        directUpload: jest.fn().mockResolvedValue({}),
+        deleteFile: jest.fn().mockResolvedValue({}),
+      };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(png),
+      );
+
+      const [, , key] = filesService.directUpload.mock.calls[0];
+      expect(filesService.deleteFile).toHaveBeenCalledWith("debug", key);
+      expect(result.reportId).toBe(7);
+    });
+
+    it("keeps a private copy when the ticket is not created", async () => {
+      const snSupportService = {
+        isConfigured: jest.fn().mockReturnValue(true),
+        createTicket: jest.fn().mockRejectedValue(new Error("SN down")),
+      };
+      const filesService = {
+        directUpload: jest.fn().mockResolvedValue({}),
+        deleteFile: jest.fn().mockResolvedValue({}),
+      };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      await service.reportIssue(reportDto, session, asUpload(png));
+
+      expect(filesService.directUpload).toHaveBeenCalledTimes(2);
+      const [, , publicKey] = filesService.directUpload.mock.calls[0];
+      const [, , privateKey, options] = filesService.directUpload.mock.calls[1];
+      expect(privateKey).not.toBe(publicKey);
+      expect(options).toEqual({ contentType: "image/png" });
+      expect(create.mock.calls[0][0].data.data.screenshot).toMatchObject({
+        key: privateKey,
+        public: false,
+      });
+    });
+
+    it("files the report without a screenshot when the upload fails", async () => {
+      const snSupportService = sn();
+      const filesService = {
+        directUpload: jest.fn().mockRejectedValue(new Error("storage down")),
+      };
+      const { service } = makeForReportIssue(snSupportService, filesService);
+
+      const result = await service.reportIssue(
+        reportDto,
+        session,
+        asUpload(png),
+      );
+
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toBeUndefined();
+      expect(result.reportId).toBe(7);
+    });
   });
 });
 

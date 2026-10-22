@@ -71,17 +71,21 @@ function makeFile(sizeBytes: number): File {
 function httpResponse(
   status: number,
   body = "",
+  headers: Record<string, string> = {},
 ): Promise<UploadTransportResponse> {
   return Promise.resolve({
     status,
     responseText: body,
-    getResponseHeader: () => null,
+    getResponseHeader: (name: string) => headers[name.toLowerCase()] ?? null,
   });
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   post.mockResolvedValue(PRESIGN_RESPONSE);
+  // Upload failures are reported with fetch; the report must never matter
+  // to the outcome these tests check.
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 204 });
 });
 
 describe("single-PUT fallback", () => {
@@ -190,21 +194,93 @@ describe("single-PUT fallback", () => {
   });
 });
 
-describe("failures that must not reroute", () => {
-  it("does not fall back when storage returns an HTTP status", async () => {
+// Storage never makes its own errors readable cross-origin, so a status the
+// browser can read came from a proxy in between. Same-origin gets past it.
+describe("readable storage rejections", () => {
+  it.each([403, 404, 407, 413, 500, 502])(
+    "re-sends through the API when the storage PUT answers %s",
+    async (status) => {
+      sendWithStallDetection
+        .mockReturnValueOnce(httpResponse(status, "<html>Blocked</html>"))
+        .mockReturnValueOnce(
+          httpResponse(201, JSON.stringify(DIRECT_UPLOAD_RESPONSE)),
+        );
+      const onFallback = jest.fn();
+
+      const result = await uploadFileToStorage(makeFile(128), uploadRequest, {
+        onFallback,
+      });
+
+      expect(onFallback).toHaveBeenCalledWith({ reason: "http" });
+      expect(result.key).toBe(DIRECT_UPLOAD_RESPONSE.key);
+      const fallbackRequest = sendWithStallDetection.mock.calls[1][0];
+      expect(fallbackRequest.method).toBe("POST");
+      expect(fallbackRequest.url).toContain("/files/direct-upload");
+    },
+  );
+
+  it("never blames the session for a readable 403", async () => {
+    sendWithStallDetection
+      .mockReturnValueOnce(httpResponse(403))
+      .mockRejectedValueOnce(new UploadTransportError("dead", "network"));
+
+    const failure = await uploadFileToStorage(
+      makeFile(128),
+      uploadRequest,
+    ).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      userMessage: expect.not.stringMatching(/session expired/i),
+    });
+  });
+
+  it("says the network is blocking the upload when the fallback also fails", async () => {
+    sendWithStallDetection
+      .mockReturnValueOnce(httpResponse(403))
+      .mockRejectedValueOnce(new UploadTransportError("dead", "network"));
+
+    await expect(
+      uploadFileToStorage(makeFile(128), uploadRequest),
+    ).rejects.toMatchObject({
+      userMessage:
+        "This upload appears to be blocked by your network. Try a different network or device, or another browser.",
+    });
+  });
+
+  it("explains instead of rerouting a readable rejection above the fallback cap", async () => {
+    const size = DIRECT_UPLOAD_FALLBACK_MAX_BYTES + 1;
     sendWithStallDetection.mockReturnValueOnce(httpResponse(403));
     const onFallback = jest.fn();
 
     await expect(
-      uploadFileToStorage(makeFile(128), uploadRequest, { onFallback }),
+      uploadFileToStorage(
+        makeFile(size),
+        { ...uploadRequest, fileSize: size },
+        { onFallback },
+      ),
     ).rejects.toMatchObject({
-      userMessage: "Upload session expired. Please refresh and try again.",
+      userMessage:
+        "Your network appears to be blocking this upload, and the file is too large to send another way. Try a different network, device or browser, or a smaller file.",
     });
 
     expect(onFallback).not.toHaveBeenCalled();
     expect(sendWithStallDetection).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the API's own answer when the fallback is refused", async () => {
+    sendWithStallDetection
+      .mockReturnValueOnce(httpResponse(403))
+      .mockReturnValueOnce(
+        httpResponse(429, JSON.stringify({ message: "slow down" })),
+      );
+
+    await expect(
+      uploadFileToStorage(makeFile(128), uploadRequest),
+    ).rejects.toMatchObject({ status: 429 });
+  });
+});
+
+describe("failures that must not reroute", () => {
   it("does not fall back when the presign call itself fails", async () => {
     const { APIError } =
       jest.requireActual<typeof import("../api-client")>("../api-client");
@@ -284,5 +360,26 @@ describe("multipart uploads", () => {
       (call) => call[0].method === "POST",
     );
     expect(postedToApi).toBe(false);
+  });
+
+  it("treats a readable part rejection as a blocked network, not a session problem", async () => {
+    const size = 12 * 1024 * 1024;
+    sendWithStallDetection.mockReturnValue(httpResponse(403));
+    const onFallback = jest.fn();
+
+    await expect(
+      uploadFileToStorage(
+        makeFile(size),
+        { ...uploadRequest, fileSize: size },
+        { onFallback },
+      ),
+    ).rejects.toMatchObject({
+      userMessage:
+        "Your network appears to be blocking this upload, and the file is too large to send another way. Try a different network, device or browser, or a smaller file.",
+    });
+
+    expect(onFallback).not.toHaveBeenCalled();
+    // A 403 will not change on retry, so the part is tried once.
+    expect(sendWithStallDetection).toHaveBeenCalledTimes(1);
   });
 });

@@ -101,6 +101,118 @@ export function failureKindOf(error: unknown): UploadFailureKind {
 }
 
 /**
+ * What a readable non-2xx from the storage leg told us about who sent it.
+ *
+ * Object storage never makes its own error responses readable to the page (it
+ * sends no Access-Control-Allow-Origin on them), so a status the browser lets
+ * us read came from something in between — a corporate proxy or DLP filter.
+ * These fields exist to identify that intermediary, nothing more.
+ */
+export interface StorageResponseDetails {
+  /** Product token of the `Server` header, when the response exposed it. */
+  server?: string;
+  /** Whether the response carried a storage request id (real storage reply). */
+  hasAmzRequestId: boolean;
+  /** Error code the body named (`<Code>…</Code>` or a JSON code). */
+  errorCode?: string;
+  /** Length of the body, in characters. */
+  bodyLength: number;
+}
+
+/**
+ * The only shape kept from a response body: one identifier, so it cannot
+ * carry a name, email, IP address or credential. Matches the API's check.
+ */
+const ERROR_CODE = /^[A-Za-z][\w.-]{0,63}$/;
+const XML_CODE = /<Code>([^<]{1,64})<\/Code>/i;
+const SERVER_PRODUCT_TOKEN =
+  /^[\w!#$%&'*+.^`|~-]{1,64}(?:\/[\w!#$%&'*+.^`|~-]{1,64})?$/;
+const MAX_SERVER_TOKEN_LENGTH = 64;
+
+/**
+ * The error code a rejection body names, and nothing else from it.
+ *
+ * Block pages from filtering proxies routinely echo the user's name, email,
+ * IP address or the blocked URL (whose query string here is a presigned
+ * credential), so no free text from the body is ever kept.
+ */
+export function extractStorageErrorCode(body: string): string | undefined {
+  const xml = XML_CODE.exec(body)?.[1]?.trim();
+  if (xml !== undefined) return ERROR_CODE.test(xml) ? xml : undefined;
+  if (!body.trimStart().startsWith("{")) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { code, error } = parsed as { code?: unknown; error?: unknown };
+    const candidate = typeof code === "string" ? code : error;
+    return typeof candidate === "string" && ERROR_CODE.test(candidate)
+      ? candidate
+      : undefined;
+  } catch {
+    // Not JSON after all: there is no code to keep.
+    return undefined;
+  }
+}
+
+/** The first product token of a `Server` header ("nginx/1.18.0"). */
+function serverProductToken(value: string): string | undefined {
+  const [first] = value.trim().split(/\s/);
+  return first &&
+    first.length <= MAX_SERVER_TOKEN_LENGTH &&
+    SERVER_PRODUCT_TOKEN.test(first)
+    ? first
+    : undefined;
+}
+
+function readHeader(
+  response: UploadTransportResponse,
+  name: string,
+): string | null {
+  try {
+    return response.getResponseHeader(name);
+  } catch {
+    // Some engines throw for headers the CORS policy withholds; that is the
+    // same as the header being absent.
+    return null;
+  }
+}
+
+export function describeStorageResponse(
+  response: UploadTransportResponse,
+): StorageResponseDetails {
+  const server = readHeader(response, "server");
+  const body =
+    typeof response.responseText === "string" ? response.responseText : "";
+  return {
+    server: server ? serverProductToken(server) : undefined,
+    hasAmzRequestId: Boolean(readHeader(response, "x-amz-request-id")),
+    errorCode: extractStorageErrorCode(body),
+    bodyLength: body.length,
+  };
+}
+
+/**
+ * The storage leg produced a readable HTTP response that was not a success.
+ *
+ * Because storage's own errors are unreadable cross-origin, this is the mark
+ * of an intermediary answering in storage's place. The same bytes sent to the
+ * API on the site's own origin usually get past it.
+ */
+export class StorageHttpError extends Error {
+  public readonly details: StorageResponseDetails;
+
+  constructor(
+    message: string,
+    public readonly status: number,
+    response: UploadTransportResponse,
+  ) {
+    super(message);
+    this.name = "StorageHttpError";
+    this.details = describeStorageResponse(response);
+  }
+}
+
+/**
  * How long to wait for a response after the body has been fully handed off.
  * Scales with the payload because the bytes XHR already counted as "sent" may
  * still be draining out of the socket buffer on a slow link.

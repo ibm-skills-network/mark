@@ -1416,5 +1416,12 @@
   "Data-saving modes and some browsers, such as Opera Mini, can break the page. Turn the mode off or open the assignment in another browser.": "省流量模式和某些浏览器（例如 Opera Mini）可能会导致页面损坏。请关闭该模式，或在其他浏览器中打开作业。",
   "Images can't be graded in a text answer. Paste the text output instead, or describe it in words.": "文本答案中的图片无法评分。请改为粘贴文本形式的输出，或用文字描述。",
   "Your grade is on its way to yourLearning": "您的成绩正在同步到 yourLearning",
-  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "将您的成绩同步到 yourLearning 可能需要几个小时，请耐心等待。您的成绩已安全记录在我们这里，您无需执行任何操作。您可以关闭此窗口。"
+  "Syncing your grade to yourLearning can take a few hours, so please be patient. Your grade is safely recorded with us and there's nothing you need to do. You can close this window.": "将您的成绩同步到 yourLearning 可能需要几个小时，请耐心等待。您的成绩已安全记录在我们这里，您无需执行任何操作。您可以关闭此窗口。",
+  "File uploads may not work in the Coursera app. Open this assignment in a browser such as Chrome or Safari instead.": "在 Coursera 应用中可能无法上传文件。请改用 Chrome 或 Safari 等浏览器打开此作业。",
+  "File uploads may not work in this in-app browser. Open this assignment in a browser such as Chrome or Safari instead.": "在此应用内浏览器中可能无法上传文件。请改用 Chrome 或 Safari 等浏览器打开此作业。",
+  "Your file for Question {question} hasn't been uploaded. Submit anyway?": "问题 {question} 的文件尚未上传。仍要提交吗？",
+  "Files for Questions {questions} haven't been uploaded. Submit anyway?": "问题 {questions} 的文件尚未上传。仍要提交吗？",
+  "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "问题 {question} 的文件上传失败，因此不会为该问题提交任何内容。仍要提交吗？",
+  "You have flagged questions. Are you sure you want to submit?": "您有已标记的问题。确定要提交吗？",
+  "You have unanswered questions. Are you sure you want to submit?": "您有未回答的问题。确定要提交吗？"
 }

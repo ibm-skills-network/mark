@@ -21,6 +21,7 @@ import {
   ArchiveEntryContent,
   LearnerFileUpload,
 } from "../common/interfaces/attempt.interface";
+import { normalizeLearnerFileContent } from "../common/utils/learner-file-content.util";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
 import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../../llm/features/grading/constants";
@@ -278,6 +279,28 @@ export class FileContentExtractionService {
     }
   }
 
+  /**
+   * Inline content is read as text below. Stored responses and request
+   * bodies can carry a JSON file's content already parsed into an object;
+   * serialize it back so the file is extracted instead of failing on it.
+   */
+  private withTextContent(file: LearnerFileUpload): LearnerFileUpload {
+    const raw: unknown = file.content;
+    if (typeof raw === "string" || raw === undefined || raw === null) {
+      return file;
+    }
+
+    const { content, originalType } = normalizeLearnerFileContent(raw);
+    this.logger.warn("file_extraction.non_string_content", {
+      filename: file.filename,
+      questionId: file.questionId,
+      recordId: file.recordId,
+      contentType: originalType,
+      serializedLength: content?.length ?? 0,
+    });
+    return { ...file, content: content ?? "" };
+  }
+
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
     options?: {
@@ -296,7 +319,10 @@ export class FileContentExtractionService {
           );
           const startTime = Date.now();
 
-          const result = await this.extractSingleFileContent(file, options);
+          const result = await this.extractSingleFileContent(
+            this.withTextContent(file),
+            options,
+          );
 
           const duration = Date.now() - startTime;
           this.logger.debug(
@@ -4157,9 +4183,9 @@ export class FileContentExtractionService {
    * The position of `<tag`, ignoring longer tag names that merely start with
    * it, or -1.
    */
-  private indexOfOpeningTag(xml: string, tag: string): number {
+  private indexOfOpeningTag(xml: string, tag: string, start = 0): number {
     const opener = `<${tag}`;
-    let from = 0;
+    let from = start;
     for (;;) {
       const at = xml.indexOf(opener, from);
       if (at === -1) return -1;
@@ -4377,30 +4403,6 @@ export class FileContentExtractionService {
       }
     }
 
-    const pivotFieldElements = [
-      ...this.xmlBlockContent(pivotXml, "pivotFields").matchAll(
-        /<pivotField\b[^<>]*>/g,
-      ),
-    ].map((match) => match[0]);
-
-    const fieldLabel = (index: number): string => {
-      if (index < 0) return "Values";
-      const label = cacheFields[index] ?? `Field ${index + 1}`;
-      const sortType = /\bsortType="([^"<>]*)"/.exec(
-        pivotFieldElements[index] ?? "",
-      )?.[1];
-      return sortType && sortType !== "manual"
-        ? `${label} (sorted ${sortType})`
-        : label;
-    };
-
-    const axisFields = (section: "rowFields" | "colFields"): string[] => {
-      const block = this.xmlBlockContent(pivotXml, section);
-      return [...block.matchAll(/<field\b[^<>]*\bx="(-?\d+)"/g)].map((match) =>
-        fieldLabel(Number.parseInt(match[1], 10)),
-      );
-    };
-
     const dataFields = [
       ...this.xmlBlockContent(pivotXml, "dataFields").matchAll(
         /<dataField\b[^<>]*>/g,
@@ -4418,6 +4420,35 @@ export class FileContentExtractionService {
         : "Values";
     });
 
+    const pivotFields = this.pivotFieldElements(
+      this.xmlBlockContent(pivotXml, "pivotFields"),
+    );
+
+    const fieldLabel = (index: number): string => {
+      if (index < 0) return "Values";
+      const label = cacheFields[index] ?? `Field ${index + 1}`;
+      const field = pivotFields[index];
+      const sortType = /\bsortType="([^"<>]*)"/.exec(
+        field?.openingTag ?? "",
+      )?.[1];
+      if (!sortType || sortType === "manual") return label;
+      // Without an autoSortScope naming a data field, Excel sorts the field's
+      // items by their own labels, not by any value.
+      const dataFieldIndex = this.pivotSortDataFieldIndex(field?.body ?? "");
+      const basis =
+        dataFieldIndex === undefined
+          ? "label"
+          : (dataFields[dataFieldIndex] ?? "values");
+      return `${label} (sorted ${sortType} by ${basis})`;
+    };
+
+    const axisFields = (section: "rowFields" | "colFields"): string[] => {
+      const block = this.xmlBlockContent(pivotXml, section);
+      return [...block.matchAll(/<field\b[^<>]*\bx="(-?\d+)"/g)].map((match) =>
+        fieldLabel(Number.parseInt(match[1], 10)),
+      );
+    };
+
     const heading =
       sheetName === undefined
         ? `Pivot table "${name}"`
@@ -4432,6 +4463,69 @@ export class FileContentExtractionService {
       `\n  Column fields: ${columnFields.length > 0 ? columnFields.join(", ") : "(none)"}` +
       `\n  Data fields: ${dataFields.length > 0 ? dataFields.join(", ") : "(none)"}`
     );
+  }
+
+  /**
+   * Each `<pivotField>` in a `<pivotFields>` block, in order, with its opening
+   * tag and the content up to its `</pivotField>` ("" when self-closing).
+   *
+   * Scanned forward only: an opener with no closer gets an empty body, and
+   * once no closer is left none is searched for again, so a block of unclosed
+   * openers costs time linear in its length.
+   */
+  private pivotFieldElements(
+    block: string,
+  ): Array<{ openingTag: string; body: string }> {
+    const fields: Array<{ openingTag: string; body: string }> = [];
+    const closer = "</pivotField>";
+    let closersRemain = true;
+    let cursor = 0;
+    for (;;) {
+      const openingTag = this.indexOfOpeningTag(block, "pivotField", cursor);
+      if (openingTag === -1) break;
+      const openingTagEnd = block.indexOf(">", openingTag);
+      if (openingTagEnd === -1) break;
+      const tag = block.slice(openingTag, openingTagEnd + 1);
+      cursor = openingTagEnd + 1;
+      if (block.charAt(openingTagEnd - 1) === "/" || !closersRemain) {
+        fields.push({ openingTag: tag, body: "" });
+        continue;
+      }
+      const closingTag = block.indexOf(closer, cursor);
+      if (closingTag === -1) {
+        closersRemain = false;
+        fields.push({ openingTag: tag, body: "" });
+        continue;
+      }
+      fields.push({ openingTag: tag, body: block.slice(cursor, closingTag) });
+      cursor = closingTag + closer.length;
+    }
+    return fields;
+  }
+
+  /**
+   * The dataFields index a pivot field's sort is scoped to, or undefined when
+   * the sort is by the field's item labels. A value sort carries an
+   * `<autoSortScope>` whose pivot area references the data-field pseudo field
+   * (index 4294967294, written -2 by some producers); its `<x v="N"/>` picks
+   * dataFields[N]. A reference with no pointer yields -1, which no data field
+   * matches, so the caller falls back to a generic "values".
+   */
+  private pivotSortDataFieldIndex(pivotFieldBody: string): number | undefined {
+    const scope = this.xmlBlockContent(pivotFieldBody, "autoSortScope");
+    if (scope === "") return undefined;
+    for (const match of scope.matchAll(/<reference\b[^<>]*>/g)) {
+      const field = /\bfield="(-?\d+)"/.exec(match[0])?.[1];
+      if (field !== "4294967294" && field !== "-2") continue;
+      if (match[0].endsWith("/>")) return -1;
+      const contentStart = (match.index ?? 0) + match[0].length;
+      const contentEnd = scope.indexOf("</reference>", contentStart);
+      const content =
+        contentEnd === -1 ? "" : scope.slice(contentStart, contentEnd);
+      const pointer = /<x\b[^<>]*\bv="(\d+)"/.exec(content)?.[1];
+      return pointer === undefined ? -1 : Number.parseInt(pointer, 10);
+    }
+    return undefined;
   }
 
   /**

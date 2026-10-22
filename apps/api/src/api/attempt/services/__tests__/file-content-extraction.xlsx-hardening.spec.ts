@@ -309,9 +309,244 @@ describe("workbook pivot XML scanning cost", () => {
 
     expect(result.pivotCount).toBe(1);
     expect(result.section).toContain("source: SalesData!A1:D9");
-    expect(result.section).toContain("Row fields: Region (sorted descending)");
+    expect(result.section).toContain(
+      "Row fields: Region (sorted descending by label)",
+    );
     expect(result.section).toContain("Column fields: Revenue");
     expect(result.section).toContain("Data fields: Sum of Revenue");
+  });
+});
+
+describe("workbook pivot sort basis", () => {
+  const PIVOT_CACHE_RELATIONSHIP =
+    `<Relationships><Relationship Id="rId1" ` +
+    `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" ` +
+    `Target="../pivotCache/pivotCacheDefinition1.xml"/></Relationships>`;
+  const PIVOT_CACHE =
+    `<pivotCacheDefinition><cacheSource><worksheetSource sheet="Sales" ref="A1:C26"/>` +
+    `</cacheSource><cacheFields count="3"><cacheField name="Dealer ID"/>` +
+    `<cacheField name="Quantity Sold"/><cacheField name="Unit Price"/>` +
+    `</cacheFields></pivotCacheDefinition>`;
+  const DATA_FIELDS =
+    `<dataFields count="2"><dataField name="Sum of Quantity Sold" fld="1"/>` +
+    `<dataField name="Average of Unit Price" fld="2" subtotal="average"/></dataFields>`;
+
+  async function describePivot(pivotFields: string): Promise<string> {
+    const service = createService();
+    const buffer = craftZip([
+      {
+        path: "xl/pivotTables/pivotTable1.xml",
+        content:
+          `<pivotTableDefinition name="QuantityByDealer">` +
+          `<pivotFields count="3">${pivotFields}</pivotFields>` +
+          `<rowFields count="1"><field x="0"/></rowFields>` +
+          DATA_FIELDS +
+          `</pivotTableDefinition>`,
+      },
+      {
+        path: "xl/pivotTables/_rels/pivotTable1.xml.rels",
+        content: PIVOT_CACHE_RELATIONSHIP,
+      },
+      {
+        path: "xl/pivotCache/pivotCacheDefinition1.xml",
+        content: PIVOT_CACHE,
+      },
+    ]);
+    const result = await (service as any).extractExcelChartsAndImages(buffer);
+    expect(result.pivotCount).toBe(1);
+    return result.section as string;
+  }
+
+  function valueSortScope(field: string, dataFieldIndex?: number): string {
+    const pointer =
+      dataFieldIndex === undefined ? "" : `<x v="${dataFieldIndex}"/>`;
+    return (
+      `<autoSortScope><pivotArea dataOnly="0" outline="0" fieldPosition="0">` +
+      `<references count="1"><reference field="${field}" count="1" selected="0">` +
+      `${pointer}</reference></references></pivotArea></autoSortScope>`
+    );
+  }
+
+  const OTHER_FIELDS =
+    `<pivotField dataField="1" showAll="0"/>` +
+    `<pivotField dataField="1" showAll="0"/>`;
+
+  it("says a self-closing sorted field is sorted by its labels", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="descending"/>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted descending by label)",
+    );
+  });
+
+  it("says a sorted field with items but no sort scope is sorted by its labels", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="ascending">` +
+        `<items count="3"><item x="1"/><item x="0"/><item t="default"/></items>` +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted ascending by label)",
+    );
+  });
+
+  it("names the data field a value sort is scoped to", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="descending">` +
+        `<items count="3"><item x="1"/><item x="0"/><item t="default"/></items>` +
+        valueSortScope("4294967294", 0) +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted descending by Sum of Quantity Sold)",
+    );
+  });
+
+  it("follows the data-field pointer to the second data field", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="ascending">` +
+        valueSortScope("4294967294", 1) +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted ascending by Average of Unit Price)",
+    );
+  });
+
+  it("accepts the signed form of the data-field pseudo index", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="descending">` +
+        valueSortScope("-2", 0) +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted descending by Sum of Quantity Sold)",
+    );
+  });
+
+  it("falls back to values when the sort scope does not say which data field", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="descending">` +
+        valueSortScope("4294967294") +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted descending by values)",
+    );
+  });
+
+  it("falls back to values when the data-field pointer is out of range", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="descending">` +
+        valueSortScope("4294967294", 7) +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted descending by values)",
+    );
+  });
+
+  it("treats a sort scope that references only an item field as a label sort", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="descending">` +
+        valueSortScope("0", 0) +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toContain(
+      "Row fields: Dealer ID (sorted descending by label)",
+    );
+  });
+
+  it("leaves a manually sorted field unannotated", async () => {
+    const section = await describePivot(
+      `<pivotField axis="axisRow" showAll="0" sortType="manual">` +
+        valueSortScope("4294967294", 0) +
+        `</pivotField>` +
+        OTHER_FIELDS,
+    );
+
+    expect(section).toMatch(/Row fields: Dealer ID\n/);
+  });
+
+  it("keeps field indexes aligned when earlier fields carry children", async () => {
+    const service = createService();
+    const buffer = craftZip([
+      {
+        path: "xl/pivotTables/pivotTable1.xml",
+        content:
+          `<pivotTableDefinition name="Mixed">` +
+          `<pivotFields count="3">` +
+          `<pivotField showAll="0"><items count="1"><item t="default"/></items></pivotField>` +
+          `<pivotField axis="axisRow" showAll="0" sortType="descending">` +
+          valueSortScope("4294967294", 0) +
+          `</pivotField>` +
+          `<pivotField axis="axisCol" showAll="0" sortType="ascending"/>` +
+          `</pivotFields>` +
+          `<rowFields count="1"><field x="1"/></rowFields>` +
+          `<colFields count="1"><field x="2"/></colFields>` +
+          DATA_FIELDS +
+          `</pivotTableDefinition>`,
+      },
+      {
+        path: "xl/pivotTables/_rels/pivotTable1.xml.rels",
+        content: PIVOT_CACHE_RELATIONSHIP,
+      },
+      {
+        path: "xl/pivotCache/pivotCacheDefinition1.xml",
+        content: PIVOT_CACHE,
+      },
+    ]);
+
+    const result = await (service as any).extractExcelChartsAndImages(buffer);
+
+    expect(result.section).toContain(
+      "Row fields: Quantity Sold (sorted descending by Sum of Quantity Sold)",
+    );
+    expect(result.section).toContain(
+      "Column fields: Unit Price (sorted ascending by label)",
+    );
+  });
+
+  it("scans many unclosed pivot fields in bounded time", async () => {
+    const service = createService();
+    const openers: string[] = [];
+    for (let index = 0; index < 20_000; index++) {
+      openers.push(
+        '<pivotField sortType="descending"><autoSortScope><reference field="-2">',
+      );
+    }
+    const buffer = craftZip([
+      {
+        path: "xl/pivotTables/pivotTable1.xml",
+        content:
+          `<pivotTableDefinition name="Adversarial"><pivotFields>` +
+          openers.join("") +
+          `</pivotFields><rowFields><field x="0"/></rowFields></pivotTableDefinition>`,
+      },
+    ]);
+
+    const startedAt = Date.now();
+    const result = await (service as any).extractExcelChartsAndImages(buffer);
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(result.pivotCount).toBe(1);
   });
 });
 

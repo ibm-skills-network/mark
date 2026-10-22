@@ -127,6 +127,7 @@ function seedLearnerState(assignmentIdInStore: number | null) {
     activeAttemptId: 999,
     userPreferedLanguage: null,
     isUploadingFiles: false,
+    uploadStatusByQuestion: {},
   });
   useLearnerOverviewStore.setState({ assignmentId: assignmentIdInStore });
   useAssignmentDetails.setState({ assignmentDetails: null });
@@ -519,6 +520,51 @@ describe("LearnerHeader submit gating", () => {
     expect(toast.error).toHaveBeenCalledWith(
       expect.stringMatching(/file upload in progress/i),
     );
+  });
+
+  it("names the question whose file is still uploading", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [
+        answeredQuestion,
+        {
+          id: 2,
+          type: "UPLOAD",
+          status: "unedited",
+        } as unknown as QuestionStore,
+      ],
+    });
+    useLearnerStore.getState().setQuestionUploadStatus(2, "uploading");
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      "Wait for the file on Question 2 to finish uploading.",
+    );
+  });
+
+  it("asks before submitting past a failed upload", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [
+        answeredQuestion,
+        {
+          id: 2,
+          type: "UPLOAD",
+          status: "unedited",
+        } as unknown as QuestionStore,
+      ],
+    });
+    useLearnerStore.getState().setQuestionUploadStatus(2, "failed");
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    // The confirmation (mocked out here) stands between the learner and an
+    // attempt with an empty upload answer.
+    expect(mockSubmitAssignment).not.toHaveBeenCalled();
   });
 
   it("refuses to submit when no question has been answered", async () => {
