@@ -25,6 +25,25 @@ type SyncWithAttempt = Prisma.LtiGradeSyncGetPayload<{
   include: { attempt: true };
 }>;
 
+type SupersedingSync = {
+  id: number;
+  grade: number;
+};
+
+type ResourceLink = {
+  groupId?: string;
+  outcomeServiceUrl?: string;
+};
+
+/**
+ * How long a row may sit PENDING (never claimed) or IN_PROGRESS (claimed, no
+ * outcome written) before it is treated as orphaned, e.g. by a pod killed
+ * mid-send, and becomes eligible for a retry. Well above the 90s gateway
+ * timeout so a send that is still in flight is never claimed twice.
+ * Mirrored in scripts/lti-sync-drain.js.
+ */
+export const ORPHANED_SYNC_STALE_MS = 10 * 60 * 1000;
+
 type ErrorHistoryEntry = {
   attempt: number;
   error: string;
@@ -70,6 +89,9 @@ export class LtiGradeSyncService {
       `Creating grade sync for attempt ${request.attemptId}, grade: ${request.grade}`,
     );
 
+    // Inserted already claimed: if this process dies before an outcome is
+    // written, the row is a stale IN_PROGRESS row that the retry drain
+    // recovers, instead of a PENDING row nothing ever looks at.
     const sync = await this.prisma.ltiGradeSync.create({
       data: {
         attemptId: request.attemptId,
@@ -78,16 +100,19 @@ export class LtiGradeSyncService {
         grade: request.grade,
         authCookie: request.authCookie,
         ltiGatewayUrl: this.ltiGatewayUrl,
-        status: LtiSyncStatus.PENDING,
+        status: LtiSyncStatus.IN_PROGRESS,
+        lastAttemptAt: new Date(),
       },
+      include: { attempt: true },
     });
 
-    return await this.attemptSync(sync.id);
+    return await this.sendGrade(sync);
   }
 
   /**
-   * Attempts to sync a grade to the LTI gateway.
-   * Handles errors, retries, and notifications.
+   * Retries an existing sync row. Claims it atomically so two workers can't
+   * send it twice, and closes it unsent when a newer SUCCESS already covers
+   * the same gradebook column.
    *
    * @param syncId - The ID of the sync record
    * @returns Promise<SyncResult> with sync outcome
@@ -102,14 +127,218 @@ export class LtiGradeSyncService {
       throw new Error(`Grade sync ${syncId} not found`);
     }
 
-    void this.prisma.ltiGradeSync.update({
-      where: { id: syncId },
-      data: {
+    if (sync.status === LtiSyncStatus.SUCCESS) {
+      return {
+        success: true,
+        syncId,
+        status: LtiSyncStatus.SUCCESS,
+        message: "Grade already successfully synced",
+      };
+    }
+
+    const claimedAt = new Date();
+    const claim = await this.prisma.ltiGradeSync.updateMany({
+      where: this.claimableWhere(syncId, claimedAt),
+      data: { status: LtiSyncStatus.IN_PROGRESS, lastAttemptAt: claimedAt },
+    });
+
+    if (claim.count === 0) {
+      this.logger.log(
+        `LTI grade sync ${syncId} not claimed: another send is in flight`,
+        {
+          sync_id: syncId,
+          attempt_id: sync.attemptId,
+          assignment_id: sync.assignmentId,
+          status: sync.status,
+          last_attempt_at: sync.lastAttemptAt?.toISOString() ?? null,
+        },
+      );
+      return {
+        success: false,
+        syncId,
         status: LtiSyncStatus.IN_PROGRESS,
-        lastAttemptAt: new Date(),
+        message: "Grade sync is already in progress",
+      };
+    }
+
+    const superseding = await this.findSupersedingSync(sync);
+    if (superseding) {
+      return await this.closeAsSuperseded(sync, superseding);
+    }
+
+    return await this.sendGrade(sync);
+  }
+
+  /**
+   * Rows a send may claim. PENDING is only claimable once orphaned: current
+   * code never leaves a row PENDING, but a pod still running older code
+   * keeps its row PENDING while its own send is in flight. IN_PROGRESS is
+   * only claimable once stale, so an in-flight send is never doubled.
+   */
+  private claimableWhere(
+    syncId: number,
+    now: Date,
+  ): Prisma.LtiGradeSyncWhereInput {
+    const staleBefore = new Date(now.getTime() - ORPHANED_SYNC_STALE_MS);
+    return {
+      id: syncId,
+      OR: [
+        { status: { in: [LtiSyncStatus.SCHEDULED, LtiSyncStatus.FAILED] } },
+        { status: LtiSyncStatus.PENDING, createdAt: { lt: staleBefore } },
+        ...this.staleInProgressWhere(staleBefore),
+      ],
+    };
+  }
+
+  private staleInProgressWhere(
+    staleBefore: Date,
+  ): Prisma.LtiGradeSyncWhereInput[] {
+    return [
+      { status: LtiSyncStatus.IN_PROGRESS, lastAttemptAt: { lt: staleBefore } },
+      {
+        status: LtiSyncStatus.IN_PROGRESS,
+        lastAttemptAt: null,
+        updatedAt: { lt: staleBefore },
+      },
+    ];
+  }
+
+  /**
+   * A newer SUCCESS for the same learner, assignment and resource link means
+   * the LMS already holds a grade at least as current as this row's (each
+   * row carries the learner's best grade at the time it was created).
+   * Sending this older row would overwrite that grade with a stale one.
+   */
+  private async findSupersedingSync(
+    sync: SyncWithAttempt,
+  ): Promise<SupersedingSync | null> {
+    const newer = await this.prisma.ltiGradeSync.findMany({
+      where: {
+        userId: sync.userId,
+        assignmentId: sync.assignmentId,
+        status: LtiSyncStatus.SUCCESS,
+        id: { gt: sync.id },
+      },
+      select: { id: true, grade: true, authCookie: true },
+      orderBy: { id: "desc" },
+      take: 100,
+    });
+
+    if (newer.length === 0) {
+      return null;
+    }
+
+    const link = this.resourceLinkOf(sync.authCookie, sync.id);
+    const match = newer.find((candidate) =>
+      this.isSameResourceLink(
+        link,
+        this.resourceLinkOf(candidate.authCookie, candidate.id),
+      ),
+    );
+
+    return match ? { id: match.id, grade: match.grade } : null;
+  }
+
+  /**
+   * The gradebook column a row posts to, read from the stored session JWT.
+   * lis_result_sourcedid is deliberately not used: some LMSes issue a new
+   * one on every launch for the same learner and column.
+   */
+  private resourceLinkOf(authCookie: string, syncId: number): ResourceLink {
+    const payloadSegment = authCookie.split(".")[1];
+    if (!payloadSegment) {
+      return {};
+    }
+
+    try {
+      const payload: unknown = JSON.parse(
+        Buffer.from(payloadSegment, "base64url").toString("utf8"),
+      );
+      if (!this.isRecord(payload)) {
+        return {};
+      }
+      const groupId = payload.groupID;
+      const outcomeServiceUrl = payload.lis_outcome_service_url;
+      return {
+        groupId: typeof groupId === "string" ? groupId : undefined,
+        outcomeServiceUrl:
+          typeof outcomeServiceUrl === "string" ? outcomeServiceUrl : undefined,
+      };
+    } catch (error) {
+      // Not fatal: the row is then matched on learner and assignment alone.
+      this.logger.warn(`LTI grade sync ${syncId}: unreadable session claims`, {
+        sync_id: syncId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+
+  /** Fields missing on either side are not compared. */
+  private isSameResourceLink(a: ResourceLink, b: ResourceLink): boolean {
+    if (a.groupId && b.groupId && a.groupId !== b.groupId) {
+      return false;
+    }
+    if (
+      a.outcomeServiceUrl &&
+      b.outcomeServiceUrl &&
+      a.outcomeServiceUrl !== b.outcomeServiceUrl
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  private async closeAsSuperseded(
+    sync: SyncWithAttempt,
+    superseding: SupersedingSync,
+  ): Promise<SyncResult> {
+    const reason = `superseded by sync ${superseding.id} (grade ${superseding.grade}); not sent`;
+    const errorHistory = this.normalizeErrorHistory(sync.errorHistory);
+    errorHistory.push({
+      attempt: sync.retryCount,
+      error: reason,
+      timestamp: new Date().toISOString(),
+    });
+
+    await this.prisma.ltiGradeSync.update({
+      where: { id: sync.id },
+      data: {
+        status: LtiSyncStatus.FAILED,
+        lastError: reason,
+        errorHistory,
+        nextRetryAt: null,
+        completedAt: new Date(),
       },
     });
 
+    this.logger.log(
+      `LTI grade sync ${sync.id} closed: superseded by sync ${superseding.id}`,
+      {
+        sync_id: sync.id,
+        attempt_id: sync.attemptId,
+        assignment_id: sync.assignmentId,
+        grade: sync.grade,
+        previous_status: sync.status,
+        superseded_by_sync_id: superseding.id,
+        superseded_by_grade: superseding.grade,
+      },
+    );
+
+    return {
+      success: false,
+      syncId: sync.id,
+      status: LtiSyncStatus.FAILED,
+      message:
+        "Grade sync superseded by a newer synced grade for the same course; not resent",
+    };
+  }
+
+  /**
+   * Sends a claimed row's grade to the LTI gateway and records the outcome.
+   */
+  private async sendGrade(sync: SyncWithAttempt): Promise<SyncResult> {
+    const syncId = sync.id;
     const targetUrl = sync.ltiGatewayUrl || this.ltiGatewayUrl;
     const requestStart = Date.now();
     this.logger.debug(
@@ -498,7 +727,8 @@ If you have questions, please contact your instructor.
   }
 
   /**
-   * Processes all scheduled retries that are due.
+   * Processes scheduled retries that are due, plus rows orphaned before
+   * they reached SCHEDULED (stale PENDING or IN_PROGRESS).
    * Should be called periodically by a cron job or scheduler.
    *
    * @returns Promise<number> - Number of syncs processed
@@ -506,13 +736,17 @@ If you have questions, please contact your instructor.
   async processScheduledRetries(): Promise<number> {
     const now = new Date();
 
+    const staleBefore = new Date(now.getTime() - ORPHANED_SYNC_STALE_MS);
+
     const dueRetries = await this.prisma.ltiGradeSync.findMany({
       where: {
-        status: LtiSyncStatus.SCHEDULED,
-        nextRetryAt: {
-          lte: now,
-        },
+        OR: [
+          { status: LtiSyncStatus.SCHEDULED, nextRetryAt: { lte: now } },
+          { status: LtiSyncStatus.PENDING, createdAt: { lt: staleBefore } },
+          ...this.staleInProgressWhere(staleBefore),
+        ],
       },
+      orderBy: { id: "asc" },
       take: 50,
     });
 

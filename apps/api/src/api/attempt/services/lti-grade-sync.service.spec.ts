@@ -20,6 +20,7 @@ describe("LtiGradeSyncService", () => {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       count: jest.fn(),
     },
     ltiSyncErrorLog: {
@@ -60,6 +61,8 @@ describe("LtiGradeSyncService", () => {
     httpService = module.get<HttpService>(HttpService);
 
     jest.clearAllMocks();
+    mockPrismaService.ltiGradeSync.updateMany.mockResolvedValue({ count: 1 });
+    mockPrismaService.ltiGradeSync.findMany.mockResolvedValue([]);
   });
 
   describe("createAndSync", () => {
@@ -114,8 +117,10 @@ describe("LtiGradeSyncService", () => {
           attemptId: 123,
           userId: "user-456",
           grade: 0.85,
-          status: LtiSyncStatus.PENDING,
+          status: LtiSyncStatus.IN_PROGRESS,
+          lastAttemptAt: expect.any(Date),
         }),
+        include: { attempt: true },
       });
     });
   });
@@ -167,10 +172,11 @@ describe("LtiGradeSyncService", () => {
         },
       );
 
-      expect(mockPrismaService.ltiGradeSync.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mockPrismaService.ltiGradeSync.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 1 }),
         data: expect.objectContaining({
           status: LtiSyncStatus.IN_PROGRESS,
+          lastAttemptAt: expect.any(Date),
         }),
       });
 
@@ -451,7 +457,7 @@ describe("LtiGradeSyncService", () => {
         },
       ];
 
-      mockPrismaService.ltiGradeSync.findMany.mockResolvedValue(dueRetries);
+      mockPrismaService.ltiGradeSync.findMany.mockResolvedValueOnce(dueRetries);
       mockPrismaService.ltiGradeSync.findUnique
         .mockResolvedValueOnce(dueRetries[0])
         .mockResolvedValueOnce(dueRetries[1]);
@@ -470,15 +476,25 @@ describe("LtiGradeSyncService", () => {
       const processed = await service.processScheduledRetries();
 
       expect(processed).toBe(2);
-      expect(mockPrismaService.ltiGradeSync.findMany).toHaveBeenCalledWith({
-        where: {
-          status: LtiSyncStatus.SCHEDULED,
-          nextRetryAt: {
-            lte: expect.any(Date),
+      expect(mockPrismaService.ltiGradeSync.findMany).toHaveBeenNthCalledWith(
+        1,
+        {
+          where: {
+            OR: expect.arrayContaining([
+              {
+                status: LtiSyncStatus.SCHEDULED,
+                nextRetryAt: { lte: expect.any(Date) },
+              },
+              {
+                status: LtiSyncStatus.PENDING,
+                createdAt: { lt: expect.any(Date) },
+              },
+            ]),
           },
+          orderBy: { id: "asc" },
+          take: 50,
         },
-        take: 50,
-      });
+      );
     });
 
     it("should handle partial failures in batch", async () => {
@@ -487,7 +503,7 @@ describe("LtiGradeSyncService", () => {
         { id: 2, status: LtiSyncStatus.SCHEDULED, attempt: {} },
       ];
 
-      mockPrismaService.ltiGradeSync.findMany.mockResolvedValue(dueRetries);
+      mockPrismaService.ltiGradeSync.findMany.mockResolvedValueOnce(dueRetries);
       mockPrismaService.ltiGradeSync.findUnique
         .mockResolvedValueOnce({
           ...dueRetries[0],
@@ -520,7 +536,7 @@ describe("LtiGradeSyncService", () => {
         nextRetryAt: new Date(),
       }));
 
-      mockPrismaService.ltiGradeSync.findMany.mockResolvedValue(
+      mockPrismaService.ltiGradeSync.findMany.mockResolvedValueOnce(
         manyRetries.slice(0, 50),
       );
 

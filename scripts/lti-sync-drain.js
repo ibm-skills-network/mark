@@ -18,6 +18,12 @@
  *                           (default: 2026-05-25T18:31:00Z — the recent batch)
  *   --all                   ignore --since, include every SCHEDULED row
  *   --include-failed        also pick up FAILED rows (default: SCHEDULED only)
+ *
+ * Rows orphaned before they reached SCHEDULED are always included: PENDING
+ * rows older than 10 minutes and IN_PROGRESS rows whose claim is older than
+ * 10 minutes (the sending pod died mid-send). The API claims each row
+ * atomically and skips rows superseded by a newer SUCCESS, so a row that is
+ * still in flight or already covered is never sent twice.
  *   --rate=5                requests per second (default 5)
  *   --limit=N               cap total rows processed (default: no cap)
  *   --batch-size=500        DB page size (default 500)
@@ -87,21 +93,42 @@ async function retryOne(apiBase, syncId, headers) {
   return { status: response.status, body };
 }
 
-async function fetchPage(args, cursorId) {
+// Keep in step with ORPHANED_SYNC_STALE_MS in lti-grade-sync.service.ts.
+const ORPHANED_SYNC_STALE_MS = 10 * 60 * 1000;
+
+function buildWhere(args, cursorId, now) {
   const statuses = args.includeFailed ? ["SCHEDULED", "FAILED"] : ["SCHEDULED"];
-  const where = { status: { in: statuses } };
-  if (!args.all) where.createdAt = { gte: new Date(args.since) };
-  if (cursorId != null) where.id = { gt: cursorId };
+  const retryable = { status: { in: statuses } };
   if (!args.ignoreNextRetry) {
     // Match the in-process cron's behaviour: only process rows whose
     // backoff has elapsed. nextRetryAt may be null on a fresh row that
     // has never been scheduled (first immediate-sync failure) — treat
     // those as due too.
-    where.OR = [{ nextRetryAt: { lte: new Date() } }, { nextRetryAt: null }];
+    retryable.OR = [{ nextRetryAt: { lte: now } }, { nextRetryAt: null }];
   }
+  const staleBefore = new Date(now.getTime() - ORPHANED_SYNC_STALE_MS);
+  const and = [
+    {
+      OR: [
+        retryable,
+        { status: "PENDING", createdAt: { lt: staleBefore } },
+        { status: "IN_PROGRESS", lastAttemptAt: { lt: staleBefore } },
+        {
+          status: "IN_PROGRESS",
+          lastAttemptAt: null,
+          updatedAt: { lt: staleBefore },
+        },
+      ],
+    },
+  ];
+  if (!args.all) and.push({ createdAt: { gte: new Date(args.since) } });
+  if (cursorId != null) and.push({ id: { gt: cursorId } });
+  return { AND: and };
+}
 
+async function fetchPage(args, cursorId) {
   return prisma.ltiGradeSync.findMany({
-    where,
+    where: buildWhere(args, cursorId, new Date()),
     select: { id: true, attemptId: true, status: true, createdAt: true },
     orderBy: { id: "asc" },
     take: args.batchSize,
@@ -132,11 +159,11 @@ async function main() {
   console.log("  api base   :", apiBase || "(none — dry run)");
   console.log(
     "  scope      :",
-    args.all ? "ALL SCHEDULED" : `createdAt >= ${args.since}`,
+    args.all ? "ALL" : `createdAt >= ${args.since}`,
   );
   console.log(
     "  statuses   :",
-    args.includeFailed ? "SCHEDULED + FAILED" : "SCHEDULED",
+    `${args.includeFailed ? "SCHEDULED + FAILED" : "SCHEDULED"} + orphaned PENDING/IN_PROGRESS`,
   );
   console.log("  concurrency:", args.concurrency);
   console.log(
@@ -330,10 +357,14 @@ async function shutdownLinkerdProxy() {
   }
 }
 
-main()
-  .then(shutdownLinkerdProxy)
-  .catch(async (error) => {
-    console.error(error);
-    await shutdownLinkerdProxy();
-    process.exit(1);
-  });
+if (require.main === module) {
+  main()
+    .then(shutdownLinkerdProxy)
+    .catch(async (error) => {
+      console.error(error);
+      await shutdownLinkerdProxy();
+      process.exit(1);
+    });
+}
+
+module.exports = { buildWhere, ORPHANED_SYNC_STALE_MS };
