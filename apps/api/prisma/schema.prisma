@@ -546,6 +546,12 @@ model AssignmentAttempt {
   RegradingRequest    RegradingRequest[]
   comments            String? /// Additional comments or notes for the assignment attempt from the system
   preferredLanguage   String?
+  resultSubmissionId  String?
+  definition          AttemptDefinition?
+  draft               AttemptDraft?
+  submissions         AttemptSubmission[]
+  draftOperations     AttemptDraftOperation[]
+  sources             AttemptSource[]
   gradingProgress     GradingProgress?
   GradingJob          GradingJob[]
   LtiGradeSync        LtiGradeSync[]
@@ -1147,4 +1153,60 @@ model SavedSession {
 
   @@id([storeId, role, assignmentId])
   @@index([updatedAt])
+}
+
+/// Snapshot captured only when creating a new attempt. No inferred historical backfill.
+model AttemptDefinition {
+  attemptId     Int               @id
+  attempt       AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  schemaVersion Int               @default(1)
+  provenance    String            @default("created")
+  snapshot      Json
+  createdAt     DateTime          @default(now())
+}
+
+model AttemptDraft {
+  attemptId Int               @id
+  attempt   AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  revision  Int               @default(0)
+  answers   Json
+  updatedAt DateTime          @updatedAt
+}
+
+/// Durable receipts let a timed-out save be retried even after later saves.
+model AttemptDraftOperation {
+  attemptId   Int
+  attempt     AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  operationId String
+  requestHash String
+  revision    Int
+  createdAt   DateTime          @default(now())
+
+  @@id([attemptId, operationId])
+  @@unique([attemptId, revision])
+}
+
+model AttemptSubmission {
+  id            String            @id @default(uuid())
+  attemptId     Int               @unique
+  attempt       AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  operationId   String
+  draftRevision Int
+  answers       Json
+  createdAt     DateTime          @default(now())
+
+  @@unique([attemptId, operationId])
+}
+
+/// A completed upload can be bound to one attempt only; keys never come from submit bodies.
+model AttemptSource {
+  id         String            @id @default(uuid())
+  attemptId  Int
+  attempt    AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  uploadId   String            @unique
+  storageKey String
+  bucket     String
+  createdAt  DateTime          @default(now())
+
+  @@index([attemptId])
 }

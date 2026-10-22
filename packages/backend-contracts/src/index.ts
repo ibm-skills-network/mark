@@ -154,3 +154,5 @@ export {
   assertCommittedGrade,
 } from "./grading-result";
 export type { QuestionGrade, GradeCommitV1 } from "./grading-result";
+
+export * from "./attempt";
