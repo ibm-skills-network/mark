@@ -42,6 +42,7 @@ export interface RichTextEditorProps
   allowCopy?: boolean;
   toolbarMode?: ToolbarMode;
   disableListAutofill?: boolean;
+  disablePasteRules?: boolean;
   blockImages?: boolean;
   onImageBlocked?: () => void;
 }
@@ -56,6 +57,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   placeholder = "Write your question here...",
   toolbarMode = "full",
   disableListAutofill = false,
+  disablePasteRules = false,
   blockImages = false,
   onImageBlocked,
 }) => {
@@ -92,6 +94,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       getImagePolicy: () => policyRef.current,
     }),
     content: initialContent,
+    enablePasteRules: !disablePasteRules,
     parseOptions: { preserveWhitespace: "full" },
     immediatelyRender: false,
     emitContentError: true,
