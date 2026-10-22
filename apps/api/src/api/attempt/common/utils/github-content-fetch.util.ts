@@ -261,11 +261,58 @@ export async function fetchReadmeForBranch(
   }
 }
 
+/** Why a fetch produced nothing gradeable, in the learner-facing vocabulary. */
+export type UrlFetchFailureCode =
+  | "url_unreachable"
+  | "url_blocked"
+  | "url_empty"
+  | "url_unsupported";
+
+export interface UrlFetchFailure {
+  code: UrlFetchFailureCode;
+  /** Status the remote site answered with, when it answered at all. */
+  httpStatus?: number;
+}
+
 export interface GithubFetchResult {
   /** Root-repository fallbacks do not establish implementation evidence. */
   evidenceKind?: "readme" | "repository_metadata" | "repository_page";
   body: string;
   isFunctional: boolean;
+  /** Set whenever the result has nothing gradeable in it. */
+  failure?: UrlFetchFailure;
+}
+
+function httpStatusOf(error: unknown): number | undefined {
+  const status = (error as { response?: { status?: unknown } } | undefined)
+    ?.response?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+/**
+ * Maps a confirmed (non-retryable) miss to what the learner should be told.
+ * 401/403/406/451 are a site refusing automated readers; everything else that
+ * answered is treated as "not found", which for GitHub includes private repos.
+ */
+function failureForConfirmedMiss(error: unknown): UrlFetchFailure {
+  // The mesh's own 504 for a refused connect is not the site's answer.
+  if (isMeshConnectRefused(error)) return { code: "url_unreachable" };
+  const httpStatus = httpStatusOf(error);
+  if (
+    httpStatus === 401 ||
+    httpStatus === 403 ||
+    httpStatus === 406 ||
+    httpStatus === 451
+  ) {
+    return { code: "url_blocked", httpStatus };
+  }
+  return httpStatus === undefined
+    ? { code: "url_unreachable" }
+    : { code: "url_unreachable", httpStatus };
+}
+
+function emptyResult(failure: UrlFetchFailure): GithubFetchResult {
+  return { body: "", isFunctional: false, failure };
 }
 
 export interface GithubFetchLogContext {
@@ -313,9 +360,12 @@ function stripNoiseNodes($: ReturnType<typeof cheerio.load>): void {
 async function scrapeGithubPage(
   url: string,
   requireReadme = false,
+  onMiss?: (failure: UrlFetchFailure) => void,
 ): Promise<string | undefined> {
   try {
-    const response = await safeGet<string>(url);
+    const response = await safeGet<string>(url, {
+      headers: BROWSER_LIKE_HEADERS,
+    });
     const $ = cheerio.load(response.data);
     stripNoiseNodes($);
 
@@ -346,6 +396,7 @@ async function scrapeGithubPage(
     return content ? content.replaceAll(/\s+/g, " ").trim() : undefined;
   } catch (error) {
     throwIfRetryable(error, url, "github_page");
+    onMiss?.(failureForConfirmedMiss(error));
     logger.warn(
       `GitHub HTML-scrape fallback failed for ${url}: ${
         error instanceof Error ? error.message : String(error)
@@ -519,7 +570,10 @@ async function fetchGithubBlobContent(
       responseType: "text",
     });
     if (response.status === 200) {
-      return { body: truncate(response.data), isFunctional: true };
+      const body = truncate(response.data);
+      return body.trim()
+        ? { body, isFunctional: true }
+        : emptyResult({ code: "url_empty", httpStatus: 200 });
     }
     if (response.status >= 500) {
       logger.warn(
@@ -531,7 +585,10 @@ async function fetchGithubBlobContent(
         status: response.status,
       });
     }
-    return { body: "", isFunctional: false };
+    return emptyResult({
+      code: "url_unreachable",
+      httpStatus: response.status,
+    });
   } catch (error) {
     if (error instanceof RetryableUrlFetchError) {
       throw error;
@@ -542,11 +599,270 @@ async function fetchGithubBlobContent(
         error instanceof Error ? error.message : String(error)
       }`,
     );
-    return { body: "", isFunctional: false };
+    return emptyResult(failureForConfirmedMiss(error));
   }
 }
 
-const REPO_ROOT_RE = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/;
+const GITHUB_TREE_RE =
+  /^https:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)\/tree\/([^#?]+)/i;
+
+/** Bounds for reading a folder: enough for a module, never a whole repo. */
+export const MAX_FOLDER_FILES = 25;
+const MAX_FOLDER_FILE_BYTES = 60_000;
+const FOLDER_FETCH_CONCURRENCY = 5;
+
+// Content we cannot show a text grader; listed by name only.
+const BINARY_EXTENSIONS = new Set([
+  "7z",
+  "avi",
+  "bin",
+  "bmp",
+  "class",
+  "dll",
+  "doc",
+  "docx",
+  "exe",
+  "gif",
+  "gz",
+  "ico",
+  "jar",
+  "jpeg",
+  "jpg",
+  "mov",
+  "mp3",
+  "mp4",
+  "o",
+  "pdf",
+  "png",
+  "ppt",
+  "pptx",
+  "pyc",
+  "so",
+  "sqlite",
+  "tar",
+  "tgz",
+  "ttf",
+  "wav",
+  "webp",
+  "woff",
+  "woff2",
+  "xls",
+  "xlsx",
+  "zip",
+]);
+
+interface GithubContentEntry {
+  type?: string;
+  name?: string;
+  path?: string;
+  size?: number;
+  download_url?: string | null;
+  content?: string;
+  encoding?: string;
+}
+
+function decodePathSegments(path: string): string[] {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        // A literal "%" in a file name: use the segment as typed.
+        return segment;
+      }
+    });
+}
+
+function contentsApiUrl(
+  owner: string,
+  repo: string,
+  path: string[],
+  reference: string,
+): string {
+  const encodedPath = path.map((part) => encodeURIComponent(part)).join("/");
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}?ref=${encodeURIComponent(reference)}`;
+}
+
+function isBinaryName(name: string): boolean {
+  const extension = name.includes(".")
+    ? (name.split(".").pop() ?? "").toLowerCase()
+    : "";
+  return BINARY_EXTENSIONS.has(extension);
+}
+
+async function fetchFolderFile(
+  entry: GithubContentEntry,
+): Promise<string | undefined> {
+  if (!entry.download_url) return undefined;
+  // download_url is GitHub's own raw host; keep it that way before fetching.
+  let host: string;
+  try {
+    host = new URL(entry.download_url).hostname;
+  } catch {
+    return undefined;
+  }
+  if (host !== "raw.githubusercontent.com") return undefined;
+  try {
+    const response = await safeGet<string>(entry.download_url, {
+      responseType: "text",
+    });
+    if (response.status !== 200 || typeof response.data !== "string") {
+      return undefined;
+    }
+    if (response.data.includes("\u0000")) return undefined;
+    return response.data.slice(0, MAX_FOLDER_FILE_BYTES);
+  } catch (error) {
+    throwIfRetryable(error, entry.download_url, "folder_file");
+    logger.warn(
+      `Could not read a file inside a GitHub folder (path=${entry.path ?? "unknown"}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Reads a GitHub folder (`/tree/<ref>/<path>`) through the contents API. The
+ * HTML folder page is rendered client-side now, so scraping it yields
+ * nothing. Lists every entry, then inlines up to MAX_FOLDER_FILES text files
+ * under the overall content cap; sub-folders are listed, not walked.
+ */
+async function fetchGithubFolderContent(
+  owner: string,
+  repoSegment: string,
+  rest: string,
+): Promise<GithubFetchResult> {
+  const repo = repoSegment.replace(/\.git$/i, "");
+  const segments = decodePathSegments(rest);
+  if (segments.length === 0) return emptyResult({ code: "url_unsupported" });
+
+  // A branch name can contain "/", so the ref/path split is ambiguous; try
+  // the common one-segment ref first, then a two-segment ref.
+  const candidates: Array<{ ref: string; path: string[] }> = [
+    { ref: segments[0], path: segments.slice(1) },
+  ];
+  if (segments.length > 1) {
+    candidates.push({
+      ref: segments.slice(0, 2).join("/"),
+      path: segments.slice(2),
+    });
+  }
+
+  let listing: GithubContentEntry[] | GithubContentEntry | undefined;
+  let chosen = candidates[0];
+  let miss: UrlFetchFailure = { code: "url_unreachable", httpStatus: 404 };
+  for (const candidate of candidates) {
+    const requestUrl = contentsApiUrl(
+      owner,
+      repo,
+      candidate.path,
+      candidate.ref,
+    );
+    try {
+      listing = await githubApiGet<GithubContentEntry[] | GithubContentEntry>(
+        requestUrl,
+        owner,
+        repo,
+      );
+      chosen = candidate;
+      break;
+    } catch (error) {
+      if (error instanceof RetryableUrlFetchError) throw error;
+      miss = failureForConfirmedMiss(error);
+      // Only a 404 can mean "wrong ref split"; anything else is the answer.
+      if (httpStatusOf(error) !== 404) break;
+    }
+  }
+  if (!listing) {
+    logger.warn(
+      `GitHub folder could not be listed for ${owner}/${repo} (status=${miss.httpStatus ?? "none"})`,
+    );
+    return emptyResult(miss);
+  }
+
+  const label = `${owner}/${repo}/${chosen.path.join("/")}`.replace(/\/$/, "");
+  // A /tree/ link to a single file comes back as one entry, not a list.
+  if (!Array.isArray(listing)) {
+    if (
+      listing.type === "file" &&
+      listing.encoding === "base64" &&
+      listing.content
+    ) {
+      const text = Buffer.from(listing.content, "base64").toString("utf8");
+      return text.trim()
+        ? { body: truncate(text), isFunctional: true }
+        : emptyResult({ code: "url_empty", httpStatus: 200 });
+    }
+    const text = await fetchFolderFile(listing);
+    return text?.trim()
+      ? { body: truncate(text), isFunctional: true }
+      : emptyResult({ code: "url_empty", httpStatus: 200 });
+  }
+
+  if (listing.length === 0) {
+    return emptyResult({ code: "url_empty", httpStatus: 200 });
+  }
+
+  const sorted = [...listing].sort((a, b) =>
+    (a.path ?? "").localeCompare(b.path ?? ""),
+  );
+  const readable = sorted
+    .filter(
+      (entry) =>
+        entry.type === "file" &&
+        entry.name &&
+        !isBinaryName(entry.name) &&
+        (entry.size ?? 0) <= MAX_FOLDER_FILE_BYTES * 4,
+    )
+    .slice(0, MAX_FOLDER_FILES);
+
+  const contents = new Map<string, string>();
+  let budget = MAX_CONTENT_SIZE;
+  for (
+    let index = 0;
+    index < readable.length && budget > 0;
+    index += FOLDER_FETCH_CONCURRENCY
+  ) {
+    const batch = readable.slice(index, index + FOLDER_FETCH_CONCURRENCY);
+    const texts = await Promise.all(
+      batch.map((entry) => fetchFolderFile(entry)),
+    );
+    for (const [position, text] of texts.entries()) {
+      if (!text || budget <= 0) continue;
+      const kept = text.slice(0, budget);
+      budget -= kept.length;
+      contents.set(batch[position].path ?? batch[position].name ?? "", kept);
+    }
+  }
+
+  const listingLines = sorted.map(
+    (entry) => `- ${entry.name ?? "?"}${entry.type === "dir" ? "/" : ""}`,
+  );
+  const sections = [...contents.entries()].map(
+    ([path, text]) => `=== ${path} ===\n${text}`,
+  );
+  if (sections.length === 0) {
+    logger.warn(
+      `GitHub folder ${label} has no readable text files (${sorted.length} entries)`,
+    );
+    return emptyResult({ code: "url_empty", httpStatus: 200 });
+  }
+  const body = [
+    `Folder: ${label} (ref ${chosen.ref})`,
+    "Contents:",
+    ...listingLines,
+    "",
+    ...sections,
+  ].join("\n");
+  return { body: truncate(body), isFunctional: true };
+}
+
+// The clone address (".git") names the same repository as the page.
+const REPO_ROOT_RE =
+  /^https:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i;
 
 async function fetchGithubRepoRootContent(
   url: string,
@@ -600,8 +916,15 @@ async function fetchGithubRepoRootContent(
     }
   }
 
+  let pageMiss: UrlFetchFailure | undefined;
   try {
-    const scraped = await scrapeGithubPage(url, Boolean(transientError));
+    const scraped = await scrapeGithubPage(
+      url,
+      Boolean(transientError),
+      (failure) => {
+        pageMiss = failure;
+      },
+    );
     if (scraped)
       return {
         body: scraped,
@@ -613,7 +936,8 @@ async function fetchGithubRepoRootContent(
     transientError ??= error;
   }
   if (transientError) throw transientError;
-  return { body: "", isFunctional: false };
+  // GitHub answers 404 for a private repository as well as a missing one.
+  return emptyResult(pageMiss ?? { code: "url_empty", httpStatus: 200 });
 }
 
 function isHtmlResponse(contentType: unknown, body: string): boolean {
@@ -629,17 +953,38 @@ function isHtmlResponse(contentType: unknown, body: string): boolean {
   return /<!doctype\s+html\b|<\/?(?:html|body|p|div)(?=[\s/>])/i.test(body);
 }
 
+/**
+ * Headers for reading a learner's page the way a browser would. axios' default
+ * `Accept: application/json, text/plain, *\/*` gets a 406 from sites that
+ * negotiate on it, and some sites refuse requests with no browser-like agent.
+ */
+const BROWSER_LIKE_HEADERS: Record<string, string> = {
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7",
+  "Accept-Language": "en-US,en;q=0.9",
+  "User-Agent":
+    "Mozilla/5.0 (compatible; MarkGrader/1.0; +https://skills.network) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+};
+
 async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
   try {
-    const response = await safeGet<string>(url, { responseType: "text" });
+    const response = await safeGet<string>(url, {
+      responseType: "text",
+      headers: BROWSER_LIKE_HEADERS,
+    });
     // The HTML parser would eat code such as `List<Order>` in raw files.
     if (!isHtmlResponse(response.headers?.["content-type"], response.data)) {
-      return { body: truncate(response.data), isFunctional: true };
+      const body = truncate(response.data);
+      return body.trim()
+        ? { body, isFunctional: true }
+        : emptyResult({ code: "url_empty", httpStatus: response.status });
     }
     const $ = cheerio.load(response.data);
     stripNoiseNodes($);
-    const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
-    return { body: plainText, isFunctional: true };
+    const plainText = truncate($("body").text().trim().replaceAll(/\s+/g, " "));
+    return plainText
+      ? { body: plainText, isFunctional: true }
+      : emptyResult({ code: "url_empty", httpStatus: response.status });
   } catch (error) {
     // Same rule as the blob path: a timeout or a 5xx on a learner's own site
     // is a retry, not evidence that the page has nothing on it.
@@ -649,7 +994,7 @@ async function scrapeGenericUrl(url: string): Promise<GithubFetchResult> {
         error instanceof Error ? error.message : String(error)
       }`,
     );
-    return { body: "", isFunctional: false };
+    return emptyResult(failureForConfirmedMiss(error));
   }
 }
 
@@ -672,9 +1017,15 @@ async function dispatchUrlContentFetch(
   if (url.includes("/blob/")) {
     const rawUrl = convertGitHubUrlToRaw(url);
     if (!rawUrl) {
-      return { body: "", isFunctional: false };
+      return emptyResult({ code: "url_unsupported" });
     }
     return fetchGithubBlobContent(rawUrl);
+  }
+
+  const treeMatch = url.match(GITHUB_TREE_RE);
+  if (treeMatch) {
+    const [, owner, repo, rest] = treeMatch;
+    return fetchGithubFolderContent(owner, repo, rest);
   }
 
   const repoMatch = url.match(REPO_ROOT_RE);
@@ -683,13 +1034,15 @@ async function dispatchUrlContentFetch(
     return fetchGithubRepoRootContent(url, owner, repo);
   }
 
-  // A github.com URL that's neither a blob nor a bare repo root (an issue,
-  // PR, or directory listing) — scrape it directly, unchanged from the
-  // pre-existing behavior.
-  const scraped = await scrapeGithubPage(url);
+  // A github.com URL that's neither a blob, a folder nor a bare repo root (an
+  // issue, a PR, a gist) — scrape it directly.
+  let pageMiss: UrlFetchFailure | undefined;
+  const scraped = await scrapeGithubPage(url, false, (failure) => {
+    pageMiss = failure;
+  });
   return scraped
     ? { body: scraped, isFunctional: true }
-    : { body: "", isFunctional: false };
+    : emptyResult(pageMiss ?? { code: "url_empty", httpStatus: 200 });
 }
 
 const GITHUB_OWNER_REPO_RE = /^https:\/\/github\.com\/([^/]+)\/([^/]+)/;
@@ -703,13 +1056,24 @@ function extractOwnerRepoForLogging(url: string): {
   return match ? { owner: match[1], repo: match[2] } : {};
 }
 
+function hostForLog(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    // Log context only; an unparseable URL has no host to report.
+    return "unknown";
+  }
+}
+
+const MAX_LOGGED_URL_LENGTH = 300;
+
 function buildLogContextSuffix(
   url: string,
   logContext: GithubFetchLogContext,
 ): string {
   const { owner, repo } = extractOwnerRepoForLogging(url);
   const parts = [
-    `url=${url}`,
+    `url=${url.slice(0, MAX_LOGGED_URL_LENGTH)}`,
     owner ? `owner=${owner}` : undefined,
     repo ? `repo=${repo}` : undefined,
     `assignmentId=${logContext.assignmentId ?? "unknown"}`,
@@ -751,11 +1115,17 @@ export async function fetchUrlContentForGrading(
 
   try {
     const result = await dispatchUrlContentFetch(url);
-    if (result.isFunctional) {
+    const hasBody =
+      typeof result.body === "string"
+        ? result.body.trim().length > 0
+        : result.body != null;
+    if (result.isFunctional && hasBody) {
       logger.debug(`URL content fetch succeeded (${logSuffix})`);
     } else {
+      // Not debug: an empty fetch blocks grading, and the host + bounded URL
+      // are what make that block traceable afterwards.
       logger.warn(
-        `URL content fetch returned no functional content (${logSuffix})`,
+        `URL content fetch returned no gradeable content (host=${hostForLog(url)}, failure=${result.failure?.code ?? "url_empty"}, httpStatus=${result.failure?.httpStatus ?? "none"}, ${logSuffix})`,
       );
     }
     return result;
