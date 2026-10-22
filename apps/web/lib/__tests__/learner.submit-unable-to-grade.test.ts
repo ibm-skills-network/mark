@@ -154,7 +154,7 @@ describe("submitAssignment: learner-fixable grading failure", () => {
       expect(isGradingUnableError(error)).toBe(true);
       expect(toast.error).not.toHaveBeenCalled();
       expect(submitReportAuthor).not.toHaveBeenCalled();
-      expect(apiClient.post).not.toHaveBeenCalled();
+      expect((apiClient.post as jest.Mock).mock.calls).toHaveLength(0);
     },
   );
 });

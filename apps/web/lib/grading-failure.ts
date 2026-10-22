@@ -43,10 +43,10 @@ export interface GradingIssueSource {
 export interface GradingIssue {
   questionId: number;
   /**
-   * A code this client knows, or any other string a newer server sends. An
-   * unknown code is kept so the server `message` can still be shown.
+   * Usually a GradingIssueCode, but kept as any string: a newer server may
+   * send a code this client doesn't know, and its `message` is still shown.
    */
-  code: GradingIssueCode | (string & {});
+  code: string;
   source?: GradingIssueSource;
   retryable: boolean;
   message: string;

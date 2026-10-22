@@ -8,6 +8,10 @@ import GradingProgressModal, {
   type ProgressState,
 } from "../GradingProgressModal";
 
+jest.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 jest.mock("sonner", () => ({
   toast: { error: jest.fn(), success: jest.fn(), info: jest.fn() },
 }));
@@ -64,6 +68,7 @@ const renderModal = (
 
 beforeEach(() => {
   mockReportErrorProps.length = 0;
+  localStorage.clear();
 });
 
 describe("GradingProgressModal error report context identity", () => {
@@ -146,5 +151,193 @@ describe("GradingProgressModal existing states", () => {
 
     expect(screen.getByText("Grading Failed")).toBeInTheDocument();
     expect(screen.queryByText("Check my results")).not.toBeInTheDocument();
+  });
+});
+
+describe("GradingProgressModal unable to grade", () => {
+  const failure: NonNullable<ProgressState["failure"]> = {
+    kind: "unable_to_grade",
+    issues: [
+      {
+        questionId: 30,
+        code: "url_unreachable",
+        source: { kind: "url", url: "https://github.com/me/private" },
+        retryable: false,
+        message: "We couldn't open your link.",
+      },
+      {
+        questionId: 10,
+        code: "file_encrypted",
+        source: { kind: "file", fileName: "<img src=x onerror=alert(1)>.pdf" },
+        retryable: false,
+        message: "Password protected.",
+      },
+    ],
+  };
+
+  const renderUnable = (
+    props: Partial<React.ComponentProps<typeof GradingProgressModal>> = {},
+    stateFailure: ProgressState["failure"] = failure,
+  ) =>
+    render(
+      <GradingProgressModal
+        isOpen
+        assignmentId={11}
+        attemptId={22}
+        progressData={{
+          status: "unable_to_grade",
+          progress: 0,
+          currentStage: "Question 1: we couldn't open your link",
+          failure: stateFailure,
+        }}
+        // Randomized order: question 30 is shown first, 10 third.
+        questionOrder={[30, 20, 10]}
+        {...props}
+      />,
+    );
+
+  it("shows a yellow 'Unable to grade' warning, not the red failure", () => {
+    renderUnable();
+
+    expect(screen.getByText("Unable to grade")).toBeInTheDocument();
+    expect(screen.queryByText("Grading Failed")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("unable-to-grade").closest(".bg-amber-50"),
+    ).not.toBeNull();
+    expect(document.querySelector(".bg-red-500")).toBeNull();
+  });
+
+  it("offers no report button", () => {
+    renderUnable();
+
+    expect(screen.queryByTestId("report-error")).not.toBeInTheDocument();
+    expect(mockReportErrorProps).toHaveLength(0);
+  });
+
+  it("numbers issues by the attempt's display order and lists them in that order", () => {
+    renderUnable();
+
+    const rows = screen.getAllByTestId("unable-to-grade-issue");
+    expect(rows[0]).toHaveTextContent("Question 1");
+    expect(rows[0]).toHaveTextContent(
+      "We couldn't open your link (https://github.com/me/private). If the repository is private, make it public so it can be graded",
+    );
+    expect(rows[1]).toHaveTextContent("Question 3");
+    expect(rows[1]).toHaveTextContent("is password-protected");
+  });
+
+  it("renders learner file names as text, never as HTML", () => {
+    renderUnable();
+
+    expect(document.querySelector("img")).toBeNull();
+    expect(
+      screen.getAllByText(/<img src=x onerror=alert\(1\)>\.pdf/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("links only safe http(s) URLs", () => {
+    renderUnable(
+      {},
+      {
+        kind: "unable_to_grade",
+        issues: [
+          {
+            questionId: 30,
+            code: "url_invalid",
+            source: { kind: "url", url: "javascript:alert(1)" },
+            retryable: false,
+            message: "",
+          },
+          {
+            questionId: 20,
+            code: "url_blocked",
+            source: { kind: "url", url: "https://example.org/work" },
+            retryable: false,
+            message: "",
+          },
+        ],
+      },
+    );
+
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "https://example.org/work");
+    expect(links[0]).toHaveAttribute("rel", "noopener noreferrer nofollow");
+  });
+
+  it("takes the learner to the question to fix it", () => {
+    const onGoToQuestion = jest.fn();
+    renderUnable({ onGoToQuestion });
+
+    fireEvent.click(screen.getByText("Fix question 3"));
+    expect(onGoToQuestion).toHaveBeenCalledWith(3);
+
+    fireEvent.click(screen.getByText("Back to my answers"));
+    expect(onGoToQuestion).toHaveBeenLastCalledWith(1);
+  });
+
+  it("offers 'Try again' instead when the problem is temporary", () => {
+    const onRetry = jest.fn();
+    const onGoToQuestion = jest.fn();
+    renderUnable(
+      { onRetry, onGoToQuestion },
+      {
+        kind: "unable_to_grade",
+        issues: [
+          {
+            questionId: 20,
+            code: "url_temporarily_unavailable",
+            source: { kind: "url", url: "https://github.com/me/repo" },
+            retryable: true,
+            message: "",
+          },
+        ],
+      },
+    );
+
+    expect(screen.queryByText(/Fix question/)).not.toBeInTheDocument();
+    const buttons = screen.getAllByText("Try again");
+    expect(buttons.length).toBeGreaterThan(0);
+    fireEvent.click(buttons[0]);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels an issue whose question isn't in this attempt without a number", () => {
+    renderUnable(
+      {},
+      {
+        kind: "unable_to_grade",
+        issues: [
+          {
+            questionId: 999,
+            code: "something_new",
+            retryable: false,
+            message: "A newer server explains this.",
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByText("One of your answers")).toBeInTheDocument();
+    expect(
+      screen.getByText("A newer server explains this."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("GradingProgressModal real grading failure", () => {
+  it.each([
+    ["no failure (older server)", undefined],
+    ["kind grading_failed", { kind: "grading_failed" as const, issues: [] }],
+  ])("keeps the red 'Grading Failed' screen for %s", (_label, failure) => {
+    renderModal({
+      status: "failed",
+      currentStage: "Grading failed",
+      failure,
+    });
+
+    expect(screen.getByText("Grading Failed")).toBeInTheDocument();
+    expect(document.querySelector(".bg-red-500")).not.toBeNull();
+    expect(screen.queryByText("Unable to grade")).not.toBeInTheDocument();
   });
 });
