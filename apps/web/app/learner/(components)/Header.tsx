@@ -58,6 +58,7 @@ import {
   isGradingStreamLostError,
 } from "@/lib/learner";
 import { withTextFileContent } from "@/lib/learner-file-content";
+import { isGradingUnableError } from "@/lib/grading-failure";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
   "Translations are only available after publishing this assignment. Publish to preview translated content.";
@@ -439,6 +440,7 @@ function LearnerHeader() {
             gradingState:
               metadata?.gradingState ??
               (isNonTerminal ? prev.gradingState : undefined),
+            failure: metadata?.failure,
           }));
         },
         undefined,
@@ -524,6 +526,13 @@ function LearnerHeader() {
         }
         setShowGradingModal(false);
         router.push(learnerSuccessPath(assignmentId, error.attemptId));
+        return;
+      }
+
+      if (isGradingUnableError(error)) {
+        // Nothing was graded and the attempt is still open: leave the fix
+        // list up until the learner chooses where to go. The answers stay in
+        // the store, so they can edit and resubmit.
         return;
       }
 
@@ -851,6 +860,24 @@ function LearnerHeader() {
         assignmentId={assignmentId || 0}
         attemptId={currentAttemptId}
         progressData={progressData}
+        questionOrder={questions.map((question) => question.id)}
+        onGoToQuestion={(questionNumber) => {
+          setShowGradingModal(false);
+          if (questionNumber !== null) {
+            useLearnerStore.getState().setActiveQuestionNumber(questionNumber);
+            // The overview scrolls on change only; scroll here too so a
+            // question that was already active is brought into view.
+            requestAnimationFrame(() => {
+              document
+                .getElementById(`item-${questionNumber}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }
+        }}
+        onRetry={() => {
+          setShowGradingModal(false);
+          void handleSubmitAssignment();
+        }}
         onCheckResults={
           assignmentId && currentAttemptId
             ? () => {

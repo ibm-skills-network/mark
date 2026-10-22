@@ -19,6 +19,12 @@ import type {
   SubmitAssignmentResponse,
 } from "@config/types";
 import { toast } from "sonner";
+import {
+  GradingUnableError,
+  isLearnerFixableFailure,
+  parseGradingFailure,
+  type GradingFailure,
+} from "@/lib/grading-failure";
 import { submitReportAuthor } from "@/lib/talkToBackend";
 import { apiClient, APIError, isNetworkError } from "./api-client";
 import {
@@ -185,7 +191,9 @@ export type GradingProgressStatus =
   | "completed"
   | "failed"
   | "stalled"
-  | "disconnected";
+  | "disconnected"
+  // Terminal: the submission needs fixing by the learner (see grading-failure).
+  | "unable_to_grade";
 
 /**
  * Thrown when the grading stream stops being a usable source of truth. It is
@@ -605,6 +613,7 @@ export async function submitAssignment(
       currentQuestion?: number;
       totalQuestions?: number;
       gradingState?: GradingProgressDetails;
+      failure?: GradingFailure;
     },
   ) => void,
   onGradingJobCreated?: (gradingJobId: string) => void,
@@ -743,6 +752,39 @@ export async function submitAssignment(
         return true;
       };
 
+      /**
+       * A terminal "Failed" frame. When the server says the learner can fix
+       * the submission, hand the fix list to the caller and stop: no toast,
+       * no report — nothing went wrong on our side. Anything else (older
+       * servers send no `failure`) keeps the red failure path as it was.
+       */
+      const handleFailedFrame = (
+        data: { failure?: unknown },
+        failureMessage: string,
+      ) => {
+        if (!settle()) return;
+        const failure = parseGradingFailure(data.failure);
+
+        if (isLearnerFixableFailure(failure)) {
+          console.info("[learner] grading blocked by learner-fixable issues", {
+            assignmentId,
+            attemptId,
+            gradingJobId,
+            issueCodes: failure.issues.map((issue) => issue.code),
+          });
+          onProgress?.("unable_to_grade", 0, failureMessage, { failure });
+          reject(new GradingUnableError(failureMessage, failure));
+          return;
+        }
+
+        onProgress?.("failed", 0, failureMessage);
+
+        setTimeout(() => {
+          toast.error(failureMessage);
+          reject(new Error(failureMessage));
+        }, 2000);
+      };
+
       const handleIdleTimeout = () => {
         if (settled) return;
         const currentAttempt = retryCount;
@@ -844,14 +886,7 @@ export async function submitAssignment(
               }
               resolve(result);
             } else if (data.status === "Failed") {
-              if (!settle()) return;
-              const failureMessage = data.progress || "Grading failed";
-              onProgress?.("failed", 0, failureMessage);
-
-              setTimeout(() => {
-                toast.error(failureMessage);
-                reject(new Error(failureMessage));
-              }, 2000);
+              handleFailedFrame(data, data.progress || "Grading failed");
             }
           } catch (error) {
             console.error("SSE onmessage handler error:", error);
@@ -968,15 +1003,10 @@ export async function submitAssignment(
               const data = JSON.parse(event.data);
 
               if (data?.status === "Failed") {
-                if (!settle()) return;
-                const errorMessage =
-                  data.progress || data.error || "Grading failed";
-                onProgress?.("failed", 0, errorMessage);
-
-                setTimeout(() => {
-                  toast.error(errorMessage);
-                  reject(new Error(errorMessage));
-                }, 2000);
+                handleFailedFrame(
+                  data,
+                  data.progress || data.error || "Grading failed",
+                );
               } else if (data?.error) {
                 watchdog.noteGradingUpdate();
                 const streamErrorMessage =
