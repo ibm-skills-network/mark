@@ -78,7 +78,11 @@ describe("JobQueueService", () => {
     expect(queueAdd).toHaveBeenCalledWith(
       JOB_NAMES.ARTIFACT_EXTRACT,
       { encrypted: payload },
-      { priority: 1 },
+      {
+        priority: 1,
+        attempts: 5,
+        backoff: { type: "exponential", delay: 15_000 },
+      },
     );
     queueAdd.mockClear();
     await expect(

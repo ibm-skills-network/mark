@@ -136,6 +136,13 @@ export class JobQueueService implements OnModuleDestroy {
     const { priority: overridePriority, ...restOptions } = options;
     const resolvedPriority = overridePriority ?? mappedPriority;
     const jobOptions: JobsOptions = {
+      // Give parser admission and expired leases time to recover. The grading
+      // queue's immediate retry fallback would exhaust all attempts while the
+      // two parser slots are still occupied by the same bounded operations.
+      ...(jobName === JOB_NAMES.ARTIFACT_EXTRACT && {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 15_000 },
+      }),
       ...(resolvedPriority !== undefined && { priority: resolvedPriority }),
       ...restOptions,
     };

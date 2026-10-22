@@ -159,6 +159,27 @@ describe("isolated artifact parser (real child and PDF dependency)", () => {
       delete process.env.MARK_PARSER_ISOLATION_TEST;
     }
   });
+  it("keeps module startup healthy when dependency metadata is unavailable", async () => {
+    const filesystem = require("node:fs") as typeof import("node:fs");
+    const missingMetadata = jest
+      .spyOn(filesystem, "existsSync")
+      .mockReturnValue(false);
+    let unavailableParse: typeof Parse;
+    try {
+      expect(() =>
+        jest.isolateModules(() => {
+          unavailableParse = require(
+            join(folder, "isolated-artifact-parser.js"),
+          ).parseArtifactIsolated;
+        }),
+      ).not.toThrow();
+      await expect(
+        unavailableParse(Buffer.from("input"), "text"),
+      ).rejects.toMatchObject({ code: "dependency_unavailable" });
+    } finally {
+      missingMetadata.mockRestore();
+    }
+  });
   it("records legitimately empty input", async () => {
     expect(await parse(Buffer.alloc(0), "text")).toMatchObject({
       blocks: [],
