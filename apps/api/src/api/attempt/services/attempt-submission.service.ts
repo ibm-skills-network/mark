@@ -1,3 +1,5 @@
+import { createAttemptSchema } from "backend-contracts";
+import { AttemptSnapshotService } from "../immutable/attempt-snapshot.service";
 import {
   SourceProcessingError,
   RetryableProcessingError,
@@ -11,6 +13,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -108,6 +111,7 @@ export class AttemptSubmissionService {
     private readonly translationService: TranslationService,
     private readonly questionVariantService: QuestionVariantService,
     private readonly ltiGradeSyncService: LtiGradeSyncService,
+    @Optional() private readonly snapshots?: AttemptSnapshotService,
   ) {}
 
   async autoSaveQuestionResponse(
@@ -118,6 +122,7 @@ export class AttemptSubmissionService {
     userSession: UserSession,
     language: string,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
+    await this.snapshots?.assertLegacy(attemptId);
     let responseDto: CreateQuestionResponseAttemptResponseDto;
     try {
       responseDto = await this.questionResponseService.createQuestionResponse(
@@ -189,7 +194,37 @@ export class AttemptSubmissionService {
   async createAssignmentAttempt(
     assignmentId: number,
     userSession: UserSession,
+    snapshotContract = false,
+    creationOperationId?: string,
   ): Promise<BaseAssignmentAttemptResponseDto> {
+    if (
+      snapshotContract &&
+      !createAttemptSchema.safeParse({ operationId: creationOperationId })
+        .success
+    )
+      throw new BadRequestException(
+        "Snapshot creation requires a UUID operationId",
+      );
+    const receiptWhere = {
+      assignmentId,
+      userId: userSession.userId,
+      operationId: creationOperationId,
+    };
+    if (snapshotContract) {
+      const receipt = await this.prisma.attemptCreationOperation.findUnique({
+        where: { assignmentId_userId_operationId: receiptWhere },
+      });
+      if (receipt)
+        return {
+          id: receipt.attemptId,
+          success: true,
+          serverNow: readServerClock(),
+        };
+    }
+    if (snapshotContract && !this.snapshots?.enabled(assignmentId))
+      throw new ConflictException(
+        "Snapshot cohort is not enabled for this assignment",
+      );
     const now = new Date();
 
     const existingAttempt = await this.findResumableAttempt(
@@ -198,7 +233,8 @@ export class AttemptSubmissionService {
       now,
     );
 
-    if (existingAttempt) {
+    if (existingAttempt && !snapshotContract) {
+      await this.snapshots?.assertLane(existingAttempt.id, snapshotContract);
       return {
         id: existingAttempt.id,
         success: true,
@@ -233,6 +269,10 @@ export class AttemptSubmissionService {
 
     const assignmentForAttemptFlow = {
       ...assignment,
+      ...(snapshotContract && assignment.currentVersion
+        ? assignment.currentVersion
+        : {}),
+      id: assignment.id,
       success: true,
     } as GetAssignmentResponseDto;
 
@@ -250,6 +290,17 @@ export class AttemptSubmissionService {
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${userSession.userId}:${assignmentId}`}, 0))`;
 
+        if (snapshotContract) {
+          const receipt = await tx.attemptCreationOperation.findUnique({
+            where: { assignmentId_userId_operationId: receiptWhere },
+          });
+          if (receipt)
+            return {
+              id: receipt.attemptId,
+              success: true,
+              serverNow: readServerClock(),
+            };
+        }
         const concurrentAttempt = await this.findResumableAttempt(
           assignmentId,
           userSession.userId,
@@ -258,6 +309,15 @@ export class AttemptSubmissionService {
         );
 
         if (concurrentAttempt) {
+          await this.snapshots?.assertLane(
+            concurrentAttempt.id,
+            snapshotContract,
+            tx,
+          );
+          if (snapshotContract)
+            await tx.attemptCreationOperation.create({
+              data: { ...receiptWhere, attemptId: concurrentAttempt.id },
+            });
           this.logger.warn(
             `createAssignmentAttempt: concurrent creation resolved by resume assignment=${assignmentId} user=${userSession.userId} attempt=${concurrentAttempt.id}`,
           );
@@ -274,13 +334,19 @@ export class AttemptSubmissionService {
           tx,
         );
 
-        return this.createAttemptWithQuestions(
+        const created = await this.createAttemptWithQuestions(
           tx,
           assignmentId,
           assignment,
           assignmentForAttemptFlow,
           userSession,
+          snapshotContract,
         );
+        if (snapshotContract)
+          await tx.attemptCreationOperation.create({
+            data: { ...receiptWhere, attemptId: created.id },
+          });
+        return created;
       },
       { maxWait: 5000, timeout: 15_000 },
     );
@@ -319,6 +385,7 @@ export class AttemptSubmissionService {
     }>,
     assignmentForAttemptFlow: GetAssignmentResponseDto,
     userSession: UserSession,
+    snapshotContract = false,
   ): Promise<BaseAssignmentAttemptResponseDto> {
     const attemptExpiresAt = this.calculateAttemptExpiresAt(
       assignmentForAttemptFlow,
@@ -401,7 +468,8 @@ export class AttemptSubmissionService {
       })) as QuestionDto[];
     }
 
-    const requestedPerAttempt = assignment.numberOfQuestionsPerAttempt ?? 0;
+    const requestedPerAttempt =
+      assignmentForAttemptFlow.numberOfQuestionsPerAttempt ?? 0;
     if (requestedPerAttempt > 0) {
       // The pool can be smaller than the requested subset: assignments
       // published before the authoring guards landed still carry oversized
@@ -486,6 +554,26 @@ export class AttemptSubmissionService {
       tx,
     );
 
+    if (snapshotContract) {
+      if (
+        orderedQuestions.some(
+          (q) => !["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(q.type),
+        )
+      )
+        throw new BadRequestException(
+          "The first snapshot cohort supports choice-only assignments",
+        );
+      const published = assignment.currentVersion ?? assignment;
+      await this.snapshots.capture(
+        tx,
+        assignmentAttempt.id,
+        activeVersionId,
+        JSON.parse(JSON.stringify(published)) as Record<string, unknown>,
+        orderedQuestions,
+        assignment.currentVersion?.questionVersions ?? [],
+      );
+    }
+
     return {
       id: assignmentAttempt.id,
       success: true,
@@ -503,6 +591,7 @@ export class AttemptSubmissionService {
     attemptId: number,
     userSession: UserSession,
   ): Promise<{ id: number; success: true }> {
+    await this.snapshots?.assertLegacy(attemptId);
     this.logger.log(
       `abandonAssignmentAttempt: request attempt=${attemptId} user=${userSession.userId}`,
     );
@@ -638,6 +727,7 @@ export class AttemptSubmissionService {
     attemptId: number,
     userSession: UserSession,
   ): Promise<GetAssignmentAttemptResponseDto> {
+    await this.snapshots?.assertLegacy(attemptId);
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
       include: {
@@ -944,6 +1034,7 @@ export class AttemptSubmissionService {
     attemptId: number,
     language?: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
+    await this.snapshots?.assertLegacy(attemptId);
     const normalizedLanguage = this.getNormalizedLanguage(language);
 
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
@@ -1137,6 +1228,19 @@ export class AttemptSubmissionService {
     ) => Promise<void>,
     cache?: JobScopedCache,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
+    const pinned = await this.snapshots?.loadForGrading(
+      attemptId,
+      assignmentId,
+      request.userSession.userId,
+    );
+    if (pinned) {
+      return this.gradePinnedSubmission(
+        pinned,
+        authCookie,
+        gradingCallbackRequired,
+        request,
+      );
+    }
     // Allocate the per-invocation cache once and share it across both
     // pre-translate and grading phases. Without this hoist, callers that
     // omit `cache` (notably the SSE submission path,
@@ -1455,6 +1559,83 @@ export class AttemptSubmissionService {
       }
       throw error;
     }
+  }
+
+  private async gradePinnedSubmission(
+    pinned: NonNullable<
+      Awaited<ReturnType<AttemptSnapshotService["loadForGrading"]>>
+    >,
+    authCookie: string,
+    callbackRequired: boolean,
+    request: UserSessionRequest,
+  ): Promise<UpdateAssignmentAttemptResponseDto> {
+    const { attempt, definition, submission, updateDto } = pinned;
+    const assignment = definition.assignment;
+    let grade = attempt.grade;
+    const totalPossiblePoints = definition.questions.reduce(
+      (sum, q) => sum + q.totalPoints,
+      0,
+    );
+    if (totalPossiblePoints <= 0)
+      throw new BadRequestException(
+        "Pinned assignment has no available points",
+      );
+    if (!attempt.submitted) {
+      const items = await this.questionResponseService.gradeQuestionsForLearner(
+        updateDto.responsesForQuestions,
+        attempt.id,
+        attempt.assignmentId,
+        updateDto.language,
+        undefined,
+        undefined,
+        request.userSession.userId,
+        definition,
+      );
+      grade =
+        items.reduce((sum, item) => sum + item.responseDto.totalPoints, 0) /
+        totalPossiblePoints;
+      try {
+        await this.questionResponseService.commitAttemptWithResponses(
+          attempt.id,
+          items,
+          grade,
+          updateDto,
+          submission.id,
+        );
+      } catch (error) {
+        if (!(error instanceof ConflictException)) throw error;
+        // A concurrent retry can win the commit; return only its durable result.
+        const winner = await this.prisma.assignmentAttempt.findUniqueOrThrow({
+          where: { id: attempt.id },
+        });
+        if (!winner.submitted || winner.grade === null) throw error;
+        grade = winner.grade;
+      }
+    }
+    if (callbackRequired)
+      await this.handleLtiGradeCallback(
+        attempt.id,
+        grade,
+        authCookie,
+        attempt.assignmentId,
+        request.userSession.userId,
+      );
+    await this.questionResponseService.markGradingComplete(attempt.id);
+    return {
+      id: attempt.id,
+      success: true,
+      submitted: true,
+      grade: assignment.showAssignmentScore === true ? grade : undefined,
+      totalPointsEarned:
+        assignment.showAssignmentScore === true
+          ? grade * totalPossiblePoints
+          : undefined,
+      totalPossiblePoints,
+      showQuestions: assignment.showQuestions === true,
+      showSubmissionFeedback: assignment.showSubmissionFeedback === true,
+      correctAnswerVisibility: "NEVER",
+      feedbacksForQuestions: [],
+    };
   }
 
   /**

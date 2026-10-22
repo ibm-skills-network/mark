@@ -1,3 +1,4 @@
+import { AttemptDefinitionV1, gradePinnedChoice } from "backend-contracts";
 import {
   InvalidGradingResultError,
   assertQuestionGrade,
@@ -18,7 +19,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { QuestionType } from "@prisma/client";
+import { Question, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   authorAssignmentDetailsDTO,
@@ -296,6 +297,7 @@ export class QuestionResponseService {
     preTranslatedQuestions?: Map<number, QuestionDto>,
     cache?: JobScopedCache,
     userId?: string,
+    pinnedDefinition?: AttemptDefinitionV1,
   ): Promise<GradedItem[]> {
     // Defense-in-depth: allocate a cache if the caller did not supply one.
     // The submission entrypoint (updateLearnerAttempt) now hoists this same
@@ -306,6 +308,25 @@ export class QuestionResponseService {
     // in Phase 1 fans out N concurrent assignment.findUnique +
     // question.findUnique calls.
     const effectiveCache: JobScopedCache = cache ?? newJobScopedCache();
+
+    if (pinnedDefinition) {
+      effectiveCache.assignment = {
+        instructions:
+          typeof pinnedDefinition.assignment.instructions === "string"
+            ? pinnedDefinition.assignment.instructions
+            : null,
+      };
+      for (const q of pinnedDefinition.questions) {
+        effectiveCache.questions.set(q.id, {
+          ...q.configuration,
+          id: q.id,
+          question: q.question,
+          type: q.type,
+          totalPoints: q.totalPoints,
+          choices: q.choices,
+        } as unknown as Question);
+      }
+    }
 
     // ── Phase 0: Up-front question + assignment hoist (populates per-job cache before Phase 1 reads) ──
     // Both hoists must run BEFORE Phase 1's $transaction so the parallel `Promise.all`
@@ -336,6 +357,23 @@ export class QuestionResponseService {
         async (tx) => {
           const questionDtos: QuestionDto[] = await Promise.all(
             responsesForQuestions.map(async (response) => {
+              if (pinnedDefinition) {
+                const pinned = pinnedDefinition.questions.find(
+                  (q) => q.id === response.id,
+                );
+                if (!pinned)
+                  throw new BadRequestException(
+                    "Question is absent from pinned definition",
+                  );
+                return {
+                  ...pinned.configuration,
+                  id: pinned.id,
+                  question: pinned.question,
+                  type: pinned.type,
+                  totalPoints: pinned.totalPoints,
+                  choices: pinned.choices,
+                } as unknown as QuestionDto;
+              }
               const { question } = await this.getLearnerQuestion(
                 response.id,
                 assignmentAttemptId,
@@ -407,6 +445,21 @@ export class QuestionResponseService {
       inMemoryContext: inMemoryContextResponses,
       reportProgress: true,
       gradeOne: async (question, request) => {
+        const pinned = pinnedDefinition?.questions.find(
+          (q) => q.id === question.id,
+        );
+        if (
+          pinned &&
+          ["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(pinned.type)
+        ) {
+          const ids = request.learnerChoices ?? [];
+          const responseDto = Object.assign(
+            new CreateQuestionResponseAttemptResponseDto(),
+            gradePinnedChoice(pinned, ids),
+          );
+          assertQuestionGrade(responseDto, question.id, question.totalPoints);
+          return { learnerResponse: ids, responseDto };
+        }
         const assignmentContext = await this.getAssignmentContext(
           assignmentId,
           question.id,
@@ -454,6 +507,7 @@ export class QuestionResponseService {
     gradedItems: GradedItem[],
     grade: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    submissionId?: string,
   ): Promise<{ id: number; submitted: boolean; grade: number | null }> {
     assertGradeCommit({
       schemaVersion: 1,
@@ -488,6 +542,9 @@ export class QuestionResponseService {
 
     return this.prisma.$transaction(
       async (tx) => {
+        if (submissionId) {
+          await tx.$executeRaw`SELECT set_config('mark.submission_id', ${submissionId}, true)`;
+        }
         // Write all QuestionResponse records
         for (const {
           questionId,
@@ -514,6 +571,7 @@ export class QuestionResponseService {
           },
           data: {
             submitted: true,
+            ...(submissionId ? { resultSubmissionId: submissionId } : {}),
             preferredLanguage: language ?? "en",
             expiresAt: new Date(),
             grade,

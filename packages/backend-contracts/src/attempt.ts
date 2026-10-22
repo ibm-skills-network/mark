@@ -2,12 +2,13 @@ import { z } from "zod";
 
 const id = z.number().int().positive().safe();
 const operationId = z.string().uuid();
+export const createAttemptSchema = z.object({ operationId }).strict();
 export const pinnedChoiceSchema = z
   .object({
     id: z.string().uuid(),
     choice: z.string(),
     isCorrect: z.boolean(),
-    points: z.number().finite(),
+    points: z.number().finite().nonnegative(),
     feedback: z.string().nullish(),
   })
   .strict();
@@ -183,7 +184,10 @@ export function gradePinnedChoice(
   return {
     questionId: question.id,
     question: question.question,
-    totalPoints: Math.max(0, Math.min(raw, question.totalPoints)),
+    totalPoints:
+      question.type === "SINGLE_CORRECT"
+        ? raw
+        : Math.max(0, Math.min(raw, question.totalPoints)),
     feedback: selected.map((c) => ({
       choice: c.choice,
       feedback:

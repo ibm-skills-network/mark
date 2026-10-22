@@ -237,6 +237,7 @@ describe("AssignmentAttemptAccessControlGuard", () => {
 
     expect(mockPrisma.assignmentAttempt.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.assignmentAttempt.findFirst).toHaveBeenCalledWith({
+      include: { definition: { select: { attemptId: true } } },
       where: {
         id: 88,
         assignmentId: 42,
@@ -390,6 +391,7 @@ describe("AssignmentAttemptAccessControlGuard — session replaced by another la
 
     expect(mockPrisma.assignmentAttempt.findFirst).toHaveBeenCalledTimes(1);
     expect(mockPrisma.assignmentAttempt.findFirst).toHaveBeenCalledWith({
+      include: { definition: { select: { attemptId: true } } },
       where: {
         id: ATTEMPT,
         assignmentId: ROUTE_ASSIGNMENT,
@@ -618,4 +620,49 @@ describe("AssignmentAttemptAccessControlGuard — ownership is proven, not infer
       guard.canActivate(contextFor({ userId: "learner-1" })),
     ).resolves.toBe(true);
   });
+});
+
+describe("snapshot contract routing", () => {
+  class LegacyController {}
+  class SnapshotController {}
+  Reflect.defineMetadata("attemptSnapshotContract", true, SnapshotController);
+  const prisma = {
+    assignment: { findUnique: jest.fn() },
+    assignmentGroup: { findFirst: jest.fn() },
+    assignmentAttempt: { findFirst: jest.fn() },
+    $transaction: jest
+      .fn()
+      .mockResolvedValue([
+        { id: 42 },
+        { assignmentId: 42 },
+        { id: 88, userId: "user-1", definition: { attemptId: 88 } },
+      ]),
+  };
+  const guard = new AssignmentAttemptAccessControlGuard(
+    new Reflector(),
+    prisma as unknown as PrismaService,
+    mockLogger as never,
+  );
+  it.each(["GET", "POST", "PUT", "PATCH"])(
+    "rejects %s through older controllers and permits the snapshot controller",
+    async (method) => {
+      const request = {
+        params: { assignmentId: "42", attemptId: "88" },
+        userSession: buildSession(UserRole.LEARNER),
+        method,
+        originalUrl: "/synthetic",
+      };
+      const context = (controller: typeof LegacyController) =>
+        ({
+          switchToHttp: () => ({ getRequest: () => request }),
+          getClass: () => controller,
+        }) as unknown as ExecutionContext;
+      await expect(
+        guard.canActivate(context(LegacyController)),
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(
+        guard.canActivate(context(SnapshotController)),
+      ).resolves.toBe(true);
+    },
+  );
 });

@@ -1,3 +1,7 @@
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
+
 -- CreateTable
 CREATE TABLE "AttemptDefinition" (
     "attemptId" INTEGER NOT NULL,
@@ -146,3 +150,15 @@ END;
 $$;
 CREATE TRIGGER guard_snapshot_question_response BEFORE INSERT OR UPDATE OR DELETE ON "QuestionResponse"
 FOR EACH ROW EXECUTE FUNCTION guard_snapshot_question_response();
+
+CREATE TABLE "AttemptCreationOperation" (
+  "assignmentId" INTEGER NOT NULL, "userId" TEXT NOT NULL, "operationId" TEXT NOT NULL,
+  "attemptId" INTEGER NOT NULL REFERENCES "AssignmentAttempt"(id) ON DELETE RESTRICT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY ("assignmentId", "userId", "operationId")
+);
+CREATE INDEX "AttemptCreationOperation_attemptId_idx" ON "AttemptCreationOperation"("attemptId");
+CREATE TRIGGER immutable_creation_receipt BEFORE UPDATE OR DELETE ON "AttemptCreationOperation"
+FOR EACH ROW EXECUTE FUNCTION reject_attempt_evidence_mutation();
+
+COMMIT;

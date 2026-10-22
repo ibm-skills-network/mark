@@ -1,5 +1,6 @@
 import {
   CanActivate,
+  ConflictException,
   ExecutionContext,
   ForbiddenException,
   Inject,
@@ -168,7 +169,10 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       }
 
       queries.push(
-        this.prisma.assignmentAttempt.findFirst({ where: whereClause }),
+        this.prisma.assignmentAttempt.findFirst({
+          where: whereClause,
+          include: { definition: { select: { attemptId: true } } },
+        }),
       );
     }
 
@@ -284,6 +288,14 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       );
     }
 
+    if (
+      (attempt as { definition?: unknown } | undefined)?.definition &&
+      !Reflect.getMetadata("attemptSnapshotContract", context.getClass())
+    ) {
+      throw new ConflictException(
+        "Use the revision-aware snapshot API for this attempt",
+      );
+    }
     return true;
   }
 }

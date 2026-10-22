@@ -1,3 +1,5 @@
+import { AttemptSnapshotController } from "./immutable/attempt-snapshot.controller";
+import { AttemptSnapshotService } from "./immutable/attempt-snapshot.service";
 import { Module } from "@nestjs/common";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { JobQueueModule } from "../../job-queue/job-queue.module";
@@ -59,8 +61,9 @@ import { TranslationService } from "./services/translation/translation.service";
     AdminAuthModule,
     AttemptAccessCacheModule,
   ],
-  controllers: [AttemptControllerV2],
+  controllers: [AttemptControllerV2, AttemptSnapshotController],
   providers: [
+    AttemptSnapshotService,
     AttemptServiceV2,
     AttemptSubmissionService,
     AttemptValidationService,

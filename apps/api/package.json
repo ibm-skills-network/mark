@@ -34,7 +34,8 @@
     "translation-audit": "node dist/scripts/translation-audit.js",
     "verify-migration": "dotenv -e ./dev.env -- ts-node scripts/verify-migration.ts",
     "rich-text-migration": "node dist/rich-text-migration/main.js",
-    "build:rich-text-migration": "tsc --noEmit -p tsconfig.rich-text-migration.json && node scripts/build-rich-text-migration.cjs"
+    "build:rich-text-migration": "tsc --noEmit -p tsconfig.rich-text-migration.json && node scripts/build-rich-text-migration.cjs",
+    "test:attempt-snapshots:integration": "node test/run-attempt-snapshots.cjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

@@ -551,6 +551,7 @@ model AssignmentAttempt {
   draft               AttemptDraft?
   submissions         AttemptSubmission[]
   draftOperations     AttemptDraftOperation[]
+  creationOperations  AttemptCreationOperation[]
   sources             AttemptSource[]
   gradingProgress     GradingProgress?
   GradingJob          GradingJob[]
@@ -1208,5 +1209,17 @@ model AttemptSource {
   bucket     String
   createdAt  DateTime          @default(now())
 
+  @@index([attemptId])
+}
+
+model AttemptCreationOperation {
+  assignmentId Int
+  userId       String
+  operationId  String
+  attemptId    Int
+  attempt      AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  createdAt    DateTime          @default(now())
+
+  @@id([assignmentId, userId, operationId])
   @@index([attemptId])
 }
