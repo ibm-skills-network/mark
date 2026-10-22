@@ -1,4 +1,6 @@
 /* eslint-disable unicorn/no-null */
+import { issueFromQuestionError } from "../../llm/features/grading/errors/grading-failure.mapper";
+import { SourceProcessingError } from "../../llm/features/grading/errors/source-processing.error";
 import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
@@ -2201,6 +2203,30 @@ export class AttemptServiceV1 implements OnModuleDestroy {
       .map((response) => response.reason as string);
 
     if (failedResponses.length > 0) {
+      // Problems the learner can fix (a dead link, an unreadable file) are
+      // reported together as a 422 naming every blocked question, exactly as
+      // the queued grader does; anything else is still our failure.
+      const issues = questionResponses.flatMap((response, index) => {
+        if (response.status !== "rejected") return [];
+        const issue = issueFromQuestionError(
+          response.reason,
+          responsesForQuestions[index].id,
+        );
+        return issue ? [issue] : [];
+      });
+      if (issues.some((issue) => !issue.retryable)) {
+        for (const issue of issues) {
+          this.logger.warn("grading.unable_to_grade.issue", {
+            assignmentAttemptId,
+            assignmentId,
+            questionId: issue.questionId,
+            code: issue.code,
+            httpStatus: issue.source?.httpStatus,
+            retryable: issue.retryable,
+          });
+        }
+        throw SourceProcessingError.aggregate(issues);
+      }
       this.logger.error("submitQuestions: one or more responses failed", {
         failed_count: failedResponses.length,
         successful_count: successfulResponses.length,
@@ -2862,9 +2888,17 @@ export class AttemptServiceV1 implements OnModuleDestroy {
     const urlFetchResponse =
       await AttemptHelper.fetchPlainTextFromUrl(learnerResponse);
     if (!urlFetchResponse.isFunctional) {
-      throw new BadRequestException(
-        `Unable to extract content from the provided URL: ${learnerResponse}`,
-      );
+      // Same outcome as the v2 grader: the learner can fix the link, so it is
+      // reported as a blocked question rather than a server error.
+      throw new SourceProcessingError("url_fetch_failed", "url", {
+        code: urlFetchResponse.failure?.code ?? "url_unreachable",
+        questionId: question.id,
+        source: {
+          kind: "url",
+          url: learnerResponse,
+          httpStatus: urlFetchResponse.failure?.httpStatus,
+        },
+      });
     }
 
     const urlBasedQuestionEvaluateModel = new UrlBasedQuestionEvaluateModel(

@@ -12,6 +12,8 @@ import {
   RETRYABLE_FETCH_BASE_DELAY_MS,
 } from "../../api/src/job-queue/attempt-retry-backoff";
 import { UnsupportedImageFormatError } from "../../api/src/api/llm/features/grading/errors/unsupported-image-format.error";
+import { SourceProcessingError } from "../../api/src/api/llm/features/grading/errors/source-processing.error";
+import { buildGradingIssue } from "../../api/src/api/llm/features/grading/errors/grading-failure";
 import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 import { encryptJobPayload } from "./job-payload.crypto";
 import {
@@ -1398,7 +1400,7 @@ describe("JobWorkerService", () => {
       expect((thrown as Error).name).toBe("UnrecoverableError");
       expect((thrown as Error).message).toBe(oversized.learnerMessage);
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
-      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
         "attempt.grade.learner.terminal",
         expect.objectContaining({
           attemptId: 861298,
@@ -1444,7 +1446,7 @@ describe("JobWorkerService", () => {
       expect((thrown as Error).name).toBe("UnrecoverableError");
       expect((thrown as Error).message).toBe(unsupported.learnerMessage);
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
-      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
         "attempt.grade.learner.terminal",
         expect.objectContaining({
           attemptId: 861298,
@@ -1649,6 +1651,7 @@ describe("JobWorkerService", () => {
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         99_001,
         expect.stringContaining("Failed to grade text response"),
+        { kind: "grading_failed", issues: [] },
       );
       expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
         "grading-job-xyz",
@@ -1670,6 +1673,7 @@ describe("JobWorkerService", () => {
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         99_001,
         expect.any(String),
+        { kind: "grading_failed", issues: [] },
       );
       expect(mockJobStateService.updateJobStatus).toHaveBeenCalledTimes(1);
     });
@@ -1702,6 +1706,7 @@ describe("JobWorkerService", () => {
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         99_001,
         expect.stringContaining("stalled"),
+        { kind: "grading_failed", issues: [] },
       );
       expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
         "grading-job-xyz",
@@ -1723,6 +1728,209 @@ describe("JobWorkerService", () => {
 
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledTimes(1);
       expect(mockJobStateService.updateJobStatus).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("structured grading failure on the terminal status", () => {
+    const originalFlag = process.env.JOBS_EXECUTE_LOCALLY;
+    afterAll(() => {
+      if (originalFlag === undefined) delete process.env.JOBS_EXECUTE_LOCALLY;
+      else process.env.JOBS_EXECUTE_LOCALLY = originalFlag;
+    });
+
+    function attemptJob(attemptsMade = 1): Job {
+      return {
+        id: "bull-issues",
+        name: JOB_NAMES.ATTEMPT_GRADE,
+        attemptsMade,
+        opts: { attempts: 3 },
+        data: encryptJobPayload({
+          gradingJobId: "grading-issues",
+          attemptId: 1877774,
+          assignmentId: 2583,
+          updateDto: { submitted: true },
+          userSession: {
+            userId: "learner-issues",
+            role: "Learner",
+            gradingCallbackRequired: false,
+          },
+        }),
+      } as unknown as Job;
+    }
+
+    function failedHandler(): (job: Job, error: Error) => Promise<void> {
+      const attempt = workerInstances.find(
+        (w) => w.queueName === JOB_QUEUE_NAMES.ATTEMPT,
+      );
+      return attempt?.handlers.failed as (
+        job: Job,
+        error: Error,
+      ) => Promise<void>;
+    }
+
+    const blocked = () =>
+      SourceProcessingError.aggregate([
+        buildGradingIssue(8040, {
+          code: "url_placeholder",
+          source: {
+            kind: "url",
+            url: "https://github.com/VOTRE_USER/expressBookReview/blob/main/router/general.js",
+          },
+        }),
+        buildGradingIssue(8041, {
+          code: "file_wrong_format",
+          source: {
+            kind: "file",
+            fileName: "Budget.xlsx",
+            detectedType: "html",
+            expectedType: "xlsx",
+          },
+        }),
+      ]);
+
+    async function terminalErrorFor(job: Job): Promise<Error> {
+      try {
+        await asTestAccessor(service).handleAttemptJob(job);
+      } catch (error) {
+        return error as Error;
+      }
+      throw new Error("expected the attempt job to fail");
+    }
+
+    it("publishes every blocked question with status Failed and an English progress", async () => {
+      process.env.JOBS_EXECUTE_LOCALLY = "true";
+      await service.onModuleInit();
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(blocked());
+
+      const terminal = await terminalErrorFor(attemptJob());
+      expect(terminal).toBeInstanceOf(UnrecoverableError);
+      await failedHandler()(attemptJob(), terminal);
+
+      const failure = {
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            questionId: 8040,
+            code: "url_placeholder",
+            retryable: false,
+            source: {
+              kind: "url",
+              url: "https://github.com/VOTRE_USER/expressBookReview/blob/main/router/general.js",
+            },
+          }),
+          expect.objectContaining({
+            questionId: 8041,
+            code: "file_wrong_format",
+          }),
+        ],
+      };
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-issues",
+        {
+          status: "Failed",
+          progress: expect.stringMatching(
+            /^We couldn't grade 2 of your answers as submitted\./,
+          ),
+          failure,
+        },
+      );
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        1877774,
+        expect.any(String),
+        failure,
+      );
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "attempt.grade.unable_to_grade.issue",
+        expect.objectContaining({
+          attemptId: 1877774,
+          assignmentId: 2583,
+          questionId: 8040,
+          code: "url_placeholder",
+          host: "github.com",
+        }),
+      );
+      expect(mockStructuredLogger.error).not.toHaveBeenCalledWith(
+        "attempt.grade.learner.terminal",
+        expect.anything(),
+      );
+    });
+
+    it("keeps the structured failure across the remote executor boundary", async () => {
+      process.env.JOBS_EXECUTE_LOCALLY = "false";
+      await service.onModuleInit();
+      const error = blocked();
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        statusText: "Unprocessable Entity",
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            statusCode: 422,
+            error: "SourceProcessingError",
+            message: error.message,
+            reason: error.reason,
+            retryable: false,
+            failure: { kind: "unable_to_grade", issues: error.issues },
+          }),
+        ),
+      });
+
+      const terminal = await terminalErrorFor(attemptJob());
+      await failedHandler()(attemptJob(), terminal);
+
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-issues",
+        expect.objectContaining({
+          failure: { kind: "unable_to_grade", issues: error.issues },
+        }),
+      );
+    });
+
+    it("reports a link that stayed unreachable through every retry as try-again-later", async () => {
+      await service.onModuleInit();
+      const transient = new RetryableUrlFetchError({
+        requestUrl: "https://hh.kz/vacancies/x",
+        reason: "timeout",
+      });
+      transient.questionId = 41868;
+      transient.learnerUrl = "https://hh.kz/vacancies/x";
+
+      await failedHandler()(attemptJob(3), transient);
+
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-issues",
+        expect.objectContaining({
+          failure: {
+            kind: "unable_to_grade",
+            issues: [
+              expect.objectContaining({
+                questionId: 41868,
+                code: "url_temporarily_unavailable",
+                retryable: true,
+                message: expect.stringMatching(/try again in a few minutes/),
+              }),
+            ],
+          },
+        }),
+      );
+    });
+
+    it("marks anything else grading_failed with no issues", async () => {
+      await service.onModuleInit();
+      await failedHandler()(attemptJob(3), new TypeError("boom"));
+
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-issues",
+        {
+          status: "Failed",
+          progress: "boom",
+          failure: { kind: "grading_failed", issues: [] },
+        },
+      );
+      expect(mockStructuredLogger.error).toHaveBeenCalledWith(
+        "attempt.grade.grading_failed",
+        expect.objectContaining({ attemptId: 1877774 }),
+      );
     });
   });
 

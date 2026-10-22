@@ -3,6 +3,10 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import IORedis from "ioredis";
 import { Observable } from "rxjs";
 import {
+  GradingFailure,
+  isGradingFailure,
+} from "../api/llm/features/grading/errors/grading-failure";
+import {
   CreateJobStateOptions,
   JobStateRecord,
   JobStatusUpdate,
@@ -168,6 +172,12 @@ export class JobStateService implements OnModuleDestroy {
         statusUpdate.result === undefined
           ? existingJob.result
           : statusUpdate.result,
+      // A failure only describes a Failed status; a retry that resumes
+      // Processing must not carry the previous run's reasons.
+      failure:
+        statusUpdate.status === "Failed"
+          ? (statusUpdate.failure ?? existingJob.failure)
+          : undefined,
     };
 
     // Only HSET the fields the caller actually provided. The previous
@@ -182,6 +192,9 @@ export class JobStateService implements OnModuleDestroy {
 
     const transaction = this.getConnection().multi();
     transaction.hset(this.getJobStateKey(jobId), partialPayload);
+    if (existingJob.failure && !updatedJob.failure) {
+      transaction.hdel(this.getJobStateKey(jobId), "failure");
+    }
     transaction.expire(
       this.getJobStateKey(jobId),
       this.isTerminalStatus(updatedJob.status)
@@ -405,6 +418,9 @@ export class JobStateService implements OnModuleDestroy {
     if (statusUpdate.result !== undefined) {
       payload.result = JSON.stringify(statusUpdate.result);
     }
+    if (statusUpdate.failure !== undefined) {
+      payload.failure = JSON.stringify(statusUpdate.failure);
+    }
     return payload;
   }
 
@@ -441,6 +457,7 @@ export class JobStateService implements OnModuleDestroy {
         rawJob.result === undefined
           ? undefined
           : (JSON.parse(rawJob.result) as unknown),
+      failure: this.parseFailure(rawJob.failure),
       activeKeyHash: rawJob.activeKeyHash,
       createdAt: rawJob.createdAt,
       updatedAt: rawJob.updatedAt,
@@ -462,9 +479,25 @@ export class JobStateService implements OnModuleDestroy {
       currentQuestion: job.currentQuestion,
       totalQuestions: job.totalQuestions,
       result: job.result,
+      ...(job.failure ? { failure: job.failure } : {}),
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };
+  }
+
+  private parseFailure(raw: string | undefined): GradingFailure | undefined {
+    if (raw === undefined) return undefined;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return isGradingFailure(parsed) ? parsed : undefined;
+    } catch (error) {
+      this.logger.warn(
+        `Ignoring unreadable grading failure on job state: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    }
   }
 
   private toMessageEvent(job: JobStateRecord): MessageEvent {
@@ -485,6 +518,7 @@ export class JobStateService implements OnModuleDestroy {
         totalQuestions: job.totalQuestions,
         result:
           job.result === undefined ? undefined : JSON.stringify(job.result),
+        ...(job.failure ? { failure: job.failure } : {}),
         done: this.isTerminalStatus(job.status),
         timestamp: job.updatedAt,
       }),

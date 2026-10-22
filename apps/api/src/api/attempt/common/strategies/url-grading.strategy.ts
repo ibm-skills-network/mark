@@ -31,6 +31,15 @@ import { GRADING_AUDIT_SERVICE } from "../../attempt.constants";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import {
+  GradingIssueCode,
+  GradingIssueDetails,
+  sanitizeIssueUrl,
+} from "src/api/llm/features/grading/errors/grading-failure";
+import {
+  detectPrefetchUrlIssue,
+  isCourseTemplateRepoUrl,
+} from "../utils/learner-url-issues.util";
+import {
   expectedHostsForResponseType,
   normalizeLearnerUrl,
   validateLearnerUrl,
@@ -38,8 +47,20 @@ import {
 import { LocalizationService } from "../utils/localization.service";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
+function hostOf(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    // Log context only: an unparseable answer has no host.
+    return undefined;
+  }
+}
+
 @Injectable()
 export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
+  readonly supportsSourceCheck = true;
+
   constructor(
     private readonly llmFacadeService: LlmFacadeService,
     protected readonly localizationService: LocalizationService,
@@ -78,13 +99,12 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
         );
       }
 
-      // URL *format* validity is intentionally NOT a hard gate here. Throwing
-      // at validation time fails the entire grading job and leaves the
-      // learner's attempt ungraded (observed in prod: "Failed to process
-      // question response: Invalid URL: script.js"). An unparseable URL is
-      // instead graded 0-with-feedback in gradeResponse (see the invalid-URL
-      // guard there), so the learner still gets a score + feedback and LMS
-      // sync proceeds. Presence/type is still enforced above.
+      // URL *format* validity is intentionally NOT a hard gate here: a
+      // BadRequestException at this point is treated as a system failure.
+      // An unparseable URL is reported by gradeResponse instead, as an
+      // "unable to grade" issue the learner can fix and resubmit, alongside
+      // any other blocked questions in the attempt. Presence/type is still
+      // enforced above.
       return true;
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -121,101 +141,16 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     learnerResponse: string,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    // Guard: an unparseable URL is a learner input error, not a system
-    // failure. Grade it 0 with feedback and skip the fetch/LLM path entirely
-    // (unlike a source processing failure). validateResponse lets
-    // invalid formats through on purpose so they are graded here rather than
-    // failing the job.
-    const urlValidation = validateLearnerUrl(learnerResponse, {
-      expectedHosts: expectedHostsForResponseType(question.responseType),
-    });
-    if (!urlValidation.isValid) {
-      const responseDto = this.createResponseDto(0, [
-        {
-          feedback:
-            this.localizationService?.getLocalizedString?.(
-              "invalidUrl",
-              context.language,
-              { url: learnerResponse },
-            ) || `Invalid URL: ${learnerResponse}`,
-        },
-      ]);
+    const { targetUrl, urlFetchResponse } = await this.loadGradeableSource(
+      question,
+      learnerResponse,
+      context,
+    );
 
-      responseDto.metadata = {
-        error: "invalid_url",
-        url: learnerResponse,
-        status: "error",
-        maxPossiblePoints: question.totalPoints,
-      };
-
-      await this.recordGrading(
-        question,
-        {
-          learnerUrlResponse: learnerResponse,
-        } as CreateQuestionResponseAttemptRequestDto,
-        responseDto,
-        context,
-        "UrlGradingStrategy-InvalidUrl",
-      );
-
-      return responseDto;
-    }
-
-    if (urlValidation.isUnexpectedHost) {
-      // Advisory only — never changes the score. Surfaces authoring drift
-      // (a repository question collecting links somewhere else) without
-      // inventing a rejection the learner cannot argue with.
-      this.logger?.info("Learner URL is not on the question's expected hosts", {
-        assignmentId: context.assignmentId,
-        questionId: question.id,
-        responseType: question.responseType,
-      });
-    }
-
-    const targetUrl = urlValidation.normalizedUrl;
-    let urlFetchResponse: GithubFetchResult;
-
-    try {
-      urlFetchResponse = await fetchUrlContentForGrading(targetUrl, {
-        assignmentId: context.assignmentId,
-        questionId: question.id,
-      });
-    } catch (error) {
-      if (error instanceof RetryableUrlFetchError) {
-        this.logger?.warn(
-          "Transient failure fetching a learner URL for grading; propagating as retryable",
-          {
-            assignmentId: context.assignmentId,
-            questionId: question.id,
-            reason: error.reason,
-            status: error.status,
-          },
-        );
-        throw error;
-      }
-      this.logger?.warn("grading.source_processing.blocked", {
-        assignmentId: context.assignmentId,
-        attemptId: context.attemptId,
-        questionId: question.id,
-        reason: "source_unavailable",
-        sourceReference: "url",
-        retryable: true,
-        scoringBlocked: true,
-      });
-      throw new RetryableProcessingError("source_unavailable", "url");
-    }
-
-    if (
-      !urlFetchResponse.isFunctional ||
-      (typeof urlFetchResponse.body === "string"
-        ? !urlFetchResponse.body.trim()
-        : urlFetchResponse.body == null)
-    ) {
-      this.blockSource(question, context, "url_fetch_failed");
-    }
-
-    if (question.responseType === "REPO" && urlFetchResponse.evidenceKind) {
-      this.blockSource(question, context, "insufficient_source_evidence");
+    if (context.sourceCheckOnly) {
+      // Another question in this attempt is already blocked, so nothing will
+      // be saved: the link was readable, which is all this pass needed.
+      return this.createResponseDto(0, []);
     }
 
     const urlBody =
@@ -285,17 +220,138 @@ export class UrlGradingStrategy extends AbstractGradingStrategy<string> {
     return responseDto;
   }
 
+  /**
+   * Everything that has to hold before a link is worth sending to the grader:
+   * it reads as a URL, it is not a placeholder or a non-content page, and the
+   * fetch returned something. Each failure blocks the question with the code
+   * the learner needs to fix it.
+   */
+  private async loadGradeableSource(
+    question: QuestionDto,
+    learnerResponse: string,
+    context: GradingContext,
+  ): Promise<{ targetUrl: string; urlFetchResponse: GithubFetchResult }> {
+    const urlValidation = validateLearnerUrl(learnerResponse, {
+      expectedHosts: expectedHostsForResponseType(question.responseType),
+    });
+    if (!urlValidation.isValid) {
+      this.blockSource(question, context, "url_fetch_failed", {
+        code: "url_invalid",
+        source: { kind: "url", url: learnerResponse },
+      });
+    }
+
+    if (urlValidation.isUnexpectedHost) {
+      // Advisory only — never changes the score. Surfaces authoring drift
+      // (a repository question collecting links somewhere else) without
+      // inventing a rejection the learner cannot argue with.
+      this.logger?.info("Learner URL is not on the question's expected hosts", {
+        assignmentId: context.assignmentId,
+        questionId: question.id,
+        responseType: question.responseType,
+      });
+    }
+
+    const targetUrl = urlValidation.normalizedUrl;
+    const prefetchIssue = detectPrefetchUrlIssue(targetUrl);
+    if (prefetchIssue) {
+      this.blockSource(question, context, "url_fetch_failed", {
+        code: prefetchIssue.code,
+        source: { kind: "url", url: targetUrl },
+      });
+    }
+
+    let urlFetchResponse: GithubFetchResult;
+    try {
+      urlFetchResponse = await fetchUrlContentForGrading(targetUrl, {
+        assignmentId: context.assignmentId,
+        questionId: question.id,
+      });
+    } catch (error) {
+      if (error instanceof RetryableUrlFetchError) {
+        error.questionId = question.id;
+        error.learnerUrl = targetUrl;
+        this.logger?.warn(
+          "Transient failure fetching a learner URL for grading; propagating as retryable",
+          {
+            assignmentId: context.assignmentId,
+            attemptId: context.attemptId,
+            questionId: question.id,
+            host: hostOf(targetUrl),
+            reason: error.reason,
+            status: error.status,
+          },
+        );
+        throw error;
+      }
+      this.logger?.error("grading.source_processing.blocked", {
+        assignmentId: context.assignmentId,
+        attemptId: context.attemptId,
+        questionId: question.id,
+        reason: "source_unavailable",
+        sourceReference: "url",
+        retryable: true,
+        scoringBlocked: true,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw new RetryableProcessingError("source_unavailable", "url");
+    }
+
+    const hasBody =
+      typeof urlFetchResponse.body === "string"
+        ? urlFetchResponse.body.trim().length > 0
+        : urlFetchResponse.body != null;
+    if (!urlFetchResponse.isFunctional || !hasBody) {
+      let code: GradingIssueCode =
+        urlFetchResponse.failure?.code ??
+        (urlFetchResponse.isFunctional ? "url_empty" : "url_unreachable");
+      if (
+        (code === "url_unreachable" || code === "url_empty") &&
+        isCourseTemplateRepoUrl(targetUrl)
+      ) {
+        code = "url_template_repo";
+      }
+      this.blockSource(question, context, "url_fetch_failed", {
+        code,
+        source: {
+          kind: "url",
+          url: targetUrl,
+          httpStatus: urlFetchResponse.failure?.httpStatus,
+        },
+      });
+    }
+
+    if (question.responseType === "REPO" && urlFetchResponse.evidenceKind) {
+      const url = sanitizeIssueUrl(targetUrl) ?? "your repository link";
+      this.blockSource(question, context, "insufficient_source_evidence", {
+        code: "source_unreadable",
+        source: { kind: "url", url: targetUrl },
+        message: `We could only read the README or description of ${url}, which isn't enough to grade this question. Link to the specific files or folder that contain your work, then submit again.`,
+      });
+    }
+
+    return { targetUrl, urlFetchResponse };
+  }
+
   private blockSource(
     question: QuestionDto,
     context: GradingContext,
     reason: "url_fetch_failed" | "insufficient_source_evidence",
+    details: GradingIssueDetails,
   ): never {
-    const error = new SourceProcessingError(reason, "url");
+    const error = new SourceProcessingError(reason, "url", {
+      ...details,
+      questionId: question.id,
+    });
     this.logger?.warn("grading.source_processing.blocked", {
       assignmentId: context.assignmentId,
       attemptId: context.attemptId,
       questionId: question.id,
       reason,
+      code: details.code,
+      host: hostOf(details.source?.url),
+      httpStatus: details.source?.httpStatus,
       sourceReference: error.sourceReference,
       retryable: error.retryable,
       scoringBlocked: true,

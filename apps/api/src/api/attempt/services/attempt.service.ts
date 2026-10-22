@@ -41,6 +41,11 @@ import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
+import {
+  GradingFailure,
+  summarizeGradingFailure,
+} from "../../llm/features/grading/errors/grading-failure";
+import { gradingFailureFromError } from "../../llm/features/grading/errors/grading-failure.mapper";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -520,14 +525,40 @@ export class AttemptServiceV2 {
         error instanceof AttemptClosedException
           ? error.learnerMessage
           : undefined;
+      const failure = gradingFailureFromError(error);
       const learnerReason =
-        learnerFacingMessage ?? `Grading failed: ${errorMessage}`;
+        learnerFacingMessage ??
+        (failure.kind === "unable_to_grade"
+          ? summarizeGradingFailure(failure)
+          : `Grading failed: ${errorMessage}`);
+      if (
+        failure.kind === "unable_to_grade" ||
+        error instanceof AttemptClosedException
+      ) {
+        this.logger.warn("attempt.grade.unable_to_grade", {
+          attemptId,
+          assignmentId,
+          gradingJobId,
+          issueCount: failure.issues.length,
+          codes: failure.issues.map((issue) => issue.code),
+          attemptClosed: error instanceof AttemptClosedException,
+        });
+      } else {
+        this.logger.error("attempt.grade.grading_failed", {
+          attemptId,
+          assignmentId,
+          gradingJobId,
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
       // Idempotent; covers a throw before grading started.
       this.gradingProgressService?.removeProgressCallback(attemptId);
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Failed",
         progress: learnerReason,
         percentage: 0,
+        failure,
       });
 
       // Guard against author preview jobs which use attemptId = -1
@@ -535,6 +566,7 @@ export class AttemptServiceV2 {
         await this.gradingProgressService.markFailed(
           attemptId,
           learnerFacingMessage ?? errorMessage,
+          failure,
         );
       }
       throw error;
@@ -560,6 +592,7 @@ export class AttemptServiceV2 {
       currentQuestion?: number;
       totalQuestions?: number;
       result?: any;
+      failure?: GradingFailure;
     },
   ): Promise<void> {
     await this.jobStateService.updateJobStatus(gradingJobId, statusUpdate);
