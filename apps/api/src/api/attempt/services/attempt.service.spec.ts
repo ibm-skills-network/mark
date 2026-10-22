@@ -213,7 +213,7 @@ describe("AttemptServiceV2", () => {
         "job-1",
         7,
         3,
-        {} as any,
+        { submitted: true, responsesForQuestions: [] } as any,
         "",
         makeRequest(),
         "mark.attempt.heavy",
@@ -222,7 +222,7 @@ describe("AttemptServiceV2", () => {
       expect(mockJobQueueService.enqueue).toHaveBeenCalledWith(
         "mark.attempt.heavy",
         "attempt.grade",
-        expect.anything(),
+        expect.objectContaining({ schemaVersion: 1, gradingJobId: "job-1" }),
         expect.objectContaining({ jobId: "job-1" }),
       );
     });

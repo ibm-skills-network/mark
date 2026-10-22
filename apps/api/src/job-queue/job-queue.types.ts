@@ -1,3 +1,4 @@
+import type { GradingJobV1 } from "backend-contracts";
 import {
   QuestionDto,
   UpdateAssignmentQuestionsDto,
@@ -57,14 +58,7 @@ export type AttemptWorkerUserSession = Pick<
   "userId" | "role" | "gradingCallbackRequired"
 >;
 
-export interface AttemptGradeJobPayload {
-  gradingJobId: string;
-  attemptId: number;
-  assignmentId: number;
-  updateDto: LearnerUpdateAssignmentAttemptRequestDto;
-  authCookie?: string;
-  userSession: AttemptWorkerUserSession;
-}
+export type AttemptGradeJobPayload = GradingJobV1;
 
 export interface TranslateQuestionJobPayload {
   parentJobId: string;

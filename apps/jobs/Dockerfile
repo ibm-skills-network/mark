@@ -52,8 +52,12 @@ RUN apt-get update -y \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=node:node --from=installer ${DIR}/node_modules ./node_modules
+COPY --chown=node:node --from=build ${DIR}/packages/backend-contracts ./packages/backend-contracts
 COPY --chown=node:node --from=build ${DIR}/apps/jobs/dist ./dist
 COPY --chown=node:node --from=build ${DIR}/apps/jobs/package.json ./package.json
+
+# Fail the image build if the compiled workspace cannot resolve at runtime.
+RUN node -e "require('backend-contracts')"
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

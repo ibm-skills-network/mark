@@ -1,4 +1,9 @@
 import {
+  parseGradingJob,
+  GradingContractError,
+  InvalidGradingResultError,
+} from "backend-contracts";
+import {
   Inject,
   Injectable,
   Logger,
@@ -625,6 +630,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     queueName: JobQueueName = JOB_QUEUE_NAMES.ATTEMPT,
   ): Promise<void> {
     try {
+      // Validate before either local execution or forwarding to an older API.
+      if (job.name === JOB_NAMES.ATTEMPT_GRADE) {
+        parseGradingJob(this.getDecryptedJobData<unknown>(job));
+      }
       switch (job.name) {
         case JOB_NAMES.ATTEMPT_GRADE:
         case JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW: {
@@ -651,6 +660,21 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         }
       }
     } catch (error: unknown) {
+      if (error instanceof InvalidGradingResultError) {
+        this.structuredLogger.error("attempt.grade.result.rejected", {
+          jobId: job.id,
+          code: error.code,
+        });
+        throw new UnrecoverableError(error.message);
+      }
+      if (error instanceof GradingContractError) {
+        this.structuredLogger.error("attempt.grade.contract.rejected", {
+          jobId: job.id,
+          code: error.code,
+          boundary: error.boundary,
+        });
+        throw new UnrecoverableError(error.message);
+      }
       await this.classifyAttemptError(job, error);
     }
   }
@@ -854,6 +878,26 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     error: unknown,
   ): Promise<void> {
     const reason = this.messageOf(error);
+    if (reason === new GradingContractError("grading-job").message) {
+      // Malformed payload identities cannot authorize a domain-state update.
+      // Only the queue-owned job ID is safe for terminal transport status.
+      if (job.id) {
+        try {
+          await this.jobStateService.updateJobStatus(job.id, {
+            status: "Failed",
+            progress: reason,
+          });
+        } catch {
+          this.structuredLogger.warn(
+            "attempt.grade.contract.status.unavailable",
+            {
+              jobId: job.id,
+            },
+          );
+        }
+      }
+      return;
+    }
     let attemptId: number | undefined;
     let gradingJobId: string | undefined;
     try {
@@ -1118,6 +1162,13 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         processing = JSON.parse(responseBody) as typeof processing;
       } catch {
         // A proxy may return HTML instead of the API error envelope.
+      }
+      if (
+        response.status === 502 &&
+        processing?.error === "InvalidGradingResultError" &&
+        processing.retryable === false
+      ) {
+        throw new InvalidGradingResultError();
       }
       if (
         response.status === 422 &&

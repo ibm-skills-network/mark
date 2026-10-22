@@ -1,4 +1,6 @@
+import { GradingContractError } from "backend-contracts";
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -27,7 +29,19 @@ export class JobExecutorController {
       throw new ForbiddenException("Invalid job queue secret");
     }
 
-    await this.jobExecutorService.executeJob(request);
+    try {
+      await this.jobExecutorService.executeJob(request);
+    } catch (error: unknown) {
+      if (error instanceof GradingContractError) {
+        throw new BadRequestException({
+          code: error.code,
+          boundary: error.boundary,
+          message: error.message,
+          retryable: false,
+        });
+      }
+      throw error;
+    }
     return { ok: true };
   }
 

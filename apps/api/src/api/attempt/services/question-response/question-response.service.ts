@@ -1,3 +1,9 @@
+import {
+  InvalidGradingResultError,
+  assertQuestionGrade,
+  assertGradeCommit,
+  assertCommittedGrade,
+} from "backend-contracts";
 import { RetryableProcessingError } from "../../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable unicorn/no-null */
@@ -437,10 +443,10 @@ export class QuestionResponseService {
 
   /**
    * Atomically write all graded question responses and update the AssignmentAttempt
-   * grade in a single short transaction (<5s). This eliminates the gap between
+   * grade in a single transaction. This eliminates the gap between
    * QuestionResponse inserts and the grade update that could leave orphan state.
    *
-   * Uses an optimistic lock on AssignmentAttempt.version to detect concurrent writes.
+   * Uses a submitted=false compare-and-set to detect concurrent submission.
    * Throws ConflictException if the attempt was concurrently submitted by another worker.
    */
   async commitAttemptWithResponses(
@@ -449,17 +455,19 @@ export class QuestionResponseService {
     grade: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
   ): Promise<{ id: number; submitted: boolean; grade: number | null }> {
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    const {
-      responsesForQuestions: _r,
-      authorQuestions: _aq,
-      authorAssignmentDetails: _aad,
-      language,
-      preTranslatedQuestions: _pt,
-      expiresAt: _ignoredExpiresAt,
-      ...cleanedUpdateDto
-    } = updateDto;
-    /* eslint-enable @typescript-eslint/no-unused-vars */
+    assertGradeCommit({
+      schemaVersion: 1,
+      attemptId: assignmentAttemptId,
+      grade,
+      expectedQuestionIds: updateDto.responsesForQuestions.map(
+        (response) => response.id,
+      ),
+      results: gradedItems.map((item) => ({
+        questionId: item.questionId,
+        response: item.responseDto,
+      })),
+    });
+    const { language } = updateDto;
 
     const current = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
@@ -505,7 +513,6 @@ export class QuestionResponseService {
             submitted: false,
           },
           data: {
-            ...cleanedUpdateDto,
             submitted: true,
             preferredLanguage: language ?? "en",
             expiresAt: new Date(),
@@ -537,15 +544,9 @@ export class QuestionResponseService {
           select: { id: true, submitted: true, grade: true },
         });
 
-        if (
-          !committed ||
-          typeof committed.id !== "number" ||
-          committed.submitted !== true
-        ) {
-          throw new InternalServerErrorException(
-            `Commit for attempt ${assignmentAttemptId} could not be read back as submitted; aborting.`,
-          );
-        }
+        // A swallowed DB error or a mismatched read-back must roll back the
+        // transaction before completion or external delivery is announced.
+        assertCommittedGrade(committed, assignmentAttemptId, grade);
 
         return committed;
       },
@@ -909,6 +910,8 @@ export class QuestionResponseService {
         this.handleEmptyResponse(language);
       responseDto.questionId = questionId;
       responseDto.question = question.question;
+      if (role === UserRole.LEARNER)
+        assertQuestionGrade(responseDto, questionId, question.totalPoints);
       return { learnerResponse, responseDto };
     }
 
@@ -1016,6 +1019,7 @@ export class QuestionResponseService {
         );
 
         if (!responseDto) {
+          if (role === UserRole.LEARNER) throw new InvalidGradingResultError();
           this.logger.error("Strategy returned null/undefined response", {
             questionId,
             strategyName: gradingStrategy.constructor.name,
@@ -1040,7 +1044,10 @@ export class QuestionResponseService {
       // job worker classifies them by class/name to fail the attempt without
       // retries and surface their learner-facing message. Wrapping them in
       // BadRequestException erased that.
-      if (error instanceof LearnerFacingGradingError) {
+      if (
+        error instanceof LearnerFacingGradingError ||
+        error instanceof InvalidGradingResultError
+      ) {
         throw error;
       }
 
@@ -1074,6 +1081,22 @@ export class QuestionResponseService {
       );
     }
 
+    if (role === UserRole.LEARNER) {
+      // Legacy strategies return scores without identities; the orchestrator
+      // owns that binding. Reject an explicit conflicting identity rather than
+      // overwriting it when the grading wave attaches the known question ID.
+      assertQuestionGrade(
+        {
+          ...responseDto,
+          questionId:
+            responseDto.questionId === undefined
+              ? questionId
+              : responseDto.questionId,
+        },
+        questionId,
+        question.totalPoints,
+      );
+    }
     return { learnerResponse, responseDto };
   }
 

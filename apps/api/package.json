@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "build": "nest build && yarn build:rich-text-migration",
+    "build": "yarn workspace backend-contracts build && nest build && yarn build:rich-text-migration",
     "clean": "rimraf dist && rimraf node_modules",
     "dev": "yarn start:dev",
     "dev:e2e": "yarn dev",
@@ -15,12 +15,12 @@
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",
     "lint:staged": "eslint",
-    "start": "dotenv -e ./dev.env -- nest start",
+    "start": "yarn workspace backend-contracts build && dotenv -e ./dev.env -- nest start",
     "start:e2e": "dotenv -e ./dev.env -- node dist/main",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/main",
-    "test": "jest --detectOpenHandles --forceExit",
+    "test": "yarn workspace backend-contracts build && jest --detectOpenHandles --forceExit",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
@@ -108,7 +108,8 @@
     "socket.io": "^4.8.4",
     "unzipper": "^0.12.3",
     "winston": "^3.19.0",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "backend-contracts": "*"
   },
   "resolutions": {
     "multer": "^2.4.0",

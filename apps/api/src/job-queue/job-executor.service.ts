@@ -1,3 +1,5 @@
+import { parseGradingJob } from "backend-contracts";
+import { LearnerUpdateAssignmentAttemptRequestDto } from "../api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -25,7 +27,6 @@ import {
   AssignmentV2PublishJobPayload,
   AssignmentV2RetryFailedTranslationsJobPayload,
   AttemptAuthorPreviewJobPayload,
-  AttemptGradeJobPayload,
   TranslateMetaJobPayload,
   TranslateQuestionJobPayload,
   TranslateVariantJobPayload,
@@ -170,14 +171,18 @@ export class JobExecutorService {
   ): Promise<void> {
     switch (jobName) {
       case JOB_NAMES.ATTEMPT_GRADE: {
-        const jobPayload = payload as AttemptGradeJobPayload;
+        const jobPayload = parseGradingJob(payload);
         await this.attemptService.processGradingJob(
           jobPayload.gradingJobId,
           jobPayload.attemptId,
           jobPayload.assignmentId,
-          jobPayload.updateDto,
+          // The legacy DTO requires fields that its own HTTP validators mark
+          // optional. Keep that type mismatch at this compatibility boundary.
+          jobPayload.updateDto as unknown as LearnerUpdateAssignmentAttemptRequestDto,
           jobPayload.authCookie ?? "",
-          { userSession: jobPayload.userSession } as UserSessionRequest,
+          {
+            userSession: jobPayload.userSession,
+          } as unknown as UserSessionRequest,
         );
         return;
       }

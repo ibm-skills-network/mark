@@ -1,3 +1,4 @@
+import { InvalidGradingResultError } from "backend-contracts";
 /* eslint-disable */
 import {
   BadRequestException,
@@ -516,6 +517,73 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     );
   });
 
+  it.each([NaN, Infinity, -1, 85])(
+    "rejects invalid aggregate %s before any write",
+    async (grade) => {
+      await expect(
+        service.commitAttemptWithResponses(50, [], grade, baseUpdateDto),
+      ).rejects.toBeInstanceOf(InvalidGradingResultError);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockTx.questionResponse.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects missing question results before any write", async () => {
+    await expect(
+      service.commitAttemptWithResponses(50, [], 0, {
+        ...baseUpdateDto,
+        responsesForQuestions: [{ id: 1 }],
+      }),
+    ).rejects.toBeInstanceOf(InvalidGradingResultError);
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("writes only server-owned grade fields, ignoring request fields", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      submitted: false,
+    });
+    mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 50,
+      submitted: true,
+      grade: 0,
+    });
+    await service.commitAttemptWithResponses(50, [], 0, {
+      ...baseUpdateDto,
+      userId: "other-user",
+      assignmentId: 999,
+      assignmentVersionId: 999,
+      grade: 1,
+    });
+    expect(mockTx.assignmentAttempt.updateMany).toHaveBeenCalledWith({
+      where: { id: 50, submitted: false },
+      data: {
+        submitted: true,
+        preferredLanguage: "en",
+        expiresAt: expect.any(Date),
+        grade: 0,
+      },
+    });
+  });
+
+  it.each([null, 0.5])(
+    "rejects mismatched read-back grade %s inside the transaction",
+    async (storedGrade) => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        submitted: false,
+      });
+      mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 50,
+        submitted: true,
+        grade: storedGrade,
+      });
+      await expect(
+        service.commitAttemptWithResponses(50, [], 0, baseUpdateDto),
+      ).rejects.toBeInstanceOf(InvalidGradingResultError);
+    },
+  );
+
   it("throws NotFoundException when the attempt does not exist", async () => {
     mockPrisma.assignmentAttempt.findUnique.mockResolvedValue(null);
 
@@ -530,7 +598,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     });
 
     await expect(
-      service.commitAttemptWithResponses(50, [], 80, baseUpdateDto),
+      service.commitAttemptWithResponses(50, [], 0.8, baseUpdateDto),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -548,7 +616,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     mockTx.assignmentAttempt.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      service.commitAttemptWithResponses(50, [], 80, baseUpdateDto),
+      service.commitAttemptWithResponses(50, [], 0.8, baseUpdateDto),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -565,27 +633,27 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     mockTx.assignmentAttempt.findUnique.mockResolvedValue({
       id: 50,
       submitted: true,
-      grade: 85,
+      grade: 0.85,
     });
 
     const gradedItems: GradedItem[] = [
       {
         questionId: 1,
         learnerResponse: "foo",
-        responseDto: { questionId: 1 } as any,
+        responseDto: { questionId: 1, totalPoints: 5 } as any,
       },
       {
         questionId: 2,
         learnerResponse: "bar",
-        responseDto: { questionId: 2 } as any,
+        responseDto: { questionId: 2, totalPoints: 3.5 } as any,
       },
     ];
 
     const result = await service.commitAttemptWithResponses(
       50,
       gradedItems,
-      85,
-      baseUpdateDto,
+      0.85,
+      { ...baseUpdateDto, responsesForQuestions: [{ id: 1 }, { id: 2 }] },
     );
 
     expect(saveResponseSpy).toHaveBeenCalledTimes(2);
@@ -594,11 +662,11 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
         where: { id: 50, submitted: false },
         data: expect.objectContaining({
           submitted: true,
-          grade: 85,
+          grade: 0.85,
         }),
       }),
     );
-    expect(result).toEqual({ id: 50, submitted: true, grade: 85 });
+    expect(result).toEqual({ id: 50, submitted: true, grade: 0.85 });
   });
 
   // Instrumentation wrapping the Prisma client (observed with Instana's
@@ -618,12 +686,15 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
       {
         questionId: 1,
         learnerResponse: "foo",
-        responseDto: { questionId: 1, feedback: [] } as any,
+        responseDto: { questionId: 1, totalPoints: 5, feedback: [] } as any,
       },
     ];
 
     await expect(
-      service.commitAttemptWithResponses(50, gradedItems, 85, baseUpdateDto),
+      service.commitAttemptWithResponses(50, gradedItems, 0.85, {
+        ...baseUpdateDto,
+        responsesForQuestions: [{ id: 1 }],
+      }),
     ).rejects.toThrow(InternalServerErrorException);
     expect(mockTx.assignmentAttempt.updateMany).not.toHaveBeenCalled();
   });
@@ -640,7 +711,7 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     );
 
     await expect(
-      service.commitAttemptWithResponses(50, [], 85, baseUpdateDto),
+      service.commitAttemptWithResponses(50, [], 0.85, baseUpdateDto),
     ).rejects.toThrow(InternalServerErrorException);
   });
 
@@ -657,8 +728,8 @@ describe("QuestionResponseService — commitAttemptWithResponses", () => {
     );
 
     await expect(
-      service.commitAttemptWithResponses(50, [], 85, baseUpdateDto),
-    ).rejects.toThrow(InternalServerErrorException);
+      service.commitAttemptWithResponses(50, [], 0.85, baseUpdateDto),
+    ).rejects.toThrow(InvalidGradingResultError);
   });
 });
 
@@ -976,10 +1047,28 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
     expect(mockGradingFactoryService.getStrategy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    null,
+    undefined,
+    { questionId: 7, totalPoints: NaN },
+    { questionId: 7, totalPoints: 6 },
+    { questionId: 8, totalPoints: 1 },
+    { questionId: 7 },
+  ])(
+    "rejects malformed strategy output without converting it to zero",
+    async (output) => {
+      mockStrategy.gradeResponse.mockResolvedValue(output);
+      await expect(callGradeQuestionNoSave()).rejects.toBeInstanceOf(
+        InvalidGradingResultError,
+      );
+    },
+  );
+
   it("still grades a false true/false answer instead of calling it blank", async () => {
     // false is an answer, not an absence — guards against relaxing the null
     // check into a falsy one.
     mockStrategy.gradeResponse.mockResolvedValue({
+      questionId: 7,
       totalPoints: 1,
       feedback: [],
     });

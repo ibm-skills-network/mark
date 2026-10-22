@@ -3,17 +3,17 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "yarn workspace backend-contracts build && nest build",
     "dev": "yarn start:dev",
     "format": "prettier --ignore-unknown --write .",
     "format:staged": "prettier --ignore-unknown --write",
     "lint": "eslint .",
     "lint:staged": "eslint",
-    "start": "dotenv -e ../api/dev.env -- nest start",
+    "start": "yarn workspace backend-contracts build && dotenv -e ../api/dev.env -- nest start",
     "start:debug": "yarn start --debug --watch",
     "start:dev": "yarn start --watch",
     "start:prod": "node dist/jobs/src/main.js",
-    "test": "jest --detectOpenHandles --forceExit",
+    "test": "yarn workspace backend-contracts build && jest --detectOpenHandles --forceExit",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:job-worker": "jest --runInBand --runTestsByPath src/job-worker.service.spec.ts",
@@ -32,7 +32,8 @@
     "nest-winston": "^1.9.2",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "winston": "^3.19.0"
+    "winston": "^3.19.0",
+    "backend-contracts": "*"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",

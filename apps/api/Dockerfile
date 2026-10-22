@@ -52,12 +52,16 @@ RUN apt-get update -y \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=node:node --from=installer ${DIR}/node_modules ./node_modules
+COPY --chown=node:node --from=build ${DIR}/packages/backend-contracts ./packages/backend-contracts
 COPY --chown=node:node --from=build ${DIR}/apps/api/dist ./dist
 COPY --chown=node:node --from=build ${DIR}/apps/api/package.json ./package.json
 COPY --chown=node:node --from=installer ${DIR}/apps/api/prisma ./prisma
 COPY --chown=node:node --from=build ${DIR}/apps/api/migrate.sh ./migrate.sh
 COPY --chown=node:node --from=build ${DIR}/apps/api/ensureDb.js ./ensureDb.js
 COPY --chown=node:node --from=build ${DIR}/apps/api/src/scripts ./scripts
+
+# Fail the image build if the compiled workspace cannot resolve at runtime.
+RUN node -e "require('backend-contracts')"
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

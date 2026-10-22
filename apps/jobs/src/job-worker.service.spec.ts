@@ -1,3 +1,4 @@
+import { InvalidGradingResultError } from "backend-contracts";
 import { Logger } from "@nestjs/common";
 import { Job, UnrecoverableError, Worker } from "bullmq";
 import { writeFile } from "node:fs/promises";
@@ -727,11 +728,11 @@ describe("JobWorkerService", () => {
       gradingJobId: "grading-1",
       attemptId: 99,
       assignmentId: 12,
-      updateDto: { submitted: true },
+      updateDto: { submitted: true, responsesForQuestions: [] },
       authCookie: "jwt=123",
       userSession: {
         userId: "learner-1",
-        role: "Learner",
+        role: "learner",
         gradingCallbackRequired: false,
       },
     };
@@ -755,10 +756,10 @@ describe("JobWorkerService", () => {
       gradingJobId: "grading-2",
       attemptId: 100,
       assignmentId: 13,
-      updateDto: { submitted: false },
+      updateDto: { submitted: true, responsesForQuestions: [] },
       userSession: {
         userId: "learner-2",
-        role: "Learner",
+        role: "learner",
         gradingCallbackRequired: true,
       },
     };
@@ -1234,10 +1235,10 @@ describe("JobWorkerService", () => {
           gradingJobId: "grade-route",
           attemptId: 1,
           assignmentId: 1,
-          updateDto: { submitted: true },
+          updateDto: { submitted: true, responsesForQuestions: [] },
           userSession: {
             userId: "learner-route",
-            role: "Learner",
+            role: "learner",
             gradingCallbackRequired: false,
           },
         };
@@ -1306,10 +1307,10 @@ describe("JobWorkerService", () => {
         gradingJobId: "grading-classify",
         attemptId: 861298,
         assignmentId: 2537,
-        updateDto: { submitted: true },
+        updateDto: { submitted: true, responsesForQuestions: [] },
         userSession: {
           userId: "learner-classify",
-          role: "Learner",
+          role: "learner",
           gradingCallbackRequired: false,
         },
       };
@@ -1319,6 +1320,52 @@ describe("JobWorkerService", () => {
         data: encryptJobPayload(payload),
       } as unknown as Job;
     }
+
+    it.each(["true", "false"])(
+      "rejects malformed jobs before execution when local=%s",
+      async (local) => {
+        process.env.JOBS_EXECUTE_LOCALLY = local;
+        const job = {
+          ...makeAttemptJob(),
+          data: encryptJobPayload({
+            schemaVersion: 99,
+            attemptId: 123,
+            gradingJobId: "untrusted-job",
+          }),
+        } as Job;
+        await expect(
+          asTestAccessor(service).handleAttemptJob(job),
+        ).rejects.toBeInstanceOf(UnrecoverableError);
+        expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["true", "false"])(
+      "makes invalid result output terminal when local=%s",
+      async (local) => {
+        process.env.JOBS_EXECUTE_LOCALLY = local;
+        if (local === "true")
+          mockJobExecutorService.executeJob.mockRejectedValueOnce(
+            new InvalidGradingResultError(),
+          );
+        else
+          fetchMock.mockResolvedValueOnce({
+            ok: false,
+            status: 502,
+            text: async () =>
+              JSON.stringify({
+                error: "InvalidGradingResultError",
+                retryable: false,
+                message: "untrusted provider text",
+              }),
+          });
+        await expect(
+          asTestAccessor(service).handleAttemptJob(makeAttemptJob()),
+        ).rejects.toThrow(new InvalidGradingResultError().message);
+        expect(mockConnection.pipeline).not.toHaveBeenCalled();
+      },
+    );
 
     it("treats source processing failures as terminal without retrying", async () => {
       const error = new Error(
@@ -1588,10 +1635,10 @@ describe("JobWorkerService", () => {
         gradingJobId: "grading-job-xyz",
         attemptId: 99_001,
         assignmentId: 2125,
-        updateDto: { submitted: true },
+        updateDto: { submitted: true, responsesForQuestions: [] },
         userSession: {
           userId: "learner-xyz",
-          role: "Learner",
+          role: "learner",
           gradingCallbackRequired: false,
         },
       };
@@ -1613,6 +1660,20 @@ describe("JobWorkerService", () => {
       }
       return attempt.handlers.failed as (job: Job, error: Error) => void;
     }
+
+    it("does not mutate an attempt using identities from a rejected payload", async () => {
+      await service.onModuleInit();
+      const job = makeTerminalJob(0, 3);
+      const failure = new UnrecoverableError(
+        "Invalid grading-job payload. No new grade was saved.",
+      );
+      await getAttemptFailedHandler()(job, failure);
+      expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        job.id,
+        expect.objectContaining({ status: "Failed" }),
+      );
+    });
 
     it("calls markFailed + updateJobStatus when attemptsMade exhausts BullMQ retries", async () => {
       await service.onModuleInit();

@@ -1,3 +1,4 @@
+import { parseGradingJob } from "backend-contracts";
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
@@ -270,7 +271,8 @@ export class AttemptServiceV2 {
       await this.jobQueueService.enqueue(
         queueName,
         JOB_NAMES.ATTEMPT_GRADE,
-        {
+        parseGradingJob({
+          schemaVersion: 1,
           assignmentId,
           attemptId,
           gradingJobId,
@@ -284,7 +286,7 @@ export class AttemptServiceV2 {
           ...(request.userSession.gradingCallbackRequired && authCookie
             ? { authCookie }
             : {}),
-        },
+        }),
         {
           jobId: gradingJobId,
         },

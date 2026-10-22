@@ -1,3 +1,4 @@
+import { InvalidGradingResultError } from "backend-contracts";
 import {
   SourceProcessingError,
   RetryableProcessingError,
@@ -179,4 +180,21 @@ describe("processing failures", () => {
       );
     },
   );
+});
+
+describe("invalid grading result", () => {
+  it("returns a safe terminal 502 outcome rather than a learner input error", () => {
+    const { filter } = makeFilter();
+    const { host, response } = makeHost();
+    const error = new InvalidGradingResultError();
+    filter.catch(error, host);
+    expect(response.status).toHaveBeenCalledWith(502);
+    expect(response.json).toHaveBeenCalledWith({
+      statusCode: 502,
+      message: error.message,
+      error: error.name,
+      code: error.code,
+      retryable: false,
+    });
+  });
 });

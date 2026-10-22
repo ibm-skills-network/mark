@@ -1,3 +1,4 @@
+import { parseLegacySubmission, GradingContractError } from "backend-contracts";
 import {
   BadRequestException,
   Body,
@@ -253,6 +254,21 @@ export class AttemptControllerV2 {
     | { gradingJobId: string; message: string }
     | UpdateAssignmentAttemptResponseDto
   > {
+    if (request.userSession.role === UserRole.LEARNER) {
+      try {
+        parseLegacySubmission(learnerUpdateAssignmentAttemptDto);
+      } catch (error: unknown) {
+        if (error instanceof GradingContractError) {
+          throw new BadRequestException({
+            code: error.code,
+            boundary: error.boundary,
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+    }
+
     const parsedAttemptId = Number(attemptId);
     const parsedAssignmentId = Number(assignmentId);
 
