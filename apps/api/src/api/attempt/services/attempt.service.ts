@@ -558,16 +558,22 @@ export class AttemptServiceV2 {
         status: "Failed",
         progress: learnerReason,
         percentage: 0,
-        failure,
+        // A closed attempt is neither kind; the client shows its message as is.
+        ...(error instanceof AttemptClosedException ? {} : { failure }),
       });
 
       // Guard against author preview jobs which use attemptId = -1
       if (this.gradingProgressService && attemptId > 0) {
-        await this.gradingProgressService.markFailed(
-          attemptId,
-          learnerFacingMessage ?? errorMessage,
-          failure,
-        );
+        await (error instanceof AttemptClosedException
+          ? this.gradingProgressService.markFailed(
+              attemptId,
+              learnerFacingMessage ?? errorMessage,
+            )
+          : this.gradingProgressService.markFailed(
+              attemptId,
+              learnerFacingMessage ?? errorMessage,
+              failure,
+            ));
       }
       throw error;
     }
