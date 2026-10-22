@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "ไฟล์สำหรับคำถามที่ {questions} ยังไม่ได้อัปโหลด ต้องการส่งต่อไปหรือไม่",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "การอัปโหลดไฟล์สำหรับคำถามที่ {question} ล้มเหลว จึงจะไม่มีการส่งสิ่งใดสำหรับคำถามนี้ ต้องการส่งต่อไปหรือไม่",
   "You have flagged questions. Are you sure you want to submit?": "คุณมีคำถามที่ติดธงไว้ แน่ใจหรือไม่ว่าต้องการส่ง",
-  "You have unanswered questions. Are you sure you want to submit?": "คุณมีคำถามที่ยังไม่ได้ตอบ แน่ใจหรือไม่ว่าต้องการส่ง"
+  "You have unanswered questions. Are you sure you want to submit?": "คุณมีคำถามที่ยังไม่ได้ตอบ แน่ใจหรือไม่ว่าต้องการส่ง",
+  "This attempt is closed": "ความพยายามนี้ปิดแล้ว",
+  "This attempt was already closed at its time limit.": "ความพยายามนี้ถูกปิดไปแล้วเมื่อหมดเวลาที่กำหนด",
+  "This attempt has already been submitted.": "ความพยายามนี้ถูกส่งไปแล้ว",
+  "This attempt's time limit has passed.": "หมดเวลาที่กำหนดสำหรับความพยายามนี้แล้ว",
+  "View results": "ดูผลลัพธ์",
+  "Back to assignment": "กลับไปที่งานที่ได้รับมอบหมาย"
 }

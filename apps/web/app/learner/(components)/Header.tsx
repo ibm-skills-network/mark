@@ -53,6 +53,7 @@ import GradingProgressModal, {
   type ProgressState,
 } from "./GradingProgressModal";
 import {
+  ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE,
   isAttemptAlreadySubmittedError,
   isGradingStreamLostError,
 } from "@/lib/learner";
@@ -516,6 +517,11 @@ function LearnerHeader() {
       if (isAttemptAlreadySubmittedError(error)) {
         // The attempt was already graded (this was a retried PATCH after a
         // timeout or lost stream). Show those results instead of an error.
+        // One closed by its deadline gets said out loud: its results are a
+        // zero the learner did not ask for.
+        if (error.closedAtTimeLimit) {
+          toast.error(t(ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE));
+        }
         setShowGradingModal(false);
         router.push(learnerSuccessPath(assignmentId, error.attemptId));
         return;
@@ -553,6 +559,7 @@ function LearnerHeader() {
     clearGithubStore,
     clearLearnerAnswers,
     router,
+    t,
   ]);
 
   useEffect(() => {

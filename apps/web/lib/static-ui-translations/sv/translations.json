@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Filerna för frågorna {questions} har inte laddats upp. Skicka in ändå?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Uppladdningen av filen för fråga {question} misslyckades, så inget skickas in för den. Skicka in ändå?",
   "You have flagged questions. Are you sure you want to submit?": "Du har flaggade frågor. Är du säker på att du vill skicka in?",
-  "You have unanswered questions. Are you sure you want to submit?": "Du har obesvarade frågor. Är du säker på att du vill skicka in?"
+  "You have unanswered questions. Are you sure you want to submit?": "Du har obesvarade frågor. Är du säker på att du vill skicka in?",
+  "This attempt is closed": "Det här försöket är stängt",
+  "This attempt was already closed at its time limit.": "Det här försöket stängdes redan när tidsgränsen löpte ut.",
+  "This attempt has already been submitted.": "Det här försöket har redan skickats in.",
+  "This attempt's time limit has passed.": "Tidsgränsen för det här försöket har passerat.",
+  "View results": "Visa resultat",
+  "Back to assignment": "Tillbaka till uppgiften"
 }

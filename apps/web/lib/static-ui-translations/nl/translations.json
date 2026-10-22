@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "De bestanden voor de vragen {questions} zijn niet geüpload. Toch indienen?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Het uploaden van het bestand voor vraag {question} is mislukt, dus voor deze vraag wordt niets ingediend. Toch indienen?",
   "You have flagged questions. Are you sure you want to submit?": "Je hebt gemarkeerde vragen. Weet je zeker dat je wilt indienen?",
-  "You have unanswered questions. Are you sure you want to submit?": "Je hebt onbeantwoorde vragen. Weet je zeker dat je wilt indienen?"
+  "You have unanswered questions. Are you sure you want to submit?": "Je hebt onbeantwoorde vragen. Weet je zeker dat je wilt indienen?",
+  "This attempt is closed": "Deze poging is gesloten",
+  "This attempt was already closed at its time limit.": "Deze poging is al gesloten toen de tijdslimiet verliep.",
+  "This attempt has already been submitted.": "Deze poging is al ingediend.",
+  "This attempt's time limit has passed.": "De tijdslimiet van deze poging is verstreken.",
+  "View results": "Resultaten bekijken",
+  "Back to assignment": "Terug naar de opdracht"
 }

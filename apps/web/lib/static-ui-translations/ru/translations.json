@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Файлы для вопросов {questions} не загружены. Всё равно отправить?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Не удалось загрузить файл для вопроса {question}, поэтому для него ничего не будет отправлено. Всё равно отправить?",
   "You have flagged questions. Are you sure you want to submit?": "У вас есть отмеченные вопросы. Вы уверены, что хотите отправить?",
-  "You have unanswered questions. Are you sure you want to submit?": "У вас есть вопросы без ответа. Вы уверены, что хотите отправить?"
+  "You have unanswered questions. Are you sure you want to submit?": "У вас есть вопросы без ответа. Вы уверены, что хотите отправить?",
+  "This attempt is closed": "Эта попытка закрыта",
+  "This attempt was already closed at its time limit.": "Эта попытка уже была закрыта по истечении лимита времени.",
+  "This attempt has already been submitted.": "Эта попытка уже отправлена.",
+  "This attempt's time limit has passed.": "Лимит времени этой попытки истёк.",
+  "View results": "Посмотреть результаты",
+  "Back to assignment": "Вернуться к заданию"
 }

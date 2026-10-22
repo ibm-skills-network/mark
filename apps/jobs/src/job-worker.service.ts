@@ -935,12 +935,13 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     "UnsupportedImageFormatError",
   ]);
 
-  // Matches the two ConflictException messages a duplicate submit produces:
-  // the pre-commit "has already been submitted" check and the concurrent-
-  // commit "was concurrently submitted" race. Matched on message (not class)
+  // Matches the ConflictException messages a submit on a closed attempt
+  // produces: the pre-commit "has already been submitted" check, the
+  // concurrent-commit "was concurrently submitted" race, and an attempt the
+  // deadline check already "closed at its time limit". Matched on message (not class)
   // so it survives the error crossing the executor boundary.
   private static readonly ALREADY_SUBMITTED_RE =
-    /(already been submitted|concurrently submitted)/i;
+    /(already been submitted|concurrently submitted|closed at its time limit)/i;
 
   // Single source for "extract a printable message from an unknown thrown
   // value." Mirrors the pattern at handleTranslationJob's catch block but

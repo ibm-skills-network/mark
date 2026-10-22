@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "File untuk Pertanyaan {questions} belum diunggah. Tetap kirim?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Unggahan file untuk Pertanyaan {question} gagal, jadi tidak ada yang akan dikirim untuk pertanyaan itu. Tetap kirim?",
   "You have flagged questions. Are you sure you want to submit?": "Anda memiliki pertanyaan yang ditandai. Apakah Anda yakin ingin mengirim?",
-  "You have unanswered questions. Are you sure you want to submit?": "Anda memiliki pertanyaan yang belum dijawab. Apakah Anda yakin ingin mengirim?"
+  "You have unanswered questions. Are you sure you want to submit?": "Anda memiliki pertanyaan yang belum dijawab. Apakah Anda yakin ingin mengirim?",
+  "This attempt is closed": "Percobaan ini sudah ditutup",
+  "This attempt was already closed at its time limit.": "Percobaan ini sudah ditutup saat batas waktunya habis.",
+  "This attempt has already been submitted.": "Percobaan ini sudah dikirim.",
+  "This attempt's time limit has passed.": "Batas waktu percobaan ini telah habis.",
+  "View results": "Lihat hasil",
+  "Back to assignment": "Kembali ke tugas"
 }

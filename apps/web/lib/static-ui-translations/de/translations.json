@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Die Dateien für die Fragen {questions} wurden nicht hochgeladen. Trotzdem einreichen?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Der Datei-Upload für Frage {question} ist fehlgeschlagen, daher wird dafür nichts eingereicht. Trotzdem einreichen?",
   "You have flagged questions. Are you sure you want to submit?": "Sie haben markierte Fragen. Möchten Sie wirklich einreichen?",
-  "You have unanswered questions. Are you sure you want to submit?": "Sie haben unbeantwortete Fragen. Möchten Sie wirklich einreichen?"
+  "You have unanswered questions. Are you sure you want to submit?": "Sie haben unbeantwortete Fragen. Möchten Sie wirklich einreichen?",
+  "This attempt is closed": "Dieser Versuch ist geschlossen",
+  "This attempt was already closed at its time limit.": "Dieser Versuch wurde bereits bei Ablauf seines Zeitlimits geschlossen.",
+  "This attempt has already been submitted.": "Dieser Versuch wurde bereits eingereicht.",
+  "This attempt's time limit has passed.": "Das Zeitlimit dieses Versuchs ist abgelaufen.",
+  "View results": "Ergebnisse ansehen",
+  "Back to assignment": "Zurück zur Aufgabe"
 }

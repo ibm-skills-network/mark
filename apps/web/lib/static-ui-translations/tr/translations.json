@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Soru {questions} için dosyalar yüklenmedi. Yine de gönderilsin mi?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Soru {question} için dosya yüklemesi başarısız oldu, bu nedenle bu soru için hiçbir şey gönderilmeyecek. Yine de gönderilsin mi?",
   "You have flagged questions. Are you sure you want to submit?": "İşaretlenmiş sorularınız var. Göndermek istediğinizden emin misiniz?",
-  "You have unanswered questions. Are you sure you want to submit?": "Yanıtlanmamış sorularınız var. Göndermek istediğinizden emin misiniz?"
+  "You have unanswered questions. Are you sure you want to submit?": "Yanıtlanmamış sorularınız var. Göndermek istediğinizden emin misiniz?",
+  "This attempt is closed": "Bu deneme kapandı",
+  "This attempt was already closed at its time limit.": "Bu deneme, süre sınırı dolduğunda zaten kapatıldı.",
+  "This attempt has already been submitted.": "Bu deneme zaten gönderildi.",
+  "This attempt's time limit has passed.": "Bu denemenin süre sınırı doldu.",
+  "View results": "Sonuçları görüntüle",
+  "Back to assignment": "Ödeve geri dön"
 }

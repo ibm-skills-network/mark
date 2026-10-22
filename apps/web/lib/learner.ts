@@ -42,6 +42,17 @@ const ATTEMPT_IN_PROGRESS_CODE = "ATTEMPT_IN_PROGRESS";
 const ATTEMPT_TIME_RANGE_EXCEEDED_CODE = "ATTEMPT_TIME_RANGE_EXCEEDED";
 
 /**
+ * Code on the 409 a submit gets when the attempt's deadline already closed it.
+ * Keep in sync with apps/api/src/api/assignment/attempt/helper/submission-deadline.helper.ts.
+ */
+const ATTEMPT_CLOSED_AT_TIME_LIMIT_CODE = "ATTEMPT_CLOSED_AT_TIME_LIMIT";
+
+export const ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE =
+  "This attempt was already closed at its time limit.";
+export const ATTEMPT_ALREADY_SUBMITTED_MESSAGE =
+  "This attempt has already been submitted.";
+
+/**
  * Creates a attempt for a given assignment.
  * @param assignmentId The id of the assignment to create the attempt for.
  * @returns The id of the created attempt.
@@ -139,8 +150,16 @@ export function isAiTemporarilyDisabled(err: unknown): boolean {
  * is graded; the caller should show its results rather than an error.
  */
 export class AttemptAlreadySubmittedError extends Error {
-  constructor(public readonly attemptId: number) {
-    super(`Attempt ${attemptId} has already been submitted.`);
+  constructor(
+    public readonly attemptId: number,
+    /** The attempt was closed by its deadline, not submitted by the learner. */
+    public readonly closedAtTimeLimit = false,
+  ) {
+    super(
+      closedAtTimeLimit
+        ? ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE
+        : ATTEMPT_ALREADY_SUBMITTED_MESSAGE,
+    );
     this.name = "AttemptAlreadySubmittedError";
   }
 }
@@ -622,7 +641,10 @@ export async function submitAssignment(
         getErrorStatus(apiError) === 409 &&
         !isAiTemporarilyDisabled(apiError)
       ) {
-        throw new AttemptAlreadySubmittedError(attemptId);
+        throw new AttemptAlreadySubmittedError(
+          attemptId,
+          getErrorCode(apiError) === ATTEMPT_CLOSED_AT_TIME_LIMIT_CODE,
+        );
       }
 
       // Duck-typed (not gated on `instanceof APIError`, which is unreliable

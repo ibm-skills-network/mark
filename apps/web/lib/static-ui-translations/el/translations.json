@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "Τα αρχεία για τις Ερωτήσεις {questions} δεν έχουν μεταφορτωθεί. Υποβολή ούτως ή άλλως;",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "Η μεταφόρτωση του αρχείου για την Ερώτηση {question} απέτυχε, οπότε δεν θα υποβληθεί τίποτα για αυτήν. Υποβολή ούτως ή άλλως;",
   "You have flagged questions. Are you sure you want to submit?": "Έχετε επισημασμένες ερωτήσεις. Είστε βέβαιοι ότι θέλετε να υποβάλετε;",
-  "You have unanswered questions. Are you sure you want to submit?": "Έχετε αναπάντητες ερωτήσεις. Είστε βέβαιοι ότι θέλετε να υποβάλετε;"
+  "You have unanswered questions. Are you sure you want to submit?": "Έχετε αναπάντητες ερωτήσεις. Είστε βέβαιοι ότι θέλετε να υποβάλετε;",
+  "This attempt is closed": "Αυτή η προσπάθεια έχει κλείσει",
+  "This attempt was already closed at its time limit.": "Αυτή η προσπάθεια έκλεισε ήδη όταν έληξε το χρονικό της όριο.",
+  "This attempt has already been submitted.": "Αυτή η προσπάθεια έχει ήδη υποβληθεί.",
+  "This attempt's time limit has passed.": "Το χρονικό όριο αυτής της προσπάθειας έχει λήξει.",
+  "View results": "Προβολή αποτελεσμάτων",
+  "Back to assignment": "Επιστροφή στην εργασία"
 }

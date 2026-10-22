@@ -103,6 +103,7 @@ import type { GetQuestionResponseAttemptResponseDto } from "./dto/question-respo
 import { AttemptHelper } from "./helper/attempts.helper";
 import { countAnsweredResponses } from "./helper/blank-submission.helper";
 import { readServerClock } from "./helper/server-clock.helper";
+import { isPastSubmissionGrace } from "./helper/submission-deadline.helper";
 import { isLanguageInFlight } from "./translation-state-redis";
 
 type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
@@ -619,11 +620,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
         );
       }
       attemptOwnerUserId = assignmentAttempt.userId;
-      const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
-      if (
-        assignmentAttempt.expiresAt &&
-        tenSecondsBeforeNow > assignmentAttempt.expiresAt
-      ) {
+      if (isPastSubmissionGrace(assignmentAttempt.expiresAt)) {
         // A submission that arrives past the deadline carrying nothing the
         // learner typed is the signature of a client-side timer firing on a
         // clock it should not have trusted. Record it so the pattern is

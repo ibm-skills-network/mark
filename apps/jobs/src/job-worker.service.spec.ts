@@ -1560,6 +1560,29 @@ describe("JobWorkerService", () => {
       );
     });
 
+    it("treats a closed-at-time-limit ConflictException as a successful no-op", async () => {
+      // The attempt was closed by its deadline before this job ran; retrying
+      // can never grade it, so the job is done.
+      const conflict = new Error(
+        "This attempt was already closed at its time limit.",
+      );
+      conflict.name = "ConflictException";
+      mockJobExecutorService.executeJob.mockRejectedValueOnce(conflict);
+
+      let thrown: unknown;
+      try {
+        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeUndefined();
+      expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
+        "attempt.grade.already.submitted",
+        expect.objectContaining({ attemptId: 861298 }),
+      );
+    });
+
     it("treats a concurrently-submitted ConflictException as a successful no-op", async () => {
       const conflict = new Error(
         "Attempt 861298 was concurrently submitted. Grading results were discarded to prevent duplicate submission.",

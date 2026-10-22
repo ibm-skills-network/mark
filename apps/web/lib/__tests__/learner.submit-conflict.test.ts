@@ -67,4 +67,41 @@ describe("submit 409 handling", () => {
     expect(isAttemptAlreadySubmittedError(err)).toBe(true);
     expect((err as { attemptId?: number }).attemptId).toBe(999);
   });
+  it("marks a conflict on an attempt closed at its time limit", async () => {
+    (apiClient.patch as jest.Mock).mockRejectedValue(
+      conflict({
+        statusCode: 409,
+        code: "ATTEMPT_CLOSED_AT_TIME_LIMIT",
+        message: "This attempt was already closed at its time limit.",
+      }),
+    );
+
+    const err: unknown = await submitAssignment(771, 1873208, []).catch(
+      (error: unknown) => error,
+    );
+
+    expect(isAttemptAlreadySubmittedError(err)).toBe(true);
+    expect(err).toMatchObject({
+      attemptId: 1873208,
+      closedAtTimeLimit: true,
+      message: "This attempt was already closed at its time limit.",
+    });
+    expect((err as Error).message).not.toContain("Grading failed");
+  });
+
+  it("does not mark an ordinary duplicate submit as a time-limit closure", async () => {
+    (apiClient.patch as jest.Mock).mockRejectedValue(
+      conflict({
+        statusCode: 409,
+        code: "ATTEMPT_ALREADY_SUBMITTED",
+        message: "This attempt has already been submitted.",
+      }),
+    );
+
+    const err: unknown = await submitAssignment(771, 42, []).catch(
+      (error: unknown) => error,
+    );
+
+    expect(err).toMatchObject({ attemptId: 42, closedAtTimeLimit: false });
+  });
 });

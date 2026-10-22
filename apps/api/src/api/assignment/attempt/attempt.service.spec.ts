@@ -374,7 +374,7 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       const mockAttempt = {
         id: attemptId,
         assignmentId,
-        expiresAt: new Date(Date.now() - 20_000),
+        expiresAt: new Date(Date.now() - 60_000),
         submitted: false,
       };
 
@@ -427,7 +427,7 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       const mockAttempt = {
         id: attemptId,
         assignmentId,
-        expiresAt: new Date(Date.now() - 20_000),
+        expiresAt: new Date(Date.now() - 60_000),
         submitted: false,
       };
 
@@ -462,14 +462,14 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       expect(result.message).toContain("The attempt deadline has passed");
     });
 
-    it("should allow submission within 10-second grace period", async () => {
+    it("should allow submission within 30-second grace period", async () => {
       const attemptId = 1;
       const assignmentId = 1;
 
       const mockAttempt = {
         id: attemptId,
         assignmentId,
-        expiresAt: new Date(Date.now() - 5000),
+        expiresAt: new Date(Date.now() - 20_000),
         submitted: false,
         questionVariants: [],
       };

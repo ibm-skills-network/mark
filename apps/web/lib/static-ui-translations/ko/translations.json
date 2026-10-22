@@ -1423,5 +1423,11 @@
   "Files for Questions {questions} haven't been uploaded. Submit anyway?": "질문 {questions}의 파일이 업로드되지 않았습니다. 그래도 제출하시겠습니까?",
   "The file upload for Question {question} failed, so nothing will be submitted for it. Submit anyway?": "질문 {question}의 파일 업로드에 실패하여 이 질문에 대해서는 아무것도 제출되지 않습니다. 그래도 제출하시겠습니까?",
   "You have flagged questions. Are you sure you want to submit?": "플래그가 지정된 질문이 있습니다. 정말 제출하시겠습니까?",
-  "You have unanswered questions. Are you sure you want to submit?": "답하지 않은 질문이 있습니다. 정말 제출하시겠습니까?"
+  "You have unanswered questions. Are you sure you want to submit?": "답하지 않은 질문이 있습니다. 정말 제출하시겠습니까?",
+  "This attempt is closed": "이 응시는 종료되었습니다",
+  "This attempt was already closed at its time limit.": "이 응시는 제한 시간이 끝나 이미 종료되었습니다.",
+  "This attempt has already been submitted.": "이 응시는 이미 제출되었습니다.",
+  "This attempt's time limit has passed.": "이 응시의 제한 시간이 지났습니다.",
+  "View results": "결과 보기",
+  "Back to assignment": "과제로 돌아가기"
 }
