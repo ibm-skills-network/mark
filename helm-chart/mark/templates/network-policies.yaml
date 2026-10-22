@@ -165,6 +165,62 @@ spec:
 ---
 {{- end }}
 
+{{- if .Values.rustApi.enabled }}
+# For mark-rust-api: allow ingress from api-gateway only and egress to postgres only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rust-api-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.rustApi.labels" $ | nindent 6 }}
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
+      ports:
+      - protocol: TCP
+        port: {{ .Values.rustApi.containerPort }}
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer
+  policyTypes:
+  - Ingress
+  - Egress
+---
+{{- end }}
+
+{{- if .Values.rustWorker.enabled }}
+# For mark-rust-worker: no ingress (kubelet probes are node traffic), egress to postgres only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rust-worker-policy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mark.rustWorker.labels" $ | nindent 6 }}
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: apps-postgres
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apps-postgres-pgbouncer
+  policyTypes:
+  - Ingress
+  - Egress
+---
+{{- end }}
+
 # For mark-lti-credentials-manager: allow traffic from api-gateway only and block all egress traffic.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
