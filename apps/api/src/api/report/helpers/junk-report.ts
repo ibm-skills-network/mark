@@ -3,8 +3,10 @@
  * ("ok", ".", "asdf", a form with every field set to "no"). Such reports are
  * still recorded, but not forwarded to the support queue.
  *
- * Only what the reporter typed is judged: the form's section headings,
- * placeholders and the metadata block added for support are removed first.
+ * Only what the reporter typed is judged: the form's own section headings,
+ * placeholders and the generated metadata block are removed first, each only
+ * in the exact shape the form or server emits. An error identifier (HTTP
+ * status, error code) in what remains always keeps the report.
  * The rules are deliberately narrow, since a false positive hides a real
  * report from support; anything with a word that is not filler is kept.
  */
@@ -53,21 +55,44 @@ const FORM_PLACEHOLDERS = [
   "Anything else that helps us investigate.",
 ];
 
-// Lines appended to the support ticket body; never the reporter's words.
-const METADATA_LINE =
-  /^\s*(?:issue type|reporter role|severity|assignment id|attempt id|diagnostics captured):.*$/gim;
+// The metadata block appended to the support ticket body, matched only in
+// the exact shape the server generates it (key plus generated value), so a
+// reporter's sentence that happens to start with one of these keys is kept.
+const METADATA_LINES = [
+  /^Issue type: [A-Z_]+$/,
+  /^Reporter role: [A-Z_a-z]+$/,
+  /^Severity: (?:info|warning|error|critical)$/,
+  /^Assignment ID: (?:\d+|N\/A)$/,
+  /^Attempt ID: (?:\d+|N\/A)$/,
+  /^Diagnostics captured: attempt [^\n,]+, language [^\n,]+, \d+ of \d+ recent requests failed\. Full capture: Mark admin > Reports\.$/,
+];
 
-const MARKDOWN_SECTION_LABEL = /\*\*[^\n*]+:\*\*/g;
 const HTML_TAG = /<\/?[a-z][^>]*>/gi;
-const NUMBERED_PLACEHOLDER_LINE = /^\s*\d+\.\s*\.{3}\s*$/;
+// The steps field's own placeholder ("1. ...").
+const NUMBERED_PLACEHOLDER_LINE = /^\d+\.\s*\.{3}$/;
 
 const escapeRegExp = (value: string): string =>
   value.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
 
+const FORM_LABEL_PATTERN = FORM_LABELS.map((label) => escapeRegExp(label)).join(
+  "|",
+);
+// A form heading as the form emits it ("**Steps to reproduce:**"); any other
+// bold text is the reporter's.
+const MARKDOWN_SECTION_LABEL = new RegExp(
+  String.raw`\*\*(?:${FORM_LABEL_PATTERN}):\*\*`,
+  "gi",
+);
 const PLAIN_LABEL_LINE = new RegExp(
-  String.raw`^\s*(?:${FORM_LABELS.map((label) => escapeRegExp(label)).join("|")})\s*:\s*$`,
+  String.raw`^(?:${FORM_LABEL_PATTERN})\s*:$`,
   "i",
 );
+
+// Identifiers a reporter copies from an error message: an HTTP error status
+// ("500"), a Node/browser error code ("ERR_NETWORK", "ECONNRESET") or a
+// Postgres SQLSTATE ("22P05"). Any of these is enough to investigate.
+const ERROR_IDENTIFIER =
+  /(?<![\p{L}\p{N}])(?:[45]\d{2}|ERR_[A-Z0-9_]+|E(?:CONN|NOT|TIMEDOUT|PIPE|ACCES|AI_|HOST|NET|ADDR|PROTO)[A-Z_]*|\d{2}[0-9A-Z]{2}[A-Z]|\d{2}[A-Z][0-9A-Z]{2})(?![\p{L}\p{N}])/u;
 
 // Error dialogs pre-fill the form with a structured error block, and the
 // server-side error route sends its own; both are technical signal even when
@@ -161,12 +186,12 @@ export function extractReporterText(description: string): string {
     .replaceAll("\r\n", "\n")
     .replaceAll(HTML_TAG, " ")
     .replaceAll(MARKDOWN_SECTION_LABEL, "\n")
-    .replaceAll(METADATA_LINE, "")
     .split("\n")
     .map((line) => line.trim())
     .filter(
       (line) =>
         line.length > 0 &&
+        !METADATA_LINES.some((pattern) => pattern.test(line)) &&
         !PLAIN_LABEL_LINE.test(line) &&
         !NUMBERED_PLACEHOLDER_LINE.test(line) &&
         !placeholders.has(line.toLowerCase()),
@@ -187,6 +212,7 @@ export function classifyReportText(
     return { junk: false };
 
   const text = extractReporterText(description);
+  if (ERROR_IDENTIFIER.test(text)) return { junk: false };
   const letters = text.toLowerCase().match(/\p{L}/gu) ?? [];
   if (letters.length === 0) return { junk: true, reason: "no_letters" };
 

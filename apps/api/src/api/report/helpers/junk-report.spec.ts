@@ -39,10 +39,23 @@ describe("extractReporterText", () => {
           "Severity: info",
           "Assignment ID: 42",
           "Attempt ID: N/A",
-          "Diagnostics captured: attempt 84, language es",
+          "Diagnostics captured: attempt 84, language es, 1 of 3 recent requests failed. Full capture: Mark admin > Reports.",
         ].join("\n"),
       ),
     ).toBe("nothing loads");
+  });
+
+  it("keeps a line that starts with a metadata key but carries more text", () => {
+    expect(extractReporterText("Assignment ID: 42 fails to load")).toBe(
+      "Assignment ID: 42 fails to load",
+    );
+    expect(extractReporterText("Severity: high, my grade vanished")).toBe(
+      "Severity: high, my grade vanished",
+    );
+  });
+
+  it("keeps bold text that is not one of the form's own headings", () => {
+    expect(extractReporterText("**Upload fails:**")).toContain("Upload fails");
   });
 
   it("drops pasted markup and the form's placeholder text", () => {
@@ -149,6 +162,16 @@ describe("classifyReportText", () => {
         "Actual result": "grade is 0",
       }),
     ],
+    ["a bold label the form never emits", "**Upload fails:**"],
+    [
+      "a metadata key followed by a complaint",
+      "Assignment ID: 42 fails to load",
+    ],
+    ["an HTTP status code", "500"],
+    ["an HTTP status code in a form field", form({ "Actual result": "404" })],
+    ["a Node error code", "ERR_NETWORK"],
+    ["a socket error code", "ECONNRESET"],
+    ["a database error code", "22P05"],
   ];
 
   it.each(real)("keeps %s", (_name, description) => {
