@@ -33,6 +33,12 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { LearnerFacingGradingError } from "../../api/src/api/llm/features/grading/errors/learner-facing-grading.error";
+import {
+  GradingFailure,
+  isGradingFailure,
+  summarizeGradingFailure,
+} from "../../api/src/api/llm/features/grading/errors/grading-failure";
+import { gradingFailureFromError } from "../../api/src/api/llm/features/grading/errors/grading-failure.mapper";
 
 // Allowed-fields-only shape carried in translation-job payloads. Restricted
 // to identifiers; the LLM-produced translatedText/translatedChoices that
@@ -81,6 +87,16 @@ interface MarkApiJobExecutionRequest {
   bullJobId?: string;
   attemptsMade?: number;
   maxAttempts?: number;
+}
+
+function hostOfIssue(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    // Log context only; an unparseable learner answer has no host.
+    return undefined;
+  }
 }
 
 @Injectable()
@@ -387,7 +403,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
 
     worker.on("failed", (job, error) => {
       this.logger.error(
-        `Failed ${job?.name ?? "unknown"}#${job?.id ?? "unknown"}: ${error.message}`,
+        `Failed ${job?.name ?? "unknown"}#${job?.id ?? "unknown"}: ${
+          error.message
+        }`,
         error.stack,
       );
     });
@@ -538,7 +556,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     const unknown = requested.filter((name) => !knownQueues.includes(name));
     if (unknown.length > 0) {
       throw new Error(
-        `JOB_WORKER_QUEUES contains unknown queue name(s): ${unknown.join(", ")}`,
+        `JOB_WORKER_QUEUES contains unknown queue name(s): ${unknown.join(
+          ", ",
+        )}`,
       );
     }
     return new Set(requested);
@@ -715,21 +735,52 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       error instanceof LearnerFacingGradingError ||
       JobWorkerService.TERMINAL_GRADING_ERROR_NAMES.has(errorName ?? "")
     ) {
-      this.structuredLogger.error("attempt.grade.learner.terminal", {
+      const failure = gradingFailureFromError(error);
+      const terminalLog = {
         attemptId,
         assignmentId,
         errorClass: errorName ?? "LearnerFacingGradingError",
+        failureKind: failure.kind,
         reason,
         jobId: job.id,
         jobName: job.name,
-      });
-      throw new UnrecoverableError(
-        error instanceof LearnerFacingGradingError
-          ? error.learnerMessage
-          : errorName === "SourceProcessingError"
-            ? reason
-            : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
-      );
+      };
+      if (failure.kind === "unable_to_grade") {
+        // The learner's to fix, not ours: warn, one line per issue.
+        this.structuredLogger.warn("attempt.grade.learner.terminal", {
+          ...terminalLog,
+          issueCount: failure.issues.length,
+        });
+        for (const issue of failure.issues) {
+          this.structuredLogger.warn("attempt.grade.unable_to_grade.issue", {
+            attemptId,
+            assignmentId,
+            questionId: issue.questionId,
+            code: issue.code,
+            host: hostOfIssue(issue.source?.url),
+            httpStatus: issue.source?.httpStatus,
+            retryable: issue.retryable,
+            jobId: job.id,
+          });
+        }
+      } else {
+        this.structuredLogger.error(
+          "attempt.grade.learner.terminal",
+          terminalLog,
+        );
+      }
+      const terminal: UnrecoverableError & { gradingFailure?: GradingFailure } =
+        new UnrecoverableError(
+          error instanceof LearnerFacingGradingError
+            ? error.learnerMessage
+            : errorName === "SourceProcessingError"
+              ? reason
+              : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
+        );
+      // Rides to the 'failed' listener (BullMQ passes this same object), so
+      // the terminal notification can publish the structured failure.
+      terminal.gradingFailure = failure;
+      throw terminal;
     }
 
     // Branch B: V8 heap exhaustion or Node worker OOM. Single narrow cast
@@ -872,9 +923,23 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    const failure = gradingFailureFromError(error);
+    if (failure.kind === "grading_failed") {
+      this.structuredLogger.error("attempt.grade.grading_failed", {
+        jobId: job.id,
+        attemptId,
+        gradingJobId,
+        reason,
+      });
+    }
+
     if (typeof attemptId === "number" && attemptId > 0) {
       try {
-        await this.gradingProgressService.markFailed(attemptId, reason);
+        await this.gradingProgressService.markFailed(
+          attemptId,
+          reason,
+          failure,
+        );
       } catch (markError: unknown) {
         this.structuredLogger.warn("attempt.grade.terminal.markfailed.error", {
           jobId: job.id,
@@ -888,7 +953,11 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       try {
         await this.jobStateService.updateJobStatus(gradingJobId, {
           status: "Failed",
-          progress: reason.slice(0, 255),
+          progress: (failure.kind === "unable_to_grade"
+            ? summarizeGradingFailure(failure)
+            : reason
+          ).slice(0, 255),
+          failure,
         });
       } catch (publishError: unknown) {
         this.structuredLogger.warn("attempt.grade.terminal.publish.error", {
@@ -903,6 +972,8 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       jobId: job.id,
       attemptId,
       gradingJobId,
+      failureKind: failure.kind,
+      issueCount: failure.issues.length,
       reason,
     });
   }
@@ -1112,7 +1183,12 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       // Only reconstruct the explicitly supported processing outcome. Generic
       // upstream errors retain normal bounded retries and diagnostics below.
       let processing:
-        | { error?: unknown; message?: unknown; retryable?: unknown }
+        | {
+            error?: unknown;
+            message?: unknown;
+            retryable?: unknown;
+            failure?: unknown;
+          }
         | undefined;
       try {
         processing = JSON.parse(responseBody) as typeof processing;
@@ -1125,13 +1201,20 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         processing.retryable === false &&
         typeof processing.message === "string"
       ) {
-        const error = new Error(processing.message);
+        const error: Error & { gradingFailure?: GradingFailure } = new Error(
+          processing.message,
+        );
         error.name = "SourceProcessingError";
+        if (isGradingFailure(processing.failure)) {
+          error.gradingFailure = processing.failure;
+        }
         throw error;
       }
       const details = responseBody ? ` - ${responseBody}` : "";
       throw new Error(
-        `Mark API job execution failed for ${job.name}#${job.id ?? "unknown"}: ${response.status} ${response.statusText}${details}`,
+        `Mark API job execution failed for ${job.name}#${
+          job.id ?? "unknown"
+        }: ${response.status} ${response.statusText}${details}`,
       );
     }
   }

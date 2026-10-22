@@ -2,6 +2,8 @@ import { AttemptServiceV2 } from "./attempt.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { SourceProcessingError } from "../../llm/features/grading/errors/source-processing.error";
+import { buildGradingIssue } from "../../llm/features/grading/errors/grading-failure";
 import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { AttemptSubmissionService } from "./attempt-submission.service";
 import { GradingProgressService } from "./grading-progress.service";
@@ -492,6 +494,7 @@ describe("AttemptServiceV2", () => {
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         "LLM timeout",
+        { kind: "grading_failed", issues: [] },
       );
     });
 
@@ -616,14 +619,26 @@ describe("AttemptServiceV2", () => {
         ),
       ).rejects.toBe(oversized);
 
+      const oversizedFailure = {
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            code: "file_too_large",
+            retryable: false,
+            source: { kind: "file", fileName: "huge.xlsx" },
+          }),
+        ],
+      };
       expect(updateStatusSpy).toHaveBeenCalledWith("job-oversized", {
         status: "Failed",
         progress: oversized.learnerMessage,
         percentage: 0,
+        failure: oversizedFailure,
       });
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         oversized.learnerMessage,
+        oversizedFailure,
       );
     });
 
@@ -659,14 +674,29 @@ describe("AttemptServiceV2", () => {
         ),
       ).rejects.toBe(unsupported);
 
+      const unsupportedFailure = {
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            code: "file_unsupported_type",
+            source: {
+              kind: "file",
+              fileName: "photo.heic",
+              detectedType: "heic",
+            },
+          }),
+        ],
+      };
       expect(updateStatusSpy).toHaveBeenCalledWith("job-unsupported", {
         status: "Failed",
         progress: unsupported.learnerMessage,
         percentage: 0,
+        failure: unsupportedFailure,
       });
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         unsupported.learnerMessage,
+        unsupportedFailure,
       );
     });
 
@@ -700,11 +730,77 @@ describe("AttemptServiceV2", () => {
         status: "Failed",
         progress: "Grading failed: boom",
         percentage: 0,
+        failure: { kind: "grading_failed", issues: [] },
       });
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         "boom",
+        { kind: "grading_failed", issues: [] },
       );
+    });
+
+    it("publishes every blocked question as unable_to_grade next to the English summary", async () => {
+      const blocked = SourceProcessingError.aggregate([
+        buildGradingIssue(7921, {
+          code: "url_unreachable",
+          source: {
+            kind: "url",
+            url: "https://github.com/Blaziton456/e-plantScience/blob/main/README.md",
+            httpStatus: 404,
+          },
+        }),
+        buildGradingIssue(7924, {
+          code: "file_wrong_format",
+          source: {
+            kind: "file",
+            fileName: "Budget.xlsx",
+            detectedType: "html",
+            expectedType: "xlsx",
+          },
+        }),
+      ]);
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(blocked);
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-blocked",
+          1877774,
+          5,
+          {} as any,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(blocked);
+
+      const failedCall = updateStatusSpy.mock.calls.find(
+        ([, update]) => update.status === "Failed",
+      );
+      expect(failedCall?.[1].progress).toMatch(
+        /^We couldn't grade 2 of your answers as submitted\./,
+      );
+      expect(failedCall?.[1].failure).toEqual({
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            questionId: 7921,
+            code: "url_unreachable",
+          }),
+          expect.objectContaining({
+            questionId: 7924,
+            code: "file_wrong_format",
+          }),
+        ],
+      });
     });
   });
 });
