@@ -84,7 +84,10 @@ export class JwtCookieStrategy extends PassportStrategy(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  validate(request: IRequestWithCookies, payload: IJwtPayload): UserSession {
+  async validate(
+    request: IRequestWithCookies,
+    payload: IJwtPayload,
+  ): Promise<UserSession> {
     const context = quizSessionContext(request.headers ?? {});
     const routeId = request.originalUrl?.match(
       /\/assignments\/([1-9]\d*)(?:[/?]|$)/,
@@ -153,20 +156,19 @@ export class JwtCookieStrategy extends PassportStrategy(
         selected !== request.savedSession
       ) {
         const existing = request.cookies?.[SAVED_SESSION_COOKIE];
-        const stored = isStoreId(existing);
-        const storeId = stored ? existing : randomUUID();
+        const storeId = isStoreId(existing) ? existing : randomUUID();
         request.res.cookie(SAVED_SESSION_COOKIE, storeId, {
           ...options,
           maxAge: SAVED_SESSION_MAX_AGE_MS,
         });
-        // Only save once the browser has kept the store cookie.
-        if (stored)
-          void this.savedSessions.save(
-            storeId,
-            context.role,
-            context.assignmentId,
-            selected,
-          );
+        // Save the first visit too, and finish before the browser can launch
+        // another quiz. Store failures remain bounded and fail open.
+        await this.savedSessions.save(
+          storeId,
+          context.role,
+          context.assignmentId,
+          selected,
+        );
       }
     }
     return {
