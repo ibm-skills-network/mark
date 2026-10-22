@@ -728,13 +728,23 @@ describe("ReportsService.reportIssue", () => {
       expect(result.reportId).toBe(7);
     });
 
-    it("does not publish a screenshot when no ticket goes out", async () => {
+    const withDiagnosticsTable = (prisma: Record<string, unknown>) => {
+      const create = jest.fn().mockResolvedValue({ id: 1 });
+      prisma.reportDiagnostics = { create };
+      return create;
+    };
+
+    it("stores the screenshot privately when no ticket goes out", async () => {
       const snSupportService = {
         isConfigured: jest.fn().mockReturnValue(false),
         createTicket: jest.fn(),
       };
-      const filesService = { directUpload: jest.fn() };
-      const { service } = makeForReportIssue(snSupportService, filesService);
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
 
       const result = await service.reportIssue(
         reportDto,
@@ -742,8 +752,107 @@ describe("ReportsService.reportIssue", () => {
         asUpload(png),
       );
 
-      expect(filesService.directUpload).not.toHaveBeenCalled();
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      const [, bucket, key, options] = filesService.directUpload.mock.calls[0];
+      expect(bucket).toBe("debug-bkt");
+      expect(key).toMatch(/^issue-screenshots\/[\da-f-]{36}\.png$/);
+      expect(options).toEqual({ contentType: "image/png" });
+      expect(create.mock.calls[0][0].data.data.screenshot).toEqual({
+        bucket: "debug-bkt",
+        key,
+        contentType: "image/png",
+        bytes: expect.any(Number),
+        public: false,
+      });
       expect(result.reportId).toBe(7);
+    });
+
+    it("stores a grading dispute's screenshot privately against the report", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+      const diagnostics = { v: 1 as const, session: { attemptId: 84 } };
+
+      await service.reportIssue(
+        {
+          ...reportDto,
+          issueType: "FALSE_MARKING",
+          description: "Question 3 was marked wrong but matches the slides",
+          diagnostics,
+        },
+        session,
+        asUpload(png),
+      );
+
+      expect(snSupportService.createTicket).not.toHaveBeenCalled();
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      const [, , key, options] = filesService.directUpload.mock.calls[0];
+      expect(options).not.toHaveProperty("acl");
+      expect(create).toHaveBeenCalledTimes(1);
+      const { data } = create.mock.calls[0][0];
+      expect(data.reportId).toBe(7);
+      // The capture is kept alongside the screenshot reference.
+      expect(data.data.session).toEqual({ attemptId: 84 });
+      expect(data.data.screenshot).toMatchObject({ key, public: false });
+    });
+
+    it("stores a junk report's screenshot privately", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      await service.reportIssue(
+        { ...reportDto, issueType: "BUG", description: "ok" },
+        session,
+        asUpload(png),
+      );
+
+      expect(snSupportService.createTicket).not.toHaveBeenCalled();
+      expect(prisma.report.create.mock.calls[0][0].data.closureReason).toBe(
+        "junk",
+      );
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      expect(filesService.directUpload.mock.calls[0][3]).toEqual({
+        contentType: "image/png",
+      });
+      expect(create.mock.calls[0][0].data.data.screenshot).toMatchObject({
+        public: false,
+      });
+    });
+
+    it("uploads a ticketed report's screenshot once and records it", async () => {
+      const snSupportService = sn();
+      const filesService = { directUpload: jest.fn().mockResolvedValue({}) };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      await service.reportIssue(
+        { ...reportDto, issueType: "BUG" },
+        session,
+        asUpload(png),
+      );
+
+      expect(filesService.directUpload).toHaveBeenCalledTimes(1);
+      const [, , key, options] = filesService.directUpload.mock.calls[0];
+      expect(options).toEqual({ acl: "public-read", contentType: "image/png" });
+      expect(
+        snSupportService.createTicket.mock.calls[0][0].screenshotUrls,
+      ).toEqual([`https://s3.example.com/debug-bkt/${key}`]);
+      expect(create.mock.calls[0][0].data.data.screenshot).toMatchObject({
+        key,
+        public: true,
+      });
     });
 
     it("strips EXIF metadata before publishing", async () => {
@@ -801,6 +910,34 @@ describe("ReportsService.reportIssue", () => {
       const [, , key] = filesService.directUpload.mock.calls[0];
       expect(filesService.deleteFile).toHaveBeenCalledWith("debug", key);
       expect(result.reportId).toBe(7);
+    });
+
+    it("keeps a private copy when the ticket is not created", async () => {
+      const snSupportService = {
+        isConfigured: jest.fn().mockReturnValue(true),
+        createTicket: jest.fn().mockRejectedValue(new Error("SN down")),
+      };
+      const filesService = {
+        directUpload: jest.fn().mockResolvedValue({}),
+        deleteFile: jest.fn().mockResolvedValue({}),
+      };
+      const { service, prisma } = makeForReportIssue(
+        snSupportService,
+        filesService,
+      );
+      const create = withDiagnosticsTable(prisma);
+
+      await service.reportIssue(reportDto, session, asUpload(png));
+
+      expect(filesService.directUpload).toHaveBeenCalledTimes(2);
+      const [, , publicKey] = filesService.directUpload.mock.calls[0];
+      const [, , privateKey, options] = filesService.directUpload.mock.calls[1];
+      expect(privateKey).not.toBe(publicKey);
+      expect(options).toEqual({ contentType: "image/png" });
+      expect(create.mock.calls[0][0].data.data.screenshot).toMatchObject({
+        key: privateKey,
+        public: false,
+      });
     });
 
     it("files the report without a screenshot when the upload fails", async () => {
